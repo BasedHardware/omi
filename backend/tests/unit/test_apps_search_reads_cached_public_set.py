@@ -259,3 +259,23 @@ def test_my_apps_with_null_capabilities_does_not_crash_on_capability_filter(env)
     # The guard's effect: an explicit capabilities=None record is dropped, not compared (`x in None`).
     assert 'nullcap' not in ids
     assert 'a1' in ids
+
+
+def test_installed_apps_includes_persona_apps_for_the_chat_picker(env, monkeypatch):
+    """The mobile chat picker loads installed apps from /v2/apps/search.
+
+    Browse/search hides personas (they are private chat identities, not catalog
+    listings), but an installed persona must reappear in the installed read or
+    the picker silently loses it after restart/refresh.
+    """
+    # Seed the persona before any read so it is part of the cached public set.
+    env.docs.append(_app_doc('a4', 'Friend Persona', capabilities=['persona'], chat_prompt='be a friend'))
+    monkeypatch.setattr(apps_mod, 'get_enabled_apps', lambda uid: {'a1', 'a4'})
+
+    browse = env.client.get('/v2/apps/search', params={'limit': 100})
+    assert 'a4' not in [a['id'] for a in browse.json()['data']]
+
+    installed = env.client.get('/v2/apps/search', params={'installed_apps': 'true', 'limit': 100})
+    ids = [a['id'] for a in installed.json()['data']]
+    assert 'a4' in ids
+    assert 'a1' in ids

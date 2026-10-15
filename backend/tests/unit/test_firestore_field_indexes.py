@@ -570,14 +570,13 @@ _ORIGINAL_REQUIREMENTS = tuple(
 )
 
 
-def test_frozen_inventory_fake_patches_exactly_the_five_missing_fields():
+def test_frozen_inventory_fake_patches_exactly_the_four_missing_fields():
     production_project = 'based-hardware'
     production_database = '(default)'
     missing_groups = {
         'candidate_integration_outbox',
         'chat_first_proactive_intents',
         'memory_outbox',
-        'projection_repairs',
         'task_recurrence_inbox',
     }
     narrow_collection_modes = {
@@ -661,7 +660,7 @@ def test_frozen_inventory_fake_patches_exactly_the_five_missing_fields():
         for requirement in _ORIGINAL_REQUIREMENTS
         if requirement.collection_group in missing_groups
     }
-    assert len(applied) == 5
+    assert len(applied) == 4
     for name, config in before.items():
         if name not in applied:
             assert live[name] == config

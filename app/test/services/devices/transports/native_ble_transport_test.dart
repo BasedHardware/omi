@@ -34,6 +34,25 @@ void main() {
     hostApiChannelNames.clear();
   });
 
+  for (final error in ['gatt_status_22', 'pairing_lost']) {
+    test('disconnect before readiness propagates $error without changing its cause', () async {
+      var pairingLostNotifications = 0;
+      BleBridge.instance.pairingLostCallback = () => pairingLostNotifications++;
+      addTearDown(() => BleBridge.instance.pairingLostCallback = null);
+      setHostApiHandler('getBluetoothState', (message) async => ['on']);
+      setHostApiHandler('manageDevice', (message) async {
+        BleBridge.instance.onPeripheralDisconnected(_deviceId, error);
+        return <Object?>[];
+      });
+
+      final transport = NativeBleTransport(_deviceId);
+      addTearDown(transport.dispose);
+
+      await expectLater(transport.connect(), throwsA(error));
+      expect(pairingLostNotifications, error == 'pairing_lost' ? 1 : 0);
+    });
+  }
+
   test('keeps button listener alive and resubscribes after reconnect', () async {
     final subscribeCalls = <List<Object?>>[];
     final services = [

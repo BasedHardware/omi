@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-chat-search-skips-transcript-evidence",
+  "violated_contract": "Chat must not treat a title/summary-only miss as proof that a specific fact is absent from recorded transcript text.",
+  "canonical_prevention": "Search indexed transcript chunks alongside titles and summaries, reconstruct bounded excerpts from authorized hydrated conversations, and label misses with the actual transcript-search coverage. Keep behavioral tests for transcript-only hits, inaccessible rows, and index-unavailable misses.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_chat_scope.py",
+    "backend/tests/unit/test_mcp_transcript_search.py",
+    "backend/tests/unit/test_tools_router.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/retrieval/tools/conversation_tools.py",
+    "backend/utils/retrieval/tool_services/conversations.py",
+    "backend/utils/conversations/mcp_transcript_search.py"
+  ],
+  "status": "open"
+}

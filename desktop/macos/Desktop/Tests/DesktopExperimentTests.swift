@@ -75,22 +75,6 @@ final class DesktopExperimentTests: XCTestCase {
   }
 
   @MainActor
-  func testInterjectIsOnOnlyForMemoryV1AmongArmedUsers() {
-    let decision: (String?, Bool, Bool) -> Bool = {
-      InterjectFeature.isEnabled(
-        experimentVariant: $0, killSwitchEnabled: $1, unenrolledDecision: $2)
-    }
-    // memory_v1 turns it on; armed control turns it off.
-    XCTAssertTrue(decision("memory_v1", false, false))
-    XCTAssertFalse(decision("control", false, true))
-    // The fleet kill switch disarms every arm.
-    XCTAssertFalse(decision("memory_v1", true, true))
-    // Un-armed users keep the existing dogfood decision untouched.
-    XCTAssertTrue(decision(nil, false, true))
-    XCTAssertFalse(decision(nil, false, false))
-  }
-
-  @MainActor
   func testPostcardLandingConsumesEachSummaryExactlyOnce() async throws {
     let defaults = try XCTUnwrap(
       UserDefaults(suiteName: "desktop-experiment-tests-\(UUID().uuidString)"))

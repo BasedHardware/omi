@@ -156,7 +156,10 @@ void main() {
       captureGroup: const CaptureGroup(
         id: 'event-1',
         primaryId: 'a',
-        members: [CaptureGroupMember(id: 'a', source: 'desktop'), CaptureGroupMember(id: 'b', source: 'omi')],
+        members: [
+          CaptureGroupMember(id: 'a', source: 'desktop'),
+          CaptureGroupMember(id: 'b', source: 'omi'),
+        ],
       ),
     );
     provider.conversations = [grouped];
@@ -178,10 +181,12 @@ void main() {
 
   testWidgets('Separate… from a grouped row separates on confirm and reloads the list', (tester) async {
     final separated = <String>[];
-    rowSeparationController = () => CaptureGroupSeparationController(separate: (id) async {
-          separated.add(id);
-          return CaptureGroupSeparationResult.separated;
-        });
+    rowSeparationController = () => CaptureGroupSeparationController(
+          separate: (id) async {
+            separated.add(id);
+            return CaptureGroupSeparationResult.separated;
+          },
+        );
     addTearDown(() => rowSeparationController = CaptureGroupSeparationController.new);
     final grouped = ServerConversation(
       id: 'a',
@@ -191,7 +196,10 @@ void main() {
       captureGroup: const CaptureGroup(
         id: 'event-1',
         primaryId: 'a',
-        members: [CaptureGroupMember(id: 'a', source: 'desktop'), CaptureGroupMember(id: 'b', source: 'omi')],
+        members: [
+          CaptureGroupMember(id: 'a', source: 'desktop'),
+          CaptureGroupMember(id: 'b', source: 'omi'),
+        ],
       ),
     );
     provider.conversations = [grouped];
@@ -220,11 +228,15 @@ void main() {
   });
 
   group('row titles (hub audit #21)', () {
-    testWidgets('a blank title reads Untitled Conversation; a discarded one says so with its length', (tester) async {
+    testWidgets('a blank title uses its recording date; a discarded one says so with its length', (tester) async {
       late BuildContext captured;
       await pump(tester, Builder(builder: (context) => (captured = context, const SizedBox()).$2));
 
-      expect(conversationRowTitle(captured, _conversation('a', title: '  ')), 'Untitled Conversation');
+      final blankTitle = _conversation('a', title: '  ');
+      expect(
+        conversationRowTitle(captured, blankTitle),
+        OmiDateFormat.of(captured).dateTime(blankTitle.createdAt.toLocal()),
+      );
       final start = DateTime(2026, 9, 20, 10);
       final discarded = _conversation(
         'b',

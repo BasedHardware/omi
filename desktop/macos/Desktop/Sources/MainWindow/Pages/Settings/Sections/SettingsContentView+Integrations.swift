@@ -62,7 +62,7 @@ extension SettingsContentView {
                 .scaledFont(size: OmiType.body)
                 .foregroundColor(Ink.secondary)
             } else {
-              Text("Reads recent emails using browser cookies — no OAuth needed")
+              Text("Reads your recent email through your signed-in browser. No separate Google sign-in needed.")
                 .scaledFont(size: OmiType.body)
                 .foregroundColor(Ink.secondary)
             }
@@ -254,7 +254,7 @@ extension SettingsContentView {
                 .scaledFont(size: OmiType.body)
                 .foregroundColor(Ink.secondary)
             } else {
-              Text("Reads Google Calendar using browser cookies — no OAuth needed")
+              Text("Reads your Google Calendar through your signed-in browser. No separate Google sign-in needed.")
                 .scaledFont(size: OmiType.body)
                 .foregroundColor(Ink.secondary)
             }
@@ -353,6 +353,36 @@ extension SettingsContentView {
     return formatter
   }
 
-  // MARK: - Developer API Keys Subsection
+  // MARK: - Connect an Agent
 
+  /// The desktop door to the web developer home. Model-provider keys (BYOK) live under Advanced;
+  /// Omi's own MCP and Developer API keys, and the prompts that hand them to an agent, live on the web.
+  var connectAgentSubsection: some View {
+    settingsCard(settingId: "advanced.connectagent") {
+      VStack(alignment: .leading, spacing: OmiSpacing.md) {
+        HStack(spacing: OmiSpacing.md) {
+          Image(systemName: "point.3.connected.trianglepath.dotted")
+            .scaledFont(size: OmiType.heading)
+            .foregroundColor(Ink.secondary)
+          VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+            Text("Connect Claude, ChatGPT, Codex, Cursor, or any agent")
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
+            Text(
+              "Copy a setup prompt your agent follows on its own, or create MCP and Developer API keys. Opens Omi on the web."
+            )
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+          }
+          Spacer()
+        }
+
+        Button(action: { NSWorkspace.shared.open(DeveloperHomeLink.url) }) {
+          Text("Open Developer Home")
+            .scaledFont(size: OmiType.body, weight: .semibold)
+        }
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+      }
+    }
+  }
 }

@@ -1,5 +1,6 @@
 from database import conversations
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils.llm.model_config import LUNA_MODEL
 
 UID = 'translation-test-user'
 CID = 'conversation'
@@ -45,6 +46,8 @@ def test_source_fence_priority_per_target_merge_and_projection_preservation(monk
         'fr': 'Yến a parlé avec son aîné.',
     }
     assert doc['client_processing_projection'] == {'keep': True}
+    metadata = conversations._reveal_json_value(doc['translation_materializations'], UID, True)
+    assert metadata['s']['en']['model'] == LUNA_MODEL
     assert conversations.translation_materialization_is_current(UID, doc, segment, 'en', 'viewed_v1')
     segment['translations'][0]['text'] = 'legacy overwrote the value'
     assert not conversations.translation_materialization_is_current(UID, doc, segment, 'en', 'viewed_v1')

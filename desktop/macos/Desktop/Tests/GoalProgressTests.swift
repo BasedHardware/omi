@@ -35,4 +35,34 @@ final class GoalProgressTests: XCTestCase {
     let goal = try makeGoal(min: 5, target: 5, current: 5)
     XCTAssertEqual(goal.progress, 0, accuracy: 0.0001)
   }
+
+  func testGoalTypeDecodesQualifiedBackendEnumValue() throws {
+    let json = """
+      {
+        "id": "goal-1",
+        "goal_type": "GoalType.scale",
+        "min_value": 1,
+        "target_value": 10,
+        "current_value": 5
+      }
+      """
+
+    let goal = try JSONDecoder().decode(Goal.self, from: Data(json.utf8))
+
+    XCTAssertEqual(goal.goalType, .scale)
+  }
+
+  func testGeneratedGoalMetricDecodesQualifiedGoalType() throws {
+    let json = """
+      {
+        "current": 5,
+        "target": 10,
+        "type": "GoalType.scale"
+      }
+      """
+
+    let metric = try JSONDecoder().decode(OmiAPI.GoalMetric.self, from: Data(json.utf8))
+
+    XCTAssertEqual(metric.type, .scale)
+  }
 }

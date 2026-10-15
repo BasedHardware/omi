@@ -42,6 +42,17 @@ import dependencies
 from fastapi import HTTPException
 
 import database.mcp_api_key as mcp_api_key_db
+import database.api_key_cache as api_key_cache
+from tests.unit.fixtures.api_key_revocation_fakes import AtomicKeyBatch, RedisStore
+
+
+@pytest.fixture(autouse=True)
+def _local_revocation_store(monkeypatch):
+    store = RedisStore()
+    monkeypatch.setattr(api_key_cache, "_redis", lambda: store)
+    return store
+
+
 from dependencies import get_mcp_api_key_auth, get_mcp_memory_default_memory_read_context
 from utils.mcp_memories import McpVerifiedAuth, build_mcp_default_memory_read_context
 from utils.memory.product_authorization import authorize_memory_external_default_memory_read
@@ -53,6 +64,7 @@ class _FakeDoc:
         self.id = doc_id
         self.reference = SimpleNamespace(updated=[])
         self.reference.update = lambda payload: self.reference.updated.append(payload)
+        self.reference.get = lambda: SimpleNamespace(exists=True)
 
     def to_dict(self):
         return dict(self._data)
@@ -75,6 +87,9 @@ class _FakeQuery:
 
 
 class _FakeDB:
+    def batch(self):
+        return AtomicKeyBatch()
+
     def __init__(self, docs):
         self._docs = docs
         self.grant_sets = []
@@ -211,8 +226,8 @@ def test_old_mcp_key_doc_still_authenticates_uid_only_and_has_no_verified_scopes
     monkeypatch.setattr(mcp_api_key_db, '_db', lambda: fake_db)
     monkeypatch.setattr(mcp_api_key_db, 'redis_db', fake_redis)
 
-    assert mcp_api_key_db.get_user_id_by_api_key('omi_mcp_secret') == 'u1'
-    auth = mcp_api_key_db.get_user_and_scopes_by_api_key('omi_mcp_secret')
+    assert mcp_api_key_db.get_user_id_by_api_key('omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') == 'u1'
+    auth = mcp_api_key_db.get_user_and_scopes_by_api_key('omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
 
     assert auth['user_id'] == 'u1'
     assert auth['key_id'] == 'legacy-key'
@@ -251,7 +266,7 @@ def test_persisted_mcp_app_key_scopes_build_verified_memory_context_without_arch
     monkeypatch.setattr(mcp_api_key_db, '_db', lambda: fake_db)
     monkeypatch.setattr(mcp_api_key_db, 'redis_db', _FakeRedis())
 
-    auth = mcp_api_key_db.get_user_and_scopes_by_api_key('omi_mcp_secret')
+    auth = mcp_api_key_db.get_user_and_scopes_by_api_key('omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
     assert auth['user_id'] == 'u1'
     assert auth['key_id'] == 'key-1'
     assert auth['app_id'] == 'mcp-api'
@@ -282,7 +297,7 @@ def test_mcp_auth_dependency_preserves_uid_scope_identity_shape(monkeypatch):
     monkeypatch.setattr(dependencies, 'check_api_key_rate_limit', lambda **_kwargs: None)
     monkeypatch.setattr(dependencies, 'enforce_account_deletion_http_access', lambda _uid: None)
 
-    auth = asyncio.run(get_mcp_api_key_auth('Bearer omi_mcp_secret'))
+    auth = asyncio.run(get_mcp_api_key_auth('Bearer omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'))
     context = asyncio.run(get_mcp_memory_default_memory_read_context(auth))
 
     assert auth.uid == 'u1'
@@ -306,7 +321,7 @@ def test_mcp_memory_dependency_fails_closed_without_persisted_memories_read_scop
     )
     monkeypatch.setattr(dependencies, 'enforce_account_deletion_http_access', lambda _uid: None)
 
-    auth = asyncio.run(get_mcp_api_key_auth('Bearer omi_mcp_secret'))
+    auth = asyncio.run(get_mcp_api_key_auth('Bearer omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'))
     with pytest.raises(HTTPException) as exc:
         asyncio.run(get_mcp_memory_default_memory_read_context(auth))
 
@@ -393,3 +408,25 @@ def test_create_mcp_key_explicit_none_scopes_mints_legacy_key(monkeypatch):
     assert 'memories.read' in api_key_data.scopes
     assert fake_db.set_calls[0]['scopes'] == api_key_data.scopes
     assert fake_db.grant_sets
+
+
+def test_default_mcp_key_can_rename_but_cannot_cleanup_people(monkeypatch):
+    monkeypatch.setattr(mcp_api_key_db, 'generate_api_key', lambda: ('raw', 'hashed', 'omi_mcp_xxxx'))
+    fake_db = _CreateDB()
+    monkeypatch.setattr(mcp_api_key_db, '_db', lambda: fake_db)
+
+    _raw_key, api_key_data = mcp_api_key_db.create_mcp_key('u1', 'default-key')
+
+    assert 'people.rename' in api_key_data.scopes
+    assert 'people.cleanup' not in api_key_data.scopes
+
+
+def test_mcp_key_people_cleanup_requires_explicit_scope(monkeypatch):
+    monkeypatch.setattr(mcp_api_key_db, 'generate_api_key', lambda: ('raw', 'hashed', 'omi_mcp_xxxx'))
+    fake_db = _CreateDB()
+    monkeypatch.setattr(mcp_api_key_db, '_db', lambda: fake_db)
+
+    _raw_key, api_key_data = mcp_api_key_db.create_mcp_key('u1', 'cleanup-key', scopes=['people.cleanup'])
+
+    assert 'people.cleanup' in api_key_data.scopes
+    assert fake_db.set_calls[0]['scopes'] == api_key_data.scopes

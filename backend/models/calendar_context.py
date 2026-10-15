@@ -11,6 +11,13 @@ class MeetingParticipant(BaseModel):
     email: Optional[str] = Field(default=None, description="Participant's email address")
 
 
+class MeetingParticipantSources(BaseModel):
+    """Source sets, not attendance: None means that source was not supplied."""
+
+    expected_calendar: Optional[List[MeetingParticipant]] = None
+    observed_screen_listing: Optional[List[MeetingParticipant]] = None
+
+
 class CalendarMeetingContext(BaseModel):
     """Calendar meeting metadata to provide context for conversation processing"""
 
@@ -25,6 +32,17 @@ class CalendarMeetingContext(BaseModel):
     calendar_source: Optional[str] = Field(
         default='system_calendar', description="Calendar source (system_calendar, google, outlook, etc.)"
     )
+
+    participant_sources: Optional[MeetingParticipantSources] = Field(
+        default=None, description="Participant provenance retained before calendar/screen context merging"
+    )
+
+    def participants_by_source(self) -> MeetingParticipantSources:
+        if self.participant_sources is not None:
+            return self.participant_sources
+        if self.calendar_source == 'screen_activity':
+            return MeetingParticipantSources(observed_screen_listing=list(self.participants))
+        return MeetingParticipantSources(expected_calendar=list(self.participants))
 
     @classmethod
     def from_records(

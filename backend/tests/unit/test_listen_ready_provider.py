@@ -27,6 +27,13 @@ from utils.stt import provider_resilience, streaming
 from utils.stt.streaming import STTService
 
 
+@pytest.fixture(autouse=True)
+def _byok_provider_route(monkeypatch):
+    # BYOK sessions still use the legacy connector; managed sessions always
+    # follow the configured chain after the connect-order graduation.
+    monkeypatch.setattr('utils.byok.get_byok_keys', lambda: {'deepgram': 'test-key'})
+
+
 @pytest.fixture
 def anyio_backend():
     return 'asyncio'

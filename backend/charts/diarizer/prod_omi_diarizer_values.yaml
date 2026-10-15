@@ -57,6 +57,9 @@ service:
   port: 8080
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
+# /v2/diarization is intentionally NOT routed to this embedding GPU.
+# Use the separate prod-omi-diarizer-batch ClusterIP service/release; see
+# prod_omi_diarizer_batch_values.yaml and scripts/diarization_eval/capacity.md.
 ingress:
   enabled: true
   className: ""
@@ -191,3 +194,8 @@ strategy:
   rollingUpdate:
     maxUnavailable: 1
     maxSurge: 0
+
+# Route activation does not switch callers. Install the shared Gateway first.
+gateway:
+  enabled: true
+  name: prod-omi-internal-gateway

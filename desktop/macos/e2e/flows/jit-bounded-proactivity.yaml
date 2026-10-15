@@ -7,8 +7,6 @@ description: >
   evidence. Retain the serving source SHA, run IDs, and actual gateway receipts.
 app: non-prod
 covers:
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITProactivityBudget.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITProactivitySourceProjection.swift
 preconditions:
   - reviewed_isolated_qa_cloud_receipt
   - signed_in_allowlisted_qa_account

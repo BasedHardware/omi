@@ -25,6 +25,7 @@ class FakeStreamingSTTSocket:
         self._dead = False
         self._death_reason = None
         self._emitted = False
+        self._finished = False
 
     @property
     def is_connection_dead(self) -> bool:
@@ -67,7 +68,9 @@ class FakeStreamingSTTSocket:
         self.finish()
 
     def finish(self) -> None:
-        self.finish_calls += 1
+        if not self._finished:
+            self._finished = True
+            self.finish_calls += 1
 
 
 def install_streaming_stt_fake(monkeypatch, *, die_on_first_send=False, failover_selection=(None, None, None)):
@@ -84,6 +87,7 @@ def install_streaming_stt_fake(monkeypatch, *, die_on_first_send=False, failover
     """
     from routers.listen import receiver as listen_receiver
     from routers.listen import runtime as listen_runtime
+    from utils.stt import live_session
     from config.stt_provider_policy import provider_for_service
     from utils.stt import streaming as st
     from utils.stt.provider_resilience import ProviderCircuitBreaker
@@ -114,6 +118,16 @@ def install_streaming_stt_fake(monkeypatch, *, die_on_first_send=False, failover
     # the fake is reached regardless of which one the runtime selects.
     monkeypatch.setattr(listen_receiver, "process_audio_parakeet", fake_process_audio_parakeet)
     monkeypatch.setattr(listen_receiver, "process_audio_modulate", fake_process_audio_modulate)
+    # Managed live STT uses streaming's provider entry point after the configured
+    # order graduated. Keep the same fake socket at that boundary too.
+    monkeypatch.setattr(st, "process_audio_parakeet", fake_process_audio_parakeet)
+    if failover_selection[0] == STTService.modulate:
+        monkeypatch.setenv('MODULATE_API_KEY', 'fake-modulate-key')
+        monkeypatch.setattr(live_session, 'connect_modulate', fake_process_audio_modulate)
+        monkeypatch.setattr(st, "stt_service_models", ["parakeet", "modulate-velma-2"])
+    else:
+        monkeypatch.setattr(st, "stt_service_models", ["parakeet"])
+    monkeypatch.setattr(st, "parakeet_is_configured_fallback", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(
         listen_runtime,
         "get_stt_service_for_language",

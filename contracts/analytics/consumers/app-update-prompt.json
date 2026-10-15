@@ -1,0 +1,17 @@
+{
+  "id": "app-update-prompt",
+  "kind": "question",
+  "owner": "Mobile release",
+  "question": "How often do people dismiss or tap the mobile app-version update prompt, per namespace and build? Upgrade Modal Dismissed and Upgrade Modal Clicked are that store-update dialog (app/lib/widgets/upgrade_alert.dart), not the subscription paywall. The registry forbids renaming these released wire names. Do not use them in paywall, upgrade, ARPMAU, or churn queries.",
+  "query": "contracts/analytics/consumers/app-update-prompt.sql",
+  "events": [
+    "upgradeModalDismissed",
+    "upgradeModalClicked"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "git_sha",
+    "build_number"
+  ],
+  "zero_policy": "Zero events is expected when the update prompt is not shown for the selected namespace and build. Absence is not a subscription-funnel failure."
+}

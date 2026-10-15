@@ -211,8 +211,8 @@ def prepare_for_read(decrypt_func: Callable[[Dict[str, Any], str], Optional[Dict
 
             result = func(*args, **kwargs)
 
-            if result is None:
-                return None
+            if result is None or bound_args.arguments.get('metadata_only', False):
+                return result
 
             def _process(item: Any) -> Any:
                 if isinstance(item, dict):
@@ -265,8 +265,8 @@ def with_photos(photos_getter: Callable[..., Any]) -> Callable[[F], F]:
             # Execute the original function to get the conversation data
             result = func(*args, **kwargs)
 
-            if result is None:
-                return None
+            if result is None or bound_args.arguments.get('metadata_only', False):
+                return result
 
             def _fetch_and_attach_photos(conversation_data: Any) -> Any:
                 if not isinstance(conversation_data, dict) or 'id' not in conversation_data:

@@ -10,6 +10,9 @@ enum AgentFailureTranscriptFormatter {
   static func errorText(for projection: AgentRunProjection) -> String? {
     switch projection.status {
     case .failed, .timedOut, .orphaned:
+      if let failure = projection.failure {
+        return userFacingFailure(for: BridgeError.agentRuntimeFailure(failure))
+      }
       let raw =
         projection.failure?.displayMessage
         ?? projection.errorMessage
@@ -39,6 +42,10 @@ enum AgentFailureTranscriptFormatter {
   ) -> String {
     let trimmed = errorText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return genericSpawnFailure }
+
+    if AgentErrorClassifier.classify(trimmed).code == .providerBillingExhausted {
+      return billingMessage(adapterId: harnessMode?.rawValue)
+    }
 
     if looksLikeSetupNeeded(trimmed) {
       if let directedProvider {
@@ -82,6 +89,9 @@ enum AgentFailureTranscriptFormatter {
     directedProvider: AgentPillsManager.DirectedProvider? = nil
   ) -> String {
     if let runtime = error as? BridgeError, case .agentRuntimeFailure(let failure) = runtime {
+      if AgentErrorClassifier.classify(failure).code == .providerBillingExhausted {
+        return billingMessage(adapterId: failure.adapterId)
+      }
       let inferred = harnessModeFromAdapterId(failure.adapterId)
       return userFacingFailure(
         failure.displayMessage,
@@ -90,6 +100,33 @@ enum AgentFailureTranscriptFormatter {
     }
     let raw = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
     return userFacingFailure(raw, harnessMode: harnessMode, directedProvider: directedProvider)
+  }
+
+  /// Task query banners historically retain other query errors verbatim. Only
+  /// billing copy changes here; a plan-limit instruction must not become the
+  /// short generic spawn failure and invite another send against the same cap.
+  static func taskQueryFailure(for error: Error) -> String {
+    let classified: ClassifiedAgentError
+    if let runtime = error as? BridgeError, case .agentRuntimeFailure(let failure) = runtime {
+      classified = AgentErrorClassifier.classify(failure)
+    } else {
+      classified = AgentErrorClassifier.classify(error.localizedDescription)
+    }
+    return classified.code == .providerBillingExhausted
+      ? userFacingFailure(for: error) : error.localizedDescription
+  }
+
+  private static func billingMessage(adapterId: String?) -> String {
+    switch adapterId {
+    case "acp":
+      return
+        "This thread uses Claude. Claude reported a billing issue. Check its billing settings or reconnect your account."
+    case "pi-mono", "piMono":
+      return "Omi AI declined this request for billing reasons. Check AI & Automation settings or contact Omi Support."
+    default:
+      return
+        "The AI provider declined this request for billing reasons. Check the provider account used by this thread."
+    }
   }
 
   private static func looksLikeSetupNeeded(_ text: String) -> Bool {

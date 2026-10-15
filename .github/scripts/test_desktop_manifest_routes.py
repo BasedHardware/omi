@@ -106,6 +106,24 @@ class DesktopManifestRoutesTests(unittest.TestCase):
         paths = ["desktop/macos/Desktop/Sources/Probe.swift"]
         self.assertTrue(resolve_macos_only(paths, self.manifest))
 
+    def test_generated_only_pr_retains_static_and_linux_schema_sync_checks(self) -> None:
+        paths = ["desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift"]
+        self.assertTrue(resolve_macos_only(paths, self.manifest))
+        plan = resolve_impact(paths, event="pull_request")
+        self.assertTrue(plan.includes("desktop-swift-test-compile"))
+        self.assertFalse(plan.includes("desktop-swift-tests"))
+        for lane in ("local", "ci"):
+            selections = resolve_check_selections(
+                self.manifest, paths, lane, include_pr_body_checks=False, platform="linux"
+            )
+            checks = {selection.check.id: selection.check for selection in selections}
+            with self.subTest(lane=lane):
+                self.assertIn("desktop-swift-generated-dtos", checks)
+                self.assertEqual(checks["desktop-swift-generated-dtos"].command, (
+                    "python3", "backend/scripts/generate_swift_openapi_types.py", "--check"
+                ))
+                self.assertNotIn("desktop-swift-generated-dtos", resolve_macos_only(paths, self.manifest))
+
 
 if __name__ == "__main__":
     unittest.main()

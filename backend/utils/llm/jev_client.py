@@ -21,7 +21,7 @@ import math
 import os
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Optional, cast
 
 import httpx
@@ -49,6 +49,7 @@ class JevAnswers:
 
     served_model: Optional[str]
     answers: Mapping[str, Mapping[str, Any]]
+    usage: Mapping[str, Any] = field(default_factory=dict)
 
     def noul(self, name: str) -> float:
         """Probability that the answer to a noul (yes/no) question is true."""
@@ -192,7 +193,11 @@ def _validated_answers(raw: object, questions: Mapping[str, Mapping[str, Any]]) 
             ):
                 return None
         validated[name] = typed_answer
-    return JevAnswers(served_model=served_model if isinstance(served_model, str) else None, answers=validated)
+    return JevAnswers(
+        served_model=served_model if isinstance(served_model, str) else None,
+        answers=validated,
+        usage=cast(Mapping[str, Any], body['usage']) if isinstance(body.get('usage'), Mapping) else {},
+    )
 
 
 def _is_pinned_model(value: object) -> bool:

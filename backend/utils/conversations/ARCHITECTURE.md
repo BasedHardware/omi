@@ -49,8 +49,11 @@ and background processing.
   The UID allowlist is read only with `OMI_ENV_STAGE=dev`; prod declarations
   (including empty bindings) are rejected by the runtime env validator.
   Unset live percentages preserve dev's flag-on=everyone behavior. Production
-  stage 1 is live at J=1 with keep-all K=2 on all five processing hosts;
-  keep-all wins any overlap, and the remaining roughly 97% stay on nano.
+  stage 2 is live at J=10 after stage 1 soaked 24 h from 2026-10-01 22:46Z,
+  with 14 Jev gateway timeouts and no Jev-attributable 5xx. Keep-all K=2
+  remains live on all five processing hosts and wins any overlap. Non-keep-all
+  conversations outside the Jev range stay on nano; nano remains the large
+  control arm, not a separate matched nano-only cohort.
   Owner-flip flags and UID allowlists remain absent.
   `CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT` admits short,
   transcript-only model-tier decisions outside the Jev arm asynchronously, with
@@ -134,6 +137,34 @@ and background processing.
   processing budget can refuse the required refresh. Decisions are recorded as
   server-only `smart_merge_decision` before the absorb transaction.
   Constants and benchmark provenance live in `config/conversation_smart_merge.py`.
+  `CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE` (`off`/`shadow`/`on`, default
+  `off`) adds a second gap policy that applies only when both rows carry live
+  `external_data` stamps — nonempty `recording_session_id`, nonempty
+  `recording_origin_id`, equal origins (session ids name server rollover
+  generations and are never compared). The gate then uses the server wall
+  clock: `new.created_at - last.finished_at` within `0..MAX_GAP_SECONDS`,
+  where `last` is the ledger fragment with the maximum `finished_at`
+  (`smart_merge_policy.newest_wallclock_fragment`; `started_at` drifts on
+  rollover so it never selects). A newest fragment owned by a donor tombstone
+  is fetched as one bounded full row at decision time and re-read inside the
+  absorb transaction (reusing the flatten ancestry read when the id is already
+  in the union), so a concurrent mutation of origin, finish or status is
+  rechecked against the transaction's current row rather than trusted —
+  the policy is re-run on that fresh row, so a moved `finished_at` is
+  decided on the new value, and only absent or mismatched proof runs the
+  exact legacy policy including the speech-gap minimum. Wall-span caps use
+  `created_at`/`finished_at`; `wallclock_gap_negative` and
+  `wallclock_time_invalid` are the bounded new skip reasons. `shadow` runs the
+  corrected evaluation only when the legacy gate skipped a proven pair — one
+  extra Jev question with corrected timing, one bounded
+  `smart_merge_wallclock_shadow` log line and counter, no writes. Deployment
+  defaults to `shadow` on all six smart-merge hosts in dev and prod
+  (`backend`, `backend-sync`, `backend-sync-backfill`,
+  `backend-integration`, `backend-listen`, `pusher`). Timestamp
+  computation is unchanged: `started_at`, transcript rebasing and stored
+  ledger entries keep the drifted speech axis; only the decision record's
+  `gap_seconds` (wall) / `speech_gap_seconds` (`None`) and the Jev state's
+  endpoint starts (replaced by `created_at`) reflect wall time.
 - `duplicate_capture.py` owns the advisory cross-source overlap policy (#3244).
   After durable finalization, it links the shorter completed capture using
   `external_data.duplicate_capture_of` plus structured overlap evidence. The
@@ -231,11 +262,13 @@ The production shadow percentages are 100 (all five processing hosts). The
 production keep-all arm is live at 2 (started
 2026-10-01): a stable 2% of ambiguous model-tier conversations, chosen by
 conversation ID, are kept regardless of nano and record nano's would-be verdict;
-rollback is percent 0 and a redeploy. Jev relevance stage 1 started 2026-10-02
-at J=1 on the same five hosts. Keep-all takes precedence; the independent Jev
-bucket range is [2,3), and non-keep-all conversations outside it stay on nano.
-The nano remainder is the large control arm, but not a separate matched nano-only
-cohort. Owner-flip flags and UID allowlists remain absent; caps stay unchanged.
+rollback is percent 0 and a redeploy. Jev relevance stage 2 started 2026-10-03
+at J=10 on the same five hosts, after stage 1 soaked 24 h from 2026-10-01
+22:46Z with 14 Jev gateway timeouts and no Jev-attributable 5xx. Keep-all takes
+precedence; the independent Jev bucket range is [2,12), and non-keep-all
+conversations outside it stay on nano. The nano remainder is the large control
+arm, but not a separate matched nano-only cohort. Owner-flip flags and UID
+allowlists remain absent; caps stay unchanged.
 The coordinator enabled `jev_shadow.expire_at` TTL
 in `based-hardware` on 2026-10-01 and verified ACTIVE before the flip. Sync hosts have no exporter;
 readouts must distinguish their records from scraped attempt/latency coverage.

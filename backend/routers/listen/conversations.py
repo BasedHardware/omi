@@ -17,11 +17,14 @@ from routers.listen.contracts import ConversationCaptureOrigin, persisted_starte
 from utils.byok import get_byok_keys
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
 from utils.live_speaker_carry import carried_receipt
+from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_listen_audio_outcome
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.live_continuation import resolve_live_continuation
-from utils.conversation_continuity import resumable_continuation
+from database.listen_continuations import calendar_continuity_row
+from utils.conversation_continuity import calendar_continuity_identity, continuation_timeout, resumable_continuation
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.finalization_failure import classify_finalization_failure
 from utils.conversations.projection_payload import omit_null_processing_state
 from utils.conversations.process_conversation import retrieve_in_progress_conversation
 from utils.transcribe_decisions import (
@@ -93,6 +96,11 @@ class LiveConversationController:
             name='recording_session_lease_renewal',
         )
 
+    async def _continuity_row(self, row: dict[str, Any]) -> dict[str, Any]:
+        if calendar_continuity_identity(row) is None:
+            return row
+        return dict(await self.host.persistence.call(calendar_continuity_row, self.host.request.uid, row))
+
     async def _continuation(self, proposed: dict[str, str] | None = None) -> dict[str, str] | None:
         if not self.host.client_conversation_id or self.host.is_multi_channel:
             return None
@@ -124,6 +132,8 @@ class LiveConversationController:
                 binding['conversation_id'],
                 read_site=FirestoreReadSite.LISTEN_CLIENT_ID_PROBE,
             )
+        if existing:
+            existing = await self._continuity_row(existing)
         if not existing or not resumable_continuation(
             existing,
             source=normalize_listen_source(self.host.request.source),
@@ -146,7 +156,7 @@ class LiveConversationController:
         await self.host.persistence.call(
             redis_db.set_in_progress_conversation_id, self.host.request.uid, binding['conversation_id']
         )
-        await self.host.speakers.refresh_for_conversation(binding['conversation_id'])
+        await self._refresh_speakers(binding['conversation_id'])
         self.send_conversation_session(binding, self.host.recording_session_id)
         return True
 
@@ -247,7 +257,38 @@ class LiveConversationController:
             self.emit_recording_lifecycle_event(conversation_id, 'processing'), name='recording_session_processing'
         )
 
+    async def _refresh_speakers(self, conversation_id: str, **kwargs: Any) -> None:
+        observation = getattr(getattr(self.host, 'speakers', None), 'diagnostics', None)
+        previous = observation.current if observation else None
+        try:
+            await self.host.speakers.refresh_for_conversation(conversation_id, **kwargs)
+        finally:
+            # refresh closes the old generation before loading the successor.
+            # Persist its frozen counts, including work after the early checkpoint.
+            if previous is not None and previous.closed:
+                await self._persist_speaker_diagnostics(previous.data['conversation'])
+
+    async def _persist_speaker_diagnostics(self, conversation_id: str) -> None:
+        observation = getattr(getattr(self.host, 'speakers', None), 'diagnostics', None)
+        if observation is None:
+            return
+        snapshot = observation.boundary_snapshot(conversation_id)
+        if snapshot:
+            try:
+                await self.host.persistence.call(
+                    conversations_db.update_owner_recognition_diagnostics,
+                    self.host.request.uid,
+                    conversation_id,
+                    snapshot,
+                )
+            except Exception:
+                observation.flush_failed(snapshot)
+
     async def schedule_finalization(self, conversation_id: str) -> bool:
+        observation = getattr(getattr(self.host, 'speakers', None), 'diagnostics', None)
+        if observation:
+            observation.checkpoint(conversation_id, self.host.speakers.queue, self.host.speakers.tasks)
+            await self._persist_speaker_diagnostics(conversation_id)
         if not self.host.request_conversation_processing and not is_listen_finalization_dispatch_enabled():
             logger.warning('Pusher unavailable; finalization remains queued conversation=%s', conversation_id)
             return False
@@ -333,6 +374,44 @@ class LiveConversationController:
         epoch = getattr(getattr(self.host, 'receiver', None), 'speaker_provider_epoch', None)
         return getattr(epoch, 'current_scope', None)
 
+    async def _active_calendar_meeting(self) -> dict[str, Any] | None:
+        now = self.clock()
+        try:
+            meetings = await self.host.persistence.call(
+                calendar_db.get_meetings_in_time_range,
+                self.host.request.uid,
+                now - timedelta(minutes=2),
+                now + timedelta(minutes=2),
+            )
+            candidates = []
+            for meeting in meetings or []:
+                if meeting.get('calendar_source') == 'screen_activity':
+                    continue
+                start = persisted_started_seconds(meeting.get('start_time'))
+                end = persisted_started_seconds(meeting.get('end_time'))
+                duration = meeting.get('duration_minutes')
+                if (
+                    end is None
+                    and start is not None
+                    and isinstance(duration, (int, float))
+                    and not isinstance(duration, bool)
+                ):
+                    end = start + duration * 60
+                if meeting.get('id') and start is not None and end is not None and start <= now.timestamp() < end:
+                    candidates.append((start, meeting))
+            return max(candidates, key=lambda item: item[0])[1] if candidates else None
+        except Exception as error:
+            logger.warning('Live calendar lookup unavailable exception_type=%s', type(error).__name__)
+            record_fallback(
+                component='other',
+                from_mode='calendar_continuity',
+                to_mode='silence_boundary',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
+            return None
+
     async def create_new_in_progress_conversation(self, *, rollover: bool = False) -> None:
         request = self.host.request
         carry_from: Optional[tuple[str, str]] = None
@@ -388,6 +467,7 @@ class LiveConversationController:
                 read_site=FirestoreReadSite.LISTEN_CLIENT_ID_PROBE,
             )
         if existing:
+            existing = await self._continuity_row(existing)
             action = decide_recording_session_reconnect_action(
                 status=existing.get('status'),
                 discarded=bool(existing.get('discarded')),
@@ -425,7 +505,7 @@ class LiveConversationController:
                         {'uses_custom_stt': True},
                     )
                 await self.host.persistence.call(redis_db.set_in_progress_conversation_id, request.uid, conversation_id)
-                await self.host.speakers.refresh_for_conversation(conversation_id)
+                await self._refresh_speakers(conversation_id)
                 self.send_conversation_session(binding, self.host.recording_session_id)
                 return
             if existing.get('deleted') or action == RecordingSessionReconnectAction.suppress_discarded_and_rollover:
@@ -438,7 +518,7 @@ class LiveConversationController:
             return
 
         context = self.host.client_device_context
-        external_data = {
+        external_data: dict[str, Any] = {
             'conversation_role': request.conversation_role,
             'recording_session_id': self.host.recording_session_id,
         }
@@ -454,6 +534,16 @@ class LiveConversationController:
             # decision; request.source and request.onboarding_mode are client
             # input and are intentionally not used as provenance.
             external_data['onboarding_session_id'] = onboarding_session_id
+        meeting = await self._active_calendar_meeting()
+        if meeting and meeting.get('calendar_event_id') and meeting['calendar_event_id'] != 'screen-activity':
+            external_data['calendar_meeting_context'] = {
+                key: meeting[key]
+                for key in ('calendar_event_id', 'calendar_source', 'start_time', 'end_time', 'duration_minutes')
+                if key in meeting
+            }
+            # Finalization parses the stamp as CalendarMeetingContext even when
+            # its window means continuity hydration has nothing left to fetch.
+            external_data['calendar_meeting_context']['title'] = meeting.get('title') or ''
         conversation = Conversation(
             id=conversation_id,
             created_at=self.clock(),
@@ -474,6 +564,7 @@ class LiveConversationController:
             geolocation=request.geolocation,
         )
         carry = {}
+        automatic_donor = None
         if carry_from:
             try:
                 previous = await self.host.persistence.call(
@@ -493,6 +584,7 @@ class LiveConversationController:
                 and self._active_speaker_scope() == carry_from[1]
             ):
                 carry = carried_receipt(previous, carry_from[1])
+                automatic_donor = previous
         # The modeled field's None default is omitted, never stamped:
         # persist is merge=True, so a dumped None would become an
         # explicit Firestore key on every fresh recording.
@@ -519,30 +611,27 @@ class LiveConversationController:
                 )
                 return
         await self.host.persistence.call(redis_db.set_in_progress_conversation_id, request.uid, conversation_id)
-        if source == ConversationSource.desktop:
-            now = datetime.now(timezone.utc)
-            meetings = await self.host.persistence.call(
-                calendar_db.get_meetings_in_time_range,
-                request.uid,
-                now - timedelta(minutes=2),
-                now + timedelta(minutes=2),
-            )
-            if meetings:
-                now_ts = now.timestamp()
-                candidates = []
-                for meeting in meetings:
-                    meeting_id = meeting.get('id')
-                    started_seconds = persisted_started_seconds(meeting.get('start_time'))
-                    if meeting_id and started_seconds is not None:
-                        candidates.append((meeting_id, started_seconds))
-                if candidates:
-                    closest_id, _ = min(candidates, key=lambda candidate: abs(candidate[1] - now_ts))
-                    await self.host.persistence.call(redis_db.set_conversation_meeting_id, conversation_id, closest_id)
+        if source == ConversationSource.desktop and meeting:
+            await self.host.persistence.call(redis_db.set_conversation_meeting_id, conversation_id, meeting['id'])
         self.host.state.current_conversation_id = conversation_id
         # Fresh v2 generation: the origin is pinned by the receiver at the
         # first accepted audio frame associated with this conversation.
         self._adopt_capture_timeline(conversation_id, None)
-        await self.host.speakers.refresh_for_conversation(conversation_id)
+        if rollover:
+            carried_ids: set[int] = set()
+            for key in carry.get('speakers') or {}:
+                try:
+                    carried_ids.add(int(key))
+                except (TypeError, ValueError):
+                    continue
+            note_carry = getattr(self.host.speakers, 'note_rollover_carry', None)
+            if note_carry is not None:
+                note_carry(carried_ids)
+        await self._refresh_speakers(
+            conversation_id,
+            owner_carry_scope=carry_from[1] if automatic_donor and carry_from else None,
+            owner_carry_donor=automatic_donor,
+        )
         self.send_conversation_session(binding, self.host.recording_session_id)
 
     async def prepare(self) -> Optional[str]:
@@ -584,12 +673,13 @@ class LiveConversationController:
         ):
             await self.create_new_in_progress_conversation()
             return None
+        existing = await self._continuity_row(existing)
         finished_at = datetime.fromisoformat(existing['finished_at'].isoformat())
         seconds = (self.clock() - finished_at).total_seconds()
         if (
             decide_existing_conversation_action(
                 seconds_since_last_segment=seconds,
-                conversation_creation_timeout=self.host.conversation_creation_timeout,
+                conversation_creation_timeout=continuation_timeout(existing, self.host.conversation_creation_timeout),
             )
             == ConversationLifecycleAction.process_and_create_new
         ):
@@ -648,18 +738,71 @@ class LiveConversationController:
         supervisor crash that tears down the socket. A conversation whose finalization write
         fails every time (a document already at Firestore's 1 MiB limit) was retried by each
         reconnect and ended each session seconds after it started, so the client reconnected
-        in a loop and its live transcription never ran. The row keeps its status and the next
-        session's sweep retries it; unrelated rows in the same sweep still run.
+        in a loop and its live transcription never ran. A transient failure (contention, an
+        expired transaction) keeps the row's status for the next session's sweep; unrelated rows
+        in the same sweep still run. A rejection at the 1 MiB ceiling is permanent, so that row
+        goes to ``_close_oversized`` instead of being retried by every reconnect.
         """
         try:
             await finalize(conversation_id)
         except Exception as error:
+            failure = classify_finalization_failure(error, conversation_id)
+            if failure.conversation_at_size_limit:
+                await self._close_oversized(conversation_id, stage=stage)
+                return
+            # Bounded tokens, never the message: Firestore names the rejected
+            # document by its path, which carries the uid.
             logger.error(
-                'Listen pending finalization failed stage=%s conversation=%s type=%s',
+                'Listen pending finalization failed stage=%s conversation=%s type=%s reason=%s document=%s',
                 stage,
                 conversation_id,
                 type(error).__name__,
+                failure.reason,
+                failure.document,
             )
+
+    async def _close_oversized(self, conversation_id: str, *, stage: str) -> None:
+        """Terminalize a row whose finalization can never commit because it is at the 1 MiB ceiling.
+
+        Retrying is pointless (the binding write grows the document) and the row
+        would stay ``in_progress``, invisible to the user, while every reconnect
+        retried it. The lifecycle owner closes it as a kept, completed
+        conversation with its transcript intact; its own fences decide, and any
+        refusal leaves the row exactly as it was.
+        """
+        try:
+            outcome = await self.host.persistence.call(
+                lifecycle_service.close_oversized_in_progress_conversation,
+                self.host.request.uid,
+                conversation_id,
+                quiet_for=timedelta(seconds=STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS),
+            )
+        except Exception as error:
+            logger.error(
+                'Listen oversized conversation close failed stage=%s conversation=%s type=%s reason=%s',
+                stage,
+                conversation_id,
+                type(error).__name__,
+                classify_finalization_failure(error, conversation_id).reason,
+            )
+            return
+        logger.warning(
+            'Listen pending finalization hit the document size limit stage=%s conversation=%s close=%s',
+            stage,
+            conversation_id,
+            outcome,
+        )
+        if outcome != 'closed':
+            return
+        record_fallback(
+            component='conversation_finalization',
+            from_mode='listen_finalization',
+            to_mode='oversized_terminal',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        self.on_conversation_processed(conversation_id)
 
     async def recover_stale_in_progress(self) -> None:
         """Route orphaned `in_progress` conversations through normal finalization (#9809).
@@ -704,13 +847,16 @@ class LiveConversationController:
             if not conversation:
                 await self.create_new_in_progress_conversation(rollover=True)
                 continue
+            conversation = await self._continuity_row(conversation)
             finished_at = datetime.fromisoformat(conversation['finished_at'].isoformat())
             action = decide_lifecycle_action(
                 conversation_exists=True,
                 status=conversation.get('status'),
                 in_progress_status=ConversationStatus.in_progress,
                 seconds_since_last_update=(self.clock() - finished_at).total_seconds(),
-                conversation_creation_timeout=self.host.conversation_creation_timeout,
+                conversation_creation_timeout=continuation_timeout(
+                    conversation, self.host.conversation_creation_timeout
+                ),
             )
             if action == ConversationLifecycleAction.create_new:
                 await self.create_new_in_progress_conversation(rollover=True)

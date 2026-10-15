@@ -164,7 +164,8 @@ jobs:
             --expected-workflow-id "$EXPECTED_WORKFLOW_ID" \
             --expected-run-id "$QUALIFICATION_RUN_ID"
           QUALIFIED_SOURCE_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["source_sha"])' "${EVIDENCE_FILES[0]}")"
-          if ! git cat-file -e "${QUALIFIED_SOURCE_SHA}^{commit}" || ! git merge-base --is-ancestor "$QUALIFIED_SOURCE_SHA" origin/main; then
+          # git 2.54 regressed "<full-sha>^{commit}" peeling; type check instead.
+          if ! [ "$(git cat-file -t "${QUALIFIED_SOURCE_SHA}" 2>/dev/null)" = "commit" ] || ! git merge-base --is-ancestor "$QUALIFIED_SOURCE_SHA" origin/main; then
             echo "Development qualification source is not a commit on fresh origin/main." >&2
             exit 1
           fi

@@ -64,6 +64,14 @@ def writer(monkeypatch):
         lambda uid, data, document_ids=None: [(document_ids or [None])[0] or "new-task"][: len(data)],
     )
     monkeypatch.setattr(process_conversation.action_items_db, "delete_action_items_for_conversation", MagicMock())
+    monkeypatch.setattr(
+        process_conversation.action_items_db,
+        "get_action_items_by_ids",
+        lambda uid, ids: [
+            {'id': item_id, 'description': 'Send the budget', 'completed': False, 'status': 'active', 'due_at': DUE}
+            for item_id in ids
+        ],
+    )
     return process_conversation
 
 
@@ -106,7 +114,15 @@ def test_a_kept_task_is_rescheduled_once_and_only_dropped_rows_are_cancelled(mon
 
     assert writer.sync_action_item_reminder.call_args_list == [
         call(user_id="uid-1", action_item_id="old-dropped", description="", completed=True, due_at=None),
-        call(user_id="uid-1", action_item_id="old-open", description="Send the budget", completed=False, due_at=DUE),
+        call(
+            user_id="uid-1",
+            action_item_id="old-open",
+            description="Send the budget",
+            completed=False,
+            due_at=DUE,
+            status='active',
+            deleted=False,
+        ),
     ]
     writer.send_action_item_data_message.assert_not_called()
 
@@ -131,3 +147,59 @@ def test_a_failing_reminder_cancel_does_not_skip_the_new_tasks(monkeypatch, writ
     )
 
     create.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    'status,completed,deleted',
+    [('cancelled', False, False), ('superseded', False, False), ('active', False, True), ('completed', True, False)],
+)
+def test_created_reminders_use_saved_lifecycle_not_extraction(monkeypatch, writer, status, completed, deleted):
+    monkeypatch.setattr(
+        writer.action_items_db,
+        'get_action_items_by_ids',
+        lambda uid, ids: [
+            {
+                'id': ids[0],
+                'description': 'Saved task',
+                'due_at': DUE,
+                'completed': completed,
+                'status': status,
+                'deleted': deleted,
+            }
+        ],
+    )
+    _write(monkeypatch, writer, [])
+    writer.send_action_item_data_message.assert_called_once_with(
+        user_id='uid-1',
+        action_item_id='new-task',
+        description='Saved task',
+        due_at=DUE.isoformat(),
+        completed=completed,
+        status=status,
+        deleted=deleted,
+    )
+
+
+def test_failed_post_create_reminder_read_does_not_fail_committed_processing(monkeypatch, writer):
+    def unavailable_saved_state(*_args, **_kwargs):
+        raise RuntimeError('synthetic post-create read unavailable')
+
+    monkeypatch.setattr(writer.action_items_db, 'get_action_items_by_ids', unavailable_saved_state)
+    fallback = MagicMock()
+    monkeypatch.setattr(writer, 'record_fallback', fallback)
+
+    _write(monkeypatch, writer, [])
+
+    writer.send_action_item_data_message.assert_not_called()
+    writer.sync_action_item_reminder.assert_not_called()
+    writer.upsert_action_item_vectors_batch.assert_called_once_with(
+        'uid-1', [{'action_item_id': 'new-task', 'description': 'Send the budget'}]
+    )
+    writer.submit_with_context.assert_called_once()
+    fallback.assert_called_once_with(
+        component='other',
+        from_mode='task_reminder_state_read',
+        to_mode='task_write_only',
+        reason='other',
+        outcome='degraded',
+    )

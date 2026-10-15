@@ -19,9 +19,15 @@ extension RealtimeHubSession {
   }
 
   /// The Gemini `setup.generationConfig.speechConfig` block. Pin the spoken
-  /// voice — with no speechConfig Gemini picks its own default, which differs
-  /// from the OpenAI hub voice and can change across model revisions.
-  static func geminiSpeechConfig() -> [String: Any] {
-    ["voiceConfig": ["prebuiltVoiceConfig": ["voiceName": RealtimeHubVoicePolicy.voiceName(for: .gemini)]]]
+  /// voice — the shared assistant-voice selection, snapshotted at session
+  /// construction — or Gemini picks a shifting default of its own.
+  static func geminiSpeechConfig(voiceID: String = "Charon") -> [String: Any] {
+    [
+      "voiceConfig": [
+        "prebuiltVoiceConfig": [
+          "voiceName": RealtimeHubVoicePolicy.voiceName(for: .gemini, assistantVoiceID: voiceID)
+        ]
+      ]
+    ]
   }
 }

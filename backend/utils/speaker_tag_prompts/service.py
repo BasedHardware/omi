@@ -1,14 +1,12 @@
-"""Speaker tag prompts: serve a small daily set and apply the user's answers.
+"""Speaker tag prompts: a bounded daily set and atomic manual answers.
 
-Answers reuse the manual speaker-assignment transaction (the same receipt the
-transcript "Tag speaker" sheet writes), so a prompt answer and a hand edit are
-indistinguishable downstream. Voice samples follow the existing quality gates:
-other people through ``extract_speaker_samples`` (only when the user allows
-saving other people's voices), the owner through a clip that must pass the same
-transcription check before it is pooled into the owner's voiceprint.
+Owner checks bind one complete played excerpt, consume a durable conversation
+quota and never grant enrollment consent. Paid naming cards retain the existing
+manual tagging and quality-gated, preference-controlled teaching behavior.
 """
 
 import asyncio
+import contextvars
 import hashlib
 import json
 import logging
@@ -17,11 +15,12 @@ import time
 import uuid
 from concurrent.futures import Future, TimeoutError as FutureTimeoutError
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Set, Tuple, Union, cast
 
 import numpy as np
 
 from config.speaker_prior import pinned_speaker_prior_enabled
+from database import owner_confirmation as owner_confirmation_db
 from database import conversations as conversations_db
 from database import redis_db
 from database import users as users_db
@@ -31,13 +30,13 @@ from models.speaker_tag_prompts import (
     IgnoredVoicesResponse,
     SpeakerTagPromptAnswer,
     SpeakerTagPromptAnswerRequest,
+    SpeakerTagPromptSegmentIdentity,
     SpeakerTagPromptAnswerResponse,
     SpeakerTagPromptKind,
     SpeakerTagPromptOrigin,
     SpeakerTagPromptQualityOutcome,
     SpeakerTagPromptsResponse,
 )
-from utils.manual_speaker_assignments import teaching_segment_ids
 from models.person_confidence import SOURCE_CARD
 from utils.text_utils import compute_text_containment
 from utils.observability.speaker_tag_prompts import (
@@ -49,6 +48,7 @@ from utils.observability.speaker_tag_prompts import (
     SPEAKER_TAG_PROMPTS_SERVED,
     SPEAKER_TAG_PROMPTS_SKIPPED,
     VOICE_PROFILE_SETTING_CHANGES,
+    OWNER_CONFIRMATION_EVENTS,
 )
 from utils.product_telemetry import emit_product_event
 from utils.executors import (
@@ -56,14 +56,23 @@ from utils.executors import (
     db_executor,
     run_blocking,
     speaker_tag_verify_executor,
-    storage_executor,
-    submit_with_context,
     sync_executor,
 )
-from utils.speaker_identification import extract_speaker_samples
+from utils.conversations.audio_placement import CAPTURE_RETRY_MIN_SHIFT_SECONDS, capture_shift
+from utils.conversations.teaching_placement import OMI_SPEAKER_CAPTURE_RETRY_TOTAL, recover_teaching_clip
+from utils.manual_speaker_assignments import teaching_segment_ids
+from utils.speaker_learning_jobs import run_authorized_owner_learning, run_authorized_person_learning
 from utils.speaker_sample import verify_and_transcribe_sample, verify_and_transcribe_sample_in_worker
 from utils.speaker_tag_prompts.clips import CLIP_SAMPLE_RATE, conversation_clip_pcm, pcm_to_wav
 from utils.speaker_learning_policy import union_seconds
+from utils.owner_voice_evidence import authorized_owner_segments
+from utils.speaker_tag_prompts.owner_confirmation import (
+    FIELD as OWNER_CONFIRMATION_FIELD,
+    MAX_CONSTITUENTS,
+    StaleOwnerConfirmation,
+    binding_for,
+    voice_key,
+)
 from utils.speaker_tag_prompts.selection import (
     MAX_CLIP_SECONDS,
     MAX_GAP_SECONDS,
@@ -76,6 +85,7 @@ from utils.speaker_tag_prompts.selection import (
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
 from utils.speaker_permissions import named_speaker_prompts_allowed
 from utils.stt.speaker_match import mean_embedding
+from utils.speaker_tag_prompts import embedding_cache as owner_embedding_cache
 
 logger = logging.getLogger(__name__)
 
@@ -92,10 +102,6 @@ _inflight_verifications: Dict[str, Future[Optional[bytes]]] = {}
 _inflight_lock = threading.RLock()
 
 ScheduleTask = Callable[..., None]
-
-
-class TagPromptForbidden(Exception):
-    """The answer needs a feature the user's plan does not include."""
 
 
 class TagPromptInvalid(Exception):
@@ -233,28 +239,108 @@ def _submit_list_verification(
         existing = _inflight_verifications.get(key)
         if existing is not None:
             return existing
-        future = submit_with_context(
-            speaker_tag_verify_executor,
-            verified_clip_pcm,
-            uid,
-            conversation,
-            start,
-            end,
-            expected_text,
-            verification_deadline=deadline,
-        )
+        context = contextvars.copy_context()
+
+        def verify_in_context() -> Optional[bytes]:
+            return context.run(
+                verified_clip_pcm,
+                uid,
+                conversation,
+                start,
+                end,
+                expected_text,
+                verification_deadline=deadline,
+            )
+
+        future = speaker_tag_verify_executor.submit(verify_in_context)
         _inflight_verifications[key] = future
 
         def clear(done: Future[Optional[bytes]]) -> None:
             with _inflight_lock:
                 if _inflight_verifications.get(key) is done:
                     del _inflight_verifications[key]
+            if not done.cancelled():
+                error = done.exception()
+                if isinstance(error, FutureTimeoutError):
+                    logger.info('speaker tag list verification deadline reached')
+                elif error is not None:
+                    logger.error(
+                        'speaker tag list verification failed error_type=%s', type(error).__name__, exc_info=error
+                    )
 
         future.add_done_callback(clear)
         return future
 
 
-def get_prompts(uid: str, now: Optional[datetime] = None) -> SpeakerTagPromptsResponse:
+def _owner_group_evidence(
+    uid: str, conversation: Mapping[str, Any], runs: list, owner: list, deadline: float
+) -> Optional[Tuple[Any, float, str]]:
+    """Pool complete constituent clips, then select ambiguity and centroid representative.
+
+    No competing person print is loaded. A bounded roster that cannot be fully
+    evidenced is withheld rather than ranked by labels or a partial pool.
+    """
+    if not runs or len(runs) > MAX_CONSTITUENTS:
+        return None
+    owner_vector = np.asarray(owner, dtype=np.float32).reshape(-1)
+    owner_norm = np.linalg.norm(owner_vector)
+    if not np.isfinite(owner_vector).all() or owner_norm <= 0:
+        return None
+    groups = {}
+    cached_entries = owner_embedding_cache.load(uid, conversation['id'])
+    cache_changed = False
+    by_id = {s.get('id'): s for s in conversation.get('transcript_segments') or []}
+    for run in runs:
+        if time.monotonic() >= deadline:
+            raise FutureTimeoutError()
+        pcm = verified_clip_pcm(uid, conversation, run.start, run.end, run.text, verification_deadline=deadline)
+        if pcm is None:
+            return None
+        pcm_digest = hashlib.sha256(pcm).hexdigest()
+        cached = cached_entries.get(pcm_digest)
+        vector = np.asarray(cached['vector'], dtype=np.float32).reshape(-1) if cached else None
+        if vector is None:
+            vector = np.asarray(
+                extract_embedding_from_bytes(pcm_to_wav(pcm), timeout=max(0.01, deadline - time.monotonic())),
+                dtype=np.float32,
+            ).reshape(-1)
+            if vector.shape == owner_vector.shape and np.isfinite(vector).all() and np.linalg.norm(vector) > 0:
+                cached_entries[pcm_digest] = {
+                    'vector': vector.tolist(),
+                    'expires_at': time.time() + owner_embedding_cache.TTL_SECONDS,
+                }
+                cache_changed = True
+        if (
+            vector.size > owner_embedding_cache.MAX_DIMENSIONS
+            or vector.shape != owner_vector.shape
+            or not np.isfinite(vector).all()
+            or np.linalg.norm(vector) <= 0
+        ):
+            return None
+        vector = vector / np.linalg.norm(vector)
+        # The group is a scoped diarized speaker; separate captures and source
+        # windows cannot be collapsed just because their numeric speaker repeats.
+        segment = by_id.get(run.segment_ids[0])
+        if segment is None:
+            return None
+        groups.setdefault(voice_key(segment), []).append((run, vector, pcm_digest))
+    if cache_changed:
+        owner_embedding_cache.save(uid, conversation['id'], cached_entries)
+    choices = []
+    for members in groups.values():
+        centroid = mean_embedding([vector.reshape(1, -1) for _, vector, _ in members]).reshape(-1)
+        if not np.any(centroid):
+            continue
+        distance = float(1 - np.dot(centroid, owner_vector / owner_norm))
+        representative = min(members, key=lambda item: (float(1 - np.dot(item[1], centroid)), item[0].start))
+        choices.append((abs(distance - 0.50), representative[0].start, representative[0], distance, representative[2]))
+    if not choices or time.monotonic() >= deadline:
+        return None
+    _, _, run, distance, pcm_digest = min(choices, key=lambda item: item[:2])
+    return run, distance, pcm_digest
+
+
+def get_prompts(uid: str, now: Optional[datetime] = None, *, owner_excerpt: bool = False) -> SpeakerTagPromptsResponse:
     now = voice_profiles_db.as_utc(now) or datetime.now(timezone.utc)
     settings, owner_has_voice = voice_profiles_db.get_voice_profile_context(uid)
     save_others = settings['save_other_voice_profiles']
@@ -292,14 +378,46 @@ def get_prompts(uid: str, now: Optional[datetime] = None) -> SpeakerTagPromptsRe
         start_date=now - PROMPT_WINDOW,
         end_date=now,
     )
-    stored_people = [person for person in users_db.get_people(uid) if person.get('id')]
+    stored_people = [person for person in users_db.get_people(uid) if person.get('id')] if named_allowed else []
     people = {person['id']: person.get('name') or '' for person in stored_people}
     pinned = {person['id'] for person in stored_people if person.get('pinned') is True}
     deadline = time.monotonic() + LIST_VERIFY_BUDGET_SECONDS
     timed_out = False
+    owner_embedding = users_db.get_user_speaker_embedding(uid) if owner_has_voice and owner_excerpt else None
+    owner_clips = {}
+
+    def owner_evidence(conversation, runs):
+        nonlocal timed_out
+        if not owner_embedding or not runs:
+            return None
+        owner_print = owner_embedding
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            timed_out = True
+            return None
+        try:
+            context = contextvars.copy_context()
+
+            def evidence_in_context() -> Optional[Tuple[Any, float, str]]:
+                return context.run(_owner_group_evidence, uid, conversation, runs, owner_print, deadline)
+
+            future = speaker_tag_verify_executor.submit(evidence_in_context)
+            result = future.result(timeout=remaining)
+            if result is not None:
+                run, distance, pcm_digest = result
+                owner_clips[conversation['id']] = (run.segment_ids, pcm_digest)
+                return run, distance
+        except (FutureTimeoutError, ExecutorSaturatedError):
+            timed_out = True
+        except Exception as error:
+            logger.warning('owner question evidence unavailable error_type=%s', type(error).__name__)
+            timed_out = True
+        return None
 
     def verify_in_budget(conversation: Mapping[str, Any], prompt: Any, _expected: str) -> bool:
         nonlocal timed_out
+        if prompt.kind == SpeakerTagPromptKind.owner_check:
+            return conversation['id'] in owner_clips
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             timed_out = True
@@ -336,8 +454,26 @@ def get_prompts(uid: str, now: Optional[datetime] = None) -> SpeakerTagPromptsRe
         ignored=voice_profiles_db.ignored_voice_keys(state),
         prior_enabled=pinned_speaker_prior_enabled(),
         verify=verify_in_budget,
+        owner_evidence=owner_evidence,
         on_skip=lambda reason: SPEAKER_TAG_PROMPTS_SKIPPED.labels(reason=reason).inc(),
     )
+    claimed = []
+    for prompt in prompts:
+        if prompt.kind == SpeakerTagPromptKind.owner_check:
+            conversation = next(c for c in conversations if c['id'] == prompt.conversation_id)
+            binding = binding_for(conversation, prompt)
+            binding['selected_pcm_sha256'] = owner_clips[prompt.conversation_id][1]
+            try:
+                if not owner_confirmation_db.record(uid, prompt.conversation_id, 'claim', binding):
+                    continue
+            except StaleOwnerConfirmation:
+                continue
+            prompt.evidence_id = binding['evidence_id']
+            prompt.receipt_generation = binding['receipt_generation']
+            prompt.speaker_id_scope = binding['speaker_id_scope']
+            prompt.audio_capture_run = binding['audio_capture_run']
+        claimed.append(prompt)
+    prompts = claimed
     if not prompts:
         if not timed_out:
             voice_profiles_db.mark_tag_prompts_empty(uid, now)
@@ -351,15 +487,28 @@ def get_prompts(uid: str, now: Optional[datetime] = None) -> SpeakerTagPromptsRe
     return SpeakerTagPromptsResponse(prompts=prompts, first_time=first_time, save_other_voice_profiles=save_others)
 
 
-def mark_shown(uid: str, prompt_count: int, now: Optional[datetime] = None) -> bool:
+def mark_shown(uid: str, prompt_ids: List[str], now: Optional[datetime] = None, *, set_shown: bool = True) -> bool:
     now = now or datetime.now(timezone.utc)
-    first_time = voice_profiles_db.record_tag_prompts_shown(uid, now)
-    SPEAKER_TAG_PROMPT_SETS.labels(event='shown').inc()
-    emit_product_event(
-        uid=uid,
-        event='Speaker Tag Prompts Shown',
-        properties={'prompt_count': prompt_count, 'first_time': first_time},
+    first_time = voice_profiles_db.record_tag_prompts_shown(uid, now) if set_shown else False
+    conversations = conversations_db.get_conversations(
+        uid, limit=RECENT_CONVERSATION_LIMIT, start_date=now - PROMPT_WINDOW, end_date=now
     )
+    for conversation in conversations:
+        binding = conversation.get(OWNER_CONFIRMATION_FIELD) or {}
+        if binding.get('prompt_id') not in prompt_ids:
+            continue
+        try:
+            if owner_confirmation_db.record(uid, conversation['id'], 'shown', binding):
+                OWNER_CONFIRMATION_EVENTS.labels(event='shown').inc()
+        except StaleOwnerConfirmation:
+            continue
+    if set_shown:
+        SPEAKER_TAG_PROMPT_SETS.labels(event='shown').inc()
+        emit_product_event(
+            uid=uid,
+            event='Speaker Tag Prompts Shown',
+            properties={'prompt_count': len(prompt_ids), 'first_time': first_time},
+        )
     return first_time
 
 
@@ -393,11 +542,7 @@ _ALLOWED_ANSWERS = {
     SpeakerTagPromptKind.owner_check: {
         SpeakerTagPromptAnswer.me,
         SpeakerTagPromptAnswer.not_me,
-        SpeakerTagPromptAnswer.person,
-        SpeakerTagPromptAnswer.new_person,
-        SpeakerTagPromptAnswer.someone_else,
         SpeakerTagPromptAnswer.skip,
-        SpeakerTagPromptAnswer.not_a_person,
     },
     SpeakerTagPromptKind.confirm_person: {
         SpeakerTagPromptAnswer.me,
@@ -479,6 +624,86 @@ def _resolve_person(
     return person_id, person
 
 
+def _apply_owner_answer(
+    uid: str, request: SpeakerTagPromptAnswerRequest, now: datetime
+) -> SpeakerTagPromptAnswerResponse:
+    if (
+        request.answer not in {SpeakerTagPromptAnswer.me, SpeakerTagPromptAnswer.not_me, SpeakerTagPromptAnswer.skip}
+        or request.person_id is not None
+        or request.name is not None
+        or request.suggested_person_id is not None
+    ):
+        raise TagPromptInvalid('Owner questions accept only Yes, No or Skip')
+    try:
+        if not request.evidence_id:
+            raise StaleOwnerConfirmation('Owner question needs played excerpt evidence')
+        evidence = dict(
+            prompt_id=request.prompt_id,
+            evidence_id=request.evidence_id,
+            segment_ids=request.segment_ids,
+            speaker_id=request.speaker_id,
+        )
+        if request.answer == SpeakerTagPromptAnswer.skip:
+            owner_confirmation_db.record(uid, request.conversation_id, 'skip', evidence)
+            raw = conversations_db.get_conversation(uid, request.conversation_id)
+            identities = []
+        else:
+            raw, resolved, *_ = conversations_db.assign_conversation_speaker(
+                uid,
+                request.conversation_id,
+                is_user=request.answer == SpeakerTagPromptAnswer.me,
+                person_id=None,
+                segment_ids=request.segment_ids,
+                speaker_id=request.speaker_id,
+                segment_only=True,
+                use_for_speech_training=False,
+                evidence_source=SOURCE_CARD,
+                rejection=(
+                    {'kind': 'not_me', 'person_id': None} if request.answer == SpeakerTagPromptAnswer.not_me else None
+                ),
+                owner_confirmation=evidence,
+            )
+            identities = [
+                SpeakerTagPromptSegmentIdentity(id=s['id'], is_user=s['is_user'], person_id=s.get('person_id'))
+                for s in raw['transcript_segments']
+                if s['id'] in resolved
+            ]
+        if raw is None:
+            raise StaleOwnerConfirmation('Conversation not found')
+    except (StaleOwnerConfirmation, LookupError, PermissionError, ValueError) as error:
+        OWNER_CONFIRMATION_EVENTS.labels(event='stale_rejected').inc()
+        raise StaleOwnerConfirmation('Owner question is stale; refresh the conversation') from error
+    event = {
+        SpeakerTagPromptAnswer.me: 'yes',
+        SpeakerTagPromptAnswer.not_me: 'no',
+        SpeakerTagPromptAnswer.skip: 'skip',
+    }[request.answer]
+    OWNER_CONFIRMATION_EVENTS.labels(event=event).inc()
+    # Quality uses the server's origin, never a client-supplied label.
+    origin = (raw.get(OWNER_CONFIRMATION_FIELD) or {})['origin']
+    if origin == 'mixed' and request.answer != SpeakerTagPromptAnswer.skip:
+        # One mixed answered excerpt is its own denominator, not a uniform
+        # owner precision/recall observation. Keep the released response enum.
+        outcome = SpeakerTagPromptQualityOutcome.unknown_voice
+        quality_label = 'owner_mixed_yes' if request.answer == SpeakerTagPromptAnswer.me else 'owner_mixed_no'
+    else:
+        outcome = quality_outcome(
+            # A binary owner answer cannot judge a named person's identity.
+            SpeakerTagPromptOrigin.unnamed if origin in {'mixed', 'auto_person'} else SpeakerTagPromptOrigin(origin),
+            request.answer,
+            person_id=None,
+            suggested_person_id=None,
+            person_enrolled=False,
+        )
+        quality_label = outcome.value
+    voice_profiles_db.record_tag_prompt_answered(uid, request.prompt_id, now)
+    SPEAKER_TAG_PROMPT_ANSWERS.labels(kind='owner_check', answer=request.answer.value).inc()
+    SPEAKER_TAG_PROMPT_QUALITY.labels(outcome=quality_label).inc()
+    return SpeakerTagPromptAnswerResponse(
+        quality_outcome=outcome, conversation_id=request.conversation_id, segment_identities=identities
+    )
+
+
 def apply_answer(
     uid: str,
     request: SpeakerTagPromptAnswerRequest,
@@ -487,14 +712,22 @@ def apply_answer(
 ) -> SpeakerTagPromptAnswerResponse:
     """Apply one answer. ``schedule(fn, **kwargs)`` runs slow voice work after the response."""
     now = now or datetime.now(timezone.utc)
+    if request.kind == SpeakerTagPromptKind.owner_check:
+        return _apply_owner_answer(uid, request, now)
+    # A kind edit must not turn an issued owner excerpt into the legacy
+    # whole-speaker naming/learning path, even when its evidence token is omitted.
+    if request.prompt_id == prompt_id(request.conversation_id, request.speaker_id, SpeakerTagPromptKind.owner_check):
+        OWNER_CONFIRMATION_EVENTS.labels(event='stale_rejected').inc()
+        raise StaleOwnerConfirmation('Owner excerpt cannot authorize a naming answer')
     if request.answer not in _ALLOWED_ANSWERS[request.kind]:
         raise TagPromptInvalid(f'{request.answer.value} is not a valid answer for {request.kind.value}')
+    if request.evidence_id is not None:
+        raise TagPromptInvalid('Owner excerpt cannot authorize a naming answer')
     answer = effective_answer(request)
     if answer not in _ALLOWED_ANSWERS[request.kind]:
         raise TagPromptInvalid(f'{answer.value} is not a valid answer for {request.kind.value}')
-    needs_named = request.kind != SpeakerTagPromptKind.owner_check or answer in _NAMED_ANSWERS
-    if needs_named and not named_speaker_prompts_allowed(uid):
-        raise TagPromptForbidden('Naming other people needs a paid plan')
+    # Naming a voice by hand is free on every plan; only automatic non-owner suggestions are paid
+    # (get_prompts withholds them), so an answer to an already-served card is never refused here.
 
     person_id: Optional[str] = None
     person_enrolled = False
@@ -504,16 +737,19 @@ def apply_answer(
         person_enrolled = bool(person.get('speaker_embedding'))
 
     if answer == SpeakerTagPromptAnswer.me:
-        conversation, resolved = _assign(uid, request, is_user=True, person_id=None, train=False)
+        conversation, resolved = _assign(
+            uid, request, is_user=True, person_id=None, train=False, owner_segment_ids=request.segment_ids
+        )
         if schedule is not None:
             assigned = set(resolved) & {s.get('id') for s in conversation.get('transcript_segments') or []}
             segment_ids = [sid for sid in request.segment_ids if sid in assigned]
             if segment_ids:
                 schedule(
-                    store_owner_voice_sample,
+                    run_authorized_owner_learning,
                     uid=uid,
-                    conversation_id=request.conversation_id,
+                    conversation_id=conversation.get('id') or request.conversation_id,
                     segment_ids=segment_ids,
+                    card_generation=(conversation.get('manual_speaker_assignments') or {}).get('generation', 0),
                 )
                 voice_sample_queued = True
     elif person_id is not None:
@@ -524,10 +760,10 @@ def apply_answer(
             SPEAKER_TAG_PROMPT_VOICE_SAMPLES.labels(target='person', outcome='disabled_by_user').inc()
         elif schedule is not None:
             schedule(
-                extract_speaker_samples,
+                run_authorized_person_learning,
                 uid=uid,
                 person_id=person_id,
-                conversation_id=request.conversation_id,
+                conversation_id=conversation.get('id') or request.conversation_id,
                 segment_ids=teaching_segment_ids(conversation.get('transcript_segments') or [], resolved),
             )
             SPEAKER_TAG_PROMPT_VOICE_SAMPLES.labels(target='person', outcome='queued').inc()
@@ -540,7 +776,7 @@ def apply_answer(
         # The automatic label was wrong: record an explicit "not the owner / not them".
         if answer == SpeakerTagPromptAnswer.not_a_person:
             rejection = {'kind': 'not_a_person', 'person_id': None}
-        elif answer == SpeakerTagPromptAnswer.not_me or request.kind == SpeakerTagPromptKind.owner_check:
+        elif answer == SpeakerTagPromptAnswer.not_me:
             rejection = {'kind': 'not_me', 'person_id': None}
         elif request.kind == SpeakerTagPromptKind.confirm_person:
             if not request.suggested_person_id:
@@ -600,8 +836,14 @@ def _assign(
     person_id: Optional[str],
     train: bool,
     rejection: Optional[Dict[str, Any]] = None,
+    owner_segment_ids: Optional[List[str]] = None,
 ) -> Tuple[Dict[str, Any], List[str]]:
     """Label the whole diarized speaker in that conversation, like "apply to all" in the tag sheet."""
+    assignment_options: Dict[str, Any] = {}
+    if owner_segment_ids:
+        assignment_options['owner_segment_ids'] = owner_segment_ids
+    if rejection:
+        assignment_options['rejection'] = rejection
     raw, resolved, _removed, _before = conversations_db.assign_conversation_speaker(
         uid,
         request.conversation_id,
@@ -610,8 +852,9 @@ def _assign(
         speaker_id=request.speaker_id,
         use_for_speech_training=train,
         evidence_source=SOURCE_CARD,
-        **({'rejection': rejection} if rejection else {}),
+        **assignment_options,
     )
+    raw.pop('_speaker_learning_queued', None)
     return raw, resolved
 
 
@@ -665,15 +908,23 @@ def _pool(vectors: List[List[float]]) -> List[float]:
     return centroid.flatten().tolist()
 
 
-def owner_clip_window(conversation: Dict[str, Any], segment_ids: List[str]) -> Optional[Tuple[float, float, str]]:
+def owner_clip_window(
+    conversation: Dict[str, Any],
+    segment_ids: List[str],
+    *,
+    return_key: bool = False,
+    consented: Optional[Set[str]] = None,
+) -> Optional[Union[Tuple[float, float, str], Tuple[float, float, str, Tuple[Any, int]]]]:
     """The confirmed stretch, if it is still the owner's and long enough: (start, end, text).
 
     A whole-speaker label may resolve to several captures; choose the longest
     contiguous owner run (same capture scope + speaker id, gaps at most
     MAX_GAP_SECONDS) whose distinct speech reaches MIN_CLIP_SECONDS, then
     center-crop to MAX_CLIP_SECONDS. Cross-scope duplicates are ignored; a
-    non-owner or different speaker overlapping the window in the same scope
-    rejects that run.
+    non-owner or a different speaker overlapping the window in the same scope
+    rejects that run. With ``consented`` (every segment id the owner currently
+    allows teaching from), an overlapping owner segment outside it rejects the
+    run too: its speech would ride inside the clip without consent.
     """
     wanted = set(segment_ids)
     all_segments = list(conversation.get('transcript_segments') or [])
@@ -723,7 +974,11 @@ def owner_clip_window(conversation: Dict[str, Any], segment_ids: List[str]) -> O
                 and s.get('speaker_id_scope') == scope
                 and float(s.get('start') or 0) < end
                 and float(s.get('end') or 0) > start
-                and (speaker_id_of(s) != speaker_id or not s.get('is_user'))
+                and (
+                    speaker_id_of(s) != speaker_id
+                    or not s.get('is_user')
+                    or (consented is not None and s.get('id') not in consented)
+                )
                 for s in all_segments
             )
             if impure:
@@ -738,13 +993,17 @@ def owner_clip_window(conversation: Dict[str, Any], segment_ids: List[str]) -> O
             if not text:
                 continue
             if best is None or speech > best[0]:
-                best = (speech, start, end, text)
+                best = (speech, start, end, text, (scope, speaker_id))
     if best is None:
         return None
-    return best[1], best[2], best[3]
+    if return_key:
+        return best[1], best[2], best[3], best[4]
+    return cast(Tuple[float, float, str], (best[1], best[2], best[3]))
 
 
-async def store_owner_voice_sample(uid: str, conversation_id: str, segment_ids: List[str]) -> str:
+async def store_owner_voice_sample(
+    uid: str, conversation_id: str, segment_ids: List[str], *, card_generation: Optional[int] = None
+) -> str:
     """Verify a "That's me" clip and pool it into the owner's voiceprint. Returns the outcome label.
 
     The outcome is attributable: beyond the Prometheus counter, one log line
@@ -760,26 +1019,95 @@ async def store_owner_voice_sample(uid: str, conversation_id: str, segment_ids: 
         if not conversation:
             outcome = 'clip_not_clean'
             return outcome
-        window = owner_clip_window(conversation, segment_ids)
+        authorized = authorized_owner_segments(conversation, segment_ids, card_generation=card_generation)
+        if set(authorized) != set(segment_ids) or not authorized:
+            outcome = 'stale_assignment'
+            return outcome
+        # Everything the owner currently allows teaching from, not only this job's
+        # segments: an earlier confirmed segment may overlap the window, an opted-out one must not.
+        consented = set(
+            authorized_owner_segments(
+                conversation,
+                [s['id'] for s in conversation.get('transcript_segments') or [] if s.get('id')],
+                card_generation=card_generation,
+            )
+        )
+        window = owner_clip_window(conversation, authorized, return_key=True, consented=consented)
         if window is None:
             outcome = 'clip_not_clean'
             return outcome
-        start, end, text = window
-        pcm = await run_blocking(storage_executor, conversation_clip_pcm, uid, conversation, start, end)
-        if not pcm:
-            outcome = 'no_audio'
-            return outcome
-        pcm = pcm[: int(round((end - start) * CLIP_SAMPLE_RATE)) * 2]
-        if len(pcm) < int(MIN_CLIP_SECONDS * CLIP_SAMPLE_RATE) * 2:
-            outcome = 'clip_not_clean'
-            return outcome
-        wav = pcm_to_wav(pcm)
+        start, end, text, (win_scope, win_speaker) = cast(Tuple[float, float, str, Tuple[Any, int]], window)
         language = conversation.get('language') or await run_blocking(
             db_executor, users_db.get_user_language_preference, uid
         )
-        _, is_valid, reason = await verify_and_transcribe_sample(wav, CLIP_SAMPLE_RATE, text, language=language)
-        if not is_valid:
-            outcome = 'transient_failure' if reason.startswith('transcription_failed') else 'rejected_quality'
+
+        # Cut at the legacy position first, with its bounded text search. Only if that yields no
+        # verified speech and the receiver recorded hearing this window somewhere else (reconnects
+        # and failover pull the text and audio clocks apart) is it cut once more there. Every cut
+        # faces the same verification, and a failed retry reports what the legacy cut found.
+        async def cut(prefer_capture: bool) -> Tuple[str, bytes, str]:
+            pcm = await run_blocking(
+                sync_executor,
+                conversation_clip_pcm,
+                uid,
+                conversation,
+                start,
+                end,
+                caller='owner_confirmation',
+                prefer_capture=prefer_capture,
+            )
+            if not pcm:
+                return 'no_audio', b'', ''
+            pcm = pcm[: int(round((end - start) * CLIP_SAMPLE_RATE)) * 2]
+            if len(pcm) < int(MIN_CLIP_SECONDS * CLIP_SAMPLE_RATE) * 2:
+                return 'clip_not_clean', b'', ''
+            clip_wav = pcm_to_wav(pcm)
+            _, clip_valid, clip_reason = await verify_and_transcribe_sample(
+                clip_wav, CLIP_SAMPLE_RATE, text, language=language
+            )
+            if clip_valid:
+                return '', clip_wav, clip_reason
+            failed = 'transient_failure' if clip_reason.startswith('transcription_failed') else 'rejected_quality'
+            return failed, b'', clip_reason
+
+        failure, wav, reason = await cut(False)
+        if failure == 'rejected_quality' and reason.startswith('text_mismatch'):
+            run_contributors = [
+                s
+                for s in conversation['transcript_segments']
+                if s.get('id') in authorized
+                and s.get('speaker_id_scope') == win_scope
+                and speaker_id_of(s) == win_speaker
+                and s.get('start', end) < end
+                and s.get('end', start) > start
+            ]
+            if run_contributors:
+                recovered = await recover_teaching_clip(
+                    uid,
+                    conversation,
+                    start,
+                    end,
+                    text,
+                    language,
+                    CLIP_SAMPLE_RATE,
+                    anchor_offset=start - min(float(s.get('start') or 0) for s in run_contributors),
+                )
+                if recovered is not None:
+                    failure, wav = '', pcm_to_wav(recovered[0])
+        use_capture = False
+        shift = capture_shift(conversation, start, end)
+        if (
+            failure
+            and failure != 'transient_failure'
+            and shift is not None
+            and abs(shift) >= CAPTURE_RETRY_MIN_SHIFT_SECONDS
+        ):
+            OMI_SPEAKER_CAPTURE_RETRY_TOTAL.labels(target='owner', outcome='attempted').inc()
+            capture_failure, capture_wav, _ = await cut(True)
+            if not capture_failure:
+                failure, wav, use_capture = '', capture_wav, True
+        if failure:
+            outcome = failure
             return outcome
         embedding = await run_blocking(sync_executor, extract_embedding_from_bytes, wav, 'owner_confirmation.wav')
         if not np.isfinite(embedding).all() or not np.any(embedding):
@@ -793,11 +1121,34 @@ async def store_owner_voice_sample(uid: str, conversation_id: str, segment_ids: 
             _pool,
             conversation_id=conversation_id,
             expected_receipt_generation=(conversation.get('manual_speaker_assignments') or {}).get('generation', 0),
+            card_generation=card_generation,
+            # Record every consented segment inside the selected run's window: the
+            # confirmation retracts by intersection, so each contributor must be named,
+            # and overlapping owner segments from another capture scope must not be
+            # retracted by a later edit in this scope.
+            segment_ids=[
+                s['id']
+                for s in conversation['transcript_segments']
+                if s.get('id') in consented
+                and s.get('speaker_id_scope') == win_scope
+                and speaker_id_of(s) == win_speaker
+                # Only segments that put audio in the clip: zero-duration provider
+                # points and unplaced text contribute none, and naming them would let
+                # an edit to that text retract or block a sample it never fed.
+                and s.get('audio_alignment') != 'unplaced'
+                and s.get('start') is not None
+                and s.get('end') is not None
+                and float(s['end']) > float(s['start'])
+                and float(s['start']) < end
+                and float(s['end']) > start
+            ],
         )
         if not stored:
             outcome = 'stale_assignment'
             return outcome
         outcome = 'stored'
+        if use_capture:
+            OMI_SPEAKER_CAPTURE_RETRY_TOTAL.labels(target='owner', outcome='stored').inc()
         return outcome
     except Exception as error:
         logger.error('speaker tag prompt owner sample failed error_type=%s', type(error).__name__)

@@ -23,6 +23,7 @@ STT_STREAM_CLOSE_REASONS = frozenset(
         *ACCOUNT_REJECTION_REASONS,
         PROVIDER_RATE_LIMITED,
         'soniox_idle_timeout',
+        'soniox_request_timeout',
         'soniox_no_audio_teardown',
         'soniox_rotation',
         'soniox_invalid_hint',
@@ -46,6 +47,22 @@ def bounded_stream_close_provider(provider: str) -> str:
 def bounded_stream_close_reason(reason: Optional[str]) -> str:
     label = (reason or '').strip().lower()
     return label if label in STT_STREAM_CLOSE_REASONS else 'connection_lost'
+
+
+def initialize_stt_stream_close_children() -> None:
+    """Publish every bounded provider/reason child at zero. Never raises.
+
+    Prometheus needs a scraped zero before the first close to observe its
+    increase. Include the provider fallback bucket, but never vendor strings.
+    Repeated initialization only touches children; it never resets counts.
+    """
+
+    try:
+        for provider in sorted(STT_STREAM_CLOSE_PROVIDERS | {'unknown'}):
+            for reason in sorted(STT_STREAM_CLOSE_REASONS):
+                OMI_STT_STREAM_CLOSE_TOTAL.labels(provider=provider, reason=reason)
+    except Exception:
+        pass
 
 
 def record_stt_stream_close(*, provider: str, reason: Optional[str]) -> None:
@@ -90,4 +107,6 @@ def publish_stt_provider_retired(env: Optional[Mapping[str, str]] = None) -> Non
         pass
 
 
+# Direct Soniox users also import this module, even without streaming.py.
+initialize_stt_stream_close_children()
 publish_stt_provider_retired()

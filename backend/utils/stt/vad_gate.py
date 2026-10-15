@@ -20,7 +20,7 @@ from bisect import bisect_right
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Deque, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional, Sequence, Tuple, cast
 
 import numpy as np
 
@@ -30,6 +30,7 @@ from utils.metrics import (
     OMI_VAD_GATE_SESSIONS_TOTAL,
 )
 from utils.observability.fallback import record_fallback
+from config.live_stt_recovery import session_recovery_enabled
 from utils.stt.socket import STTSocket
 from utils.stt.vad import (
     VAD_WINDOW_SAMPLES,
@@ -732,6 +733,7 @@ class GatedSTTSocket(STTSocket):
         send_tracker: Any = None,
     ):
         self._conn = stt_connection
+        self.recovery_enabled = session_recovery_enabled(stt_connection)
         self._gate = gate
         self._passthrough_audio = passthrough_audio
         # Audio-timeline v2: the provider epoch's translator. Accepted sends
@@ -756,6 +758,20 @@ class GatedSTTSocket(STTSocket):
     @property
     def death_reason(self) -> Optional[str]:
         return self._conn.death_reason
+
+    async def wait_send_capacity(self, limit: int | None = None, timeout: float | None = None) -> bool:
+        enabled = getattr(self, 'recovery_enabled', None)
+        if enabled is None:
+            enabled = session_recovery_enabled(self._conn)
+        if not enabled:
+            return not self.is_connection_dead
+        wait = getattr(self._conn, 'wait_send_capacity', None)
+        if not callable(wait):
+            return not self.is_connection_dead
+        try:
+            return await cast(Callable[..., Awaitable[bool]], wait)(limit=limit, timeout=timeout)
+        except TypeError:
+            return await cast(Callable[[], Awaitable[bool]], wait)()
 
     @property
     def typed_death_reason(self) -> Optional[str]:
@@ -806,6 +822,9 @@ class GatedSTTSocket(STTSocket):
                 self._send_tracker.send_path = 'direct_recorded'
                 self._send_tracker.note_accepted(start_sample, len(data) // 2)
             return accepted
+        observe = getattr(self._conn, 'observe_vad', None)
+        if getattr(self._conn, 'idle_close_enabled', False) is True and callable(observe):
+            observe(gate_out, self._gate.mode)
         if self._raw_file:
             self._raw_file.write(data)
         if self._gated_file and gate_out.audio_to_send:
@@ -821,6 +840,7 @@ class GatedSTTSocket(STTSocket):
             # a provider enqueue failure and must not terminate the session.
             accepted = True
             sent_spans = ()
+        self._idle_send_spans = sent_spans
         if accepted is True and self._send_tracker is not None and sent_spans:
             self._send_tracker.send_path = 'vad_gate_passthrough' if self._passthrough_audio else 'vad_gate_active'
             self._send_tracker.note_accepted_spans(sent_spans)
@@ -836,6 +856,44 @@ class GatedSTTSocket(STTSocket):
                 # the client instead of continuing as if transcription worked.
                 return False
         return accepted
+
+    @property
+    def idle_close_enabled(self) -> bool:
+        return getattr(self._conn, 'idle_close_enabled', False) is True
+
+    async def complete_send(self) -> bool:
+        offset = getattr(self._conn, 'set_resume_provider_offset', None)
+        if self._send_tracker is not None and callable(offset):
+            offset(self._send_tracker.last_send_provider_start)
+        complete = getattr(self._conn, 'complete_send', None)
+        return (
+            await cast(Callable[[], Awaitable[bool]], complete)() if callable(complete) else not self.is_connection_dead
+        )
+
+    def commit_send(self) -> None:
+        commit = getattr(self._conn, 'commit_send', None)
+        if callable(commit):
+            commit()
+
+    def send_admitted_audio(self, data: bytes, spans: Any) -> bool:
+        from utils.stt.soniox_idle import unaccepted_onset
+
+        data, spans = unaccepted_onset(data, spans, self._send_tracker)
+        if not data:
+            return True
+        self._idle_send_spans = spans
+        accepted = self._conn.send(data)
+        if accepted and self._send_tracker is not None and spans:
+            self._send_tracker.note_accepted_spans(spans)
+        return accepted
+
+    def take_unsent_packet(self) -> Any:
+        data = self.take_unsent_audio()
+        return (data, getattr(self, '_idle_send_spans', ())) if data else None
+
+    def take_unsent_audio(self) -> bytes:
+        take = getattr(self._conn, 'take_unsent_audio', None)
+        return cast(Callable[[], bytes], take)() if callable(take) else b''
 
     def finalize(self) -> None:
         """Flush pending transcript."""

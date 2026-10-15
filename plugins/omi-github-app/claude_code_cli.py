@@ -8,6 +8,8 @@ import tempfile
 import logging
 from typing import Optional, Dict, Any
 
+REQUEST_TIMEOUT = (5, 30)
+
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -198,7 +200,7 @@ def get_default_branch(owner: str, repo: str, github_token: str) -> str:
     }
 
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
         if response.status_code == 200:
             default_branch = response.json().get('default_branch', 'main')
             logger.info(f"Default branch for {owner}/{repo}: {default_branch}")
@@ -251,7 +253,7 @@ def create_pr_with_github_api(
     logger.info(f"Creating PR: {branch} -> {base_branch}")
 
     try:
-        response = requests.post(url, headers=headers, json=data)
+        response = requests.post(url, headers=headers, json=data, timeout=REQUEST_TIMEOUT)
 
         if response.status_code == 201:
             pr_data = response.json()
@@ -305,7 +307,7 @@ def merge_pr_with_github_api(
     logger.info(f"Merging PR #{pr_number} using {merge_method} method")
 
     try:
-        response = requests.put(url, headers=headers, json=data)
+        response = requests.put(url, headers=headers, json=data, timeout=REQUEST_TIMEOUT)
 
         if response.status_code == 200:
             logger.info(f"PR #{pr_number} merged successfully")

@@ -34,6 +34,11 @@ Future<void> showActionItemFormSheet(
   );
 }
 
+const int _kTaskMaxLength = 4096;
+
+/// The character counter appears in the last 10% before [_kTaskMaxLength].
+const int _kTaskCounterThreshold = _kTaskMaxLength * 9 ~/ 10;
+
 /// Creates or edits one task. Explicit Cancel and Save; completion (edit mode) applies the moment
 /// it is ticked, like the list's checkbox. Delete is immediate with an Undo toast.
 ///
@@ -187,7 +192,10 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
       final sid = newShareId();
       OmiHaptics.light();
       final outcome = await SharePlus.instance.share(
-        ShareParams(text: tagShareUrl(url, sid: sid), sharePositionOrigin: shareSheetOrigin()),
+        ShareParams(
+          text: tagShareUrl(url, sid: sid),
+          sharePositionOrigin: shareSheetOrigin(),
+        ),
       );
       final targetApp = outcome.status == ShareResultStatus.success ? shareTargetApp(outcome.raw) : null;
       PlatformManager.instance.analytics.track(
@@ -278,7 +286,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
               autofocus: true,
               maxLines: 5,
               minLines: 2,
-              maxLength: 4096,
+              maxLength: _kTaskMaxLength,
               textInputAction: TextInputAction.done,
               style: OmiType.callout.copyWith(height: 1.4),
               cursorColor: OmiColors.accent,
@@ -325,29 +333,36 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                 ),
               ),
             ),
-            Wrap(spacing: OmiSpacing.xs, children: [
-              for (final days in [0, 1, 7])
-                ActionChip(
-                  key: ValueKey('task_quick_date_$days'),
-                  label: Text(days == 0
-                      ? l10n.today
-                      : days == 1
-                          ? l10n.tomorrow
-                          : l10n.nextWeek),
-                  onPressed: _isSaving ? null : () => _selectQuickDate(days),
-                  backgroundColor: OmiColors.surface2,
-                  labelStyle: OmiType.footnote,
-                  side: BorderSide(color: OmiColors.border),
-                ),
-            ]),
-            Align(
-              alignment: AlignmentDirectional.centerEnd,
-              child: Text(
-                '${_textController.text.characters.length}/4096',
-                key: const Key('task_character_count'),
-                style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
-              ),
+            Wrap(
+              spacing: OmiSpacing.xs,
+              children: [
+                for (final days in [0, 1, 7])
+                  ActionChip(
+                    key: ValueKey('task_quick_date_$days'),
+                    label: Text(
+                      days == 0
+                          ? l10n.today
+                          : days == 1
+                              ? l10n.tomorrow
+                              : l10n.nextWeek,
+                    ),
+                    onPressed: _isSaving ? null : () => _selectQuickDate(days),
+                    backgroundColor: OmiColors.surface2,
+                    labelStyle: OmiType.footnote,
+                    side: BorderSide(color: OmiColors.border),
+                  ),
+              ],
             ),
+            // The counter only matters near the limit: it shows in the last 10%.
+            if (_textController.text.characters.length >= _kTaskCounterThreshold)
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: Text(
+                  '${_textController.text.characters.length}/$_kTaskMaxLength',
+                  key: const Key('task_character_count'),
+                  style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
+                ),
+              ),
             const SizedBox(height: OmiSpacing.sm),
             if (_saveFailed) ...[
               Semantics(

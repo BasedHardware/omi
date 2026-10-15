@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from database import conversations as db
+from tests.unit.fixtures.offline_firestore_sdk import OfflineFirestoreClient
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.person_evidence_backfill import backfill_person, receipt_conversations_by_person
 
@@ -71,12 +72,11 @@ def test_live_card_evidence_is_not_counted_again_by_backfill(monkeypatch):
 
 
 def test_script_pagination_uses_a_valid_firestore_cursor(monkeypatch):
-    from google.auth.credentials import AnonymousCredentials
-    from google.cloud.firestore import Client, Query
+    from google.cloud.firestore import Query
     from types import SimpleNamespace
     from scripts import backfill_person_label_evidence as script
 
-    client = Client(project='synthetic-test', credentials=AnonymousCredentials())
+    client = OfflineFirestoreClient(project='synthetic-test')
     calls = []
 
     def stream(query):

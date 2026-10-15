@@ -217,6 +217,21 @@ class TestRedactForIntegration:
         assert results[0]['structured']['title'] == ''
         assert results[1]['structured']['title'] == "Test Title"
 
+    def test_strips_internal_audio_evidence_from_segments(self):
+        conv = _make_conv_dict(is_locked=False)
+        conv['transcript_segments'] = [
+            {
+                'text': 'hi',
+                'audio_capture_start': 1.0,
+                'audio_capture_end': 2.0,
+                'audio_source': {'type': 'sync', 'start': 1.0, 'end': 2.0},
+            }
+        ]
+        result = redact_conversation_for_integration(conv)
+        segment = result['transcript_segments'][0]
+        for field in ('audio_capture_start', 'audio_capture_end', 'audio_source'):
+            assert field not in segment
+
 
 class TestSerializeDatetimes:
     def test_datetime_to_iso(self):

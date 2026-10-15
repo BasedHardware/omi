@@ -141,7 +141,9 @@ class TestUsersTimezoneSanitization:
 
     def test_create_daily_summary_timezone_exception_sanitized(self):
         request = users_router.CreateDailySummaryRequest(date="2026-09-24")
-        with patch.object(users_router.notification_db, "get_user_time_zone", return_value="Invalid/Timezone"), patch(
+        with patch.object(users_router, "enforce_chat_quota"), patch.object(
+            users_router.notification_db, "get_user_time_zone", return_value="Invalid/Timezone"
+        ), patch(
             "pytz.timezone",
             side_effect=RuntimeError(f"pytz lookup failed: {SENSITIVE_TRACE}"),
         ):

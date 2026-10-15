@@ -7,6 +7,7 @@ logic run for real. All text is synthetic.
 """
 
 from datetime import datetime, timedelta, timezone
+from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
@@ -15,7 +16,7 @@ from config import conversation_smart_merge as config
 from database import conversation_finalization_jobs as jobs_db
 from database import conversations as conversations_db
 from database import smart_merge as smart_merge_db
-from database import sync_bridges
+from database import sync_bridges, action_item_refresh as refresh_db
 from database.firestore_index_registry import CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY, INDEX_ONLY_REQUIREMENTS
 from database.legal_holds import DestructiveOperationInProgress
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
@@ -67,8 +68,10 @@ class World:
         self.process_persisted = True
         self.retract_error = None
         self.on_ask = None
-        for module in (smart_merge_db, sync_bridges, conversations_db):
+        self.preceding_calls = []
+        for module in (smart_merge_db, sync_bridges, conversations_db, refresh_db):
             monkeypatch.setattr(module, 'get_firestore_client', lambda: self.store)
+        monkeypatch.setattr(refresh_db, 'bump_action_items_list_version', lambda uid: None)
         monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda uid, cid: None)
         monkeypatch.setattr(conversations_db, '_delete_conversation_search_index', lambda uid, cid: None)
         monkeypatch.setattr(conversations_db, 'get_conversation', self.get)
@@ -76,7 +79,7 @@ class World:
         self.invalidated = []
         monkeypatch.setattr(
             conversations_db,
-            '_invalidate_client_processing',
+            'clear_client_processing',
             lambda payload: self.invalidated.append('transcript_segments' in payload),
         )
         monkeypatch.setattr(smart_merge_db, 'find_preceding_conversations', self.preceding)
@@ -122,17 +125,28 @@ class World:
         )
         return row
 
-    def preceding(self, uid, *, source, created_before, limit, firestore_client=None):
+    def preceding(
+        self, uid, *, source, created_before, limit=None, discarded=False, transaction=None, firestore_client=None
+    ):
+        if transaction is not None:
+            assert_read_allowed = getattr(transaction, '_assert_read_allowed', None)
+            if assert_read_allowed is not None:
+                assert_read_allowed()
+        self.preceding_calls.append(
+            {'source': source, 'discarded': discarded, 'limit': limit, 'transaction': transaction is not None}
+        )
         rows = [
             dict(value, id=key[-1])
             for key, value in self.store.rows.items()
             if key[:3] == ('users', uid, 'conversations')
-            and value.get('discarded') is False
+            and value.get('discarded') is discarded
             and value.get('source') == source
+            and value.get('status') in smart_merge_db._ALL_STATUSES
             and value['created_at'] < created_before
         ]
         rows.sort(key=lambda row: row['created_at'], reverse=True)
-        return [{k: v for k, v in row.items() if k != 'transcript_segments'} for row in rows[:limit]]
+        projected = [{k: v for k, v in row.items() if k != 'transcript_segments'} for row in rows]
+        return projected if limit is None else projected[:limit]
 
     # -- fakes
     def ask(self, state, questions, *, lane, timeout_seconds, max_attempts):
@@ -946,3 +960,21 @@ def test_preceding_query_uses_the_registered_spec_and_an_existing_index():
     assert ('limit', (6,), {}) in log
     selected = next(args[0] for name, args, _ in log if name == 'select')
     assert 'transcript_segments' not in selected
+
+
+@pytest.mark.parametrize('protected', ['p', 'n'])
+def test_transaction_never_rekeys_corrected_capture_anchors(world, protected):
+    world.add('p', 0, 10)
+    world.add('n', 15, 10)
+    world.raw(protected)['has_transcript_corrections'] = True
+    before = deepcopy(world.store.rows)
+    result = smart_merge_db.absorb_conversation(
+        UID,
+        'p',
+        'n',
+        expected_revision=0,
+        plan=lambda *_: (_ for _ in ()).throw(AssertionError('corrected captures must not reach the merge planner')),
+        firestore_client=world.store,
+    )
+    assert result.outcome == 'rejected'
+    assert world.store.rows == before

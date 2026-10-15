@@ -7,7 +7,8 @@ import 'package:omi/ui/omi_tokens.dart';
 /// [OmiColors.chipSurface].
 ///
 /// [count], when given, is drawn after the label; [semanticsLabel] must then say what it counts
-/// ("Needs Voice, 3 people"). The visual chip is 32pt; the touch target is 44pt.
+/// ("Needs Voice, 3 people"). [icon], when given, leads the label (the "+" of "Add Person"). The
+/// visual chip is 32pt; the touch target is 44pt.
 class OmiFilterChip extends StatelessWidget {
   const OmiFilterChip({
     super.key,
@@ -16,6 +17,7 @@ class OmiFilterChip extends StatelessWidget {
     required this.onSelected,
     this.count,
     this.semanticsLabel,
+    this.icon,
   });
 
   final String label;
@@ -23,6 +25,7 @@ class OmiFilterChip extends StatelessWidget {
   final VoidCallback onSelected;
   final int? count;
   final String? semanticsLabel;
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
@@ -52,21 +55,39 @@ class OmiFilterChip extends StatelessWidget {
                 color: selected ? OmiColors.accent : OmiColors.chipSurface,
                 borderRadius: OmiRadius.pillAll,
               ),
-              child: Text.rich(
-                TextSpan(children: [
-                  TextSpan(text: label),
-                  if (count != null)
-                    TextSpan(
-                      text: '  $count',
-                      style: TextStyle(color: foreground.withValues(alpha: 0.6)),
-                    ),
-                ]),
-                style: OmiType.subhead.copyWith(color: foreground, fontWeight: FontWeight.w500),
+              child: _withIcon(
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(text: label),
+                      if (count != null)
+                        TextSpan(
+                          text: '  $count',
+                          style: TextStyle(color: foreground.withValues(alpha: 0.6)),
+                        ),
+                    ],
+                  ),
+                  style: OmiType.subhead.copyWith(color: foreground, fontWeight: FontWeight.w500),
+                ),
+                foreground,
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _withIcon(Widget text, Color foreground) {
+    final glyph = icon;
+    if (glyph == null) return text;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(glyph, size: 16, color: foreground),
+        const SizedBox(width: OmiSpacing.xxs),
+        Flexible(child: text),
+      ],
     );
   }
 }

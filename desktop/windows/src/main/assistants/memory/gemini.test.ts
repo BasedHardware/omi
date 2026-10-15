@@ -11,6 +11,7 @@ vi.mock('electron', () => ({ net: { fetch: h.fetch } }))
 vi.mock('../core/session', () => ({ getAbortSignal: () => h.abortSignal }))
 
 import { extractMemory } from './gemini'
+import { geminiClientPlatform } from '../../../shared/geminiProxy'
 import type { BackendSession } from '../core/session'
 
 const session = (): BackendSession => ({ apiBase: 'a', desktopApiBase: 'd', token: 't' })
@@ -97,5 +98,24 @@ describe('extractMemory — retry classification', () => {
       confidence: 0.9
     })
     expect(h.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('emits the bounded attribution headers on the proxy request', async () => {
+    h.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ candidates: [{ content: { parts: [{ text: '{}' }] } }] })
+    })
+    await extractMemory(session(), 'sys', 'prompt', 'BASE64')
+    const [url, init] = h.fetch.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/v1/proxy/gemini/models/')
+    expect(init.headers).toMatchObject({
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer t',
+      'X-Omi-Lane': 'memory',
+      'X-Omi-Workload': 'extraction'
+    })
+    expect((init.headers as Record<string, string>)['X-Omi-Client-Platform']).toBe(
+      geminiClientPlatform(process.platform)
+    )
   })
 })

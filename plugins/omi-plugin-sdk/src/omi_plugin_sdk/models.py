@@ -11,7 +11,7 @@ MeetingType = Literal[
 # Optional structured fields added for rich meeting notes are serialized only
 # when the producer actually set them: the flag-off note shape must stay
 # byte-identical in prompts, responses, and persisted documents.
-_OMIT_WHEN_UNSET = ('meeting_type', 'participants', 'insights')
+_OMIT_WHEN_UNSET = ('meeting_type', 'participants', 'insights', 'note_claims')
 
 
 def _drop_unset_fields(model: BaseModel, data: dict, fields: tuple[str, ...]) -> dict:
@@ -175,7 +175,27 @@ class Insight(BaseModel):
     )
 
 
+class NoteEvidenceRef(BaseModel):
+    id: str
+    source_kind: str
+    time: Optional[str] = None
+    actor: Optional[str] = None
+    diarization_key: Optional[str] = None
+    source_ref: Optional[str] = None
+
+
+class NoteClaim(BaseModel):
+    target: str = Field(description='JSON pointer to a visible field, e.g. /sections/0/body_markdown')
+    text: str = Field(description='Exact factual clause within that field')
+    evidence_ids: List[str] = Field(description='Smallest sufficient episode evidence IDs')
+    provenance: Literal['said', 'shown', 'written', 'inferred']
+    evidence_sources: Optional[List[NoteEvidenceRef]] = Field(default=None, description='Server-authored source metadata; model may omit')
+
+
 class Structured(BaseModel):
+    note_claims: Optional[List[NoteClaim]] = Field(
+        default=None, description='Episode claim provenance; absent on legacy notes'
+    )
     title: str = Field(description="A title/name for this conversation", default="")
     overview: str = Field(
         description="A brief overview of the conversation, highlighting the key details from it",

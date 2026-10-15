@@ -3,15 +3,14 @@
 Gathers prior-meeting gists, people facts, goals, memories, and (flag-gated)
 screen text for the notes-v2 dynamic block. Every read is individually
 best-effort: a failing source degrades to absent context and never blocks note
-generation. Dataclasses and the renderer are pure; only ``gather_*`` does I/O.
+generation. Pure types/rendering live in ``meeting_context_render``; only ``gather_*`` does I/O.
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Iterable, Mapping, Optional, Sequence
+from typing import Any, Mapping, Optional, Sequence
 from zoneinfo import ZoneInfo
 
 import database.action_items as action_items_db
@@ -21,24 +20,19 @@ import database.goals as goals_db
 import database.screen_activity as screen_activity_db
 from database._client import db as firestore_db, get_firestore_client
 from database.auth import get_user_from_uid
-from models.calendar_context import CalendarMeetingContext
 from utils.memory.memory_service import MemoryService
 from utils.conversations.meeting_context import stored_meeting_window
 from utils.conversations.meeting_participants import MeetingRoster
+from utils.conversations.meeting_context_render import (
+    MeetingContextPack,
+    PersonFact,
+    PriorMeetingNote,
+    truncate_context_text,
+    MAX_SCREEN_CHARACTERS,
+)
 from utils.conversations.screen_text_digest import digest_screen_rows
-from utils.conversations.meeting_treatment import deduplicated_transcribed_speech_seconds
 
 logger = logging.getLogger(__name__)
-
-MAX_CONTEXT_PACK_CHARACTERS = 6_000
-MAX_PRIOR_MEETINGS_CHARACTERS = 1_600
-MAX_PEOPLE_CHARACTERS = 900
-MAX_GOALS_CHARACTERS = 400
-MAX_MEMORIES_CHARACTERS = 850
-MAX_SCREEN_CHARACTERS = 2_500
-# Rendered before SCREEN ACTIVITY so the overall cap trims the raw OCR digest,
-# not the judge's per-frame summaries.
-MAX_SCREEN_MOMENTS_CHARACTERS = 900
 
 MAX_PRIOR_MEETINGS = 3
 MAX_PRIOR_OPEN_ITEMS = 3
@@ -46,147 +40,6 @@ MAX_PRIOR_GIST_CHARACTERS = 300
 PRIOR_MEETING_LOOKBACK_DAYS = 180
 MAX_PEOPLE_DOCS = 100
 MAX_SCREEN_ROWS = 80
-MIN_CLUSTER_COUNT = 2
-MIN_SPEECH_SECONDS = 300
-
-BACKGROUND_CONTEXT_HEADING = 'BACKGROUND CONTEXT (not part of this conversation)'
-
-
-@dataclass(frozen=True)
-class PriorMeetingNote:
-    title: str
-    date_label: str
-    gist: str
-    open_items: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class PersonFact:
-    name: str
-    relationship: Optional[str] = None
-    notes: Optional[str] = None
-    aliases: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class MeetingContextPack:
-    prior_meetings: tuple[PriorMeetingNote, ...] = ()
-    people_facts: tuple[PersonFact, ...] = ()
-    goals: tuple[str, ...] = ()
-    memories: tuple[str, ...] = ()
-    screen_text: str = ''
-    screen_moments: tuple[str, ...] = ()
-
-    @property
-    def empty(self) -> bool:
-        return not (
-            self.prior_meetings
-            or self.people_facts
-            or self.goals
-            or self.memories
-            or self.screen_text
-            or self.screen_moments
-        )
-
-
-def _truncate(value: str, limit: int) -> str:
-    value = value.strip()
-    if len(value) <= limit:
-        return value
-    return value[: limit - 1].rstrip() + '…'
-
-
-def _render_part(lines: Iterable[str], cap: int) -> str:
-    rendered: list[str] = []
-    used = 0
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        if used + len(line) + 1 > cap:
-            # Truncate the item to what remains of the part budget instead of
-            # dropping it — one oversized fact must not crowd out the rest.
-            remaining = cap - used - 1
-            if remaining < 2:
-                break
-            line = _truncate(line, remaining)
-        rendered.append(line)
-        used += len(line) + 1
-    return '\n'.join(rendered)
-
-
-def render_meeting_context_pack(pack: Optional[MeetingContextPack]) -> str:
-    """Render the pack as the dynamic BACKGROUND CONTEXT block, <= 6000 chars."""
-    if pack is None or pack.empty:
-        return ''
-    parts: list[str] = [BACKGROUND_CONTEXT_HEADING]
-    prior_lines = []
-    for note in pack.prior_meetings:
-        line = f'- [{note.date_label}] {note.title}'
-        if note.gist:
-            line += f' — {note.gist}'
-        prior_lines.append(line)
-        for item in note.open_items:
-            prior_lines.append(f'  open: {item}')
-    prior = _render_part(prior_lines, MAX_PRIOR_MEETINGS_CHARACTERS)
-    if prior:
-        parts.append(f'PRIOR MEETINGS\n{prior}')
-    people_lines = []
-    for fact in pack.people_facts:
-        line = f'- {fact.name}'
-        detail = fact.relationship or ''
-        if fact.aliases:
-            detail = f'{detail}; aka {", ".join(fact.aliases)}' if detail else f'aka {", ".join(fact.aliases)}'
-        if detail:
-            line += f' ({detail})'
-        if fact.notes:
-            line += f' — {fact.notes}'
-        people_lines.append(line)
-    people = _render_part(people_lines, MAX_PEOPLE_CHARACTERS)
-    if people:
-        parts.append(f'PEOPLE\n{people}')
-    goals = _render_part((f'- {goal}' for goal in pack.goals), MAX_GOALS_CHARACTERS)
-    if goals:
-        parts.append(f'GOALS\n{goals}')
-    memories = _render_part((f'- {memory}' for memory in pack.memories), MAX_MEMORIES_CHARACTERS)
-    if memories:
-        parts.append(f'MEMORIES\n{memories}')
-    moments = _render_part(pack.screen_moments, MAX_SCREEN_MOMENTS_CHARACTERS)
-    if moments:
-        parts.append(f'SCREEN MOMENTS (approved screenshots from this call)\n{moments}')
-    if pack.screen_text:
-        parts.append(f'SCREEN ACTIVITY\n{_truncate(pack.screen_text, MAX_SCREEN_CHARACTERS)}')
-    rendered = '\n\n'.join(parts)
-    if len(rendered) > MAX_CONTEXT_PACK_CHARACTERS:
-        rendered = rendered[: MAX_CONTEXT_PACK_CHARACTERS - 1].rstrip() + '…'
-    return rendered
-
-
-def should_gather_meeting_context(conversation: Any, resolved_context: Optional[CalendarMeetingContext]) -> bool:
-    """Whether this conversation is meeting-like enough to pay for context reads.
-
-    True for a desktop meeting-role capture, whenever meeting identity already
-    resolved, or when the transcript shows a real multi-party conversation
-    (>= 2 speaker clusters and >= 300 seconds of deduplicated speech). The rich
-    flag check itself stays at the call site so this stays a pure gate.
-    """
-    source = getattr(conversation, 'source', None)
-    external_data = getattr(conversation, 'external_data', None) or {}
-    if (
-        getattr(source, 'value', source) == 'desktop'
-        and isinstance(external_data, Mapping)
-        and external_data.get('conversation_role') == 'meeting'
-    ):
-        return True
-    if resolved_context is not None:
-        return True
-    segments = getattr(conversation, 'transcript_segments', None) or []
-    cluster_ids = {
-        getattr(segment, 'speaker_id', None) for segment in segments if getattr(segment, 'speaker_id', None) is not None
-    }
-    if len(cluster_ids) < MIN_CLUSTER_COUNT:
-        return False
-    return deduplicated_transcribed_speech_seconds(segments) >= MIN_SPEECH_SECONDS
 
 
 def _log_source_failure(source: str, uid: str, exc: Exception) -> None:
@@ -342,10 +195,10 @@ def _conversation_gist(conversation_data: Mapping[str, Any]) -> str:
             if isinstance(section, Mapping):
                 body = section.get('body_markdown')
                 if isinstance(body, str) and body.strip():
-                    return _truncate(body, MAX_PRIOR_GIST_CHARACTERS)
+                    return truncate_context_text(body, MAX_PRIOR_GIST_CHARACTERS)
     overview = structured.get('overview')
     if isinstance(overview, str) and overview.strip():
-        return _truncate(overview, MAX_PRIOR_GIST_CHARACTERS)
+        return truncate_context_text(overview, MAX_PRIOR_GIST_CHARACTERS)
     return ''
 
 
@@ -451,6 +304,8 @@ def _gather_prior_meetings(
                 date_label=_local_date_label(sort_key, timezone_name),
                 gist=_conversation_gist(record),
                 open_items=open_items,
+                source_id=record_id if isinstance(record_id, str) else None,
+                started_at=_as_utc(record.get('started_at')) or _as_utc(record.get('created_at')),
             )
         )
     return tuple(notes)
@@ -498,7 +353,7 @@ def _gather_people_facts(roster: MeetingRoster, people: Sequence[Mapping[str, An
                 name=name.strip(),
                 relationship=relationship.strip() if isinstance(relationship, str) and relationship.strip() else None,
                 notes=(
-                    _truncate(notes_value.strip(), 200)
+                    truncate_context_text(notes_value.strip(), 200)
                     if isinstance(notes_value, str) and notes_value.strip()
                     else None
                 ),
@@ -557,22 +412,27 @@ def _gather_memories(uid: str, roster: MeetingRoster) -> tuple[str, ...]:
     return tuple(lines)
 
 
-def _gather_screen_text(uid: str, conversation: Any) -> str:
+def _gather_screen_rows(uid: str, conversation: Any) -> tuple[Mapping[str, Any], ...]:
     started_at = getattr(conversation, 'started_at', None)
     finished_at = getattr(conversation, 'finished_at', None)
     if not isinstance(started_at, datetime) or not isinstance(finished_at, datetime):
-        return ''
+        return ()
     try:
         rows: Any = screen_activity_db.get_screen_activity(
             uid, start_date=started_at, end_date=finished_at, limit=MAX_SCREEN_ROWS
         )
     except Exception as exc:  # noqa: BLE001 - best effort
         _log_source_failure('screen_activity', uid, exc)
-        return ''
+        return ()
     if not rows:
-        return ''
+        return ()
     ordered = sorted((row for row in rows if isinstance(row, Mapping)), key=lambda row: str(row.get('timestamp') or ''))
-    return digest_screen_rows(ordered, MAX_SCREEN_CHARACTERS)
+    # Preserve observations within the same bounded query; the typed adapter caps rows.
+    return tuple(ordered)
+
+
+def _gather_screen_text(uid: str, conversation: Any) -> str:
+    return digest_screen_rows(_gather_screen_rows(uid, conversation), MAX_SCREEN_CHARACTERS)
 
 
 def gather_meeting_context_pack(
@@ -584,6 +444,7 @@ def gather_meeting_context_pack(
     include_screen_text: bool = False,
     timezone_name: Optional[str] = None,
     screen_moments: Sequence[str] = (),
+    preserve_screen_rows: bool = False,
 ) -> Optional[MeetingContextPack]:
     """Assemble the background pack. Every source degrades independently.
 
@@ -614,21 +475,22 @@ def gather_meeting_context_pack(
         goals=_try('goals', lambda: _gather_goals(uid), ()),
         memories=_try('memories', lambda: _gather_memories(uid, roster), ()),
         screen_text=(
-            _try('screen_activity', lambda: _gather_screen_text(uid, conversation), '') if include_screen_text else ''
+            _try('screen_activity', lambda: _gather_screen_text(uid, conversation), '')
+            if include_screen_text and not preserve_screen_rows
+            else ''
         ),
         screen_moments=tuple(screen_moments),
+        screen_rows=(
+            _try('screen_activity', lambda: _gather_screen_rows(uid, conversation), ())
+            if include_screen_text and preserve_screen_rows
+            else ()
+        ),
     )
     return None if pack.empty else pack
 
 
 __all__ = [
-    'BACKGROUND_CONTEXT_HEADING',
-    'MeetingContextPack',
-    'PersonFact',
-    'PriorMeetingNote',
     'gather_meeting_context_pack',
     'load_people_documents',
-    'render_meeting_context_pack',
     'resolve_owner_identity',
-    'should_gather_meeting_context',
 ]

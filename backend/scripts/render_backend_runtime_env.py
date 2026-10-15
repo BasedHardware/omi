@@ -24,6 +24,32 @@ _DEPLOY_CLOUD_RUN_ENV_SEPARATORS = frozenset({',', '\n', '\r', '\u2028', '\u2029
 # cannot read the key secret, so a lingering ref would fail revision creation.
 KEY_CREDENTIAL_ENV_NAMES = ('SERVICE_ACCOUNT_JSON', 'GOOGLE_APPLICATION_CREDENTIALS')
 
+# The literal --remove-env-vars list every Cloud Run service deploy action already carries. The
+# manifest's forbidden_env may only append keys missing from it: gcloud rejects a key named twice.
+RETIRED_ENV_NAMES = (
+    'MEMORY_ENABLED_USERS',
+    'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED',
+    'MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS',
+    'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED',
+    'BASIC_TIER_MINUTES_LIMIT_PER_MONTH',
+    'BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH',
+    'BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH',
+    'BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH',
+    'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST',
+    'DEEPGRAM_SELF_HOSTED_ENABLED',
+    'DEEPGRAM_SELF_HOSTED_URL',
+)
+# Only the API service talks to the pusher; every other service drops its URL.
+PUSHER_CLIENT_SERVICES = frozenset({'backend'})
+
+
+def _remove_env_extra(service: str, service_config: ConfigDict) -> str:
+    """Manifest forbidden keys the action's literal list lacks, each with a leading comma."""
+    listed: set[str] = set(RETIRED_ENV_NAMES)
+    if service not in PUSHER_CLIENT_SERVICES:
+        listed.add('HOSTED_PUSHER_API_URL')
+    return ''.join(f',{name}' for name in sorted(set(service_config.get('forbidden_env', [])) - listed))
+
 
 def _as_config_dict(value: object) -> ConfigDict | None:
     return cast(ConfigDict, value) if isinstance(value, dict) else None
@@ -163,6 +189,8 @@ def main() -> int:
                     (f'{output_prefix}_secrets', _render_secrets(service_config.get('secrets', {}))),
                     (f'{output_prefix}_secret_names', _render_secret_names(service_config.get('secrets', {}))),
                     (f'{output_prefix}_identity_flags', _render_identity_flags(service, service_config)),
+                    (f'{output_prefix}_forbidden_env_names', ','.join(sorted(service_config.get('forbidden_env', [])))),
+                    (f'{output_prefix}_remove_env_extra', _remove_env_extra(service, service_config)),
                 )
             )
     for job, raw_job_config in selected_jobs.items():

@@ -1,0 +1,44 @@
+# Dedicated image for the Omi finops unit-cost producer Cloud Run Job.
+# Unlike backend/Dockerfile (Firebase backend) this ships only what the finops
+# pipeline needs: stdlib pulls + google-cloud-bigquery/storage under ADC.
+FROM gcr.io/based-hardware-dev/python:3.11-slim-forky AS builder
+
+ENV PATH="/opt/venv/bin:$PATH"
+RUN python -m venv /opt/venv
+
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# google-cloud-bigquery brings google-auth (ADC) and the BigQuery REST client used by
+# bq_stub.py; google-cloud-storage backs the daily overlap lease; mcp backs posthog_dau.
+RUN pip install --no-cache-dir \
+    google-cloud-bigquery==3.30.0 \
+    google-cloud-storage==2.18.0 \
+    "mcp>=1.2.0"
+
+FROM gcr.io/based-hardware-dev/python:3.11-slim-forky
+
+WORKDIR /app
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Patch OS packages in this layer before installing runtime deps (#7136 pattern).
+RUN apt-get update && apt-get -y dist-upgrade \
+    && apt-get -y install --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /opt/venv /opt/venv
+
+# Recreate the two repo-relative paths the code expects:
+#   pull_stripe.py: CATALOG = HERE/../../config/plan_catalog.json
+#   pull_providers/posthog run from /app/finops directly.
+COPY backend/scripts/finops/ /app/monorepo/backend/scripts/finops/
+COPY backend/config/plan_catalog.json /app/monorepo/backend/config/plan_catalog.json
+
+ENV FINOPS_AUTH=cloudrun \
+    FINOPS_SECRETS_DIR=/run/secrets/finops \
+    FINOPS_RUN_ROOT=/tmp/finops-runs \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app/monorepo/backend/scripts/finops
+ENTRYPOINT ["python", "/app/monorepo/backend/scripts/finops/cloudrun_entry.py"]

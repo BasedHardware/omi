@@ -10,6 +10,26 @@ Add one JSON file per user-facing mobile PR under `unreleased/`:
 
 Use a unique kebab-case filename, for example `20260924-chat-scrolling.json`.
 
+## Platform-specific changes
+
+A change that only applies to one platform must say so, or it ships to both
+stores' release notes — and Apple rejects cross-platform release notes under
+Guideline 2.3.10. Tag the fragment:
+
+```json
+{
+  "change": "Recording controls appear on the Lock Screen and Dynamic Island",
+  "platforms": ["ios"]
+}
+```
+
+`platforms` is a non-empty list from `"ios"` and `"android"`. Omit it for
+changes that apply to both. The tag survives collection into
+`releases/<version>.json`, and `store-notes` drops the entry from the other
+store's text. As a backstop, deriving store notes fails closed if the text
+still names the other platform ("Android", "Google Play", "iOS", "iPhone",
+"iPad", "Apple").
+
 ## When a fragment is required
 
 Every PR that changes production code under `app/` must add a fragment, except

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-failed-resume-renews-its-own-staleness-ttl",
+  "violated_contract": "A resumable checkpoint's TTL-based staleness bound only protects against abandonment if the checkpoint goes untouched while stale; it does nothing against a checkpoint that is touched every tick but never advances. The daily-summary job resumes its saved cohort before serving the current one, and a single recipient whose push keeps reporting zero devices delivered re-fails on every tick; the failure handler checkpoints that exact recipient again with a fresh Redis TTL (documented as a 2-hour staleness bound), so the \"stale cursor expires and the next run starts clean\" safety net never fires -- the cohort is resumed, re-fails, and re-checkpointed forever. Because the job only serves the current cohort after the resumed one reports complete, every other recipient's recap silently stopped generating for as long as the one dead recipient kept failing (observed: six days and 17k+ recipients, #21012).",
+  "canonical_prevention": "Measure a resumed cohort's age from the cohort's own origin instant compared against the current time, not from whether the checkpoint key still exists in Redis -- a failed resume rewrites the key and renews its TTL, so TTL survival cannot distinguish a cohort that is actively failing from one that is healthily in progress. Once the age exceeds the documented staleness bound, abandon the resume unconditionally (clear the checkpoint, log the abandoned recipient, proceed to the current cohort) rather than returning early on an incomplete resume.",
+  "canonical_prevention_artifact": [
+    "backend/utils/other/notifications.py",
+    "backend/tests/unit/test_daily_summary_job_resilience.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/other/notifications.py",
+    "backend/utils/other/daily_summary_budget.py"
+  ],
+  "status": "open"
+}

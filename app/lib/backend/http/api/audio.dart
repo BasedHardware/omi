@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/audio_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
@@ -63,12 +64,14 @@ class ConversationAudioUrlInfo {
       duration: generated.duration,
       capturedDuration: generated.capturedDuration,
       spans: generated.spans
-          .map((s) => ConversationAudioSpan(
-                fileId: s.fileId,
-                wallOffset: s.wallOffset,
-                artifactOffset: s.artifactOffset,
-                len: s.len,
-              ))
+          .map(
+            (s) => ConversationAudioSpan(
+              fileId: s.fileId,
+              wallOffset: s.wallOffset,
+              artifactOffset: s.artifactOffset,
+              len: s.len,
+            ),
+          )
           .toList(),
     );
   }
@@ -143,24 +146,25 @@ Future<void> precacheConversationAudio(String conversationId) async {
 /// Get signed URLs for audio files in a conversation.
 /// Returns direct GCS URLs when cached; pending files are being built
 /// server-side and should be re-polled after [AudioUrlsResponse.pollAfterMs].
-Future<AudioUrlsResponse> getConversationAudioSignedUrls(String conversationId) async {
-  try {
-    final headers = await buildHeaders(requireAuthCheck: true);
-    final response = await makeApiCall(
-      url: '${Env.apiBaseUrl}v1/sync/audio/$conversationId/urls',
-      headers: headers,
-      method: 'GET',
-      body: '',
-    );
-
-    if (response == null || response.statusCode != 200) {
-      return AudioUrlsResponse(files: []);
-    }
-
-    final decoded = wire.GeneratedAudioUrlsResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    return AudioUrlsResponse.fromGenerated(decoded);
-  } catch (e) {
-    Logger.debug('Error getting audio signed URLs: $e');
-    return AudioUrlsResponse(files: []);
-  }
+/// Transport and HTTP failures stay distinguishable in the [ApiProblem]; a
+/// genuinely empty conversation still decodes to empty [AudioUrlsResponse.files].
+Future<ApiResult<AudioUrlsResponse>> getConversationAudioSignedUrls(
+  String conversationId, {
+  ApiSend? send,
+  ApiExecutionSeams? execution,
+}) {
+  return executeApi<AudioUrlsResponse>(
+    request: ApiRequest(url: '${Env.apiBaseUrl}v1/sync/audio/$conversationId/urls', method: 'GET'),
+    send: send,
+    execution: execution,
+    decode: (body) {
+      try {
+        final decoded = jsonDecode(body);
+        if (decoded is! Map<String, dynamic>) throw const FormatException('Expected audio urls object');
+        return AudioUrlsResponse.fromGenerated(wire.GeneratedAudioUrlsResponse.fromJson(decoded));
+      } catch (_) {
+        throw const FormatException('Invalid audio urls response');
+      }
+    },
+  );
 }

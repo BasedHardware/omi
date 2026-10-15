@@ -7,6 +7,7 @@ private enum LocalUploadStubMode: Sendable {
   case offline
   case httpStatus(Int)
   case success
+  case deleted
 }
 
 /// Scripted `/v1/conversations/from-segments`: success returns `backend-<client_conversation_id>`, and
@@ -20,6 +21,13 @@ private final class LocalUploadRetryURLStub: URLProtocol, @unchecked Sendable {
     lock.lock()
     defer { lock.unlock() }
     return _uploadBodies
+  }
+
+  static var isDeleted: Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    if case .deleted = _mode { return true }
+    return false
   }
 
   static func setMode(_ mode: LocalUploadStubMode) {
@@ -85,12 +93,12 @@ private final class LocalUploadRetryURLStub: URLProtocol, @unchecked Sendable {
       client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
     case .httpStatus(let statusCode):
       respond(url: url, statusCode: statusCode, body: Data(#"{"detail":"stubbed upload failure"}"#.utf8))
-    case .success:
+    case .success, .deleted:
       let json = body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
       let clientConversationId = json?["client_conversation_id"] as? String ?? "unknown"
       let response: [String: Any] = [
         "id": "backend-\(clientConversationId)",
-        "status": "processing",
+        "status": Self.isDeleted ? "deleted" : "processing",
         "discarded": false,
       ]
       let responseBody = (try? JSONSerialization.data(withJSONObject: response)) ?? Data()
@@ -185,6 +193,16 @@ final class LocalSegmentsFinalizationRetryTests: XCTestCase {
       try? FileManager.default.removeItem(at: userDir)
     }
     try await super.tearDown()
+  }
+
+  func testTombstoneAcknowledgementPurgesSessionAndStopsRetrying() async throws {
+    let id = try await makeFinishedLocalSession(clientConversationId: "deleted-session")
+    LocalUploadRetryURLStub.setMode(.deleted)
+    await ConversationFinalizationService.shared.recoverPendingFinalizations()
+    let session = try await TranscriptionStorage.shared.getSession(id: id)
+    XCTAssertNil(session)
+    await ConversationFinalizationService.shared.recoverPendingFinalizations()
+    XCTAssertEqual(LocalUploadRetryURLStub.uploadBodies.count, 1)
   }
 
   // MARK: - State machine

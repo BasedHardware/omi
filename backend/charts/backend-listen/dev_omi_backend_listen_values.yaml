@@ -106,6 +106,47 @@ envFrom:
       name: dev-omi-backend-config
 
 env:
+  - name: AUDIO_ARCHIVE_LIVE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_READ_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_STOP_PCM_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_SYNC_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_COALESCE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_PERCENT
+    value: "0"
+  - name: AUDIO_ARCHIVE_UID_ALLOWLIST
+    value: ""
+  - name: BUCKET_AUDIO_DERIVED
+    value: ""
+  - name: AUDIO_MERGE_WORKER_URL
+    value: ""
+  # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
+  - name: PROACTIVITY_V2_POSTHOG_TOKEN
+    value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
+  - name: PROACTIVITY_V2_POSTHOG_HOST
+    value: "https://us.posthog.com"
+  - name: FIRESTORE_READ_LEDGER
+    value: "1"
+  - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
+    value: "true"
+  - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
+    value: "true"
+  - name: CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE
+    value: "shadow"
+  - name: SYNC_ASSIGNMENT_RECOVERY_ENABLED
+    value: "true"
+  - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED
+    value: "true"
+  - name: CAPTURE_GROUP_CONTAINMENT_MODE
+    value: "shadow"
   # Keep these aligned with the development GitHub environment variables used
   # by the Cloud Run backend; api.omiapi.com is served by backend-listen.
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
@@ -200,21 +241,15 @@ env:
     value: "3600"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
-  - name: OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED
-    value: "true"
-  - name: CONVERSATION_NOTES_V2_ENABLED
-    value: "true"
-  - name: MEETING_RECEIPT_RECONCILER_ENABLED
-    value: "false"
+  - name: OMI_SHAPED_AGENT_MODE
+    value: "on"
+  - name: REVIEW_SURFACE_MODE
+    value: "on"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
     value: "true"
   - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
     value: "true"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
-    value: "true"
-  - name: MEETING_NOTES_RICH_CONTEXT_ENABLED
-    value: "true"
-  - name: MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED
     value: "true"
   - name: MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED
     value: "true"
@@ -258,18 +293,6 @@ env:
     value: "off"
   - name: OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION
     value: "false"
-  - name: OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED
-    value: "false"
-  - name: OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE
-    value: "1.0"
-  - name: OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED
-    value: "false"
-  - name: OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE
-    value: "1.0"
-  - name: OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED
-    value: "false"
-  - name: OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE
-    value: "1.0"
   - name: OMI_LLM_GATEWAY_SERVICE_TOKEN
     valueFrom:
       secretKeyRef:
@@ -307,11 +330,11 @@ env:
   - name: BUCKET_TEMPORAL_SYNC_LOCAL
     value: "syncing-local-development"
   - name: HOSTED_VAD_API_URL
-    value: "http://vad.omiapi.com:80/v1/vad"
+    value: "http://172.16.48.49/vad/v1/vad"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
-    value: "http://diarizer.omiapi.com:80"
+    value: "http://172.16.48.49/diarizer"
   - name: HOSTED_TRANSLATION_API_URL
-    value: "http://nllb.omiapi.com"
+    value: "http://172.16.48.49/nllb"
   - name: TRANSLATION_SERVICE_MODELS
     value: "nllb,gemini"
   - name: TRANSLATION_DEMAND_SHADOW_ENABLED
@@ -367,9 +390,17 @@ env:
     value: "parakeet,modulate-velma-2"
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
     value: "false"
-  - name: STT_CONNECT_ORDER_FROM_CONFIG
-    value: "true"
   - name: STT_RESILIENT_RECONNECT
+    value: "false"
+  - name: STT_LIVE_DEMAND_ENABLED
+    value: "false"
+  - name: STT_LIVE_DEMAND_PERCENT
+    value: "0"
+  - name: STT_LIVE_DEMAND_UID_ALLOWLIST
+    value: ""
+  - name: STT_LIVE_DEMAND_MIN_DWELL_SECONDS
+    value: "15"
+  - name: STT_FAILOVER_RECOVERY_ENABLED
     value: "false"
   - name: STT_ROUTING_MODE
     value: "shadow"
@@ -407,6 +438,10 @@ env:
     value: "8"
   - name: PARAKEET_WINDOW_DIARIZATION
     value: "false"
+  - name: PARAKEET_WINDOW_DEADLINE_CUT_ENABLED
+    value: "false"
+  - name: PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS
+    value: "1.2"
   - name: PARAKEET_WINDOW_PACE_SECONDS
     value: "6"
   - name: PARAKEET_WINDOW_MAX_CONTEXT_SECONDS
@@ -538,6 +573,30 @@ env:
   # Admits new eligible recordings only (single-channel, server STT);
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
+    value: "true"
+  - name: AUDIO_TIMELINE_SPANS
+    value: "false"
+  - name: LIVE_SPEAKER_SPAN_RESOLUTION
+    value: "false"
+  - name: LIVE_CAPTURE_WINDOW_RETENTION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS
+    value: "false"
+  - name: SONIOX_WIRE_LEDGER
+    value: "false"
+  - name: SONIOX_ORDERED_FINALIZE
+    value: "false"
+  - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
+    value: "false"
+  # S1 capture evidence (dedupe of sync uploads against live audio); mobile sends it only from
+  # builds with --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true.
+  - name: CAPTURE_EVIDENCE_V1_DARK_WRITE
     value: "true"
   # Fair-use system (PR #5748)
   - name: FAIR_USE_ENABLED

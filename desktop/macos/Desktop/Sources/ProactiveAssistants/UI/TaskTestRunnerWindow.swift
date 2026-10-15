@@ -421,6 +421,11 @@ struct TaskTestRunnerView: View {
     cancellationRequested = false
     statusMessage = "Finding context switches…"
 
+    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      statusMessage = "Sign in to run a screenshot test"
+      isRunning = false
+      return
+    }
     Task {
       log("TaskTestRunner: Starting test task")
       let startTime = Date()
@@ -523,13 +528,17 @@ struct TaskTestRunnerView: View {
 
       // Process each departing frame
       for (i, screenshot) in sampled.enumerated() {
-        if cancellationRequested { break }
+        if cancellationRequested || !RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) { break }
 
         await MainActor.run {
           statusMessage = "Processing \(i + 1)/\(sampled.count)…"
         }
 
+        guard let binding = ScreenTaskFrameBinding.capture(app: screenshot.appName, title: screenshot.windowTitle),
+          binding.authorization == authorization
+        else { continue }
         do {
+          // Bind the job owner/app before loading stored pixels; never rebind a replay after an account transition.
           // Load JPEG from video chunk
           let jpegData = try await RewindStorage.shared.loadScreenshotData(for: screenshot)
 
@@ -538,7 +547,7 @@ struct TaskTestRunnerView: View {
           let (allResults, searchCount) = try await DesktopLogPrivacy.$suppressContent.withValue(
             ScreenTaskFeature.isEnabled
           ) {
-            try await taskAssistant.testAnalyze(jpegData: jpegData, appName: screenshot.appName)
+            try await taskAssistant.testAnalyze(jpegData: jpegData, appName: screenshot.appName, binding: binding)
           }
           let duration = Date().timeIntervalSince(analyzeStart)
 
@@ -547,6 +556,7 @@ struct TaskTestRunnerView: View {
           let result: TaskExtractionResult? = allResults.first(where: { $0.hasNewTask }) ?? allResults.first
 
           await MainActor.run {
+            guard binding.isCurrent() else { return }
             results.append(
               TaskTestResult(
                 index: i + 1,
@@ -561,7 +571,10 @@ struct TaskTestRunnerView: View {
             progress = Double(i + 1) / Double(sampled.count)
           }
         } catch {
+          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { break }
+          guard binding.isCurrent() else { continue }
           await MainActor.run {
+            guard binding.isCurrent() else { return }
             results.append(
               TaskTestResult(
                 index: i + 1,

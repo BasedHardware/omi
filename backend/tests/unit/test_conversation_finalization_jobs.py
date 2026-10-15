@@ -1260,17 +1260,12 @@ def test_durable_summary_reads_a_fixed_projection_shard_set_without_job_aggregat
         'dead_letter': 1,
         'terminal_unknown': 0,
         'oldest_nonterminal_age_seconds': 0.0,
+        'oldest_blocked_byok_age_seconds': 0.0,
     }
 
 
 def test_oldest_nonterminal_age_sees_jobs_that_carry_no_reconcile_after_at():
-    """A BYOK job is invisible to ``reconcile_after_at`` and must still age.
-
-    ``_resume_blocked_byok_job_txn`` and the BYOK retry path delete
-    ``reconcile_after_at`` outright, so the old due-page implementation reported
-    0 while those jobs sat unfinished indefinitely.  Asking ``status`` directly
-    is what makes them visible.
-    """
+    """Legacy rows without due timestamps still age; blocked rows age separately."""
 
     created_at = datetime.now(timezone.utc) - timedelta(days=30)
 
@@ -1305,6 +1300,8 @@ def test_oldest_nonterminal_age_sees_jobs_that_carry_no_reconcile_after_at():
             return self
 
         def stream(self):
+            if self._status == 'blocked_byok':
+                return iter([Snapshot({'created_at': created_at - timedelta(days=10)})])
             if self._status != 'queued':
                 return iter(())
             # No ``reconcile_after_at`` key at all — exactly the resumed BYOK shape.
@@ -1318,7 +1315,8 @@ def test_oldest_nonterminal_age_sees_jobs_that_carry_no_reconcile_after_at():
 
     summary = jobs.get_finalization_job_summary(firestore_client=Client())
 
-    assert summary['oldest_nonterminal_age_seconds'] > 29 * 24 * 3600
+    assert 29 * 24 * 3600 < summary['oldest_nonterminal_age_seconds'] < 31 * 24 * 3600
+    assert 39 * 24 * 3600 < summary['oldest_blocked_byok_age_seconds'] < 41 * 24 * 3600
 
 
 class _BoundedReplayCollection:
@@ -1860,3 +1858,13 @@ def test_advance_cursor_succeeds_on_first_write_when_doc_absent():
     assert result is True
     assert transaction.sets[0][1]['generation'] == 1
     assert transaction.sets[0][1]['resume_after_path'] == 'users/u/c/first'
+
+
+def test_selfheal_cursor_preserves_verification_deadline(monkeypatch):
+    entry = {'uid': 'u1', 'conversation_id': 'c1', 'job_id': 'j1', 'admitted_at': _now()}
+    ref = _Ref('in_progress_content_sweep', {'pending_verifications': [entry]})
+    client = SimpleNamespace(collection=lambda name: _Collection({'in_progress_content_sweep': ref}))
+
+    cursor = jobs.get_in_progress_content_sweep_cursor(firestore_client=client)
+
+    assert cursor['pending_verifications'] == [entry]

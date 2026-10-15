@@ -20,7 +20,8 @@ def default_gate(monkeypatch):
 def baseline_counts():
     counts = Counter()
     yield counts
-    # 4 million baseline sessions represent about 222 days at 18k/day.
+    # Fast lane: 20k sessions per rate; slow lane retains the full sweep.
+    # Long trajectories remain runnable explicitly without breaking CI CPU limits.
     # Require no false bench in this seeded baseline; bound higher-rate
     # calibration separately so the reported sensitivity does not drift.
     assert counts[0.03] == 0
@@ -28,16 +29,21 @@ def baseline_counts():
     assert counts[0.075] <= 32
 
 
+# Preserve main's slow full sweep; short fast trajectories fit the 0.30s CPU guard.
+_BASELINE_SEEDS = [seed if seed < 10 else pytest.param(seed, marks=pytest.mark.slow) for seed in range(200)]
+
+
+@pytest.mark.parametrize('sessions', [2000, pytest.param(20000, marks=pytest.mark.slow)])
 @pytest.mark.parametrize('rate', [0.03, 0.05, 0.075])
-@pytest.mark.parametrize('seed', range(200))
-def test_twenty_thousand_session_baseline(rate, seed, baseline_counts):
+@pytest.mark.parametrize('seed', _BASELINE_SEEDS)
+def test_seeded_session_baseline(rate, seed, sessions, baseline_counts):
     rng, state = random.Random(seed), GateState()
-    for n in range(20000):
+    for n in range(sessions):
         state = transition(state, rng.random() < rate, n, witness=f'{n:016x}')
         if state.stage == 0:
             baseline_counts[rate] += 1
             state = GateState()
-    assert state.n <= 20000
+    assert state.n <= sessions
 
 
 def detect(rate, seed, *, warmup=500, horizon=5000):
@@ -54,6 +60,7 @@ def detect(rate, seed, *, warmup=500, horizon=5000):
     return horizon + 1, failures
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize('rate,limit', [(0.12, 1500), (0.16, 300)])
 def test_brownout_median_detection(rate, limit):
     # A run that has not detected by the limit cannot lower the median below it,
@@ -62,7 +69,7 @@ def test_brownout_median_detection(rate, limit):
     assert statistics.median(samples) <= limit
 
 
-@pytest.mark.parametrize('warmup', [0, 100, 1020, 20000])
+@pytest.mark.parametrize('warmup', [0, 100, 1020, pytest.param(20000, marks=pytest.mark.slow)])
 @pytest.mark.parametrize('phase', range(5))
 def test_sustained_sixty_percent_outage_within_ten_failed_sessions(warmup, phase):
     state = GateState()
@@ -104,7 +111,9 @@ def trial_day(seed, rate=0.61, sessions=17900, *, outcome_delay=30, cache_delay=
     return trials, disruptions
 
 
-@pytest.mark.parametrize('seed', range(100))
+@pytest.mark.parametrize(
+    'seed', [seed if seed < 10 else pytest.param(seed, marks=pytest.mark.slow) for seed in range(100)]
+)
 def test_chronic_modulate_daily_trial_disruption_budget(seed):
     trials, disruptions = trial_day(seed)
     assert disruptions + 10 < 100  # include an initial hard-outage detection allowance

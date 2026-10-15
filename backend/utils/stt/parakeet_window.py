@@ -97,6 +97,7 @@ STRANDED_SILENCE_SECONDS = 5.0
 # Answered-empty context may leave TDT only after the 90s capture replay horizon.
 ANSWERED_CONTEXT_RETENTION_SECONDS = 90.0
 FIRST_TEXT_DEADLINE_SECONDS = 12.0
+DEADLINE_CUT_POST_LATENCY_SECONDS = 1.2
 # Three times the observed 280ms admission; never suppress unresolved audio.
 SHORT_SPEECH_EPISODE_SECONDS = 1.0
 # Several short utterances may return empty; only emitted text renews this allowance.
@@ -232,6 +233,11 @@ class WindowAdmission:
         self.active = 0
         self._lock = threading.Lock()
 
+    def available(self) -> bool:
+        cap = max(0, int(os.getenv('PARAKEET_WINDOW_MAX_SESSIONS', '1')))
+        with self._lock:
+            return self.active < cap
+
     def acquire(self) -> Callable[[], None]:
         cap = max(0, int(os.getenv('PARAKEET_WINDOW_MAX_SESSIONS', '1')))
         with self._lock:
@@ -282,8 +288,14 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._health_close: Callable[[], None] = lambda: None
         self._first_speech_at: float | None = None
         self._first_text_recorded = False
+        self.progress_deadline_enabled = False
+        self.allow_no_text_rescue: Callable[[], bool] = lambda: True
         self._first_text_deadline = _positive_float_env(
             'PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', FIRST_TEXT_DEADLINE_SECONDS
+        )
+        self._deadline_cut_enabled = os.getenv('PARAKEET_WINDOW_DEADLINE_CUT_ENABLED', 'false').lower() == 'true'
+        self._deadline_cut_post_latency = _positive_float_env(
+            'PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS', DEADLINE_CUT_POST_LATENCY_SECONDS
         )
         self._max_empty_streak = _positive_int_env('PARAKEET_WINDOW_MAX_EMPTY_STREAK', MAX_EMPTY_STREAK)
         self._empty_streak = 0
@@ -444,10 +456,17 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._first_text_timer = None
         if (
             self._deadline_speech_at is not None
-            and not self._first_text_recorded
+            and (not self._first_text_recorded or self.progress_deadline_enabled)
             and not self._closed
             and not self._dead
         ):
+            if self.progress_deadline_enabled and not self.allow_no_text_rescue():
+                # One bounded successor interval already tested this session.
+                # Ambiguous empty audio continues on cheap decoding; transport
+                # errors still follow normal recovery. Never infer fleet noise.
+                self._deadline_speech_at = None
+                self._deadline_speech_bytes = 0
+                return
             now = time.monotonic()
             self.first_text_diagnostics = FirstTextDeadlineDiagnostics(
                 admitted_seconds=self._to_seconds(self._admitted_speech_bytes),
@@ -553,13 +572,17 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         if self._next_send_speech and data:
             if self._first_speech_at is None:
                 self._first_speech_at = time.monotonic()
-            if not self._first_text_recorded and self._deadline_speech_at is None:
+            if (
+                (not self._first_text_recorded or self.progress_deadline_enabled)
+                and self._deadline_speech_at is None
+                and (not self.progress_deadline_enabled or self.allow_no_text_rescue())
+            ):
                 self._deadline_speech_at = time.monotonic()
                 self._first_text_timer = asyncio.get_running_loop().call_later(
                     self._first_text_deadline, self._expire_first_text
                 )
             self._admitted_speech_bytes += len(data)
-            if not self._first_text_recorded:
+            if not self._first_text_recorded or self.progress_deadline_enabled:
                 self._deadline_speech_bytes += len(data)
             end = self._received_bytes + len(data)
             if self._speech_spans and self._speech_spans[-1][1] == self._received_bytes:
@@ -764,7 +787,11 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 self._answered_empty_speech_end = max(self._answered_empty_speech_end, job.end_bytes)
             if has_speech:
                 self._empty_streak = min(1000000, self._empty_streak + 1)
-                if not self._first_text_recorded and self._empty_streak >= self._max_empty_streak:
+                if (
+                    (not self._first_text_recorded or self.progress_deadline_enabled)
+                    and self._empty_streak >= self._max_empty_streak
+                    and (not self.progress_deadline_enabled or self.allow_no_text_rescue())
+                ):
                     self.fail('empty_streak')
                     return
         segments = await self._recover_skipped_head(job, segments)
@@ -775,6 +802,20 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         has_held_tail = cut_requested and len(
             decide_window(segments, job.duration, job.duration + 1.0, force=job.force, pause=job.pause).emit
         ) < len(segments)
+        # Sentence anchoring may hold a healthy nonempty answer until the
+        # context cap (24s), beyond the first/progress deadline (12s). If the
+        # remaining budget is within the qualified POST latency allowance,
+        # publish the held tail using the existing timestamp-preserving cut.
+        # A normal first POST after 6s of capture must still hold its sentence;
+        # neither a full pace nor the next pacing wait is a cut allowance.
+        # Empty answers and in-flight faults retain the original deadline.
+        deadline_cut = (
+            self._deadline_cut_enabled
+            and self._deadline_speech_at is not None
+            and (not self._first_text_recorded or self.progress_deadline_enabled)
+            and self._deadline_speech_at + self._first_text_deadline - time.monotonic()
+            <= self._deadline_cut_post_latency
+        )
         decision = decide_window(
             segments,
             job.duration,
@@ -786,13 +827,17 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             # the long held tail only when another pace of audio would leave
             # too little room for the next POST to make progress.
             min_cap_progress=(self._pace_seconds if len(self._buf) >= self._buffer_cap() - self._pace_bytes else 0.0),
-            force_replay_cut=self._replay_cut_requested,
+            force_replay_cut=self._replay_cut_requested or deadline_cut,
         )
         if decision.forced_cut:
             WINDOW_FORCED_CUTS.inc()
         emitted, beyond_window = await self._materialize(decision.emit, job.pcm, job.start, job.duration)
         if emitted and not self._dead:
             if any(str(item.get('text', '')).strip() for item in emitted):
+                if self.progress_deadline_enabled:
+                    self._cancel_first_text_timer()
+                    self._deadline_speech_at = None
+                    self._deadline_speech_bytes = 0
                 # Parsed but held text cannot renew the allowance. Keep the
                 # counted endpoint so old overlapping PCM is not counted again.
                 self._answered_empty_speech_bytes = 0
@@ -1105,13 +1150,23 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         wav = _pcm16_to_wav_bytes(self._normalize_posted_pcm(pcm), self._sample_rate)
         acquired = False
         try:
-            async with asyncio.timeout(self._post_timeout):
+            async with asyncio.timeout(self._post_timeout) as deadline:
                 async with get_stt_semaphore():
                     acquired = True
+                    when = deadline.when()
+                    remaining = (
+                        max(0.0, when - asyncio.get_running_loop().time()) if when is not None else self._post_timeout
+                    )
+                    remaining = math.floor(remaining * 1000) / 1000
+                    if remaining <= 0:
+                        raise TimeoutError('post budget exhausted at semaphore admission')
                     return await get_stt_client().post(
                         self._url,
                         files={'file': ('audio.wav', wav, 'audio/wav')},
-                        headers={'X-Omi-STT-Surface': 'live-window'},
+                        headers={
+                            'X-Omi-STT-Surface': 'live-window',
+                            'X-Omi-STT-Timeout-Seconds': f'{remaining:.3f}',
+                        },
                     )
         except (TimeoutError, httpx.TimeoutException):
             if not acquired:
@@ -1128,6 +1183,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 response = await self._post_window(pcm)
             finally:
                 self._post_in_flight = False
+            if response.status_code == 503 and response.headers.get('X-Omi-STT-Error') == 'queue_timeout':
+                outcome = 'queue_timeout'
+                self.fail('capacity_full', capacity_subtype='queue_timeout')
+                response.raise_for_status()
             if response.status_code >= 500:
                 st._parakeet_circuit.record_serve_failure()  # type: ignore[reportPrivateUsage]  # shared circuit owner
                 self.fail('provider_5xx')
