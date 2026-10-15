@@ -17,7 +17,6 @@ from utils.translation_core.planner import TranslationMode, TranslationUnit
 from utils.translation_core.providers import ProviderBatch, ProviderTranslation, TranslationProvider
 
 CACHE_WRITES = [
-    (redis_db.set_generic_cache, ('path', {'ok': True})),
     (redis_db.set_generic_cache, ('path', {'ok': True}, 60)),
     (redis_db.set_app_cache_by_id, ('app', {'id': 'app'})),
     (redis_db.set_app_usage_count_cache, ('app', 5)),
