@@ -2504,9 +2504,21 @@ class CaptureController extends ChangeNotifier
     // case the disable/reject paths may have removed nativeBleStreamConfig and
     // the native background streamer cannot start from nativeBleStreamingEnabled
     // alone.
-    _preferences.backgroundModeEnabled = true;
     final device = _recordingDevice!;
-    final codec = await _getAudioCodec(device.id);
+    final BleAudioCodec codec;
+    try {
+      codec = await _getAudioCodec(device.id);
+    } catch (e) {
+      Logger.debug('[BackgroundMode] enable failed - unable to read audio codec: ');
+      _preferences.backgroundModeEnabled = false;
+      await _preferences.saveBool('nativeBleStreamingEnabled', false);
+      await _preferences.saveBool('nativeBleForegroundReady', false);
+      await _preferences.remove('nativeBleStreamConfig');
+      notifyListeners();
+      return false;
+    }
+
+    _preferences.backgroundModeEnabled = true;
     final wasForegroundReady = _preferences.getBool('nativeBleForegroundReady');
     await _saveNativeBleStreamConfig(device, codec);
     if (wasForegroundReady) {
