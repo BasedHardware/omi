@@ -90,7 +90,7 @@ def test_update_linked_branch_preserves_completed_at(monkeypatch):
 
     monkeypatch.setattr(action_items_db, "db", fake_db)
     monkeypatch.setattr(action_items_db, "bump_action_items_list_version", lambda uid: None)
-    monkeypatch.setattr(action_items_db, "validate_task_relationship_in_transaction", lambda **kw: None)
+    monkeypatch.setattr(action_items_db, "validate_task_relationship_in_transaction", lambda *a, **kw: None)
     monkeypatch.setattr(action_items_db, "_record_followup_completion", lambda *a: None)
 
     # Drive the real transactional body directly: firestore.transactional just
