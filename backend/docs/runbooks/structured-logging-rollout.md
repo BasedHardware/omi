@@ -1,0 +1,63 @@
+# Structured logging rollout
+
+`omi_logging.configure_logging(service, ...)` is the dependency-free foundation.
+No entrypoint has switched in the foundation change. Keep the current split-stream
+setup until the consumer and per-service deployment gates below pass.
+
+Images must copy `backend/omi_logging.py` into their Python application import root;
+use `from omi_logging import configure_logging, TraceContextMiddleware`. Do not
+import through `utils`: the Parakeet NeMo image provides a competing top-level
+`utils` package. Validate each image with the runtime-image registry smoke path.
+Call setup before heavy imports; reapply after libraries that install handlers.
+Install `TraceContextMiddleware` around the ASGI app to carry validated Cloud Trace
+or W3C trace IDs through request handling. Set the project explicitly or through
+`GOOGLE_CLOUD_PROJECT`, `GCP_PROJECT`, or `GCLOUD_PROJECT`; trace resource names
+are omitted if no project is known. Set `OMI_ENV_STAGE` or pass `environment`.
+
+GCP runtime markers select one-line JSON on stdout. `OMI_LOG_FORMAT=json|text`
+overrides detection. Exceptions include the traceback in `message` and Error
+Reporting type/service fields. Local output defaults to readable text. Preserve
+message strings while migrating so downstream filters retain their meaning.
+Cloud Run uses platform request logs. GKE suppresses successful health/metrics
+probes and uses LB logs for diarizer, nllb, parakeet, pusher and vad. Keep general
+access records for listen, llm-gateway and diarizer-batch until actual route
+coverage is proven. Exceptions and ERROR records are never suppressed.
+
+## Consumer admission
+
+Before switching any service, update and read back the current live filters for:
+
+- `backend_from_segments_returned`, `backend_tombstone_guard_firing`
+- `daily_summary_recap_generated`, `daily_summary_user_failed`
+- `firestore_missing_index_errors`, `firestore_missing_index_errors_gke`
+- `omigtp-api-requests`
+- sink `vad-streaming-to-bigquery`
+
+Preserve resource predicates and widen message predicates with
+`(textPayload:"phrase" OR jsonPayload.message:"phrase")` (or the same regex).
+Preserve broader SEARCH semantics when adding explicit message matches. Dry-run
+with `gcloud logging read` using timestamp-only output; no matches establishes
+syntax acceptance only. Recheck counters on known events after every deployment.
+The daily-summary metrics also extract `retry`, `reason`, and `error_type` from
+textPayload. Widening filters alone does not preserve these label series: their
+producer/extractor transition needs a separate verified compatibility gate before
+notifications-job migration. Do not silently accept empty label values.
+
+`sync_backfill_uid_sequencer_scheduler_failure` selects Cloud Scheduler platform
+AttemptFinished records, not application messages. Preserve `severity>=ERROR`,
+`jsonPayload."@type"`, job ID and resource predicates unchanged.
+
+## Per-service acceptance
+
+Migrate separately in this order: diarizer, nllb, llm-gateway, diarizer-batch,
+pusher, parakeet, vad, backend-listen, desktop-backend, shared Cloud Run backends,
+Modal HTTP/jobs and messaging maintenance. Use existing deployment workflows,
+record immutable rollback images/revisions first, and wait for any concurrent
+release on the same service. Listen rollout targets only the main deployment.
+
+Compare exact before/after windows: severity counts, JSON share, single-entry
+tracebacks, Error Reporting grouping, metric labels/counters, sink delivery,
+request coverage, and log bytes/day by container. Watch at least 15 minutes;
+compare 5xx and restarts with the preceding 24–48 hours. Capped log samples are
+not complete rates or billed-byte measurements. Roll back the affected image if
+signal is lost; retain widened filters through the rollback window.
