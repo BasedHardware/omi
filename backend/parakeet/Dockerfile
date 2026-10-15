@@ -73,6 +73,7 @@ RUN pip install --no-cache-dir --no-deps "pyannote.audio==3.3.2" && \
     /usr/local/lib/python3.12/dist-packages/pyannote/audio/telemetry/__init__.py
 
 COPY backend/parakeet/ .
+COPY backend/utils/logging_config.py ./utils/logging_config.py
 COPY backend/tests/container/ tests/container/
 
 ENV NVIDIA_VISIBLE_DEVICES=all

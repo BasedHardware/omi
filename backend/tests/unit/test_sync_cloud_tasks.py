@@ -3411,21 +3411,23 @@ async def test_busy_upload_exposes_existing_owner_without_dispatching(owner_job_
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    'flag,reply,expected',
+    'flag,percent,reply,expected',
     [
-        ('false', 1, 'backfill'),
-        ('true', 1, 'fresh'),
-        ('true', 0, 'backfill'),
-        ('true', None, 'backfill'),
+        ('false', '100', 1, 'backfill'),
+        ('true', '100', 1, 'fresh'),
+        ('true', '100', 0, 'backfill'),
+        ('true', '100', None, 'backfill'),
+        ('true', '0', 1, 'backfill'),
     ],
 )
-async def test_legacy_fresh_budget_decides_persisted_and_dispatched_lane(monkeypatch, flag, reply, expected):
+async def test_legacy_fresh_budget_decides_persisted_and_dispatched_lane(monkeypatch, flag, percent, reply, expected):
     """Exercise the production admission handler; proof stays LEGACY in both lanes."""
     from starlette.datastructures import UploadFile
     from utils.sync import lanes, legacy_fresh
 
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setenv('SYNC_LEGACY_FRESH_ENABLED', flag)
+    monkeypatch.setenv('SYNC_LEGACY_FRESH_PERCENT', percent)
     monkeypatch.setattr(lanes, 'parse_sync_filename_timestamp', lambda _: time.time() - 60)
     redis = MagicMock()
     redis.eval.return_value = reply
@@ -3445,7 +3447,7 @@ async def test_legacy_fresh_budget_decides_persisted_and_dispatched_lane(monkeyp
         assert module.enqueue_sync_job.call_args.args[0]['lane'] == expected
         assert module.enqueue_sync_job.call_args.args[0]['capture_time_trust'] == 'legacy'
         module.start_background_task.assert_not_called()
-        if flag == 'false':
+        if flag == 'false' or percent == '0':
             redis.eval.assert_not_called()
         else:
             redis.eval.assert_called_once()
@@ -3471,6 +3473,7 @@ def test_legacy_fresh_http_multipart_measures_bytes_and_returns_lane(monkeypatch
 
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setenv('SYNC_LEGACY_FRESH_ENABLED', 'true')
+    monkeypatch.setenv('SYNC_LEGACY_FRESH_PERCENT', '100')
     monkeypatch.setattr(lanes, 'parse_sync_filename_timestamp', lambda _: time.time() - 60)
     redis = MagicMock()
     redis.eval.return_value = reply
@@ -3521,6 +3524,7 @@ async def test_fresh_only_refusal_demotes_legacy_but_keeps_device_bound_429(monk
 
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setenv('SYNC_LEGACY_FRESH_ENABLED', 'true')
+    monkeypatch.setenv('SYNC_LEGACY_FRESH_PERCENT', '100')
     monkeypatch.setenv('SYNC_BACKFILL_ENABLED', 'true')
     monkeypatch.setattr(lanes, 'parse_sync_filename_timestamp', lambda _: time.time() - 60)
     redis = MagicMock()
@@ -3594,6 +3598,7 @@ async def test_legacy_fresh_refusal_preserves_backfill_pause_instead_of_429(monk
 
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setenv('SYNC_LEGACY_FRESH_ENABLED', 'true')
+    monkeypatch.setenv('SYNC_LEGACY_FRESH_PERCENT', '100')
     monkeypatch.setenv('SYNC_BACKFILL_ENABLED', 'false')
     monkeypatch.setattr(lanes, 'parse_sync_filename_timestamp', lambda _: time.time() - 60)
     redis = MagicMock()
