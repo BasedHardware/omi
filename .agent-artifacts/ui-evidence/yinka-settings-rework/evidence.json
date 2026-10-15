@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "images": [
+    {"file": "001-mobile-ios-settings-before-light.png", "platform": "mobile-ios", "description": "Settings sheet before: Referral with a NEW tag beside Plan; Device, Recording, Voice, Notifications, Integrations, Agent, Privacy in one group", "captured_by": "agent", "source": "manual"},
+    {"file": "002-mobile-ios-settings-after-light.png", "platform": "mobile-ios", "description": "Settings sheet after: Plan alone, then Device (battery shown), Recording, Notifications, Data & Privacy; Voice, Integrations, Agent next; Referral moves beside Help", "captured_by": "agent", "source": "manual"},
+    {"file": "003-mobile-ios-settings-before-dark.png", "platform": "mobile-ios", "description": "Settings sheet before, dark", "captured_by": "agent", "source": "manual"},
+    {"file": "004-mobile-ios-settings-after-dark.png", "platform": "mobile-ios", "description": "Settings sheet after, dark", "captured_by": "agent", "source": "manual"}
+  ]
+}

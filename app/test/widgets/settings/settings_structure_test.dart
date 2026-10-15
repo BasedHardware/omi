@@ -31,6 +31,9 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   bool get isConnected => true;
 
   @override
+  int get batteryLevel => 82;
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
@@ -141,7 +144,7 @@ void main() {
   }
 
   testWidgets(
-      'the sheet is Account, Plan, Referral, the groups, Connect an Agent, Memories, Goals and Feedback, in order, keyed',
+      'the sheet is Account, Plan, the most-opened groups, Voice, Integrations, Connect an Agent, Memories, Goals, Help, Referral and Feedback, in order, keyed',
       (
     tester,
   ) async {
@@ -150,36 +153,38 @@ void main() {
     expect(rows.map(_keyOf).toList(), [
       'settings_account',
       'settings_row_planAndUsage',
-      'settings_row_referral',
       'settings_group_device',
       'settings_group_recording',
-      'settings_group_voice',
       'settings_group_notifications',
+      'settings_group_privacy',
+      'settings_group_voice',
       'settings_group_integrations',
       'settings_row_connect_agent',
-      'settings_group_privacy',
       'settings_row_memories',
       'settings_row_goals',
       'settings_group_help',
+      'settings_row_referral',
       'settings_row_feedback', // where Intercom is supported (the host test is)
       'settings_group_developer',
     ]);
     // Account shows who is signed in.
     expect(rows.first.title, 'Ada');
     expect(rows.first.subtitle, 'ada@example.com');
+    // Device shows the connected device's battery without opening the group.
+    expect(rows[2].value, '82%');
     expect(rows.skip(1).map((r) => r.title).toList(), [
       en.planAndUsage,
-      en.referralProgram,
       en.device,
       en.recordingAndTranscription,
-      en.assistantVoiceSettingsTitle,
       en.notificationsAndDisplay,
+      en.dataAndPrivacy,
+      en.assistantVoiceSettingsTitle,
       en.integrations,
       en.connectAnAgent,
-      en.dataAndPrivacy,
       en.memories,
       en.goals,
       en.helpAndAbout,
+      en.referralProgram,
       en.feedbackBug,
       en.developerSettings,
     ]);

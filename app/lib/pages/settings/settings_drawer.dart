@@ -16,9 +16,10 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
-/// The Settings sheet: Account, then eight groups (Device, Recording & Transcription, Voice,
-/// Notifications & Display, Integrations, Privacy & Data, Help & About, Developer Settings), plus
-/// search over every row in Settings and its pages ([settingsSearchEntries]).
+/// The Settings sheet: Account and Plan, then the groups people open most (Device, Recording &
+/// Transcription, Notifications & Display, Data & Privacy), Voice, Integrations, Memories, Goals,
+/// Help & About and Developer Settings, plus search over every row in Settings and its pages
+/// ([settingsSearchEntries]).
 ///
 /// Every setting is at most one tap below the sheet: a group row opens its group page
 /// (settings_groups.dart), whose rows open the same pages the sheet used to open directly.
@@ -121,6 +122,13 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     return currentPlanDisplayName(context, subscription);
   }
 
+  /// The device on the Device row: its battery when it reports one, else Connected / Disconnected.
+  String _deviceValue(DeviceProvider device) {
+    if (!device.isConnected) return context.l10n.disconnected;
+    final battery = device.batteryLevel;
+    return battery >= 0 ? '$battery%' : context.l10n.connected;
+  }
+
   Widget _buildSettings(BuildContext context) {
     final l10n = context.l10n;
     final planValue = _planValue(context.watch<UsageProvider>());
@@ -142,7 +150,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           ],
         ),
         const SizedBox(height: OmiSpacing.xl),
-        // Plan, referrals and feedback stay one tap from the sheet (David, 2026-09-24).
+        // Plan stays one tap from the sheet (David, 2026-09-24); for Free and Plus its section adds
+        // the minutes meter and the Upgrade button.
         OmiSettingsGroup(
           children: [
             SettingsPlanSection(
@@ -154,16 +163,11 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 value: planValue,
               ),
             ),
-            _row(
-              SettingsDestination.referral,
-              key: 'settings_row_referral',
-              icon: FontAwesomeIcons.gift,
-              title: l10n.referralProgram,
-              tag: SettingsTag(l10n.newTag, OmiColors.success),
-            ),
           ],
         ),
         const SizedBox(height: OmiSpacing.xl),
+        // The groups people open most come first: Device and Recording & Transcription are most of
+        // the visits to Settings, then Notifications & Display and Data & Privacy.
         OmiSettingsGroup(
           children: [
             _row(
@@ -171,6 +175,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               key: 'settings_group_device',
               icon: FontAwesomeIcons.bluetooth,
               title: l10n.device,
+              value: _deviceValue(context.watch<DeviceProvider>()),
             ),
             _row(
               SettingsDestination.recordingGroup,
@@ -179,16 +184,27 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               title: l10n.recordingAndTranscription,
             ),
             _row(
-              SettingsDestination.voice,
-              key: 'settings_group_voice',
-              icon: FontAwesomeIcons.volumeHigh,
-              title: l10n.assistantVoiceSettingsTitle,
-            ),
-            _row(
               SettingsDestination.notificationsGroup,
               key: 'settings_group_notifications',
               icon: FontAwesomeIcons.solidBell,
               title: l10n.notificationsAndDisplay,
+            ),
+            _row(
+              SettingsDestination.privacyGroup,
+              key: 'settings_group_privacy',
+              icon: FontAwesomeIcons.shield,
+              title: l10n.dataAndPrivacy,
+            ),
+          ],
+        ),
+        const SizedBox(height: OmiSpacing.xl),
+        OmiSettingsGroup(
+          children: [
+            _row(
+              SettingsDestination.voice,
+              key: 'settings_group_voice',
+              icon: FontAwesomeIcons.volumeHigh,
+              title: l10n.assistantVoiceSettingsTitle,
             ),
             _row(
               SettingsDestination.integrations,
@@ -202,12 +218,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               key: 'settings_row_connect_agent',
               icon: FontAwesomeIcons.terminal,
               title: l10n.connectAnAgent,
-            ),
-            _row(
-              SettingsDestination.privacyGroup,
-              key: 'settings_group_privacy',
-              icon: FontAwesomeIcons.shield,
-              title: l10n.dataAndPrivacy,
             ),
           ],
         ),
@@ -230,6 +240,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           ],
         ),
         const SizedBox(height: OmiSpacing.xl),
+        // Referrals and feedback stay one tap from the sheet (David, 2026-09-24).
         OmiSettingsGroup(
           children: [
             _row(
@@ -237,6 +248,12 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               key: 'settings_group_help',
               icon: FontAwesomeIcons.circleQuestion,
               title: l10n.helpAndAbout,
+            ),
+            _row(
+              SettingsDestination.referral,
+              key: 'settings_row_referral',
+              icon: FontAwesomeIcons.gift,
+              title: l10n.referralProgram,
             ),
             if (PlatformService.isIntercomSupported)
               _row(
