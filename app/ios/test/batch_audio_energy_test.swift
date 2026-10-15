@@ -18,7 +18,9 @@ final class CountingDefaults: UserDefaults {
 
 @main
 struct BatchAudioEnergyTests {
-    static func check(_ condition: Bool) { precondition(condition) }
+    static func check(_ condition: Bool, file: StaticString = #file, line: UInt = #line) {
+        precondition(condition, file: file, line: line)
+    }
 
     static func directory() throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -266,8 +268,13 @@ struct BatchAudioEnergyTests {
         enqueue(0x22)
         writer.queue.sync {}
         policy(4, muted: false)
+        // Keep this packet pending until the revision changes. Otherwise a
+        // fast writer may legitimately commit it before policy(5).
+        let pendingRevision = DispatchSemaphore(value: 0)
+        writer.queue.async { pendingRevision.wait() }
         enqueue(0x33)
         policy(5, muted: false)
+        pendingRevision.signal()
         writer.queue.sync {}
         policy(5, muted: false)
         enqueue(0x44)
