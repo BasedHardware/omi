@@ -235,8 +235,8 @@ class TestConversationsToStringEventTimes:
         result = conversations_to_string([conv], tz="Asia/Ho_Chi_Minh")
         assert "14:18 Asia/Ho_Chi_Minh" in result
         assert "07:18" not in result
-        # Duration is a bare number, not a second clock pair.
-        assert "duration: 130 minutes" in result
+        # Duration is a bare value (format_duration), not a second clock pair.
+        assert "2h 10m" in result
 
     def test_event_start_defaults_to_utc_label(self):
         conv = self._make_event_conversation()
