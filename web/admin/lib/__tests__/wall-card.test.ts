@@ -96,6 +96,22 @@ it("keeps real healthy counts bright, all fixtures dim, and puts the complete me
     /script|foreignObject|iframe|NO WATERMARK|\[Active\]/
   );
   expect(String(money.cardSvg)).toContain("FIXTURE");
+  const cash = data.metrics.find(
+    (m) => m.id === "revenue.plan_prepay_usd_week"
+  )!;
+  Object.assign(cash, {
+    value: 41812.82,
+    status: "proxy",
+    partial: true,
+    sourceRefreshedAt: now.toISOString(),
+    dataThrough: "2026-10-11",
+  });
+  expect(
+    wallPresentation(data, now).tiles.revenue_plan_prepay_usd_week
+  ).toMatchObject({
+    valueColor: "#8190a6",
+    footnote: "Coverage incomplete · as of Oct 11",
+  });
 });
 it("dims proxies with a material gap without dimming all proxy metrics", async () => {
   const now = new Date("2026-10-15T12:00Z");

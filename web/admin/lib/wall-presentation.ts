@@ -13,7 +13,7 @@ export const WALL_LABELS: Partial<Record<Metric["id"], string>> = {
   "revenue.arpmau": "ARPMAU",
   "revenue.mrr": "Monthly recurring revenue",
   "revenue.hardware_usd_week": "Hardware sales",
-  "revenue.plan_prepay_usd_week": "Plan prepay sold",
+  "revenue.plan_prepay_usd_week": "Plan prepay · Shopify",
   "cost.net_day": "Daily net cost",
   "cost.per_mau_month": "Monthly cost / MAU",
   "cost.gross_margin_pct": "Gross margin · goal 60%",
@@ -144,7 +144,14 @@ export function wallPresentation(payload: WallPayload, now = new Date()) {
       footnote = `180-day lookback · ${
         through ? `as of ${through}` : "refresh pending"
       }`;
-    if (m.id === "revenue.plan_prepay_usd_week" && !fixture && m.value != null)
+    if (
+      m.id === "revenue.plan_prepay_usd_week" &&
+      !fixture &&
+      !m.stale &&
+      !m.partial &&
+      !m.materialGap &&
+      m.value != null
+    )
       footnote = `Shopify cash · ${
         through ? `as of ${through}` : "refresh pending"
       }`;
