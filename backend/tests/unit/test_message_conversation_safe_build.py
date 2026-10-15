@@ -43,9 +43,9 @@ def test_object_with_model_dump_builds():
 def test_malformed_members_are_skipped_without_raising():
     members = [
         _valid_dict(id='ok1'),
-        {'id': 'no-structured'},                       # missing structured
+        {'id': 'no-structured'},  # missing structured
         'not-a-mapping',
-        _valid_dict(id='ok2', created_at='garbage'),   # bad datetime
+        _valid_dict(id='ok2', created_at='garbage'),  # bad datetime
         None,
         {'structured': {'title': 'T', 'emoji': 'e'}, 'created_at': NOW},  # missing id
     ]
