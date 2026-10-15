@@ -4725,6 +4725,10 @@ programming and caller reachability before deploying.
 Caller deploy order, route requirements and independent rollback are documented
 in [the Gateway caller runbook](internal-gateway-callers.md).
 
+Long-audio batch qualification uses the same final-pass HTTP client and public
+corpus only; see [the stage C load method and probe commands](diarizer-batch-stagec-load.md).
+Its wall/RTF scenarios remain unqualified until the lead fills the timing table.
+
 ### As-captured archive trial
 
 The default-off `AUDIO_ARCHIVE_*` cohort captures original live Opus packets
