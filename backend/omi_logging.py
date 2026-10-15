@@ -123,7 +123,7 @@ class JsonFormatter(logging.Formatter):
             payload['logging.googleapis.com/trace'] = f'projects/{self.project}/traces/{trace[0]}'
             payload['logging.googleapis.com/spanId'] = trace[1]
             payload['logging.googleapis.com/trace_sampled'] = trace[2]
-        return json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
+        return json.dumps(payload, ensure_ascii=True, separators=(',', ':'))
 
 
 class BelowWarningFilter(logging.Filter):
@@ -152,7 +152,11 @@ class NeMoFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         if record.levelno >= logging.ERROR or record.exc_info:
             return True
-        return not any(marker in record.getMessage() for marker in NEMO_REPEATS)
+        try:
+            message = record.getMessage()
+        except Exception:
+            return True  # Let the handler contain malformed vendor diagnostics.
+        return not any(marker in message for marker in NEMO_REPEATS)
 
 
 def configure_logging(

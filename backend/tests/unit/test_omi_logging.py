@@ -280,3 +280,22 @@ def test_bad_exception_metadata_cannot_discard_error(monkeypatch, metadata):
     entry = json.loads(output.getvalue())
     assert 'original' in entry['message']
     assert 'logging.googleapis.com/trace' not in entry
+
+
+def test_malformed_nemo_diagnostic_does_not_escape_filter():
+    record = logging.LogRecord('nemo_logger', logging.WARNING, '', 0, '%s %s', ('one',), None)
+    assert logs.NeMoFilter().filter(record)
+
+
+def test_surrogate_message_is_valid_utf8_json(monkeypatch):
+    monkeypatch.setenv('OMI_LOG_FORMAT', 'json')
+    output = io.BytesIO()
+    stream = io.TextIOWrapper(output, encoding='utf-8', errors='strict', write_through=True)
+    logs.configure_logging('test', stdout=stream)
+    message = 'filename ' + chr(0xDCFF) + ' café'
+    logging.warning(message)
+    encoded = output.getvalue()
+    assert encoded.isascii()
+    entry = json.loads(encoded.decode('utf-8'))
+    assert entry['message'] == message
+    assert entry['severity'] == 'WARNING'
