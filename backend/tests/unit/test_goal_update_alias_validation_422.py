@@ -81,3 +81,37 @@ def test_patch_goal_not_found_still_404():
         with pytest.raises(HTTPException) as exc:
             goals_router.update_goal(goal_id="goal_1", updates=body, uid="u1")
     assert exc.value.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# the same request on the developer twin endpoint must not 500 either
+# ---------------------------------------------------------------------------
+def test_dev_patch_goal_contradicting_alias_answers_422():
+    """``PATCH /v1/dev/user/goals/{goal_id}`` calls the same store seam.
+
+    Before this change the developer route had no ``GoalStoreError`` mapping,
+    so a contradicting alias patch escaped as an uncaught
+    ``GoalValidationError`` and FastAPI answered 500 — the exact fault this
+    bounty fixes on the canonical route, still live on the developer one.
+    """
+    import routers.developer as developer_router
+
+    body = developer_router.UpdateGoalRequest.model_validate({"min_value": 30})
+    with patch.object(
+        developer_router.goals_db, "update_goal",
+        side_effect=goals_db.GoalValidationError("metric min must not exceed max"),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            developer_router.update_goal(goal_id="goal_1", request=body, uid="u1")
+    assert exc.value.status_code == 422
+    assert exc.value.detail == "metric min must not exceed max"
+
+
+def test_dev_patch_goal_not_found_still_404():
+    import routers.developer as developer_router
+
+    body = developer_router.UpdateGoalRequest.model_validate({"title": "New title"})
+    with patch.object(developer_router.goals_db, "update_goal", return_value=None):
+        with pytest.raises(HTTPException) as exc:
+            developer_router.update_goal(goal_id="goal_1", request=body, uid="u1")
+    assert exc.value.status_code == 404
