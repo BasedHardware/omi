@@ -171,7 +171,7 @@ class LiveSTTAttempt:
         source: str | None = None,
         model: str | None = None,
         language: str | None = None,
-        emitter: Callable[..., None] = emit_product_event,
+        emitter: Callable[..., object] = emit_product_event,
         clock: Callable[[], float] = monotonic,
     ) -> None:
         self.provider = bounded_provider(provider)
