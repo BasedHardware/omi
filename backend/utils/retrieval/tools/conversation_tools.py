@@ -11,7 +11,6 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 
 import database.conversations as conversations_db
-import database.notifications as notification_db
 import database.users as users_db
 import database.vector_db as vector_db
 from models.other import Person
@@ -39,6 +38,7 @@ from utils.retrieval.tools.conversation_jit import (
     is_jit_conversation_retrieval_enabled,
 )
 import logging
+from utils.model_text import DisplayClock, truncation_note
 
 logger = logging.getLogger(__name__)
 
@@ -422,6 +422,7 @@ def get_conversations_tool(
 
         # Convert to Conversation objects
         conversations: List[Any] = []
+        truncation_notes: Dict[str, str] = {}
         for conv_data in conversations_data:
             try:
                 conversation = deserialize_conversation(conv_data)
@@ -432,7 +433,16 @@ def get_conversations_tool(
                     and conversation.transcript_segments
                     and len(conversation.transcript_segments) > max_transcript_segments
                 ):
+                    total_segments = len(conversation.transcript_segments)
                     conversation.transcript_segments = conversation.transcript_segments[:max_transcript_segments]
+                    note = truncation_note(
+                        shown=len(conversation.transcript_segments),
+                        total=total_segments,
+                        unit='transcript segments',
+                        how_to_get_more='Increase max_transcript_segments or set it to -1 for the full transcript.',
+                    )
+                    if note:
+                        truncation_notes[conversation.id] = note
 
                 conversations.append(conversation)
             except Exception as e:
@@ -442,13 +452,15 @@ def get_conversations_tool(
         logger.info(f"🔍 get_conversations_tool - Converted {len(conversations)} conversation objects")
 
         # Return formatted string (timestamps rendered in the user's timezone for correct chat answers)
+        display_clock = DisplayClock.for_turn(configurable, uid)
         result = _render_addressable_conversations(
             conversations,
             configurable=configurable,
             use_transcript=include_transcript,
             include_timestamps=include_timestamps,
             people=people,
-            tz=notification_db.get_user_time_zone(uid) or 'UTC',
+            clock=display_clock,
+            truncation_notes=truncation_notes,
         )
         result = _bounded_result(result, total_found, results_truncated, already_bounded=True)
         logger.info(f"🔍 get_conversations_tool - Generated result string, length: {len(result)}")
@@ -786,6 +798,7 @@ def search_conversations_tool(
 
         # Convert to Conversation objects
         conversations: List[Any] = []
+        truncation_notes: Dict[str, str] = {}
         for conv_data in conversations_data:
             try:
                 conversation = deserialize_conversation(conv_data)
@@ -796,7 +809,16 @@ def search_conversations_tool(
                     and conversation.transcript_segments
                     and len(conversation.transcript_segments) > max_transcript_segments
                 ):
+                    total_segments = len(conversation.transcript_segments)
                     conversation.transcript_segments = conversation.transcript_segments[:max_transcript_segments]
+                    note = truncation_note(
+                        shown=len(conversation.transcript_segments),
+                        total=total_segments,
+                        unit='transcript segments',
+                        how_to_get_more='Increase max_transcript_segments or set it to -1 for the full transcript.',
+                    )
+                    if note:
+                        truncation_notes[conversation.id] = note
 
                 conversations.append(conversation)
             except Exception as e:
@@ -812,6 +834,7 @@ def search_conversations_tool(
             else ('matching exactly' if exact_conversation_id else 'semantically matching')
         )
         result = f"Found {len(conversations)} conversations {match_kind} '{query}':\n\n"
+        display_clock = DisplayClock.for_turn(configurable, uid)
         admitted_ids: Set[str] = set()
         result += _render_addressable_conversations(
             conversations,
@@ -820,11 +843,14 @@ def search_conversations_tool(
             use_transcript=include_transcript,
             include_timestamps=include_timestamps,
             people=people,
-            tz=notification_db.get_user_time_zone(uid) or 'UTC',
+            clock=display_clock,
+            truncation_notes=truncation_notes,
         )
         transcript_excerpts = (
             chat_transcript_excerpts(
-                [row for row in conversations_data if row.get('id') in admitted_ids], transcript_search
+                [row for row in conversations_data if row.get('id') in admitted_ids],
+                transcript_search,
+                clock=display_clock,
             )
             if include_transcript
             else {}

@@ -193,6 +193,7 @@ action_items_db.update_action_item = MagicMock(return_value=True)
 # Stub database.notifications
 notifications_db = _stub_module("database.notifications")
 notifications_db.get_user_time_zone = MagicMock(return_value="UTC")
+importlib.import_module("database").notifications = notifications_db
 
 # Stub notifications
 notif_mod = _stub_module("utils.notifications")
@@ -342,7 +343,7 @@ transcript_search_mod.search_chat_transcript_chunks = MagicMock(return_value=_Ch
 transcript_chunks_mod = _stub_module("utils.conversations.transcript_chunks")
 
 
-def _hydrate_chunk_texts(_uid, conversations):
+def _hydrate_chunk_texts(_uid, conversations, *, clock=None):
     return conversations
 
 
@@ -444,6 +445,7 @@ memories_model_mod.MemoryDB = FakeMemoryDB
 sys.path.insert(0, str(BACKEND_DIR))
 
 # Now load the shared service modules
+_load_module_from_file("utils.model_text", BACKEND_DIR / "utils" / "model_text.py")
 retrieval_safety = _load_module_from_file(
     "utils.retrieval.safety",
     BACKEND_DIR / "utils" / "retrieval" / "safety.py",
@@ -476,6 +478,7 @@ rate_limit_config_mod = _load_module_from_file(
 # Restore sys.modules now that the modules under test are imported and bound to
 # their stubbed dependencies. Tests below patch those module objects directly.
 restore_sys_modules(_SYS_MODULES_SNAPSHOT)
+importlib.import_module("database").notifications = notifications_db
 del _SYS_MODULES_SNAPSHOT, _SYS_MODULE_NAMES
 
 
@@ -1269,7 +1272,7 @@ class TestRouterEndpoints:
         vector_db.search_transcript_chunks.return_value = [
             {'conversation_id': 'conv-a', 'chunk_index': 0, 'created_at': 1722500000, 'score': 0.9},
         ]
-        transcript_chunks_mod.hydrate_chunk_texts.side_effect = lambda _uid, rows: [
+        transcript_chunks_mod.hydrate_chunk_texts.side_effect = lambda _uid, rows, *, clock=None: [
             {
                 **r,
                 'text': '[Conversation on 01 Aug 2024, 08:53]\nUser: the beta shipped',
@@ -1313,7 +1316,9 @@ class TestSearchConversationChunksSources:
         return router_mod.ToolResponse.model_validate(result)
 
     def _hydrate_with(self, **fields):
-        transcript_chunks_mod.hydrate_chunk_texts.side_effect = lambda _uid, rows: [{**r, **fields} for r in rows]
+        transcript_chunks_mod.hydrate_chunk_texts.side_effect = lambda _uid, rows, *, clock=None: [
+            {**r, **fields} for r in rows
+        ]
 
     def test_sources_carry_parent_conversation_id_and_dedupe_by_conversation(self):
         vector_db.search_transcript_chunks.return_value = [

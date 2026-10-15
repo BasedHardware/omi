@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 from typing import Any, List, Optional, Set
 
 import database.conversations as conversations_db
-import database.notifications as notification_db
 import database.users as users_db
 import database.vector_db as vector_db
 from models.conversation import Conversation
@@ -28,6 +27,7 @@ from utils.conversations.search import (
     parse_exact_conversation_reference,
 )
 from utils.retrieval.safety import safe_isoformat
+from utils.model_text import DisplayClock, truncation_note
 import logging
 
 logger = logging.getLogger(__name__)
@@ -155,6 +155,7 @@ def get_conversations_text(
 
     # Convert to objects
     conversations: List[Conversation] = []
+    truncation_notes: dict[str, str] = {}
     for conv_data in conversations_data:
         try:
             conversation = deserialize_conversation(conv_data)
@@ -163,7 +164,16 @@ def get_conversations_text(
                 and conversation.transcript_segments
                 and len(conversation.transcript_segments) > max_transcript_segments
             ):
+                total_segments = len(conversation.transcript_segments)
                 conversation.transcript_segments = conversation.transcript_segments[:max_transcript_segments]
+                note = truncation_note(
+                    shown=len(conversation.transcript_segments),
+                    total=total_segments,
+                    unit='transcript segments',
+                    how_to_get_more='Increase max_transcript_segments or set it to -1 for the full transcript.',
+                )
+                if note:
+                    truncation_notes[conversation.id] = note
             conversations.append(conversation)
         except Exception as e:
             logger.error(f"Error parsing conversation {conv_data.get('id')}: {e}")
@@ -177,7 +187,8 @@ def get_conversations_text(
         use_transcript=include_transcript,
         include_timestamps=include_timestamps,
         people=people,
-        tz=notification_db.get_user_time_zone(uid),
+        clock=DisplayClock.for_uid(uid),
+        truncation_notes=truncation_notes,
     )
 
 
@@ -313,6 +324,7 @@ def search_conversations_text(
 
         # Convert
         conversations: List[Conversation] = []
+        truncation_notes: dict[str, str] = {}
         for conv_data in conversations_data:
             try:
                 conversation = deserialize_conversation(conv_data)
@@ -321,16 +333,28 @@ def search_conversations_text(
                     and conversation.transcript_segments
                     and len(conversation.transcript_segments) > max_transcript_segments
                 ):
+                    total_segments = len(conversation.transcript_segments)
                     conversation.transcript_segments = conversation.transcript_segments[:max_transcript_segments]
+                    note = truncation_note(
+                        shown=len(conversation.transcript_segments),
+                        total=total_segments,
+                        unit='transcript segments',
+                        how_to_get_more='Increase max_transcript_segments or set it to -1 for the full transcript.',
+                    )
+                    if note:
+                        truncation_notes[conversation.id] = note
                 conversations.append(conversation)
             except Exception as e:
                 logger.error("Error parsing conversation search result: %s", type(e).__name__)
                 continue
 
         rendered_ids = {conversation.id for conversation in conversations}
+        display_clock = DisplayClock.for_uid(uid)
         transcript_excerpts = (
             chat_transcript_excerpts(
-                [row for row in conversations_data if row.get('id') in rendered_ids], transcript_search
+                [row for row in conversations_data if row.get('id') in rendered_ids],
+                transcript_search,
+                clock=display_clock,
             )
             if include_transcript
             else {}
@@ -346,7 +370,8 @@ def search_conversations_text(
             use_transcript=include_transcript,
             include_timestamps=include_timestamps,
             people=people,
-            tz=notification_db.get_user_time_zone(uid),
+            clock=display_clock,
+            truncation_notes=truncation_notes,
         )
         for cid, excerpt in transcript_excerpts.items():
             result += (
