@@ -1,0 +1,182 @@
+"""Durable, trailing-edge sync enrichment outbox.
+
+Only IDs and scheduling metadata live here. A deterministic task name survives a
+lost enqueue acknowledgement. The existing sequencer sweep repairs missing or
+exhausted tasks in bounded batches, including a crash between mark and enqueue.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import math
+import logging
+import os
+import random
+import time
+import uuid
+from typing import Any
+
+from google.cloud import firestore
+from google.api_core.exceptions import AlreadyExists, FailedPrecondition, NotFound
+from prometheus_client import Counter
+
+from config.sync_reprocess import settle_seconds
+from database._client import get_firestore_client
+
+logger = logging.getLogger(__name__)
+
+COLLECTION = 'sync_reprocess_outbox'
+LEASE_SECONDS = 1800  # Greater than the Cloud Tasks dispatch deadline.
+REPAIR_SECONDS = 1800
+COALESCED = Counter('sync_reprocess_coalesced_total', 'Sync updates folded into an existing enrichment obligation')
+
+
+def key(uid: str, conversation_id: str) -> str:
+    return hashlib.sha256(f'{uid}\0{conversation_id}'.encode()).hexdigest()
+
+
+def owns_runtime() -> bool:
+    from utils.sync.stage import production_stage
+
+    return bool(os.getenv('FIRESTORE_EMULATOR_HOST')) or production_stage()
+
+
+def _mutate(document_id: str, operation):
+    if not owns_runtime():
+        raise RuntimeError('sync reprocess outbox requires production or a Firestore emulator')
+    client = get_firestore_client()
+    ref = client.collection(COLLECTION).document(document_id)
+
+    # All state for one obligation is in one document. Optimistic conditional
+    # writes avoid read-lock upgrade deadlocks under simultaneous appends while
+    # fencing claims, extension and completion against the exact read revision.
+    for attempt in range(10):
+        snapshot = ref.get()
+        old = snapshot.to_dict() if snapshot.exists else None
+        new, result = operation(old)
+        if new == old:
+            return result
+        try:
+            if old is None:
+                ref.create(new)
+            else:
+                fence = firestore.LastUpdateOption(snapshot.update_time)
+                if new is None:
+                    ref.delete(option=fence)
+                else:
+                    ref.update(new, option=fence)
+            return result
+        except (AlreadyExists, FailedPrecondition, NotFound):
+            if attempt == 9:
+                raise
+            time.sleep(random.uniform(0.005, min(0.2, 0.01 * 2**attempt)))
+
+
+def _enqueue(row: dict[str, Any]) -> None:
+    from utils.cloud_tasks import enqueue_named_task
+
+    handler = os.environ['SYNC_TASKS_HANDLER_URL']
+    suffix = '/v2/sync-jobs/run'
+    if not handler.endswith(suffix):
+        raise RuntimeError('sync reprocessing requires the sync worker handler binding')
+    enqueue_named_task(
+        os.environ['SYNC_TASKS_QUEUE'],
+        handler,
+        f"sr-{key(row['uid'], row['conversation_id'])}-{row['task_token']}",
+        {'kind': 'sync_reprocess', 'key': key(row['uid'], row['conversation_id']), 'task_token': row['task_token']},
+        audience=os.getenv('SYNC_TASKS_OIDC_AUDIENCE') or handler,
+        schedule_at=math.ceil(row['due_at']),
+    )
+
+
+def mark(uid: str, conversation_id: str, language: str, *, now: float | None = None) -> None:
+    current = time.time() if now is None else now
+
+    def update(old):
+        row = dict(old or {})
+        row.update(
+            uid=uid,
+            conversation_id=conversation_id,
+            language=language,
+            version=row.get('version', 0) + 1,
+            due_at=max(row.get('due_at', 0), current + settle_seconds()),
+        )
+        if old is None:
+            row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'], lease_until=0)
+        return row, (row, old is not None)
+
+    row, coalesced = _mutate(key(uid, conversation_id), update)
+    if coalesced:
+        COALESCED.inc()
+    else:
+        _enqueue(row)  # Failure leaves the obligation durable for the sweep.
+
+
+def run(document_id: str, task_token: str, process, *, now: float | None = None) -> str:
+    current = time.time() if now is None else now
+    owner = uuid.uuid4().hex
+
+    def claim(old):
+        if old is None or old['task_token'] != task_token:
+            return old, ('stale', None)
+        if old.get('lease_until', 0) > current:
+            return old, ('busy', None)
+        row = dict(old)
+        if row['due_at'] > current:
+            row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
+            return row, ('deferred', row)
+        row.update(lease_until=current + LEASE_SECONDS, owner=owner)
+        return row, ('claimed', row)
+
+    status, row = _mutate(document_id, claim)
+    if status == 'deferred':
+        _enqueue(row)
+        return status
+    if status != 'claimed':
+        return status
+    # Exceptions leave a leased, dirty row. Retry/sweep recovers after expiry.
+    process(row['uid'], row['conversation_id'], row['language'])
+
+    def finish(old):
+        if old is None or old.get('owner') != owner:
+            return old, None
+        if old['version'] == row['version']:
+            return None, None
+        pending = dict(old)
+        pending.update(lease_until=0, task_token=uuid.uuid4().hex, task_due_at=pending['due_at'])
+        return pending, pending
+
+    pending = _mutate(document_id, finish)
+    if pending is not None:
+        _enqueue(pending)
+    return 'processed'
+
+
+def sweep(*, now: float | None = None, limit: int = 100) -> dict[str, int]:
+    current = time.time() if now is None else now
+    counts = {'repaired': 0, 'error': 0}
+    if not owns_runtime():
+        return counts
+    limit = max(1, min(100, limit))
+    client = get_firestore_client()
+    # One range/order field uses the automatic single-field index.
+    snapshots = client.collection(COLLECTION).where('due_at', '<=', current).order_by('due_at').limit(limit).stream()
+    for snapshot in snapshots:
+
+        def repair(old):
+            if old is None or old.get('lease_until', 0) > current:
+                return old, None
+            row = dict(old)
+            if row['task_due_at'] + REPAIR_SECONDS <= current:
+                row.update(task_token=uuid.uuid4().hex, task_due_at=current)
+            return row, row
+
+        try:
+            row = _mutate(snapshot.id, repair)
+            if row is not None:
+                _enqueue(row)
+                counts['repaired'] += 1
+        except Exception as error:
+            counts['error'] += 1
+            logger.error('event=sync_reprocess action=repair outcome=error exception_type=%s', type(error).__name__)
+    return counts

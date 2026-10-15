@@ -2843,3 +2843,12 @@ _add(
         domains={'since': ['', T0.isoformat()], 'exclude_session': [None, 'session']},
     )
 )
+
+
+_add(
+    DriverEntry(
+        'utils.sync.reprocess.sweep',
+        neutrals={'now': (T0.timestamp(), 'operand clock only'), 'limit': _LIMIT},
+        patchers=(_stub('utils.sync.reprocess._mutate', None), _stub('utils.sync.reprocess.owns_runtime', True)),
+    )
+)

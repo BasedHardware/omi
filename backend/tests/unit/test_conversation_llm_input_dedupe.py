@@ -1,0 +1,183 @@
+"""Exact prompt inputs, successful-output checkpoints, and flag-off compatibility."""
+
+from datetime import datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import pytest
+
+from utils.conversations import llm_input_dedupe as dedupe
+
+
+@pytest.fixture
+def enabled(monkeypatch):
+    monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'true')
+    monkeypatch.setattr(dedupe, '_stored', lambda *a: {})
+    return SimpleNamespace(id='c', sync_content_revision=3)
+
+
+def test_notes_unchanged_skips_changed_inputs_run(enabled, monkeypatch):
+    from models.conversation import Structured
+
+    generate = Mock(return_value=Structured(title='Saved title'))
+    inputs = dict(
+        language_code='en',
+        tz='UTC',
+        started_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+        output_language_code='en',
+        existing_action_items=[],
+        meeting_context='Calendar: planning',
+    )
+    hashes = {}
+    prefix = {'context': 'FULL TRANSCRIPT\nWe will ship Friday.', 'known_spellings': 'Omi'}
+    dedupe.notes('u', enabled, prefix, generate, hashes, **inputs)
+    row = {**hashes, 'structured': generate.return_value.model_dump()}
+    monkeypatch.setattr(dedupe, '_stored', lambda *a: row)
+    output = dedupe.notes('u', enabled, prefix, generate, {}, **inputs)
+    assert output.title == 'Saved title' and generate.call_count == 1
+    for name, value in [
+        ('language_code', 'fr'),
+        ('tz', 'Asia/Tokyo'),
+        ('meeting_context', 'Different meeting'),
+        ('started_at', datetime(2026, 10, 2, tzinfo=timezone.utc)),
+        ('existing_action_items', [{'id': 'new', 'description': 'Ship'}]),
+    ]:
+        dedupe.notes('u', enabled, prefix, generate, {}, **{**inputs, name: value})
+    dedupe.notes('u', enabled, {**prefix, 'context': 'A new word'}, generate, {}, **inputs)
+    assert generate.call_count == 7
+
+
+def test_failed_notes_do_not_stamp_hash(enabled):
+    hashes = {}
+    with pytest.raises(RuntimeError):
+        dedupe.notes('u', enabled, {'context': 'text'}, Mock(side_effect=RuntimeError('provider')), hashes)
+    assert hashes == {}
+
+
+def test_l1_only_reuses_successful_exact_hash(enabled, monkeypatch):
+    inputs = {'transcript': 'Remember Friday', 'language': 'en', 'date': '2026-10-01', 'context': {'owner': 'David'}}
+    digest, matched = dedupe.l1_input('u', enabled, inputs)
+    assert digest and not matched
+    monkeypatch.setattr(dedupe, '_stored', lambda *a: {dedupe.L1_HASH: digest})
+    assert dedupe.l1_input('u', enabled, inputs) == (digest, True)
+    for name, value in [
+        ('transcript', 'Remember Saturday'),
+        ('language', 'fr'),
+        ('date', '2026-10-02'),
+        ('context', {'owner': 'Someone else'}),
+    ]:
+        changed, matched = dedupe.l1_input('u', enabled, {**inputs, name: value})
+        assert changed != digest and not matched
+
+
+def test_disabled_dedupe_preserves_calls_without_storage_or_hashing(monkeypatch):
+    monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'false')
+    read = Mock(side_effect=AssertionError('must not read'))
+    monkeypatch.setattr(dedupe, '_stored', read)
+    monkeypatch.setattr(dedupe, 'fingerprint', read)
+    generate = Mock(return_value='same')
+    conversation = SimpleNamespace(id='c')
+    assert dedupe.notes('u', conversation, 'prefix', generate, {}) == 'same'
+    generate.assert_called_once_with('prefix', uid='u')
+    assert dedupe.l1_input('u', conversation, object()) == (None, False)
+    assert not dedupe.l1_succeeded('u', conversation, None)
+    read.assert_not_called()
+
+
+def test_unknown_input_objects_are_rejected_instead_of_stringified():
+    with pytest.raises(TypeError):
+        dedupe.fingerprint('notes', object())
+
+
+def test_new_capture_records_first_success_hash_without_reading_missing_id(enabled, monkeypatch):
+    monkeypatch.setattr(dedupe, '_stored', Mock(side_effect=AssertionError('new captures have no stored row')))
+    hashes = {}
+    generate = Mock(return_value='new notes')
+    assert dedupe.notes('u', SimpleNamespace(), {'conversation_id': 'generated'}, generate, hashes) == 'new notes'
+    assert hashes[dedupe.NOTES_HASH]
+    generate.assert_called_once()
+
+
+@pytest.fixture(scope='module')
+def memory_module():
+    import importlib
+    from testing.import_isolation import stub_modules
+
+    with stub_modules({}):
+        pc = importlib.import_module('utils.conversations.process_conversation')
+        from models.conversation import Conversation
+        from models.structured import Structured
+        from models.transcript_segment import TranscriptSegment
+
+        yield pc, Conversation, Structured, TranscriptSegment
+
+
+@pytest.fixture
+def memory_stack(memory_module, monkeypatch):
+    pc, Conversation, Structured, TranscriptSegment = memory_module
+    now = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    conversation = Conversation(
+        id='memory-input',
+        sync_content_revision=1,
+        created_at=now,
+        started_at=now,
+        finished_at=now,
+        source='omi',
+        language='en',
+        structured=Structured(title='Saved'),
+        transcript_segments=[TranscriptSegment(text='We will ship Friday.', start=0, end=10, is_user=False)],
+    )
+    service = Mock()
+    monkeypatch.setattr(pc, 'MemoryService', lambda **_: service)
+    monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda *_: 'en')
+    monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda *_: 'UTC')
+    monkeypatch.setattr(pc, 'get_user_name', lambda *_: 'David')
+    monkeypatch.setattr(pc, 'conversation_known_spellings', lambda *_: 'Omi')
+    monkeypatch.setattr(pc, '_stored_meeting_context', lambda *_: None)
+    monkeypatch.setattr(pc, 'rich_roster_inputs', lambda *_: (None, False))
+    monkeypatch.setattr(pc, 'conversation_transcript_and_speaker_map', lambda *_: ('Ship Friday', {}))
+    monkeypatch.setattr(pc, 'may_attribute_to_owner', lambda *_: True)
+    monkeypatch.setattr(pc, '_rejected_memory_examples_for_l1', lambda *_, **__: ())
+    monkeypatch.setattr(pc, 'select_owner_shadow_indices', lambda *_: ([], 0))
+    yield pc, conversation, service
+
+
+def test_l1_orchestration_only_stamps_after_replacement_and_skips_exact_retry(enabled, memory_stack, monkeypatch):
+    pc, conversation, service = memory_stack
+    row = {}
+    monkeypatch.setattr(dedupe, '_stored', lambda *_: row)
+    stamps = []
+
+    def succeeded(uid, conv, digest):
+        service.replace_conversation_memories.assert_called()
+        stamps.append(digest)
+        row[dedupe.L1_HASH] = digest
+        return True
+
+    monkeypatch.setattr(dedupe, 'l1_succeeded', succeeded)
+    extract = Mock(return_value=[])
+    monkeypatch.setattr(pc, 'extract_canonical_l1_memory_candidates', extract)
+    pc._extract_memories_canonical('u', conversation, db_client=Mock())
+    pc._extract_memories_canonical('u', conversation, db_client=Mock())
+    assert extract.call_count == 1 and len(stamps) == 1
+    service.replace_conversation_memories.assert_called_once()
+    conversation.transcript_segments[0].text += ' Actually Saturday.'
+    pc._extract_memories_canonical('u', conversation, db_client=Mock())
+    assert extract.call_count == 2 and len(stamps) == 2
+
+
+def test_l1_failed_extraction_or_replacement_never_stamps(enabled, memory_stack, monkeypatch):
+    pc, conversation, service = memory_stack
+    stamp = Mock()
+    monkeypatch.setattr(dedupe, 'l1_succeeded', stamp)
+    monkeypatch.setattr(
+        pc, 'extract_canonical_l1_memory_candidates', Mock(side_effect=pc.MemoryExtractionError('provider'))
+    )
+    pc._extract_memories_canonical('u', conversation, db_client=Mock())
+    service.replace_conversation_memories.assert_not_called()
+    stamp.assert_not_called()
+    monkeypatch.setattr(pc, 'extract_canonical_l1_memory_candidates', Mock(return_value=[]))
+    service.replace_conversation_memories.side_effect = RuntimeError('storage unavailable')
+    with pytest.raises(RuntimeError):
+        pc._extract_memories_canonical('u', conversation, db_client=Mock())
+    stamp.assert_not_called()
