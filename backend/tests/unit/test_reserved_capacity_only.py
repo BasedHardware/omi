@@ -98,7 +98,7 @@ async def test_paid_dispatch_never_reaches_shared_gemini(monkeypatch, anchor, st
             assert result.selected_provider == 'openai' and result.selected_model == 'gpt-6-luna'
             assert result.response['choices'][0]['message']['content'] == 'ok'
             assert result.provider_accounting.usage.total_tokens == 3
-        assert len(seen) == (2 if state == State.ACTIVE else 1)
+        assert len(seen) == (1 if state == State.INACTIVE else 2)
 
 
 @pytest.mark.asyncio
@@ -157,17 +157,17 @@ def test_config_load_rejects_paygo_gemini(tmp_path, mutation):
 def test_all_desktop_aliases_follow_the_moved_order(anchor):
     assert (
         ptr.reserved_generation_model(anchor, {ptr.PT_MODEL_CURRENT: State.INACTIVE, ptr.PT_MODEL_TARGET: State.ACTIVE})
-        == ptr.PT_MODEL_TARGET
+        is None
     )
-    assert ptr.reserved_generation_model(anchor, {}) is None
+    assert ptr.reserved_generation_model(anchor, {}) == ptr.PT_MODEL_CURRENT
     assert (
         ptr.reserved_generation_model(anchor, {ptr.PT_MODEL_CURRENT: State.ACTIVE, ptr.PT_MODEL_TARGET: State.ACTIVE})
-        is None
+        == ptr.PT_MODEL_CURRENT
     )
 
 
 @pytest.mark.asyncio
-async def test_provider_dispatch_uses_moved_reservation_with_dedicated_header(monkeypatch):
+async def test_provider_dispatch_after_move_uses_only_luna(monkeypatch):
     monkeypatch.delenv('OMI_VERTEX_PT_MODEL', raising=False)
     monkeypatch.delenv('OMI_VERTEX_RESERVATION_STATES', raising=False)
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
@@ -175,9 +175,9 @@ async def test_provider_dispatch_uses_moved_reservation_with_dedicated_header(mo
 
     def handler(request):
         seen.append(request)
-        assert request.headers[ptr.REQUEST_TYPE_HEADER] == 'dedicated'
-        assert f'/models/{ptr.PT_MODEL_TARGET}:generateContent' in request.url.path
-        return httpx.Response(200, json={'candidates': [{'content': {'parts': [{'text': 'ok'}]}}]})
+        assert request.url.path == '/v1/chat/completions'
+        assert json.loads(request.content)['model'] == 'gpt-6-luna'
+        return httpx.Response(200, json=success())
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         vertex = VertexGeminiProvider(http_client=client, access_token_supplier=AsyncMock(return_value='synthetic'))
@@ -196,12 +196,12 @@ async def test_provider_dispatch_uses_moved_reservation_with_dedicated_header(mo
         result = await execute_chat_completion(
             resolved,
             build_omi_managed_credential_context(ServiceCaller(name='backend')),
-            ProviderRegistry({'gemini': vertex}),
+            ProviderRegistry({'gemini': vertex, 'openai': OpenAICompatibleChatCompletionProvider(http_client=client)}),
         )
 
-    assert result.selected_provider == 'gemini'
+    assert result.selected_provider == 'openai'
     assert len(seen) == 1
-    assert f'/models/{ptr.PT_MODEL_TARGET}:generateContent' in seen[0].url.path
+    assert seen[0].url.path == '/v1/chat/completions'
 
 
 @pytest.mark.parametrize(
@@ -299,7 +299,6 @@ async def test_macos_task_extraction_payload_maps_budget_and_counts_dropped_cont
 @pytest.mark.parametrize(
     'lane,streaming',
     [
-        ('omi:auto:dream-reasoning', False),
         (ptr.desktop_text_lane_id(ptr.PT_MODEL_CURRENT), False),
         (ptr.desktop_text_lane_id(ptr.PT_MODEL_CURRENT), True),
     ],
@@ -393,7 +392,7 @@ async def test_reserved_invalid_request_recovers_through_luna(monkeypatch, capsy
 def test_invalid_request_exception_is_only_reserved_paid_primary_to_luna(mutation):
 
     config = load_gateway_config()
-    route = config.route_artifacts[config.lanes['omi:auto:dream-reasoning'].active_route]
+    route = config.route_artifacts[config.lanes[ptr.desktop_text_lane_id(ptr.PT_MODEL_CURRENT)].active_route]
     failed = route.primary
     assert can_try_next_provider(route, failed, FailureClass.PROVIDER_INVALID_REQUEST)
     assert not is_lkg_eligible(route, FailureClass.PROVIDER_INVALID_REQUEST)
@@ -557,22 +556,20 @@ async def test_invalid_request_after_first_stream_chunk_never_calls_luna(monkeyp
 
 @pytest.mark.parametrize('lane', ['omi:auto:dream-reasoning', 'omi:auto:dream-verify'])
 @pytest.mark.parametrize('failure', [FailureClass.RESERVED_CAPACITY_UNAVAILABLE, FailureClass.PROVIDER_429_OMI_PAID])
-def test_both_dream_lanes_keep_exact_luna_fallback_and_allow_reserved_recovery(lane, failure):
+def test_both_dream_lanes_refuse_all_reserved_recovery(lane, failure):
     config = load_gateway_config()
     route = config.route_artifacts[config.lanes[lane].active_route]
     assert route.provider_options['reserved_capacity_only'] is True
-    assert route.fallbacks == [ProviderRef(provider='openai', model='gpt-6-luna')]
-    assert can_try_next_provider(route, route.primary, failure)
-    assert is_lkg_eligible(route, failure)
+    assert route.primary.model == 'gemini-3.8-flash'
+    assert route.fallbacks == []
+    assert not can_try_next_provider(route, route.primary, failure)
+    assert not is_lkg_eligible(route, failure)
 
 
-def test_dream_route_derivation_refuses_a_future_gemini_fallback():
+def test_dream_route_generation_is_independent_of_desktop_fallbacks():
     from llm_gateway.gateway.dream_lanes import dream_lane_items
 
-    config = load_gateway_config()
-    route = config.route_artifacts[config.lanes['omi:auto:dream-reasoning'].active_route]
-    lane = config.lanes['omi:auto:dream-reasoning']
-    changed = route.model_dump(mode='json')
-    changed['fallbacks'] = [{'provider': 'gemini', 'model': 'synthetic-payg'}]
-    _, routes = dream_lane_items([lane.model_dump(mode='json')], [changed])
-    assert all(r['primary'] == {'provider': 'openai', 'model': 'gpt-6-luna'} and not r['fallbacks'] for r in routes)
+    _, routes = dream_lane_items()
+    assert all(
+        r['primary'] == {'provider': 'gemini', 'model': 'gemini-3.8-flash'} and not r['fallbacks'] for r in routes
+    )
