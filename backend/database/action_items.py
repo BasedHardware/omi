@@ -771,7 +771,9 @@ def get_action_items(
         has_date_filters = (
             start_date is not None or end_date is not None or due_start_date is not None or due_end_date is not None
         )
-        if has_date_filters:
+        # Fall back to single-query bounded scan when conversation_id is scoped (compact lists
+        # without covering composite indexes for created_at DESC) or when date filters apply.
+        if has_date_filters or conversation_id is not None:
             items, docs = _stream_action_items_bounded(
                 q, max_docs=_list_scan_budget(row_budget), budget=budget, extra_fields=extra_fields
             )

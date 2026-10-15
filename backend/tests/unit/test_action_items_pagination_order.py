@@ -23,13 +23,15 @@ BASE = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
 class _Doc:
-    def __init__(self, doc_id, created_at, due_at, completed=None):
+    def __init__(self, doc_id, created_at, due_at, completed=None, conversation_id=None):
         self.id = doc_id
         self._data = {'created_at': created_at, 'due_at': due_at}
         # Only stamp `completed` when the test cares about it, so the existing
         # all-active fixtures keep exercising the missing-field default path.
         if completed is not None:
             self._data['completed'] = completed
+        if conversation_id is not None:
+            self._data['conversation_id'] = conversation_id
 
     def to_dict(self):
         return dict(self._data)
@@ -38,9 +40,10 @@ class _Doc:
 class _Query:
     """Firestore query stand-in with completed equality filtering (production semantics)."""
 
-    def __init__(self, docs, completed=None, order_by_fields=None):
+    def __init__(self, docs, completed=None, conversation_id=None, order_by_fields=None):
         self._docs = docs
         self._completed = completed
+        self._conversation_id = conversation_id
         self._order_by_fields = list(order_by_fields or [])
         self._offset = 0
         self._limit = None
@@ -48,18 +51,31 @@ class _Query:
     def where(self, *a, **k):
         filt = k.get('filter') if k else None
         completed = self._completed
+        conversation_id = self._conversation_id
         if filt is not None:
             field = getattr(filt, 'field_path', None) or getattr(filt, 'field', None)
             value = getattr(filt, 'value', None)
             if field == 'completed':
                 completed = value
-        q = _Query(self._docs, completed=completed, order_by_fields=self._order_by_fields)
+            elif field == 'conversation_id':
+                conversation_id = value
+        q = _Query(
+            self._docs,
+            completed=completed,
+            conversation_id=conversation_id,
+            order_by_fields=self._order_by_fields,
+        )
         q._offset = self._offset
         q._limit = self._limit
         return q
 
     def order_by(self, field, direction=None):
-        q = _Query(self._docs, completed=self._completed, order_by_fields=self._order_by_fields + [(field, direction)])
+        q = _Query(
+            self._docs,
+            completed=self._completed,
+            conversation_id=self._conversation_id,
+            order_by_fields=self._order_by_fields + [(field, direction)],
+        )
         q._offset = self._offset
         q._limit = self._limit
         return q
@@ -77,6 +93,8 @@ class _Query:
 
     def stream(self):
         d = list(self._docs)
+        if self._conversation_id is not None:
+            d = [doc for doc in d if doc._data.get('conversation_id') == self._conversation_id]
         if self._completed is not None:
             # Firestore equality excludes missing/null completed fields.
             d = [doc for doc in d if doc._data.get('completed') is self._completed]
@@ -232,3 +250,32 @@ def test_large_active_task_pagination_no_duplicates_or_skips(fake_db):
     assert set(page1).intersection(set(page2)) == set()
     # All 200 tasks returned across the 2 pages
     assert set(page1).union(set(page2)) == {f't{i:03d}' for i in range(200)}
+
+
+def test_conversation_scoped_query_skips_ordered_prefix_ordering(fake_db):
+    """When conversation_id is provided, queries fall back to single-query bounded
+    scan without order_by('created_at', DESCENDING) to avoid missing composite index
+    FailedPrecondition in Firestore on (conversation_id, completed, created_at DESC)."""
+    docs = [
+        _Doc('c1_task1', BASE + timedelta(minutes=1), BASE + timedelta(days=2), completed=False, conversation_id='conv-1'),
+        _Doc('c1_task2', BASE + timedelta(minutes=2), None, completed=False, conversation_id='conv-1'),
+        _Doc('c2_task', BASE + timedelta(minutes=3), BASE + timedelta(days=1), completed=False, conversation_id='conv-2'),
+    ]
+    query = _Query(docs)
+    tracked_queries = []
+
+    orig_where = query.where
+
+    def _tracking_where(*args, **kwargs):
+        sub_q = orig_where(*args, **kwargs)
+        tracked_queries.append(sub_q)
+        return sub_q
+
+    query.where = _tracking_where
+    fake_db.collection.return_value.document.return_value.collection.return_value = query
+
+    items = action_items.get_action_items('uid1', conversation_id='conv-1')
+    assert [i['id'] for i in items] == ['c1_task1', 'c1_task2']
+    # Verify no orderBy was applied to Firestore queries for conversation_id scoped call
+    for q in tracked_queries:
+        assert q._order_by_fields == []
