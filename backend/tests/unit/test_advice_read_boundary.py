@@ -35,7 +35,7 @@ def _fake_db(docs):
     return db
 
 
-def test_malformed_docs_are_dropped_not_fatal():
+def test_malformed_docs_are_dropped_not_fatal(monkeypatch):
     docs = [
         _snap(
             'a1',
@@ -69,23 +69,23 @@ def test_malformed_docs_are_dropped_not_fatal():
             },
         ),
     ]
-    advice_db.db = _fake_db(docs)
+    monkeypatch.setattr(advice_db, 'db', _fake_db(docs))
     out = advice_db.get_advice('u1')
     assert [a.id for a in out] == ['a1', 'a4']
     assert out[0].content == 'try a walk'
 
 
-def test_all_poisoned_returns_empty_page():
-    advice_db.db = _fake_db(
+def test_all_poisoned_returns_empty_page(monkeypatch):
+    monkeypatch.setattr(advice_db, 'db', _fake_db(
         [_snap('a1', {'category': 'other', 'created_at': '2026-10-14T00:00:00Z', 'updated_at': '2026-10-14T00:00:00Z'})]
-    )
+    ))
     assert advice_db.get_advice('u1') == []
 
 
-def test_advice_type_returned():
+def test_advice_type_returned(monkeypatch):
     from models.advice import Advice
 
-    advice_db.db = _fake_db(
+    monkeypatch.setattr(advice_db, 'db', _fake_db(
         [
             _snap(
                 'a9',
@@ -97,6 +97,6 @@ def test_advice_type_returned():
                 },
             )
         ]
-    )
+    ))
     out = advice_db.get_advice('u1')
     assert isinstance(out[0], Advice)
