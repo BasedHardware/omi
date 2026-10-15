@@ -140,3 +140,32 @@ the budget. Do not launch an unbounded background call after timeout. If the
 batch service cannot meet this budget, retain legacy matching during drain or
 run durable asynchronous refinement after transcript visibility. Measure this
 before widening B to C; no final-pass policy is changed in this PR.
+
+
+## Persistence gate before cohort enablement
+
+Keep LEGACY fresh admission dark until concurrent same-UID uploads pass on the
+actual candidate image. `SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED` defaults
+false on sync and backfill. Qualify it in an isolated synthetic dev revision
+first: two overlapping jobs, bounded read-abort recovery, replay idempotency,
+and exact uploaded/persisted segment-ID coverage. SDK commit retries alone do
+not cover a read-time `Aborted`; the optional outer retry handles both with a
+fresh transaction, five outer attempts and at most 2.4s jitter sleep. Expired-ID
+recovery remains three attempts inside each outer attempt. Retry exhaustion
+still fails truthfully and requires the retained WAL; it must never ACK loss.
+
+Run the real SDK/transaction adapter locally with:
+
+```sh
+firebase emulators:exec --only firestore --project demo-sync-assignment \
+  'backend/.venv/bin/python backend/scripts/sync_assignment_contention_emulator_test.py'
+```
+
+The emulator injects one read-abort envelope at the transport boundary because
+native contention timing is nondeterministic; begin/rollback/restart/commit and
+concurrent append/replay durability use real SDK/emulator transactions. Synthetic
+dev contention is a separate live check, not full serving-image qualification.
+Keep the per-UID backfill sequencer at one job; this retry changes no ownership
+or queue policy. A revision-fenced zero-success superseded job is acceptable
+only when its segment IDs are proven in the surviving persisted conversation.
+Rollback by disabling the retry flag; disable the LEGACY master to stop promotion.
