@@ -52,7 +52,7 @@ class OnTheWayPage extends StatelessWidget {
           for (final w in [...SyncPendingWork.uploaded(p), ...SyncPendingWork.syncing(p)])
             if (w.conversationId == null || !processingIds.contains(w.conversationId)) w,
         ]..sort((a, b) => b.timerStart.compareTo(a.timerStart));
-        for (final block in groupRecordingBlocks(pending)) {
+        for (final block in groupRecordingBlocks(pending, joinDeviceCopies: true)) {
           if (block.wals.every((w) => w.status == WalStatus.uploaded)) {
             almostReady.add(_PendingItem.block(block, label: l.transcribing, step: 2));
           } else {

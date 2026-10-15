@@ -360,6 +360,28 @@ void main() {
       expect(SyncPendingWork.syncing(_FakeSync(wals: [source, piece(1000)])).single.storage, WalStorage.sdcard);
     });
 
+    testWidgets('a stalled device drain reads as one recording: copied pieces and the rest on the device',
+        (tester) async {
+      final rest = Wal(
+          timerStart: 1300,
+          codec: BleAudioCodec.opus,
+          seconds: 300,
+          status: WalStatus.miss,
+          storage: WalStorage.flashPage,
+          device: 'pendant');
+      Wal piece(int start) => Wal(
+          timerStart: start,
+          codec: BleAudioCodec.opus,
+          seconds: 150,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+          originalStorage: WalStorage.flashPage,
+          device: 'pendant');
+      await _pumpPage(tester, _FakeSync(wals: [rest, piece(1000), piece(1150)]));
+      expect(find.textContaining('· 10m'), findsOneWidget);
+      expect(find.textContaining('·'), findsOneWidget);
+    });
+
     test('a device drain counts its audio once toward catching up', () {
       final source = Wal(
           timerStart: 1000,

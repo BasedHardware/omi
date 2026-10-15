@@ -232,6 +232,20 @@ void main() {
       expect(find.text('No activity yet'), findsOneWidget);
     });
 
+    testWidgets('a recap stamped ahead of the phone clock is seen once shown', (tester) async {
+      final (seen, _) = _seen(yesterday.millisecondsSinceEpoch);
+      final ahead = DateTime.now().add(const Duration(minutes: 10));
+      await tester.pumpWidget(_app(ActivityPage(
+        seen: seen,
+        probeDreamReport: () async => false,
+        loadRecaps: () async => (items: [_recap('ahead', ahead)], ok: true),
+        loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])),
+      )));
+      await tester.pumpAndSettle();
+      expect(find.text('Recap ahead'), findsOneWidget);
+      expect(seen.hasNew.value, isFalse);
+    });
+
     testWidgets('an empty feed still pulls to refresh', (tester) async {
       final (seen, _) = _seen(yesterday.millisecondsSinceEpoch);
       var recaps = <DailySummary>[];

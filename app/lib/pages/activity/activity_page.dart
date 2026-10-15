@@ -136,7 +136,13 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
     final anyFailed = !recaps.ok || changesFailed;
     if (recaps.ok) {
       _seen.observe(recaps.items.map((r) => r.createdAt));
-      _shownThrough = startedAt;
+      // Through the newest recap shown, too: a server clock ahead of the phone's must not leave a
+      // recap already seen lighting the bell. Recaps that arrive after this load are still news.
+      var through = _shownThrough != null && _shownThrough!.isAfter(startedAt) ? _shownThrough! : startedAt;
+      for (final r in recaps.items) {
+        if (r.createdAt.isAfter(through)) through = r.createdAt;
+      }
+      _shownThrough = through;
     }
     final shown = _shownThrough;
     if (shown != null) _seen.markSeen(through: shown);
