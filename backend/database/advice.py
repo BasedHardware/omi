@@ -6,7 +6,7 @@ Collection: users/{uid}/advice
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional
 
 from google.api_core.exceptions import NotFound
 from google.cloud import firestore
