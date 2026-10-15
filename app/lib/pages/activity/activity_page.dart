@@ -120,6 +120,13 @@ class _ActivityPageState extends State<ActivityPage> {
       ..sort((a, b) => b.at.compareTo(a.at));
   }
 
+  /// Recent Changes can Undo or Redo in place and returns nothing: reload on return so the rows here
+  /// match what it changed.
+  Future<void> _openRecentChanges() async {
+    await routeToPage(context, const RecentChangesPage());
+    if (mounted) await _refresh();
+  }
+
   /// The detail page pops `{deleted: true, summaryId}` when the recap is deleted there: drop it here
   /// and from Home's recap row instead of leaving a ghost.
   Future<void> _openRecap(DailySummary summary) async {
@@ -206,7 +213,7 @@ class _ActivityPageState extends State<ActivityPage> {
                           subtitle:
                               change.undone ? '${l.reviewChangeUndone} · ${dates.time(item.at)}' : dates.time(item.at),
                           isNew: false,
-                          onTap: () => routeToPage(context, const RecentChangesPage()),
+                          onTap: _openRecentChanges,
                         ),
                     },
                 ],
@@ -218,7 +225,7 @@ class _ActivityPageState extends State<ActivityPage> {
                 child: OmiButton.tertiary(
                   key: const Key('activity_recent_changes'),
                   label: l.reviewRecentChanges,
-                  onPressed: () => routeToPage(context, const RecentChangesPage()),
+                  onPressed: _openRecentChanges,
                 ),
               ),
             Center(child: DreamReportLink(probe: widget.probeDreamReport)),

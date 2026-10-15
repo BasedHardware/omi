@@ -42,16 +42,27 @@ class HomeDailyRecaps extends StatefulWidget {
   State<HomeDailyRecaps> createState() => HomeDailyRecapsState();
 }
 
-class HomeDailyRecapsState extends State<HomeDailyRecaps> {
+class HomeDailyRecapsState extends State<HomeDailyRecaps> with WidgetsBindingObserver {
   final _forYouKey = GlobalKey<HomeForYouState>();
   List<DailySummary> _recaps = [];
   bool _loading = true;
 
   StreamSubscription<String>? _deletions;
+  DateTime? _lastRefresh;
+
+  /// A recap made while the app was in the background shows (and lights the Activity bell) on return.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    final last = _lastRefresh;
+    if (last != null && DateTime.now().difference(last) < const Duration(minutes: 5)) return;
+    refresh();
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _deletions = _recapDeletions.stream.listen((id) {
       if (mounted) setState(() => _recaps.removeWhere((s) => s.id == id));
     });
@@ -60,12 +71,14 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _deletions?.cancel();
     super.dispose();
   }
 
   /// Reloads the row (pull-to-refresh on Home). A failed read keeps the cards already shown.
   Future<void> refresh() async {
+    _lastRefresh = DateTime.now();
     await Future.wait([_refreshRecaps(), if (_forYouKey.currentState != null) _forYouKey.currentState!.refresh()]);
   }
 

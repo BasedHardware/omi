@@ -91,9 +91,13 @@ abstract final class SyncPendingWork {
 
   /// Where the pending work is right now, in one short line.
   static String stageLabel(SyncProvider p, AppLocalizations l) {
-    if (p.isRateLimited) return syncCooldownTitle(p.rateLimitReason, l);
     final s = p.syncState;
-    if (s.isSyncing && !s.isFetchingConversations) {
+    final active = s.isSyncing && !s.isFetchingConversations;
+    // Device downloads run through an upload cooldown (pulling audio uses no upload quota), so a
+    // download in progress is reported as itself, not as the cooldown.
+    if (active && s.phase == SyncPhase.downloadingFromDevice) return l.syncCardDownloadingTitle;
+    if (p.isRateLimited) return syncCooldownTitle(p.rateLimitReason, l);
+    if (active) {
       switch (s.phase) {
         case SyncPhase.downloadingFromDevice:
           return l.syncCardDownloadingTitle;

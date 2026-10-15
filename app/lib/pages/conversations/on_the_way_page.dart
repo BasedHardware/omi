@@ -32,6 +32,7 @@ class OnTheWayPage extends StatelessWidget {
       builder: (context, sync, child) {
         final p = syncProvider ?? sync;
         final processing = context.watch<ConversationProvider?>()?.processingConversations ?? const [];
+        final processingIds = {for (final c in processing) c.id};
         final almostReady = <_PendingItem>[
           for (final c in processing)
             _PendingItem(
@@ -40,7 +41,11 @@ class OnTheWayPage extends StatelessWidget {
               label: l.processing,
               step: 3,
             ),
-          for (final block in groupRecordingBlocks(SyncPendingWork.uploaded(p)))
+          // A live capture's uploaded audio carries the id of the conversation already listed above.
+          for (final block in groupRecordingBlocks([
+            for (final w in SyncPendingWork.uploaded(p))
+              if (w.conversationId == null || !processingIds.contains(w.conversationId)) w,
+          ]))
             _PendingItem.block(block, label: l.transcribing, step: 2),
         ];
         final syncing = [

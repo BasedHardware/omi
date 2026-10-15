@@ -14,6 +14,9 @@ import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
 import 'package:omi/pages/conversations/conversations_page.dart' show dateFilterIncludesToday;
 import 'package:omi/pages/conversations/on_the_way_page.dart';
 import 'package:omi/pages/conversations/widgets/home_pending_row.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
@@ -221,6 +224,14 @@ void main() {
       expect(find.text('Transcribing…'), findsOneWidget);
     });
 
+    testWidgets('a device download in progress reads as itself through an upload cooldown', (tester) async {
+      final sync = _FakeSync(wals: [_wal('ready', 5, WalStatus.miss)], syncing: true)
+        ..rateLimited = true
+        ..reason = RateLimitReason.backendBusy;
+      await _pumpRow(tester, sync);
+      expect(find.text('Downloading from your device'), findsOneWidget);
+    });
+
     testWidgets('reads a backend-busy cooldown as itself, not pending work', (tester) async {
       final sync = _FakeSync(wals: [_wal('ready', 5, WalStatus.miss)])
         ..rateLimited = true
@@ -362,6 +373,25 @@ void main() {
       await _pumpPage(tester, _FakeSync(fetching: true));
       expect(find.text('All recordings are synced'), findsNothing);
       expect(find.text('Transcribing…'), findsOneWidget);
+    });
+
+    testWidgets('a live capture still processing is listed once, not again as its uploaded audio', (tester) async {
+      final now = DateTime.now();
+      final conversations = ConversationProvider(
+          conversationListFetcher: () async => (items: <ServerConversation>[], ok: true), isSignedIn: () => true)
+        ..processingConversations = [
+          ServerConversation(
+              id: 'conv-1',
+              createdAt: now,
+              startedAt: now,
+              structured: Structured('', ''),
+              status: ConversationStatus.processing),
+        ];
+      final uploaded = _wal('live', 4, WalStatus.uploaded)..conversationId = 'conv-1';
+      await _pumpPage(tester, _FakeSync(wals: [uploaded]),
+          extras: [ChangeNotifierProvider<ConversationProvider>.value(value: conversations)]);
+      expect(find.text('Processing'), findsOneWidget);
+      expect(find.text('Transcribing…'), findsNothing);
     });
 
     testWidgets('says so when everything has landed', (tester) async {
