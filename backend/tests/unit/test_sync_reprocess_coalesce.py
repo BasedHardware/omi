@@ -9,6 +9,8 @@ import pytest
 from config import sync_reprocess as flags
 from utils.sync import reprocess
 
+_ENQUEUE = reprocess._enqueue
+
 
 @pytest.fixture
 def state(monkeypatch):
@@ -181,3 +183,26 @@ def test_partial_result_replay_recovers_intent_without_transient_merged_map(pipe
     response = {'updated_memories': {'c', 'fenced'}, pipeline._RESPONSE_FENCED_CONVERSATION_IDS: {'fenced'}}
     pipeline._reprocess_merged_conversations('u', response)
     mark.assert_called_once_with('u', 'c', pipeline._LINEAGE_RETRY_LANGUAGE)
+
+
+def test_backfill_recovery_retains_its_queue_worker_and_identity(state, monkeypatch):
+    rows, tasks = state
+    from utils import cloud_tasks
+
+    enqueue = Mock()
+    monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
+    monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-backfill')
+    monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://backfill.invalid/v2/sync-jobs/run')
+    monkeypatch.setenv('SYNC_TASKS_OIDC_AUDIENCE', 'backfill-audience')
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'backfill-invoker@example.invalid')
+    reprocess.mark('u', 'c', 'en', now=0)
+    row = rows[reprocess.key('u', 'c')]
+    monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs')
+    monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://fresh.invalid/v2/sync-jobs/run')
+    monkeypatch.setenv('SYNC_TASKS_OIDC_AUDIENCE', 'fresh-audience')
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'fresh-invoker@example.invalid')
+    _ENQUEUE(row)
+    assert enqueue.call_args.args[0:2] == ('sync-backfill', 'https://backfill.invalid/v2/sync-jobs/run')
+    assert enqueue.call_args.kwargs['audience'] == 'backfill-audience'
+    assert enqueue.call_args.kwargs['invoker_sa'] == 'backfill-invoker@example.invalid'
+    assert enqueue.call_args.kwargs['schedule_at'] == 600

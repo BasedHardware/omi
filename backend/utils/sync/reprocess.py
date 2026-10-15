@@ -72,19 +72,33 @@ def _mutate(document_id: str, operation):
             time.sleep(random.uniform(0.005, min(0.2, 0.01 * 2**attempt)))
 
 
+def _dispatch_binding() -> dict[str, str]:
+    handler = os.getenv('SYNC_TASKS_HANDLER_URL', '')
+    return {
+        'queue': os.getenv('SYNC_TASKS_QUEUE', ''),
+        'handler': handler,
+        'audience': os.getenv('SYNC_TASKS_OIDC_AUDIENCE') or handler,
+        'invoker_sa': os.getenv('SYNC_TASKS_INVOKER_SA', ''),
+    }
+
+
 def _enqueue(row: dict[str, Any]) -> None:
     from utils.cloud_tasks import enqueue_named_task
 
-    handler = os.environ['SYNC_TASKS_HANDLER_URL']
-    suffix = '/v2/sync-jobs/run'
-    if not handler.endswith(suffix):
+    # A backfill obligation is repaired by the fresh service's sweep. Retain
+    # the originating queue/worker/identity rather than borrowing that sweep's
+    # fresh capacity or audience. These bindings contain no credentials.
+    dispatch = row['dispatch']
+    handler = dispatch['handler']
+    if not handler.endswith('/v2/sync-jobs/run'):
         raise RuntimeError('sync reprocessing requires the sync worker handler binding')
     enqueue_named_task(
-        os.environ['SYNC_TASKS_QUEUE'],
+        dispatch['queue'],
         handler,
         f"sr-{key(row['uid'], row['conversation_id'])}-{row['task_token']}",
         {'kind': 'sync_reprocess', 'key': key(row['uid'], row['conversation_id']), 'task_token': row['task_token']},
-        audience=os.getenv('SYNC_TASKS_OIDC_AUDIENCE') or handler,
+        audience=dispatch['audience'],
+        invoker_sa=dispatch['invoker_sa'],
         schedule_at=math.ceil(row['due_at']),
     )
 
@@ -102,7 +116,9 @@ def mark(uid: str, conversation_id: str, language: str, *, now: float | None = N
             due_at=max(row.get('due_at', 0), current + settle_seconds()),
         )
         if old is None:
-            row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'], lease_until=0)
+            row.update(
+                task_token=uuid.uuid4().hex, task_due_at=row['due_at'], lease_until=0, dispatch=_dispatch_binding()
+            )
         return row, (row, old is not None)
 
     row, coalesced = _mutate(key(uid, conversation_id), update)
