@@ -452,6 +452,10 @@ def is_selectable_backend_path(path: str) -> bool:
         return False
     if path.endswith('.md'):
         return False
+    # Duration exemptions are not product sources. Treating this list as an
+    # unmapped backend path would select the full unit suite on every edit.
+    if path == 'backend/tests/fast_unit_duration_allowlist.txt':
+        return False
     if path.startswith('backend/docs/'):
         return False
     if path.startswith('backend/charts/'):

@@ -441,3 +441,8 @@ tests/unit/test_llm_gateway_deploy_contract.py::test_gateway_runtime_static_addr
 # The first real translation quality check loads langdetect's local profiles.
 # Assertions pass in isolation, but the cold profile load costs 0.32-0.34s CPU.
 tests/unit/test_translation_negative_cache_detection.py::test_negative_cached_segment_does_not_vote_for_target_language
+# First test in the file pays yaml.safe_load of deploy/runtime_env.yaml in the
+# call phase. Measured 0.31s alone and 0.32-0.47s inside pre-push (local fail
+# limit 0.30s). The pusher release contract selects this file whenever
+# verify_pusher_live_alert_route.py changes. Assertions still run.
+tests/unit/test_conversation_notes_v2_beta_rollout.py::test_dev_enables_every_rollout_flag_on_every_summary_pipeline_service
