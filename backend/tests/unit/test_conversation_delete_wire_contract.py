@@ -64,7 +64,7 @@ def _delete_client(monkeypatch) -> TestClient:
         'delete_owner_prompt_embedding_cache',
         'delete_conversation_screen_frames',
         'delete_conversation_and_frame_evidence',
-        'delete_conversation_audio_files',
+        'delete_privacy_conversation_audio',
         'delete_vector',
         'delete_transcript_chunk_vectors',
         'delete_action_item_vectors_batch',
@@ -73,6 +73,7 @@ def _delete_client(monkeypatch) -> TestClient:
     ):
         monkeypatch.setattr(conversations, name, MagicMock())
     monkeypatch.setattr(conversations.conversation_tombstones, 'record_deletion', MagicMock())
+    monkeypatch.setattr(conversations.conversations_db, 'get_conversation', lambda *args: {})
     monkeypatch.setattr(conversations, 'retraction_can_be_skipped', lambda *args, **kwargs: True)
     monkeypatch.setattr(conversations.action_items_db, 'get_action_items_by_conversation', lambda *args, **kwargs: [])
     monkeypatch.setattr(conversations.action_items_db, 'delete_action_items_for_conversation', MagicMock())

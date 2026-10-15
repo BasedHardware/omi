@@ -42,6 +42,8 @@ class AnalyticsManager {
   static final Map<String, DateTime> _pendingTimedEvents = {};
   static const Duration _pendingTimedEventTtl = Duration(hours: 1);
   static const Duration _initTimeout = Duration(seconds: 2);
+  static const Duration _settleTimeout = Duration(seconds: 6); // reset + identify + id over the channel
+  static int _settleAttempts = 0;
   static const int _maxQueuedEvents = 200;
   static const int _flushBatchSize = 20;
   static const int _maxDeliveryAttempts = 3;
@@ -53,8 +55,7 @@ class AnalyticsManager {
   static int _droppedEvents = 0;
   static Map<String, Object> _globalEventProperties = {'app_platform': _mobilePlatformName};
 
-  /// Events whose PostHog rows were missing the release build. The value is
-  /// the same `app_build` super-property Device Connected already flushes.
+  /// Events whose PostHog rows were missing the release build (same `app_build` super-property as Device Connected).
   static const Set<String> _captureWedgeFamilyEvents = {
     'Capture Wedge Detected',
     'Local WAL Stuck',
@@ -122,14 +123,14 @@ class AnalyticsManager {
     final previousOwner = _identityKnown ? _boundIdentity : null;
     final hadSession = _eventContext.containsKey('app_session_id');
     _identityResetNeeded = _identityResetNeeded || !_identityKnown || _boundIdentity != null;
-    // Preserve a durable epoch across relaunch of the same account so native
-    // session markers survive process death, but retire them on account changes.
+    // Keep a durable epoch across relaunch of the same account (native session markers survive), retire on change.
     final savedIdentity = _preferences.getString('device_health_identity');
     final savedEpoch = _preferences.getInt('device_health_identity_epoch');
     final sameOnRestart = !_identityKnown && identity != null && savedIdentity == identity && savedEpoch > 0;
     _identityEpoch = sameOnRestart ? savedEpoch - 1 : (_identityEpoch > savedEpoch ? _identityEpoch : savedEpoch);
     _identityKnown = true;
     _identityEpoch++;
+    _settleAttempts = 0;
     _boundIdentity = identity;
     _identityChanges.value = _identityEpoch;
     ClientTelemetry.instance.onOwnerChanged(previous: previousOwner, next: identity);
@@ -169,18 +170,26 @@ class AnalyticsManager {
       if (adapter is AnalyticsIdentityAdapter) {
         distinctId = await (adapter as AnalyticsIdentityAdapter)
             .settleIdentity(_boundIdentity, reset: reset)
-            .timeout(_initTimeout);
+            .timeout(_settleTimeout);
       } else {
         if (reset) adapter.reset();
         if (_boundIdentity != null) adapter.identify(userId: _boundIdentity!);
       }
       if (epoch != _identityEpoch || !identical(adapter, _adapter) || !_trackingEnabled) return;
       _identityResetNeeded = false;
+      _settleAttempts = 0;
       _settledDistinctId = distinctId;
       _scheduleFlush();
       _notifyIdentity(distinctId, true);
     } catch (_) {
-      if (epoch == _identityEpoch) _notifyIdentity(null, false);
+      if (epoch != _identityEpoch) return;
+      _notifyIdentity(null, false);
+      // A slow or failed SDK round trip (fresh install, first sign-in) must not strand the session.
+      if (_settleAttempts < _retryDelays.length) {
+        Timer(_retryDelays[_settleAttempts++], () {
+          if (epoch == _identityEpoch && _settledDistinctId == null) unawaited(_settleIdentity());
+        });
+      }
     }
   }
 
@@ -224,7 +233,10 @@ class AnalyticsManager {
     if (PhysicalQualification.enabled) return;
     _initStarted = true;
     if (_adapter == null && Env.posthogApiKey != null) {
-      _adapter = PostHogAnalyticsAdapter(apiKey: Env.posthogApiKey!);
+      _adapter = PostHogAnalyticsAdapter(
+        apiKey: Env.posthogApiKey!,
+        personPropertiesForFlags: () => {'\$email': _preferences.email},
+      );
     }
     final adapter = _adapter;
     if (adapter == null || _analyticsReady) return;
@@ -544,8 +556,7 @@ class AnalyticsManager {
   }
 
   void migrateUser(String newUid) {
-    // Account transitions use the same fence; aliasing unrelated accounts is
-    // not a supported analytics migration policy.
+    // Account transitions use the same fence; aliasing unrelated accounts is not a supported policy.
     bindIdentity(newUid);
     unawaited(_clearPersonPropertyCache());
   }
@@ -554,8 +565,7 @@ class AnalyticsManager {
     _setUserPropertiesBatch({'\$name': _preferences.fullName, '\$email': _preferences.email});
   }
 
-  /// One fenced read for every flag value: no adapter, no settled identity, tracking off, or an
-  /// identity switch while the read is in flight all yield null (callers map null to "off").
+  /// One fenced read per flag value: no adapter/identity, tracking off or an identity switch mid-read → null.
   Future<T?> _readFlag<T>(Future<T> Function(AnalyticsFeatureFlagAdapter adapter) read) async {
     final adapter = _adapter;
     if (adapter == null || !adapter.isInitialized || !_trackingEnabled || _settledDistinctId == null) return null;
@@ -572,18 +582,15 @@ class AnalyticsManager {
   }
 
   Future<bool> isFeatureEnabled(String key) async => await _readFlag((a) => a.isFeatureEnabled(key)) ?? false;
-
   Future<Object?> getFeatureFlagPayload(String key) => _readFlag<Object?>((a) => a.getFeatureFlagPayload(key));
-
-  /// The multivariate arm for [key]; null when the flag is off, not multivariate, or unresolved.
   Future<String?> getFeatureFlagVariant(String key) => _readFlag<String?>((a) => a.getFeatureFlagVariant(key));
 
+  /// Re-fetches flags for the settled identity (a read right after sign-in would otherwise see the anonymous id's).
+  Future<bool> reloadFeatureFlags() async => await _readFlag<bool>((a) => a.reloadFeatureFlags()) ?? false;
   String? get settledDistinctId => _settledDistinctId; // null until an identity settles
-
   final Set<String> _recordedFlagExposures = {};
 
-  /// PostHog Experiments exposure (`$feature_flag_called`), once per identity, flag and arm (the
-  /// SDK's own exposure events are off); also registers `$feature/<key>`. False when nothing was sent.
+  /// PostHog Experiments exposure (`$feature_flag_called`), once per identity/flag/arm; also sets `$feature/<key>`.
   bool recordFeatureFlagExposure(String key, String variant) {
     final identity = _settledDistinctId;
     if (identity == null || !_trackingEnabled) return false;
@@ -2269,9 +2276,7 @@ class AnalyticsManager {
     );
   }
 
-  // ============================================================================
-  // ACTION ITEMS TRACKING
-  // ============================================================================
+  // ---- ACTION ITEMS TRACKING ----
 
   void actionItemChecked({required String actionItemId, required bool completed, required DateTime timestamp}) {
     track(
@@ -2294,9 +2299,7 @@ class AnalyticsManager {
     track('Task Integration Settings Opened', properties: {'app_name': appName});
   }
 
-  // ============================================================================
-  // TRANSCRIPTION / CUSTOM STT TRACKING
-  // ============================================================================
+  // ---- TRANSCRIPTION / CUSTOM STT TRACKING ----
 
   void transcriptionSourceSelected({
     required String source, // 'omi' or 'custom'
@@ -2310,9 +2313,7 @@ class AnalyticsManager {
     track('Transcription Provider Selected', properties: {'provider': provider});
   }
 
-  // ============================================================================
-  // AUDIO PLAYBACK TRACKING
-  // ============================================================================
+  // ---- AUDIO PLAYBACK TRACKING ----
 
   void audioPlaybackFailed({required String conversationId, required String reason}) {
     track(
@@ -2445,9 +2446,7 @@ class AnalyticsManager {
     track('Apple Reminder Deleted', properties: {'action_item_id': actionItemId});
   }
 
-  // ============================================================================
-  // SETTINGS PAGE TRACKING
-  // ============================================================================
+  // ---- SETTINGS PAGE TRACKING ----
 
   void settingsPageOpened({required String pageName}) {
     track('Settings Page Opened', properties: {'page_name': pageName});
@@ -2457,9 +2456,7 @@ class AnalyticsManager {
     track('Usage Tab Changed', properties: {'tab_name': tabName});
   }
 
-  // ============================================================================
-  // APPS PAGE TRACKING
-  // ============================================================================
+  // ---- APPS PAGE TRACKING ----
 
   void appsSearched({required String searchTerm, required int resultCount}) {
     track(
@@ -2496,9 +2493,7 @@ class AnalyticsManager {
     track('Apps Category Page Opened', properties: {'category': category, 'app_count': appCount});
   }
 
-  // ============================================================================
-  // APP DETAIL PAGE TRACKING
-  // ============================================================================
+  // ---- APP DETAIL PAGE TRACKING ----
 
   void appDetailViewed({
     required String appId,
@@ -2560,9 +2555,7 @@ class AnalyticsManager {
     track('App Detail Chat Clicked', properties: {'app_id': appId, 'app_name': appName});
   }
 
-  // ============================================================================
-  // FOLDER TRACKING
-  // ============================================================================
+  // ---- FOLDER TRACKING ----
 
   void folderCreated({
     required String folderId,
@@ -2750,9 +2743,7 @@ class AnalyticsManager {
     );
   }
 
-  // ============================================================================
-  // DAILY SUMMARY / RECAP TRACKING
-  // ============================================================================
+  // ---- DAILY SUMMARY / RECAP TRACKING ----
 
   void dailySummarySettingsOpened() => const TypedEvents().emit(const DailySummarySettingsOpened());
 
@@ -2849,9 +2840,7 @@ class AnalyticsManager {
     track('Daily Summary Delete Failed', properties: {'summary_id': summaryId, 'date': date, 'source': source});
   }
 
-  // ============================================================================
-  // ANNOUNCEMENT TRACKING
-  // ============================================================================
+  // ---- ANNOUNCEMENT TRACKING ----
 
   void announcementShown({required String announcementId, required String type, String? trigger, int? priority}) {
     track(
@@ -2885,9 +2874,7 @@ class AnalyticsManager {
 
   void whatsNewOpened() => const TypedEvents().emit(const WhatsNewOpened());
 
-  // ============================================================================
-  // GOALS TRACKING
-  // ============================================================================
+  // ---- GOALS TRACKING ----
 
   void goalAddButtonTapped({required String source}) {
     track('Goal Add Button Tapped', properties: {'source': source});
@@ -2949,9 +2936,7 @@ class AnalyticsManager {
 
   void dailyScoreHelpTapped() => const TypedEvents().emit(const DailyScoreHelpTapped());
 
-  // ============================================================================
-  // INTEGRATIONS PAGE TRACKING
-  // ============================================================================
+  // ---- INTEGRATIONS PAGE TRACKING ----
 
   void integrationsPageOpened() => const TypedEvents().emit(const IntegrationsPageOpened());
 
@@ -2971,19 +2956,11 @@ class AnalyticsManager {
     track('Integration Disconnected', properties: {'integration_name': integrationName});
   }
 
-  // ============================================================================
-  // PAYMENTS PAGE TRACKING
-  // ============================================================================
-
   void paymentsPageOpened() => const TypedEvents().emit(const PaymentsPageOpened());
 
   void paymentMethodSelected({required String methodName}) {
     track('Payment Method Selected', properties: {'method_name': methodName});
   }
-
-  // ============================================================================
-  // OTHER PAGES TRACKING
-  // ============================================================================
 
   void connectDevicePageOpened() => const TypedEvents().emit(const ConnectDevicePageOpened());
 

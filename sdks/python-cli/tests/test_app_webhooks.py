@@ -298,6 +298,8 @@ def test_serve_receives_a_delivery_and_answers_with_the_chosen_reply(cli_runner:
         str(port),
         "--requests",
         "1",
+        "--status",
+        "200",
         "--reply",
         '{"message": "Got it, noted"}',
     )
@@ -309,6 +311,33 @@ def test_serve_receives_a_delivery_and_answers_with_the_chosen_reply(cli_runner:
     received = json.loads(result.stdout)
     assert received[0]["query"] == {"uid": events_mod.SAMPLE_UID}
     assert received[0]["idempotency_key"] == "key-1"
+
+
+@pytest.mark.parametrize("status", [100, 199])
+def test_serve_rejects_informational_status_before_binding(
+    cli_runner: CliRunner, config_path: Path, status: int
+) -> None:
+    # If status validation reaches the command callback, binding this occupied
+    # port fails instead of reporting the invalid receiver configuration.
+    with socket.socket() as occupied:
+        occupied.bind(("127.0.0.1", 0))
+        occupied.listen()
+        port = int(occupied.getsockname()[1])
+        result = _run(
+            cli_runner,
+            "app",
+            "serve",
+            "--port",
+            str(port),
+            "--status",
+            str(status),
+            "--requests",
+            "1",
+        )
+
+    assert result.exit_code == 2
+    assert "Invalid value for '--status'" in result.stderr
+    assert "200<=x<=599" in result.stderr
 
 
 def test_serve_rejects_a_reply_that_is_not_json(cli_runner: CliRunner, config_path: Path) -> None:

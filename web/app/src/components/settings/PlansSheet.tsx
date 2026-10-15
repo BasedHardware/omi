@@ -18,8 +18,9 @@ import type {
   PricingOption,
   AvailablePlansResponse,
 } from '@/types/user';
-import { decodePlan, planGrantsPaidCapability } from '@/types/user';
+import { decodePlan, planDisplayName, planGrantsPaidCapability } from '@/types/user';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { TranscriptionUsageMeter } from './TranscriptionUsageMeter';
 import { DEFAULT_PLAN_FEATURES } from '@/lib/planFeatures';
 import {
   trackPaywallOpened,
@@ -54,7 +55,10 @@ export function PlansSheet({
   const planIdentity = subscription
     ? subscription.plan_identity ?? decodePlan(subscription.plan)
     : null;
-  const isUnlimited = planIdentity ? planGrantsPaidCapability(planIdentity) : false;
+  const isPaid = planIdentity ? planGrantsPaidCapability(planIdentity) : false;
+  const currentPlanName = planIdentity
+    ? planDisplayName(planIdentity)
+    : 'Plan unavailable';
   const isUnknownPlan = planIdentity?.kind === 'unknown';
   const isCanceling_ = subscription?.cancel_at_period_end;
 
@@ -153,7 +157,7 @@ export function PlansSheet({
       trackUpgradePlanSelected(tier, interval, 'web_plans');
 
       // If already subscribed and selecting a different plan, use upgrade endpoint
-      if (isUnlimited && !isCanceling_ && !isCurrentPlan) {
+      if (isPaid && !isCanceling_ && !isCurrentPlan) {
         const result = await upgradeSubscription(selectedPriceId);
         if (result?.status === 'success' || result?.scheduled_start) {
           trackUpgradeSucceeded(tier, interval);
@@ -294,11 +298,11 @@ export function PlansSheet({
                         <Dialog.Title className="text-lg font-semibold text-text-primary">
                           {isUnknownPlan
                             ? 'Plan unavailable'
-                            : isUnlimited && !isCanceling_
-                            ? 'Manage Your Plan'
+                            : isPaid && !isCanceling_
+                            ? currentPlanName
                             : 'Choose Your Plan'}
                         </Dialog.Title>
-                        {isUnlimited && subscription?.current_period_end && (
+                        {isPaid && subscription?.current_period_end && (
                           <p className="text-xs text-text-quaternary">
                             {isCanceling_
                               ? `Cancels on ${formatDate(
@@ -389,6 +393,8 @@ export function PlansSheet({
                           </p>
                         )}
 
+                        <TranscriptionUsageMeter subscription={subscription} />
+
                         {/* Features List */}
                         <div className="space-y-2">
                           <h4 className="text-sm font-medium text-text-secondary">
@@ -420,7 +426,7 @@ export function PlansSheet({
                           disabled={
                             isLoading ||
                             !selectedPriceId ||
-                            (isUnlimited && !isCanceling_ && selectedOption?.is_active)
+                            (isPaid && !isCanceling_ && selectedOption?.is_active)
                           }
                           className={cn(
                             'w-full rounded-xl py-3 font-medium transition-colors',
@@ -436,7 +442,7 @@ export function PlansSheet({
                             </span>
                           ) : isCanceling_ ? (
                             'Reactivate Subscription'
-                          ) : isUnlimited ? (
+                          ) : isPaid ? (
                             selectedOption?.is_active ? (
                               'Current Plan'
                             ) : (
@@ -447,7 +453,7 @@ export function PlansSheet({
                           )}
                         </button>
 
-                        {!isUnlimited && subscription?.stripe_subscription_id && (
+                        {!isPaid && subscription?.stripe_subscription_id && (
                           <button
                             onClick={handleManagePayment}
                             disabled={isLoading}
@@ -459,7 +465,7 @@ export function PlansSheet({
                         )}
 
                         {/* Secondary Actions */}
-                        {isUnlimited && (
+                        {isPaid && (
                           <div className="space-y-3 border-t border-bg-tertiary pt-4">
                             <button
                               onClick={handleManagePayment}

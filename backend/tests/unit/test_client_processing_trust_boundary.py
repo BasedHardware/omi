@@ -1016,11 +1016,14 @@ def test_red_proof_full_conversation_dump_fails_dump_scan() -> None:
     """
     tools_path = _BACKEND / 'utils' / 'retrieval' / 'tools' / 'conversation_tools.py'
     source = tools_path.read_text(encoding='utf-8')
-    needle = 'conversations_collected.append(conversation_to_citation_card(conv))'
+    needle = 'collected.append(conversation_to_citation_card(conversation))'
     assert needle in source, 'citation collector site moved; update this red-proof needle'
-    poisoned = source.replace(needle, 'conversations_collected.append(conv.model_dump())', 1)
+    poisoned = source.replace(needle, 'collected.append(conversation.model_dump())', 1)
     dumps = collect_conversation_dumps('utils/retrieval/tools/conversation_tools.py', poisoned)
-    assert DumpSite('utils/retrieval/tools/conversation_tools.py', 'get_conversations_tool', 'model_dump') in dumps
+    assert (
+        DumpSite('utils/retrieval/tools/conversation_tools.py', '_render_addressable_conversations', 'model_dump')
+        in dumps
+    )
     assert all(site.relpath != 'utils/retrieval/tools/conversation_tools.py' for site in _PRODUCTION_DUMPS)
 
 
@@ -1032,15 +1035,18 @@ def test_red_proof_aliased_receiver_dump_fails_dump_scan() -> None:
     """
     tools_path = _BACKEND / 'utils' / 'retrieval' / 'tools' / 'conversation_tools.py'
     source = tools_path.read_text(encoding='utf-8')
-    needle = 'conversations_collected.append(conversation_to_citation_card(conv))'
+    needle = 'collected.append(conversation_to_citation_card(conversation))'
     assert needle in source, 'citation collector site moved; update this red-proof needle'
     poisoned = source.replace(
         needle,
-        'payload = conv; conversations_collected.append(payload.model_dump())',
+        'payload = conversation; collected.append(payload.model_dump())',
         1,
     )
     dumps = collect_conversation_dumps('utils/retrieval/tools/conversation_tools.py', poisoned)
-    assert DumpSite('utils/retrieval/tools/conversation_tools.py', 'get_conversations_tool', 'model_dump') in dumps
+    assert (
+        DumpSite('utils/retrieval/tools/conversation_tools.py', '_render_addressable_conversations', 'model_dump')
+        in dumps
+    )
     assert all(site.relpath != 'utils/retrieval/tools/conversation_tools.py' for site in _PRODUCTION_DUMPS)
 
 
@@ -1048,11 +1054,14 @@ def test_red_proof_include_none_dump_fails_dump_scan() -> None:
     """Mutation: ``conv.model_dump(include=None)`` is a full dump, not an allowlist."""
     tools_path = _BACKEND / 'utils' / 'retrieval' / 'tools' / 'conversation_tools.py'
     source = tools_path.read_text(encoding='utf-8')
-    needle = 'conversations_collected.append(conversation_to_citation_card(conv))'
+    needle = 'collected.append(conversation_to_citation_card(conversation))'
     assert needle in source, 'citation collector site moved; update this red-proof needle'
-    poisoned = source.replace(needle, 'conversations_collected.append(conv.model_dump(include=None))', 1)
+    poisoned = source.replace(needle, 'collected.append(conversation.model_dump(include=None))', 1)
     dumps = collect_conversation_dumps('utils/retrieval/tools/conversation_tools.py', poisoned)
-    assert DumpSite('utils/retrieval/tools/conversation_tools.py', 'get_conversations_tool', 'model_dump') in dumps
+    assert (
+        DumpSite('utils/retrieval/tools/conversation_tools.py', '_render_addressable_conversations', 'model_dump')
+        in dumps
+    )
     scratch = 'def f(conv):\n    return conv.model_dump(include=None)\n'
     assert collect_conversation_dumps('scratch.py', scratch) == frozenset({DumpSite('scratch.py', 'f', 'model_dump')})
 
@@ -1061,11 +1070,14 @@ def test_red_proof_dynamic_include_dump_fails_dump_scan() -> None:
     """Mutation: ``conv.model_dump(include=fields)`` cannot be verified statically."""
     tools_path = _BACKEND / 'utils' / 'retrieval' / 'tools' / 'conversation_tools.py'
     source = tools_path.read_text(encoding='utf-8')
-    needle = 'conversations_collected.append(conversation_to_citation_card(conv))'
+    needle = 'collected.append(conversation_to_citation_card(conversation))'
     assert needle in source, 'citation collector site moved; update this red-proof needle'
-    poisoned = source.replace(needle, 'conversations_collected.append(conv.model_dump(include=fields))', 1)
+    poisoned = source.replace(needle, 'collected.append(conversation.model_dump(include=fields))', 1)
     dumps = collect_conversation_dumps('utils/retrieval/tools/conversation_tools.py', poisoned)
-    assert DumpSite('utils/retrieval/tools/conversation_tools.py', 'get_conversations_tool', 'model_dump') in dumps
+    assert (
+        DumpSite('utils/retrieval/tools/conversation_tools.py', '_render_addressable_conversations', 'model_dump')
+        in dumps
+    )
     scratch = 'def f(conv, fields):\n    return conv.model_dump(include=fields)\n'
     assert collect_conversation_dumps('scratch.py', scratch) == frozenset({DumpSite('scratch.py', 'f', 'model_dump')})
 
@@ -1289,25 +1301,37 @@ def _assert_cards_and_message_are_projection_free(cards: list[dict[str, Any]]) -
 
 
 def test_citation_collector_and_message_serializer_exclude_projection(render_mod: ModuleType) -> None:
-    """Drive the collector body and the Message serializer: projection text cannot appear.
-
-    Both tool sites append ``conversation_to_citation_card(conv)``. This test
-    runs that loop on a deserialized Conversation (the same conversion the
-    tools perform) and then the voice/text ``Message.memories`` serializer.
-    """
+    """Drive the shared production collector and Message serializer with a projection sentinel."""
     tools_source = (_BACKEND / 'utils' / 'retrieval' / 'tools' / 'conversation_tools.py').read_text(encoding='utf-8')
-    helper_call = 'conversations_collected.append(conversation_to_citation_card(conv))'
-    assert tools_source.count(helper_call) == 2
-    assert 'conv.model_dump()' not in tools_source
+    tree = ast.parse(tools_source)
+    for tool_name in ('get_conversations_tool', 'search_conversations_tool'):
+        tool_body = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == tool_name)
+        assert any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == '_render_addressable_conversations'
+            for node in ast.walk(tool_body)
+        ), f'{tool_name} must use the projection-free citation collector'
+    assert collect_conversation_dumps('utils/retrieval/tools/conversation_tools.py', tools_source) == frozenset()
 
     conv = _make_conversation(projection=True)
     conv_data = conv.model_dump()
     assert SENTINEL in str(conv_data.get('client_processing'))
     conversations = [deserialize_conversation(conv_data)]
-    conversations_collected: list[dict[str, Any]] = []
-    for item in conversations:
-        conversations_collected.append(render_mod.conversation_to_citation_card(item))
-    _assert_cards_and_message_are_projection_free(conversations_collected)
+    configurable: dict[str, Any] = {'conversations_collected': []}
+    with stub_modules({}):
+        tools_mod = load_module_fresh(
+            'utils.retrieval.tools.conversation_tools',
+            str(_BACKEND / 'utils' / 'retrieval' / 'tools' / 'conversation_tools.py'),
+        )
+        rendered = tools_mod._render_addressable_conversations(
+            conversations, configurable=configurable, use_transcript=True
+        )
+    assert SENTINEL not in rendered
+    assert 'client_processing' not in rendered
+    assert f'ref: conversations/{conv.id}' in rendered
+    assert len(configurable['conversations_collected']) == 1
+    _assert_cards_and_message_are_projection_free(configurable['conversations_collected'])
 
 
 def _divergent_output_spec() -> dict[str, Any]:

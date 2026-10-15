@@ -10,6 +10,7 @@ import time
 import uuid
 
 from utils.manual_speaker_assignments import acknowledged_teaching
+from utils.other.live_audio_archive import LiveAudioArchive
 from collections import OrderedDict, deque
 from typing import Any, Dict, List, Optional, Tuple, cast
 
@@ -52,7 +53,7 @@ from fastapi.websockets import WebSocketDisconnect
 
 from models.conversation_enums import ConversationSource
 from models.conversation_photo import ConversationPhoto
-from models.message_event import PhotoDescribedEvent, PhotoProcessingEvent
+from models.message_event import PhotoDescribedEvent, PhotoProcessingEvent, MessageServiceStatusEvent
 from models.transcript_segment import SpeakerIdentityStatus
 from utils.aac import AACDecoder
 from utils.llm.openglass import describe_image
@@ -248,6 +249,7 @@ class ListenReceiver(ReplayFilterMixin):
     def __init__(self, host: Any, channel_configs: List[ChannelConfig], channel_id_to_index: Dict[int, int]):
         self.soniox_idle_budget = SonioxIdleBudget()
         self.host = host
+        self.raw_archive = LiveAudioArchive(host)
         self.lane_meter = LiveLaneMeter()
         self.live_demand = None
         self.translation_demand = TranslationDemand()
@@ -1987,17 +1989,29 @@ class ListenReceiver(ReplayFilterMixin):
             return 0
         self._unknown_prefix_streak = 0
         audio = data[1:]
+        captured_audio = bytes(audio)
         if request.codec == 'opus' and self.multi_opus_decoders[channel_index]:
             try:
                 audio = self.multi_opus_decoders[channel_index].decode(
                     bytes(audio), opus_decode_capacity(request.sample_rate)
                 )
             except Exception as error:
+                await self.raw_archive.append(
+                    captured_audio, self.host.state.current_conversation_id, now, 0, channel_index
+                )
                 self._record_decode_failure('opus', error, len(audio), channel=channel_index)
                 return 0
             self.decode_failure_streak = 0
             if not audio:
                 return 0
+        await self.raw_archive.append(
+            captured_audio,
+            self.host.state.current_conversation_id,
+            now,
+            len(audio) // 2,
+            channel_index,
+            decoded=bytes(audio),
+        )
         # Audio activity only counts once the channel prefix resolved and an
         # opus frame decoded; rejected frames above cannot renew the lease.
         self._note_audio_activity()
@@ -2079,6 +2093,16 @@ class ListenReceiver(ReplayFilterMixin):
             demand = getattr(self, 'live_demand', None)
             if demand is not None:
                 demand.observe(payload)
+            if payload.get('mobile_batch_capability_v1') is True:
+                # Client renews its bounded authorization lease. No audio is
+                # consumed here; legacy state reports keep their current shape.
+                await self.host.refresh_mobile_batch_admission()
+                await self.host.asend_event(
+                    MessageServiceStatusEvent(
+                        status='mobile_batch_admission',
+                        mobile_standard_batch=self.host.mobile_standard_batch,
+                    )
+                )
             if not self.host.state.realtime_demand.observe(payload):
                 logger.debug('Ignored malformed or over-budget client_state')
             config = resolve_ondemand_config()
@@ -2207,6 +2231,10 @@ class ListenReceiver(ReplayFilterMixin):
                     source_claim = self._pending_source_frame
                     self._pending_source_frame = None
                     if len(data) <= 2:
+                        if data:
+                            await self.raw_archive.append(
+                                bytes(data), self.host.state.current_conversation_id, time.time(), 0
+                            )
                         continue
                     now = time.time()
                     prev_audio_received = self.host.state.last_audio_received_time
@@ -2238,6 +2266,7 @@ class ListenReceiver(ReplayFilterMixin):
                         elif request.codec == 'pcm8':
                             decoded = audioop.lin2lin(audioop.bias(data, 1, -128), 1, 2)
                     except Exception as error:
+                        await self.raw_archive.append(bytes(data), self.host.state.current_conversation_id, now, 0)
                         self._record_decode_failure(request.codec, error, len(data))
                         continue
                     self.decode_failure_streak = 0
@@ -2266,6 +2295,13 @@ class ListenReceiver(ReplayFilterMixin):
                                 payload=bytes(data),
                                 receipt_wall_time=now,
                             )
+                        await self.raw_archive.append(
+                            bytes(data),
+                            self.host.state.current_conversation_id,
+                            self.capture_timeline.wall(start_sample),
+                            len(decoded) // 2,
+                            decoded=decoded,
+                        )
                         self._note_accepted_frame(start_sample, end_sample)
                         self._write_ring_buffer_frame(decoded, now, start_sample)
                         if not self.host.use_custom_stt:
@@ -2284,6 +2320,9 @@ class ListenReceiver(ReplayFilterMixin):
                             else:
                                 self.host.audio_bytes_send(decoded, now)
                         continue
+                    await self.raw_archive.append(
+                        bytes(data), self.host.state.current_conversation_id, now, len(decoded) // 2, decoded=decoded
+                    )
                     if self.host.state.audio_ring_buffer is not None:
                         self.host.state.audio_ring_buffer.write(decoded, now)
                     if not self.host.use_custom_stt:
@@ -2323,6 +2362,12 @@ class ListenReceiver(ReplayFilterMixin):
             finally:
                 self.stt_drain_complete.set()
                 self.host.state.active = False
+                # Archive I/O runs only after transcript drain, outside the STT
+                # shutdown deadline. Its bounded wait cannot cancel STT tails.
+                try:
+                    await self.raw_archive.close()
+                except Exception as error:
+                    logger.warning('archive tail flush failed: %s', type(error).__name__)
 
     async def _bounded_teardown(self, buffer: bytearray, decoded_audio_bytes: int) -> None:
         bound = (self.shutdown_deadline or replay_delivery.clock()) + SHUTDOWN_CLEANUP_SECONDS

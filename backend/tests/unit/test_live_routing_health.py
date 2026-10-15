@@ -257,6 +257,8 @@ async def test_bench_write_retries_after_redis_backoff(monkeypatch):
     assert ('soniox', 'account') in health._pending_benches
     assert health._redis_retry_at > time.time()
     health._redis_retry_at = time.time() + 0.03  # Shorten the production backoff for the test.
+    # This fake covers bench writes; unrelated cost polling needs Redis time().
+    monkeypatch.setattr(health, 'refresh_cost_once', AsyncMock())
     refresh = asyncio.create_task(health.refresh_forever())
     try:
         deadline = asyncio.get_running_loop().time() + 1.0
@@ -726,3 +728,26 @@ def test_on_mode_waits_for_text_and_plain_no_text_releases_probe(monkeypatch):
     leg.finish()
     assert closed == [True]
     assert quarantines == []
+
+
+@pytest.mark.asyncio
+async def test_bounded_redis_preserves_cancellation_when_operation_finishes():
+    """A completed Redis operation must not swallow refresh-worker cancellation."""
+    health = live_health.FleetHealth(redis_client=DownRedis())
+    parent = None
+
+    async def operation():
+        parent.cancel()
+        return 'completed'
+
+    parent = asyncio.create_task(health._bounded(operation()))
+    with pytest.raises(asyncio.CancelledError):
+        await parent
+
+
+@pytest.mark.asyncio
+async def test_bounded_redis_still_enforces_deadline(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_REDIS_TIMEOUT_SECONDS', '0.01')
+    health = live_health.FleetHealth(redis_client=DownRedis())
+    with pytest.raises(TimeoutError):
+        await health._bounded(asyncio.Event().wait())

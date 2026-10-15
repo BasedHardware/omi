@@ -15,21 +15,14 @@ CHARTS = Path(__file__).resolve().parents[2] / 'charts'
 ADAPTER = CHARTS / 'monitoring/prometheus-adapter/prod_omi_prometheus_adapter.yaml'
 
 
-@pytest.mark.parametrize(
-    'service', ['parakeet', 'backend-listen', 'pusher', 'vad', 'diarizer', 'nllb-translation', 'deepgram-self-hosted']
-)
+@pytest.mark.parametrize('service', ['parakeet', 'backend-listen', 'pusher', 'vad', 'diarizer', 'nllb-translation'])
 def test_prod_hpa_consumed_metrics_have_adapter_rules(service):
     helm = shutil.which('helm')
     if helm is None:
         pytest.skip('helm is not installed')
     chart = CHARTS / service
-    if service == 'deepgram-self-hosted':
-        chart /= 'nova-3'
-        values = chart / 'prod_omi_values.yaml'
-        templates = ['templates/engine/engine.hpa.yaml', 'templates/api/api.hpa.yaml']
-    else:
-        values = chart / f'prod_omi_{service.replace("-", "_")}_values.yaml'
-        templates = ['templates/hpa.yaml']
+    values = chart / f'prod_omi_{service.replace("-", "_")}_values.yaml'
+    templates = ['templates/hpa.yaml']
     command = [
         helm,
         'template',
@@ -70,7 +63,6 @@ def test_cluster_adapter_keeps_all_parakeet_rules():
 def test_hpa_and_adapter_changes_select_this_contract():
     sources = [ADAPTER] + list(CHARTS.glob('*/prod*values.yaml'))
     sources += list(CHARTS.glob('*/templates/hpa.yaml'))
-    sources += [CHARTS / 'deepgram-self-hosted/nova-3/prod_omi_values.yaml']
     owned = {
         'parakeet',
         'backend-listen',

@@ -115,6 +115,28 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: AUDIO_ARCHIVE_LIVE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_READ_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_STOP_PCM_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_SYNC_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_COALESCE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_PERCENT
+    value: "0"
+  - name: AUDIO_ARCHIVE_UID_ALLOWLIST
+    value: ""
+  - name: BUCKET_AUDIO_DERIVED
+    value: ""
+  - name: AUDIO_MERGE_WORKER_URL
+    value: ""
   # Bounded, process-local late identity repair coalescing; rollback with false.
   - name: OWNER_IDENTITY_RETRY_COALESCE_ENABLED
     value: "true"
@@ -277,9 +299,9 @@ env:
   - name: TRANSCRIPTION_FINAL_PASS_PERCENT
     value: "0"
   - name: TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE
-    value: "false"
+    value: "true"
   - name: TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED
-    value: "false"
+    value: "true"
   # Phase-1 final-pass shadow runs only for the owner UID on this pusher.
   - name: TRANSCRIPTION_SHADOW_ENABLED
     value: "true"
@@ -353,8 +375,7 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: ADMIN_KEY
-  # Shared Deepgram credential: this deployment reaches self-hosted dg.omi.me,
-  # while backend-listen uses the hosted API with the same key.
+  # Retain the cloud/BYOK credential; self-hosted Deepgram is retired.
   - name: DEEPGRAM_API_KEY
     valueFrom:
       secretKeyRef:
@@ -457,9 +478,7 @@ env:
         name: prod-omi-backend-secrets
         key: TYPESENSE_API_KEY
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
-    value: "true"
-  - name: DEEPGRAM_SELF_HOSTED_URL
-    value: "https://dg.omi.me"
+    value: "false"
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
   - name: STT_PRERECORDED_MODEL
@@ -609,6 +628,8 @@ volumeMounts: []
 #   mountPath: "/etc/foo"
 #   readOnly: true
 
+# Placement uses service/env labels, not pool names or CPU family.
+# New N4 and qualified N2 fallback pools retain the affinity labels below.
 nodeSelector: {}
 
 tolerations: []

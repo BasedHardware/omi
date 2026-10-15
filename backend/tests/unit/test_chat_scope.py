@@ -27,6 +27,7 @@ def test_build_chat_scope_conversation_and_dates():
     )
     assert build_chat_scope(ctx) == {
         "conversation_id": "conv-1",
+        "title": "Standup",
         "start_date": "2026-08-01T00:00:00-07:00",
         "end_date": "2026-08-01T23:59:59-07:00",
     }

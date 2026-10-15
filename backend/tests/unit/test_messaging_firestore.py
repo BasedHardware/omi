@@ -84,9 +84,9 @@ def local_api(store, monkeypatch):
     from utils.messaging.gateway import Gateway
 
     adapter = LoopbackAdapter()
-    gateway = Gateway(adapter, store=store, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
     monkeypatch.setattr(messaging, 'MessagingStore', lambda: store)
-    monkeypatch.setattr(messaging, '_admit', lambda uid: None)
+    monkeypatch.setattr(messaging, '_admit', lambda uid, channel: None)
     monkeypatch.setattr(messaging, '_gateways', {'loopback': gateway})
     app = FastAPI()
     app.include_router(messaging.router)

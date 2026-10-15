@@ -438,9 +438,20 @@ def command_for_host(
     platform_name: str | None = None,
     python_executable: str | None = None,
 ) -> list[str]:
-    """Resolve manifest interpreter aliases through the active Windows toolchain."""
+    """Resolve manifest interpreter aliases through the active toolchain.
+
+    On Windows, `python3`/`bash` must route through Git's toolchain. On POSIX
+    hosts the manifest's `python3` alias also honors an explicit
+    `python_executable`, so a host whose PATH `python3` is Xcode CLT 3.9 runs
+    manifest checks under the >= 3.10 interpreter the dev harness selected
+    instead of crashing on PEP 604 unions at module scope.
+    """
     platform = platform_name or os.name
-    if platform != "nt" or not command:
+    if not command:
+        return command
+    if platform != "nt":
+        if command[0] == "python3" and python_executable:
+            return [python_executable, *command[1:]]
         return command
     if command[0] == "bash":
         return [bash_executable(platform_name=platform), *command[1:]]
@@ -474,7 +485,7 @@ def execute_checks(
             pr_body_file=pr_body_file,
             skip_changelog=skip_changelog,
         )
-        command = command_for_host(command)
+        command = command_for_host(command, python_executable=sys.executable)
         returncode = subprocess.run(command, cwd=root, check=False).returncode
         status = "PASS" if returncode == 0 else "FAIL"
         print(f"<== {status} {check.id} ({time.monotonic() - started:.2f}s)", flush=True)

@@ -17,6 +17,17 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
+          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+          BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+          AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -124,6 +135,10 @@ environments:
           PARAKEET_WINDOW_MAX_SESSIONS: {value: '1', category: rollout}
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS: {value: '8', category: rollout}
           PARAKEET_WINDOW_DIARIZATION: {value: 'false', category: rollout}
+          PARAKEET_WINDOW_DEADLINE_CUT_ENABLED: {value: 'false', category: rollout}
+          PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS:
+            value: '1.2'
+            category: reliability
           PARAKEET_WINDOW_PACE_SECONDS: {value: '6', category: rollout}
           PARAKEET_WINDOW_MAX_CONTEXT_SECONDS: {value: '24', category: rollout}
           PARAKEET_BATCH_PRESSURE_POOL_HOST:
@@ -282,6 +297,17 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
+          AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
+          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+          BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+          AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -564,6 +590,8 @@ environments:
       services:
         backend:
           forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -600,6 +628,17 @@ environments:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
           env:
+            AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
+            AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+            BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
               value: '13151'
               category: service_discovery
@@ -771,6 +810,14 @@ environments:
             CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
         backend-sync:
+          forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
+          - HOSTED_PUSHER_API_URL
+          - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+          - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+          - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+          - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           capabilities:
           - conversation.finalize.persisted
           - memory.canonical.mutate
@@ -800,6 +847,17 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
+            AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+            BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             OMI_VERTEX_RESERVATION_PROJECT:
               value: based-hardware-dev
               category: runtime_identity
@@ -889,6 +947,13 @@ environments:
               provisional: true
               value: '2592000'
               category: rollout
+            SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
+            SYNC_LEGACY_FRESH_HOURLY_TOKENS:
+              value: '60'
+              category: reliability
+            SYNC_LEGACY_FRESH_BURST_TOKENS:
+              value: '10'
+              category: reliability
             SYNC_FRESH_MAX_AGE_SECONDS:
               provisional: true
               value: '21600'
@@ -976,13 +1041,15 @@ environments:
             CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
             CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+        backend-sync-backfill:
           forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
           - HOSTED_PUSHER_API_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
-        backend-sync-backfill:
           secrets:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
@@ -1000,6 +1067,17 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
+            AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+            BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
               value: '13151'
               category: service_discovery
@@ -1084,6 +1162,13 @@ environments:
               provisional: true
               value: '2592000'
               category: rollout
+            SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
+            SYNC_LEGACY_FRESH_HOURLY_TOKENS:
+              value: '60'
+              category: reliability
+            SYNC_LEGACY_FRESH_BURST_TOKENS:
+              value: '10'
+              category: reliability
             SYNC_FRESH_MAX_AGE_SECONDS:
               provisional: true
               value: '21600'
@@ -1155,13 +1240,15 @@ environments:
             CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
           provisional: true
+        backend-integration:
           forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
           - HOSTED_PUSHER_API_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
-        backend-integration:
           secrets:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
@@ -1182,6 +1269,17 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
+            AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+            BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
               value: '13151'
               category: service_discovery
@@ -1294,12 +1392,6 @@ environments:
             OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
               value: '3600'
               category: replay_capture
-          forbidden_env:
-          - HOSTED_PUSHER_API_URL
-          - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-          - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
-          - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
-          - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
       jobs:
         notifications-job:
           flags:
@@ -1712,6 +1804,17 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
+          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+          BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+          AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           AUDIO_TIMELINE_SPANS: {value: 'true', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -1792,9 +1895,9 @@ environments:
             value: prod
             category: runtime_identity
           STT_RESILIENT_RECONNECT: {value: 'false', category: rollout}
-          STT_LIVE_DEMAND_ENABLED: {value: 'false', category: rollout}
+          STT_LIVE_DEMAND_ENABLED: {value: 'true', category: rollout}
           STT_LIVE_DEMAND_PERCENT: {value: '0', category: rollout}
-          STT_LIVE_DEMAND_UID_ALLOWLIST: {value: '', category: rollout}
+          STT_LIVE_DEMAND_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           STT_LIVE_DEMAND_MIN_DWELL_SECONDS: {value: '15', category: rollout}
           STT_FAILOVER_RECOVERY_ENABLED: {value: 'true', category: rollout}
           STT_ROUTING_MODE: {value: 'on', category: rollout}
@@ -1815,6 +1918,10 @@ environments:
           PARAKEET_WINDOW_MAX_SESSIONS: {value: '16', category: rollout}
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS: {value: '8', category: rollout}
           PARAKEET_WINDOW_DIARIZATION: {value: 'false', category: rollout}
+          PARAKEET_WINDOW_DEADLINE_CUT_ENABLED: {value: 'false', category: rollout}
+          PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS:
+            value: '1.2'
+            category: reliability
           PARAKEET_WINDOW_PACE_SECONDS: {value: '6', category: rollout}
           PARAKEET_WINDOW_MAX_CONTEXT_SECONDS: {value: '24', category: rollout}
           PARAKEET_BATCH_PRESSURE_POOL_HOST:
@@ -1961,6 +2068,9 @@ environments:
           PARAKEET_WINDOW_MAX_EMPTY_STREAK:
             value: '4'
             category: reliability
+          MOBILE_STANDARD_BATCH_ENABLED: {value: 'true', category: rollout}
+          MOBILE_STANDARD_BATCH_PERCENT: {value: '0', category: rollout}
+          MOBILE_STANDARD_BATCH_UIDS: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           SONIOX_IDLE_CLOSE_SECONDS: {value: '45', category: rollout}
           STT_NO_TEXT_RESCUE_ENABLED: {value: 'true', category: rollout}
           OMI_CUSTOMER_DATA_PROJECT:
@@ -2047,6 +2157,17 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
         env:
+          AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
+          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+          BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+          AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           AUDIO_TIMELINE_SPANS: {value: 'true', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -2086,8 +2207,8 @@ environments:
           TRANSCRIPTION_FINAL_PASS_BACKEND: {value: pyannote, category: rollout}
           TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '0', category: rollout}
-          TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'false', category: rollout}
-          TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'false', category: rollout}
+          TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'true', category: rollout}
+          TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'true', category: rollout}
           TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
           TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
           TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
@@ -2261,6 +2382,8 @@ environments:
       services:
         backend:
           forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -2318,6 +2441,17 @@ environments:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
           env:
+            AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
+            AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+            BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
               value: '13151'
               category: service_discovery
@@ -2446,8 +2580,8 @@ environments:
             TRANSCRIPTION_FINAL_PASS_BACKEND: {value: pyannote, category: rollout}
             TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '0', category: rollout}
-            TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'false', category: rollout}
-            TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'false', category: rollout}
+            TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'true', category: rollout}
+            TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'true', category: rollout}
             TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
             TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
             TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
@@ -2565,6 +2699,13 @@ environments:
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-sync:
+          forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
+          - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+          - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+          - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+          - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           capabilities:
           - conversation.finalize.persisted
           - memory.canonical.mutate
@@ -2594,6 +2735,17 @@ environments:
               secret: DREAM_AGENT_FEEDBACK_SALT
               version: latest
           env:
+            AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
+            AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+            BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             OMI_VERTEX_RESERVATION_PROJECT:
               value: based-hardware
               category: runtime_identity
@@ -2680,6 +2832,13 @@ environments:
               provisional: true
               value: '2592000'
               category: rollout
+            SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
+            SYNC_LEGACY_FRESH_HOURLY_TOKENS:
+              value: '60'
+              category: reliability
+            SYNC_LEGACY_FRESH_BURST_TOKENS:
+              value: '10'
+              category: reliability
             SYNC_FRESH_MAX_AGE_SECONDS:
               provisional: true
               value: '21600'
@@ -2724,8 +2883,8 @@ environments:
             TRANSCRIPTION_FINAL_PASS_BACKEND: {value: pyannote, category: rollout}
             TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '0', category: rollout}
-            TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'false', category: rollout}
-            TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'false', category: rollout}
+            TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'true', category: rollout}
+            TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'true', category: rollout}
             TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
             TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
             TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
@@ -2821,12 +2980,14 @@ environments:
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
+        backend-sync-backfill:
           forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
-        backend-sync-backfill:
           secrets:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
@@ -2841,6 +3002,17 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
+            AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+            BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
               value: '13151'
               category: service_discovery
@@ -2922,6 +3094,13 @@ environments:
               provisional: true
               value: '2592000'
               category: rollout
+            SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
+            SYNC_LEGACY_FRESH_HOURLY_TOKENS:
+              value: '60'
+              category: reliability
+            SYNC_LEGACY_FRESH_BURST_TOKENS:
+              value: '10'
+              category: reliability
             SYNC_FRESH_MAX_AGE_SECONDS:
               provisional: true
               value: '21600'
@@ -2954,6 +3133,20 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            HOSTED_DIARIZATION_API_URL:
+              value: http://172.16.160.20/diarizer-batch
+              category: service_discovery
+            TRANSCRIPTION_FINAL_PASS_DIARIZER: {value: pyannote_shadow, category: rollout}
+            TRANSCRIPTION_FINAL_PASS_BACKEND: {value: pyannote, category: rollout}
+            TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '0', category: rollout}
+            TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'true', category: rollout}
+            TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'true', category: rollout}
+            TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
+            TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
+            TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            TRANSCRIPTION_SHADOW_PERCENT: {value: '0', category: rollout}
+            TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '1', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
@@ -3031,12 +3224,14 @@ environments:
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           provisional: true
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
+        backend-integration:
           forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
-        backend-integration:
           secrets:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
@@ -3054,6 +3249,17 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
+            AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+            BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
               value: '13151'
               category: service_discovery
@@ -3180,11 +3386,6 @@ environments:
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
-          forbidden_env:
-          - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-          - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
-          - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
-          - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
       jobs:
         notifications-job:
           flags:

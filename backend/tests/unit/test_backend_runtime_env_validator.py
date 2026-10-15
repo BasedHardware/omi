@@ -68,6 +68,17 @@ def render_cloud_run_state(env_config: dict, monkeypatch) -> dict:
 
 def with_memory_env(payload: str) -> str:
     memory_env = '''\
+        {"name": "AUDIO_ARCHIVE_LIVE_ENABLED", "value": "false"},
+        {"name": "AUDIO_ARCHIVE_READ_ENABLED", "value": "false"},
+        {"name": "AUDIO_ARCHIVE_STOP_PCM_ENABLED", "value": "false"},
+        {"name": "AUDIO_ARCHIVE_SYNC_ENABLED", "value": "false"},
+        {"name": "AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED", "value": "false"},
+        {"name": "AUDIO_ARCHIVE_COALESCE_ENABLED", "value": "false"},
+        {"name": "AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED", "value": "false"},
+        {"name": "AUDIO_ARCHIVE_PERCENT", "value": "0"},
+        {"name": "AUDIO_ARCHIVE_UID_ALLOWLIST", "value": ""},
+        {"name": "BUCKET_AUDIO_DERIVED", "value": ""},
+        {"name": "AUDIO_MERGE_WORKER_URL", "value": ""},
         {"name": "REDIS_DB_PORT", "value": "13151"},
         {"name": "FREE_TIER_LOCAL_PROCESSING", "value": "true"},
         {"name": "FREE_TIER_LOCAL_PROCESSING_COHORT", "value": ""},
@@ -495,6 +506,15 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = re.sub(
         r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
         lambda match: match.group(1) + '\n' + entries + ',',
+        payload,
+        flags=re.DOTALL,
+    )
+    # Keep unrelated Cloud Run failure fixtures complete under the new dark gate.
+    payload = re.sub(
+        r'("backend-sync(?:-backfill)?":\s*\{.*?"env":\s*\[)',
+        r'\1\n        {"name": "SYNC_LEGACY_FRESH_ENABLED", "value": "false"},'
+        r'\n        {"name": "SYNC_LEGACY_FRESH_HOURLY_TOKENS", "value": "60"},'
+        r'\n        {"name": "SYNC_LEGACY_FRESH_BURST_TOKENS", "value": "10"},',
         payload,
         flags=re.DOTALL,
     )
@@ -3188,7 +3208,12 @@ def test_transcription_shadow_prod_scope_matches_generated_manifest_overlay_and_
         selected = {key: pusher[key]['value'] for key in controls}
         assert selected in stages.values()
         for scope, env in _manifest_env_blocks(source):
-            if scope in ('gke/pusher', 'cloud_run/backend', 'cloud_run/backend-sync'):
+            if scope in (
+                'gke/pusher',
+                'cloud_run/backend',
+                'cloud_run/backend-sync',
+                'cloud_run/backend-sync-backfill',
+            ):
                 assert {key: env[key]['value'] for key in controls} == selected, scope
             else:
                 assert all(key not in env for key in controls), scope

@@ -91,6 +91,28 @@ envFrom:
       name: prod-omi-backend-config
 
 env:
+  - name: AUDIO_ARCHIVE_LIVE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_READ_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_STOP_PCM_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_SYNC_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_COALESCE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_PERCENT
+    value: "0"
+  - name: AUDIO_ARCHIVE_UID_ALLOWLIST
+    value: ""
+  - name: BUCKET_AUDIO_DERIVED
+    value: ""
+  - name: AUDIO_MERGE_WORKER_URL
+    value: ""
   # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
   - name: PROACTIVITY_V2_POSTHOG_TOKEN
     value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
@@ -445,13 +467,19 @@ env:
   - name: STT_RESILIENT_RECONNECT
     value: "false"
   - name: STT_LIVE_DEMAND_ENABLED
-    value: "false"
+    value: "true"
   - name: STT_LIVE_DEMAND_PERCENT
     value: "0"
   - name: STT_LIVE_DEMAND_UID_ALLOWLIST
-    value: ""
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: STT_LIVE_DEMAND_MIN_DWELL_SECONDS
     value: "15"
+  - name: MOBILE_STANDARD_BATCH_ENABLED
+    value: "true"
+  - name: MOBILE_STANDARD_BATCH_PERCENT
+    value: "0"
+  - name: MOBILE_STANDARD_BATCH_UIDS
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: STT_FAILOVER_RECOVERY_ENABLED
     value: "true"
   - name: SONIOX_IDLE_CLOSE_SECONDS
@@ -494,6 +522,10 @@ env:
     value: "8"
   - name: PARAKEET_WINDOW_DIARIZATION
     value: "false"
+  - name: PARAKEET_WINDOW_DEADLINE_CUT_ENABLED
+    value: "false"
+  - name: PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS
+    value: "1.2"
   - name: PARAKEET_WINDOW_PACE_SECONDS
     value: "6"
   - name: PARAKEET_WINDOW_MAX_CONTEXT_SECONDS
@@ -760,6 +792,8 @@ volumeMounts: []
 #   mountPath: "/etc/foo"
 #   readOnly: true
 
+# Placement uses service/env labels, not pool names or CPU family.
+# New N4 and qualified N2 fallback pools retain the affinity labels below.
 nodeSelector: {}
 
 tolerations: []

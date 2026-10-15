@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/providers/messaging_channels_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -15,10 +16,14 @@ enum ChatAppsProblem {
   /// Too many attempts in a short time.
   rateLimited,
 
+  /// The channel is full (409); the backend put the account on its waitlist. Not an error.
+  waitlisted,
+
   /// Anything else; trying again may work.
   failed;
 
   static ChatAppsProblem fromApi(ApiProblem problem) => switch (problem.kind) {
+        _ when isSeatCapProblem(problem) => waitlisted,
         ApiProblemKind.transport => offline,
         ApiProblemKind.forbidden || ApiProblemKind.paymentRequired || ApiProblemKind.notFound => unavailable,
         ApiProblemKind.rateLimited => rateLimited,
@@ -26,7 +31,7 @@ enum ChatAppsProblem {
       };
 
   /// Retrying cannot help until something changes outside this screen.
-  bool get blocksRetry => this == unavailable;
+  bool get blocksRetry => this == unavailable || this == waitlisted;
 
   String message(BuildContext context) {
     final l10n = context.l10n;
@@ -34,6 +39,7 @@ enum ChatAppsProblem {
       offline => l10n.chatAppsProblemOffline,
       unavailable => l10n.chatAppsProblemUnavailable,
       rateLimited => l10n.chatAppsProblemRateLimited,
+      waitlisted => l10n.chatAppsWaitlistJoined,
       failed => l10n.chatAppsProblemFailed,
     };
   }
@@ -61,4 +67,11 @@ class ChatAppsProblemLine extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Closes a connect sheet after minting answered 409: the person is on the channel's waitlist,
+/// which the page row now shows. Confirms it instead of showing an error.
+void closeConnectSheetOnWaitlist(BuildContext context) {
+  OmiFeedback.confirm(context, context.l10n.chatAppsWaitlistJoined);
+  Navigator.of(context).pop();
 }

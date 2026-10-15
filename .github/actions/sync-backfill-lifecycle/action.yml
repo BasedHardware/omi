@@ -38,6 +38,16 @@ inputs:
       worker runs as that service account and the cloned backend-sync contract drops key-credential refs.
     required: false
     default: ''
+  forbidden_env_names:
+    description: Manifest forbidden env keys to exclude from the live clone (mode=worker)
+    required: false
+    default: DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL
+  remove_env_extra:
+    description: >-
+      Manifest forbidden env keys the worker deploy's literal --remove-env-vars list lacks, each with a
+      leading comma (mode=worker). gcloud rejects a key named twice.
+    required: false
+    default: ''
   backfill_env_vars:
     description: Manifest-rendered backend-sync-backfill env overlay (mode=worker)
     required: false
@@ -105,9 +115,13 @@ runs:
           SYNC_TASKS_OIDC_AUDIENCE=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
         SECRET_OVERLAY: ${{ inputs.backfill_secrets }}
         REMOVE_ENV_VARS: HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH${{ inputs.project_id == 'based-hardware' && ',CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST' || '' }}
+        FORBIDDEN_ENV_NAMES: ${{ inputs.forbidden_env_names }}
         IDENTITY_FLAGS: ${{ inputs.identity_flags }}
       run: |
         DEPLOY_CONTROL_SCRIPT_DIR="${DEPLOY_CONTROL_SCRIPTS:-backend/scripts}"
+        # Drop forbidden live bindings before overlays can reintroduce them after gcloud removal.
+        REMOVE_ENV_VARS="${REMOVE_ENV_VARS},${FORBIDDEN_ENV_NAMES}"
+        export REMOVE_ENV_VARS
         # A worker pinned to its own runtime identity cannot read backend-sync's key secret, and
         # gcloud applies --update-secrets after --remove-secrets, so the clone itself must drop it.
         if [[ -n "$IDENTITY_FLAGS" ]]; then
@@ -159,7 +173,7 @@ runs:
           --concurrency=6
           --cpu=2
           --memory=8Gi
-          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ inputs.remove_env_extra }}
           ${{ inputs.cloud_run_flags }}
           ${{ inputs.identity_flags }}
         env_vars: ${{ steps.backfill-runtime.outputs.env_vars }}
@@ -195,8 +209,9 @@ runs:
       if: ${{ inputs.mode == 'platform' || inputs.mode == 'dispatch' }}
       shell: bash
       run: |
-        # The first concurrency=6 step retains 40 concurrent dispatches / 10 per second
-        # to isolate instance packing from higher downstream load.
+        # Reviewed drain step: 60 dispatches stays below 18 x 6 = 108 worker
+        # slots. Retain the 10/s rate, maxScale=18, 8 GiB and one owner per UID.
+        # Roll back queue concurrency to 40 on >10% p95 or retry regression.
         # Dispatch concurrency must not exceed the worker's capacity:
         # --max-instances x --concurrency (service-level --max above; the
         # service cap wins when it is lower).
@@ -210,7 +225,7 @@ runs:
           gcloud tasks queues update sync-backfill \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
-            --max-concurrent-dispatches=40 \
+            --max-concurrent-dispatches=60 \
             --max-dispatches-per-second=10 \
             --min-backoff=5s \
             --max-backoff=60s
@@ -218,7 +233,7 @@ runs:
           gcloud tasks queues create sync-backfill \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
-            --max-concurrent-dispatches=40 \
+            --max-concurrent-dispatches=60 \
             --max-dispatches-per-second=10 \
             --min-backoff=5s \
             --max-backoff=60s

@@ -90,7 +90,7 @@ final class ConversationDisplayStateTests: XCTestCase {
       segments: [segment("plenty of words to look recoverable normally")]
     )
     XCTAssertEqual(conv.displayState, .locked)
-    XCTAssertEqual(conv.displayTitle, "Locked")
+    XCTAssertEqual(conv.displayTitle, "Saved and waiting")
     XCTAssertFalse(conv.canReprocess, "Reprocess shouldn't be offered while locked")
   }
 
