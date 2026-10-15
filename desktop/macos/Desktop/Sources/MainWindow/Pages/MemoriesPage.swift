@@ -997,8 +997,10 @@ class MemoriesViewModel: ObservableObject {
           selectedTags.contains { tag in tag.matches(memory) }
         }
       }
-    } else if !filteredFromDatabase.isEmpty {
-      // Tag filters applied: use SQLite filtered results
+    } else if !selectedTags.isEmpty {
+      // A tag/category filter is applied — the filtered result set is the
+      // answer, EMPTY INCLUDED: an applied filter with no matches shows
+      // nothing, not the whole list (issue #21715).
       result = filteredFromDatabase
     } else {
       // No filters: use loaded memories
@@ -1803,10 +1805,14 @@ class MemoriesViewModel: ObservableObject {
     // Remove from UI immediately (optimistic) — must also remove from filter source arrays
     // so recomputeFilteredMemories() doesn't resurrect the deleted memory.
     OmiMotion.withGated(.easeInOut(duration: 0.2)) {
-      memories.removeAll { $0.id == memory.id }
+      // Prune the filter sources FIRST — `memories.removeAll` fires a
+      // didSet → recomputeFilteredMemories(), which would rebuild the
+      // visible list from the still-stale search/filter arrays and
+      // resurrect the card (issue #21716).
+      searchResults.removeAll { $0.id == memory.id }
       filteredFromDatabase.removeAll { $0.id == memory.id }
       allFilteredResults.removeAll { $0.id == memory.id }
-      searchResults.removeAll { $0.id == memory.id }
+      memories.removeAll { $0.id == memory.id }
       pendingDeleteMemory = memory
       undoTimeRemaining = OmiFeedbackTiming.undo
     }
