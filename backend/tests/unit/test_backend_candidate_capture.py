@@ -638,7 +638,6 @@ def test_extraction_only_proposes_and_never_accepts_or_writes_a_task(monkeypatch
     )
     emitted = []
     monkeypatch.setattr(process_conversation, 'emit_product_event', lambda **event: emitted.append(event))
-
     process_conversation._save_action_items(
         'user-1',
         _conversation(
@@ -667,6 +666,7 @@ def test_extraction_only_proposes_and_never_accepts_or_writes_a_task(monkeypatch
                 'task_count': 2,
                 'conversation_id': 'conversation-1',
                 'task_source': 'transcript',
+                'source_platform': 'unknown',
                 'persistence_path': 'canonical_candidate',
             },
         }

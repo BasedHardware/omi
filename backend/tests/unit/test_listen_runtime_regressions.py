@@ -1144,14 +1144,15 @@ async def test_transcript_loop_emits_diarization_completion_after_terminal_flush
     assert flushed == ['conversation-1']
     assert telemetry.events[0]['event'] == 'Diarization Completed'
     assert telemetry.events[0]['properties']['speaker_count'] == 1
-    assert telemetry.events[0]['properties']['recording_id'] == 'recording-1'
-    assert telemetry.events[0]['properties']['conversation_id'] == 'conversation-1'
+    assert not {'recording_id', 'conversation_id'} & telemetry.events[0]['properties'].keys()
 
 
 @pytest.mark.anyio
 async def test_transcript_loop_attributes_diarization_completion_to_each_conversation(monkeypatch):
-    from utils.product_telemetry import set_product_telemetry_client_for_tests
+    from utils.product_telemetry import emit_product_event, set_product_telemetry_client_for_tests
 
+    emitted = MagicMock(wraps=emit_product_event)
+    monkeypatch.setattr('routers.listen.transcripts.emit_product_event', emitted)
     websocket = SimpleNamespace(send_json=lambda _payload: _async_result(None))
     processor, _delivered, _flushed = _transcript_processor_for_delivery(monkeypatch, websocket)
     processor.host.recording_session_id = 'recording-1'
@@ -1183,10 +1184,9 @@ async def test_transcript_loop_attributes_diarization_completion_to_each_convers
 
     await processor.process_loop()
 
-    assert [event['properties']['conversation_id'] for event in telemetry.events] == [
-        'conversation-1',
-        'conversation-2',
-    ]
+    properties = [call.kwargs['properties'] for call in emitted.call_args_list]
+    assert [p['conversation_id'] for p in properties] == ['conversation-1', 'conversation-2']
+    assert all('conversation_id' not in event['properties'] for event in telemetry.events)
     assert [event['properties']['speaker_count'] for event in telemetry.events] == [1, 1]
 
 

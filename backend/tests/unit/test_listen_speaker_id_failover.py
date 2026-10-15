@@ -830,7 +830,7 @@ async def test_diarization_completed_emitted_for_both_persistence_modes(monkeypa
 
     events = [e for e in telemetry.events if e.get('event') == 'Diarization Completed']
     assert events, 'Diarization Completed must be emitted from the v2 batch path as from the legacy loop'
-    assert events[-1]['properties']['conversation_id'] == CONV
+    assert 'conversation_id' not in events[-1]['properties']
     assert events[-1]['properties']['speaker_count'] >= 1
 
 
