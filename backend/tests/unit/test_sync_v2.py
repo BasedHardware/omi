@@ -32,6 +32,7 @@ from io import BytesIO
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import gc
 
 # Keep additive batch imports real before legacy fixtures replace package roots.
 from utils.batch_pipeline import intake as _batch_intake  # noqa: F401
@@ -1689,6 +1690,9 @@ class TestAsyncCoordinatorBehavioral:
     def fenced_worker_module(self):
         """Build the import-heavy behavioral harness outside the test call budget."""
         module, stubs = self._load_sync_module()
+        # Release prior cyclic mock graphs during harness setup, so a full-heap
+        # collection does not get charged to an unrelated request assertion.
+        gc.collect()
         try:
             yield module, stubs
         finally:
@@ -3653,22 +3657,14 @@ class TestV2EndpointExecution:
             else:
                 sys.modules[mod_name] = orig
 
-    def test_get_poll_404_expired_job(self):
+    def test_get_poll_404_expired_job(self, sync_endpoint_module):
         """GET poll returns 404 when job not found."""
-        saved, mock_sync_jobs, _ = self._build_test_app()
+        saved, mock_sync_jobs, module = sync_endpoint_module
         mock_sync_jobs.get_sync_job = MagicMock(return_value=None)
 
         try:
-            sys.modules.pop('routers.sync', None)
-            sys.modules.pop('utils.sync.pipeline', None)
-            import importlib.util
-
-            spec = importlib.util.spec_from_file_location(
-                'sync_poll_404',
-                os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'),
-            )
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+            module.get_sync_job = mock_sync_jobs.get_sync_job
+            module.create_sync_job = mock_sync_jobs.create_sync_job
 
             from fastapi import FastAPI
             from fastapi.testclient import TestClient
@@ -3686,9 +3682,9 @@ class TestV2EndpointExecution:
         finally:
             self._cleanup_modules(saved)
 
-    def test_get_poll_403_wrong_owner(self):
+    def test_get_poll_403_wrong_owner(self, sync_endpoint_module):
         """GET poll returns 403 when job belongs to different user."""
-        saved, mock_sync_jobs, _ = self._build_test_app()
+        saved, mock_sync_jobs, module = sync_endpoint_module
         mock_sync_jobs.get_sync_job = MagicMock(
             return_value={
                 'job_id': 'some-job',
@@ -3702,16 +3698,8 @@ class TestV2EndpointExecution:
         )
 
         try:
-            sys.modules.pop('routers.sync', None)
-            sys.modules.pop('utils.sync.pipeline', None)
-            import importlib.util
-
-            spec = importlib.util.spec_from_file_location(
-                'sync_poll_403',
-                os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'),
-            )
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+            module.get_sync_job = mock_sync_jobs.get_sync_job
+            module.create_sync_job = mock_sync_jobs.create_sync_job
 
             from fastapi import FastAPI
             from fastapi.testclient import TestClient
@@ -3726,9 +3714,9 @@ class TestV2EndpointExecution:
         finally:
             self._cleanup_modules(saved)
 
-    def test_get_poll_completed_includes_result(self):
+    def test_get_poll_completed_includes_result(self, sync_endpoint_module):
         """GET poll returns result and error fields on terminal status."""
-        saved, mock_sync_jobs, _ = self._build_test_app()
+        saved, mock_sync_jobs, module = sync_endpoint_module
         mock_sync_jobs.get_sync_job = MagicMock(
             return_value={
                 'job_id': 'done-job',
@@ -3744,16 +3732,8 @@ class TestV2EndpointExecution:
         )
 
         try:
-            sys.modules.pop('routers.sync', None)
-            sys.modules.pop('utils.sync.pipeline', None)
-            import importlib.util
-
-            spec = importlib.util.spec_from_file_location(
-                'sync_poll_done',
-                os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'),
-            )
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+            module.get_sync_job = mock_sync_jobs.get_sync_job
+            module.create_sync_job = mock_sync_jobs.create_sync_job
 
             from fastapi import FastAPI
             from fastapi.testclient import TestClient
@@ -3773,9 +3753,9 @@ class TestV2EndpointExecution:
         finally:
             self._cleanup_modules(saved)
 
-    def test_get_poll_failed_includes_error(self):
+    def test_get_poll_failed_includes_error(self, sync_endpoint_module):
         """GET poll returns error field when all segments failed."""
-        saved, mock_sync_jobs, _ = self._build_test_app()
+        saved, mock_sync_jobs, module = sync_endpoint_module
         mock_sync_jobs.get_sync_job = MagicMock(
             return_value={
                 'job_id': 'fail-job',
@@ -3791,16 +3771,8 @@ class TestV2EndpointExecution:
         )
 
         try:
-            sys.modules.pop('routers.sync', None)
-            sys.modules.pop('utils.sync.pipeline', None)
-            import importlib.util
-
-            spec = importlib.util.spec_from_file_location(
-                'sync_poll_failed',
-                os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'),
-            )
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+            module.get_sync_job = mock_sync_jobs.get_sync_job
+            module.create_sync_job = mock_sync_jobs.create_sync_job
 
             from fastapi import FastAPI
             from fastapi.testclient import TestClient
@@ -3819,9 +3791,9 @@ class TestV2EndpointExecution:
         finally:
             self._cleanup_modules(saved)
 
-    def test_get_poll_processing_excludes_result(self):
+    def test_get_poll_processing_excludes_result(self, sync_endpoint_module):
         """GET poll must NOT include result/error when job is still processing."""
-        saved, mock_sync_jobs, _ = self._build_test_app()
+        saved, mock_sync_jobs, module = sync_endpoint_module
         mock_sync_jobs.get_sync_job = MagicMock(
             return_value={
                 'job_id': 'active-job',
@@ -3837,16 +3809,8 @@ class TestV2EndpointExecution:
         )
 
         try:
-            sys.modules.pop('routers.sync', None)
-            sys.modules.pop('utils.sync.pipeline', None)
-            import importlib.util
-
-            spec = importlib.util.spec_from_file_location(
-                'sync_poll_active',
-                os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'),
-            )
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+            module.get_sync_job = mock_sync_jobs.get_sync_job
+            module.create_sync_job = mock_sync_jobs.create_sync_job
 
             from fastapi import FastAPI
             from fastapi.testclient import TestClient
@@ -3866,9 +3830,9 @@ class TestV2EndpointExecution:
         finally:
             self._cleanup_modules(saved)
 
-    def test_post_returns_202_and_schedules_background(self):
+    def test_post_returns_202_and_schedules_background(self, sync_endpoint_module):
         """POST /v2/sync-local-files must return 202, create job, and schedule async background task."""
-        saved, mock_sync_jobs, _ = self._build_test_app()
+        saved, mock_sync_jobs, module = sync_endpoint_module
         mock_sync_jobs.create_sync_job = MagicMock(
             return_value={
                 'job_id': 'created-job',
@@ -3880,16 +3844,8 @@ class TestV2EndpointExecution:
         )
 
         try:
-            sys.modules.pop('routers.sync', None)
-            sys.modules.pop('utils.sync.pipeline', None)
-            import importlib.util
-
-            spec = importlib.util.spec_from_file_location(
-                'sync_post_202',
-                os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'),
-            )
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+            module.get_sync_job = mock_sync_jobs.get_sync_job
+            module.create_sync_job = mock_sync_jobs.create_sync_job
 
             module._retrieve_file_paths_v2 = MagicMock(return_value=['/tmp/fake.opus'])
 
@@ -3935,19 +3891,27 @@ class TestV2EndpointExecution:
         finally:
             self._cleanup_modules(saved)
 
-    @pytest.mark.parametrize('failure_key', ['invalid_audio', 'persistent_persistence'])
-    def test_capped_content_returns_a_per_wal_retryable_job_without_dispatch(self, failure_key):
-        saved, mock_sync_jobs, _ = self._build_test_app()
+    @pytest.fixture
+    def sync_endpoint_module(self):
+        """Keep real router import/setup outside the endpoint execution budget."""
+        saved, jobs, _ = self._build_test_app()
         try:
-            sys.modules.pop('routers.sync', None)
-            sys.modules.pop('utils.sync.pipeline', None)
             import importlib.util
 
             spec = importlib.util.spec_from_file_location(
-                'sync_post_capped', os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
+                'sync_endpoint_fixture', os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
             )
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
+            gc.collect()
+            yield saved, jobs, module
+        finally:
+            self._cleanup_modules(saved)
+
+    @pytest.mark.parametrize('failure_key', ['invalid_audio', 'persistent_persistence'])
+    def test_capped_content_returns_a_per_wal_retryable_job_without_dispatch(self, failure_key, sync_endpoint_module):
+        saved, mock_sync_jobs, module = sync_endpoint_module
+        try:
             module._retrieve_file_paths_v2 = MagicMock(return_value=['/tmp/fake.opus'])
             module._cleanup_files = MagicMock()
             module.claim_sync_content = MagicMock(
