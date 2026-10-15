@@ -123,13 +123,16 @@ struct ConversationDetailHeader<BannerInset: View, Recordings: View, Trailing: V
         Text(conversation.structured.emoji)
           .scaledFont(size: OmiType.heading)
       }
-      Text(conversation.displayTitle)
-        .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(titleColor)
-        .lineLimit(2)
-        .truncationMode(.tail)
-        .help(conversation.displayTitle)
-        .layoutPriority(1)
+      // The locked badge carries the waiting copy; no duplicate title beside it.
+      if conversation.displayState != .locked {
+        Text(conversation.displayTitle)
+          .scaledFont(size: OmiType.heading, weight: .semibold)
+          .foregroundColor(titleColor)
+          .lineLimit(2)
+          .truncationMode(.tail)
+          .help(conversation.displayTitle)
+          .layoutPriority(1)
+      }
       // Fixed so a narrow window truncates the title, never wraps the badge.
       ConversationStatusBadge(state: conversation.displayState)
         .fixedSize()

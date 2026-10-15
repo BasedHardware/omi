@@ -165,8 +165,8 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     memory_job = jobs['memory-maintenance-job']
     memory_env = _MODULE['_render_env_vars'](memory_job['env'])
     assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=true' in memory_env
-    assert 'MEMORY_CANONICAL_MAINTENANCE_FLEX=true' in memory_env
-    assert 'MEMORY_CANONICAL_CONSOLIDATION_ENABLED=true' in memory_env
+    assert 'MEMORY_CANONICAL_MAINTENANCE_FLEX' not in memory_env
+    assert 'MEMORY_CANONICAL_CONSOLIDATION_ENABLED' not in memory_env
     assert 'OMI_BACKGROUND_FLEX_CAPABLE=true' in memory_env
     assert 'MEMORY_ENABLED_USERS' not in memory_env
     assert 'MEMORY_ENABLED=on' in memory_env
@@ -397,7 +397,7 @@ def test_render_prod_emits_memory_maintenance_job_cron_on(capsys, monkeypatch):
     assert 'MEMORY_ENABLED=on' in job_env
     assert 'MEMORY_MODE=' not in job_env
     assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=true' in job_env
-    assert 'MEMORY_CANONICAL_MAINTENANCE_FLEX=true' in job_env
+    assert 'MEMORY_CANONICAL_MAINTENANCE_FLEX' not in job_env
     assert 'OMI_BACKGROUND_FLEX_CAPABLE=true' in job_env
     assert 'MEMORY_ENABLED_USERS' not in job_env
     prod_memory_job = _MANIFEST['environments']['prod']['cloud_run']['jobs']['memory-maintenance-job']

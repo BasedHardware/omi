@@ -2417,6 +2417,17 @@
             ],
             "title": "Id"
           },
+          "original_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Text"
+          },
           "speaker_id": {
             "anyOf": [
               {

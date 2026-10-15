@@ -9,7 +9,11 @@ from diarization import diarization_endpoint, initialize_diarization
 from embedding import embedding_endpoint, embedding_endpoint_v2, initialize_embeddings
 import logging
 
-logging.basicConfig(level=logging.INFO)
+from utils.logging_config import configure_split_stream_logging
+
+# The internal HTTP LB already logs every request. Uvicorn access lines duplicated it.
+configure_split_stream_logging(level=logging.INFO)
+logging.getLogger('uvicorn.access').setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 

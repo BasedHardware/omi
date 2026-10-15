@@ -68,6 +68,16 @@ live in `cost_rate_cards.yaml`; unknown models, non-token units, and cache write
 recorded as `unpriced`, never as zero cost. The estimate uses marginal token rates and deliberately excludes cache
 storage charges and provider request/tool fees.
 
+Dream v2 reasoning enables function tools; its verification lane uses the same
+dedicated route and configured non-Gemini fallback, with structured output and no
+tools. Nested function schemas use Vertex `parametersJsonSchema`. Session turns
+reuse an identical prefix (contract, tools and seed) for Vertex implicit caching.
+[Google documents implicit caching on Provisioned Throughput](https://cloud.google.com/blog/products/ai-machine-learning/vertex-ai-context-caching),
+so this route does not require an explicit cached-content resource, TTL or delete
+call. Cache hits are measured from provider usage, never assumed. Identical
+prefixes improve reuse; provider minimum-size and retention constraints still
+apply. Other lanes retain their existing capabilities and cache behavior.
+
 Set `LLM_GATEWAY_ACCOUNTING_ENABLED=true` only for a gateway identity with Firestore read/write access to the backend
 project (normally `roles/datastore.user`). Ledger writes are detached from the response path,
 `LLM_GATEWAY_ACCOUNTING_WRITE_TIMEOUT_SECONDS` bounds each non-fatal Firestore write and the orderly-shutdown drain,

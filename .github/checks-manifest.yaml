@@ -539,7 +539,7 @@ checks:
     command: ["python3", "app/scripts/mobile_daily_train_test.py"]
     triggers: ["app/scripts/mobile_daily_train.py", "app/scripts/mobile_daily_train_test.py", "app/scripts/mobile_store_promote.py", "codemagic.yaml", ".github/workflows/mobile_daily_train.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "the daily store train may only queue builds for a human release: hold while a submission is in flight, replace only an unreleased approval, iOS MANUAL release type, Play production draft never completed"
+    reason: "the daily store train is self-driving but store-gated: hold while a submission is in flight, replace only an unreleased approval, iOS releases on approval with a pausable phased rollout, Android stages a haltable production rollout and advances it one ladder hop per gate-green day (halted rollouts wait for a human)"
   - id: mobile-daily-train-dispatch
     command: ["python3", ".github/scripts/test_dispatch_mobile_daily_train.py"]
     triggers: [".github/scripts/dispatch_mobile_daily_train.py", ".github/scripts/test_dispatch_mobile_daily_train.py", ".github/scripts/dispatch_mobile_internal_builds.py", ".github/workflows/mobile_daily_train.yml", ".github/checks-manifest.yaml"]
@@ -638,6 +638,16 @@ checks:
     triggers: ["app/lib/**/*.dart"]
     lanes: ["local", "ci"]
     reason: "INV-UI-3: changed app/lib files may not add hand-rolled back glyphs, dialogs, sheets, toasts, clipboard writes, date patterns, UI literals or hardcoded copy (app/docs/ux-contract.md)"
+  - id: mobile-ui-isolate-tests
+    command: ["python3", ".github/scripts/test_check_mobile_ui_isolate.py"]
+    triggers: [".github/scripts/check_mobile_ui_isolate.py", ".github/scripts/test_check_mobile_ui_isolate.py", ".github/scripts/check_mobile_ux_contract.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "INV-PERF-1 is a no-increase ratchet plus a provider-graph check; every rule must keep a case proving it fails on the defect it targets"
+  - id: mobile-ui-isolate
+    command: ["python3", ".github/scripts/check_mobile_ui_isolate.py", "--changed-files", "{changed_files}", "--base", "{base}"]
+    triggers: ["app/lib/**/*.dart"]
+    lanes: ["local", "ci"]
+    reason: "INV-PERF-1: the mobile app stuttered while syncing/recording because history-sized work ran on the UI isolate and proxy update hooks re-notified on every upstream change (app/docs/performance.md); changed app/lib files may not add sync file I/O, provider JSON, frame-rate timers, blur, unsized network images or shrinkWrap lists, and no proxy hook may notify without an early return"
   - id: mobile-l10n-arb-contract
     command: ["python3", "app/scripts/l10n.py", "check"]
     triggers: ["app/lib/l10n/*.arb", "app/scripts/l10n.py", ".github/checks-manifest.yaml"]
@@ -857,8 +867,8 @@ checks:
     lanes: ["local", "ci"]
     reason: "reviewed public inputs, Docker guards, client canaries, no-traffic candidates, and promotion wiring must match one contract"
   - id: public-build-contract-fixtures
-    command: ["python3", ".github/scripts/test_check_public_build_contract.py"]
-    triggers: [".github/scripts/check_public_build_contract.py", ".github/scripts/preflight_public_build_config.py", ".github/scripts/preflight_public_build_runtime.py", ".github/scripts/smoke_public_build_browser.py", ".github/scripts/public_build_acceptance_route.py", ".github/scripts/test_check_public_build_contract.py", "web/personas-open-source/src/app/api/social-profile/route.ts"]
+    command: ["python3", ".github/scripts/test_public_build_runtime_env_input.py"]
+    triggers: [".github/scripts/check_public_build_contract.py", ".github/scripts/preflight_public_build_config.py", ".github/scripts/preflight_public_build_runtime.py", ".github/scripts/smoke_public_build_browser.py", ".github/scripts/public_build_acceptance_route.py", ".github/scripts/test_check_public_build_contract.py", ".github/scripts/test_public_build_runtime_env_input.py", "web/personas-open-source/src/app/api/social-profile/route.ts"]
     lanes: ["local", "ci"]
     reason: "public-build contract and GitHub variable scope fixtures must remain executable"
   - id: web-app-checks

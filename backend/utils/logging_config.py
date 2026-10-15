@@ -74,6 +74,35 @@ def quiet_http_client_loggers() -> None:
             logger.setLevel(logging.WARNING)
 
 
+# NeMo routes every message through this one logger and sets propagate=False,
+# so a root-level change never reaches it. The three markers are emitted once
+# per GPU batch (timestamps INFO, two Lhotse dataloader warnings). Other
+# nemo_logger warnings and errors still pass.
+NEMO_LOGGER_NAME = 'nemo_logger'
+REPETITIVE_NEMO_MESSAGE_MARKERS = (
+    'Timestamps requested, setting decoding timestamps to True',
+    'are ignored by Lhotse dataloader',
+    'You are using a non-tarred dataset and requested tokenization during data sampling',
+)
+
+
+class RepetitiveNeMoMessageFilter(logging.Filter):
+    """Drop NeMo's per-batch timestamps and Lhotse dataloader chatter."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            message = record.getMessage()
+        except Exception:
+            return True
+        return not any(marker in message for marker in REPETITIVE_NEMO_MESSAGE_MARKERS)
+
+
+def quiet_repetitive_nemo_logs() -> None:
+    logger = logging.getLogger(NEMO_LOGGER_NAME)
+    if not any(isinstance(item, RepetitiveNeMoMessageFilter) for item in logger.filters):
+        logger.addFilter(RepetitiveNeMoMessageFilter())
+
+
 class _MaxLevelFilter(logging.Filter):
     """Only allow records strictly below ``level`` (keeps errors off stdout)."""
 

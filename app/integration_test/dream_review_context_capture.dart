@@ -5,7 +5,8 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/review.dart';
 import 'package:omi/l10n/app_localizations.dart';
-import 'package:omi/pages/review/widgets/review_question_card.dart';
+import 'package:omi/pages/review/recent_changes_page.dart';
+import 'support/dream_changes_fixture.dart';
 import 'package:omi/providers/review_provider.dart';
 import 'package:omi/ui/ui.dart';
 
@@ -28,12 +29,9 @@ Future<void> main() async {
       theme: buildOmiTheme(brightness: Brightness.dark),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        body: SafeArea(
-            child: Padding(
-          padding: const EdgeInsets.all(OmiSpacing.md),
-          child: ListView(children: [ReviewQuestionCard(item: dreamSpellingQuestion)]),
-        )),
+      home: RecentChangesPage(
+        loadChanges: ({cursor}) async => ApiSuccess(ReviewChangesPage(changes: [dreamSyntheticChange()])),
+        setUndone: (id, {required undone}) async => ApiSuccess(dreamSyntheticChange(undone: undone)),
       ),
     ),
   ));

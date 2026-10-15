@@ -1,63 +1,29 @@
-"""Bounded labels for dream health; never include identities or provider bodies."""
+"""Count-only Dream harness health with bounded labels; no owner or content labels."""
 
 import logging
-import json
-
-from prometheus_client import Counter
-from utils.dream_diagnostics import counts_only
-
-PASSES = Counter('omi_dream_pass_total', 'Dream terminal pass outcomes', ['status', 'error_type'])
-ABANDONED = Counter('omi_dream_abandoned_total', 'Dream abandoned leases reclaimed', ['context_mode'])
-
-POLICY_WARNINGS = Counter('omi_dream_policy_warning_total', 'Ignored auto-apply policy kinds')
-
-TOKENS = Counter('omi_dream_tokens_total', 'Observed dream model tokens')
-RESPONSE_RETRIES = Counter('omi_dream_response_retries_total', 'Dream malformed/truncated JSON response retries')
-DECISIONS = Counter('omi_dream_decision_total', 'Full-mode Dream decisions', ['decision'])
-DECISION_COUNTS = ('auto_applied_unanimous', 'suggested_majority', 'questions_offered', 'questions_dropped_low_value')
-CANARY = Counter('omi_dream_canary_total', 'Dream synthetic loop outcomes', ['status', 'stage'])
-
-REJECTED = Counter('omi_dream_rejected_total', 'Dream deterministic proposal rejections', ['reason'])
-REJECTION_REASONS = {
-    'nonempty_field',
-    'insufficient_speech',
-    'placeholder',
-    'ungrounded',
-    'overview_format',
-    'language_not_defect',
-    'not_a_failure',
-    'ref_leak',
-    'feedback_cap',
-    'privacy_rejected',
-    'invalid_evidence',
-    'invalid_spelling',
-    'stale_task_evidence',
-    'task_too_recent',
-    'bad_target',
-    'common_word',
-    'context_target',
-    'ungrounded_spelling',
-    'edit_cap',
-    'invalid_edit',
-    'duplicate_edit',
-    'noop',
-    'contradictory_spelling',
-    'invalid_question_evidence',
-    'consensus_rejected',
-}
+from prometheus_client import Counter, Histogram
+from config.dream_agent import KNOWN_KINDS
+from utils.agent_capabilities.errors import CONFLICT_CODES
 
 logger = logging.getLogger(__name__)
-EVIDENCE_CHARS = Counter('omi_dream_evidence_chars_total', 'Projected dream evidence characters', ['lane'])
-RETRIEVAL = Counter(
-    'omi_dream_retrieval_total', 'Dream retrieval operations and candidate dispositions', ['path', 'count']
+PASSES = Counter('omi_dream_pass_total', 'Dream terminal outcomes', ['status', 'error_type'])
+TOKENS = Counter('omi_dream_tokens_total', 'Observed billable Dream tokens')
+SESSION_TOKENS = Histogram(
+    'omi_dream_session_tokens',
+    'Observed model tokens per owner size bucket',
+    ['bucket'],
+    buckets=(1000, 5000, 10000, 25000, 50000, 100000, 200000, 300000),
 )
-RETRIEVAL_FAILURES = Counter(
-    'omi_dream_retrieval_failure_total', 'Dream retrieval exception classes', ['path', 'exception_class']
-)
-TARGET_CONTEXT = Counter('omi_dream_target_context_total', 'Dream target retrieval coverage', ['coverage'])
-DIRTY_READS = Counter('omi_dream_dirty_read_total', 'Dream queue selection dispositions', ['count'])
-INPUT_CONTENT = Counter('omi_dream_input_content_total', 'Dream input content availability', ['count'])
-CONTEXT_BUDGET = Counter('omi_dream_context_budget_total', 'Dream context allocation diagnostics', ['count'])
+TURNS = Counter('omi_dream_turns_total', 'Dream reasoning turns')
+TOOLS = Counter('omi_dream_tool_total', 'Dream tool calls', ['tool'])
+REJECTED = Counter('omi_dream_rejected_total', 'Immediate proposal rejection reasons', ['reason'])
+RESUBMITS = Counter('omi_dream_resubmits_succeeded_total', 'Rejected proposals successfully restaged')
+DECISIONS = Counter('omi_dream_verifier_total', 'Independent verifier decisions', ['decision'])
+APPLIED = Counter('omi_dream_applied_total', 'Journaled verified changes', ['kind'])
+UNDO = Counter('omi_dream_undo_total', 'Applied changes undone', ['kind'])
+CACHE = Counter('omi_dream_cache_tokens_total', 'Reported cache usage; unknown is separate', ['status'])
+CANARY = Counter('omi_dream_canary_total', 'Synthetic harness outcomes', ['status', 'stage'])
+ABANDONED = Counter('omi_dream_abandoned_total', 'Stale owner leases reclaimed')
 
 ERROR_TYPES = {
     'TimeoutError',
@@ -75,14 +41,14 @@ ERROR_TYPES = {
     'NotFound',
     'DeadlineExceeded',
     'AdmissionDenied',
-    'DreamTranscriptReadError',
+    'AgentTranscriptReadError',
     'InvalidModelResponse',
     'LeaseAbandoned',
 }
 
 
 # An exact allowlist, rather than logging arbitrary messages beginning with dream_.
-DREAM_VALUE_ERROR_CODES = frozenset(
+LEGACY_ERROR_CODES = frozenset(
     {
         'dream_reasoning_budget',
         'dream_sample_plan',
@@ -139,91 +105,153 @@ def error_code(exc):
     return code if isinstance(code, str) and code in DREAM_VALUE_ERROR_CODES else None
 
 
+BASE_VALUE_ERROR_CODES = (
+    LEGACY_ERROR_CODES
+    | frozenset(CONFLICT_CODES.values())
+    | frozenset(
+        [
+            'dream_argument_budget',
+            'agent_person_already_merged',
+            'dream_capacity_wait',
+            'dream_capture_speech_insufficient',
+            'dream_capture_speech_mismatch',
+            'dream_capture_time_unavailable',
+            'dream_captures_do_not_overlap',
+            'dream_common_word',
+            'dream_contradictory_spelling',
+            'dream_conversation_user_protected',
+            'dream_cursor_collection',
+            'dream_disabled',
+            'dream_edit_cap',
+            'dream_frame_evidence',
+            'dream_gateway_failure',
+            'dream_gateway_rejected',
+            'dream_input_token_budget',
+            'dream_invalid_arguments',
+            'dream_invalid_cache_usage',
+            'dream_invalid_conversation_merge',
+            'dream_invalid_entity',
+            'dream_invalid_entity_summary',
+            'dream_invalid_lane',
+            'dream_invalid_language_tag',
+            'dream_invalid_language_target',
+            'dream_invalid_memory',
+            'dream_invalid_person',
+            'dream_invalid_person_merge',
+            'dream_invalid_question_evidence',
+            'dream_invalid_spelling',
+            'dream_invalid_target',
+            'dream_invalid_task',
+            'dream_invalid_tool_calls',
+            'dream_invalid_usage',
+            'dream_invalid_vocabulary',
+            'dream_language_changed',
+            'dream_language_speech_insufficient',
+            'dream_missing_duplicate',
+            'dream_person_changed',
+            'dream_person_user_protected',
+            'dream_proposal_cap',
+            'dream_question_kind',
+            'dream_reference_cap',
+            'dream_response_truncated',
+            'dream_search_token_budget',
+            'dream_summary_insufficient_speech',
+            'dream_summary_nonempty_field',
+            'dream_summary_overview_format',
+            'dream_summary_placeholder',
+            'dream_summary_ref_leak',
+            'dream_summary_ungrounded',
+            'dream_suppressed',
+            'dream_target_unavailable',
+            'dream_task_changed',
+            'dream_task_evidence',
+            'dream_task_merge_metadata_mismatch',
+            'dream_task_user_protected',
+            'dream_unknown_cursor',
+            'dream_unknown_evidence',
+            'dream_unknown_person',
+            'dream_unknown_tool',
+            'dream_unknown_vocabulary',
+            'dream_unsupported_edit',
+            'dream_unsupported_spelling_target',
+            'dream_vocabulary_cap',
+            'dream_vocabulary_requires_acceptance',
+        ]
+    )
+)
+
+
 def record_pass(report):
     status = report.get('status', 'failed')
-    if status not in {'complete', 'failed', 'deadline', 'not_admitted', 'waiting'}:
-        status = 'failed'
+    status = status if status in {'complete', 'failed', 'deadline', 'not_admitted', 'waiting'} else 'failed'
     error = report.get('error_type')
     PASSES.labels(status, error if error in ERROR_TYPES else 'other' if error else 'none').inc()
-    TOKENS.inc(max(0, int(report.get('tokens', 0))))
-    retries = max(0, int(report.get('response_retries', 0)))
-    RESPONSE_RETRIES.inc(retries)
-    if report.get('context_mode') == 'full':
-        for decision in DECISION_COUNTS:
-            DECISIONS.labels(decision).inc(max(0, int(report.get(decision, 0))))
-
+    tokens = max(0, int(report.get('tokens', 0)))
+    TOKENS.inc(tokens)
+    bucket = report.get('size_bucket')
+    if bucket in {'empty', 'light', 'medium', 'heavy'}:
+        SESSION_TOKENS.labels(bucket).observe(tokens)
+    TURNS.inc(max(0, int(report.get('turns', 0))))
+    for tool, count in report.get('tool_counts', {}).items():
+        if tool in {'search', 'read', 'propose_edit', 'ask', 'learn_term', 'finish', 'unknown'}:
+            TOOLS.labels(tool).inc(max(0, int(count)))
     for reason, count in report.get('rejected', {}).items():
-        if reason in REJECTION_REASONS:
-            REJECTED.labels(reason).inc(max(0, int(count)))
-
-    triage = max(0, int(report.get('triage_evidence_chars', 0)))
-    reasoning = max(0, int(report.get('reasoning_evidence_chars', 0)))
-    EVIDENCE_CHARS.labels('triage').inc(triage)
-    EVIDENCE_CHARS.labels('reasoning').inc(reasoning)
-    diagnostics = counts_only(report)
-    for path, counts in diagnostics['retrieval_counts'].items():
-        for key, count in counts.items():
-            RETRIEVAL.labels(path, key).inc(count)
-    for path, counts in diagnostics['retrieval_failure_counts'].items():
-        for name, count in counts.items():
-            RETRIEVAL_FAILURES.labels(path, name).inc(count)
-    for key, count in diagnostics['dirty_counts'].items():
-        DIRTY_READS.labels(key).inc(count)
-    for key, count in diagnostics['target_context_counts'].items():
-        TARGET_CONTEXT.labels(key).inc(count)
-    for key, count in diagnostics['input_content_counts'].items():
-        INPUT_CONTENT.labels(key).inc(count)
-    for key, count in diagnostics['context_budget_counts'].items():
-        CONTEXT_BUDGET.labels(key).inc(count)
-    logger.info(
-        'Dream pass status=%s error_code=%s context_mode=%s input_tokens_estimate=%d targets=%d records=%d response_retries=%d '
-        'samples_requested=%d samples_returned=%d samples_failed=%d consensus_threshold=%d '
-        'samples_attempted=%d samples_capacity_wait=%d capacity_retries=%d '
-        'triage_evidence_chars=%d reasoning_evidence_chars=%d '
-        'dropped_invalid=%s validation_errors=%s rejected=%s poisoned=%d retrieval_counts=%s '
-        'retrieval_failure_counts=%s dirty_counts=%s target_context_counts=%s input_content_counts=%s context_budget_counts=%s',
-        status,
-        report.get('error_code') if report.get('error_code') in DREAM_VALUE_ERROR_CODES else 'none',
-        'full' if report.get('context_mode') == 'full' else 'bounded',
-        max(0, int(report.get('input_tokens_estimate', 0))),
-        max(0, int(report.get('targets', 0))),
-        max(0, int(report.get('records', 0))),
-        retries,
-        max(0, int(report.get('samples_requested', 0))),
-        max(0, int(report.get('samples_returned', 0))),
-        max(0, int(report.get('samples_failed', 0))),
-        max(0, int(report.get('consensus_threshold', 0))),
-        max(0, int(report.get('samples_attempted', 0))),
-        max(0, int(report.get('samples_capacity_wait', 0))),
-        max(0, int(report.get('capacity_retries', 0))),
-        triage,
-        reasoning,
-        json.dumps(report.get('dropped_invalid', {}), sort_keys=True),
-        json.dumps(report.get('validation_errors', {}), sort_keys=True),
-        json.dumps(
-            {
-                reason: max(0, int(count))
-                for reason, count in report.get('rejected', {}).items()
-                if reason in REJECTION_REASONS
-            },
-            sort_keys=True,
-        ),
-        max(0, int(report.get('poisoned', 0))),
-        json.dumps(diagnostics['retrieval_counts'], sort_keys=True),
-        json.dumps(diagnostics['retrieval_failure_counts'], sort_keys=True),
-        json.dumps(diagnostics['dirty_counts'], sort_keys=True),
-        json.dumps(diagnostics['target_context_counts'], sort_keys=True),
-        json.dumps(diagnostics['input_content_counts'], sort_keys=True),
-        json.dumps(diagnostics['context_budget_counts'], sort_keys=True),
-    )
-    if report.get('context_mode') == 'full':
-        logger.info(
-            'Dream decisions=%s',
-            json.dumps({key: max(0, int(report.get(key, 0))) for key in DECISION_COUNTS}, sort_keys=True),
+        # Exact source-owned reason codes only. Arbitrary exception messages
+        # and model-supplied fields can never become metric labels.
+        label = (
+            reason
+            if reason in DREAM_VALUE_ERROR_CODES or reason in {'schema', 'dream_stale_or_unavailable'}
+            else 'other'
         )
+        REJECTED.labels(label).inc(max(0, int(count)))
+    RESUBMITS.inc(max(0, int(report.get('resubmits_succeeded', 0))))
+    for decision, count in report.get('verifier_outcomes', {}).items():
+        if decision in {'agree', 'split', 'disagree', 'unverified'}:
+            DECISIONS.labels(decision).inc(max(0, int(count)))
+    for row in report.get('outcomes', []):
+        if row.get('status') == 'applied' and row.get('kind') in KNOWN_KINDS:
+            APPLIED.labels(row['kind']).inc()
+    for key, label in [
+        ('cached_tokens', 'cached'),
+        ('uncached_tokens', 'uncached'),
+        ('cache_unreported_tokens', 'unreported'),
+    ]:
+        CACHE.labels(label).inc(max(0, int(report.get(key, 0))))
+    logger.info(
+        'Dream status=%s bucket=%s tokens=%d turns=%d tool_calls=%d verifier_calls=%d applied=%d',
+        status,
+        bucket if bucket in {'empty', 'light', 'medium', 'heavy'} else 'unknown',
+        tokens,
+        max(0, int(report.get('turns', 0))),
+        sum(max(0, int(count)) for count in report.get('tool_counts', {}).values()),
+        max(0, int(report.get('verifier_calls', 0))),
+        sum(row.get('status') == 'applied' for row in report.get('outcomes', [])),
+    )
 
 
-def record_reclaimed(age_s, context_mode):
-    PASSES.labels('failed', 'LeaseAbandoned').inc()
-    ABANDONED.labels(context_mode).inc()
-    logger.info('Dream lease reclaimed age_s=%d mode=%s', age_s, context_mode)
+DREAM_VALUE_ERROR_CODES = (
+    BASE_VALUE_ERROR_CODES
+    | frozenset(code.replace('dream_', 'agent_', 1) for code in BASE_VALUE_ERROR_CODES)
+    | {
+        'agent_target_term_missing',
+        'agent_target_quote_mismatch',
+        'agent_fragment_not_supported',
+        'agent_unread_ref',
+        'agent_question_policy',
+    }
+)
+
+
+def record_reclaimed(age_s, size_bucket=None):
+    ABANDONED.inc()
+    logger.info('Dream lease reclaimed age_s=%d', age_s)
+
+
+def record_undo(change):
+    kind = change.edit_kind or change.kind
+    UNDO.labels(kind if kind in KNOWN_KINDS else 'other').inc()
+
+
+OVERLAY_READ_FAILURES = Counter(
+    "agent_overlay_read_failures_total", "Original transcript rendered after projection failure"
+)

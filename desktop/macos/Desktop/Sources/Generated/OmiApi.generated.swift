@@ -5964,6 +5964,7 @@ public enum OmiAPI {
     public let end: Double
     public let id: String?
     public let isUser: Bool
+    public let originalText: String?
     public let personId: String?
     public let speaker: String?
     public let speakerId: Int?
@@ -5978,6 +5979,7 @@ public enum OmiAPI {
       case end
       case id
       case isUser = "is_user"
+      case originalText = "original_text"
       case personId = "person_id"
       case speaker
       case speakerId = "speaker_id"
@@ -5994,6 +5996,7 @@ public enum OmiAPI {
       end = try c.decode(Double.self, forKey: .end)
       id = try c.decodeIfPresent(String.self, forKey: .id)
       isUser = try c.decode(Bool.self, forKey: .isUser)
+      originalText = try c.decodeIfPresent(String.self, forKey: .originalText)
       personId = try c.decodeIfPresent(String.self, forKey: .personId)
       speaker = try c.decodeIfPresent(String.self, forKey: .speaker)
       speakerId = try c.decodeIfPresent(Int.self, forKey: .speakerId)
@@ -6005,10 +6008,11 @@ public enum OmiAPI {
       translations = try c.decodeIfPresent([Translation].self, forKey: .translations)
     }
 
-    public init(end: Double, id: String? = nil, isUser: Bool, personId: String? = nil, speaker: String? = nil, speakerId: Int? = nil, speakerLabelSource: String? = nil, speechProfileProcessed: Bool? = nil, start: Double, sttProvider: String? = nil, text: String, translations: [Translation]? = nil) {
+    public init(end: Double, id: String? = nil, isUser: Bool, originalText: String? = nil, personId: String? = nil, speaker: String? = nil, speakerId: Int? = nil, speakerLabelSource: String? = nil, speechProfileProcessed: Bool? = nil, start: Double, sttProvider: String? = nil, text: String, translations: [Translation]? = nil) {
       self.end = end
       self.id = id
       self.isUser = isUser
+      self.originalText = originalText
       self.personId = personId
       self.speaker = speaker
       self.speakerId = speakerId
@@ -19097,7 +19101,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func syncLocalFilesV2V2SyncLocalFilesPost(client: OmiApiClient, conversationId: String? = nil, recordingSessionId: String? = nil, audioStartSeconds: Double? = nil, audioEndSeconds: Double? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, xRequestID: String? = nil, xCloudTraceContext: String? = nil, xOmiSyncCaptureManifest: String? = nil, xOmiConversationGeolocation: String? = nil, authorization: String? = nil) async throws -> Void {
+  public static func syncLocalFilesV2V2SyncLocalFilesPost(client: OmiApiClient, conversationId: String? = nil, recordingSessionId: String? = nil, audioStartSeconds: Double? = nil, audioEndSeconds: Double? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, xRequestID: String? = nil, xCloudTraceContext: String? = nil, xOmiSyncCaptureManifest: String? = nil, xOmiFirmwareVersion: String? = nil, xOmiDeviceModel: String? = nil, xOmiConversationGeolocation: String? = nil, authorization: String? = nil) async throws -> Void {
     let _path = "/v2/sync-local-files"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -19129,6 +19133,8 @@ public enum OmiAPI {
     if let xRequestID { req.setValue(String(xRequestID), forHTTPHeaderField: "X-Request-ID") }
     if let xCloudTraceContext { req.setValue(String(xCloudTraceContext), forHTTPHeaderField: "X-Cloud-Trace-Context") }
     if let xOmiSyncCaptureManifest { req.setValue(String(xOmiSyncCaptureManifest), forHTTPHeaderField: "X-Omi-Sync-Capture-Manifest") }
+    if let xOmiFirmwareVersion { req.setValue(String(xOmiFirmwareVersion), forHTTPHeaderField: "X-Omi-Firmware-Version") }
+    if let xOmiDeviceModel { req.setValue(String(xOmiDeviceModel), forHTTPHeaderField: "X-Omi-Device-Model") }
     if let xOmiConversationGeolocation { req.setValue(String(xOmiConversationGeolocation), forHTTPHeaderField: "X-Omi-Conversation-Geolocation") }
     if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
     let (data, resp) = try await URLSession.shared.data(for: req)

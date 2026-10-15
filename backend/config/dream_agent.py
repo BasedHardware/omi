@@ -1,110 +1,69 @@
-"""Default-off dream admission and bounded budgets, read at invocation time."""
+"""Live global kill switch, eligibility and hard all-user Dream ceilings."""
 
 import math
 import os
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
+from config.plan_catalog import PAID_PLAN_IDS
 
-AUTO = frozenset({'title', 'overview', 'spelling'})
-SUGGEST = frozenset(
-    {'vocabulary', 'close_task', 'retire_task', 'merge_people', 'merge_memories', 'memory', 'entity_summary'}
-)
+from utils.agent_capabilities.registry import AUTO, KINDS
+
+SUGGEST = frozenset(name for name, spec in KINDS.items() if spec.default_policy == 'suggest')
 KNOWN_KINDS = AUTO | SUGGEST
 SUGGESTIONS_PER_DAY = 3
-
-# The reserved Dream models have a 1M input window. Keep completion headroom
-# inside that window too, even when an operator requests a larger budget.
-FULL_CONTEXT_WINDOW = 1048576
-# K=3 sequential 480s calls, one 120s cooldown and 60s effect headroom.
-# Extra retries/samples use survivors when this request-wide deadline cannot fit them.
-FULL_PASS_SECONDS = 1620
-FULL_MODEL_SECONDS = 480
-FULL_COMPLETION_TOKENS = 32768
-FULL_THINKING_TOKENS = 16384
-FULL_DRAIN_SECONDS = FULL_PASS_SECONDS + 60
-PASS_TIMEOUT_SECONDS = 180
-FINISH_MARGIN_SECONDS = 30
-DRAIN_TIMEOUT_SECONDS = PASS_TIMEOUT_SECONDS + FINISH_MARGIN_SECONDS + 30
+PASS_TIMEOUT_SECONDS = 1620
+DRAIN_TIMEOUT_SECONDS = 1680
+HTTP_TIMEOUT_SECONDS = 1710
 LEASE_RECLAIM_MARGIN_SECONDS = 60
+FINISH_MARGIN_SECONDS = 30
 
 
-def context_mode(uid: str) -> str:
-    allowed = {s.strip() for s in os.getenv('DREAM_AGENT_FULL_CONTEXT_UIDS', '').split(',') if s.strip()}
+def enabled():
+    from config.dream_control import allowed
+
+    return os.getenv('DREAM_AGENT_ENABLED', 'false').strip().lower() == 'true' and allowed()
+
+
+def mode():
+    return 'on' if enabled() else 'off'
+
+
+def eligibility():
+    value = os.getenv('DREAM_AGENT_ELIGIBILITY', 'all').strip().lower()
+    return value if value in {'all', 'paid', 'allowlist'} else 'invalid'
+
+
+def _allowlisted(uid):
+    return uid in {item.strip() for item in os.getenv('DREAM_AGENT_UID_ALLOWLIST', '').split(',') if item.strip()}
+
+
+def may_be_eligible(uid):
     return (
-        'full'
-        if os.getenv('DREAM_AGENT_CONTEXT_MODE', 'bounded').strip().lower() == 'full' and uid in allowed
-        else 'bounded'
+        bool(uid)
+        and not uid.startswith('dream-canary-')
+        and eligibility() != 'invalid'
+        and (eligibility() != 'allowlist' or _allowlisted(uid))
     )
 
 
-def full_context_enabled() -> bool:
-    return os.getenv('DREAM_AGENT_CONTEXT_MODE', 'bounded').strip().lower() == 'full' and bool(
-        {s.strip() for s in os.getenv('DREAM_AGENT_FULL_CONTEXT_UIDS', '').split(',') if s.strip()}
+def eligible(uid, user):
+    if not may_be_eligible(uid) or user.get('dream_canary') or user.get('deleted') or user.get('deletion_requested_at'):
+        return False
+    policy = eligibility()
+    return (
+        policy == 'all'
+        or (policy == 'allowlist' and _allowlisted(uid))
+        or (policy == 'paid' and (user.get('subscription') or {}).get('plan', user.get('plan', '')) in PAID_PLAN_IDS)
     )
 
 
-def auto_apply_kinds(uid: str | None = None) -> frozenset[str]:
-    """An override may narrow safe automation; risky operations always require Review."""
-    value = os.getenv('DREAM_AGENT_AUTO_APPLY_KINDS')
-    if value is None:
-        return AUTO
-    requested = {kind.strip() for kind in value.split(',') if kind.strip()}
-    ignored = requested - AUTO
-    if ignored:
-        import logging
-        from utils.dream_metrics import POLICY_WARNINGS
-
-        POLICY_WARNINGS.inc(len(ignored))
-        logging.getLogger(__name__).warning('Dream auto-apply policy ignored kinds count=%d', len(ignored))
-    effective = frozenset(requested & AUTO)
-    return effective | {'spelling'} if uid is not None and context_mode(uid) == 'full' else effective
+def auto_apply_kinds(uid=None):
+    return AUTO
 
 
-def apply_policy(kind: str, automatic: frozenset[str]) -> str:
+def apply_policy(kind, automatic):
     if kind not in KNOWN_KINDS:
         raise ValueError('Unknown dream edit kind')
     return 'auto' if kind in automatic else 'suggest'
-
-
-def mode() -> str:
-    value = os.getenv('DREAM_AGENT_MODE', 'off').strip().lower()
-    return value if value in {'shadow', 'on'} else 'off'
-
-
-def _allowlisted(uid: str) -> bool:
-    return uid in {s.strip() for s in os.getenv('DREAM_AGENT_UID_ALLOWLIST', '').split(',') if s.strip()}
-
-
-def _testflight_minimum_build() -> int | None:
-    minimum_build = os.getenv('DREAM_AGENT_TESTFLIGHT_MIN_BUILD', '').strip()
-    if not minimum_build or os.getenv('DREAM_AGENT_TESTFLIGHT_ENABLED', 'false').lower() != 'true':
-        return None
-    try:
-        minimum = int(minimum_build)
-    except ValueError:
-        return None
-    return minimum if minimum >= 1 else None
-
-
-def may_be_eligible(uid: str) -> bool:
-    """Cheap pre-check before reading the user document; False means `eligible` is False."""
-    return uid != canary_uid() and (_allowlisted(uid) or _testflight_minimum_build() is not None)
-
-
-def eligible(uid: str, user: dict) -> bool:
-    if uid == canary_uid() or user.get('dream_canary'):
-        return False
-    if _allowlisted(uid):
-        return True
-    minimum = _testflight_minimum_build()
-    if minimum is None:
-        return False
-    app_build = user.get('dream_app_build')
-    return (
-        user.get('dream_release_channel') == 'testflight'
-        and isinstance(app_build, int)
-        and not isinstance(app_build, bool)
-        and app_build >= minimum
-    )
 
 
 def canary_uid() -> str:
@@ -118,7 +77,7 @@ def canary_eligible(uid: str, user: dict) -> bool:
 
 
 def self_report_enabled() -> bool:
-    return os.getenv('DREAM_SELF_REPORT_MODE', 'off').strip().lower() == 'on'
+    return enabled()
 
 
 def number(key: str, default: float) -> float:
@@ -130,43 +89,31 @@ def number(key: str, default: float) -> float:
 
 @dataclass(frozen=True)
 class Caps:
-    tokens: int = 24000
+    tokens: int = 256000
     passes: int = 2
-    edits: int = 10
-    daily_usd: float = 20.0
+    edits: int = 25
+    daily_usd: float = 10.0
+    global_daily_usd: float = 15000.0
+    global_spend_shards: int = 64
+    expected_tokens: int = 12000
+    tokens_per_minute: int = 2000000
     max_usd_per_token: float = 0.00001
     undo_rate: float = 0.2
     undo_min_samples: int = 10
     anonymous_k: int = 20
     manual_runs: int = 3
     completion_tokens: int = 4096
-    context_mode: str = 'bounded'
-    samples: int = 1
-
-    def for_uid(self, uid):
-        if context_mode(uid) != 'full':
-            return self if self.context_mode == 'bounded' else replace(self, context_mode='bounded')
-        completion = max(
-            128, min(FULL_COMPLETION_TOKENS, int(number('DREAM_AGENT_FULL_COMPLETION_TOKENS', FULL_COMPLETION_TOKENS)))
-        )
-        inputs = max(0, min(FULL_CONTEXT_WINDOW - completion, int(number('DREAM_AGENT_FULL_CONTEXT_TOKENS', 400000))))
-        samples = max(1, min(8, int(number('DREAM_AGENT_FULL_SAMPLES', 3))))
-        return replace(
-            self,
-            context_mode='full',
-            tokens=inputs + completion,
-            completion_tokens=completion,
-            edits=25,
-            samples=samples,
-        )
 
     @classmethod
     def from_env(cls):
         return cls(
-            tokens=int(number('DREAM_AGENT_TOKENS_PER_PASS', 24000)),
+            tokens=int(number('DREAM_AGENT_TOKENS_PER_PASS', 256000)),
             passes=int(number('DREAM_AGENT_PASSES_PER_DAY', 2)),
-            edits=int(number('DREAM_AGENT_EDITS_PER_PASS', 10)),
-            daily_usd=number('DREAM_AGENT_DAILY_USD', 20),
+            edits=int(number('DREAM_AGENT_EDITS_PER_PASS', 25)),
+            daily_usd=number('DREAM_AGENT_DAILY_USD', 10),
+            global_daily_usd=number('DREAM_AGENT_GLOBAL_DAILY_USD', 15000),
+            expected_tokens=int(number('DREAM_AGENT_EXPECTED_TOKENS', 12000)),
+            tokens_per_minute=int(number('DREAM_AGENT_TOKENS_PER_MINUTE', 2000000)),
             max_usd_per_token=number('DREAM_AGENT_MAX_USD_PER_TOKEN', 0.00001),
             undo_rate=number('DREAM_AGENT_UNDO_RATE', 0.2),
             undo_min_samples=int(number('DREAM_AGENT_UNDO_MIN_SAMPLES', 10)),
@@ -175,18 +122,11 @@ class Caps:
         )
 
     @property
-    def reservation_usd(self) -> float:
-        # Full mode may repeat its request once after truncated/invalid JSON.
-        return self.tokens * (2 * self.samples if self.context_mode == 'full' else 1) * self.max_usd_per_token
+    def reservation_usd(self):
+        return min(self.tokens, self.expected_tokens) * self.max_usd_per_token
 
 
-def backfill_share() -> float:
-    return min(1.0, number('DREAM_AGENT_BACKFILL_SHARE', 0.1))
-
-
-def random_seed_share() -> float:
-    return min(1.0, number('DREAM_AGENT_RANDOM_SEED_SHARE', 0.1))
-
-
-def concurrency() -> int:
-    return max(1, min(8, int(number('DREAM_AGENT_CONCURRENCY', 2))))
+def concurrency():
+    caps = Caps.from_env()
+    derived = math.ceil(caps.tokens_per_minute / max(1, caps.expected_tokens) * 2)
+    return max(1, min(512, int(number('DREAM_AGENT_CONCURRENCY', derived))))

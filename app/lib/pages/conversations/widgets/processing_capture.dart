@@ -1,3 +1,5 @@
+import 'package:omi/ui/components/local_stt_recovery_notice.dart';
+import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'dart:async';
 
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -138,39 +140,46 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           return const SizedBox.shrink();
         }
 
-        return GestureDetector(
-          onTap: () async {
-            // Offline/batch mode has no live transcript — the card is informational,
-            // so swallow taps instead of opening the (empty) capturing page. Covers both
-            // device batch and the phone-mic Transcribe Later session.
-            if (provider.isPhoneMicBatchRecording ||
-                (SharedPreferencesUtil().batchModeEnabled && provider.havingRecordingDevice)) {
-              return;
-            }
-            final isCaptureActive = provider.recordingState == RecordingState.record ||
-                provider.recordingState == RecordingState.systemAudioRecord ||
-                provider.recordingState == RecordingState.deviceRecord ||
-                provider.recordingState == RecordingState.initialising ||
-                provider.recordingState == RecordingState.interrupted ||
-                provider.recordingState == RecordingState.pause ||
-                provider.havingRecordingDevice ||
-                provider.isPaused;
-            if (!isCaptureActive && provider.segments.isEmpty && provider.photos.isEmpty) return;
-            PlatformManager.instance.analytics.liveTranscriptCardClicked(
-              hasSegments: provider.segments.isNotEmpty,
-              hasPhotos: provider.photos.isNotEmpty,
-              segmentCount: provider.segments.length,
-              photoCount: provider.photos.length,
-            );
-            routeToPage(context, ConversationCapturingPage(topConversationId: provider.topConversationId));
-          },
-          child: Semantics(
-            button: !batch,
-            hint: batch ? null : context.l10n.liveTranscript,
-            child: _cardShell(_buildUnifiedRecordingUI(provider),
-                padding: batch ? _liveCardPadding : EdgeInsets.zero, decorated: batch),
+        return Column(children: [
+          if (provider.localSttFailure case final failure?)
+            LocalSttRecoveryNotice(
+                failure: failure,
+                onRetry: provider.retryLocalTranscription,
+                onSetup: () => routeToPage(context, const TranscriptionSettingsPage())),
+          GestureDetector(
+            onTap: () async {
+              // Offline/batch mode has no live transcript — the card is informational,
+              // so swallow taps instead of opening the (empty) capturing page. Covers both
+              // device batch and the phone-mic Transcribe Later session.
+              if (provider.isPhoneMicBatchRecording ||
+                  (SharedPreferencesUtil().batchModeEnabled && provider.havingRecordingDevice)) {
+                return;
+              }
+              final isCaptureActive = provider.recordingState == RecordingState.record ||
+                  provider.recordingState == RecordingState.systemAudioRecord ||
+                  provider.recordingState == RecordingState.deviceRecord ||
+                  provider.recordingState == RecordingState.initialising ||
+                  provider.recordingState == RecordingState.interrupted ||
+                  provider.recordingState == RecordingState.pause ||
+                  provider.havingRecordingDevice ||
+                  provider.isPaused;
+              if (!isCaptureActive && provider.segments.isEmpty && provider.photos.isEmpty) return;
+              PlatformManager.instance.analytics.liveTranscriptCardClicked(
+                hasSegments: provider.segments.isNotEmpty,
+                hasPhotos: provider.photos.isNotEmpty,
+                segmentCount: provider.segments.length,
+                photoCount: provider.photos.length,
+              );
+              routeToPage(context, ConversationCapturingPage(topConversationId: provider.topConversationId));
+            },
+            child: Semantics(
+              button: !batch,
+              hint: batch ? null : context.l10n.liveTranscript,
+              child: _cardShell(_buildUnifiedRecordingUI(provider),
+                  padding: batch ? _liveCardPadding : EdgeInsets.zero, decorated: batch),
+            ),
           ),
-        );
+        ]);
       },
     );
   }
@@ -281,7 +290,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       osHoldsMic: provider.isCallActive,
     );
     final micTaken = interruption == CaptureInterruption.micTaken;
-    final hasTerminalTranscriptionFailure = provider.terminalTranscriptionFailure != null;
+    final hasTerminalTranscriptionFailure =
+        provider.terminalTranscriptionFailure != null || provider.localSttFailure != null;
     final bufferingFor = provider.customSttBufferingDuration;
 
     // Determine if this is an OmiGlass-type device (captures photos)
@@ -300,12 +310,15 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     final starting = isPhoneRecording &&
         provider.recordingState == RecordingState.initialising &&
         displayState == CaptureDisplayState.listening;
-    final copy = unverified
-        ? CaptureCardCopy(context.l10n.captureSourcePendant)
-        : starting
-            ? CaptureCardCopy(context.l10n.captureStarting)
-            : captureCardCopy(context.l10n, displayState,
-                micTaken: micTaken, socketDown: !provider.transcriptServiceReady);
+    final copy = provider.localSttFailure != null
+        ? CaptureCardCopy(context.l10n.transcriptionUnavailable,
+            detail: context.l10n.setupOnDevice, explanation: context.l10n.transcriptionUnavailableRecordingSaved)
+        : unverified
+            ? CaptureCardCopy(context.l10n.captureSourcePendant)
+            : starting
+                ? CaptureCardCopy(context.l10n.captureStarting)
+                : captureCardCopy(context.l10n, displayState,
+                    micTaken: micTaken, socketDown: !provider.transcriptServiceReady);
 
     // When recording is active: the one capture status and control surface.
     if (isDeviceRecording || isPhoneRecording) {

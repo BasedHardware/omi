@@ -314,7 +314,8 @@ class AgentProposalItem {
 
   static AgentProposalItem? fromJson(Map<String, dynamic>? json) {
     if (json == null) return null;
-    final edit = _map(json['edit']);
+    final operation = _map(json['operation']);
+    final edit = operation?.isNotEmpty == true ? operation : _map(json['edit']);
     final vocabulary = _map(json['vocabulary']);
     final targetLabel = _str(json['target_label']) ?? '';
     if (edit != null) {
@@ -324,8 +325,13 @@ class AgentProposalItem {
         editKind: kind,
         targetLabel: targetLabel,
         otherLabel: _str(json['other_label']),
-        before: _str(edit['before']) ?? '',
-        after: _str(edit['after']) ?? '',
+        before: (_str(edit['before']) ?? '').isEmpty
+            ? _str(json['target_content']) ?? targetLabel
+            : _str(edit['before']) ?? '',
+        after: (_str(edit['after']) ?? '').isEmpty &&
+                {'supersede_memory', 'merge_people', 'merge_tasks', 'merge_conversations'}.contains(kind)
+            ? _str(json['other_content']) ?? _str(json['other_label']) ?? ''
+            : _str(edit['after']) ?? '',
         reason: _str(edit['reason']),
       );
     }
@@ -520,6 +526,10 @@ class ReviewChange {
     required this.createdAt,
     this.reason,
     this.snippet,
+    this.editKind,
+    this.before,
+    this.after,
+    this.context,
     this.refs = const [],
     this.undone = false,
   });
@@ -528,6 +538,10 @@ class ReviewChange {
   final String title;
   final String? reason;
   final String? snippet;
+  final String? editKind;
+  final String? before;
+  final String? after;
+  final SpellingContext? context;
   final List<ReviewChangeRef> refs;
   final DateTime createdAt;
   final bool undone;
@@ -538,6 +552,10 @@ class ReviewChange {
         title: title,
         reason: reason,
         snippet: snippet,
+        editKind: editKind,
+        before: before,
+        after: after,
+        context: context,
         refs: refs,
         createdAt: createdAt,
         undone: undone ?? this.undone,
@@ -554,6 +572,10 @@ class ReviewChange {
       title: title,
       reason: _str(json['reason']),
       snippet: _str(json['snippet']),
+      editKind: _str(json['edit_kind']),
+      before: _str(json['before']),
+      after: json['after'] is String ? json['after'] as String : null,
+      context: SpellingContext.fromJson(_map(json['context'])),
       refs: _maps(json['refs'])
           .map((r) {
             final type = _str(r['type']);

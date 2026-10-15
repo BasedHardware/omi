@@ -1,3 +1,7 @@
+import 'package:permission_handler/permission_handler.dart';
+import 'package:omi/services/sockets/on_device_apple_provider.dart';
+import 'package:omi/services/sockets/local_stt_failure.dart';
+import 'package:omi/ui/components/local_stt_recovery_notice.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -1208,6 +1212,20 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           ),
           const SizedBox(height: OmiSpacing.sm),
           TranscriptionHelpText(context.l10n.nativeEngineNoDownload),
+          FutureBuilder(
+            future: OnDeviceAppleProvider.readiness(_currentLanguage),
+            builder: (context, snapshot) {
+              final readiness = snapshot.data;
+              if (readiness == null || readiness.ready) return const SizedBox.shrink();
+              return LocalSttRecoveryNotice(
+                  language: _currentLanguage,
+                  failure: LocalSttFailure(readiness.status, canProbeRecovery: true),
+                  onRetry: () async {
+                    setState(() {});
+                  },
+                  onSetup: openAppSettings);
+            },
+          ),
           const SizedBox(height: OmiSpacing.lg),
           _buildLanguageSelector(),
         ],
