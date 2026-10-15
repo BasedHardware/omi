@@ -2,7 +2,7 @@
 
 ``MCP Tool Call`` is the stable PostHog event contract for the hosted
 Streamable HTTP MCP tool boundary, and ``MCP Active`` is the once-per-uid-
-per-day marker that keeps DAU/WAU exact. The per-POST envelope is NOT a
+per-day transport-presence diagnostic. The per-POST envelope is NOT a
 PostHog event: it is a structured ``mcp_request`` log line emitted for 100%
 of requests so log-based metrics carry the volume PostHog pricing cannot.
 
@@ -15,7 +15,6 @@ addresses, user agents, or exception text.
 from __future__ import annotations
 
 import hashlib
-import importlib
 import json
 import logging
 import math
@@ -28,7 +27,7 @@ from typing import Any, List, Mapping, Optional
 
 import database.redis_db as redis_db
 from utils.executors import postprocess_executor, submit_with_context
-from utils.integration_telemetry import emit_posthog_event
+from utils.product_telemetry import emit_product_event
 from utils.mcp_server.constants import MCP_MAX_BATCH_MESSAGES
 from utils.mcp_server.registry import TOOL_SPECS
 from utils.mcp_server.versions import SUPPORTED_PROTOCOL_VERSIONS
@@ -259,65 +258,8 @@ def user_in_tool_call_sample(uid: Any, rate: float) -> bool:
     return bucket / 0xFFFFFFFF < rate
 
 
-_mcp_events_client: Optional[Any] = None
-_mcp_events_client_disabled = False
-
-
-def _build_mcp_events_client(api_key: str) -> Any:
-    host = os.getenv("POSTHOG_HOST", "https://app.posthog.com")
-    posthog_module = importlib.import_module("posthog")
-    posthog_client_cls = getattr(posthog_module, "Posthog")
-    return posthog_client_cls(project_api_key=api_key, host=host)
-
-
-def _get_mcp_events_client() -> Optional[Any]:
-    """Dedicated capture client for MCP events, built from the events key only.
-
-    The events key is never mixed into generic capture, and this client never
-    falls back to the project key — when POSTHOG_EVENTS_API_KEY is unset the
-    caller falls back to the generic emit path instead.
-    """
-    global _mcp_events_client, _mcp_events_client_disabled
-    if _mcp_events_client_disabled:
-        return None
-    if _mcp_events_client is not None:
-        return _mcp_events_client
-
-    api_key = os.getenv("POSTHOG_EVENTS_API_KEY")
-    if not api_key:
-        return None
-
-    try:
-        _mcp_events_client = _build_mcp_events_client(api_key)
-    except Exception as exc:
-        logger.warning("mcp analytics posthog_import_failed error=%s", type(exc).__name__)
-        _mcp_events_client_disabled = True
-        return None
-    return _mcp_events_client
-
-
-def emit_mcp_posthog_event(distinct_id: Optional[str], event: str, properties: dict) -> None:
-    """Capture one MCP event through the dedicated events-key client.
-
-    Falls back to the generic emit path when POSTHOG_EVENTS_API_KEY is unset
-    (or the dedicated client cannot be built) so dev keeps working as today.
-    """
-    if not distinct_id:
-        return
-    client = _get_mcp_events_client()
-    if client is None:
-        emit_posthog_event(distinct_id, event, properties)
-        return
-    try:
-        client.capture(distinct_id=distinct_id, event=event, properties=properties)
-    except Exception as exc:
-        logger.warning("mcp analytics posthog_emit_failed event=%s error=%s", event, type(exc).__name__)
-
-
-def set_mcp_events_client_for_tests(client: Optional[Any]) -> None:
-    global _mcp_events_client, _mcp_events_client_disabled
-    _mcp_events_client = client
-    _mcp_events_client_disabled = client is None
+def emit_mcp_posthog_event(distinct_id: Optional[str], event: str, properties: dict) -> bool:
+    return emit_product_event(uid=distinct_id or '', event=event, properties={**properties, "source_platform": "mcp"})
 
 
 def log_mcp_request(

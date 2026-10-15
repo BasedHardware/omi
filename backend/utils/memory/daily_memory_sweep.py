@@ -462,6 +462,7 @@ def read_daily_memory_sweep_cohort_assignment(
                 reader = _POSTHOG_CLIENTS.get(client_key)
                 if reader is None:
                     reader = client_type(
+                        send=False,
                         project_api_key=api_key,
                         host=host,
                         feature_flags_request_timeout_seconds=timeout,

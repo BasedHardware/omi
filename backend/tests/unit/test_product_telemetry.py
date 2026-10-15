@@ -1,121 +1,176 @@
-import logging
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
-from utils import product_telemetry
-from utils.product_telemetry import emit_product_event, set_product_telemetry_client_for_tests
-
-
-class _FakePosthog:
-    def __init__(self, *, fail=False):
-        self.fail = fail
-        self.events = []
-
-    def capture(self, **event):
-        if self.fail:
-            raise RuntimeError('posthog unavailable')
-        self.events.append(event)
+from utils import product_telemetry as telemetry
 
 
 @pytest.fixture(autouse=True)
-def _reset_client():
+def reset(monkeypatch):
+    telemetry.set_product_telemetry_client_for_tests(None)
+    for key in (*telemetry._CAPTURE_KEYS, 'POSTHOG_INTERNAL_UIDS', 'POSTHOG_TEST_UIDS', 'OMI_ENV_STAGE', 'ENVIRONMENT'):
+        monkeypatch.delenv(key, raising=False)
     yield
-    set_product_telemetry_client_for_tests(None)
+    telemetry.set_product_telemetry_client_for_tests(None)
 
 
-def test_product_event_uses_uid_only_as_distinct_id_and_drops_null_properties(monkeypatch):
-    fake = _FakePosthog()
-    set_product_telemetry_client_for_tests(fake)
-    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+def test_defaults_privacy_and_roster(monkeypatch):
+    fake = Mock()
+    telemetry.set_product_telemetry_client_for_tests(fake)
+    monkeypatch.setenv('POSTHOG_INTERNAL_UIDS', ' staff,other ')
+    monkeypatch.setenv('POSTHOG_TEST_UIDS', 'tester')
+    for uid in ('staff', 'tester', 'omi-release-probe', 'cfc_synthetic', 'external'):
+        assert telemetry.emit_product_event(
+            uid=uid,
+            event='Example',
+            properties={
+                'uid': uid,
+                'conversation_id': 'private',
+                'query': 'private',
+                'count': 2,
+            },
+        )
+    props = [call.kwargs['properties'] for call in fake.capture.call_args_list]
+    assert props[0] == {
+        'count': 2,
+        'internal': True,
+        'source_platform': 'unknown',
+        'test': False,
+        'emitter': 'server',
+        'environment': 'unknown',
+    }
+    assert all(p['test'] for p in props[1:4])
+    assert 'internal' not in props[4]
 
-    emit_product_event(
-        uid='user-1',
-        event='Transcript Started',
-        properties={'recording_id': 'recording-1', 'conversation_id': None},
+
+@pytest.mark.parametrize('platform', sorted(telemetry.SOURCE_PLATFORMS))
+def test_request_context_and_background_propagation(platform):
+    from utils.executors import submit_with_context
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        with telemetry.product_telemetry_context(
+            headers={
+                'x-app-platform': platform,
+                'x-build-channel': 'testflight',
+                'x-internal': 'true',
+            }
+        ):
+            props = submit_with_context(executor, telemetry.server_event_properties, 'u', {}).result()
+            assert props['source_platform'] == platform
+            assert props['build_channel'] == 'testflight'
+            assert 'internal' not in props
+            assert props['test'] is False
+            assert (
+                telemetry.server_event_properties('u', {'source_platform': 'android'})['source_platform'] == 'android'
+            )
+        assert telemetry.server_event_properties('u', {})['source_platform'] == 'unknown'
+
+
+def test_concurrent_requests_cannot_leak_context():
+    async def request(platform):
+        with telemetry.product_telemetry_context(headers={'x-app-platform': platform}):
+            await asyncio.sleep(0)
+            return telemetry.server_event_properties('u', {})['source_platform']
+
+    async def run():
+        return await asyncio.gather(request('ios'), request('web'))
+
+    assert asyncio.run(run()) == ['ios', 'web']
+
+
+def test_invalid_metadata_is_bounded():
+    props = telemetry.server_event_properties(
+        'u', {'app_platform': 'Darwin', 'build_channel': 'private@example.com', 'internal': 'true'}
+    )
+    assert props['source_platform'] == 'unknown'
+    assert 'build_channel' not in props
+    assert 'internal' not in props
+
+
+def test_single_client_key_precedence_and_lazy_concurrent_construction(monkeypatch):
+    sdk = Mock()
+    factory = Mock(return_value=sdk)
+    monkeypatch.setattr(telemetry.importlib, 'import_module', lambda _: SimpleNamespace(Posthog=factory))
+    monkeypatch.setenv('POSTHOG_PROJECT_API_KEY', 'disabled')
+    monkeypatch.setenv('POSTHOG_EVENTS_API_KEY', ' phc_events ')
+    monkeypatch.setenv('POSTHOG_BILLING_API_KEY', 'phc_billing')
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        clients = list(executor.map(lambda _: telemetry.get_server_posthog_client(), range(12)))
+    assert all(client is clients[0] for client in clients)
+    factory.assert_called_once_with(
+        project_api_key='phc_events', host='https://app.posthog.com', sync_mode=True, timeout=2, max_retries=0
     )
 
-    assert fake.events == [
-        {
-            'distinct_id': 'user-1',
-            'event': 'Transcript Started',
-            'properties': {'recording_id': 'recording-1', 'environment': 'dev'},
-        }
-    ]
+
+@pytest.mark.parametrize('key', ['disabled', 'placeholder-phc_private', 'phx_personal'])
+def test_invalid_keys_never_construct_sdk_or_leak(monkeypatch, caplog, key):
+    monkeypatch.setenv('POSTHOG_PROJECT_API_KEY', key)
+    monkeypatch.setattr(telemetry.importlib, 'import_module', lambda _: pytest.fail('invalid SDK construction'))
+    assert not telemetry.emit_product_event(uid='u', event='Example', properties={})
+    if key != 'disabled':
+        assert key not in caplog.text
 
 
-def test_product_event_is_fail_open():
-    set_product_telemetry_client_for_tests(_FakePosthog(fail=True))
-
-    emit_product_event(uid='user-1', event='Transcript Failed', properties={})
-
-
-def _reject_sdk(name):
-    raise AssertionError(f'must not construct SDK for {name}')
-
-
-@pytest.mark.parametrize('raw_key', ['disabled', '  disabled\n', 'placeholder-phc_leak'])
-def test_invalid_billing_project_key_is_absent_and_logged_once(monkeypatch, caplog, raw_key):
-    set_product_telemetry_client_for_tests(None)
-    monkeypatch.setenv('POSTHOG_BILLING_API_KEY', raw_key)
-    monkeypatch.delenv('POSTHOG_PROJECT_API_KEY', raising=False)
-    monkeypatch.delenv('POSTHOG_API_KEY', raising=False)
-    monkeypatch.setattr(product_telemetry.importlib, 'import_module', _reject_sdk)
-
-    with caplog.at_level(logging.WARNING, logger='utils.product_telemetry'):
-        assert product_telemetry._get_billing_client() is None
-        assert product_telemetry._get_billing_client() is None
-        emit_product_event(uid='user-1', event='Billing Subscription Started', properties={})
-
-    warnings = [
-        record
-        for record in caplog.records
-        if record.name == 'utils.product_telemetry' and record.levelno >= logging.WARNING
-    ]
-    assert [record.getMessage() for record in warnings] == ['billing telemetry disabled: invalid project key']
-    assert all(not record.args for record in warnings)
-    # The warning text itself contains the word "disabled". Any other key bytes must stay out.
-    if raw_key != 'disabled':
-        assert raw_key not in caplog.text
-    assert 'phc_' not in caplog.text
+def test_capture_failure_and_queue_rejection_are_not_success():
+    fake = Mock()
+    telemetry.set_product_telemetry_client_for_tests(fake)
+    fake.capture.side_effect = RuntimeError('secret')
+    assert not telemetry.emit_product_event(uid='u', event='Example', properties={})
+    fake.capture.side_effect = None
+    fake.capture.return_value = (False, {})
+    assert not telemetry.emit_product_event(uid='u', event='Example', properties={})
 
 
-def test_missing_billing_key_does_not_log_invalid_project_key(monkeypatch, caplog):
-    set_product_telemetry_client_for_tests(None)
-    for name in ('POSTHOG_BILLING_API_KEY', 'POSTHOG_PROJECT_API_KEY', 'POSTHOG_API_KEY'):
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setattr(product_telemetry.importlib, 'import_module', _reject_sdk)
+def test_nonbilling_delivery_is_offloaded_and_billing_is_synchronous(monkeypatch):
+    from utils import executors
 
-    with caplog.at_level(logging.WARNING, logger='utils.product_telemetry'):
-        assert product_telemetry._get_billing_client() is None
+    sdk = Mock()
+    submit = Mock()
+    monkeypatch.setattr(executors, 'submit_with_context', submit)
+    client = telemetry._ServerCaptureClient(sdk)
+    client.capture(event='Example')
+    sdk.capture.assert_not_called()
+    submit.assert_called_once()
+    submit.call_args.args[1]()
+    sdk.capture.assert_called_once_with(event='Example')
+    client.capture(event='Billing Subscription Started')
+    assert sdk.capture.call_count == 2
 
-    assert caplog.records == []
+
+def test_emitters_route_through_shared_capture():
+    from utils import integration_telemetry
+
+    fake = Mock()
+    telemetry.set_product_telemetry_client_for_tests(fake)
+    integration_telemetry.emit_posthog_event('u', 'Integration Sync Succeeded', {'app_platform': 'ios'})
+    integration_telemetry.emit_posthog_event('u', 'Integration Auth Refresh Succeeded', {'source_platform': 'mcp'})
+    assert fake.capture.call_args_list[0].kwargs['properties']['source_platform'] == 'ios'
+    assert fake.capture.call_args_list[1].kwargs['properties']['source_platform'] == 'mcp'
+    assert all(call.kwargs['properties']['emitter'] == 'server' for call in fake.capture.call_args_list)
 
 
-def test_invalid_billing_key_falls_through_to_public_project_key(monkeypatch, caplog):
-    set_product_telemetry_client_for_tests(None)
-    created = []
+def test_closed_experiment_names_survive_but_raw_identifiers_do_not():
+    assert (
+        telemetry.server_event_properties('u', {'experiment_id': 'EXP-001-day3-reengagement'})['experiment_id']
+        == 'EXP-001-day3-reengagement'
+    )
+    assert 'experiment_id' not in telemetry.server_event_properties('u', {'experiment_id': 'private-uid'})
 
-    class Client:
-        def __init__(self, **kwargs):
-            created.append(kwargs)
 
-    monkeypatch.setenv('POSTHOG_BILLING_API_KEY', 'disabled')
-    monkeypatch.setenv('POSTHOG_PROJECT_API_KEY', '  phc_shared-project \n')
-    monkeypatch.delenv('POSTHOG_HOST', raising=False)
-    monkeypatch.setattr(product_telemetry.importlib, 'import_module', lambda _: SimpleNamespace(Posthog=Client))
-    with caplog.at_level(logging.WARNING, logger='utils.product_telemetry'):
-        client = product_telemetry._get_billing_client()
+def test_queue_budget_rejects_without_blocking_and_releases_after_delivery(monkeypatch):
+    from threading import BoundedSemaphore
+    from utils import executors
 
-    assert client is not None
-    assert created == [
-        {
-            'project_api_key': 'phc_shared-project',
-            'host': 'https://app.posthog.com',
-            'sync_mode': True,
-            'timeout': 2,
-            'max_retries': 0,
-        }
-    ]
-    assert caplog.records == []
-    assert 'disabled' not in caplog.text
+    queued = []
+    monkeypatch.setattr(executors, 'submit_with_context', lambda executor, fn: queued.append(fn))
+    sdk = Mock()
+    client = telemetry._ServerCaptureClient(sdk)
+    client.pending = BoundedSemaphore(1)
+    assert client.capture(event='Example') is True
+    assert client.capture(event='Example') is False
+    queued.pop()()
+    assert client.capture(event='Example') is True
+    queued.pop()()
