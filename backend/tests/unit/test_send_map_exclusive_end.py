@@ -151,6 +151,25 @@ def test_provider_hole_with_adjacent_capture_still_refuses():
     assert sends.map_interval(2, 25) is None
 
 
+def test_boundary_at_adjacency_is_open_but_adjacent_ok():
+    # At the middle boundary: provider end of second == provider start of third (2000)
+    s = SendMap(1000)
+    s.add_accepted_spans([(0, 1000), (6000, 1000), (12000, 1000)])
+    # The interval starting exactly at the provider boundary of the middle hole must map into the next send.
+    assert s.map_interval(2000, 2500) == (12000, 12500)
+    assert s.map_interval(1999, 2500) is None  # straddles the gap
+
+
+def test_three_spans_avoid_false_gap_at_interior_boundary():
+    # Contributing segments that span both before and after an interior boundary are rejected if they don't form contiguous chain,
+    # but the boundary itself must not be misclassified as a gap that blocks adjacent mapping.
+    s = SendMap(1000)
+    s.add_accepted_spans([(0, 1000), (6000, 1000), (12000, 1000)])
+    assert s.map_interval(500, 1500) is None  # spans first two (gap between 1000 and 6000 on capture)
+    assert s.map_interval(500, 2500) is None  # spans first and third (skips middle gap entirely)
+    assert s.accepted_provider_samples(2000, 2010) == 10
+
+
 def test_existing_outer_tolerance_and_point_semantics():
     sends = SendMap(100)
     sends.add_accepted_spans([(0, 100), (200, 100)])
