@@ -1205,15 +1205,15 @@ def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> t
     return allowed, remaining, retry_after
 
 
-def reserve_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
+def reserve_rate_limit(
+    key: str, policy: str, max_requests: int, window: int, *, redis_client: Any = None
+) -> tuple[bool, int, int]:
     """Atomically reserve one reversible slot without counting denied attempts.
 
-    Returns ``(allowed, remaining, reset_seconds)``. ``reset_seconds`` is the
-    key TTL on both admit and deny so callers can advertise window reset without
-    a second Redis round-trip. Denied attempts still do not increment the counter.
+    Returns (allowed, remaining, reset_seconds); denied attempts never increment.
     """
     redis_key = f'rl:{policy}:{key}'
-    admitted, current, ttl = _RATE_LIMIT_RESERVE_LUA(keys=[redis_key], args=[window, max_requests])
+    admitted, current, ttl = _RATE_LIMIT_RESERVE_LUA(keys=[redis_key], args=[window, max_requests], client=redis_client)
     allowed = bool(admitted)
     remaining = max(0, max_requests - current)
     reset_seconds = max(0, int(ttl))

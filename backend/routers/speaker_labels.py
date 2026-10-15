@@ -17,12 +17,21 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-_DOC_ID_PATTERN = r'^[A-Za-z0-9_-]{1,128}$'
 
-
-def _is_safe_firestore_document_id(value: str) -> bool:
-    """Validate Firestore ids in handlers without narrowing released OpenAPI schemas."""
-    return re.fullmatch(_DOC_ID_PATTERN, value) is not None
+def _valid_document_id(value: str) -> bool:
+    # Preserve opaque legacy IDs. Only exclude invalid Firestore addresses;
+    # arbitrary charset/128-char bounds narrow the released v1 contract.
+    reserved = re.fullmatch(r'__.*__', value) is not None and re.fullmatch(r'__id[0-9]+__', value) is None
+    try:
+        return (
+            not reserved
+            and bool(value)
+            and '/' not in value
+            and value not in ('.', '..')
+            and len(value.encode('utf-8')) <= 1500
+        )
+    except UnicodeEncodeError:
+        return False
 
 
 @router.post(
@@ -37,11 +46,9 @@ def reject_speaker_label(
     background_tasks: BackgroundTasks,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    if not _is_safe_firestore_document_id(conversation_id):
+    if not _valid_document_id(conversation_id):
         raise HTTPException(status_code=422, detail='invalid conversation_id')
-    if not 0 <= speaker_id <= 1_000_000:
-        raise HTTPException(status_code=422, detail='invalid speaker_id')
-    if data.person_id is not None and not _is_safe_firestore_document_id(data.person_id):
+    if data.person_id is not None and not _valid_document_id(data.person_id):
         raise HTTPException(status_code=400, detail='invalid person_id')
     try:
         raw, resolved, removed, _before = conversations_db.assign_conversation_speaker(
@@ -100,7 +107,7 @@ async def get_person_voice_matches(
     person_id: str,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    if not _is_safe_firestore_document_id(person_id):
+    if not _valid_document_id(person_id):
         raise HTTPException(status_code=422, detail='invalid person_id')
     try:
         return await find_person_voice_matches(uid, person_id)
