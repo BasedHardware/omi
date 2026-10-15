@@ -318,6 +318,7 @@ class GeneratedStorefrontUsage {
   final String kind;
   final bool mcpCapReached;
   final String? meterLine;
+  final String? moreLabel;
   final String? nudgeLine;
   final int? percent;
   final String? periodId;
@@ -328,6 +329,7 @@ class GeneratedStorefrontUsage {
     this.kind = "unavailable",
     this.mcpCapReached = false,
     this.meterLine,
+    this.moreLabel,
     this.nudgeLine,
     this.percent,
     this.periodId,
@@ -340,6 +342,7 @@ class GeneratedStorefrontUsage {
       kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: false, nullable: false, defaultValue: "unavailable"), "kind"),
       mcpCapReached: _required(_readFieldValue<bool>(_readField(json, const ["mcp_cap_reached"]), "mcp_cap_reached", _readBool, requiredField: false, nullable: false, defaultValue: false), "mcp_cap_reached"),
       meterLine: _readFieldValue<String>(_readField(json, const ["meter_line"]), "meter_line", _readString, requiredField: false, nullable: true),
+      moreLabel: _readFieldValue<String>(_readField(json, const ["more_label"]), "more_label", _readString, requiredField: false, nullable: true),
       nudgeLine: _readFieldValue<String>(_readField(json, const ["nudge_line"]), "nudge_line", _readString, requiredField: false, nullable: true),
       percent: _readFieldValue<int>(_readField(json, const ["percent"]), "percent", _readInt, requiredField: false, nullable: true),
       periodId: _readFieldValue<String>(_readField(json, const ["period_id"]), "period_id", _readString, requiredField: false, nullable: true),
@@ -353,6 +356,7 @@ class GeneratedStorefrontUsage {
       'kind': kind,
       'mcp_cap_reached': mcpCapReached,
       'meter_line': meterLine,
+      'more_label': moreLabel,
       'nudge_line': nudgeLine,
       'percent': percent,
       'period_id': periodId,

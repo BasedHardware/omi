@@ -5351,6 +5351,7 @@ public enum OmiAPI {
     public let kind: String?
     public let mcpCapReached: Bool?
     public let meterLine: String?
+    public let moreLabel: String?
     public let nudgeLine: String?
     public let percent: Int?
     public let periodId: String?
@@ -5361,6 +5362,7 @@ public enum OmiAPI {
       case kind
       case mcpCapReached = "mcp_cap_reached"
       case meterLine = "meter_line"
+      case moreLabel = "more_label"
       case nudgeLine = "nudge_line"
       case percent
       case periodId = "period_id"
@@ -5373,6 +5375,7 @@ public enum OmiAPI {
       kind = try c.decodeIfPresent(String.self, forKey: .kind)
       mcpCapReached = try c.decodeIfPresent(Bool.self, forKey: .mcpCapReached)
       meterLine = try c.decodeIfPresent(String.self, forKey: .meterLine)
+      moreLabel = try c.decodeIfPresent(String.self, forKey: .moreLabel)
       nudgeLine = try c.decodeIfPresent(String.self, forKey: .nudgeLine)
       percent = try c.decodeIfPresent(Int.self, forKey: .percent)
       periodId = try c.decodeIfPresent(String.self, forKey: .periodId)
@@ -5380,10 +5383,11 @@ public enum OmiAPI {
       resetLabel = try c.decodeIfPresent(String.self, forKey: .resetLabel)
     }
 
-    public init(kind: String? = nil, mcpCapReached: Bool? = nil, meterLine: String? = nil, nudgeLine: String? = nil, percent: Int? = nil, periodId: String? = nil, proGates: [String]? = nil, resetLabel: String? = nil) {
+    public init(kind: String? = nil, mcpCapReached: Bool? = nil, meterLine: String? = nil, moreLabel: String? = nil, nudgeLine: String? = nil, percent: Int? = nil, periodId: String? = nil, proGates: [String]? = nil, resetLabel: String? = nil) {
       self.kind = kind
       self.mcpCapReached = mcpCapReached
       self.meterLine = meterLine
+      self.moreLabel = moreLabel
       self.nudgeLine = nudgeLine
       self.percent = percent
       self.periodId = periodId

@@ -370,6 +370,7 @@ class StorefrontUsage {
   final String? resetLabel;
   final String? meterLine;
   final String? nudgeLine;
+  final String? moreLabel;
   final Set<String> proGates;
   final bool mcpCapReached;
 
@@ -380,6 +381,7 @@ class StorefrontUsage {
     this.resetLabel,
     this.meterLine,
     this.nudgeLine,
+    this.moreLabel,
     this.mcpCapReached = false,
     this.proGates = const {},
   });
@@ -404,6 +406,7 @@ class StorefrontUsage {
       resetLabel: _optionalText(json, 'reset_label'),
       meterLine: _optionalText(json, 'meter_line'),
       nudgeLine: _optionalText(json, 'nudge_line'),
+      moreLabel: _optionalText(json, 'more_label'),
       mcpCapReached: json['mcp_cap_reached'] == true,
       proGates: Set<String>.unmodifiable(gates.map((value) => value as String)),
     );

@@ -31,7 +31,11 @@ not expose the sheet.
   when the sheet is hidden.
 - `usage`: `kind` (`usage_budget`, `transcription`, `unavailable`), nullable
   `percent`, nullable `period_id`, nullable `reset_label`, nullable
-  `meter_line`, nullable `nudge_line`, `pro_gates`. Never raw unit amounts.
+  `meter_line`, nullable `nudge_line`, nullable `more_label`, `pro_gates`.
+  Never raw unit amounts. `more_label` is present only for `usage_budget`
+  when `meter_line` is set; it is the words that open this sheet with
+  `trigger=usage_budget`. It is omitted for legacy transcription usage and
+  whenever there is no meter line.
 - `tiers[]` in display order (recommended first, then ascending rank; while a
   cancellation is scheduled, the current tier is first, then the other ladder
   tiers by rank, and nothing is recommended): `tier_id`, `plan_id`, `name`,

@@ -65,6 +65,8 @@ class StorefrontUsage(BaseModel):
     reset_label: str | None = None
     meter_line: str | None = None
     nudge_line: str | None = None
+    # Opens the plans sheet (trigger=usage_budget). Only with a usage_budget meter line.
+    more_label: str | None = None
     pro_gates: list[str] = Field(default_factory=list)
     mcp_cap_reached: bool = False
 
@@ -73,6 +75,8 @@ class StorefrontUsage(BaseModel):
         data = handler(self)
         if not self.mcp_cap_reached:
             data.pop('mcp_cap_reached', None)
+        if data.get('more_label') is None:
+            data.pop('more_label', None)
         return data
 
 

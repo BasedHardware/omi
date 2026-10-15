@@ -5083,6 +5083,7 @@ export interface StorefrontUsage {
   kind?: "usage_budget" | "transcription" | "unavailable";
   mcp_cap_reached?: boolean;
   meter_line?: string | null;
+  more_label?: string | null;
   nudge_line?: string | null;
   percent?: number | null;
   period_id?: string | null;

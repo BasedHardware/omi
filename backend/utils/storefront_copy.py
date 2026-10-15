@@ -452,6 +452,7 @@ def present_usage(
         payload['meter_line'] = text['meter']['line'].format(
             percent=shown, hours=f'{left:,}', reset=payload['reset_label']
         )
+        payload['more_label'] = text['meter']['more_label']
         if 80 <= shown < 100:
             payload['nudge_line'] = text['meter']['nudge_80'].format(reset=payload['reset_label'])
     return payload

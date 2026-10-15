@@ -30904,6 +30904,17 @@
             ],
             "title": "Meter Line"
           },
+          "more_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "More Label"
+          },
           "nudge_line": {
             "anyOf": [
               {

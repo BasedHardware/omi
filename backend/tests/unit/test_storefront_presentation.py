@@ -801,6 +801,7 @@ def test_golden_storefront_scenarios():
     assert free_card.prices[0].headline == '$0'
     assert rendered['free_budget80'].header == "You've used 80% of this month's usage"
     assert rendered['free_budget80'].usage.meter_line == ('80% used · about 3 hours of recording left · resets Nov 1')
+    assert rendered['free_budget80'].usage.more_label == 'Get more usage'
     assert rendered['free_budget80'].usage.nudge_line == ("You've used 80% of this month's usage · resets Nov 1")
     assert rendered['free_pro_gate_proactive'].header == 'Reminders and follow-ups come with Pro'
     proactive = next(tier for tier in rendered['free_pro_gate_proactive'].tiers if tier.plan_id == 'operator')
@@ -855,6 +856,8 @@ def test_golden_storefront_scenarios():
     assert legacy.current.name == 'Unlimited'
     assert legacy.current.line == "You're on Unlimited · $29.99/mo · renews Nov 1"
     assert legacy.current.legacy_note == "We don't sell this plan anymore, but yours stays exactly as it is."
+    assert legacy.usage.more_label is None
+    assert 'more_label' not in legacy.model_dump(mode='json')['usage']
     assert not any(tier.action == 'checkout' for tier in legacy.tiers)
     assert 'basic' not in {tier.plan_id for tier in legacy.tiers}
     assert {tier.plan_id for tier in legacy.tiers if tier.action == 'none'} >= {
