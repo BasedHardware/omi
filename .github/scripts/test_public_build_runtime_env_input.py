@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Gateway admission accepts newline-delimited runtime config without bypasses."""
 
+import sys
 import unittest
 
 import test_check_public_build_contract as fixtures
@@ -42,4 +43,7 @@ class RuntimeEnvInputTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    suite = unittest.defaultTestLoader.loadTestsFromModule(fixtures)
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(RuntimeEnvInputTests))
+    result = unittest.TextTestRunner().run(suite)
+    sys.exit(not result.wasSuccessful())
