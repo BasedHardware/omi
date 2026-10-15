@@ -1360,7 +1360,7 @@ async def test_streaming_body_stops_before_the_platform_request_timeout(monkeypa
         return await awaitable
 
     _set_gemini_byok(monkeypatch, 'user-key')
-    monkeypatch.setattr(desktop_proxy, "_STREAM_DEADLINE_SECONDS", 0.1)
+    monkeypatch.setattr(desktop_proxy.desktop_gemini_gateway, "DESKTOP_STREAM_DEADLINE_SECONDS", 0.1)
     monkeypatch.setattr(desktop_proxy, "_meter_server_request", meter)
     monkeypatch.setattr(desktop_proxy, "_upstream", route)
     monkeypatch.setattr(desktop_proxy, "_cancel_on_disconnect", await_upstream)

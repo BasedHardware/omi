@@ -56,6 +56,16 @@ async def await_before_deadline(awaitable: Awaitable[_T], deadline: float) -> _T
     return await asyncio.wait_for(awaitable, remaining)
 
 
+async def iter_before_deadline(source: AsyncIterator[_T], deadline: float) -> AsyncIterator[_T]:
+    """Yield items until ``deadline`` (loop time), then raise TimeoutError."""
+    iterator = source.__aiter__()
+    while True:
+        try:
+            yield await await_before_deadline(anext(iterator), deadline)
+        except StopAsyncIteration:
+            return
+
+
 class DesktopGeminiGatewayError(Exception):
     """The gateway hop failed; the proxy maps this to its error envelope."""
 
