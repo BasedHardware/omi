@@ -3,12 +3,15 @@
 from hashlib import sha256
 
 from database._client import get_firestore_client
-from models.agent_refs import canonical_collection
 
 COLLECTIONS = ('conversations', 'action_items', 'people', 'memory_items')
 
 
 def history_collection(uid, collection, *, firestore_client=None):
+    # Deferred: conversations imports dream_store -> dream_history, and import-isolated
+    # database tests stub the models package.
+    from models.agent_refs import canonical_collection
+
     collection = canonical_collection(collection)
     if collection not in COLLECTIONS:
         raise ValueError('dream_history_collection')
