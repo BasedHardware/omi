@@ -58,7 +58,7 @@ def test_http_boundary_blocks_before_lookup_and_counts_requests(
     assert response.json() == {'detail': 'Sync job polling too frequent; retry later'}
     assert lookup.call_count == 40
     for call in poll_lua.call_args_list:
-        assert call.kwargs == {'keys': ['rl:sync_job_poll:owner'], 'args': [20, 40]}
+        assert call.kwargs == {'keys': ['rl:sync_job_poll:owner'], 'args': [20, 40], 'client': None}
     assert sync_router.OMI_SYNC_JOB_POLL_REQUESTS_TOTAL._value.get() - requests_before == 41
     assert sync_router.OMI_SYNC_JOB_POLL_THROTTLED_TOTAL._value.get() - throttles_before == 1
 

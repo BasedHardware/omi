@@ -80,7 +80,7 @@ def validate_summary(payload, *, now=None):
                 raise FleetValidationError('unknown_histogram')
     if not validator().is_valid(payload):
         raise FleetValidationError('invalid_schema')
-    pattern = r'[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:[Zz]|[+-][0-9]{2}:[0-9]{2})'
+    pattern = r'[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:[Zz]|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])'
     if not all(re.fullmatch(pattern, payload[key]) for key in ('window_start', 'window_end')):
         raise FleetValidationError('invalid_schema')
     try:

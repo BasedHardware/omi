@@ -74,6 +74,7 @@ def test_cardinality_and_generated_contract():
         (lambda p: p.update(window_start=p['window_end']), 'invalid_window'),
         (lambda p: p.update(window_end='2026-10-15T00:00:00'), 'invalid_schema'),
         (lambda p: p.update(window_end=p['window_end'].replace('T', 'X')), 'invalid_schema'),
+        (lambda p: p.update(window_end=p['window_end'].replace('+00:00', '+00:99')), 'invalid_schema'),
         (lambda p: p['histograms'].append({'name': 'raw', 'buckets': []}), 'unknown_histogram'),
     ],
 )
