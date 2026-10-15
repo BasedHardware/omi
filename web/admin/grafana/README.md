@@ -124,3 +124,110 @@ python3 web/admin/grafana/apply_omi_tv_dashboard.py
 
 Note: large POSTs through the admin.omi.me rewrite get dropped — CI uses the
 repo variable `GRAFANA_URL` pointing at the direct Cloud Run URL.
+
+## Omi TV v2 — isolated Direction A board
+
+`omi-tv-v2` is a separate UID. Its source is `build_wall_dashboard.py`, called
+by `build_dashboards.py`; the three legacy board files retain their existing
+contract. `apply_omi_tv_dashboard.py` accepts the new UID and still preserves
+live layout on subsequent applies. This slice does not switch `/dashboard`.
+
+The admin-authenticated `/api/omi/stats/wall` returns the 22 contract IDs plus
+explicit capture-week-1 and plan-prepay-cash lines. Definitions, UTC cutoffs,
+primary/entry attribution and qualification come from `lib/qualified-activity.ts`.
+A bounded, coalesced 15-minute in-process cache preserves source refresh stamps
+and expires at UTC midnight. PostHog carries its upstream `last_refresh`, or the
+execution completion time of our live HogQL aggregate when the API omits it.
+A cached upstream result without a refresh receipt stays unknown. Payload-cache
+reads never advance source refresh timestamps.
+It performs no Firestore cache writes and has no
+stale-on-error fallback. Counts use primary qualified platform; cohort rates use
+entry platform and include the full denominator. Rates do not add across splits:
+the split numerators and denominators do. Missing sources remain null.
+
+Each metric is one native **Canvas** panel, backed by Infinity as the only
+external plugin. Canvas's SVG-icon element renders a data-only card through
+Grafana's built-in SVG sanitizer. The card's background/border encloses the
+label, scope chip, value, delta, platform splits, complete-period sparkline and
+footnote. There are no floating subpanels, HTML overrides or custom JavaScript.
+Responsive constraints keep the complete card inside narrow laptop columns.
+
+Healthy live aggregates use full contrast. Stale, partial, explicitly material-gap
+proxies and all synthetic fixtures are dimmed. A proxy label alone does not dim
+an otherwise healthy audited aggregate. Fixture cards always say **FIXTURE**.
+Cohort-rate deltas use percentage points; count and monetary deltas use relative
+percent change. Scope chips say all or macOS; entry/primary attribution is in the
+panel description and diagnostics. Money is compact at thousands, without cents
+above $100. Full source reasons and versions remain in the diagnostics table.
+
+MAU keeps two completed 30-day periods to stay within PostHog's query budget;
+other usage/cohort trends retain six completed periods. Cohort anchors are still
+first-seen proxies, with a bounded 180-day history check, not Firebase signups.
+MCP, Windows/web foreground coverage and strict saved-state/source joins remain
+incomplete and are disclosed. A bare MCP marker never qualifies.
+
+Local verification (no production Firebase/Stripe key, token minting or Grafana):
+
+```bash
+hostctl context
+# Follow machine-config's local-container guide; the env command only selects its socket.
+~/machine-config/scripts/container-runtime.zsh start
+eval "$(~/machine-config/scripts/container-runtime.zsh env)"
+source ~/.local/bin/gcp-agent-env.sh ro-prod
+python3 web/admin/grafana/verify_wall_local.py serve  # keep foreground in one terminal
+python3 web/admin/grafana/verify_wall_local.py provision  # another terminal, same Docker env
+# Python environment with playwright + Chromium installed:
+python3 web/admin/grafana/verify_wall_local.py screens
+```
+
+`serve` reads only the authorized PostHog key and Shopify fields from the supplied
+local files, uses the existing development admin bypass, binds localhost:3107,
+and disables Firebase and real Stripe credentials. Stripe uses the clearly
+labeled synthetic fixture at `lib/__fixtures__/wall-stripe.json`. Fixture dates
+are fixed; when old, they correctly dim. `--replay /absolute/aggregate.json`
+replays a locally saved wall response without changing its source timestamps;
+this requires non-production mode and `DEV_BYPASS_AUTH=1`. Production rejects
+both fixture modes. Local Grafana binds localhost:3207; the helper intentionally
+fails if its container name exists rather than replacing an unrelated instance.
+The provisioned board rewrites the proxy URL only in its local copy.
+
+Run records and screenshots are written only to
+`/Users/dazheng/workspace/omi/data/run-2026-10-14-omi-tv-metrics/`;
+never commit that workspace run directory in the public repository. The local
+verifier uses the `omi-tv-v2-rev1-1440.png` / `-1920.png` screenshot names.
+Tracked UI-evidence copies belong under `.agent-artifacts/ui-evidence/`.
+
+Deploy prerequisites and limits:
+
+- Existing admin auth/proxy and Infinity datasource `omi-admin-api` must reach the
+  new route. PostHog needs `POSTHOG_PERSONAL_API_KEY`, `POSTHOG_PROJECT_ID` and
+  optionally `POSTHOG_HOST`. No production Firebase key is needed by the wall.
+- Shopify reuses `SHOPIFY_STORE` and `SHOPIFY_ACCESS_TOKEN`; alternatively supply
+  `SHOPIFY_CLIENT_ID`/`SHOPIFY_CLIENT_SECRET` for a client-credentials exchange.
+  The app needs **read_orders**. Older history beyond 60 days needs the separate
+  approved history scope. Order/line/refund pagination is checked; truncation
+  returns null. USD shop-money is required until an approved FX mapping exists.
+  `OMI_TV_DEVICE_SKUS` adds approved device SKUs; conservative audited titles are
+  a proxy until the SKU/bundle mapping is signed off. Refunds restate sale weeks.
+- Stripe uses the existing library's active/past-due status pagination, excludes
+  marketplace apps, and includes every price of allowed Omi products. Explicit
+  extra enterprise product IDs use `OMI_TV_PLAN_PRODUCT_IDS`; unknown products and
+  tiered prices remain coverage gaps. JPY is zero-decimal and never treated as
+  USD cents. Non-USD amounts need approved FX; otherwise they are excluded and
+  the book is partial. The live book has no fabricated prior/trend. **Production
+  ARPMAU stays null until a corrected same-cutoff MRR snapshot source is wired**;
+  corrupt historic FinOps aggregates cannot repair their dropped products/JPY
+  from totals alone. Synthetic same-cutoff fixtures exercise the arithmetic.
+- Billing reuses `infra-costs` billing mode with aggregate-only reads, skipping
+  Firestore/ledger diagnostics and the estimated fallback. Select ro-prod ADC
+  locally; the runtime billing identity needs its existing BigQuery read/job
+  permissions and provider invoice bindings. Missing provider/STT coverage is
+  partial and dim; gross margin is null until recognized revenue and complete
+  variable cost coverage are available. Cost/MAU uses the matching 30 days through D−2.
+- Payer churn, activated-to-paid, message ratings and trustworthy crash coverage
+  need their missing aggregate sources. Zero crash events never produce 100%.
+
+Validation: `npm test`, `npm run typecheck`, `npm run lint` in `web/admin`,
+`python3 web/admin/grafana/test_build_dashboards.py`, and `make preflight`.
+Opt-in live aggregate smoke checks: `OMI_TV_LIVE_CHECK=1 npm test --
+lib/__tests__/wall-live.test.ts` with the authorized read-only source env loaded.
