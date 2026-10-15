@@ -45,9 +45,13 @@ then calls `stage_audio(item, wav)` before atomic enqueue. Replace the seed
 `persist_result(item, payload)` encrypts words, turns and provenance, then returns
 an immutable generation-pinned URI. C calls `load_result(original_item, uri)`.
 The original admitted WorkItem is required; payload identity is never trusted.
-The encrypted payload includes `speech_seconds`, the sample-rounded union of
-original unpadded VAD spans (silence zero). C validates it against `audio_seconds`
-for content-idempotent accounting; ASR padding or word clocks are not speech usage.
+The encrypted payload includes `speech_spans`, an ordered nonoverlapping list of
+`{start, end}` seconds on the original capture-relative timeline, sample-rounded
+from the unpadded VAD union (silence `[]`). `speech_seconds` is the duration of that
+same union (silence zero). C validates both against `audio_seconds`, then applies
+the legacy VAD grouping policy for multipart projection and content-idempotent
+accounting. ASR padding, window-local clocks and transcript gaps never define
+these boundaries. The chain reuses its single VAD invocation for both fields.
 
 Both standard and enhanced accounts receive per-owner AES-256-GCM encryption
 for temporary artifacts. E2EE, unknown protection, missing pinned generation,

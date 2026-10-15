@@ -77,6 +77,7 @@ def test_vad_silence_skips_models_but_persists_result():
     assert not words.calls and not diarized
     assert saved['a']['words'] == []
     assert saved['a']['speech_seconds'] == 0
+    assert saved['a']['speech_spans'] == []
 
 
 def test_failure_is_not_silence_and_siblings_survive():
@@ -294,8 +295,61 @@ def test_pool_defaults_and_unsafe_config(monkeypatch):
 
 
 def test_speech_seconds_uses_unpadded_vad_union_in_original_samples():
-    worker, _, saved, _, _, failures = setup_worker(vad=lambda _: [(0.1, 0.6), (0.4, 1.1), (0.3, 0.5), (1.8, 2.0)])
+    worker, _, saved, _, _, failures = setup_worker(
+        vad=lambda _: [(0.10002, 0.60002), (0.4, 1.10002), (0.30002, 0.50002), (1.8, 2.005)]
+    )
     assert worker.process_batch([item()])
+    assert saved['a']['speech_spans'] == [{'start': 0.1, 'end': 1.1}, {'start': 1.8, 'end': 2.0}]
     assert saved['a']['speech_seconds'] == pytest.approx(1.2)
     assert saved['a']['audio_seconds'] == 2
     assert not failures
+
+
+def test_capture_vad_groups_keep_words_and_diarization_on_original_span_clocks():
+    from utils.batch_pipeline.contracts import projection_speech_spans
+    from utils.batch_pipeline.projection_parts import split_result
+
+    vad_calls = []
+
+    def vad(samples):
+        vad_calls.append(len(samples))
+        return [(1, 3), (150, 152)]
+
+    class GroupWords:
+        def transcribe_batch(self, samples):
+            # Context windows are [0,7] and [146,156]. Provider clocks are
+            # local to each padded window; emitted clocks must stay original.
+            assert [len(sample) / 16000 for sample in samples] == [7, 10]
+            return [
+                [{'word': 'first', 'timestamp': [1.25, 1.75]}],
+                [{'word': 'second', 'timestamp': [4.25, 4.75]}],
+            ]
+
+    def diarize(samples):
+        assert len(samples) == 180 * 16000
+        return {
+            'turns': [
+                {'start': 1, 'end': 3, 'speaker': 'left'},
+                {'start': 150, 'end': 152, 'speaker': 'right'},
+            ]
+        }
+
+    worker, _, saved, decoded, _, failures = setup_worker(
+        vad=vad, words_providers={'parakeet': GroupWords()}, diarizers={'pyannote': diarize}
+    )
+    capture = replace(item(duration=180), requires_compute_admission=True)
+    assert len(worker.process_batch([capture])) == 1
+    assert vad_calls == [180 * 16000] and decoded == ['a'] and not failures
+    payload = saved['a']
+    assert projection_speech_spans(payload, 180) == [{'start': 1.0, 'end': 3.0}, {'start': 150.0, 'end': 152.0}]
+    assert payload['speech_seconds'] == 4
+    assert [word['timestamp'] for word in payload['words']] == [[1.25, 1.75], [150.25, 150.75]]
+
+    parts = split_result(capture, payload)
+    assert len(parts) == 2  # 147 seconds of silence must not join the groups.
+    assert [part.capture_at for part, _ in parts] == [101.0, 250.0]
+    assert [part.duration_seconds for part, _ in parts] == [2.0, 2.0]
+    for index, (_, part_payload) in enumerate(parts):
+        assert part_payload['words'] == [{'word': ['first', 'second'][index], 'timestamp': [0.25, 0.75]}]
+        assert part_payload['diarization']['turns'] == [{'start': 0.0, 'end': 2.0, 'speaker': ['left', 'right'][index]}]
+        assert part_payload['speech_seconds'] == 2.0
