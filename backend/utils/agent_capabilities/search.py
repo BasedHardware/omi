@@ -55,10 +55,12 @@ class OwnerSearch:
     async def search(self, request, *, byte_budget=64000):
         query = request.vocabulary or request.query
         found = []
+        skipped_refs = []
         counts = Counter()
         cursors = {}
         for collection in dict.fromkeys(request.collections):
             refs = []
+            next_page = None
             try:
                 if collection == 'conversations' and query and request.mode == 'lexical':
                     page = (
@@ -79,7 +81,7 @@ class OwnerSearch:
                     )
                     refs = ['conversations/' + key for key in ids]
                     if len(ids) >= request.limit:
-                        cursors[collection] = 'lexical:' + str(page + 1)
+                        next_page = 'lexical:' + str(page + 1)
                 elif collection == 'conversations' and query and request.mode == 'semantic':
                     counts['embedding_token_upper_bound'] += len(query.encode()) * 3
                     if vector_db.index is None:
@@ -113,20 +115,23 @@ class OwnerSearch:
                         db_executor, dream_history.history_page, self.uid, collection, after=request.cursor, limit=40
                     )
                     refs = [collection + '/' + key for key in ids]
-                for ref in refs[:40]:
+                visited = 0
+                for index, ref in enumerate(refs[:40]):
+                    row = await self.read(ref)
+                    visited += 1
                     if (
                         not (collection == 'conversations' and query and request.mode == 'lexical')
                         and request.mode != 'semantic'
                     ):
                         cursors[collection] = ref.partition('/')[2]
-                    row = await self.read(ref)
                     counts['hydrated'] += 1
                     from utils.agent_capabilities.session import serialized_bytes
 
                     size = serialized_bytes(row)
                     if counts['read_bytes'] + size > byte_budget:
                         counts['budget_exhausted'] += 1
-                        break
+                        skipped_refs.append(ref)
+                        continue
                     if row is None or not matches(row, request):
                         counts['read_bytes'] += size
                         continue
@@ -142,11 +147,17 @@ class OwnerSearch:
                     hit = {'ref': ref, 'snippet': text}
                     if serialized_bytes([*found, hit]) > byte_budget:
                         counts['budget_exhausted'] += 1
-                        break
+                        skipped_refs.append(ref)
+                        continue
                     counts['read_bytes'] += size
                     found.append(hit)
                     if len(found) >= request.limit:
+                        # A preceding collection may have consumed result slots.
+                        # Expose this page's unvisited tail rather than losing it.
+                        skipped_refs.extend(refs[index + 1 :])
                         break
+                if next_page and visited == len(refs):
+                    cursors[collection] = next_page
             except Exception:
                 # Provider faults are explicit incomplete search, never a healthy
                 # empty result. No arbitrary provider text enters diagnostics.
@@ -158,12 +169,13 @@ class OwnerSearch:
                     reason='other',
                     outcome='degraded',
                 )
-            if len(found) >= request.limit or counts['budget_exhausted']:
+            if len(found) >= request.limit:
                 break
         return {
             'results': found[: request.limit],
+            'skipped_refs': list(dict.fromkeys(skipped_refs)),
             'cursors': cursors,
             'counts': dict(counts),
-            'complete': counts['failed_paths'] == 0 and not counts['budget_exhausted'],
-            'truncated': bool(counts['budget_exhausted']),
+            'complete': counts['failed_paths'] == 0 and not skipped_refs,
+            'truncated': bool(skipped_refs),
         }

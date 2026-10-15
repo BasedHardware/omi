@@ -34,13 +34,14 @@ async def test_search_keeps_fitting_hits_and_budget_after_oversized_hit(monkeypa
     small = {'content': 'Synthetic small fact.'}
     source = search_source(monkeypatch, {'small': small, 'oversized': {'content': 'x' * 2000}})
     session = Session('synthetic-search-owner', source, SessionLimits(read_bytes=400), {}, authority='user')
-    result = await session.search(Search(collections=['memory_items', 'people']))
+    result = await session.search(Search(collections=['memory_items']))
     assert result['results'] == [{'ref': 'memory_items/small', 'snippet': small['content']}]
     assert result['truncated'] is True and result['complete'] is False
     assert result['counts']['hydrated'] == 2
     assert result['counts']['read_bytes'] == serialized_bytes(small)
     assert session.read_bytes == 2 + max(serialized_bytes(result['results']), serialized_bytes(small))
-    assert session.known == {'memory_items/small'}
+    assert result['skipped_refs'] == ['memory_items/oversized']
+    assert session.known == {'memory_items/small', 'memory_items/oversized'}
     # The omitted hit did not exhaust the budget or hide the useful ref.
     loaded = await session.read(Read(refs=['memory_items/small']))
     assert loaded['records']['memory_items/small'] == small
@@ -55,7 +56,8 @@ async def test_search_empty_truncation_does_not_charge_dropped_hit_or_control_en
     result = await session.search(Search(collections=['memory_items']))
     assert result['results'] == [] and result['truncated'] is True
     assert result['complete'] is False and result['counts'].get('read_bytes', 0) == 0
-    assert session.read_bytes == before and not session.known
+    assert session.read_bytes == before and session.known == {'memory_items/oversized'}
+    assert result['skipped_refs'] == ['memory_items/oversized']
 
 
 @pytest.mark.asyncio
@@ -79,16 +81,106 @@ async def test_injected_search_provider_also_truncates_to_fitting_hits():
                 'results': [
                     {'ref': 'people/small', 'snippet': 'Synthetic'},
                     {'ref': 'people/large', 'snippet': 'x' * 2000},
+                    {'ref': 'people/tail', 'snippet': 'Synthetic tail'},
                 ],
                 'counts': {},
                 'complete': True,
             }
 
-    session = Session('synthetic-search-owner', Source(), SessionLimits(read_bytes=100), {}, authority='user')
+    session = Session('synthetic-search-owner', Source(), SessionLimits(read_bytes=160), {}, authority='user')
     result = await session.search(Search(collections=['people']))
-    assert [row['ref'] for row in result['results']] == ['people/small']
+    assert [row['ref'] for row in result['results']] == ['people/small', 'people/tail']
     assert result['truncated'] is True and result['complete'] is False
-    assert session.known == {'people/small'} and session.read_bytes < 100
+    assert result['skipped_refs'] == ['people/large']
+    assert session.known == {'people/small', 'people/large', 'people/tail'} and session.read_bytes < 160
+
+
+@pytest.mark.asyncio
+async def test_lexical_page_scans_past_oversized_hit_and_preserves_it_before_advancing(monkeypatch):
+    rows = {
+        'oversized': {'transcript_segments': [{'text': 'x' * 2000}]},
+        'small': {'content': 'Synthetic small capture'},
+        'tail': {'content': 'Synthetic tail capture'},
+        'next': {'content': 'Synthetic next page'},
+    }
+    source = search_source(monkeypatch, rows)
+    pages = []
+
+    def query(**kwargs):
+        pages.append(kwargs['page'])
+        return ['oversized', 'small', 'tail'] if kwargs['page'] == 1 else ['next']
+
+    monkeypatch.setattr(search, 'keyword_search_conversation_ids', query)
+    session = Session('synthetic-search-owner', source, SessionLimits(read_bytes=500), {}, authority='user')
+    request = Search(query='Synthetic', collections=['conversations'], limit=3)
+    result = await session.search(request)
+    assert [hit['ref'] for hit in result['results']] == ['conversations/small', 'conversations/tail']
+    assert result['counts']['hydrated'] == 3
+    assert result['skipped_refs'] == ['conversations/oversized']
+    assert result['cursors'] == {'conversations': 'lexical:2'}
+    assert result['truncated'] is True and result['complete'] is False
+    # The skipped ref is usable by read; it fails only its independent byte cap.
+    omitted = await session.read(Read(refs=result['skipped_refs']))
+    assert omitted['errors']['conversations/oversized']['code'] == 'agent_read_byte_budget'
+    following = await session.search(request.model_copy(update={'cursor': 'lexical:2'}))
+    assert pages == [1, 2] and following['results'][0]['ref'] == 'conversations/next'
+    assert following['cursors'] == {} and following['complete'] is True
+
+
+@pytest.mark.asyncio
+async def test_lexical_page_cursor_is_not_published_when_hydration_stops_early(monkeypatch):
+    source = search_source(monkeypatch, {'oversized': {'content': 'x' * 2000}})
+    monkeypatch.setattr(search, 'keyword_search_conversation_ids', lambda **kw: ['oversized', 'unavailable'])
+
+    async def read(self, ref):
+        if ref.endswith('/unavailable'):
+            raise RuntimeError('Synthetic unavailable capture')
+        return {'content': 'x' * 2000}
+
+    monkeypatch.setattr(search.OwnerSearch, 'read', read)
+    monkeypatch.setattr(search, 'record_fallback', lambda **kw: None)
+    result = await source.search(Search(query='Synthetic', collections=['conversations'], limit=2), byte_budget=500)
+    assert result['cursors'] == {} and result['counts']['failed_paths'] == 1
+    assert result['skipped_refs'] == ['conversations/oversized'] and result['complete'] is False
+
+
+@pytest.mark.asyncio
+async def test_semantic_search_returns_small_tail_hits_and_reports_oversized_refs(monkeypatch):
+    rows = {
+        'oversized': {'content': 'x' * 2000},
+        'small': {'content': 'Synthetic small capture'},
+        'oversized-again': {'content': 'x' * 3000},
+        'tail': {'content': 'Synthetic tail capture'},
+    }
+    source = search_source(monkeypatch, rows)
+    monkeypatch.setattr(search.vector_db, 'index', object())
+    monkeypatch.setattr(search.vector_db, 'query_vectors', lambda *a, **kw: list(rows))
+    session = Session('synthetic-search-owner', source, SessionLimits(read_bytes=500), {}, authority='user')
+    result = await session.search(Search(query='Synthetic', mode='semantic', collections=['conversations'], limit=4))
+    assert [hit['ref'] for hit in result['results']] == ['conversations/small', 'conversations/tail']
+    assert result['skipped_refs'] == ['conversations/oversized', 'conversations/oversized-again']
+    assert result['counts']['hydrated'] == 4 and result['counts']['budget_exhausted'] == 2
+    assert result['counts']['read_bytes'] == sum(serialized_bytes(rows[key]) for key in ('small', 'tail'))
+    assert result['cursors'] == {} and result['truncated'] is True and result['complete'] is False
+    omitted = await session.read(Read(refs=result['skipped_refs']))
+    assert all(error['code'] == 'agent_read_byte_budget' for error in omitted['errors'].values())
+    assert session.known == {'conversations/' + key for key in rows} and session.read_bytes <= 500
+
+
+@pytest.mark.asyncio
+async def test_lexical_partial_page_does_not_advance_when_other_collection_used_result_slots(monkeypatch):
+    source = search_source(monkeypatch, {'person': {'name': 'Synthetic person'}})
+    monkeypatch.setattr(search, 'keyword_search_conversation_ids', lambda **kw: ['first', 'second', 'tail'])
+
+    async def read(self, ref):
+        return {'name': 'Synthetic person'} if ref.startswith('people/') else {'content': 'Synthetic capture'}
+
+    monkeypatch.setattr(search.OwnerSearch, 'read', read)
+    session = Session('synthetic-search-owner', source, SessionLimits(read_bytes=500), {}, authority='user')
+    result = await session.search(Search(query='Synthetic', collections=['people', 'conversations'], limit=3))
+    assert len(result['results']) == 3
+    assert 'conversations' not in result['cursors']
+    assert result['skipped_refs'] == ['conversations/tail'] and 'conversations/tail' in session.known
 
 
 @pytest.fixture

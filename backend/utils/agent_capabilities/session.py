@@ -135,18 +135,25 @@ class Session:
         # control envelope that reports truncation, so an oversized dropped hit
         # cannot consume the budget or discard useful results from this call.
         hits = []
+        skipped_refs = list(result.get('skipped_refs', []))
         for hit in result.get('results', [])[: request.limit]:
+            hit = {**hit, 'ref': canonical_ref(hit['ref'])}
             if serialized_bytes([*hits, hit]) > byte_budget:
-                result = {**result, 'complete': False, 'truncated': True}
-                break
+                skipped_refs.append(hit['ref'])
+                continue
             hits.append(hit)
-        result = {**result, 'results': hits}
+        skipped_refs = list(dict.fromkeys(canonical_ref(ref) for ref in skipped_refs))
+        result = {**result, 'results': hits, 'skipped_refs': skipped_refs}
+        if skipped_refs:
+            result.update(complete=False, truncated=True)
         self.read_bytes += max(serialized_bytes(hits) if hits else 0, result.get('counts', {}).get('read_bytes', 0))
-        for row in result.get('results', [])[: request.limit]:
-            if len(self.known) >= 512:
+        # Reported candidates are seen refs too, so read can attempt an omitted
+        # record individually (and return a byte-limit error, not unknown-ref).
+        for ref in [*(hit['ref'] for hit in hits), *skipped_refs]:
+            base = base_ref(ref)
+            if base not in self.known and len(self.known) >= 512:
                 raise ValueError('agent_reference_cap')
-            row['ref'] = canonical_ref(row['ref'])
-            self.known.add(base_ref(row['ref']))
+            self.known.add(base)
         for collection, cursor in result.get('cursors', {}).items():
             scoped = request.model_copy(update={'collections': [collection], 'cursor': None})
             self.cursors[cursor] = json.dumps(scoped.model_dump(mode='json', exclude={'cursor'}), sort_keys=True)
