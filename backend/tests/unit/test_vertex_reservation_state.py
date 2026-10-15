@@ -50,6 +50,41 @@ async def test_non_teaching_probe_preserves_completed_failure_window(monkeypatch
         await client.aclose()
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('outcome', ['inconclusive', 'exception'])
+async def test_non_teaching_probe_advances_discovery_without_waiting_for_snapshot_expiry(monkeypatch, outcome):
+    monkeypatch.delenv(ptr.PT_MODEL_OVERRIDE_ENV, raising=False)
+    monkeypatch.delenv(vr.STATE_OVERRIDE_ENV, raising=False)
+    client = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    store = ReservationState(client)
+    calls = []
+
+    async def probe(model, location):
+        calls.append(model)
+        if model == OLD:
+            if outcome == 'exception':
+                raise RuntimeError('synthetic inconclusive probe')
+            return outcome
+        return 'dedicated_success'
+
+    try:
+        assert set((await store.refresh(probe, apply_overrides=False)).values()) == {vr.State.UNKNOWN}
+        await asyncio.gather(*store._probe_tasks)
+        # A completed non-teaching probe invalidates the cold snapshot while its
+        # global lease remains held; the next refresh can claim the other model.
+        assert store._snapshot == {}
+        assert (await store.refresh(probe, apply_overrides=False))[NEW] == vr.State.UNKNOWN
+        await asyncio.gather(*store._probe_tasks)
+        assert (await store.refresh(apply_overrides=False))[NEW] == vr.State.ACTIVE
+        assert calls == [OLD, NEW]
+        evidence = json.loads(await client.get(store.key()))['evidence']
+        assert evidence[OLD] == asdict(vr.Evidence())
+        assert evidence[NEW]['success_at'] > 0
+    finally:
+        await store.aclose()
+        await client.aclose()
+
+
 def failures(start=1000):
     e = vr.Evidence(success_at=100)
     for t in [start, start + 600, start + 1200, start + 1800]:

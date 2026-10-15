@@ -54,9 +54,13 @@ async def test_backend_discovery_publishes_shared_evidence_without_gateway(monke
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
         monkeypatch.setattr(dream_capacity, 'get_desktop_gemini_client', lambda: client)
         try:
-            # Cold or legacy-only evidence does not admit Dream.
+            # Complete both probes without waiting for the one-second snapshot TTL.
+            # An inconclusive legacy probe must not delay discovering Dream's order.
             assert await dream_capacity.available_model() is None
             await asyncio.gather(*state._probe_tasks)
+            legacy_doc = json.loads(await redis.get(state.key()))
+            assert legacy_doc['evidence'][OLD]['failure_count'] == 0
+            assert legacy_doc['evidence'][OLD]['success_at'] == 0
             assert await dream_capacity.available_model() is None
             await asyncio.gather(*state._probe_tasks)
             assert await dream_capacity.available_model() == NEW
@@ -68,6 +72,7 @@ async def test_backend_discovery_publishes_shared_evidence_without_gateway(monke
             assert doc['states'][NEW] == 'active' and doc['evidence'][NEW]['success_at'] > 0
             assert (await ReservationState(redis).refresh())[NEW] == State.ACTIVE
             assert len(requests) == 2  # One globally leased probe per declared model.
+            assert OLD in requests[0].url.path and NEW in requests[1].url.path
             for request in requests:
                 assert '/projects/based-hardware/' in request.url.path
                 assert request.headers['X-Vertex-AI-LLM-Request-Type'] == 'dedicated'

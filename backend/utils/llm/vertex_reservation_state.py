@@ -383,7 +383,9 @@ class ReservationState:
             and key == self.key()
         ):
             await self.transact(model, outcome)
-            self._snapshot = {}
+        # A completed probe releases the local snapshot so the next refresh can
+        # discover another model. Non-teaching outcomes still publish no evidence.
+        self._snapshot = {}
 
     async def aclose(self) -> None:
         for task in self._probe_tasks:

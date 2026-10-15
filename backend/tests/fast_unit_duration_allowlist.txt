@@ -428,3 +428,16 @@ tests/unit/test_dream_budget_settlement.py::test_known_cost_and_lease_finish_sha
 tests/unit/test_task_sync_apple_async_boundary.py::test_single_apple_reminder_sync_offloads_batch_update_and_preserves_result
 tests/unit/test_task_sync_apple_async_boundary.py::test_batch_apple_reminder_sync_offloads_batch_update_and_preserves_per_item_results
 tests/unit/test_task_sync_apple_async_boundary.py::test_apple_reminder_sync_failure_hides_exception_text_in_single_and_batch_results
+
+# These behavioral import-contract tests deliberately load the real chat_file module
+# against fresh router/database stubs. Both assertions pass; the required import
+# graph costs 0.44-0.60s CPU per call in file isolation (serial and parallel runs).
+# Keep both contracts in the unit selection without weakening the global budget.
+tests/unit/test_chat_file_gateway_stub_import_contract.py::test_chat_file_imports_against_the_suite_gateway_stub
+tests/unit/test_chat_file_gateway_stub_import_contract.py::test_a_stale_stub_fails_on_the_exact_missing_attribute
+# Compares the runtime manifest, ingress chart and deployment workflow declarations
+# in dev and prod; all assertions pass, but YAML parsing costs 0.30-0.31s CPU.
+tests/unit/test_llm_gateway_deploy_contract.py::test_gateway_runtime_static_address_matches_helm_ingress_declaration
+# The first real translation quality check loads langdetect's local profiles.
+# Assertions pass in isolation, but the cold profile load costs 0.32-0.34s CPU.
+tests/unit/test_translation_negative_cache_detection.py::test_negative_cached_segment_does_not_vote_for_target_language
