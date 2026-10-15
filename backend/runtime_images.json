@@ -76,7 +76,8 @@
             "dependency_probe_smoke": true,
             "pull_request_smoke": true,
             "dependency_probe_exclusions": {
-                "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; pusher images use its built-in fallback."
+                "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; pusher images use its built-in fallback.",
+                "onnxruntime": "utils.stt.vad guards the local Silero ONNX import; pusher images ship without onnxruntime and stored-audio VAD compaction abstains to original audio there."
             }
         },
         {

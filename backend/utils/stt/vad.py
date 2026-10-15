@@ -6,7 +6,12 @@ from typing import Any, Dict, List, Literal, Optional, Tuple, Union, overload
 
 import httpx
 import numpy as np
-import onnxruntime as ort  # onnxruntime is untyped
+
+try:
+    import onnxruntime as ort  # onnxruntime is untyped
+except ImportError:  # pragma: no cover - pusher image ships without onnxruntime
+    ort = None
+
 import requests
 from pydub import AudioSegment  # pydub is untyped
 
@@ -115,7 +120,7 @@ def _record_hosted_vad_fallback(exc: BaseException) -> None:
 _ASSETS_DIR = os.path.join(os.path.dirname(__file__), 'assets')
 _MODEL_PATH = os.path.join(_ASSETS_DIR, 'silero_vad.onnx')
 
-_ort_session: Optional[ort.InferenceSession] = None
+_ort_session: Optional[Any] = None
 _ort_init_lock = threading.Lock()
 
 # ONNX model constants — Silero VAD v6 (full model, opset 16)
@@ -129,7 +134,7 @@ VAD_CONTEXT_SAMPLES = 64  # prepended to each window
 _STATE_SHAPE = (2, 1, 128)
 
 
-def _get_ort_session() -> ort.InferenceSession:
+def _get_ort_session() -> Any:
     """Lazy-init the shared ONNX InferenceSession (singleton, thread-safe).
 
     ORT InferenceSession.run() is thread-safe for different input data.
@@ -138,6 +143,8 @@ def _get_ort_session() -> ort.InferenceSession:
     global _ort_session
     if _ort_session is not None:
         return _ort_session
+    if ort is None:
+        raise RuntimeError('onnxruntime is unavailable; local Silero VAD cannot run')
     with _ort_init_lock:
         if _ort_session is not None:
             return _ort_session
