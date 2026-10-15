@@ -374,11 +374,15 @@ export async function computeWall(
     (async () => {
       const book = await sources.stripe();
       const m = metrics["revenue.mrr"];
-      m.value = book.usd;
+      m.value =
+        book.usd === 0 &&
+        (book.partial || book.unmappedProducts > 0 || book.unsupportedItems > 0)
+          ? null
+          : book.usd;
       m.partial =
         book.partial || book.unmappedProducts > 0 || book.unsupportedItems > 0;
       // Live Stripe is today's book. Never pretend it is a historical complete-day close.
-      m.status = "proxy";
+      m.status = m.value == null ? "null" : "proxy";
       m.sourceRefreshedAt = new Date().toISOString();
       m.dataThrough = now.toISOString();
       m.stale = false;
@@ -400,7 +404,7 @@ export async function computeWall(
           book.sourceRefreshedAt
         );
         const mau = metrics["engagement.mau"];
-        if (mau.value && !m.partial) {
+        if (mau.value && m.value != null && !m.partial) {
           a.value = book.usd / mau.value;
           a.denominator = mau.value;
           stamp(

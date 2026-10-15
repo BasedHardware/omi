@@ -218,3 +218,15 @@ describe("Stripe wall book", () => {
     vi.unstubAllEnvs();
   });
 });
+
+it("does not turn unsupported or failed Stripe coverage into a zero MRR", async () => {
+  const s = sources();
+  s.stripe = async () => ({
+    usd: 0,
+    partial: false,
+    unmappedProducts: 0,
+    unsupportedItems: 2,
+  });
+  const wall = await computeWall(s, now);
+  expect(wall.metrics.find((m) => m.id === "revenue.mrr")?.value).toBeNull();
+});
