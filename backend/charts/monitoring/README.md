@@ -1093,6 +1093,13 @@ PVC is zonal to `us-central1-a`; replica 1 gets its own retained claim. Existing
 80GB retention-size and 10-day retention are preserved.
 
 Stage 1 pins the existing Service to replica 0 while the new TSDB warms.
+A separate unpinned self-monitor Service exposes both replicas and both ports.
+When restoring the native query Service, remove both temporary Service entries
+(`prometheusWarmupService` and `prometheusSelfMonitorService`) while preserving
+all other extra manifests. The workflow waits for operator reconciliation and
+checks both Ready pods, node separation and independent Bound PVCs; Helm wait
+alone cannot establish these conditions. Start the warm-up clock only after
+both replicas are ready and their self-scrape targets are healthy.
 Current alert sources include seven-day lookbacks; readiness alone is not
 query parity. After at least seven days and accepted per-replica alert-query
 comparisons, a separate change restores the native Service selector. Full

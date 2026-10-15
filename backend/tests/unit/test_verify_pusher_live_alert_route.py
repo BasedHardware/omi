@@ -257,11 +257,16 @@ def test_gate_file_contains_every_pusher_finalization_uid(verifier: SimpleNamesp
 
 def test_live_stt_import_allowlist_excludes_pending_runway_rules(verifier: SimpleNamespace) -> None:
     rules = verifier.load_live_stt_import_rules()
-    assert set(rules) == set(verifier.LIVE_STT_IMPORT_UIDS) | set(verifier.REDIS_CACHE_IMPORT_UIDS)
+    assert set(rules) == (
+        set(verifier.LIVE_STT_IMPORT_UIDS)
+        | set(verifier.REDIS_CACHE_IMPORT_UIDS)
+        | set(verifier.DATASOURCE_CANARY_UIDS)
+    )
+    assert "omi-datasource-gmp" not in rules
     assert set(rules).isdisjoint(verifier.LIVE_STT_PENDING_UIDS)
-    assert (set(rules) - set(verifier.REDIS_CACHE_IMPORT_UIDS)) | set(verifier.LIVE_STT_PENDING_UIDS) == {
-        rule["uid"] for rule in json.loads((verifier.ALERT_SOURCES / "live-stt.json").read_text())
-    }
+    assert (set(rules) - set(verifier.REDIS_CACHE_IMPORT_UIDS) - set(verifier.DATASOURCE_CANARY_UIDS)) | set(
+        verifier.LIVE_STT_PENDING_UIDS
+    ) == {rule["uid"] for rule in json.loads((verifier.ALERT_SOURCES / "live-stt.json").read_text())}
     gated = verifier.load_gated_uids(verifier.load_all_committed_rules())
     assert set(verifier.LIVE_STT_IMPORT_UIDS) | set(verifier.REDIS_CACHE_IMPORT_UIDS) <= set(gated)
 
@@ -286,6 +291,10 @@ def test_live_stt_import_upserts_only_allowlisted_rules_and_checks_telegram_rout
             return [{"uid": existing_uid}]
         if path == "/api/v1/provisioning/contact-points":
             return contact_points
+        uid = path.rsplit("/", 1)[-1]
+        if uid in verifier.DATASOURCE_CANARY_UIDS:
+            assert [key for key, _ in calls] == list(verifier.DATASOURCE_CANARY_UIDS)
+            return rules[uid]
         raise AssertionError(f"unexpected Grafana read path: {path}")
 
     def fake_write(_url: str, uid: str, _rule: dict[str, Any], _token: str, *, exists: bool) -> None:
@@ -328,7 +337,7 @@ def test_live_stt_fleet_scope_reports_only_the_import_allowlist(
         "https://monitor.omi.me", "secret", 1, "gated", alert_set="live-stt"
     )
     assert failures == []
-    assert report[0] == "FLEET committed=28 live=28 gated=28 matching=28 gated_matching=28"
+    assert report[0] == "FLEET committed=30 live=30 gated=30 matching=30 gated_matching=30"
     assert "COMMITTED_BUT_ABSENT (0): -" in report
     assert "LIVE_BUT_UNCOMMITTED (0): -" in report
 
@@ -597,4 +606,75 @@ def test_missing_redis_rule_fails_live_import_scope(verifier: SimpleNamespace, m
         lambda *_args, **_kwargs: [rule for key, rule in rules.items() if key != uid],
     )
     failures, _ = verifier._run_fleet_coverage("https://monitor.omi.me", "secret", 1, "gated", alert_set="live-stt")
+    assert any(uid in failure for failure in failures)
+
+
+@pytest.mark.parametrize('uid', ['omi-datasource-prometheus', 'omi-datasource-cloud-monitoring'])
+@pytest.mark.parametrize('field,value', [('isPaused', True), ('execErrState', 'KeepLast'), ('noDataState', 'OK')])
+def test_import_requires_active_fail_closed_canary_source(verifier, monkeypatch, uid, field, value):
+    committed = copy.deepcopy(verifier.load_all_committed_rules())
+    committed[uid][field] = value
+    monkeypatch.setitem(verifier.load_live_stt_import_rules.__globals__, 'load_all_committed_rules', lambda: committed)
+    with pytest.raises(verifier.AlertRouteError, match='must be active and page'):
+        verifier.load_live_stt_import_rules()
+
+
+@pytest.mark.parametrize('mutation', ['paused', 'error', 'nodata', 'identity', 'receiver', 'nonobject'])
+def test_canary_readback_failure_prevents_business_keep_last_writes(verifier, monkeypatch, mutation):
+    rules = verifier.load_live_stt_import_rules()
+    broken = copy.deepcopy(rules[verifier.DATASOURCE_CANARY_UIDS[0]])
+    if mutation == 'paused':
+        broken['isPaused'] = True
+    elif mutation == 'error':
+        broken['execErrState'] = 'KeepLast'
+    elif mutation == 'nodata':
+        broken['noDataState'] = 'OK'
+    elif mutation == 'identity':
+        broken['labels']['alert_identity'] = 'wrong'
+    elif mutation == 'receiver':
+        broken['notification_settings']['receiver'] = 'wrong'
+    else:
+        broken = []
+    writes = []
+
+    def read(_base, path, _token, **kwargs):
+        if path == verifier.ALERT_RULE_LIST_PATH:
+            return []
+        if path.endswith('/contact-points'):
+            return [{'name': verifier.TELEGRAM_RECEIVER, 'type': 'telegram'}]
+        uid = path.rsplit('/', 1)[-1]
+        return broken if uid == verifier.DATASOURCE_CANARY_UIDS[0] else rules[uid]
+
+    monkeypatch.setitem(verifier._run_live_stt_import.__globals__, '_request_json', read)
+    monkeypatch.setitem(
+        verifier._run_live_stt_import.__globals__,
+        '_write_rule',
+        lambda _base, uid, *_args, **kwargs: writes.append(uid),
+    )
+    assert verifier._run_live_stt_import('https://monitor.omi.me', 'dummy-secret')
+    assert writes == list(verifier.DATASOURCE_CANARY_UIDS)
+
+
+@pytest.mark.parametrize('uid', ['omi-datasource-prometheus', 'omi-datasource-cloud-monitoring'])
+@pytest.mark.parametrize('mutation', ['absent', 'paused', 'error', 'nodata', 'identity', 'receiver'])
+def test_live_stt_postimport_gate_includes_canaries(verifier, monkeypatch, uid, mutation):
+    live = copy.deepcopy(verifier.load_live_stt_import_rules())
+    if mutation == 'absent':
+        live.pop(uid)
+    elif mutation == 'paused':
+        live[uid]['isPaused'] = True
+    elif mutation == 'error':
+        live[uid]['execErrState'] = 'KeepLast'
+    elif mutation == 'nodata':
+        live[uid]['noDataState'] = 'OK'
+    elif mutation == 'identity':
+        live[uid]['labels']['alert_identity'] = 'wrong'
+    else:
+        live[uid]['notification_settings']['receiver'] = 'wrong'
+    monkeypatch.setitem(
+        verifier._run_fleet_coverage.__globals__, '_request_json', lambda *_args, **kwargs: list(live.values())
+    )
+    failures, _ = verifier._run_fleet_coverage(
+        'https://monitor.omi.me', 'dummy-secret', 1, 'gated', alert_set='live-stt'
+    )
     assert any(uid in failure for failure in failures)

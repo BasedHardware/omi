@@ -451,7 +451,7 @@ nodeExporter:
 
 # Temporary warm-up pin. Helm matches kind/name/namespace, so moving the native
 # Service into extraManifests preserves its ClusterIP and both consumer URLs.
-# Stage 2 removes this manifest AND restores prometheus.service.enabled: true.
+# Stage 2 removes both temporary Services AND restores prometheus.service.enabled: true.
 extraManifests:
   prometheusWarmupService: |
     apiVersion: v1
@@ -461,7 +461,8 @@ extraManifests:
       namespace: {{ template "kube-prometheus-stack.namespace" . }}
       labels:
         app: {{ template "kube-prometheus-stack.name" . }}-prometheus
-        self-monitor: {{ .Values.prometheus.serviceMonitor.selfMonitor | quote }}
+        # Query routing is pinned; self-scrapes use the unpinned Service below.
+        self-monitor: "false"
         {{- include "kube-prometheus-stack.labels" . | nindent 4 }}
     spec:
       type: ClusterIP
@@ -479,3 +480,28 @@ extraManifests:
         app.kubernetes.io/name: prometheus
         operator.prometheus.io/name: {{ template "kube-prometheus-stack.prometheus.crname" . }}
         statefulset.kubernetes.io/pod-name: prometheus-prod-omi-kube-prometheus-s-prometheus-0
+
+  prometheusSelfMonitorService: |
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: {{ template "kube-prometheus-stack.fullname" . }}-prometheus-selfmonitor
+      namespace: {{ template "kube-prometheus-stack.namespace" . }}
+      labels:
+        app: {{ template "kube-prometheus-stack.name" . }}-prometheus
+        self-monitor: "true"
+        {{- include "kube-prometheus-stack.labels" . | nindent 4 }}
+    spec:
+      type: ClusterIP
+      ports:
+        - name: {{ .Values.prometheus.prometheusSpec.portName }}
+          port: 9090
+          targetPort: 9090
+        - name: reloader-web
+          appProtocol: http
+          port: 8080
+          targetPort: reloader-web
+      publishNotReadyAddresses: false
+      selector:
+        app.kubernetes.io/name: prometheus
+        operator.prometheus.io/name: {{ template "kube-prometheus-stack.prometheus.crname" . }}
