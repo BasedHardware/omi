@@ -10,14 +10,14 @@ class Grafana:
     def __init__(self, base, token):
         self.base, self.token = base.rstrip("/"), token
 
-    def call(self, method, path, body=None):
+    def call(self, method, path, body=None, *, timeout=30):
         request = urllib.request.Request(
             self.base + path,
             data=None if body is None else json.dumps(body).encode(),
             headers={"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"},
             method=method,
         )
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             return json.load(response)
 
     def optional(self, path):

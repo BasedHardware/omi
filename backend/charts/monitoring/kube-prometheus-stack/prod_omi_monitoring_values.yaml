@@ -83,6 +83,7 @@ grafana:
           editable: false
           jsonData:
             auth_method: none
+            timeoutInSeconds: 420
             allowedHosts: [http://127.0.0.1:8899]
   extraConfigmapMounts:
     - name: stats-proxy

@@ -35,6 +35,11 @@ The metadata access token is used only for IAM Credentials `generateIdToken`
 on `omi-stats-reader`, audience `https://admin.omi.me/api/omi/stats`, includeEmail.
 The ID token stays in memory and refreshes five minutes early, or once on 401.
 No service-account key or static bearer is provisioned in Infinity.
+Cold wall aggregation includes batched120-second PostHog queries. The isolated
+HTTP budgets are360s upstream,420s Infinity and450s for live verification,
+matching the existing six-minute web proxy envelope without raising monitoring
+datasource/global timeouts. Warm/measure the real wall before enabling the embed;
+these deadlines do not prove a cold aggregate finishes within them.
 
 Parent must apply `grafana-stats-proxy` ConfigMap from `stats_proxy.py` and the
 bootstrap-generated `grafana-business-runtime` ConfigMap before Helm. Hash the

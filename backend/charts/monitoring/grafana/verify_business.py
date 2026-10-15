@@ -33,7 +33,7 @@ def verify(base, business_token, viewer_token):
     # impersonated stats reader -> HTTPS wall route. No returned values logged.
     target = dict(board["dashboard"]["panels"][-1]["targets"][0])
     target.update({"intervalMs": 900000, "maxDataPoints": 100})
-    query = client.call("POST", "/api/ds/query", {"from": "now-1h", "to": "now", "queries": [target]})
+    query = client.call("POST", "/api/ds/query", {"from": "now-1h", "to": "now", "queries": [target]}, timeout=450)
     results = list(query["results"].values())
     assert results and all(
         not item.get("error") and item.get("status", 200) == 200 and item.get("frames") for item in results

@@ -98,7 +98,7 @@ class StatsProxy:
                     body = self.request(
                         "https://admin.omi.me" + path,
                         {"Authorization": f"Bearer {token}", "Accept": "application/json"},
-                        timeout=65,
+                        timeout=360,
                     )
                     json.loads(body)  # Never forward HTML, redirects or a login page.
                     stamp = self.clock()
@@ -160,7 +160,7 @@ class Server(ThreadingHTTPServer):
 
     def get_request(self):
         request, address = super().get_request()
-        request.settimeout(110)
+        request.settimeout(430)
         return request, address
 
     def process_request(self, request, client_address):
