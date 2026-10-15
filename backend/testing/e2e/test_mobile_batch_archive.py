@@ -61,7 +61,11 @@ def test_local_http_batch_archive_acceptance(client, auth_headers, monkeypatch, 
             response = http.post(
                 '/v2/sync-local-files', headers=auth_headers, files={'files': (name, raw, 'application/octet-stream')}
             )
-        archived = list((Path(fake_storage) / storage.private_cloud_sync_bucket / 'raw-mobile-batch').rglob('*.bin'))
+        archived = [
+            path
+            for path in (Path(fake_storage) / storage.private_cloud_sync_bucket / 'raw-mobile-batch').rglob('*.bin')
+            if path.is_file()
+        ]
         if archive_fails:
             assert response.status_code == 500, response.text
             assert not scheduled
