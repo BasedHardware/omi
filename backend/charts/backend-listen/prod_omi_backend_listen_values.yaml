@@ -445,13 +445,19 @@ env:
   - name: STT_RESILIENT_RECONNECT
     value: "false"
   - name: STT_LIVE_DEMAND_ENABLED
-    value: "false"
+    value: "true"
   - name: STT_LIVE_DEMAND_PERCENT
     value: "0"
   - name: STT_LIVE_DEMAND_UID_ALLOWLIST
-    value: ""
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: STT_LIVE_DEMAND_MIN_DWELL_SECONDS
     value: "15"
+  - name: MOBILE_STANDARD_BATCH_ENABLED
+    value: "true"
+  - name: MOBILE_STANDARD_BATCH_PERCENT
+    value: "0"
+  - name: MOBILE_STANDARD_BATCH_UIDS
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: STT_FAILOVER_RECOVERY_ENABLED
     value: "true"
   - name: SONIOX_IDLE_CLOSE_SECONDS
@@ -494,6 +500,10 @@ env:
     value: "8"
   - name: PARAKEET_WINDOW_DIARIZATION
     value: "false"
+  - name: PARAKEET_WINDOW_DEADLINE_CUT_ENABLED
+    value: "false"
+  - name: PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS
+    value: "1.2"
   - name: PARAKEET_WINDOW_PACE_SECONDS
     value: "6"
   - name: PARAKEET_WINDOW_MAX_CONTEXT_SECONDS
@@ -760,6 +770,8 @@ volumeMounts: []
 #   mountPath: "/etc/foo"
 #   readOnly: true
 
+# Placement uses service/env labels, not pool names or CPU family.
+# New N4 and qualified N2 fallback pools retain the affinity labels below.
 nodeSelector: {}
 
 tolerations: []

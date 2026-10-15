@@ -24,6 +24,25 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
   final PeopleProvider peopleProvider;
   final UsageProvider usageProvider;
 
+  /// The proxy provider rebuilds this adapter on every upstream notify. Two
+  /// adapters over the same provider instances behave identically, so the
+  /// capture controller can skip re-installing (and re-notifying) it.
+  @override
+  bool operator ==(Object other) =>
+      other is ProviderCaptureExternalActions &&
+      identical(other.conversationProvider, conversationProvider) &&
+      identical(other.messageProvider, messageProvider) &&
+      identical(other.peopleProvider, peopleProvider) &&
+      identical(other.usageProvider, usageProvider);
+
+  @override
+  int get hashCode => Object.hash(
+    identityHashCode(conversationProvider),
+    identityHashCode(messageProvider),
+    identityHashCode(peopleProvider),
+    identityHashCode(usageProvider),
+  );
+
   @override
   bool? get isOutOfCredits => usageProvider.isOutOfCredits;
 
@@ -86,8 +105,13 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
 
   @override
   Future<bool> assignSpeaker(String conversationId, List<String> segmentIds, String personId, {int? speakerId}) =>
-      assignBulkConversationTranscriptSegments(conversationId, segmentIds,
-          isUser: personId == 'user', personId: personId == 'user' ? null : personId, speakerId: speakerId);
+      assignBulkConversationTranscriptSegments(
+        conversationId,
+        segmentIds,
+        isUser: personId == 'user',
+        personId: personId == 'user' ? null : personId,
+        speakerId: speakerId,
+      );
 
   @override
   Future<void> refreshPeople() {

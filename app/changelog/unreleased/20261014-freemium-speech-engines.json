@@ -1,0 +1,3 @@
+{
+  "change": "On-device fallback uses Apple’s newer speech engine on supported iPhones and decodes Android recordings in bounded chunks for better transcription."
+}

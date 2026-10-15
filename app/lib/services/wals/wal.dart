@@ -103,17 +103,17 @@ WalSyncDisplayState? worstSessionSyncState(Iterable<Wal> wals) {
 bool isRetryableSyncState(WalSyncDisplayState state) => state == WalSyncDisplayState.failed;
 
 int _syncOutcomeRank(WalSyncDisplayState state) => switch (state) {
-      WalSyncDisplayState.failed => 4,
-      WalSyncDisplayState.corrupted => 4,
-      WalSyncDisplayState.outsideRecoveryWindow => 4,
-      WalSyncDisplayState.unsupportedAudio => 4,
-      WalSyncDisplayState.uploadRejected => 4,
-      WalSyncDisplayState.retrying => 3,
-      WalSyncDisplayState.syncing => 2,
-      WalSyncDisplayState.uploaded => 1,
-      WalSyncDisplayState.synced => 1,
-      WalSyncDisplayState.waiting => 1,
-    };
+  WalSyncDisplayState.failed => 4,
+  WalSyncDisplayState.corrupted => 4,
+  WalSyncDisplayState.outsideRecoveryWindow => 4,
+  WalSyncDisplayState.unsupportedAudio => 4,
+  WalSyncDisplayState.uploadRejected => 4,
+  WalSyncDisplayState.retrying => 3,
+  WalSyncDisplayState.syncing => 2,
+  WalSyncDisplayState.uploaded => 1,
+  WalSyncDisplayState.synced => 1,
+  WalSyncDisplayState.waiting => 1,
+};
 
 /// Max automatic sync attempts before a recording is considered
 /// [WalSyncDisplayState.failed]. This is the budget itself, not a display
@@ -173,6 +173,21 @@ class Wal {
 
   WalStatus status;
   WalStorage storage;
+
+  /// Explicit phone-only custody. Never admitted to a cloud audio drain.
+  bool onDeviceOnly;
+
+  /// Recording-time custody evidence. Null identifies pre-fix dev records.
+  bool? capturedOnDeviceOnly;
+
+  /// Imported device storage was never part of the phone's live STT route.
+  /// Repair only the erroneous pre-fix stamp, preserving explicit capture consent.
+  void repairLegacyImportedCustody() {
+    if (capturedOnDeviceOnly == null &&
+        (originalStorage == WalStorage.sdcard || originalStorage == WalStorage.flashPage)) {
+      onDeviceOnly = false;
+    }
+  }
 
   String? filePath;
   List<List<int>> data;
@@ -338,6 +353,8 @@ class Wal {
     this.channel = 1,
     this.status = WalStatus.inProgress,
     this.storage = WalStorage.mem,
+    this.onDeviceOnly = false,
+    this.capturedOnDeviceOnly,
     this.filePath,
     this.device = "phone",
     this.deviceModel,
@@ -376,6 +393,8 @@ class Wal {
       sampleRate: json['sample_rate'] ?? 16000,
       status: WalStatus.values.asNameMap()[json['status']] ?? WalStatus.inProgress,
       storage: WalStorage.values.asNameMap()[json['storage']] ?? WalStorage.mem,
+      onDeviceOnly: json['on_device_only'] == true,
+      capturedOnDeviceOnly: json['captured_on_device_only'] as bool?,
       filePath: json['file_path'],
       seconds: json['seconds'] ?? chunkSizeInSeconds,
       device: json['device'] ?? "phone",
@@ -385,8 +404,9 @@ class Wal {
       fileNum: json['file_num'] ?? 1,
       totalFrames: json['total_frames'] ?? 0,
       syncedFrameOffset: json['synced_frame_offset'] ?? 0,
-      originalStorage:
-          json['original_storage'] != null ? WalStorage.values.asNameMap()[json['original_storage']] : null,
+      originalStorage: json['original_storage'] != null
+          ? WalStorage.values.asNameMap()[json['original_storage']]
+          : null,
       conversationId: json['conversation_id'],
       recordingSessionId: json['recording_session_id'],
       ownerUid: json['owner_uid'],
@@ -405,7 +425,7 @@ class Wal {
       uploadedAt: json['uploaded_at'] ?? 0,
       syncedAt: json['synced_at'] ?? 0,
       keptForTranscriptRecovery: json['kept_for_transcript_recovery'] == true,
-    );
+    )..repairLegacyImportedCustody();
   }
 
   Map<String, dynamic> toJson() {
@@ -416,6 +436,8 @@ class Wal {
       'sample_rate': sampleRate,
       'status': status.name,
       'storage': storage.name,
+      'on_device_only': onDeviceOnly,
+      if (capturedOnDeviceOnly != null) 'captured_on_device_only': capturedOnDeviceOnly,
       'file_path': filePath,
       'seconds': seconds,
       'device': device,

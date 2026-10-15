@@ -10,7 +10,8 @@ import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/http/api/conversations.dart'
     hide unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
-import 'package:omi/backend/http/api/conversations.dart' as conv_api
+import 'package:omi/backend/http/api/conversations.dart'
+    as conv_api
     show unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
 import 'package:omi/backend/http/api/speaker_labels.dart';
 import 'package:omi/backend/http/api/users.dart';
@@ -27,10 +28,10 @@ import 'package:omi/pages/conversation_detail/conversation_summary_selection.dar
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
-typedef SpeakerAssignmentCall = Future<bool> Function(String, List<String>,
-    {bool? isUser, String? personId, int? speakerId});
-typedef ConversationReprocessCall = Future<ServerConversation?> Function(String,
-    {String? appId, bool requireSpeakerReceipt});
+typedef SpeakerAssignmentCall =
+    Future<bool> Function(String, List<String>, {bool? isUser, String? personId, int? speakerId});
+typedef ConversationReprocessCall =
+    Future<ServerConversation?> Function(String, {String? appId, bool requireSpeakerReceipt});
 typedef ConversationDetailFetchCall = Future<ServerConversation?> Function(String);
 
 /// Where the open conversation's full detail fetch stands. The page renders the list's copy first;
@@ -45,10 +46,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     ConversationReprocessCall? reprocess,
     ConversationDetailFetchCall? fetchConversation,
     SpeakerRejectionCall? rejectSpeaker,
-  })  : _assignSpeaker = assignSpeaker ?? assignBulkConversationTranscriptSegments,
-        _rejectSpeaker = rejectSpeaker ?? rejectConversationSpeaker,
-        _reprocess = reprocess ?? reProcessConversationServer,
-        _fetchConversation = fetchConversation ?? getConversationById;
+  }) : _assignSpeaker = assignSpeaker ?? assignBulkConversationTranscriptSegments,
+       _rejectSpeaker = rejectSpeaker ?? rejectConversationSpeaker,
+       _reprocess = reprocess ?? reProcessConversationServer,
+       _fetchConversation = fetchConversation ?? getConversationById;
   final SpeakerAssignmentCall _assignSpeaker;
   final ConversationReprocessCall _reprocess;
   final ConversationDetailFetchCall _fetchConversation;
@@ -88,12 +89,12 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   @visibleForTesting
   Set<String> get trackedSpeakerConversationIds => {
-        ..._speakerEditGenerationByConversation.keys,
-        ..._pendingSpeakerSavesByConversation.keys,
-        ..._automaticSpeakerSummaryRefreshIds,
-        ..._endedSpeakerLabelingSessionIds,
-        ..._confirmedSpeakerLabelingSessionIds,
-      };
+    ..._speakerEditGenerationByConversation.keys,
+    ..._pendingSpeakerSavesByConversation.keys,
+    ..._automaticSpeakerSummaryRefreshIds,
+    ..._endedSpeakerLabelingSessionIds,
+    ..._confirmedSpeakerLabelingSessionIds,
+  };
 
   bool get speakerLabelingSessionActive => _labelingSessionId != null && _labelingSessionId == conversationOrNull?.id;
 
@@ -312,14 +313,16 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     final generation = ++_speakerEditGeneration;
     _speakerEditGenerationByConversation[target.id] = generation;
     if (changed && _labelingSessionId == target.id) {
-      _labelingUndo.add(_SpeakerLabelUndo(
-        generation: generation,
-        before: {for (final MapEntry(key: segment, value: original) in before.entries) segment.id: original},
-        changedIds: {
-          for (final segment in selected)
-            if (segment.isUser != self || segment.personId != person) segment.id,
-        },
-      ));
+      _labelingUndo.add(
+        _SpeakerLabelUndo(
+          generation: generation,
+          before: {for (final MapEntry(key: segment, value: original) in before.entries) segment.id: original},
+          changedIds: {
+            for (final segment in selected)
+              if (segment.isUser != self || segment.personId != person) segment.id,
+          },
+        ),
+      );
     }
     _pendingSpeakerSaves++;
     _pendingSpeakerSavesByConversation.update(target.id, (count) => count + 1, ifAbsent: () => 1);
@@ -882,6 +885,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
+  // The open detail page derives its conversation from ConversationProvider
+  // (conversationOrNull); this notify is how it sees server updates. Only the
+  // detail page listens, so the cost is bounded to that page.
+  // omi-perf-allow: proxy-hook-notify -- the open detail page derives its conversation from upstream
   void setProviders(AppProvider provider, ConversationProvider conversationProvider) {
     this.conversationProvider = conversationProvider;
     appProvider = provider;
@@ -1165,8 +1172,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       if (_isDisposed) return;
 
       // Preserve locally added apps that aren't in the API response yet
-      final locallyAddedApps =
-          _cachedEnabledConversationApps.where((app) => _locallyAddedAppIds.contains(app.id)).toList();
+      final locallyAddedApps = _cachedEnabledConversationApps
+          .where((app) => _locallyAddedAppIds.contains(app.id))
+          .toList();
 
       _cachedEnabledConversationApps.clear();
       _cachedEnabledConversationApps.addAll(apps);

@@ -124,6 +124,10 @@ environments:
           PARAKEET_WINDOW_MAX_SESSIONS: {value: '1', category: rollout}
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS: {value: '8', category: rollout}
           PARAKEET_WINDOW_DIARIZATION: {value: 'false', category: rollout}
+          PARAKEET_WINDOW_DEADLINE_CUT_ENABLED: {value: 'false', category: rollout}
+          PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS:
+            value: '1.2'
+            category: reliability
           PARAKEET_WINDOW_PACE_SECONDS: {value: '6', category: rollout}
           PARAKEET_WINDOW_MAX_CONTEXT_SECONDS: {value: '24', category: rollout}
           PARAKEET_BATCH_PRESSURE_POOL_HOST:
@@ -564,6 +568,8 @@ environments:
       services:
         backend:
           forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -771,6 +777,14 @@ environments:
             CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
         backend-sync:
+          forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
+          - HOSTED_PUSHER_API_URL
+          - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+          - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+          - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+          - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           capabilities:
           - conversation.finalize.persisted
           - memory.canonical.mutate
@@ -889,6 +903,13 @@ environments:
               provisional: true
               value: '2592000'
               category: rollout
+            SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
+            SYNC_LEGACY_FRESH_HOURLY_TOKENS:
+              value: '60'
+              category: reliability
+            SYNC_LEGACY_FRESH_BURST_TOKENS:
+              value: '10'
+              category: reliability
             SYNC_FRESH_MAX_AGE_SECONDS:
               provisional: true
               value: '21600'
@@ -976,13 +997,15 @@ environments:
             CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
             CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+        backend-sync-backfill:
           forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
           - HOSTED_PUSHER_API_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
-        backend-sync-backfill:
           secrets:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
@@ -1084,6 +1107,13 @@ environments:
               provisional: true
               value: '2592000'
               category: rollout
+            SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
+            SYNC_LEGACY_FRESH_HOURLY_TOKENS:
+              value: '60'
+              category: reliability
+            SYNC_LEGACY_FRESH_BURST_TOKENS:
+              value: '10'
+              category: reliability
             SYNC_FRESH_MAX_AGE_SECONDS:
               provisional: true
               value: '21600'
@@ -1155,13 +1185,15 @@ environments:
             CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
           provisional: true
+        backend-integration:
           forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
           - HOSTED_PUSHER_API_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
-        backend-integration:
           secrets:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
@@ -1294,12 +1326,6 @@ environments:
             OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
               value: '3600'
               category: replay_capture
-          forbidden_env:
-          - HOSTED_PUSHER_API_URL
-          - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-          - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
-          - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
-          - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
       jobs:
         notifications-job:
           flags:
@@ -1792,9 +1818,9 @@ environments:
             value: prod
             category: runtime_identity
           STT_RESILIENT_RECONNECT: {value: 'false', category: rollout}
-          STT_LIVE_DEMAND_ENABLED: {value: 'false', category: rollout}
+          STT_LIVE_DEMAND_ENABLED: {value: 'true', category: rollout}
           STT_LIVE_DEMAND_PERCENT: {value: '0', category: rollout}
-          STT_LIVE_DEMAND_UID_ALLOWLIST: {value: '', category: rollout}
+          STT_LIVE_DEMAND_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           STT_LIVE_DEMAND_MIN_DWELL_SECONDS: {value: '15', category: rollout}
           STT_FAILOVER_RECOVERY_ENABLED: {value: 'true', category: rollout}
           STT_ROUTING_MODE: {value: 'on', category: rollout}
@@ -1815,6 +1841,10 @@ environments:
           PARAKEET_WINDOW_MAX_SESSIONS: {value: '16', category: rollout}
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS: {value: '8', category: rollout}
           PARAKEET_WINDOW_DIARIZATION: {value: 'false', category: rollout}
+          PARAKEET_WINDOW_DEADLINE_CUT_ENABLED: {value: 'false', category: rollout}
+          PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS:
+            value: '1.2'
+            category: reliability
           PARAKEET_WINDOW_PACE_SECONDS: {value: '6', category: rollout}
           PARAKEET_WINDOW_MAX_CONTEXT_SECONDS: {value: '24', category: rollout}
           PARAKEET_BATCH_PRESSURE_POOL_HOST:
@@ -1961,6 +1991,9 @@ environments:
           PARAKEET_WINDOW_MAX_EMPTY_STREAK:
             value: '4'
             category: reliability
+          MOBILE_STANDARD_BATCH_ENABLED: {value: 'true', category: rollout}
+          MOBILE_STANDARD_BATCH_PERCENT: {value: '0', category: rollout}
+          MOBILE_STANDARD_BATCH_UIDS: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           SONIOX_IDLE_CLOSE_SECONDS: {value: '45', category: rollout}
           STT_NO_TEXT_RESCUE_ENABLED: {value: 'true', category: rollout}
           OMI_CUSTOMER_DATA_PROJECT:
@@ -2261,6 +2294,8 @@ environments:
       services:
         backend:
           forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -2565,6 +2600,13 @@ environments:
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-sync:
+          forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
+          - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+          - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+          - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+          - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           capabilities:
           - conversation.finalize.persisted
           - memory.canonical.mutate
@@ -2680,6 +2722,13 @@ environments:
               provisional: true
               value: '2592000'
               category: rollout
+            SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
+            SYNC_LEGACY_FRESH_HOURLY_TOKENS:
+              value: '60'
+              category: reliability
+            SYNC_LEGACY_FRESH_BURST_TOKENS:
+              value: '10'
+              category: reliability
             SYNC_FRESH_MAX_AGE_SECONDS:
               provisional: true
               value: '21600'
@@ -2821,12 +2870,14 @@ environments:
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
+        backend-sync-backfill:
           forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
-        backend-sync-backfill:
           secrets:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
@@ -2922,6 +2973,13 @@ environments:
               provisional: true
               value: '2592000'
               category: rollout
+            SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
+            SYNC_LEGACY_FRESH_HOURLY_TOKENS:
+              value: '60'
+              category: reliability
+            SYNC_LEGACY_FRESH_BURST_TOKENS:
+              value: '10'
+              category: reliability
             SYNC_FRESH_MAX_AGE_SECONDS:
               provisional: true
               value: '21600'
@@ -3045,12 +3103,14 @@ environments:
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           provisional: true
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
+        backend-integration:
           forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
-        backend-integration:
           secrets:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
@@ -3194,11 +3254,6 @@ environments:
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
-          forbidden_env:
-          - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-          - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
-          - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
-          - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
       jobs:
         notifications-job:
           flags:

@@ -13347,4 +13347,104 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get chatAppsWaitlistJoined => 'Ești pe lista de așteptare. Te anunțăm când se eliberează un loc.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Totul e gata, $name';
+  }
+
+  @override
+  String get onboardingActDemoSummary =>
+      'Prânz cu Sam, care se mută la Lisabona în iunie. Vrei să trimiți prezentarea echipei până vineri și să iei lapte în drum spre casă.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Trimite prezentarea echipei până vineri';
+
+  @override
+  String get onboardingActDemoTask2 => 'Ia lapte în drum spre casă';
+
+  @override
+  String get onboardingActDemoTitle => 'Prânz cu Sam';
+
+  @override
+  String get onboardingActDictateBody => 'Spune-o în felul tău. Omi se ocupă de rest.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Doar vorbește. Omi te ascultă.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Tocmai am luat prânzul cu Sam, se mută la Lisabona în iunie! Amintește-mi să trimit prezentarea echipei până vineri și să iau lapte în drum spre casă.';
+
+  @override
+  String get onboardingActDictateHint => 'Atinge bifa când ai terminat';
+
+  @override
+  String get onboardingActDictateTitle => 'Povestește-i lui Omi despre ziua ta';
+
+  @override
+  String get onboardingActIntro => 'Hai să încercăm Omi.';
+
+  @override
+  String get onboardingActJustNow => 'Chiar acum';
+
+  @override
+  String get onboardingActMicAllow => 'Permite microfonul';
+
+  @override
+  String get onboardingActMicBody => 'Ca Omi să te audă când vorbești cu el.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi nu trimite încă sunet. Deocamdată folosește telefonul.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi are nevoie de microfon';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Nu se aude Omi. Verifică dacă e pornit și aproape.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Încă nu te auzim. Încearcă să vorbești puțin mai tare.';
+
+  @override
+  String get onboardingActNotesLabel => 'Ziua ta, pe scurt';
+
+  @override
+  String get onboardingActPhoneMic => 'Microfonul telefonului';
+
+  @override
+  String get onboardingActRateTitle => 'Îți place Omi până acum?';
+
+  @override
+  String get onboardingActRemembers => 'Omi își amintește, ca să nu fie nevoie să o faci tu';
+
+  @override
+  String get onboardingActSavedToTasks => 'Salvat în sarcinile tale';
+
+  @override
+  String get onboardingActTasksLabel => 'Omi ți-a prins sarcinile';
+
+  @override
+  String get onboardingActWriting => 'Rezumăm…';
+
+  @override
+  String get onboardingActYourWords => 'Iată ce ai spus';
+
+  @override
+  String get onboardingConnectOmi => 'Conectează Omi';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Atinge Omi-ul tău pentru a te conecta.';
+
+  @override
+  String get onboardingNoOmiYet => 'Nu ai încă Omi?';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Încă nu am comandat';
+
+  @override
+  String get onboardingOmiOrdered => 'L-am comandat';
+
+  @override
+  String get onboardingPermissionTapToFix => 'Atinge pentru a remedia';
 }

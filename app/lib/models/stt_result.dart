@@ -99,10 +99,12 @@ class SttSegment {
 }
 
 class SttTranscriptionResult {
+  /// End of successfully consumed audio, including silence.
+  final double? audioEndSeconds;
   final List<SttSegment> segments;
   final String? rawText;
 
-  SttTranscriptionResult({this.segments = const [], this.rawText});
+  SttTranscriptionResult({this.segments = const [], this.rawText, this.audioEndSeconds});
 
   bool get isEmpty => segments.isEmpty && (rawText == null || rawText!.trim().isEmpty);
   bool get isNotEmpty => !isEmpty;
@@ -149,8 +151,9 @@ class SttTranscriptionResult {
 
           final speakerValue = _schemaValue(seg, schema.segmentsSpeakerField, 'speaker');
           final speakerIdValue = _schemaValue(seg, schema.segmentsSpeakerIdField, 'speaker_id');
-          final speakerId =
-              speakerIdValue != null ? _extractSpeakerId(speakerIdValue) : _extractSpeakerId(speakerValue);
+          final speakerId = speakerIdValue != null
+              ? _extractSpeakerId(speakerIdValue)
+              : _extractSpeakerId(speakerValue);
           final speaker = _extractSpeakerLabel(speakerValue, speakerId);
           final isUser = _extractBool(_schemaValue(seg, schema.segmentsIsUserField, 'is_user'));
           final personId = _extractNullableString(_schemaValue(seg, schema.segmentsPersonIdField, 'person_id'));

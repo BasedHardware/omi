@@ -93,6 +93,9 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_BATCH_PRESSURE_POOL_HOST",
             "PARAKEET_WINDOW_ALLOCATION_PERCENT",
             "PARAKEET_WINDOW_DIARIZATION",
+            # Pusher never creates a window decoder or owns its delivery deadline.
+            "PARAKEET_WINDOW_DEADLINE_CUT_ENABLED",
+            "PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS",
             "PARAKEET_WINDOW_MAX_SESSIONS",
             "PARAKEET_WINDOW_MAX_CONTEXT_SECONDS",
             "PARAKEET_WINDOW_PACE_SECONDS",
@@ -183,11 +186,19 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _DEMAND_LISTEN_ONLY,
     "prod": frozenset(
         {
+            # Only listen's runtime reads these to advertise mobile control-channel
+            # admission. Pusher never grants permission; sync archives unconditionally.
+            "MOBILE_STANDARD_BATCH_ENABLED",
+            "MOBILE_STANDARD_BATCH_PERCENT",
+            "MOBILE_STANDARD_BATCH_UIDS",
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
             "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
             "PARAKEET_BATCH_PRESSURE_POOL_HOST",
             "PARAKEET_WINDOW_ALLOCATION_PERCENT",
             "PARAKEET_WINDOW_DIARIZATION",
+            # Pusher never creates a window decoder or owns its delivery deadline.
+            "PARAKEET_WINDOW_DEADLINE_CUT_ENABLED",
+            "PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS",
             "PARAKEET_WINDOW_MAX_SESSIONS",
             "PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS",
             "PARAKEET_WINDOW_MAX_EMPTY_STREAK",
@@ -298,15 +309,10 @@ PROD_FINAL_PASS_SHADOW_VALUES = {
 
 PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset({"GOOGLE_CLIENT_ID", "REDIS_DB_HOST", "TYPESENSE_HOST"}),
-    # DEEPGRAM_API_KEY: pusher reaches self-hosted dg.omi.me with it; the
-    # backend-listen managed (cloud) credential was retired 2026-09-18 — no
-    # streaming session selects Deepgram cloud, and a spent managed key made
-    # the fallback hops dial a 402 account for days (FC-deterministic-provider-
-    # rejection-burns-connect-retries).
+    # Pusher retains its cloud/BYOK credential; listen has no managed cloud key.
     "prod": frozenset(
         {
             "DEEPGRAM_API_KEY",
-            "DEEPGRAM_SELF_HOSTED_URL",
             # Late identity retries are scheduled only by prod pusher audio drain.
             "OWNER_IDENTITY_RETRY_COALESCE_ENABLED",
             "REDIS_DB_HOST",
@@ -340,7 +346,7 @@ SHARED_VALUE_DIFF_ALLOWED: dict[str, frozenset[str]] = {
     ),
     # The 1% windowed-TDT canary is listen-only. Pusher retains its streaming
     # and prerecorded policy while allocated listen sessions may lead with TDT.
-    "prod": frozenset({"BUCKET_SPEECH_PROFILES", "DD_SERVICE", "DEEPGRAM_SELF_HOSTED_ENABLED", "STT_SERVICE_MODELS"}),
+    "prod": frozenset({"BUCKET_SPEECH_PROFILES", "DD_SERVICE", "STT_SERVICE_MODELS"}),
 }
 
 DEV_SHADOW_VALUES = {

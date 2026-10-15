@@ -1003,6 +1003,12 @@ OMI_SYNC_LANE_SPEECH_MS_TOTAL = Counter(
     ['lane'],
 )
 
+OMI_SYNC_LANE_ADMISSIONS_TOTAL = Counter(
+    'omi_sync_lane_admissions_total',
+    'V2 sync upload lane decisions after the legacy fresh budget',
+    ['lane', 'trust', 'reason'],
+)
+
 OMI_SYNC_RECORDING_AGE_SECONDS = Histogram(
     'omi_sync_recording_age_seconds',
     'Oldest recording age at sync admission by lane',

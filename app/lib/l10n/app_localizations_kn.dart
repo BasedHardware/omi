@@ -13331,4 +13331,104 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get chatAppsWaitlistJoined => 'ನೀವು ಕಾಯುವ ಪಟ್ಟಿಯಲ್ಲಿದ್ದೀರಿ. ಸ್ಥಳ ಲಭ್ಯವಾದಾಗ ತಿಳಿಸುತ್ತೇವೆ.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'ಎಲ್ಲವೂ ಸಿದ್ಧ, $name';
+  }
+
+  @override
+  String get onboardingActDemoSummary =>
+      'ಜೂನ್‌ನಲ್ಲಿ ಲಿಸ್ಬನ್‌ಗೆ ಹೋಗುತ್ತಿರುವ ಸ್ಯಾಮ್ ಜೊತೆ ಊಟ. ಶುಕ್ರವಾರದೊಳಗೆ ತಂಡಕ್ಕೆ ಡೆಕ್ ಕಳುಹಿಸಬೇಕು, ಮನೆಗೆ ಹೋಗುವಾಗ ಹಾಲು ತರಬೇಕು.';
+
+  @override
+  String get onboardingActDemoTask1 => 'ಶುಕ್ರವಾರದೊಳಗೆ ತಂಡಕ್ಕೆ ಡೆಕ್ ಕಳುಹಿಸುವುದು';
+
+  @override
+  String get onboardingActDemoTask2 => 'ಮನೆಗೆ ಹೋಗುವಾಗ ಹಾಲು ತರುವುದು';
+
+  @override
+  String get onboardingActDemoTitle => 'ಸ್ಯಾಮ್ ಜೊತೆ ಊಟ';
+
+  @override
+  String get onboardingActDictateBody => 'ನಿಮ್ಮದೇ ರೀತಿಯಲ್ಲಿ ಹೇಳಿ. ಉಳಿದದ್ದು Omi ನೋಡಿಕೊಳ್ಳುತ್ತದೆ.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'ಸುಮ್ಮನೆ ಮಾತಾಡಿ. ನಿಮ್ಮ Omi ಕೇಳುತ್ತಿದೆ.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'ಈಗಷ್ಟೇ ಸ್ಯಾಮ್ ಜೊತೆ ಊಟ ಮಾಡಿದೆ, ಅವಳು ಜೂನ್‌ನಲ್ಲಿ ಲಿಸ್ಬನ್‌ಗೆ ಹೋಗುತ್ತಿದ್ದಾಳೆ! ಶುಕ್ರವಾರದೊಳಗೆ ತಂಡಕ್ಕೆ ಡೆಕ್ ಕಳುಹಿಸಲು ಮತ್ತು ಮನೆಗೆ ಹೋಗುವಾಗ ಹಾಲು ತರಲು ನೆನಪಿಸು.';
+
+  @override
+  String get onboardingActDictateHint => 'ಮುಗಿದ ನಂತರ ಟಿಕ್ ಟ್ಯಾಪ್ ಮಾಡಿ';
+
+  @override
+  String get onboardingActDictateTitle => 'ನಿಮ್ಮ ದಿನದ ಬಗ್ಗೆ Omi ಗೆ ಹೇಳಿ';
+
+  @override
+  String get onboardingActIntro => 'Omi ಪ್ರಯತ್ನಿಸೋಣ.';
+
+  @override
+  String get onboardingActJustNow => 'ಈಗಷ್ಟೇ';
+
+  @override
+  String get onboardingActMicAllow => 'ಮೈಕ್ರೊಫೋನ್ ಅನುಮತಿಸಿ';
+
+  @override
+  String get onboardingActMicBody => 'ನೀವು ಮಾತನಾಡಿದಾಗ Omi ಕೇಳಲು.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'ನಿಮ್ಮ Omi ಇನ್ನೂ ಆಡಿಯೋ ಕಳುಹಿಸುತ್ತಿಲ್ಲ. ಸದ್ಯಕ್ಕೆ ನಿಮ್ಮ ಫೋನ್ ಬಳಸಿ.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi ಗೆ ನಿಮ್ಮ ಮೈಕ್ರೊಫೋನ್ ಬೇಕು';
+
+  @override
+  String get onboardingActNoAudioOmi => 'ನಿಮ್ಮ Omi ಕೇಳಿಸುತ್ತಿಲ್ಲ. ಅದು ಆನ್ ಆಗಿದೆ ಮತ್ತು ಹತ್ತಿರವಿದೆಯೇ ನೋಡಿ.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'ಇನ್ನೂ ನಿಮ್ಮ ಧ್ವನಿ ಕೇಳಿಸುತ್ತಿಲ್ಲ. ಸ್ವಲ್ಪ ಜೋರಾಗಿ ಮಾತಾಡಿ ನೋಡಿ.';
+
+  @override
+  String get onboardingActNotesLabel => 'ನಿಮ್ಮ ದಿನದ ಸಾರಾಂಶ';
+
+  @override
+  String get onboardingActPhoneMic => 'ಫೋನ್ ಮೈಕ್ರೊಫೋನ್';
+
+  @override
+  String get onboardingActRateTitle => 'ಇಲ್ಲಿಯವರೆಗೆ Omi ಇಷ್ಟವಾಯಿತೇ?';
+
+  @override
+  String get onboardingActRemembers => 'ನೀವು ನೆನಪಿಡಬೇಕಿಲ್ಲ, Omi ನೆನಪಿಡುತ್ತದೆ';
+
+  @override
+  String get onboardingActSavedToTasks => 'ನಿಮ್ಮ ಕೆಲಸಗಳಿಗೆ ಉಳಿಸಲಾಗಿದೆ';
+
+  @override
+  String get onboardingActTasksLabel => 'Omi ನಿಮ್ಮ ಕೆಲಸಗಳನ್ನು ಗುರುತಿಸಿದೆ';
+
+  @override
+  String get onboardingActWriting => 'ಸಾರಾಂಶ ಮಾಡುತ್ತಿದೆ…';
+
+  @override
+  String get onboardingActYourWords => 'ನೀವು ಹೇಳಿದ್ದು ಇದು';
+
+  @override
+  String get onboardingConnectOmi => 'Omi ಸಂಪರ್ಕಿಸಿ';
+
+  @override
+  String get onboardingConnectTapToConnect => 'ಸಂಪರ್ಕಿಸಲು ನಿಮ್ಮ Omi ಟ್ಯಾಪ್ ಮಾಡಿ.';
+
+  @override
+  String get onboardingNoOmiYet => 'ಇನ್ನೂ ನಿಮ್ಮ Omi ಇಲ್ಲವೇ?';
+
+  @override
+  String get onboardingOmiNotOrdered => 'ಇನ್ನೂ ಆರ್ಡರ್ ಮಾಡಿಲ್ಲ';
+
+  @override
+  String get onboardingOmiOrdered => 'ನಾನು ಆರ್ಡರ್ ಮಾಡಿದ್ದೇನೆ';
+
+  @override
+  String get onboardingPermissionTapToFix => 'ಸರಿಪಡಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ';
 }

@@ -104,7 +104,7 @@ backend (main.py)
   ├── ──────► vad (modal/)
   ├── ──────► parakeet (parakeet/)
   ├── ──────► modulate (managed API)
-  ├── ──────► deepgram-self-hosted (explicit streaming policy only)
+  ├── ──────► Deepgram cloud / BYOK (Omi self-hosted fleet retired)
   ├── ──────► nllb-translation (nllb_translation/)
   └── ──────► llm-gateway (llm_gateway/main.py)
 
@@ -138,7 +138,7 @@ STT policy: `config/stt_provider_policy.py`. Windowed live rollout: `docs/operat
 - **pusher** (`pusher/main.py`) — Receives audio via binary WebSocket protocol. Calls diarizer and the configured Parakeet/Modulate STT provider for speaker sample extraction (`utils/speaker_identification.py` → `utils/speaker_sample.py`).
 - **diarizer** (`diarizer/main.py`) — `/v2/embedding`, `/v2/diarization`. Batch seam: `utils/stt/diarization.py`; naming: `utils/stt/speaker_match.py`. Backend/pusher use `HOSTED_SPEAKER_EMBEDDING_API_URL`.
 - **vad** (`modal/main.py`) — GPU. `/v1/vad`. Called by backend only.
-- **deepgram-self-hosted** — GPU STT deployment behind an explicit non-cloud endpoint. Hosted Deepgram serves the live streaming surface (`dg-nova-3` first, `DEEPGRAM_API_KEY`); it stays off batch. A deployment that sets `DEEPGRAM_SELF_HOSTED_ENABLED` must point at its own endpoint — never `api.deepgram.com`.
+- **Deepgram** — Cloud/BYOK remains supported. Omi self-hosted overlays are retired; [fleet retirement](docs/runbooks/audio-fleet.md#self-hosted-deepgram-retirement) requires a clean post-deploy caller audit before resource deletion.
 - **parakeet** (`parakeet/`) — GPU STT service for streaming and pre-recorded transcription. Called by backend when `HOSTED_PARAKEET_API_URL` is set and Parakeet is selected. Clients must not call it directly — they go through the authed backend proxy `POST /v1/stt/transcribe` (`routers/stt.py`).
 - **modulate** — Managed STT provider for configured languages. Called by backend when `MODULATE_API_KEY` is configured and Modulate is selected.
 - **nllb-translation** (`nllb_translation/`) — GPU translation service. Called by backend when `HOSTED_TRANSLATION_API_URL` is set and NLLB is selected.

@@ -13087,4 +13087,102 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chatAppsWaitlistJoined => '你已在候补名单中。有名额时我们会通知你。';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return '一切就绪，$name';
+  }
+
+  @override
+  String get onboardingActDemoSummary => '和 Sam 吃了午饭，她六月要搬去里斯本。你打算周五前把演示稿发给团队，回家路上买牛奶。';
+
+  @override
+  String get onboardingActDemoTask1 => '周五前把演示文稿发给团队';
+
+  @override
+  String get onboardingActDemoTask2 => '回家路上买牛奶';
+
+  @override
+  String get onboardingActDemoTitle => '和 Sam 吃午饭';
+
+  @override
+  String get onboardingActDictateBody => '随便说，剩下的交给 Omi。';
+
+  @override
+  String get onboardingActDictateBodyOmi => '直接说就好，你的 Omi 正在听。';
+
+  @override
+  String get onboardingActDictateExample => '刚和 Sam 吃完午饭，她六月要搬去里斯本！提醒我周五前把演示文稿发给团队，回家路上顺便买牛奶。';
+
+  @override
+  String get onboardingActDictateHint => '说完后点对勾';
+
+  @override
+  String get onboardingActDictateTitle => '跟 Omi 说说你的一天';
+
+  @override
+  String get onboardingActIntro => '来试试 Omi 吧。';
+
+  @override
+  String get onboardingActJustNow => '刚刚';
+
+  @override
+  String get onboardingActMicAllow => '允许使用麦克风';
+
+  @override
+  String get onboardingActMicBody => '这样你说话时 Omi 才能听到。';
+
+  @override
+  String get onboardingActMicFallbackBody => '你的 Omi 还没有传来声音，先用手机吧。';
+
+  @override
+  String get onboardingActMicTitle => 'Omi 需要使用麦克风';
+
+  @override
+  String get onboardingActNoAudioOmi => '听不到你的 Omi。请确认它已开启并在附近。';
+
+  @override
+  String get onboardingActNoAudioPhone => '还听不到你的声音，试着大声一点。';
+
+  @override
+  String get onboardingActNotesLabel => '你的一天，总结好了';
+
+  @override
+  String get onboardingActPhoneMic => '手机麦克风';
+
+  @override
+  String get onboardingActRateTitle => '目前喜欢 Omi 吗？';
+
+  @override
+  String get onboardingActRemembers => 'Omi 帮你记住，你无需费心';
+
+  @override
+  String get onboardingActSavedToTasks => '已保存到你的任务';
+
+  @override
+  String get onboardingActTasksLabel => 'Omi 记下了你的待办';
+
+  @override
+  String get onboardingActWriting => '正在总结…';
+
+  @override
+  String get onboardingActYourWords => '你说的内容';
+
+  @override
+  String get onboardingConnectOmi => '连接 Omi';
+
+  @override
+  String get onboardingConnectTapToConnect => '轻点你的 Omi 进行连接。';
+
+  @override
+  String get onboardingNoOmiYet => '还没有 Omi？';
+
+  @override
+  String get onboardingOmiNotOrdered => '还没下单';
+
+  @override
+  String get onboardingOmiOrdered => '我已下单';
+
+  @override
+  String get onboardingPermissionTapToFix => '点按以修复';
 }
