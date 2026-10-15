@@ -243,10 +243,11 @@ def test_outer_server_exception_log_retains_trace_without_leaking(monkeypatch):
     assert all('logging.googleapis.com/trace' not in entry for entry in entries[1:])
 
 
-def test_exception_metadata_failure_does_not_replace_original():
+@pytest.mark.parametrize('rejection', [AttributeError, asyncio.CancelledError, KeyboardInterrupt])
+def test_exception_metadata_failure_does_not_replace_original(rejection):
     class ImmutableError(Exception):
         def __setattr__(self, name, value):
-            raise AttributeError('immutable')
+            raise rejection('immutable')
 
     failure = ImmutableError('original')
 
@@ -257,3 +258,25 @@ def test_exception_metadata_failure_does_not_replace_original():
         asyncio.run(logs.TraceContextMiddleware(app)({'type': 'http'}, None, None))
     assert caught.value is failure
     assert logs._TRACE.get() is None
+
+
+@pytest.mark.parametrize(
+    'metadata', [None, 'bad', ('bad', 'bad', True), ('a' * 32, 'b' * 16, object()), KeyboardInterrupt()]
+)
+def test_bad_exception_metadata_cannot_discard_error(monkeypatch, metadata):
+    class CustomError(Exception):
+        def __getattribute__(self, name):
+            if name == '_omi_logging_trace':
+                if isinstance(metadata, BaseException):
+                    raise metadata
+                return metadata
+            return super().__getattribute__(name)
+
+    monkeypatch.setenv('OMI_LOG_FORMAT', 'json')
+    output = io.StringIO()
+    logs.configure_logging('test', project='project', stdout=output)
+    failure = CustomError('original')
+    logging.error('outer failure', exc_info=(type(failure), failure, None))
+    entry = json.loads(output.getvalue())
+    assert 'original' in entry['message']
+    assert 'logging.googleapis.com/trace' not in entry

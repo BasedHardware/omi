@@ -11,7 +11,7 @@ import logging
 import os
 import re
 import sys
-from typing import Any, Awaitable, Callable, Mapping, TextIO
+from typing import Any, Awaitable, Callable, Mapping, TextIO, cast
 
 _TRACE: contextvars.ContextVar[tuple[str, str, bool] | None] = contextvars.ContextVar('omi_log_trace', default=None)
 LOGGER_LEVELS = {
@@ -63,11 +63,34 @@ class TraceContextMiddleware:
             # on the exception so its outer log keeps the originating trace.
             try:
                 setattr(error, '_omi_logging_trace', _TRACE.get())
-            except Exception:
+            except BaseException:
                 pass  # Never replace the original failure if a custom exception rejects attributes.
             raise
         finally:
             _TRACE.reset(token)
+
+
+def _exception_trace(error: BaseException | None) -> tuple[str, str, bool] | None:
+    """Optional metadata must never prevent delivery of the original error log."""
+    try:
+        value = getattr(error, '_omi_logging_trace', None)
+        if type(value) is not tuple:
+            return None
+        value = cast(tuple[Any, ...], value)
+        if (
+            len(value) == 3
+            and type(value[0]) is str
+            and type(value[1]) is str
+            and type(value[2]) is bool
+            and re.fullmatch(r'[0-9a-f]{32}', value[0])
+            and re.fullmatch(r'[0-9a-f]{16}', value[1])
+            and int(value[0], 16)
+            and int(value[1], 16)
+        ):
+            return cast(tuple[str, str, bool], value)
+    except BaseException:
+        pass  # A custom exception attribute accessor cannot break logging.
+    return None
 
 
 class JsonFormatter(logging.Formatter):
@@ -95,7 +118,7 @@ class JsonFormatter(logging.Formatter):
             payload['serviceContext'] = {'service': self.service}
         trace = _TRACE.get()
         if trace is None and record.exc_info:
-            trace = getattr(record.exc_info[1], '_omi_logging_trace', None)
+            trace = _exception_trace(record.exc_info[1])
         if trace and self.project:
             payload['logging.googleapis.com/trace'] = f'projects/{self.project}/traces/{trace[0]}'
             payload['logging.googleapis.com/spanId'] = trace[1]
