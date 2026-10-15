@@ -51,6 +51,9 @@ def gmail_module(monkeypatch):
     users_db.get_integration = MagicMock()
     monkeypatch.setitem(sys.modules, "database", database)
     monkeypatch.setitem(sys.modules, "database.users", users_db)
+    notifications_db = types.ModuleType("database.notifications")
+    notifications_db.get_user_time_zone = lambda _uid: "UTC"
+    monkeypatch.setitem(sys.modules, "database.notifications", notifications_db)
 
     tools_mod = types.ModuleType("langchain_core.tools")
     tools_mod.tool = _ToolWrapper
