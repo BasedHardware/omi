@@ -359,7 +359,8 @@ def ios_phased_release_paused(live_version_id: str) -> bool:
     Reads GET /v1/appStoreVersions/{id}/appStoreVersionPhasedRelease over the
     same REST+JWT surface as the replace-path lookup. A 404 means the live
     version has no phased release at all (released before this posture or
-    fully finished), which is not a pause. Any other lookup failure fails
+    fully finished), which is not a pause; so does a 200 whose `data` is null,
+    which is how Apple actually answers for a version released without one. Any other lookup failure fails
     closed: a brake this train cannot read is a brake it must respect.
     """
     token = _asc_rest_token()
@@ -377,6 +378,10 @@ def ios_phased_release_paused(live_version_id: str) -> bool:
         raise TrainError(f"App Store Connect phased-release lookup failed for {live_version_id}: HTTP {exc.code}") from exc
     except (urllib.error.URLError, ValueError) as exc:
         raise TrainError(f"App Store Connect phased-release lookup failed for {live_version_id}: {exc}") from exc
+    if isinstance(payload, dict) and "data" in payload and payload["data"] is None:
+        # Apple answers a to-one relationship with no phased release as 200 `"data": null`
+        # (seen live 2026-10-15 for 1.0.562, released MANUAL), not 404: no rollout, no pause.
+        return False
     if not isinstance(payload, dict) or not isinstance(payload.get("data"), dict):
         raise TrainError(f"App Store Connect phased-release lookup returned an invalid resource for {live_version_id}")
     return str(_attributes(payload["data"]).get("phasedReleaseState")) == "PAUSED"
