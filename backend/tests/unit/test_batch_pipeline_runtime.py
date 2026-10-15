@@ -152,11 +152,20 @@ def test_startup_pins_precision_reuses_segmentation_and_owns_one_gpu(monkeypatch
     segmentation = SimpleNamespace(
         float=lambda: calls.append('segmentation-fp32') or segmentation, eval=lambda: segmentation
     )
-    diarizer = SimpleNamespace(_segmentation=SimpleNamespace(model=segmentation), to=lambda device: diarizer)
+    diarizer = SimpleNamespace(
+        _segmentation=SimpleNamespace(model=segmentation),
+        segmentation_batch_size=32,
+        embedding_batch_size=32,
+        to=lambda device: diarizer,
+    )
     asr = FakeASR()
     asr.to = lambda dtype: calls.append(('asr-dtype', dtype)) or asr
     asr.eval = lambda: asr
-    vad = SimpleNamespace(instantiate=lambda params: calls.append(('vad-params', params)), to=lambda device: vad)
+    vad = SimpleNamespace(
+        _segmentation=SimpleNamespace(batch_size=32),
+        instantiate=lambda params: calls.append(('vad-params', params)),
+        to=lambda device: vad,
+    )
     fake_torch = SimpleNamespace(
         bfloat16='bf16',
         device=lambda device: device,
@@ -184,9 +193,12 @@ def test_startup_pins_precision_reuses_segmentation_and_owns_one_gpu(monkeypatch
         startup, 'VoiceActivityDetection', lambda **kw: calls.append(('vad-model', kw['segmentation'])) or vad
     )
     monkeypatch.setenv('BATCH_PIPELINE_POOL_KIND', 'dedicated_batch')
+    monkeypatch.setenv('BATCH_PIPELINE_MODEL_BATCH_SIZE', '8')
     artifacts = SimpleNamespace(fetch_audio=lambda _: b'', persist_result=lambda *args: 'unused')
     worker = startup.load_worker(artifacts)
     assert worker.config.words == 'parakeet' and worker.config.diarizer == 'pyannote'
+    assert diarizer.segmentation_batch_size == 8 and diarizer.embedding_batch_size == 8
+    assert worker.vad.model._segmentation.batch_size == 8
     assert ('asr-dtype', 'bf16') in calls and 'segmentation-fp32' in calls
     assert ('vad-model', segmentation) in calls
     assert ('asr-revision', startup.ASR_REVISION) in calls

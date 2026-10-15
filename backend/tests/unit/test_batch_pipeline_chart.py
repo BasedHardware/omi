@@ -51,6 +51,9 @@ def test_default_chart_has_no_resources_or_admission():
     assert values['enabled'] is False and values['autoscaling']['minReplicas'] == 1
     assert values['autoscaling']['enabled'] is False
     assert values['podMonitoring']['enabled'] is True
+    assert values['worker']['batchSize'] == 8
+    assert values['resources']['requests']['memory'] == '11Gi'
+    assert values['resources']['limits']['memory'] == '13Gi'
     result = render()
     assert result.returncode == 0 and list(yaml.safe_load_all(result.stdout)) == []
 
@@ -69,6 +72,7 @@ def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
     assert '@sha256:' in container['image']
     assert container['resources']['limits']['nvidia.com/gpu'] == '1'
     env = {v['name']: v.get('value') for v in container['env']}
+    assert env['BATCH_PIPELINE_MODEL_BATCH_SIZE'] == '8'
     assert env['BATCH_PIPELINE_ENABLED'] == 'false' and env['BATCH_PIPELINE_PERCENT'] == '0'
     assert env['BATCH_PIPELINE_POOL_KIND'] == 'dedicated_batch'
     assert env['BATCH_PIPELINE_SHARED_LIVE_ENABLED'] == 'false'
@@ -156,6 +160,17 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     assert project_env['OMI_ENV_STAGE']['value'] == stage
     assert project_env['BATCH_PIPELINE_NAMESPACE']['value'] == namespace
     assert project_env['BUCKET_BATCH_PIPELINE']['value'] == bucket
+    defaults = yaml.safe_load((CHART / 'values.yaml').read_text())
+    environment_values = yaml.safe_load(values.read_text())
+    batch_size = environment_values.get('worker', {}).get('batchSize', defaults['worker']['batchSize'])
+    assert batch_size == 8
+    assert project_env['BATCH_PIPELINE_MODEL_BATCH_SIZE']['value'] == str(batch_size)
+    assert container['resources']['requests']['memory'] == '11Gi'
+    assert container['resources']['limits']['memory'] == '13Gi'
+    assert container['resources']['requests']['cpu'] == '4'
+    assert container['resources']['limits']['cpu'] == '8'
+    assert container['resources']['requests']['nvidia.com/gpu'] == '1'
+    assert container['resources']['limits']['nvidia.com/gpu'] == '1'
     for name in ('ENCRYPTION_SECRET', 'HUGGINGFACE_TOKEN'):
         assert project_env[name]['valueFrom']['secretKeyRef']['name'] == secret
     project_id = 'based-hardware-dev' if environment == 'dev' else 'based-hardware'

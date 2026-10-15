@@ -22,9 +22,37 @@ from diarizer.batch_pipeline_models import create_local_worker
 
 ASR_REVISION = '541d1f99c6b0c3cd0b11a95167540bb8edefd82b'
 DIARIZER_REVISION = '3533c8cf8e369892e6b79ff1bf80f7b0286a54ee'
+BATCH_SIZE_ENV = 'BATCH_PIPELINE_MODEL_BATCH_SIZE'
+
+
+def _model_batch_size_override():
+    """Return the deployment's shared model batch pin, if one was supplied.
+
+    The pyannote library defaults to 32. Leave that behavior intact for
+    non-chart callers; the worker chart always supplies the measured batch size.
+    """
+    raw_value = os.getenv(BATCH_SIZE_ENV)
+    if raw_value is None:
+        return None
+    try:
+        batch_size = int(raw_value)
+    except ValueError as exc:
+        raise ValueError(f'{BATCH_SIZE_ENV} must be an integer in [1, 32]') from exc
+    if not 1 <= batch_size <= 32:
+        raise ValueError(f'{BATCH_SIZE_ENV} must be an integer in [1, 32]')
+    return batch_size
+
+
+def _set_batch_size(model, attribute, batch_size, label):
+    if not hasattr(model, attribute):
+        raise RuntimeError(f'worker model no longer exposes {label} batch size')
+    setattr(model, attribute, batch_size)
+    if getattr(model, attribute) != batch_size:
+        raise RuntimeError(f'worker failed to pin {label} batch size')
 
 
 def load_worker(artifacts):
+    model_batch_size = _model_batch_size_override()
     if torch is None or nemo_asr is None or Pipeline is None or VoiceActivityDetection is None:
         raise RuntimeError('batch worker requires the joint GPU image')
     if hf_hub_download is None or not torch.cuda.is_available() or torch.cuda.device_count() != 1:
@@ -38,6 +66,9 @@ def load_worker(artifacts):
         revision=DIARIZER_REVISION,
         token=os.getenv('HUGGINGFACE_TOKEN'),
     ).to(torch.device('cuda:0'))
+    if model_batch_size is not None:
+        _set_batch_size(diarizer, 'segmentation_batch_size', model_batch_size, 'pyannote segmentation')
+        _set_batch_size(diarizer, 'embedding_batch_size', model_batch_size, 'pyannote embedding')
     # Never apply BF16 autocast to segmentation: the quality lane rejected it.
     segmentation = diarizer._segmentation.model.float().eval()
     vad = VoiceActivityDetection(segmentation=segmentation)
@@ -45,6 +76,11 @@ def load_worker(artifacts):
     # constants, not tunable pipeline parameters.
     vad.instantiate({'min_duration_on': 0.0, 'min_duration_off': 0.0})
     vad.to(torch.device('cuda:0'))
+    if model_batch_size is not None:
+        vad_inference = getattr(vad, '_segmentation', None)
+        if vad_inference is None:
+            raise RuntimeError('worker VAD no longer exposes segmentation inference')
+        _set_batch_size(vad_inference, 'batch_size', model_batch_size, 'VAD')
     return create_local_worker(
         fetch_audio=artifacts.fetch_audio,
         persist_result=artifacts.persist_result,

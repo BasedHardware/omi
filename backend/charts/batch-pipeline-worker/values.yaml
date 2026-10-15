@@ -21,11 +21,11 @@ worker:
 resources:
   requests:
     cpu: "4"
-    memory: 16Gi
+    memory: 11Gi
     nvidia.com/gpu: "1"
   limits:
     cpu: "8"
-    memory: 24Gi
+    memory: 13Gi
     nvidia.com/gpu: "1"
 autoscaling:
   # Enable only after scoped queue-age series and adapter are verified live.

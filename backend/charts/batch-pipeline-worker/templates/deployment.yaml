@@ -62,6 +62,7 @@ spec:
             - {name: OMI_ENV_STAGE, value: {{ .Values.stage | quote }}}
             - {name: BATCH_PIPELINE_NAMESPACE, value: {{ .Values.namespace | quote }}}
             - {name: BUCKET_BATCH_PIPELINE, value: {{ required "dedicated staging bucket required" .Values.bucket | quote }}}
+            # Shared by Parakeet windows and pyannote segmentation, embedding and VAD inference.
             - {name: BATCH_PIPELINE_MODEL_BATCH_SIZE, value: {{ .Values.worker.batchSize | quote }}}
             - {name: BATCH_PIPELINE_UNIT_SECONDS, value: {{ .Values.worker.unitSeconds | quote }}}
             - {name: BATCH_PIPELINE_PADDED_SECONDS, value: {{ .Values.worker.paddedSeconds | quote }}}
