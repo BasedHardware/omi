@@ -18,7 +18,7 @@ from utils.batch_pipeline.contracts import WorkItem
 logger = logging.getLogger(__name__)
 
 
-def build_incoming(item: WorkItem, binding, payload: dict) -> dict:
+def build_incoming(item: WorkItem, binding, payload: dict, *, geolocation=None) -> dict:
     """Use legacy word alignment, segment grouping and minimum conversation shape."""
     from models.conversation import Conversation, CreateConversation
     from models.conversation_enums import ConversationSource
@@ -33,8 +33,8 @@ def build_incoming(item: WorkItem, binding, payload: dict) -> dict:
     if not words:
         raise ValueError('successful batch result must contain words')
     duration = float(payload['audio_seconds'])
-    if not 0 < duration <= 7200:
-        raise ValueError('invalid result audio duration')
+    if not 0 < duration <= 7200 or abs(duration - item.duration_seconds) > 0.1:
+        raise ValueError('result audio duration differs from admitted capture')
     # The existing final-pass aligner abstains in diarization gaps; the existing
     # prerecorded grouper supplies the same sentence/segment shapes as sync.
     aligned = assign_words(words, payload['diarization']['turns'])
@@ -62,6 +62,7 @@ def build_incoming(item: WorkItem, binding, payload: dict) -> dict:
         private_cloud_sync_enabled=binding.private_cloud_sync_enabled,
         client_device_id=binding.client_device_id,
         client_platform=binding.client_platform,
+        geolocation=geolocation,
     )
     incoming = Conversation(
         id=chunk_identity(item.owner_id, binding.source, binding.client_device_id, binding.is_locked, item.capture_at),
@@ -70,6 +71,9 @@ def build_incoming(item: WorkItem, binding, payload: dict) -> dict:
         **create.model_dump(),
     ).model_dump()
     incoming['data_protection_level'] = binding.data_protection_level
+    from utils.sync.intake_completion import apply_capture_evidence_dark_write
+
+    apply_capture_evidence_dark_write(incoming, None, segments)
     return incoming
 
 
@@ -132,7 +136,26 @@ class Projector:
                 receipt = session.persist_empty()
             else:
                 payload = self.load_result(item, entry['result']['result_uri'])
-                incoming = build_incoming(item, binding, payload)
+                from utils.batch_pipeline.context import ResolvedContext, resolve_context
+
+                context = ResolvedContext(binding.target_conversation_id)
+                if item.requires_compute_admission:
+                    if self.fetch_audio is None:
+                        raise ProjectionBlocked('authenticated intake manifest loader required')
+                    from utils.batch_pipeline.audio import read_context
+
+                    context = resolve_context(item, binding, read_context(self.fetch_audio(item)), self.store.client)
+                incoming = build_incoming(item, binding, payload, geolocation=context.geolocation)
+                if context.binding_reason is not None and context.target_id:
+                    incoming['_sync_lineage_binding'] = context.binding_reason
+                from utils.conversation_continuity import intervals_connect
+
+                segments = incoming['transcript_segments']
+                if any(
+                    not intervals_connect(a['start'], a['end'], b['start'], b['end'])
+                    for a, b in zip(segments, segments[1:])
+                ):
+                    raise ProjectionBlocked('capture spans multiple legacy conversation groups')
                 speech = payload.get('speech_seconds')
                 if (
                     not isinstance(speech, (int, float))
@@ -147,10 +170,20 @@ class Projector:
                 def persisted(transaction, planned):
                     receipt_box[:] = [session.persist(transaction, planned)]
 
+                candidate = None
+                if context.target_id is None:
+                    from database.conversations import get_closest_conversation_to_timestamps
+
+                    candidate = get_closest_conversation_to_timestamps(
+                        binding.owner_id,
+                        int(incoming['started_at'].timestamp()),
+                        int(incoming['finished_at'].timestamp()),
+                    )
                 assign_sync_conversation(
                     binding.owner_id,
                     incoming,
-                    target_id=binding.target_conversation_id,
+                    target_id=context.target_id,
+                    candidate_id=candidate['id'] if candidate else None,
                     firestore_client=self.store.client,
                     before_assign=session.prepare,
                     validate_plan=session.validate_plan,

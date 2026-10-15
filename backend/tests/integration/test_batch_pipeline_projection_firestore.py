@@ -32,6 +32,7 @@ def lane(monkeypatch):
 
     monkeypatch.setenv('OMI_ENV_STAGE', 'local')
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('SYNC_BACKFILL_ROUTING_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
     monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
     client = firestore.Client(project=f'demo-pr1-c-{uuid4().hex[:12]}', credentials=AnonymousCredentials())
@@ -79,7 +80,7 @@ def lane(monkeypatch):
     projector = Projector(store, load, publish=lambda b, r: published.append(r), clock=clock)
     queue, merge = Scheduler(store), OrderedMerge(store)
 
-    def seed(names=('a',), *, device=None, protection='standard', capture_at=1000.0):
+    def seed(names=('a',), *, device=None, protection='standard', capture_at=1000.0, duration_seconds=30.0):
         ids = tuple(f'{name}-{uuid4().hex[:8]}' for name in names)
         binding = ProjectionBinding(
             uid,
@@ -95,7 +96,7 @@ def lane(monkeypatch):
                 uid,
                 capture_at + i * 30,
                 f'gs://synthetic/{sid}#1',
-                30,
+                duration_seconds,
                 Priority.DEEP,
                 conversation_id=chunk_identity(uid, 'omi', device, False, capture_at + i * 30),
                 privacy_generation=0,
@@ -104,7 +105,11 @@ def lane(monkeypatch):
         ]
         assert admit(store, items, binding, 0, namespace=store.namespace)['outcome'] == 'batch'
         ledger = sync_content_ledger_ref(client, uid, binding.content_id)
-        leases = {lease.item.segment_id: lease for lease in queue.pull(0, len(items))}
+        leases = {}
+        for _ in range(240):
+            leases.update({lease.item.segment_id: lease for lease in queue.pull(0, len(items))})
+            if len(leases) == len(items):
+                break
         assert len(leases) == len(items)
         return SimpleNamespace(binding=binding, ids=ids, items=items, ledger=ledger, leases=leases)
 
@@ -256,8 +261,8 @@ def test_deletion_during_projection_cannot_resurrect_or_complete(lane, monkeypat
     built, deleted = threading.Event(), threading.Event()
     original = projection.build_incoming
 
-    def pause(*args):
-        incoming = original(*args)
+    def pause(*args, **kwargs):
+        incoming = original(*args, **kwargs)
         built.set()
         assert deleted.wait(10)
         return incoming
@@ -542,3 +547,165 @@ def test_leading_silence_preserves_absolute_capture_and_playback_clock(lane):
     assert row['started_at'].timestamp() == batch.items[0].capture_at
     assert row['transcript_segments'][0]['start'] == 10
     assert row['finished_at'].timestamp() == batch.items[0].capture_at + 14
+
+
+def frozen_manifest(lane, batch, **extra):
+    import io
+    import wave
+    from utils.batch_pipeline.audio import with_context
+
+    item, binding = batch.items[0], batch.binding
+    context = {
+        'owner_id': lane.uid,
+        'job_id': binding.job_id,
+        'content_id': binding.content_id,
+        'segment_id': item.segment_id,
+        'capture_at': item.capture_at,
+        'source': binding.source,
+        'should_lock': binding.is_locked,
+        'client_device_id': binding.client_device_id,
+        'client_platform': binding.client_platform,
+        'conversation_id': binding.target_conversation_id,
+        **extra,
+    }
+    stream = io.BytesIO()
+    with wave.open(stream, 'wb') as handle:
+        handle.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+        handle.writeframes(b'\0' * (32000 * 30))
+    return with_context(stream.getvalue(), context)
+
+
+def test_authenticated_manifest_preserves_location_and_uses_legacy_lineage_policy(lane, monkeypatch):
+    from utils.batch_pipeline.projection import build_incoming
+    from utils.sync import recording_lineage
+
+    batch = lane.seed()
+    live = build_incoming(batch.items[0], batch.binding, lane.payload)
+    live['id'] = 'live-target'
+    lane.conversations.assign_sync_conversation(lane.uid, live, firestore_client=lane.client)
+    lane.finish(batch)
+    lane.projector.store.ref('jobs', batch.ids[0]).update({'requires_compute_admission': True})
+    geo = {'latitude': 21.03, 'longitude': 105.85, 'google_place_id': 'synthetic-place'}
+    manifest = frozen_manifest(
+        lane,
+        batch,
+        recording_session_id='synthetic-recording',
+        audio_start_seconds=1000,
+        audio_end_seconds=1030,
+        geolocation=geo,
+    )
+    lane.projector.fetch_audio = lambda _: manifest
+    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'false')
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_ENABLED', 'true')
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')
+
+    def plan(segments, timestamp_of, duration_of, uid, origin, stamped, source, device, locked, job, reasons):
+        assert uid == lane.uid and origin == 'synthetic-recording'
+        assert timestamp_of(segments[0]) == 1000 and duration_of(segments[0]) == 30
+        reasons[segments[0]] = 'bound'
+        return {segments[0]: 'live-target'}
+
+    monkeypatch.setattr(recording_lineage, 'plan_segment_targets', plan)
+    result = lane.projector.project(batch.ids[0])
+    assert result['updated_memories'] == ['live-target'] and not result['new_memories']
+    row = lane.user.collection('conversations').document('live-target').get().to_dict()
+    assert {key: row['geolocation'][key] for key in geo} == geo
+
+
+def test_authenticated_manifest_rejects_cross_owner_binding_before_assignment(lane):
+    from database.batch_pipeline_projection import ProjectionBlocked
+
+    batch = lane.seed()
+    lane.finish(batch)
+    lane.projector.store.ref('jobs', batch.ids[0]).update({'requires_compute_admission': True})
+    manifest = frozen_manifest(lane, batch, owner_id='different-synthetic-owner')
+    lane.projector.fetch_audio = lambda _: manifest
+    with pytest.raises(ProjectionBlocked, match='metadata binding mismatch'):
+        lane.projector.project(batch.ids[0])
+    assert not active_rows(lane) and not lane.tasks and not lane.published
+    assert batch.ledger.get().to_dict()['status'] == 'processing'
+
+
+def test_unindexed_legacy_conversation_is_found_through_existing_candidate_lookup(lane):
+    from dataclasses import replace
+    from utils.batch_pipeline.projection import build_incoming
+
+    batch = lane.seed()
+    legacy = build_incoming(replace(batch.items[0], capture_at=990), batch.binding, lane.payload)
+    legacy['id'] = 'legacy-record'
+    lane.conversations.assign_sync_conversation(lane.uid, legacy, firestore_client=lane.client)
+    for snapshot in lane.user.collection('sync_assignment').stream():
+        snapshot.reference.delete()
+    lane.finish(batch)
+    result = lane.projector.project(batch.ids[0])
+    assert result['updated_memories'] == ['legacy-record'] and not result['new_memories']
+    assert len(active_rows(lane)) == 1
+
+
+def test_coalesced_enrichment_task_consumes_persisted_transcript_once(lane):
+    from utils.batch_pipeline.enrichment import run_enrichment
+
+    batch = lane.seed()
+    lane.finish(batch)
+    lane.projector.project(batch.ids[0])
+    key, row = lane.reprocess.key(lane.uid, active_rows(lane)[0]['id']), lane.tasks[0]
+    calls = []
+
+    def process(uid, cid, language):
+        assert batch.ledger.get().to_dict()['status'] == 'completed'
+        assert lane.user.collection('conversations').document(cid).get().exists
+        calls.append((uid, cid, language))
+
+    assert run_enrichment(key, row['task_token'], now=row['due_at'] + 1, process=process) == 'processed'
+    assert run_enrichment(key, row['task_token'], now=row['due_at'] + 2, process=process) == 'stale'
+    assert len(calls) == 1
+    assert not lane.client.collection(lane.reprocess.COLLECTION).document(key).get().exists
+
+
+def test_enrichment_task_drops_deleted_account_obligation(lane):
+    from utils.batch_pipeline.enrichment import run_enrichment
+
+    batch = lane.seed()
+    lane.finish(batch)
+    lane.projector.project(batch.ids[0])
+    row = lane.tasks[0]
+    key = lane.reprocess.key(lane.uid, row['conversation_id'])
+    lane.client.collection('account_deletions').document(lane.uid).set({'wipe_status': 'queued'})
+    calls = []
+    assert (
+        run_enrichment(key, row['task_token'], now=row['due_at'] + 1, process=lambda *args: calls.append(args))
+        == 'superseded'
+    )
+    assert not calls and not lane.client.collection(lane.reprocess.COLLECTION).document(key).get().exists
+
+
+def test_backfill_enrichment_retains_configured_worker_queue_and_audience(lane, monkeypatch):
+    batch = lane.seed()
+    lane.finish(batch)
+    monkeypatch.setenv('SYNC_BACKFILL_ROUTING_ENABLED', 'true')
+    monkeypatch.setenv('SYNC_BACKFILL_TASKS_QUEUE', 'projects/demo/locations/test/queues/backfill')
+    monkeypatch.setenv('SYNC_BACKFILL_TASKS_HANDLER_URL', 'https://synthetic.invalid/v2/sync-jobs/run')
+    monkeypatch.setenv('SYNC_BACKFILL_TASKS_OIDC_AUDIENCE', 'https://synthetic.invalid')
+    lane.projector.project(batch.ids[0])
+    dispatch = lane.tasks[0]['dispatch']
+    assert dispatch['queue'].endswith('/queues/backfill')
+    assert dispatch['handler'] == 'https://synthetic.invalid/v2/sync-jobs/run'
+    assert dispatch['audience'] == 'https://synthetic.invalid'
+
+
+def test_disconnected_legacy_groups_are_held_without_false_completion(lane):
+    from database.batch_pipeline_projection import ProjectionBlocked
+
+    batch = lane.seed(duration_seconds=200)
+    lane.payload.update(
+        audio_seconds=200,
+        speech_seconds=2.0,
+        words=[{'word': 'First.', 'timestamp': [0, 1]}, {'word': 'Later.', 'timestamp': [150, 151]}],
+        diarization={'turns': [{'start': 0, 'end': 200, 'speaker': 'SPEAKER_00'}]},
+    )
+    lane.finish(batch)
+    with pytest.raises(ProjectionBlocked, match='multiple legacy conversation groups'):
+        lane.projector.project(batch.ids[0])
+    assert not active_rows(lane) and not lane.tasks and not lane.published
+    assert batch.ledger.get().to_dict()['status'] == 'processing'
+    assert lane.projector.store.ref('results', batch.ids[0]).get().to_dict()['projection_state'] == 'pending'

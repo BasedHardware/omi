@@ -125,6 +125,23 @@ class ProjectionStore:
                 if receipt.get('state') == 'ready':
                     return old or {}, True
                 row, result = operation(old)
+                if old is None and session.job.get('priority') != 0:
+                    from utils.cloud_tasks import is_sync_backfill_routing_enabled
+
+                    if is_sync_backfill_routing_enabled():
+                        import os
+
+                        queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip()
+                        handler = os.getenv('SYNC_BACKFILL_TASKS_HANDLER_URL', '').strip()
+                        if not queue or not handler:
+                            raise ProjectionBlocked('backfill enrichment dispatch binding required')
+                        row['dispatch'] = {
+                            'queue': queue,
+                            'handler': handler,
+                            'audience': os.getenv('SYNC_BACKFILL_TASKS_OIDC_AUDIENCE') or handler,
+                            'invoker_sa': os.getenv('SYNC_TASKS_INVOKER_SA', ''),
+                        }
+                        result = (row, result[1])
                 # The enrichment obligation and its exactly-once projection
                 # receipt commit together, fenced against account deletion.
                 transaction.set(ref, row)
