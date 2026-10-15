@@ -17,9 +17,23 @@ from unittest.mock import MagicMock
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
-_STUB = ('database', 'utils', 'firebase_admin', 'google', 'pusher',
-         'modal', 'ulid', 'langchain', 'redis', 'sentry_sdk', 'pydub',
-         'opuslib', 'pinecone', 'typesense', 'prometheus_client')
+_STUB = (
+    'database',
+    'utils',
+    'firebase_admin',
+    'google',
+    'pusher',
+    'modal',
+    'ulid',
+    'langchain',
+    'redis',
+    'sentry_sdk',
+    'pydub',
+    'opuslib',
+    'pinecone',
+    'typesense',
+    'prometheus_client',
+)
 
 
 def _is_stubbed(name):
@@ -62,13 +76,13 @@ finally:
 class TestMacosMetadataFiltering:
     def test_appledouble_and_macosx_dirs_are_not_lifelogs(self):
         names = [
-            'lifelogs/2025-10-08_07h00m25s_Real.md',        # real
-            'export/lifelogs/note.md',                    # real, nested
+            'lifelogs/2025-10-08_07h00m25s_Real.md',  # real
+            'export/lifelogs/note.md',  # real, nested
             '__MACOSX/lifelogs/._2025-10-08_07h00m25s_Real.md',  # AppleDouble
-            'lifelogs/._2025-10-08_07h00m25s_Real.md',    # AppleDouble sibling
+            'lifelogs/._2025-10-08_07h00m25s_Real.md',  # AppleDouble sibling
             '__MACOSX/._other.md',
-            'lifelogs/img.png',                           # not markdown
-            'random/readme.md',                           # no lifelogs/ path
+            'lifelogs/img.png',  # not markdown
+            'random/readme.md',  # no lifelogs/ path
         ]
         got = [n for n in names if L.is_lifelog_path(n)]
         assert got == [
