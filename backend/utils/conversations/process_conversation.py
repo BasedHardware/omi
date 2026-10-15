@@ -356,6 +356,7 @@ def _get_structured(
     user_kept: bool = False,
     relevance_observer: Optional[Callable[[RelevanceDecision], None]] = None,
     recovery_transcript_decoded: bool = True,
+    llm_hashes: dict[str, str] | None = None,
 ) -> Tuple[Structured, bool]:
     try:
         if trigger is ProcessingTrigger.SERVER_RECOVERY and not recovery_transcript_decoded:
@@ -604,10 +605,15 @@ def _get_structured(
             roster=roster,
             desktop_meeting_capture=desktop_capture,
         )
+        from utils.conversations import llm_input_dedupe
+
         with track_usage(uid, Features.CONVERSATION_STRUCTURE):
-            structured = get_conversation_notes(
+            structured = llm_input_dedupe.notes(
+                uid,
+                main_conv,
                 prefix,
-                uid=uid,
+                get_conversation_notes,
+                llm_hashes,
                 started_at=conv_started_at,
                 language_code=language_code,
                 output_language_code=user_language,
@@ -1546,10 +1552,18 @@ def _extract_memories_canonical(
     uid: str, conversation: Conversation, *, db_client: Any, parity_capture: SurfaceParityCapture | None = None
 ) -> ConversationMemoryExtractionResult:
     """Universal canonical extraction with one atomic source replacement."""
+    from config.sync_reprocess import dedupe_enabled
+    from utils.conversations import llm_input_dedupe
+
+    l1_digest = None
     source = source_for_conversation(conversation)
     memory_service = MemoryService(db_client=db_client)
 
     language = users_db.get_user_language_preference(uid)
+    if dedupe_enabled():
+        # Prevent the extractor's None fallback from resolving a second,
+        # potentially different preference after we fingerprint the input.
+        language = language or 'en'
     source_captured_at = getattr(conversation, "started_at", None) or getattr(conversation, "created_at", None)
     capture_candidates: List[Tuple[Memory, List[str], str, List[str], bool]] = []
     capture_decisions_by_memory_object: Dict[int, Tuple[str, bool]] = {}
@@ -1570,6 +1584,33 @@ def _extract_memories_canonical(
         text_content = ext_data.get('text')
         if text_content and len(text_content) > 0:
             text_source = ext_data.get('text_source', 'other')
+            # Resolve hidden profile/date inputs once, then pass those exact
+            # values to both the fingerprint and the extractor.
+            external_kwargs = {}
+            if dedupe_enabled():
+                from utils.llm.memories import get_prompt_memories
+                from utils.llm.temporal import current_date_for_uid
+
+                prompt_name, prompt_memories = get_prompt_memories(uid)
+                external_kwargs = {'user_name': prompt_name, 'memories_str': prompt_memories}
+                content_date = content_date or current_date_for_uid(uid)
+            known_spellings = conversation_known_spellings(uid)
+            if dedupe_enabled():
+                l1_digest, matched = llm_input_dedupe.l1_input(
+                    uid,
+                    conversation,
+                    {
+                        'text': text_content,
+                        'source': text_source,
+                        'language': language,
+                        'content_date': content_date,
+                        'known_spellings': known_spellings,
+                        'profile': external_kwargs,
+                    },
+                    db_client=db_client,
+                )
+                if matched:
+                    return ConversationMemoryExtractionResult(count=0, source=source, path=PATH_CANONICAL)
             try:
                 extracted_memories = extract_memories_from_text(
                     uid,
@@ -1578,7 +1619,8 @@ def _extract_memories_canonical(
                     language=language,
                     content_date=content_date,
                     strict=True,
-                    known_spellings=conversation_known_spellings(uid),
+                    known_spellings=known_spellings,
+                    **external_kwargs,
                 )
             except MemoryExtractionError as exc:
                 return _canonical_extraction_unavailable(conversation, source, exc)
@@ -1617,6 +1659,33 @@ def _extract_memories_canonical(
                 roster=prompt_roster,
                 desktop_meeting_capture=prompt_desktop_capture,
             )
+        rejected_examples = _rejected_memory_examples_for_l1(uid, db_client=db_client)
+        if dedupe_enabled() and prompt_prefix is not None:
+            l1_digest, matched = llm_input_dedupe.l1_input(
+                uid,
+                conversation,
+                {
+                    'prefix': prompt_prefix,
+                    'segments': conversation.transcript_segments,
+                    'user_name': user_name,
+                    'language': language,
+                    'content_date': content_date,
+                    'rejected_examples': rejected_examples,
+                    'belief_model': belief_model_enabled(),
+                    'owner_adjudication': (
+                        {
+                            'title': conversation.structured.title,
+                            'overview': conversation.structured.overview,
+                            'source': conversation.source,
+                        }
+                        if memory_owner_jev_flip_enabled()
+                        else None
+                    ),
+                },
+                db_client=db_client,
+            )
+            if matched:
+                return ConversationMemoryExtractionResult(count=0, source=source, path=PATH_CANONICAL)
         try:
             extracted_candidates = extract_canonical_l1_memory_candidates(
                 uid,
@@ -1626,7 +1695,7 @@ def _extract_memories_canonical(
                 language=language,
                 strict=True,
                 prompt_prefix=prompt_prefix,
-                rejected_memory_examples=_rejected_memory_examples_for_l1(uid, db_client=db_client),
+                rejected_memory_examples=rejected_examples,
             )
         except MemoryExtractionError as exc:
             return _canonical_extraction_unavailable(conversation, source, exc)
@@ -1910,6 +1979,7 @@ def _extract_memories_canonical(
         conversation.id,
         replacement_payloads,
     )
+    llm_input_dedupe.l1_succeeded(uid, conversation, l1_digest, db_client=db_client)
     capture_regime = getattr(conversation.source, "value", conversation.source) or ConversationSource.unknown.value
     owner_evidence = OwnerAttributionEvidence.from_segments(conversation.transcript_segments)
     for memory_db_obj, _, _, _ in parsed_memories:
@@ -2978,6 +3048,7 @@ def process_conversation(
 
     generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
     decisions: list[RelevanceDecision] = []
+    llm_hashes: dict[str, str] = {}
     structured, discarded = _get_structured(
         uid,
         language_code,
@@ -2988,6 +3059,7 @@ def process_conversation(
         user_kept=user_kept,
         relevance_observer=decisions.append,
         recovery_transcript_decoded=recovery_transcript_decoded,
+        llm_hashes=llm_hashes,
     )
     conversation = _get_conversation_obj(
         uid,
@@ -3043,6 +3115,14 @@ def process_conversation(
     # calendar links, usage, or webhooks from a stale in-memory snapshot.
     conversation.status = ConversationStatus.completed
     payload = _normal_persist_payload(conversation, clear_terminal_marker=clear_stale_terminal_marker)
+    payload.update(llm_hashes)
+    from config.sync_reprocess import dedupe_enabled
+    from utils.conversations.llm_input_dedupe import NOTES_HASH, NOTES_OUTPUT_HASH, L1_HASH
+
+    if not dedupe_enabled() and not is_initial_creation:
+        # Rollback keeps generating normally; clear server-only checkpoints in
+        # this existing write so they cannot describe replacement outputs.
+        payload.update({NOTES_HASH: None, NOTES_OUTPUT_HASH: None, L1_HASH: None})
     if relevance is not None:
         # Server-side audit record, deliberately outside the client wire model.
         payload[RELEVANCE_DECISION_FIELD] = relevance.as_record()

@@ -170,7 +170,84 @@ def defer_pending(job_id: str, *, firestore_client: Any = None, now: Optional[da
         pass  # Another dispatcher already claimed this pending document.
 
 
-def claim_next(uid: str, *, firestore_client: Any = None, now: Optional[datetime] = None) -> Optional[dict[str, Any]]:
+def pending_head(uid: str, *, firestore_client: Any = None) -> Optional[dict[str, Any]]:
+    """Inspect a candidate; retirement rechecks owner and candidate atomically."""
+    _require_production()
+    client = firestore_client or get_firestore_client()
+    if _data(_root(client, uid).get()).get('active_job_id'):
+        return None
+    return _first_pending(client, uid)
+
+
+def retire_expired(
+    uid: str,
+    job_id: str,
+    *,
+    epoch: Optional[int] = None,
+    firestore_client: Any = None,
+    now: Optional[datetime] = None,
+) -> bool:
+    """Retire exact unbound work while caller holds its Redis lock and proves absence.
+
+    An epoch selects an already-dispatching owner. A worker that began running
+    wins the transaction race. Waiting retirement never changes an owner.
+    """
+    _require_production()
+    client = firestore_client or get_firestore_client()
+    root = _root(client, uid)
+    pending = _pending_ref(client, uid, job_id)
+    current = now or _now()
+
+    @firestore.transactional
+    def commit(transaction: Any) -> bool:
+        owner = _data(root.get(transaction=transaction))
+        if epoch is None:
+            if owner.get('active_job_id'):
+                return False
+            job = _data(pending.get(transaction=transaction))
+            payload = job.get('payload') or {}
+            if job.get('uid') != uid or job.get('job_id') != job_id:
+                return False
+        else:
+            if (
+                owner.get('active_job_id') != job_id
+                or owner.get('active_epoch') != epoch
+                or owner.get('active_state') != 'dispatching'
+            ):
+                return False
+            payload = owner.get('active_payload') or {}
+        content_id = payload.get('content_id')
+        ledger = None
+        claim = {}
+        if isinstance(content_id, str) and content_id and '/' not in content_id:
+            ledger = client.collection('users').document(uid).collection('sync_content_ledger').document(content_id)
+            claim = _data(ledger.get(transaction=transaction))
+        elif content_id is not None:
+            return False
+        if claim.get('job_id') == job_id:
+            if (
+                claim.get('status') != 'processing'
+                or claim.get('ledger_run_token') is not None
+                or claim.get('ledger_run_epoch') is not None
+            ):
+                return False
+            transaction.update(
+                ledger,
+                {
+                    'status': 'retryable',
+                    'job_id': firestore.DELETE_FIELD,
+                    'updated_at': current,
+                },
+            )
+        transaction.delete(root if epoch is not None else pending)
+        return True
+
+    return commit(client.transaction())
+
+
+def claim_next(
+    uid: str, *, expected_job_id: Optional[str] = None, firestore_client: Any = None, now: Optional[datetime] = None
+) -> Optional[dict[str, Any]]:
     """Promote the oldest waiting capture into a fenced dispatch reservation."""
     _require_production()
     client = firestore_client or get_firestore_client()
@@ -187,6 +264,10 @@ def claim_next(uid: str, *, firestore_client: Any = None, now: Optional[datetime
         # just before the claim commits.
         candidate = _first_pending(client, uid, transaction=transaction)
         if candidate is None:
+            return None
+        if expected_job_id is not None and candidate.get('job_id') != expected_job_id:
+            # The Redis proof belongs to a different head. Let the next kick
+            # inspect the new oldest entry before reserving any dispatch.
             return None
         pending = _pending_ref(client, uid, candidate['id'])
         job = _data(pending.get(transaction=transaction))

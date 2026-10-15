@@ -44,6 +44,9 @@ RUN python -m venv /opt/venv && \
 COPY backend/parakeet/main.py .
 COPY backend/parakeet/transcribe.py .
 COPY backend/parakeet/stream_handler.py .
+# Same overwrite as the NeMo Dockerfile: this base has no utils package, and the
+# checkout shim imports utils, which is not copied into the image.
+COPY backend/utils/logging_config.py ./omi_logging_config.py
 
 ENV PARAKEET_INFERENCE_MODE=nim
 ENV NIM_INFERENCE_URL=http://localhost:9000
