@@ -394,6 +394,23 @@ void main() {
       expect(find.text('Transcribing…'), findsNothing);
     });
 
+    testWidgets('one recording straddling an upload batch is listed once, by its least advanced part', (tester) async {
+      final done =
+          Wal(timerStart: 1000, codec: BleAudioCodec.opus, seconds: 300, status: WalStatus.uploaded, device: 'pendant');
+      final next =
+          Wal(timerStart: 1300, codec: BleAudioCodec.opus, seconds: 120, status: WalStatus.miss, device: 'pendant');
+      await _pumpPage(tester, _FakeSync(wals: [next, done]));
+      expect(find.text('ALMOST READY'), findsNothing);
+      expect(find.text('Waiting to sync'), findsOneWidget);
+    });
+
+    testWidgets('a transfer with no recording listed yet sits under Syncing', (tester) async {
+      await _pumpPage(tester, _FakeSync(syncing: true));
+      expect(find.text('SYNCING'), findsOneWidget);
+      expect(find.text('ALMOST READY'), findsNothing);
+      expect(find.text('Downloading from your device'), findsOneWidget);
+    });
+
     testWidgets('says so when everything has landed', (tester) async {
       await _pumpPage(tester, _FakeSync(wals: [_wal('done', 15, WalStatus.synced)]));
       expect(find.text('All recordings are synced'), findsOneWidget);

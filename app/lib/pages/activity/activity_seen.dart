@@ -45,10 +45,11 @@ class ActivitySeen {
     hasNew.value = _latestDelightMs > seen;
   }
 
-  /// Activity was opened or left: everything it holds has been seen.
-  void markSeen({DateTime? now}) {
-    final ms = (now ?? DateTime.now()).millisecondsSinceEpoch;
-    _write(ms > _latestDelightMs ? ms : _latestDelightMs);
-    hasNew.value = false;
+  /// Activity showed everything up to [through] (default now). A recap seen elsewhere after that,
+  /// say by Home refreshing behind an open Activity, keeps the bell lit.
+  void markSeen({DateTime? through}) {
+    final ms = (through ?? DateTime.now()).millisecondsSinceEpoch;
+    _write(ms);
+    hasNew.value = _latestDelightMs > ms;
   }
 }

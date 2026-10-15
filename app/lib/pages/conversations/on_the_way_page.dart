@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/recording_blocks.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -41,25 +42,38 @@ class OnTheWayPage extends StatelessWidget {
               label: l.processing,
               step: 3,
             ),
-          // A live capture's uploaded audio carries the id of the conversation already listed above.
-          for (final block in groupRecordingBlocks([
-            for (final w in SyncPendingWork.uploaded(p))
-              if (w.conversationId == null || !processingIds.contains(w.conversationId)) w,
-          ]))
-            _PendingItem.block(block, label: l.transcribing, step: 2),
         ];
-        final syncing = [
-          for (final block in groupRecordingBlocks(SyncPendingWork.syncing(p)))
-            _PendingItem.block(block, label: _syncingLabel(block, l), step: 1),
-        ];
+        final syncing = <_PendingItem>[];
+        // One recording's fragments can straddle stages (an upload batch done, the next still
+        // syncing): group every pending fragment first, then a block is only as far along as its
+        // least advanced part. A live capture's uploaded audio carries the id of the conversation
+        // already listed as processing, so it is not repeated.
+        final pending = [
+          for (final w in SyncPendingWork.uploaded(p))
+            if (w.conversationId == null || !processingIds.contains(w.conversationId)) w,
+          ...SyncPendingWork.syncing(p),
+        ]..sort((a, b) => b.timerStart.compareTo(a.timerStart));
+        for (final block in groupRecordingBlocks(pending)) {
+          if (block.wals.every((w) => w.status == WalStatus.uploaded)) {
+            almostReady.add(_PendingItem.block(block, label: l.transcribing, step: 2));
+          } else {
+            syncing.add(_PendingItem.block(block, label: _syncingLabel(block, l), step: 1));
+          }
+        }
 
         final attentionCount = groupRecordingBlocks(SyncPendingWork.attention(p)).length;
         final Widget body;
         // A sync can be mid-run with no recording listed yet (WAL-less processing), and refused
         // recordings are not pending: neither is "all synced".
-        final serverBusy = SyncPendingWork.hasServerJobs(p);
-        if (almostReady.isEmpty && serverBusy) {
-          almostReady.add(_PendingItem.status(label: SyncPendingWork.stageLabel(p, l), step: 2));
+        if (almostReady.isEmpty && syncing.isEmpty && SyncPendingWork.hasServerJobs(p)) {
+          final status = SyncPendingWork.stageLabel(p, l);
+          final phase = p.syncState.phase;
+          final transferring = p.syncState.isSyncing &&
+              !p.syncState.isFetchingConversations &&
+              (phase == SyncPhase.downloadingFromDevice ||
+                  phase == SyncPhase.waitingForInternet ||
+                  phase == SyncPhase.uploadingToCloud);
+          (transferring ? syncing : almostReady).add(_PendingItem.status(label: status, step: transferring ? 1 : 2));
         }
         if (almostReady.isEmpty && syncing.isEmpty && attentionCount == 0) {
           body = OmiEmptyState(icon: Icons.check_circle_outline, title: l.allRecordingsSynced);

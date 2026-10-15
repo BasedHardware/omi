@@ -61,12 +61,20 @@ void main() {
       expect(seen.hasNew.value, isTrue);
 
       final now = DateTime.now();
-      seen.markSeen(now: now);
+      seen.markSeen(through: now);
       expect(seen.hasNew.value, isFalse);
       expect(stored(), now.millisecondsSinceEpoch);
       seen.observe([anHourAgo]);
       expect(seen.hasNew.value, isFalse);
     });
+  });
+
+  test('leaving Activity marks seen only through what it showed', () {
+    final (seen, _) = _seen(yesterday.millisecondsSinceEpoch);
+    final shown = DateTime.now().subtract(const Duration(minutes: 10));
+    seen.observe([DateTime.now()]); // Home saw a recap after Activity last loaded.
+    seen.markSeen(through: shown);
+    expect(seen.hasNew.value, isTrue);
   });
 
   group('ActivityBellButton', () {

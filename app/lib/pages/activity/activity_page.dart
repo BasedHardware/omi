@@ -48,7 +48,7 @@ class _ChangeItem extends _ActivityItem {
   final ReviewChange change;
 }
 
-class _ActivityPageState extends State<ActivityPage> {
+class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver {
   late final ActivitySeen _seen = widget.seen ?? ActivitySeen.instance;
 
   /// The last visit before this one: items newer than it get a dot.
@@ -66,17 +66,28 @@ class _ActivityPageState extends State<ActivityPage> {
   /// shown, with a retry, instead of passing for a complete list.
   bool _partial = false;
 
+  /// When this page last loaded: leaving marks seen only through what it actually showed.
+  DateTime _shownThrough = DateTime.now();
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _previousVisitMs = _seen.seenAtMs;
-    _seen.markSeen();
+    _seen.markSeen(through: _shownThrough);
     _refresh();
+  }
+
+  /// A recap made while the app was in the background shows here on return, not just on Home.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refresh();
   }
 
   @override
   void dispose() {
-    _seen.markSeen();
+    WidgetsBinding.instance.removeObserver(this);
+    _seen.markSeen(through: _shownThrough);
     super.dispose();
   }
 
@@ -85,6 +96,7 @@ class _ActivityPageState extends State<ActivityPage> {
       _loading = _items.isEmpty;
       _failed = false;
     });
+    final startedAt = DateTime.now();
     final results = await Future.wait<Object>([
       (widget.loadRecaps ?? _loadActivityRecaps)(),
       (widget.loadChanges ?? review_api.getReviewChanges)(),
@@ -104,8 +116,11 @@ class _ActivityPageState extends State<ActivityPage> {
     }
     final changesFailed = changes is ApiFailure<ReviewChangesPage> && changes.problem.kind != ApiProblemKind.notFound;
     final anyFailed = !recaps.ok || changesFailed;
-    if (recaps.ok) _seen.observe(recaps.items.map((r) => r.createdAt));
-    _seen.markSeen();
+    if (recaps.ok) {
+      _seen.observe(recaps.items.map((r) => r.createdAt));
+      _shownThrough = startedAt;
+    }
+    _seen.markSeen(through: _shownThrough);
     setState(() {
       _loading = false;
       _rebuildItems();

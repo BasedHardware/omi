@@ -550,7 +550,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           processingByDate: processingByDate,
         );
         // Recordings that are not conversations yet sit in Today, where they will land.
+        // Speaker-scoped results are a search: the global pending row was never filtered by speaker.
         final showPending = showRecordings &&
+            convoProvider.selectedSpeakerId == null &&
             dateFilterIncludesToday(convoProvider.selectedStartDate, convoProvider.selectedEndDate, DateTime.now());
         final conversationRows = showPending ? _withPendingSyncRow(listRows, DateTime.now()) : listRows;
 
