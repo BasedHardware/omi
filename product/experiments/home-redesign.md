@@ -3,7 +3,8 @@
 **Question.** Does the redesigned Home (from #21711) make new and existing mobile readers record
 more, come back more and upgrade more than today's Home?
 
-**Arms** (PostHog flag `home-redesign`, variants `control` / `test`, experience continuity on):
+**Arms** (PostHog flag `home-redesign`, id 963799, experiment 486169, 50/50 by distinct id; draft until the
+build is in the stores):
 - `control` — today's Home, unchanged: the Ask Omi chat bar with the round record button, the live
   recording card above the list, the processing row, empty states with icons, the calendar in the
   header, locked rows that open Usage, no chat welcome or starter to-dos.
