@@ -630,8 +630,7 @@ async def get_calendar_events_tool(
                 # 'now' drifts between the caller's ISO string and this
                 # check — a range starting today counts as future-facing.
                 future_range = (
-                    time_min is not None
-                    and time_min >= datetime.now(timezone.utc) - timedelta(days=1)
+                    time_min >= datetime.now(timezone.utc) - timedelta(days=1)
                 )
 
                 all_events: List[Dict[str, Any]] = []
