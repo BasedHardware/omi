@@ -130,9 +130,19 @@ async def test_multi_channel_receiver_drops_malformed_opus_frame_without_mixing_
 
 
 @pytest.mark.anyio
-async def test_receiver_emits_decoded_audio_duration_at_session_end():
+async def test_receiver_emits_decoded_audio_duration_at_session_end(monkeypatch):
+    import routers.listen.receiver as receiver_module
+
     telemetry = _TelemetryClient()
     set_product_telemetry_client_for_tests(telemetry)
+    source_events = []
+    emit_product_event = receiver_module.emit_product_event
+
+    def capture_source_event(**event):
+        source_events.append(event)
+        return emit_product_event(**event)
+
+    monkeypatch.setattr(receiver_module, 'emit_product_event', capture_source_event)
     websocket = _FramesWebSocket([{'bytes': b'\x01\x00' * 16000}, {'type': 'websocket.disconnect', 'code': 1000}])
     host = SimpleNamespace(
         request=SimpleNamespace(websocket=websocket, codec='pcm16', sample_rate=16000, uid='user-1'),
@@ -161,7 +171,9 @@ async def test_receiver_emits_decoded_audio_duration_at_session_end():
 
     assert telemetry.events[0]['event'] == 'Encoded Audio Duration Measured'
     assert telemetry.events[0]['properties']['duration_seconds'] == 1.0
-    assert telemetry.events[0]['properties']['recording_id'] == 'recording-1'
+    assert source_events[0]['properties']['recording_id'] == 'recording-1'
+    assert source_events[0]['properties']['conversation_id'] == 'conversation-1'
+    assert not {'recording_id', 'conversation_id'} & telemetry.events[0]['properties'].keys()
 
 
 @pytest.mark.anyio

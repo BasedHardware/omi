@@ -28,7 +28,7 @@ def _install_fake_db(monkeypatch):
     writes = []
 
     doc_ref = MagicMock()
-    doc_ref.get.return_value = SimpleNamespace(exists=True)
+    doc_ref.get.return_value = SimpleNamespace(exists=True, to_dict=lambda: {})
     doc_ref.update.side_effect = lambda data: writes.append(data)
 
     items_collection = MagicMock()
@@ -67,3 +67,17 @@ def test_non_export_update_leaves_sync_requested_alone(monkeypatch):
     action_items_db.update_action_item(UID, ITEM_ID, {"description": "x"})
 
     assert "sync_requested" not in writes[-1]
+
+
+def test_non_apple_export_preserves_pending_apple_sync(monkeypatch):
+    writes = _install_fake_db(monkeypatch)
+
+    action_items_db.update_action_item(
+        UID,
+        ITEM_ID,
+        {"exported": True, "export_platform": "asana", "sync_requested": True},
+    )
+
+    assert writes[-1]["exported"] is True
+    assert writes[-1]["export_platform"] == "asana"
+    assert writes[-1]["sync_requested"] is True
