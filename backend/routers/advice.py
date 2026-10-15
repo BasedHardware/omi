@@ -89,6 +89,8 @@ def create_advice(
         )
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         _log_database_failure('create', uid, e)
         raise HTTPException(status_code=500, detail='Failed to create advice')
@@ -108,6 +110,8 @@ def get_advice(
         )
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         _log_database_failure('list', uid, e)
         raise HTTPException(status_code=500, detail='Failed to load advice')
@@ -126,6 +130,8 @@ def update_advice(
         result = advice_db.update_advice(uid, advice_id, is_read=request.is_read, is_dismissed=request.is_dismissed)
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         _log_database_failure('update', uid, e)
         raise HTTPException(status_code=500, detail='Failed to update advice')
@@ -144,6 +150,8 @@ def delete_advice(
         deleted = advice_db.delete_advice(uid, advice_id)
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         _log_database_failure('delete', uid, e)
         raise HTTPException(status_code=500, detail='Failed to delete advice')
@@ -158,6 +166,8 @@ def mark_all_advice_read(uid: str = Depends(auth.get_current_user_uid)):
         count = advice_db.mark_all_advice_read(uid)
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         _log_database_failure('mark_all_read', uid, e)
         raise HTTPException(status_code=500, detail='Failed to mark advice as read')
