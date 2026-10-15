@@ -534,6 +534,23 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         payload,
         flags=re.DOTALL,
     )
+    # Dream is admitted on these processing hosts. Keep unrelated gateway/secret
+    # fixtures complete without duplicating the rollout's account allowlist.
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    services = manifest['environments']['dev']['cloud_run']['services']
+    for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        bindings = services[service]['env']
+        entries = ',\n'.join(
+            '        ' + json.dumps({'name': name, 'value': bindings[name]['value']})
+            for name in ('DREAM_AGENT_ELIGIBILITY', 'DREAM_AGENT_UID_ALLOWLIST', 'DREAM_ON_DEMAND_ENABLED')
+        )
+        payload = re.sub(
+            rf'("{service}":\s*\{{.*?"env":\s*\[)',
+            lambda match: match.group(1) + '\n' + entries + ',',
+            payload,
+            count=1,
+            flags=re.DOTALL,
+        )
     return with_backend_integration_events_secret(payload)
 
 

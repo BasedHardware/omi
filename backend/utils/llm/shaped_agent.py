@@ -60,6 +60,7 @@ class Mount:
     schema: Any = None
     budget: Budget = Budget()
     cache_breakpoint: bool = True
+    cache_initial_evidence: bool = True
     stable_context: tuple[Any, ...] = ()
 
     def prefix(self) -> str:
@@ -76,7 +77,9 @@ class Mount:
         if explicit_cache and self.cache_breakpoint and (self.tools or self.budget.turns > 1 or self.stable_context):
             # Explicit stable_context wins. Existing agent mounts provide their
             # initial seed as evidence[0]; later tool/model turns are append-only.
-            boundary = len(self.stable_context) if self.stable_context else min(1, len(evidence))
+            boundary = len(self.stable_context)
+            if not self.stable_context and self.cache_initial_evidence:
+                boundary = min(1, len(evidence))
             message = messages[boundary]
             if isinstance(message, dict):
                 content = message.get('content')
