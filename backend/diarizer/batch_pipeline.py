@@ -20,7 +20,7 @@ _GPU_CHAIN_LOCK = threading.Lock()
 logger = logging.getLogger(__name__)
 
 
-def _fatal_cuda(exc):
+def is_fatal_cuda_error(exc):
     # Same fatal states as parakeet.gpu_worker.classify_fatal_cuda_error; keep
     # the model-free chain independent of that service's torch/NeMo imports.
     markers = (
@@ -195,7 +195,7 @@ class PipelineWorker:
 
         def fail(item, exc):
             # Quarantine poisoned CUDA state without importing a second GPU owner.
-            if _fatal_cuda(exc):
+            if is_fatal_cuda_error(exc):
                 self._unavailable = True
                 raise RuntimeError('fatal CUDA error; restart GPU chain') from exc
             if item.segment_id not in failed:

@@ -18,7 +18,7 @@ from prometheus_client import CollectorRegistry, CONTENT_TYPE_LATEST, generate_l
 from config.batch_pipeline_providers import provider_config
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_store import FirestoreStore
-from diarizer.batch_pipeline import _fatal_cuda
+from diarizer.batch_pipeline import is_fatal_cuda_error
 from diarizer.batch_pipeline_startup import load_worker, synchronize_gpu
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.capacity import PoolCapacity
@@ -59,7 +59,7 @@ class SynchronizedWorker:
                 # quiescence, even for a dedicated GPU with no live reservation.
                 self.synchronize()
         except Exception as error:
-            if _fatal_cuda(error) and self.on_fatal:
+            if is_fatal_cuda_error(error) and self.on_fatal:
                 self.on_fatal()
             raise
 
