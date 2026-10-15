@@ -419,3 +419,8 @@ tests/unit/test_account_gate_busy_http.py
 # lazy import in its call phase under file isolation. Measured 0.29s quiet and
 # 0.31-0.32s beside another unit file (2026-10-15), straddling the 0.30s guard.
 tests/unit/test_dream_lease_reclamation.py::test_only_strictly_older_leases_are_reclaimed[1-bounded]
+# The file's tests pay the task sync module graph under file isolation; up to 0.39s CPU
+# during pre-push (2026-10-15, strict local fail limit 0.30s).
+tests/unit/test_task_sync_apple_async_boundary.py::test_single_apple_reminder_sync_offloads_batch_update_and_preserves_result
+tests/unit/test_task_sync_apple_async_boundary.py::test_batch_apple_reminder_sync_offloads_batch_update_and_preserves_per_item_results
+tests/unit/test_task_sync_apple_async_boundary.py::test_apple_reminder_sync_failure_hides_exception_text_in_single_and_batch_results
