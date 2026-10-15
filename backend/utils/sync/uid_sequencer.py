@@ -230,6 +230,7 @@ def reconcile_uid(
         )
     job_id = owner.get('active_job_id')
     if not isinstance(job_id, str) or not job_id:
+        registry.defer_owner(uid, registry.HEARTBEAT_SECONDS, now=current)
         if waiting:
             return 'dispatched' if kick(uid, retire_limit=retire_limit, progress=progress) else 'raced'
         return 'empty'
@@ -315,7 +316,9 @@ def sweep(*, limit: int = 100) -> dict[str, int]:
         pending_retired += progress.retired
         outcomes[outcome] = outcomes.get(outcome, 0) + 1
     pending = registry.due_pending(limit=limit, now=now)
-    seen_uids: set[str] = set()
+    # Each UID gets one reconcile attempt per tick even when it appears in
+    # both scans; pending rows are still deferred to rotate the bounded page.
+    seen_uids: set[str] = {owner['uid'] for owner in owners}
     for job in pending:
         progress = _ClaimProgress()
         try:
@@ -323,6 +326,9 @@ def sweep(*, limit: int = 100) -> dict[str, int]:
             if job['uid'] in seen_uids:
                 continue
             seen_uids.add(job['uid'])
+            if registry.repair_owner(job['uid'], now=now):
+                outcomes['owner_repaired'] = outcomes.get('owner_repaired', 0) + 1
+                continue  # The staggered owner deadline owns this UID's next attempt.
             sample = registry.waiting_sample(job['uid'], now=now)
             if sample['age_seconds'] >= registry.WAIT_ALERT_SECONDS:
                 logger.error(
