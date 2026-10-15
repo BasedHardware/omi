@@ -43,6 +43,9 @@ def test_unsafe_redirect_urls_rejected(url):
     'url',
     [
         'omi://oauth/success',
+        # signed/production macOS build registers this scheme — dropping it
+        # breaks X connect on release builds (dev builds use -dev).
+        'omi-computer://x/callback',
         'omi-computer-dev://done',
         'https://h.omi.me/x/done',
         'http://localhost:3000/cb',
