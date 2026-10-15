@@ -163,16 +163,22 @@ def test_timeout_is_shared_by_all_waiters_then_retried_after_backoff():
     assert len(attempts) == 2
 
 
-def test_viewer_acceptance_rejects_wrong_org_before_permission_reads():
+@pytest.mark.parametrize("active_org,role", [(1, "Viewer"), (2, "Editor")])
+def test_viewer_acceptance_rejects_wrong_scope_before_permission_reads(active_org, role):
     from charts.monitoring.grafana.verify_business import verify_viewer
 
     class WrongOrg:
         def call(self, method, path):
             assert path == "/api/user"
-            return {"orgId": 1, "isGrafanaAdmin": False}
+            return {"orgId": active_org, "isGrafanaAdmin": False, "login": "sa-negative"}
+
+    class Admin:
+        def call(self, method, path):
+            assert path == "/api/serviceaccounts/search?perpage=1000"
+            return {"serviceAccounts": [{"orgId": 2, "login": "sa-negative", "role": role}]}
 
     with pytest.raises(AssertionError):
-        verify_viewer(WrongOrg(), 2)
+        verify_viewer(WrongOrg(), 2, Admin())
 
 
 def test_viewer_acceptance_requires_same_org_viewer_and_both_denials():
@@ -184,12 +190,15 @@ def test_viewer_acceptance_requires_same_org_viewer_and_both_denials():
 
         def call(self, method, path):
             if path == "/api/user":
-                return {"orgId": 2, "isGrafanaAdmin": False}
-            if path == "/api/user/orgs":
-                return [{"orgId": 2, "role": "Viewer"}]
+                return {"orgId": 2, "isGrafanaAdmin": False, "login": "sa-negative", "id": 0}
             self.denied.append(path)
             raise HTTPError("https://fixture" + path, 403, "denied", {}, io.BytesIO())
 
+    class Admin:
+        def call(self, method, path):
+            assert path == "/api/serviceaccounts/search?perpage=1000"
+            return {"serviceAccounts": [{"orgId": 2, "login": "sa-negative", "role": "Viewer"}]}
+
     viewer = Viewer()
-    verify_viewer(viewer, 2)
+    verify_viewer(viewer, 2, Admin())
     assert viewer.denied == ["/api/folders/business", "/api/dashboards/uid/omi-tv-v2"]

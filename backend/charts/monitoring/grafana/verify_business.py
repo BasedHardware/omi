@@ -43,14 +43,16 @@ def verify(base, business_token, viewer_token):
         "PASS Business ACL/datasource isolation/Infinity wall query; frames="
         + str(sum(len(item["frames"]) for item in results))
     )
-    verify_viewer(Grafana(base, viewer_token), org["id"])
+    verify_viewer(Grafana(base, viewer_token), org["id"], client)
 
 
-def verify_viewer(viewer, org_id):
+def verify_viewer(viewer, org_id, business_admin):
     user = viewer.call("GET", "/api/user")
     assert not user.get("isGrafanaAdmin") and user["orgId"] == org_id
-    memberships = viewer.call("GET", "/api/user/orgs")
-    assert any(item["orgId"] == org_id and item["role"] == "Viewer" for item in memberships)
+    # Service-account tokens cannot call the human-only /api/user/orgs route.
+    accounts = business_admin.call("GET", "/api/serviceaccounts/search?perpage=1000")["serviceAccounts"]
+    matching = [account for account in accounts if account["login"] == user["login"]]
+    assert len(matching) == 1 and matching[0]["orgId"] == org_id and matching[0]["role"] == "Viewer"
     for path in ("/api/folders/business", "/api/dashboards/uid/omi-tv-v2"):
         try:
             viewer.call("GET", path)
