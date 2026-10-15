@@ -1,4 +1,4 @@
-"""Unit tests verifying chat calendar search returns recent matches when search_query is set (#21573)."""
+"""Unit tests verifying chat calendar search returns recent matches when newest_first is set (#21573)."""
 
 import asyncio
 from datetime import datetime, timedelta, timezone
@@ -154,10 +154,11 @@ ct = _load(
     "utils/retrieval/tools/calendar_tools.py",
 )
 get_google_calendar_events = ct.get_google_calendar_events
+get_calendar_events_tool = ct.get_calendar_events_tool
 
 
 class TestCalendarSearchRecentMatches(unittest.IsolatedAsyncioTestCase):
-    async def test_search_query_returns_latest_matches_nearest_time_max(self):
+    async def test_newest_first_true_returns_latest_matches_nearest_time_max(self):
         # 25 weekly occurrences of "1:1 with Andy"
         base_time = datetime(2025, 9, 1, 10, 0, tzinfo=timezone.utc)
         all_items = []
@@ -178,6 +179,7 @@ class TestCalendarSearchRecentMatches(unittest.IsolatedAsyncioTestCase):
                 time_max=base_time + timedelta(weeks=26),
                 max_results=10,
                 search_query="Andy",
+                newest_first=True,
             )
 
         # Must return the 10 events nearest time_max (the latest occurrences)
@@ -187,6 +189,43 @@ class TestCalendarSearchRecentMatches(unittest.IsolatedAsyncioTestCase):
         assert actual_ids == expected_ids
         # Specifically, the most recent meeting (event_24) is included
         assert actual_ids[-1] == "event_24"
+
+    async def test_default_newest_first_false_preserves_earliest_first_with_search_query(self):
+        """Regression test for maintainer feedback: other callers (mutation tools, event picker)
+        must keep earliest-first by default even when search_query is supplied."""
+        base_time = datetime(2025, 9, 1, 10, 0, tzinfo=timezone.utc)
+        page1 = [
+            {"id": f"event_{i:02d}", "summary": f"1:1 with Andy #{i}"}
+            for i in range(15)
+        ]
+        page2 = [
+            {"id": f"event_{i:02d}", "summary": f"1:1 with Andy #{i}"}
+            for i in range(15, 25)
+        ]
+
+        mock_api_request = AsyncMock(
+            side_effect=[
+                {"items": page1, "nextPageToken": "token2"},
+                {"items": page2},
+            ]
+        )
+        with patch.object(ct, "google_api_request", mock_api_request):
+            # newest_first defaults to False
+            results = await get_google_calendar_events(
+                access_token="fake_token",
+                time_min=base_time,
+                time_max=base_time + timedelta(weeks=26),
+                max_results=10,
+                search_query="Andy",
+            )
+
+        # Default must return earliest-first and stop on reaching max_results
+        assert len(results) == 10
+        expected_ids = [f"event_{i:02d}" for i in range(10)]
+        actual_ids = [e["id"] for e in results]
+        assert actual_ids == expected_ids
+        # Page 2 was never fetched because max_results was reached on page 1
+        assert mock_api_request.call_count == 1
 
     async def test_no_search_query_keeps_earliest_first(self):
         # 25 upcoming events
@@ -220,10 +259,9 @@ class TestCalendarSearchRecentMatches(unittest.IsolatedAsyncioTestCase):
         expected_ids = [f"event_{i:02d}" for i in range(10)]
         actual_ids = [e["id"] for e in results]
         assert actual_ids == expected_ids
-        # Page 2 was never fetched because max_results was reached on page 1
         assert mock_api_request.call_count == 1
 
-    async def test_search_query_with_fewer_than_max_results(self):
+    async def test_search_query_newest_first_with_fewer_than_max_results(self):
         all_items = [
             {"id": f"event_{i}", "summary": f"Andy Discussion {i}"}
             for i in range(4)
@@ -235,12 +273,13 @@ class TestCalendarSearchRecentMatches(unittest.IsolatedAsyncioTestCase):
                 access_token="fake_token",
                 max_results=10,
                 search_query="Andy",
+                newest_first=True,
             )
 
         assert len(results) == 4
         assert [e["id"] for e in results] == ["event_0", "event_1", "event_2", "event_3"]
 
-    async def test_search_query_collects_across_pages_before_tail_truncation(self):
+    async def test_search_query_newest_first_collects_across_pages_before_tail_truncation(self):
         page1 = [{"id": f"event_{i:02d}", "summary": f"Andy #{i}"} for i in range(10)]
         page2 = [{"id": f"event_{i:02d}", "summary": f"Andy #{i}"} for i in range(10, 20)]
 
@@ -255,6 +294,7 @@ class TestCalendarSearchRecentMatches(unittest.IsolatedAsyncioTestCase):
                 access_token="fake_token",
                 max_results=5,
                 search_query="Andy",
+                newest_first=True,
             )
 
         assert mock_api_request.call_count == 2
