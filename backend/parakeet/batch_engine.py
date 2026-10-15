@@ -411,7 +411,7 @@ class BatchEngine:
 
             durations = [self._effective_duration(r) for r in batch]
             max_dur = max(durations) if durations else 0
-            logger.info(
+            logger.debug(
                 f"Flushing batch: {len(batch)} files "
                 f"(max_dur={max_dur:.1f}s, limit={self._estimate_max_batch(max_dur)})"
             )

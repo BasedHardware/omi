@@ -5,7 +5,7 @@ import logging
 import os
 
 from utils.env_loader import firebase_admin_options, load_backend_env
-from utils.logging_config import configure_health_access_logging, quiet_http_client_loggers
+from utils.logging_config import configure_split_stream_logging
 from utils.firebase_admin_runtime import (
     firebase_verify_only_credential,
     install_firebase_auth_mutation_guard,
@@ -16,9 +16,8 @@ from config.chat_first_e2e_fixture import is_chat_first_e2e_harness_runtime
 load_backend_env()  # No-op if no env files exist (production); stage + local overrides otherwise
 install_google_adc_guard()
 
-logging.basicConfig(level=logging.INFO)
-configure_health_access_logging()
-quiet_http_client_loggers()
+# INFO/DEBUG to stdout, WARNING+ to stderr, so GKE does not store routine lines as ERROR.
+configure_split_stream_logging(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 import firebase_admin
