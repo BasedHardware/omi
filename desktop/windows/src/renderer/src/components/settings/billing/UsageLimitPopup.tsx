@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, X } from 'lucide-react'
 import { onUsageLimit, dismissUsageLimit, type UsageLimitReason } from '../../../lib/usageLimit'
 import { requestSettingsTab } from '../../../lib/settingsNav'
+import { trackPaywallOpened } from '../../../lib/analytics'
 
 // Fixed headline + per-reason body (UsageLimitPopupView parity). Mac's Upgrade
 // button is purple; Windows uses the app's neutral white primary (INV-UI-1: no
@@ -28,6 +29,13 @@ export function UsageLimitPopup(): React.JSX.Element | null {
   const navigate = useNavigate()
 
   useEffect(() => onUsageLimit(setReason), [])
+
+  useEffect(() => {
+    if (!reason) return
+    // This popup does not hold the subscription document. The Plan & Usage tab
+    // reports the tier when it opens.
+    trackPaywallOpened('windows_usage_limit', 'unknown')
+  }, [reason])
 
   if (!reason) return null
 

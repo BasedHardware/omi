@@ -127,7 +127,7 @@ void main() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMessageHandler(channel, null);
     }
     mockedChannels.clear();
-    BleBridge.instance.unregisterPeripheral(audioId);
+    BleBridge.instance.clearPeripheralForTesting(audioId);
   });
 
   setUp(() async {

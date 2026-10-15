@@ -18,6 +18,7 @@ import pytest
 from pydantic import BaseModel
 
 from models.transcript_segment import SpeakerIdentityStatus
+from utils import dream_vocabulary  # noqa: F401 - retain shared keyterms before legacy database stubs
 
 
 def _read_text(path):
@@ -696,6 +697,7 @@ class TestMergeSurvivorAudio:
         mock_upload = MagicMock()
         mock_storage = ModuleType('utils.other.storage')
         mock_storage.upload_audio_chunk = mock_upload
+        mock_storage.link_archive_captures = MagicMock()
 
         with (
             patch.object(merge_audio, '_wav_bytes_to_pcm16_16k', return_value=pcm),
@@ -845,6 +847,7 @@ class TestProcessSegmentReal:
         sys.modules['utils.other.storage'].mark_playback_unavailable = MagicMock()
         sys.modules['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
         sys.modules['utils.other.storage'].enqueue_conversation_audio_merge = MagicMock()
+        sys.modules['utils.other.storage'].link_archive_captures = MagicMock()
         sys.modules['utils.other.storage'].delete_syncing_temporal_file = MagicMock()
         sys.modules['utils.other.storage'].download_audio_chunks_and_merge = MagicMock()
         sys.modules['utils.other.storage'].get_or_create_merged_audio = MagicMock()
@@ -869,6 +872,7 @@ class TestProcessSegmentReal:
         sys.modules['utils.cloud_tasks'].is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
         sys.modules['utils.cloud_tasks'].is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
         sys.modules['utils.cloud_tasks'].enqueue_audio_merge_job = MagicMock()
+        sys.modules['utils.cloud_tasks'].enqueue_audio_merge_job_deferred = MagicMock()
         sys.modules['utils.cloud_tasks'].verify_audio_merge_cloud_tasks_oidc = MagicMock()
         sys.modules['utils.cloud_tasks'].verify_cloud_tasks_oidc = MagicMock()
         sys.modules['database.sync_ledger'].add_processed_sync_segment_id = MagicMock(return_value=True)
@@ -1591,6 +1595,7 @@ class TestVoiceMessageRuntimeErrorHandling:
         sys.modules['utils.other.storage'].mark_playback_unavailable = MagicMock()
         sys.modules['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
         sys.modules['utils.other.storage'].enqueue_conversation_audio_merge = MagicMock()
+        sys.modules['utils.other.storage'].link_archive_captures = MagicMock()
         sys.modules['utils.other.storage'].delete_syncing_temporal_file = MagicMock()
         sys.modules['utils.other.storage'].upload_audio_chunk = MagicMock()
         sys.modules['utils.other.storage'].precache_conversation_audio = MagicMock()

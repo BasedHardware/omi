@@ -2,9 +2,9 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional, List
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
-from config.plan_catalog import LEGACY_WIRE_PLAN_VALUES, WIRE_FALLBACK_PLAN_TYPES, PlanType
+from config.plan_catalog import PlanType
 
 
 class WebhookType(str, Enum):
@@ -119,13 +119,8 @@ class ChatUsageQuota(BaseModel):
 
 
 class Subscription(BaseModel):
-    # Temporary released-client projection. The canonical enum has six values;
-    # this compatibility view is generated from catalog wire fallbacks and is
-    # removed only after every client has a lossless unknown-value decoder.
-    plan: PlanType = Field(
-        default=PlanType.basic,
-        json_schema_extra={"enum": list(LEGACY_WIRE_PLAN_VALUES)},
-    )
+    # Catalog identity; the route remaps labels before serializing for legacy clients.
+    plan: PlanType = PlanType.basic
     status: SubscriptionStatus = SubscriptionStatus.active
     current_period_end: Optional[int] = None
     # Period start is used by the Neo desktop-grandfather check. Populated by the
@@ -225,13 +220,6 @@ class UserSubscriptionResponse(BaseModel):
     # Resolved once per request by `resolve_transcription_allowance`; the same
     # answer the listen socket enforces. Null only on servers that predate it.
     transcription_allowance: Optional[TranscriptionAllowanceSnapshot] = None
-
-    @field_validator("subscription", mode="before")
-    @classmethod
-    def _reject_values_outside_released_wire_contract(cls, value: Subscription) -> Subscription:
-        if value.plan in WIRE_FALLBACK_PLAN_TYPES:
-            raise ValueError("plan ID requires a versioned app-client subscription contract")
-        return value
 
 
 class AvailableLanguage(BaseModel):

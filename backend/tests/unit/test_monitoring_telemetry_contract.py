@@ -276,8 +276,24 @@ def test_alert_rules_use_declared_receiver_and_instatus_components():
     for rule in _alert_rules():
         receiver = (rule.get('notification_settings') or {}).get('receiver')
         assert receiver == default_receiver, f"{rule.get('uid')}: unexpected receiver {receiver!r}"
-        component = (rule.get('labels') or {}).get(label_key)
-        assert component in allowed, f"{rule.get('uid')}: unexpected {label_key}={component!r}"
+        labels = rule.get('labels') or {}
+        component = labels.get(label_key)
+        canary_sources = {
+            'omi-datasource-prometheus': 'prometheus',
+            'omi-datasource-cloud-monitoring': 'beuxmaq8oxhq8e',
+        }
+        if rule.get('uid') in canary_sources:
+            # A datasource outage is monitoring infrastructure, not evidence of
+            # an Omi product outage. These two explicit canaries reach Telegram
+            # via the root receiver and must not update a product Instatus page.
+            source = canary_sources[rule['uid']]
+            assert labels['impact'] == 'infrastructure'
+            assert labels['component'] == 'monitoring'
+            assert labels['datasource_uid'] == source
+            assert rule['data'][0]['datasourceUid'] == source
+            assert component is None
+        else:
+            assert component in allowed, f"{rule.get('uid')}: unexpected {label_key}={component!r}"
 
 
 def test_scrape_health_no_data_semantics_match_inventory():
@@ -374,3 +390,28 @@ def test_the_rewrite_regex_recovers_the_original_metric_name(mangled, plain):
 )
 def test_the_rewrite_regex_leaves_every_other_series_alone(untouched):
     assert re.fullmatch(CLOUD_RUN_NAME_REWRITE, untouched) is None
+
+
+CLOUD_MONITORING_CUSTOM_REWRITE = "stackdriver_generic_task_custom_googleapis_com_(omi_.+)"
+
+
+@pytest.mark.parametrize("env", ["dev", "prod"])
+def test_custom_metric_api_aggregates_are_renamed_back_too(env):
+    """backend-sync writes omi_sync_phase_* through the custom-metric API, which the
+    exporter names stackdriver_generic_task_custom_googleapis_com_<name>. Leaving them
+    mangled keeps omi-cloud-run-metric-names-unnormalized pending at critical."""
+    import re
+
+    job = _cloud_run_scrape_job(env)
+    rewrites = [rule for rule in job.get("metric_relabel_configs", []) if rule.get("target_label") == "__name__"]
+    custom = [rule for rule in rewrites if rule["regex"] == CLOUD_MONITORING_CUSTOM_REWRITE]
+    assert len(custom) == 1, env
+    assert custom[0]["source_labels"] == ["__name__"] and custom[0]["replacement"] == "${1}", env
+    mangled = "stackdriver_generic_task_custom_googleapis_com_omi_sync_phase_duration_seconds_bucket"
+    match = re.fullmatch(CLOUD_MONITORING_CUSTOM_REWRITE, mangled)
+    assert match and match.group(1) == "omi_sync_phase_duration_seconds_bucket"
+    # The unnormalized alert counts stackdriver_.*_omi_.* names; nothing inventoried may still carry one.
+    inventory = json.loads(
+        (Path(__file__).resolve().parents[3] / "backend/charts/monitoring/metric-inventory.prod.json").read_text()
+    )
+    assert not [m for m in inventory["metrics"] if re.fullmatch(r"stackdriver_.*_omi_.*", m)]

@@ -115,10 +115,35 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
-  - name: DREAM_AGENT_MODE
-    value: 'on'
-  - name: DREAM_AGENT_UID_ALLOWLIST
-    value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23'
+  - name: AUDIO_ARCHIVE_LIVE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_READ_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_STOP_PCM_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_SYNC_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_COALESCE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_PERCENT
+    value: "0"
+  - name: AUDIO_ARCHIVE_UID_ALLOWLIST
+    value: ""
+  - name: BUCKET_AUDIO_DERIVED
+    value: ""
+  - name: AUDIO_MERGE_WORKER_URL
+    value: ""
+  # Bounded, process-local late identity repair coalescing; rollback with false.
+  - name: OWNER_IDENTITY_RETRY_COALESCE_ENABLED
+    value: "true"
+  - name: DREAM_AGENT_ENABLED
+    value: 'true'
+  - name: DREAM_AGENT_ELIGIBILITY
+    value: 'all'
   # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
   - name: PROACTIVITY_V2_POSTHOG_TOKEN
     value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
@@ -262,7 +287,26 @@ env:
     value: "25"
   - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
     value: "false"
-  # Phase-1 final-pass shadow runs only for the owner UID on this pusher.
+  # Activate only after isolated batch install, metric and VPC route qualification.
+  - name: HOSTED_DIARIZATION_API_URL
+    value: "http://172.16.160.20/diarizer-batch"
+  - name: TRANSCRIPTION_FINAL_PASS_DIARIZER
+    value: "pyannote_shadow"
+  - name: TRANSCRIPTION_FINAL_PASS_BACKEND
+    value: "pyannote"
+  - name: TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: TRANSCRIPTION_FINAL_PASS_PERCENT
+    value: "1"
+  - name: TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE
+    value: "true"
+  - name: TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS
+    value: "10"
+  - name: TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS
+    value: "1000"
+  - name: TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED
+    value: "true"
+  # Complete stage C: 1% cohort plus the owner UID, bounded by the daily cap.
   - name: TRANSCRIPTION_SHADOW_ENABLED
     value: "true"
   - name: TRANSCRIPTION_SHADOW_KILL_SWITCH
@@ -270,9 +314,9 @@ env:
   - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: TRANSCRIPTION_SHADOW_PERCENT
-    value: "0"
-  - name: TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS
     value: "1"
+  - name: TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS
+    value: "80"
   - name: CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT
     value: "100"
   - name: MEMORY_OWNER_JEV_SHADOW_PERCENT
@@ -308,7 +352,7 @@ env:
         name: prod-omi-backend-secrets
         key: GROQ_API_KEY
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
-    value: "http://diarizer.omi.me:80"
+    value: "http://172.16.160.20/diarizer"
   - name: PINECONE_API_KEY
     valueFrom:
       secretKeyRef:
@@ -335,8 +379,7 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: ADMIN_KEY
-  # Shared Deepgram credential: this deployment reaches self-hosted dg.omi.me,
-  # while backend-listen uses the hosted API with the same key.
+  # Retain the cloud/BYOK credential; self-hosted Deepgram is retired.
   - name: DEEPGRAM_API_KEY
     valueFrom:
       secretKeyRef:
@@ -439,9 +482,7 @@ env:
         name: prod-omi-backend-secrets
         key: TYPESENSE_API_KEY
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
-    value: "true"
-  - name: DEEPGRAM_SELF_HOSTED_URL
-    value: "https://dg.omi.me"
+    value: "false"
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
   - name: STT_PRERECORDED_MODEL
@@ -591,6 +632,8 @@ volumeMounts: []
 #   mountPath: "/etc/foo"
 #   readOnly: true
 
+# Placement uses service/env labels, not pool names or CPU family.
+# New N4 and qualified N2 fallback pools retain the affinity labels below.
 nodeSelector: {}
 
 tolerations: []

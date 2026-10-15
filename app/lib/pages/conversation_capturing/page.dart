@@ -1,3 +1,6 @@
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/ui/components/local_stt_recovery_notice.dart';
+import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'dart:async';
 
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -109,9 +112,20 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   /// Finish: the one stop. No confirmation: Finish is explicit, and it processes the conversation
   /// (a phone recording stops first; a pendant it paused resumes afterwards).
   Future<void> _stopConversation(CaptureProvider provider) async {
-    await provider.finishCapture();
+    final hadContent = provider.segments.isNotEmpty || provider.photos.isNotEmpty;
+    if (hadContent) {
+      await provider.finishCapture();
+      if (!mounted) return;
+      switchHomeToConversationsTab(context);
+    } else {
+      final source = provider.liveCaptureSource;
+      if (source == null || source == ConversationSource.phone.name) {
+        await provider.stopStreamRecording();
+      } else if (LiveCaptureCard.canPause(provider.recordingDevice, source: source) && !provider.isPaused) {
+        await provider.pauseCapture();
+      }
+    }
     if (!mounted) return;
-    switchHomeToConversationsTab(context);
     // A swipe back during the finish has already popped this route; it only stays mounted while it
     // animates out, and a pop then would take Home with it and leave the navigator empty.
     final route = ModalRoute.of(context);
@@ -123,6 +137,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   /// is Paused, capture recovering on its own (a dropped socket, a mic stall) is Reconnecting, a
   /// terminal transcription failure or offline buffering is named as such, otherwise Listening.
   CaptureDisplayState _displayState(CaptureProvider provider, {required bool capturingPhotos}) {
+    if (provider.localSttFailure != null) return CaptureDisplayState.recording;
     final interruption = captureInterruption(
       interrupted: provider.recordingState == RecordingState.interrupted,
       readerPaused: provider.isPaused,
@@ -132,7 +147,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
       audioInterrupted: interruption == CaptureInterruption.micTaken,
       reconnecting: interruption == CaptureInterruption.recovering,
       paused: provider.isPaused || provider.isCallActive,
-      transcriptionUnavailable: provider.terminalTranscriptionFailure != null,
+      transcriptionUnavailable: provider.terminalTranscriptionFailure != null || provider.localSttFailure != null,
       bufferingFor: provider.customSttBufferingDuration,
       capturingPhotos: capturingPhotos,
     );
@@ -166,6 +181,11 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
           body: Column(
             children: [
               const CaptureRecoveryBanner(),
+              if (provider.localSttFailure case final failure?)
+                LocalSttRecoveryNotice(
+                    failure: failure,
+                    onRetry: provider.retryLocalTranscription,
+                    onSetup: () => routeToPage(context, const TranscriptionSettingsPage())),
               _buildUnsyncedWalIndicator(provider),
               Expanded(
                 child: provider.segments.isEmpty && provider.photos.isEmpty
@@ -650,6 +670,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
     required bool transcriptionInterrupted,
   }) {
     if (!provider.pendantCaptureVerified) return '';
+    if (provider.localSttFailure != null) return context.l10n.transcriptionUnavailableRecordingSaved;
     if (usage.isOutOfCredits) return context.l10n.transcriptionUnavailableRecordingSaved;
     if (provider.terminalTranscriptionFailure != null) {
       return context.l10n.transcriptionUnavailableRecordingContinues;

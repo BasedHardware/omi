@@ -6,10 +6,25 @@ from unittest.mock import MagicMock
 import pytest
 
 from utils.memory import canonical_short_term_maintenance_cron as cron
-from utils.memory.canonical_consolidation import ConsolidationReport
 from utils.memory.short_term_promotion import CanonicalShortTermLifecycleReport
+from utils.memory.short_term_promotion import CanonicalShortTermMaintenanceReport
+from utils.memory.canonical_consolidation import RequiredIntakeCompletion
+from utils.memory.promotion_flex import PromotionFlexDeferred
 
 NOW = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
+
+
+@pytest.fixture(autouse=True)
+def isolated_flex_router(monkeypatch):
+    router = SimpleNamespace(
+        control=SimpleNamespace(enabled=True),
+        job_budget_fits=lambda: True,
+        llm_for_uid=lambda *_, **__: object(),
+        assert_result_current=lambda: None,
+        require_job_budget=lambda: None,
+    )
+    monkeypatch.setattr(cron, 'PromotionFlexRunRouter', lambda **_: router)
+    return router
 
 
 def test_legacy_cron_has_no_daily_sweep_inventory_owner():
@@ -102,14 +117,14 @@ def _enable(monkeypatch):
 def test_disabled_global_switch_does_not_resolve_inventory(monkeypatch):
     monkeypatch.setenv(cron.MEMORY_CANONICAL_MAINTENANCE_ENABLED_ENV, "false")
     inventory = MagicMock()
-    summary = cron.run_universal_short_term_maintenance(uid_inventory=inventory, now=NOW)
+    summary = asyncio.run(cron.run_canonical_short_term_maintenance_cron(uid_inventory=inventory, now=NOW))
     assert summary.user_count == 0
     inventory.assert_not_called()
 
 
 def test_missing_inventory_fails_closed_with_operational_dependency(monkeypatch):
     _enable(monkeypatch)
-    summary = cron.run_universal_short_term_maintenance(db_client=object(), now=NOW)
+    summary = asyncio.run(cron.run_canonical_short_term_maintenance_cron(db_client=object(), now=NOW))
     assert summary.inventory_source == "unavailable"
     assert summary.inventory_complete is False
     assert summary.errors == ["canonical_uid_inventory_unavailable"]
@@ -243,501 +258,59 @@ def test_seed_existing_apply_control_accounts_is_bounded_and_resumable():
     assert cron.bounded_canonical_memory_uid_inventory(db, limit=1) == ("uid-b",)
 
 
-def test_injected_inventory_runs_arbitrary_uids(monkeypatch):
+def test_every_selected_account_runs_outbox_even_without_stm_or_in_ledger_mode(monkeypatch):
     _enable(monkeypatch)
-    calls = []
-
-    def maintenance(uid, **_kwargs):
-        calls.append(uid)
-        return cron.CanonicalShortTermMaintenanceReport(uid=uid)
-
-    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", maintenance)
-    summary = cron.run_universal_short_term_maintenance(
-        db_client=object(),
-        now=NOW,
-        uid_inventory=lambda _db, _limit: ["uid-z", "uid-a", "uid-z"],
-    )
-    assert calls == ["uid-a", "uid-z"]
-    assert summary.user_count == 2
-    assert summary.inventory_source == "injected"
-    assert summary.inventory_complete is True
-
-
-def test_enabled_flex_uid_routes_promotion_and_l2_with_long_leases_and_guards(monkeypatch):
-    _enable(monkeypatch)
-    calls = []
-
-    def flex_invoke(_prompt):
-        return "flex"
-
-    def result_guard():
-        return None
-
-    class _FlexRouter:
-        def __init__(self, *, db_client, force_enabled=False):
-            assert db_client is not None
-            self.force_enabled = force_enabled
-            self.control = type("Control", (), {"enabled": True})()
-
-        def llm_invoke_for_uid(self, uid):
-            return flex_invoke if uid == "uid-flex" else None
-
-        def llm_for_uid(self, uid, **_kwargs):
-            return object() if uid == "uid-flex" else None
-
-        def job_budget_fits(self) -> bool:
-            return True
-
-        def require_job_budget(self) -> None:
-            if not self.job_budget_fits():
-                raise cron.PromotionFlexDeferred("job_budget")
-
-        assert_result_current = staticmethod(result_guard)
-
-    def maintenance(uid, **kwargs):
-        calls.append((uid, kwargs))
-        return cron.CanonicalShortTermMaintenanceReport(uid=uid)
-
-    monkeypatch.setattr(cron, "PromotionFlexRunRouter", _FlexRouter)
-    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", maintenance)
-
-    cron.run_universal_short_term_maintenance(
-        db_client=object(),
-        now=NOW,
-        uid_inventory=lambda _db, _limit: ["uid-flex", "uid-standard"],
-    )
-
-    flex_kwargs = calls[0][1]
-    assert [uid for uid, _kwargs in calls] == ["uid-flex", "uid-standard"]
-    assert flex_kwargs["llm_invoke"] is flex_invoke
-    assert flex_kwargs["consolidation_attempt_lease_seconds"] == cron.MEMORY_PROMOTION_FLEX_LEASE_SECONDS
-    assert flex_kwargs["consolidation_result_guard"] is result_guard
-    assert flex_kwargs["required_processing_limit"] == 0
-    assert callable(flex_kwargs["job_budget_guard"])
-    assert "required_processor" not in flex_kwargs
-    standard_kwargs = calls[1][1]
-    assert standard_kwargs["llm_invoke"] is None
-    assert standard_kwargs["required_processing_limit"] == 0
-
-
-def test_empty_and_recently_dreamed_users_are_skipped(monkeypatch):
-    _enable(monkeypatch)
-    calls = []
-
-    def maintenance(uid, **_kwargs):
-        calls.append(uid)
-        return cron.CanonicalShortTermMaintenanceReport(uid=uid)
-
-    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", maintenance)
-    monkeypatch.setattr(
-        cron,
-        "count_active_short_term",
-        lambda uid, db_client, cap=11: 0 if uid == "uid-empty" else 3,
-    )
-    monkeypatch.setattr(
-        cron,
-        "recently_dreamed",
-        lambda uid, db_client, now: uid == "uid-recent",
-    )
-
-    summary = cron.run_universal_short_term_maintenance(
-        db_client=object(),
-        now=NOW,
-        uid_inventory=lambda _db, _limit: ["uid-empty", "uid-recent", "uid-ready"],
-    )
-
-    assert calls == ["uid-ready"]
-    assert summary.skipped_no_short_term == 1
-    assert summary.skipped_recently_dreamed == 1
-    assert summary.dreamed_users == 1
-
-
-def test_flex_deferral_stops_the_page_without_advancing_past_the_uid(monkeypatch):
-    _enable(monkeypatch)
-    calls = []
-
-    def maintenance(uid, **_kwargs):
-        calls.append(uid)
-        if uid == "uid-b":
-            raise cron.PromotionFlexDeferred("job_budget")
-        return cron.CanonicalShortTermMaintenanceReport(uid=uid)
-
-    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", maintenance)
-    monkeypatch.setattr(cron, "count_active_short_term", lambda uid, db_client, cap=11: 3)
-    monkeypatch.setattr(cron, "recently_dreamed", lambda uid, db_client, now: False)
-
-    db = _Db(
-        [
-            _Snapshot("canonical_memory_maintenance_registry/uid-a"),
-            _Snapshot("canonical_memory_maintenance_registry/uid-b"),
-            _Snapshot("canonical_memory_maintenance_registry/uid-c"),
-        ]
-    )
-    summary = cron.run_universal_short_term_maintenance(db_client=db, now=NOW, inventory_limit=3)
-
-    assert calls == ["uid-a", "uid-b"]
-    assert summary.flex_deferred is True
-    assert summary.dreamed_users == 1
-    assert db.docs[cron.CANONICAL_MEMORY_MAINTENANCE_CURSOR_PATH]["last_uid"] == "uid-a"
-
-
-def test_job_budget_stop_skips_later_uids_without_flex_invoke(monkeypatch):
-    _enable(monkeypatch)
-    calls = []
-
-    class _FlexRouter:
-        def __init__(self, *, db_client, force_enabled=False):
-            self.control = type("Control", (), {"enabled": True})()
-            self._checks = 0
-
-        def llm_invoke_for_uid(self, _uid):
-            return None
-
-        def llm_for_uid(self, _uid, **_kwargs):
-            return None
-
-        def job_budget_fits(self) -> bool:
-            self._checks += 1
-            return self._checks == 1
-
-        def require_job_budget(self) -> None:
-            if not self.job_budget_fits():
-                raise cron.PromotionFlexDeferred("job_budget")
-
-    def maintenance(uid, **_kwargs):
-        calls.append(uid)
-        return cron.CanonicalShortTermMaintenanceReport(uid=uid)
-
-    monkeypatch.setattr(cron, "PromotionFlexRunRouter", _FlexRouter)
-    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", maintenance)
-    monkeypatch.setattr(cron, "count_active_short_term", lambda uid, db_client, cap=11: 3)
-    monkeypatch.setattr(cron, "recently_dreamed", lambda uid, db_client, now: False)
-
-    db = _Db(
-        [
-            _Snapshot("canonical_memory_maintenance_registry/uid-a"),
-            _Snapshot("canonical_memory_maintenance_registry/uid-b"),
-            _Snapshot("canonical_memory_maintenance_registry/uid-c"),
-        ]
-    )
-    summary = cron.run_universal_short_term_maintenance(db_client=db, now=NOW, inventory_limit=3)
-
-    assert calls == ["uid-a"]
-    assert summary.flex_deferred is True
-    assert db.docs[cron.CANONICAL_MEMORY_MAINTENANCE_CURSOR_PATH]["last_uid"] == "uid-a"
-
-
-def test_in_uid_job_budget_guard_stops_the_page_without_finishing_the_uid(monkeypatch):
-    _enable(monkeypatch)
-    calls = []
-
-    class _FlexRouter:
-        def __init__(self, *, db_client, force_enabled=False):
-            self.control = type("Control", (), {"enabled": True})()
-
-        def llm_invoke_for_uid(self, _uid):
-            return None
-
-        def job_budget_fits(self) -> bool:
-            return True
-
-        def require_job_budget(self) -> None:
-            raise cron.PromotionFlexDeferred("job_budget")
-
-    def maintenance(uid, **kwargs):
-        calls.append(uid)
-        kwargs["job_budget_guard"]()
-        raise AssertionError("in-UID work must not continue after the clock is gone")
-
-    monkeypatch.setattr(cron, "PromotionFlexRunRouter", _FlexRouter)
-    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", maintenance)
-    monkeypatch.setattr(cron, "count_active_short_term", lambda uid, db_client, cap=11: 3)
-    monkeypatch.setattr(cron, "recently_dreamed", lambda uid, db_client, now: False)
-
-    db = _Db(
-        [
-            _Snapshot("canonical_memory_maintenance_registry/uid-a"),
-            _Snapshot("canonical_memory_maintenance_registry/uid-b"),
-        ]
-    )
-    summary = cron.run_universal_short_term_maintenance(db_client=db, now=NOW, inventory_limit=2)
-
-    assert calls == ["uid-a"]
-    assert summary.flex_deferred is True
-    assert summary.dreamed_users == 0
-    assert cron.CANONICAL_MEMORY_MAINTENANCE_CURSOR_PATH not in db.docs
-
-
-def test_registry_cursor_persists_after_empty_short_term_skip(monkeypatch):
-    _enable(monkeypatch)
-    calls = []
-
-    def maintenance(uid, **_kwargs):
-        calls.append(uid)
-        raise AssertionError("empty short-term accounts must not be dreamed")
-
-    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", maintenance)
-    monkeypatch.setattr(cron, "count_active_short_term", lambda uid, db_client, cap=11: 0)
-
-    db = _Db(
-        [
-            _Snapshot("canonical_memory_maintenance_registry/uid-a"),
-            _Snapshot("canonical_memory_maintenance_registry/uid-b"),
-        ]
-    )
-    summary = cron.run_universal_short_term_maintenance(db_client=db, now=NOW, inventory_limit=2)
-
-    assert calls == []
-    assert summary.skipped_no_short_term == 2
-    assert db.docs[cron.CANONICAL_MEMORY_MAINTENANCE_CURSOR_PATH]["last_uid"] == "uid-b"
-
-
-def test_maintenance_flex_env_forces_the_router(monkeypatch):
-    _enable(monkeypatch)
-    monkeypatch.setenv(cron.MEMORY_CANONICAL_MAINTENANCE_FLEX_ENV, "true")
-    seen = {}
-
-    class _FlexRouter:
-        def __init__(self, *, db_client, force_enabled=False):
-            seen["force_enabled"] = force_enabled
-            self.control = type("Control", (), {"enabled": bool(force_enabled)})()
-
-        def llm_invoke_for_uid(self, _uid):
-            return None
-
-        def llm_for_uid(self, _uid, **_kwargs):
-            return None
-
-        def job_budget_fits(self) -> bool:
-            return True
-
-        def require_job_budget(self) -> None:
-            if not self.job_budget_fits():
-                raise cron.PromotionFlexDeferred("job_budget")
-
-    monkeypatch.setattr(cron, "PromotionFlexRunRouter", _FlexRouter)
-    monkeypatch.setattr(
-        cron,
-        "run_canonical_short_term_maintenance",
-        lambda uid, **_kwargs: cron.CanonicalShortTermMaintenanceReport(uid=uid),
-    )
-
-    cron.run_universal_short_term_maintenance(
-        db_client=object(),
-        now=NOW,
-        uid_inventory=lambda _db, _limit: ["uid-a"],
-    )
-    assert seen["force_enabled"] is True
-
-
-def test_overflow_queue_bypasses_recent_dream_cooldown(monkeypatch):
-    _enable(monkeypatch)
-    calls = []
-
-    class _FlexRouter:
-        def __init__(self, *, db_client, force_enabled=False):
-            self.control = type("Control", (), {"enabled": True})()
-
-        def llm_invoke_for_uid(self, _uid):
-            return lambda prompt: "flex"
-
-        def llm_for_uid(self, _uid, **_kwargs):
-            return object()
-
-        def job_budget_fits(self) -> bool:
-            return True
-
-        def require_job_budget(self) -> None:
-            if not self.job_budget_fits():
-                raise cron.PromotionFlexDeferred("job_budget")
-
-        assert_result_current = staticmethod(lambda: None)
-
-    def maintenance(uid, **kwargs):
-        calls.append((uid, kwargs["required_processing_limit"]))
-        return cron.CanonicalShortTermMaintenanceReport(uid=uid)
-
-    monkeypatch.setattr(cron, "PromotionFlexRunRouter", _FlexRouter)
-    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", maintenance)
-    monkeypatch.setattr(
-        cron,
-        "count_active_short_term",
-        lambda uid, db_client, cap=11: 11 if uid == "uid-overflow" else 3,
-    )
-    monkeypatch.setattr(cron, "recently_dreamed", lambda uid, db_client, now: True)
-
-    summary = cron.run_universal_short_term_maintenance(
-        db_client=object(),
-        now=NOW,
-        uid_inventory=lambda _db, _limit: ["uid-daily", "uid-overflow"],
-    )
-
-    assert calls == [("uid-overflow", 0)]
-    assert summary.skipped_recently_dreamed == 1
-    assert summary.dreamed_users == 1
-
-
-def test_expiry_ordered_backstop_bypasses_cooldown_and_registry_failure(monkeypatch):
-    _enable(monkeypatch)
-    calls = []
-    monkeypatch.setattr(
-        cron,
-        'expiry_ordered_maintenance_uid_inventory',
-        lambda _db, now, limit: cron.ExpiryOrderedMaintenanceInventory(
-            uids=('uid-urgent',),
-            candidate_item_count=1,
-            expired_active_item_count=1,
-        ),
-    )
-    monkeypatch.setattr(
-        cron,
-        'bounded_canonical_memory_uid_inventory',
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(cron.CanonicalMaintenanceInventoryUnavailable('registry down')),
-    )
-    monkeypatch.setattr(cron, 'count_active_short_term', lambda uid, db_client, cap=11: 1)
-    monkeypatch.setattr(cron, 'recently_dreamed', lambda uid, db_client, now: True)
-
-    def maintenance(uid, **_kwargs):
-        calls.append(uid)
-        return cron.CanonicalShortTermMaintenanceReport(
-            uid=uid,
-            lifecycle=CanonicalShortTermLifecycleReport(
-                uid=uid,
-                lifecycle_created_count=1,
-                lifecycle_existing_count=1,
-                lifecycle_terminal_count=1,
-            ),
+    called = []
+
+    async def maintain(uid, **kwargs):
+        called.append((uid, kwargs))
+        return CanonicalShortTermMaintenanceReport(
+            uid=uid, required_intake=RequiredIntakeCompletion(uid=uid), outbox={'delivered_count': 2}
         )
 
-    monkeypatch.setattr(cron, 'run_canonical_short_term_maintenance', maintenance)
-
-    summary = cron.run_universal_short_term_maintenance(db_client=object(), now=NOW)
-
-    assert calls == ['uid-urgent']
-    assert summary.inventory_source == 'expiry_ordered'
-    assert summary.inventory_complete is False
-    assert summary.expiry_urgent_users == 1
-    assert summary.expired_active_candidates_total == 1
-    assert summary.expired_without_terminal_disposition_total == 1
-    assert summary.expired_with_recorded_disposition_total == 1
-    assert summary.expired_terminal_dispositions_total == 1
-    assert summary.skipped_recently_dreamed == 0
-    assert summary.errors == ['canonical_uid_inventory_unavailable']
-
-
-def test_failed_consolidation_does_not_start_dream_cooldown(monkeypatch):
-    _enable(monkeypatch)
-    persisted = []
-
-    def persist(uid, *, db_client, now):
-        persisted.append(uid)
-
-    def maintenance(uid, **_kwargs):
-        return cron.CanonicalShortTermMaintenanceReport(
-            uid=uid,
-            consolidation=ConsolidationReport(
-                uid=uid,
-                errors=["parse_failed"],
-                retryable_memory_ids=["mem-a"],
-            ),
-        )
-
-    monkeypatch.setattr(cron, "persist_last_dreamed_at", persist)
-    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", maintenance)
-    monkeypatch.setattr(cron, "count_active_short_term", lambda uid, db_client, cap=11: 3)
-    monkeypatch.setattr(cron, "recently_dreamed", lambda uid, db_client, now: False)
-
-    summary = cron.run_universal_short_term_maintenance(
-        db_client=object(),
-        now=NOW,
-        uid_inventory=lambda _db, _limit: ["uid-retry"],
-    )
-
-    assert persisted == []
-    assert summary.dreamed_users == 1
-    assert any("consolidation_failed" in error for error in summary.errors)
-
-
-def test_successful_dream_persists_cooldown(monkeypatch):
-    _enable(monkeypatch)
-    persisted = []
-
-    def persist(uid, *, db_client, now):
-        persisted.append(uid)
-
-    monkeypatch.setattr(cron, "persist_last_dreamed_at", persist)
-    monkeypatch.setattr(
-        cron,
-        "run_canonical_short_term_maintenance",
-        lambda uid, **_kwargs: cron.CanonicalShortTermMaintenanceReport(uid=uid),
-    )
-    monkeypatch.setattr(cron, "count_active_short_term", lambda uid, db_client, cap=11: 3)
-    monkeypatch.setattr(cron, "recently_dreamed", lambda uid, db_client, now: False)
-
-    cron.run_universal_short_term_maintenance(
-        db_client=object(),
-        now=NOW,
-        uid_inventory=lambda _db, _limit: ["uid-ok"],
-    )
-
-    assert persisted == ["uid-ok"]
-
-
-def test_inventory_candidates_come_from_the_injected_universal_inventory(monkeypatch):
-    _enable(monkeypatch)
-    summary = cron.run_universal_short_term_maintenance(
-        db_client=_Db([_Snapshot("users/uid-any/memory_items/m1")]),
-        now=NOW,
-        uid_inventory=lambda _db, _limit: ["uid-any"],
-    )
-    assert summary.user_count == 1
-
-
-def test_async_entrypoint_forwards_inventory_seam(monkeypatch):
-    expected = cron.CanonicalShortTermMaintenanceCronSummary(run_id="cron", user_count=1)
-    calls = []
-
-    async def run_blocking(_executor, _function, *args, **kwargs):
-        calls.append((args, kwargs))
-        return expected
-
-    monkeypatch.setattr(cron, "run_blocking", run_blocking)
-    inventory = lambda _db, _limit: ["uid-a"]
-    result = asyncio.run(
+    monkeypatch.setattr(cron, 'run_canonical_short_term_maintenance_async', maintain)
+    summary = asyncio.run(
         cron.run_canonical_short_term_maintenance_cron(
-            db_client=object(),
-            now=NOW,
-            run_id="cron",
-            uid_inventory=inventory,
-            inventory_limit=3,
+            db_client=object(), now=NOW, uid_inventory=lambda *_: ['empty-account', 'ledger-account']
         )
     )
-    assert result is expected
-    assert calls[0][1]["uid_inventory"] is inventory
-    assert calls[0][1]["inventory_limit"] == 3
+    assert [uid for uid, _ in called] == ['empty-account', 'ledger-account']
+    assert summary.maintained_users == 2 and summary.outbox_delivered_total == 4
+    assert called[0][1]['required_processing_limit'] == 25
+    assert callable(called[0][1]['required_processor'])
+    assert 'llm_invoke' not in called[0][1]
+    assert not any('dreamed' in name for name in vars(cron))
 
 
-def test_ledger_writer_mode_skips_short_term_dreaming(monkeypatch):
+def test_flex_stop_does_not_mark_the_current_or_later_account_completed(monkeypatch):
     _enable(monkeypatch)
-    dreamed = []
+    called = []
 
-    def maintenance(uid, **_kwargs):
-        dreamed.append(uid)
-        return cron.CanonicalShortTermMaintenanceReport(uid=uid)
+    async def maintain(uid, **kwargs):
+        called.append(uid)
+        if uid == 'b':
+            raise PromotionFlexDeferred('provider deferred')
+        return CanonicalShortTermMaintenanceReport(uid=uid)
 
-    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", maintenance)
-    monkeypatch.setattr(cron, "count_active_short_term", lambda uid, db_client, cap=11: 3)
-    monkeypatch.setattr(cron, "recently_dreamed", lambda uid, db_client, now: False)
-    monkeypatch.setattr(cron, "persist_last_dreamed_at", lambda uid, db_client, now: None)
-    monkeypatch.setattr(cron, "_is_ledger_writer", lambda uid, db_client: uid == "uid-ledger")
-
-    summary = cron.run_universal_short_term_maintenance(
-        db_client=object(),
-        now=NOW,
-        uid_inventory=lambda _db, _limit: ["uid-ledger", "uid-compat"],
+    monkeypatch.setattr(cron, 'run_canonical_short_term_maintenance_async', maintain)
+    summary = asyncio.run(
+        cron.run_canonical_short_term_maintenance_cron(
+            db_client=object(), now=NOW, uid_inventory=lambda *_: ['a', 'b', 'c']
+        )
     )
+    assert called == ['a', 'b']
+    assert summary.flex_deferred and summary.completed_uids == ('a',)
 
-    assert dreamed == ["uid-compat"]
-    assert summary.skipped_ledger_writer == 1
-    assert summary.dreamed_users == 1
-    assert summary.completed_uids == ("uid-compat", "uid-ledger")
+
+def test_outbox_error_is_reported_even_without_intake(monkeypatch):
+    _enable(monkeypatch)
+
+    async def maintain(uid, **kwargs):
+        return CanonicalShortTermMaintenanceReport(uid=uid, outbox={'dead_letter_count': 1})
+
+    monkeypatch.setattr(cron, 'run_canonical_short_term_maintenance_async', maintain)
+    summary = asyncio.run(
+        cron.run_canonical_short_term_maintenance_cron(db_client=object(), now=NOW, uid_inventory=lambda *_: ['a'])
+    )
+    assert summary.outbox_dead_letters_total == 1
+    assert any('outbox_delivery_failed' in error for error in summary.errors)

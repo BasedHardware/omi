@@ -35,6 +35,30 @@ class MessageConversation(BaseModel):
     structured: MessageConversationStructured
     created_at: datetime
 
+    @classmethod
+    def safe_build_many(cls, items, on_error=None) -> list['MessageConversation']:
+        """Build members without raising on a malformed item.
+
+        Chat callers hand in memory docs as dicts, partially-filled documents,
+        or live pydantic objects, and run this AFTER the chat message is already
+        persisted — a throw there orphans the persisted id while a fresh
+        in-memory id desyncs the client. Bad members skip; ``on_error(member,
+        exc)`` is invoked per skip so drops stay visible in logs.
+        """
+        out: list['MessageConversation'] = []
+        for m in items:
+            try:
+                if isinstance(m, cls):
+                    out.append(m)
+                elif isinstance(m, dict):
+                    out.append(cls.model_validate(m))
+                else:
+                    out.append(cls.model_validate(m.model_dump() if hasattr(m, 'model_dump') else vars(m)))
+            except Exception as exc:
+                if on_error is not None:
+                    on_error(m, exc)
+        return out
+
 
 # Chat Completions `file` content parts (purpose=user_data) accept these document
 # types. Images stay on the separate vision / image_url path and are not listed here.

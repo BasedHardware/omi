@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -98,6 +99,7 @@ Future<CaptureProvider> _pumpHomeWithCapturingPage(
   WidgetTester tester, {
   required HomeProvider home,
   required Future<void> finish,
+  bool heard = true,
 }) async {
   tester.view.physicalSize = const Size(800, 1600);
   tester.view.devicePixelRatio = 1.0;
@@ -105,6 +107,20 @@ Future<CaptureProvider> _pumpHomeWithCapturingPage(
   addTearDown(tester.view.resetDevicePixelRatio);
 
   final capture = _ControlledCapture(finish);
+  if (heard) {
+    capture.segments = [
+      TranscriptSegment(
+        id: 'seg-1',
+        text: 'hello',
+        speaker: 'SPEAKER_00',
+        isUser: false,
+        personId: null,
+        start: 0.0,
+        end: 1.0,
+        translations: [],
+      ),
+    ];
+  }
   final device = _StubDeviceProvider();
   final connectivity = _StubConnectivityProvider();
   final usage = UsageProvider();
@@ -199,5 +215,17 @@ void main() {
     expect(find.text('home'), findsOneWidget);
     expect(find.byType(ConversationCapturingPage), findsNothing);
     expect(home.selectedIndex, HomeProvider.homeTab);
+  }, variant: ios);
+
+  testWidgets('a finish with nothing heard closes the page and stays on the current tab', (tester) async {
+    final home = HomeProvider()..setIndex(HomeProvider.tasksTab);
+    final capture = await _pumpHomeWithCapturingPage(tester, home: home, finish: Future<void>.value(), heard: false);
+
+    await _finishFromPage(tester, capture);
+    await tester.pumpAndSettle();
+
+    expect(find.text('home'), findsOneWidget);
+    expect(find.byType(ConversationCapturingPage), findsNothing);
+    expect(home.selectedIndex, HomeProvider.tasksTab);
   }, variant: ios);
 }

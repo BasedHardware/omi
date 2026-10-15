@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 from database.review_queries import REVIEW_QUERY_SPECS
-from database.messaging_queries import MESSAGING_INDEX_REQUIREMENTS
+from database.messaging_queries import MESSAGING_INDEX_REQUIREMENTS, MESSAGING_FIELD_REQUIREMENTS
 from .firestore_query_types import (
     FieldIndexRequirement,
     FirestoreIndexField,
@@ -2067,9 +2067,11 @@ FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
     ('screen_activity', 'ocrText'),
     ('screen_activity', 'windowTitle'),
     ('conversations', 'live_transcript_replay_receipt'),
+    # Internal, bounded metadata read by document ID only; descendants inherit.
+    ('conversations', 'owner_recognition_diagnostics'),
 )
 
-FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = (
+FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = MESSAGING_FIELD_REQUIREMENTS + (
     FieldIndexRequirement('conversations_id_group_ascending', 'conversations', 'id', ('ASCENDING',)),
     FieldIndexRequirement('conversations_source_group_ascending', 'conversations', 'source', ('ASCENDING',)),
     FieldIndexRequirement('conversations_status_group_ascending', 'conversations', 'status', ('ASCENDING',)),
@@ -2110,7 +2112,6 @@ FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = (
         ('ASCENDING',),
     ),
     FieldIndexRequirement('memory_outbox_status_group_ascending', 'memory_outbox', 'status', ('ASCENDING',)),
-    FieldIndexRequirement('projection_repairs_status_group_ascending', 'projection_repairs', 'status', ('ASCENDING',)),
     FieldIndexRequirement(
         'task_recurrence_inbox_status_group_ascending', 'task_recurrence_inbox', 'status', ('ASCENDING',)
     ),

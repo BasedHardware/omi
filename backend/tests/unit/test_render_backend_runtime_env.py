@@ -165,8 +165,8 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     memory_job = jobs['memory-maintenance-job']
     memory_env = _MODULE['_render_env_vars'](memory_job['env'])
     assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=true' in memory_env
-    assert 'MEMORY_CANONICAL_MAINTENANCE_FLEX=true' in memory_env
-    assert 'MEMORY_CANONICAL_CONSOLIDATION_ENABLED=true' in memory_env
+    assert 'MEMORY_CANONICAL_MAINTENANCE_FLEX' not in memory_env
+    assert 'MEMORY_CANONICAL_CONSOLIDATION_ENABLED' not in memory_env
     assert 'OMI_BACKGROUND_FLEX_CAPABLE=true' in memory_env
     assert 'MEMORY_ENABLED_USERS' not in memory_env
     assert 'MEMORY_ENABLED=on' in memory_env
@@ -397,7 +397,7 @@ def test_render_prod_emits_memory_maintenance_job_cron_on(capsys, monkeypatch):
     assert 'MEMORY_ENABLED=on' in job_env
     assert 'MEMORY_MODE=' not in job_env
     assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=true' in job_env
-    assert 'MEMORY_CANONICAL_MAINTENANCE_FLEX=true' in job_env
+    assert 'MEMORY_CANONICAL_MAINTENANCE_FLEX' not in job_env
     assert 'OMI_BACKGROUND_FLEX_CAPABLE=true' in job_env
     assert 'MEMORY_ENABLED_USERS' not in job_env
     prod_memory_job = _MANIFEST['environments']['prod']['cloud_run']['jobs']['memory-maintenance-job']
@@ -877,7 +877,8 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
             'LINQ_API_KEY',
             'LINQ_WEBHOOK_SECRET',
         },
-        'backend-sync': common | {'GOOGLE_MAPS_API_KEY', 'DREAM_AGENT_FEEDBACK_SALT'},
+        'backend-sync': common
+        | {'GOOGLE_MAPS_API_KEY', 'DREAM_AGENT_FEEDBACK_SALT', 'TYPESENSE_HOST', 'TYPESENSE_API_KEY'},
         'backend-sync-backfill': common,
         'backend-integration': common | {'POSTHOG_EVENTS_API_KEY'},
     }
@@ -888,6 +889,19 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
             (entry['name'], entry['valueFrom']['secretKeyRef']['name'], entry['valueFrom']['secretKeyRef']['key'])
             for entry in refs
         } == {(name, name, 'latest') for name in names}, service
+    backend_env = prod['cloud_run']['services']['backend']['env']
+    token = backend_env['PROACTIVITY_V2_POSTHOG_TOKEN']['value']
+    assert token.startswith('phc_')
+    assert backend_env['POSTHOG_BILLING_API_KEY'] == {'value': token, 'category': 'telemetry'}
+    assert backend_env['POSTHOG_HOST'] == {'value': 'https://us.posthog.com', 'category': 'telemetry'}
+    assert _MODULE['_render_env_entries']({'POSTHOG_BILLING_API_KEY': backend_env['POSTHOG_BILLING_API_KEY']}) == [
+        {'name': 'POSTHOG_BILLING_API_KEY', 'value': token}
+    ]
+    for service_name, service in prod['cloud_run']['services'].items():
+        if service_name == 'backend':
+            continue
+        assert 'POSTHOG_BILLING_API_KEY' not in service.get('env', {})
+        assert 'POSTHOG_BILLING_API_KEY' not in service.get('secrets', {})
     desktop = _MODULE['_render_secret_entries'](prod['desktop_backend']['secrets'])
     assert {
         (entry['name'], entry['valueFrom']['secretKeyRef']['name'], entry['valueFrom']['secretKeyRef']['key'])

@@ -1,8 +1,5 @@
 ## GKE manages the Kubernetes control plane; these customer-cluster scrape
 ## targets do not exist and their default "down" alerts would page forever.
-## Component `enabled: false` already gates the whole PrometheusRule group in
-## kube-prometheus-stack, so no separate `defaultRules.disabled` entries —
-## flipping enabled back on must restore the alert automatically.
 kubeProxy:
   enabled: false
 kubeScheduler:
@@ -10,8 +7,74 @@ kubeScheduler:
 kubeControllerManager:
   enabled: false
 
+# 2026-10-13 cost audit: no committed consumer or live recording/alert rule
+# reads feature inventories, REST-client byte sizes, or probe duration histograms.
+# Keep probe result counters and all kubelet latency/error signals in use.
+kubelet:
+  serviceMonitor:
+    metricRelabelings:
+      # Preserve chart 75.15.1's default: Helm replaces this entire list.
+      - action: drop
+        sourceLabels: [__name__, le]
+        regex: (csi_operations|storage_operation_duration)_seconds_bucket;(0.25|2.5|15|25|120|600)(\.0)?
+      - action: drop
+        sourceLabels: [__name__]
+        regex: kubernetes_feature_enabled|rest_client_(request|response)_size_bytes_(bucket|sum|count)
+    probesMetricRelabelings:
+      - action: drop
+        sourceLabels: [__name__]
+        regex: prober_probe_duration_seconds_(bucket|sum|count)
+
+# Grafana owns alert evaluation. In pinned chart 75.15.1 these groups contain
+# only alerts. Keep defaultRules.create and every recording-rule group enabled;
+# all 81 recording rules used by bundled dashboards/downstream queries remain.
+defaultRules:
+  rules:
+    alertmanager: false
+    configReloaders: false
+    etcd: false
+    general: false
+    kubeApiserverSlos: false
+    kubeControllerManager: false
+    kubeProxy: false
+    kubeSchedulerAlerting: false
+    kubeStateMetrics: false
+    kubernetesApps: false
+    kubernetesResources: false
+    kubernetesStorage: false
+    kubernetesSystem: false
+    network: false
+    nodeExporterAlerting: false
+    prometheus: false
+    prometheusOperator: false
+
+# Native Prometheus alerts are disabled above; Grafana routes directly to
+# Telegram/Instatus. Live Loki 3.5.2 has no Alertmanager URL (empty means no
+# notifier destinations), so the legacy Alertmanager has no remaining producer.
+# Its live data volume is emptyDir; no Alertmanager PVC exists.
+alertmanager:
+  enabled: false
+
 grafana:
   enabled: true
+  sidecar:
+    datasources:
+      alertmanager:
+        enabled: false
+  # Do not prune existing SQLite datasource records during this retirement.
+  # 2026-10-14: Grafana ran with no requests/limits (BestEffort) on the ~1.93
+  # allocatable-core monitoring node while Prometheus sustained 1.5-2.2 cores
+  # and pinned it for hours, so kubelet probes and Grafana's own HTTP server
+  # starved: /api/health returned 502 externally and alert provisioning timed
+  # out. Requests give the alerting UI a guaranteed CPU share; sized from
+  # measured peaks (214m CPU, 241Mi during the 2026-10-14 evaluation storm).
+  resources:
+    requests:
+      cpu: 250m
+      memory: 384Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
   serviceAccount:
     create: true
     annotations:
@@ -38,11 +101,24 @@ grafana:
   imageRenderer:
     enabled: true
   grafana.ini:
+    # Grafana v12.1.0 conf/defaults.ini [database] and
+    # pkg/services/sqlstore/database_config.go (https://github.com/grafana/grafana/tree/v12.1.0).
+    # 2026-10-12 prod lock bursts: 03:02Z (11 lines), 09:02Z (67 lines);
+    # evaluation ticks dropped, API 500/502 (32.7s GET), probes failed.
+    # SQLite-only wal/query_retries/transaction_retries; defaults false/0/5.
+    # Keep the existing sqlite3 type, grafana.db path and PVC. No busy_timeout INI option.
+    database:
+      wal: true
+      query_retries: 10
+      transaction_retries: 10
     rendering:
       server_url: http://prod-omi-kube-prometheus-stack-grafana-image-renderer:8081/render
       callback_url: http://prod-omi-kube-prometheus-stack-grafana:80/
+    # Alert screenshots off (2026-10-13): renders call back into Grafana, so a slow
+    # dashboard query stalled HTTP handlers and the external health check flapped 502.
+    # Telegram notifications carry dashboard/panel links instead.
     unified_alerting.screenshots:
-      capture: true
+      capture: false
     server:
       root_url: https://monitor.omi.me/
   affinity:
@@ -59,21 +135,62 @@ grafana:
                 values:
                   - prod
 
+# 2026-10-14: the operator ran BestEffort on the monitoring node and was
+# SIGTERM-killed by its own liveness probe 48 times in 31h whenever Prometheus
+# pinned the node's CPU. Requests buy it a guaranteed share (measured use:
+# 2-25m CPU, 25Mi). Probe timeout stays at the chart default. The chart key is
+# prometheusOperator; a top-level "operator:" key is silently ignored.
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
 prometheus:
   enabled: true
+  # Stage 1: keep query traffic on the existing history while replica 1 warms.
+  # Chart 75.15.1 has no Service selector override; extraManifests below owns
+  # the SAME Service identity. Restore the native Service in a separate change
+  # only after >=7d continuous history and per-replica active-query parity.
+  service:
+    enabled: false
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
   prometheusSpec:
+    replicas: 2
+    # Custom affinity below combines required node separation and preferred zone
+    # separation. The existing monitoring-pool has only us-central1-a nodes;
+    # required zone anti-affinity would leave replica 1 Pending.
+    podAntiAffinity: ""
     secrets:
       - metrics-scrape-token
     persistentVolumeClaimRetentionPolicy:
       whenDeleted: Retain
-      whenScaled: Delete
+      whenScaled: Retain
     # Define metrics retention period
     retention: 10d
+    # Preserve the live cap within the existing 100Gi PVC.
+    retentionSize: 80GB
     resources:
       requests:
         cpu: "1"
         memory: 2G
       limits:
+        # 2026-10-14 review: keep "2". Prometheus load is sustained, not
+        # bursty - 1.5-2.2 cores across 14h with the node pinned near its
+        # 1930m allocatable, 0% CFS throttling, and the apparent ~2.9-core
+        # spikes were an artifact of kubelet scrapes timing out mid-sample.
+        # A lower cap (1600m was attempted and reverted in review) would
+        # throttle evaluation of the already-timeout-prone Prometheus-backed
+        # rules (omi-stt-fallback-leg-dead, omi-stt-leg-lifecycle-gap) and
+        # stall the adapter's custom-metrics reads behind every HPA. Node
+        # starvation is fixed with requests (Grafana/operator below, adapter
+        # and Loki read path in their values files) plus the 4-vCPU pool
+        # resize runbook in the monitoring README - not by shrinking this.
         cpu: "2"
         # 2026-09-28: Prometheus restored 2.56M head series from 24 WAL segments,
         # then OOM-killed shortly after replay completed at the 4Gi limit. The
@@ -90,6 +207,29 @@ prometheus:
               # Match the already-expanded production PVC and StatefulSet claim.
               storage: 100Gi
     additionalScrapeConfigs:
+      # HPA adapter reads THIS Prometheus, not GMP. Scrape each batch pod once
+      # and carry the Kubernetes resource labels expected by custom.metrics.
+      - job_name: diarizer-batch-metrics
+        scrape_interval: 15s
+        metrics_path: /metrics
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [prod-omi-backend]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_instance]
+            regex: prod-omi-diarizer-batch
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_container_port_name]
+            regex: http
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_phase]
+            regex: Running
+            action: keep
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
       # Additional scrape configs for Deepgram Engine metrics
       - job_name: "dg_engine_metrics"
         scrape_interval: "2s"
@@ -215,7 +355,10 @@ prometheus:
           - source_labels: [__meta_kubernetes_pod_name]
             target_label: pod
       - job_name: prometheus-stackdriver-metrics
-        scrape_interval: 1s
+        # LB and Firestore source metrics resolve at 60s. HPA rate/average
+        # windows are 5m; Firestore alert windows are 1h/6h. The exporter's
+        # 3m query interval and 1m offset remain unchanged for ingestion lag.
+        scrape_interval: 60s
         metrics_path: /metrics
         scheme: http
         kubernetes_sd_configs:
@@ -260,6 +403,14 @@ prometheus:
             regex: "stackdriver_prometheus_target_prometheus_googleapis_com_(omi_.+?)_(counter|gauge|histogram|summary|untyped|unknown)(_bucket|_sum|_count)?"
             target_label: __name__
             replacement: "${1}${3}"
+          # Aggregates written through the Cloud Monitoring custom-metric API
+          # (omi_sync_phase_* from backend-sync) arrive as
+          # stackdriver_generic_task_custom_googleapis_com_<name>, with no value-type
+          # suffix. Same rewrite, same plain namespace.
+          - source_labels: [__name__]
+            regex: "stackdriver_generic_task_custom_googleapis_com_(omi_.+)"
+            target_label: __name__
+            replacement: "${1}"
           # Prometheus client libraries emit a _created timestamp gauge beside every
           # counter. They survive the rewrite above as omi_*_created and are 36% of
           # everything this job imports (19,087 of 52,607 prod series) while
@@ -269,6 +420,21 @@ prometheus:
             regex: "omi_.*_created"
             action: drop
     affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: prometheus
+                operator.prometheus.io/name: prod-omi-kube-prometheus-s-prometheus
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: topology.kubernetes.io/zone
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: prometheus
+                  operator.prometheus.io/name: prod-omi-kube-prometheus-s-prometheus
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
           nodeSelectorTerms:
@@ -289,3 +455,60 @@ kube-state-metrics:
 
 nodeExporter:
   enabled: true
+
+# Temporary warm-up pin. Helm matches kind/name/namespace, so moving the native
+# Service into extraManifests preserves its ClusterIP and both consumer URLs.
+# Stage 2 removes both temporary Services AND restores prometheus.service.enabled: true.
+extraManifests:
+  prometheusWarmupService: |
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: {{ template "kube-prometheus-stack.fullname" . }}-prometheus
+      namespace: {{ template "kube-prometheus-stack.namespace" . }}
+      labels:
+        app: {{ template "kube-prometheus-stack.name" . }}-prometheus
+        # Query routing is pinned; self-scrapes use the unpinned Service below.
+        self-monitor: "false"
+        {{- include "kube-prometheus-stack.labels" . | nindent 4 }}
+    spec:
+      type: ClusterIP
+      ports:
+        - name: {{ .Values.prometheus.prometheusSpec.portName }}
+          port: 9090
+          targetPort: 9090
+        - name: reloader-web
+          appProtocol: http
+          port: 8080
+          targetPort: reloader-web
+      publishNotReadyAddresses: false
+      sessionAffinity: None
+      selector:
+        app.kubernetes.io/name: prometheus
+        operator.prometheus.io/name: {{ template "kube-prometheus-stack.prometheus.crname" . }}
+        statefulset.kubernetes.io/pod-name: prometheus-prod-omi-kube-prometheus-s-prometheus-0
+
+  prometheusSelfMonitorService: |
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: {{ template "kube-prometheus-stack.fullname" . }}-prometheus-selfmonitor
+      namespace: {{ template "kube-prometheus-stack.namespace" . }}
+      labels:
+        app: {{ template "kube-prometheus-stack.name" . }}-prometheus
+        self-monitor: "true"
+        {{- include "kube-prometheus-stack.labels" . | nindent 4 }}
+    spec:
+      type: ClusterIP
+      ports:
+        - name: {{ .Values.prometheus.prometheusSpec.portName }}
+          port: 9090
+          targetPort: 9090
+        - name: reloader-web
+          appProtocol: http
+          port: 8080
+          targetPort: reloader-web
+      publishNotReadyAddresses: false
+      selector:
+        app.kubernetes.io/name: prometheus
+        operator.prometheus.io/name: {{ template "kube-prometheus-stack.prometheus.crname" . }}

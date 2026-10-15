@@ -1,6 +1,7 @@
 """JPY storefront prices resolve and unlock exactly like their USD counterparts."""
 
 import asyncio
+import time
 
 import pytest
 import stripe
@@ -8,6 +9,8 @@ import stripe
 from config.plan_catalog import RECOGNIZED_STRIPE_PRICE_INTERVALS, resolve_stripe_price_plan
 from models.users import PlanType, Subscription
 from routers import payment
+from utils import product_telemetry
+from utils.observability import subscription_events
 from utils.subscription import price_ids_match_plan_and_interval
 
 JPY_PRICES = [
@@ -27,6 +30,9 @@ def test_jpy_price_resolves_to_plan_and_interval(price_id, plan, interval):
 
 def _stripe_sub(price_id):
     # JPY is zero-decimal: unit_amount is whole yen. The unlock path must not read it.
+    # A resolved checkout writes this open period; the unlock gate re-reads it
+    # through get_user_valid_subscription.
+    now = int(time.time())
     return {
         'id': 'sub-jpy',
         'customer': 'cus-jpy',
@@ -34,8 +40,8 @@ def _stripe_sub(price_id):
         'currency': 'jpy',
         'metadata': {'uid': 'user-jp'},
         'items': {'data': [{'id': 'si-jpy', 'price': {'id': price_id, 'currency': 'jpy', 'unit_amount': 4800}}]},
-        'current_period_start': 1_790_000_000,
-        'current_period_end': 1_792_592_000,
+        'current_period_start': now - 86_400,
+        'current_period_end': now + 30 * 86_400,
         'cancel_at_period_end': False,
     }
 
@@ -73,7 +79,9 @@ def webhook(monkeypatch):
     monkeypatch.setattr(payment.stripe_utils, 'parse_event', lambda payload, signature: state['event'])
     monkeypatch.setattr(payment, 'record_subscription_event', lambda **kwargs: None)
     monkeypatch.setattr(payment.users_db, 'get_user_profile', lambda uid: {'uid': uid})
-    monkeypatch.setattr(payment.users_db, 'get_user_valid_subscription', lambda uid: None)
+    # Production re-reads the row _update_subscription_from_session just wrote.
+    # A missing row is a new checkout; an open paid period unlocks.
+    monkeypatch.setattr(payment.users_db, 'get_user_valid_subscription', lambda uid: state['stored'])
     monkeypatch.setattr(payment.users_db, 'get_existing_user_subscription', lambda uid: state['stored'])
     monkeypatch.setattr(payment.users_db, 'get_user_subscription', lambda uid: state['stored'])
     monkeypatch.setattr(payment.users_db, 'update_user_subscription', write)
@@ -145,3 +153,28 @@ def test_customer_subscription_created_unlocks_jpy_subscriber(webhook, price_id,
     assert _run() == {'status': 'success'}
 
     _assert_unlocked(webhook, plan)
+
+
+def test_jpy_fixture_omits_mrr_cents(monkeypatch):
+    """unit_amount 4800 on the JPY storefront is yen, not USD cents."""
+
+    emitted = []
+    monkeypatch.setattr(product_telemetry, 'emit_product_event', lambda **kwargs: emitted.append(kwargs))
+    price_id = JPY_PRICES[0][0]
+    subscription = _stripe_sub(price_id)
+    subscription['items']['data'][0]['price']['recurring'] = {'interval': 'month'}
+
+    subscription_events.emit_billing_product_event(
+        uid='user-jp',
+        stripe_event_id='evt-jpy-mrr',
+        stripe_event_created=1_790_000_000,
+        stripe_event_type='customer.subscription.created',
+        subscription_obj=subscription,
+        previous_paid_subscription_id=None,
+        resulting_paid_subscription_id='sub-jpy',
+    )
+
+    properties = emitted[0]['properties']
+    assert properties['currency'] == 'jpy'
+    assert properties['price_id'] == price_id
+    assert 'mrr_cents' not in properties

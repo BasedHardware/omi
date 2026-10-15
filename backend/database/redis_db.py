@@ -167,15 +167,13 @@ def get_generic_cache(path: str) -> Any:
 
 
 @try_catch_decorator
-def set_generic_cache(path: str, data: object, ttl: Optional[int] = None) -> None:
+def set_generic_cache(path: str, data: object, ttl: int) -> None:
+    """Write a generic cache entry with an explicitly selected TTL."""
     key = base64.b64encode(f'{path}'.encode('utf-8'))
     key = key.decode('utf-8')
 
     payload = json.dumps(data, default=str)
-    if ttl:
-        r.set(f'cache:{key}', payload, ex=ttl)
-    else:
-        r.set(f'cache:{key}', payload)
+    _cache_set_fail_open(f'cache:{key}', payload, ttl)
 
 
 @try_catch_decorator
@@ -191,7 +189,7 @@ def delete_generic_cache(path: str) -> None:
 
 
 def set_app_cache_by_id(app_id: str, app: Dict[str, Any]) -> None:
-    r.set(f'apps:{app_id}', json.dumps(app, default=str), ex=60 * 10)  # 10 minutes cached
+    _cache_set_fail_open(f'apps:{app_id}', json.dumps(app, default=str), 60 * 10)  # 10 minutes cached
 
 
 def get_app_cache_by_id(app_id: str) -> Optional[Dict[str, Any]]:
@@ -239,7 +237,7 @@ def save_username(username: str, uid: str) -> None:
 
 
 def set_app_usage_count_cache(app_id: str, count: int) -> None:
-    r.set(f'apps:{app_id}:usage_count', _serialize_cache_value(count), ex=60 * 15)  # 15 minutes
+    _cache_set_fail_open(f'apps:{app_id}:usage_count', _serialize_cache_value(count), 60 * 15)  # 15 minutes
 
 
 def get_app_usage_count_cache(app_id: str) -> Optional[int]:
@@ -257,7 +255,7 @@ def get_app_usage_count_cache(app_id: str) -> Optional[int]:
 
 
 def set_app_money_made_amount_cache(app_id: str, amount: float) -> None:
-    r.set(f'apps:{app_id}:money_made', _serialize_cache_value(amount), ex=60 * 15)  # 15 minutes
+    _cache_set_fail_open(f'apps:{app_id}:money_made', _serialize_cache_value(amount), 60 * 15)  # 15 minutes
 
 
 def get_app_money_made_amount_cache(app_id: str) -> Optional[float]:
@@ -273,7 +271,7 @@ def get_app_money_made_amount_cache(app_id: str) -> Optional[float]:
 
 
 def set_app_usage_history_cache(app_id: str, usage: List[Dict[str, Any]]) -> None:
-    r.set(f'apps:{app_id}:usage', json.dumps(usage, default=str), ex=60 * 10)  # 10 minutes
+    _cache_set_fail_open(f'apps:{app_id}:usage', json.dumps(usage, default=str), 60 * 10)  # 10 minutes
 
 
 def get_app_usage_history_cache(app_id: str) -> List[Dict[str, Any]]:
@@ -297,7 +295,7 @@ def get_app_money_made_cache(app_id: str) -> Dict[str, Any]:
 
 
 def set_app_money_made_cache(app_id: str, money: Dict[str, Any]) -> None:
-    r.set(f'apps:{app_id}:money', json.dumps(money, default=str), ex=60 * 10)  # 10 minutes
+    _cache_set_fail_open(f'apps:{app_id}:money', json.dumps(money, default=str), 60 * 10)  # 10 minutes
 
 
 # Two reviewers of the same app race on this one key: a plain GET-modify-SET lets
@@ -322,7 +320,11 @@ return 1
 
 
 def set_app_review_cache(app_id: str, uid: str, data: Dict[str, Any]) -> None:
-    _SET_APP_REVIEW_CACHE_LUA(keys=[f'plugins:{app_id}:reviews'], args=[uid, _serialize_cache_value(data)])
+    # Strict by design: this is the read model for app reviews (incremental
+    # GET+merge+SET, no TTL, nothing rebuilds it from Firestore), so a skipped
+    # write would permanently drop a review. Fail-open requires a rebuild path.
+    key = f'plugins:{app_id}:reviews'
+    _SET_APP_REVIEW_CACHE_LUA(keys=[key], args=[uid, _serialize_cache_value(data)])
 
 
 def get_specific_user_review(app_id: str, uid: str) -> Dict[str, Any]:
@@ -461,7 +463,7 @@ def _cache_write_fail_open_reason(exc: BaseException) -> Optional[str]:
     return None
 
 
-def _cache_set_fail_open(key: str, value: Any, ttl: int) -> None:
+def _cache_set_fail_open(key: str, value: Any, ttl: Optional[int]) -> None:
     """Best-effort cache write. Redis maxmemory and connection-class faults must not 500 product requests."""
     try:
         r.set(key, value, ex=ttl)
@@ -469,21 +471,25 @@ def _cache_set_fail_open(key: str, value: Any, ttl: int) -> None:
         reason = _cache_write_fail_open_reason(exc)
         if reason is None:
             raise
-        prefix = key.split(':', 1)[0]
-        logger.warning('redis cache write skipped reason=%s prefix=%s', reason, prefix)
-        try:
-            from utils.observability.fallback import record_fallback
+        _record_cache_write_skipped(key, reason)
 
-            record_fallback(
-                component='other',
-                from_mode='cache_write',
-                to_mode='skip',
-                reason=reason,
-                outcome='degraded',
-                log=logger,
-            )
-        except Exception:
-            pass
+
+def _record_cache_write_skipped(key: str, reason: str) -> None:
+    prefix = key.split(':', 1)[0]
+    logger.warning('redis cache write skipped reason=%s prefix=%s', reason, prefix)
+    try:
+        from utils.observability.fallback import record_fallback
+
+        record_fallback(
+            component='other',
+            from_mode='cache_write',
+            to_mode='skip',
+            reason=reason,
+            outcome='degraded',
+            log=logger,
+        )
+    except Exception:
+        pass
 
 
 def cache_user_name(uid: str, name: str, ttl: int = 60 * 60 * 24 * 7) -> None:
@@ -491,7 +497,7 @@ def cache_user_name(uid: str, name: str, ttl: int = 60 * 60 * 24 * 7) -> None:
 
 
 def cache_signed_url(blob_path: str, signed_url: str, ttl: int = 60 * 60) -> None:
-    r.set(f'urls:{blob_path}', signed_url, ex=ttl - 1)
+    _cache_set_fail_open(f'urls:{blob_path}', signed_url, ttl - 1)
 
 
 def get_cached_signed_url(blob_path: str) -> str:
@@ -852,7 +858,7 @@ def get_user_preferred_app(uid: str) -> Optional[str]:
 def set_user_data_protection_level(uid: str, level: str) -> None:
     """Caches the user's data protection level."""
     key = f'user:{uid}:data_protection_level'
-    r.set(key, level)
+    _cache_set_fail_open(key, level, None)
 
 
 @try_catch_decorator
@@ -1383,7 +1389,7 @@ def can_update_persona(uid: str) -> bool:
 @try_catch_decorator
 def set_speech_profile_duration(uid: str, duration: float) -> None:
     """Cache speech profile duration (write-ahead on upload)"""
-    r.set(f'users:{uid}:speech_profile_duration', str(duration))
+    _cache_set_fail_open(f'users:{uid}:speech_profile_duration', str(duration), None)
 
 
 @try_catch_decorator
@@ -1499,25 +1505,24 @@ end
 """)
 
 
-def try_acquire_notifications_job_run_lock(token: str, ttl: int = 55 * 60) -> bool:
-    """Acquire the hourly notifications-job run lock. True iff this caller owns it.
+def release_token_lock(key: str, token: str) -> None:
+    """Release a shared Redis lease only while the caller's token owns it."""
+    _RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA(keys=[key], args=[token])
 
-    Cloud Scheduler fires hourly and the Cloud Run task timeout is 3600s, so two
-    executions can overlap. The lock lets an overlapping execution skip the
-    notification section instead of duplicating the pass.
+
+def try_acquire_notifications_job_run_lock(token: str, ttl: int = 55 * 60) -> bool:
+    """Coalesce overlapping hourly notification runs (task timeout: 3600s).
+
+    True only when this token acquires the lease.
     """
     result = r.set(_NOTIFICATIONS_JOB_RUN_LOCK_KEY, token, ex=ttl, nx=True)
     return result is not None
 
 
 def release_notifications_job_run_lock(token: str) -> None:
-    """Release the run lock only if ``token`` still owns it.
-
-    The token keeps a late release from deleting a newer run's lock. Redis
-    errors are swallowed: the key expires via TTL.
-    """
+    """Token-fenced release; Redis failures leave expiry to the TTL."""
     try:
-        _RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA(keys=[_NOTIFICATIONS_JOB_RUN_LOCK_KEY], args=[token])
+        release_token_lock(_NOTIFICATIONS_JOB_RUN_LOCK_KEY, token)
     except Exception as error:
         logger.warning('Failed to release notifications job run lock: %s', error)
 

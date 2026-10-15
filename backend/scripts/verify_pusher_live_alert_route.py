@@ -10,6 +10,7 @@ changing that gate. Fleet drift is report-only unless ``--fail-on`` is raised.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import stat
 import time
@@ -61,6 +62,7 @@ LIVE_STT_IMPORT_UIDS = (
     "omi-stt-stage-disagreement",
     "omi-stt-enabled-state-unknown",
 )
+DATASOURCE_CANARY_UIDS = ("omi-datasource-prometheus", "omi-datasource-cloud-monitoring")
 REDIS_CACHE_IMPORT_UIDS = ("omi-redis-cache-conn-warn", "omi-redis-cache-conn-page")
 LIVE_STT_PENDING_UIDS = ("omi-soniox-runway-70", "omi-soniox-runway-90")
 TELEGRAM_RECEIVER = "Omi - Services Alerting (Telegram)"
@@ -151,7 +153,7 @@ def _write_rule(base_url: str, uid: str, rule: dict[str, Any], token: str, *, ex
         raise AlertRouteError(f"Grafana API request failed for {path}: {type(exc).__name__}") from exc
 
 
-def load_live_stt_import_rules() -> dict[str, dict[str, Any]]:
+def load_live_stt_import_rules(*, production: bool = True) -> dict[str, dict[str, Any]]:
     loaded: object = json.loads((ALERT_SOURCES / "live-stt.json").read_text(encoding="utf-8"))
     if not isinstance(loaded, list):
         raise AlertRouteError("committed live-STT alert file is not a list")
@@ -167,10 +169,26 @@ def load_live_stt_import_rules() -> dict[str, dict[str, Any]]:
         raise AlertRouteError("committed live-STT rules do not match the import allowlist and pending set")
     rules = {uid: by_uid[uid] for uid in LIVE_STT_IMPORT_UIDS}
     committed = load_all_committed_rules()
-    for uid in REDIS_CACHE_IMPORT_UIDS:
+    canary_uids = DATASOURCE_CANARY_UIDS if production else ()
+    for uid in (*canary_uids, *REDIS_CACHE_IMPORT_UIDS):
         if uid not in committed:
-            raise AlertRouteError(f"committed Redis cache alert {uid} is missing")
+            raise AlertRouteError(f"committed import alert {uid} is missing")
         rules[uid] = committed[uid]
+    if not production:
+        # No verified development sentinel exists. Retain error pages instead
+        # of depending on production datasource IDs or mutating canonical rules.
+        rules = copy.deepcopy(rules)
+        for rule in rules.values():
+            if rule.get("execErrState") == "KeepLast":
+                rule["execErrState"] = "Error"
+    for uid in canary_uids:
+        canary = rules[uid]
+        if (
+            canary.get("execErrState") != "Alerting"
+            or canary.get("noDataState") != "Alerting"
+            or canary.get("isPaused") is not False
+        ):
+            raise AlertRouteError(f"datasource canary {uid} must be active and page on errors and no data")
     for uid, rule in rules.items():
         labels = rule.get("labels")
         if not isinstance(labels, dict) or labels.get("alert_identity") != uid:
@@ -191,7 +209,8 @@ def _has_telegram_receiver(contact_points: Any, receiver: str) -> bool:
 
 
 def _run_live_stt_import(grafana_url: str, token: str) -> list[str]:
-    rules = load_live_stt_import_rules()
+    rules = load_live_stt_import_rules(production=grafana_url == "https://monitor.omi.me")
+    canary_uids = tuple(uid for uid in DATASOURCE_CANARY_UIDS if uid in rules)
     live = index_live_rules(
         _request_json(grafana_url, ALERT_RULE_LIST_PATH, token, size_limit=FLEET_LIST_SIZE_LIMIT),
         path=ALERT_RULE_LIST_PATH,
@@ -199,7 +218,23 @@ def _run_live_stt_import(grafana_url: str, token: str) -> list[str]:
     contacts = _request_json(grafana_url, "/api/v1/provisioning/contact-points", token)
     if not _has_telegram_receiver(contacts, TELEGRAM_RECEIVER):
         return ["verified Telegram alert receiver is missing or resolve notifications are disabled"]
+    # Establish and read back the replacement pages before KeepLast reaches any
+    # business rule. The GMP canary belongs to its separately deployed datasource.
+    for uid in canary_uids:
+        _write_rule(grafana_url, uid, rules[uid], token, exists=uid in live)
+        print(f"UPSERTED datasource canary {uid}")
+    failures = []
+    for uid in canary_uids:
+        canary = _request_json(grafana_url, f"{ALERT_RULE_LIST_PATH}/{uid}", token)
+        if not isinstance(canary, dict):
+            failures.append(f"datasource canary {uid} read-back is not an object")
+        else:
+            failures.extend(rule_definition_errors(uid, canary, rules[uid]))
+    if failures:
+        return failures
     for uid, rule in rules.items():
+        if uid in DATASOURCE_CANARY_UIDS:
+            continue
         _write_rule(grafana_url, uid, rule, token, exists=uid in live)
         print(f"UPSERTED live-STT alert {uid}")
     return []
@@ -493,8 +528,9 @@ def _run_fleet_coverage(
     committed = load_all_committed_rules()
     gated_uids = load_gated_uids(committed)
     if alert_set == "live-stt":
-        committed = {uid: committed[uid] for uid in (*LIVE_STT_IMPORT_UIDS, *REDIS_CACHE_IMPORT_UIDS)}
-        gated_uids = tuple(uid for uid in gated_uids if uid in committed)
+        committed = load_live_stt_import_rules(production=grafana_url == "https://monitor.omi.me")
+        canary_uids = tuple(uid for uid in DATASOURCE_CANARY_UIDS if uid in committed)
+        gated_uids = tuple(dict.fromkeys((*canary_uids, *(uid for uid in gated_uids if uid in committed))))
     coverage: FleetCoverage | None = None
     last_error: str | None = None
     for attempt in range(attempts):

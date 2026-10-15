@@ -665,3 +665,13 @@ def test_range_assignment_never_promotes_to_rollover_voice():
         },
     }
     assert carried_receipt(_conversation(receipt), SCOPE) == {}
+
+
+def test_carried_receipt_tolerates_wrong_typed_sections():
+    """A stored receipt whose sections are lists/strings must not crash the rollover
+    carry — the regression behind #20334 was _active_entries calling .items() on a
+    truthy non-Mapping. Wrong-typed sections coerce to {} and yield no carries."""
+    receipt = {'generation': 3, 'speakers': ['x'], 'segments': ['y']}
+    assert carried_receipt(_conversation(receipt), SCOPE) == {}
+    assert carried_receipt(_conversation({'speakers': 'not-a-mapping'}), SCOPE) == {}
+    assert carried_receipt(_conversation({'segments': 42}), SCOPE) == {}

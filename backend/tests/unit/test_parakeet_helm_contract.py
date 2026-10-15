@@ -43,7 +43,7 @@ def test_prod_parakeet_autoscaling_and_zone_spread_contract():
     values = _values('prod')
 
     assert values['autoscaling']['minReplicas'] == 3
-    assert values['autoscaling']['maxReplicas'] == 7
+    assert values['autoscaling']['maxReplicas'] == 12
     assert values['topologySpreadConstraints'] == [
         {
             'maxSkew': 1,
@@ -103,7 +103,7 @@ def test_rendered_prod_deployment_contains_stream_admission_settings():
         document for document in yaml.safe_load_all(rendered) if document.get('kind') == 'HorizontalPodAutoscaler'
     )
     assert hpa['spec']['minReplicas'] == 3
-    assert hpa['spec']['maxReplicas'] == 7
+    assert hpa['spec']['maxReplicas'] == 12
     assert hpa['spec']['metrics'] == [
         {
             'type': 'Pods',
@@ -119,6 +119,13 @@ def test_rendered_prod_deployment_contains_stream_admission_settings():
                 'target': {'type': 'Value', 'value': '35'},
             },
         },
+        {
+            'type': 'External',
+            'external': {
+                'metric': {'name': 'parakeet_request_latency_p99'},
+                'target': {'type': 'Value', 'value': '3'},
+            },
+        },
     ]
     assert hpa['spec']['behavior'] == {
         'scaleUp': {
@@ -126,8 +133,8 @@ def test_rendered_prod_deployment_contains_stream_admission_settings():
             'policies': [{'type': 'Pods', 'value': 1, 'periodSeconds': 60}],
         },
         'scaleDown': {
-            'stabilizationWindowSeconds': 600,
-            'policies': [{'type': 'Pods', 'value': 1, 'periodSeconds': 600}],
+            'stabilizationWindowSeconds': 900,
+            'policies': [{'type': 'Pods', 'value': 1, 'periodSeconds': 900}],
         },
     }
     assert 'progressDeadlineSeconds' not in deployment['spec']

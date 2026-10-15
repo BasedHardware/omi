@@ -2,6 +2,8 @@ import sys
 from datetime import datetime, timezone
 from types import ModuleType
 
+import pytest
+
 from fastapi import BackgroundTasks
 
 from routers import conversations as conversations_router
@@ -10,8 +12,9 @@ UID = 'uid-delete-reminders'
 DUE = datetime(2026, 9, 20, 15, tzinfo=timezone.utc)
 
 
-def _delete_with_tasks(monkeypatch, tasks, vector_batch_fn=None):
+def _delete_with_tasks(monkeypatch, tasks, vector_batch_fn=None, source_lookup=None):
     cancelled = []
+    monkeypatch.setattr(conversations_router.conversations_db, 'get_conversation', source_lookup or (lambda *a: {}))
     monkeypatch.setattr(conversations_router.conversation_tombstones, 'record_deletion', lambda *a: None)
     monkeypatch.setattr(conversations_router, 'delete_owner_prompt_embedding_cache', lambda *a: None)
     vectors = []
@@ -93,3 +96,19 @@ def test_cascade_delete_cancels_reminders_even_if_vector_delete_raises(monkeypat
     assert cancelled == [
         {'user_id': UID, 'action_item_id': 'due-open', 'description': '', 'completed': True, 'due_at': None}
     ]
+
+
+@pytest.mark.parametrize('configured', [False, True])
+def test_donor_inventory_read_only_when_canonical_bucket_configured(monkeypatch, configured):
+    if configured:
+        monkeypatch.setenv('BUCKET_CANONICAL_AUDIO', 'canonical')
+    else:
+        monkeypatch.delenv('BUCKET_CANONICAL_AUDIO', raising=False)
+    reads = []
+
+    def lookup(uid, cid):
+        reads.append((uid, cid))
+        return {'sync_merged_from': ['donor']}
+
+    _delete_with_tasks(monkeypatch, [], source_lookup=lookup)
+    assert reads == ([(UID, 'conv-1')] if configured else [])

@@ -14,9 +14,11 @@ import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/capture/calendar_capture_gap_monitor.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/integrations/google_calendar_service.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/wal_sync_upload.dart';
 
@@ -31,26 +33,34 @@ import 'package:omi/utils/wal_sync_upload.dart';
 bool isBenignInProgressConversationCreateStatus(int statusCode) => statusCode == 404;
 
 Future<CreateConversationResponse?> processInProgressConversation() async {
+  return (await processInProgressConversationOutcome()).response;
+}
+
+Future<InProgressProcessOutcome> processInProgressConversationOutcome() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations',
     headers: {},
     method: 'POST',
     body: jsonEncode({}),
   );
-  if (response == null) return null;
+  if (response == null) return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
   Logger.debug('createConversationServer: ${response.body}');
   if (response.statusCode == 200) {
-    return CreateConversationResponse.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>);
+    final parsed = CreateConversationResponse.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>);
+    if (parsed.conversation == null) {
+      return InProgressProcessOutcome(response: parsed, absence: ProcessAbsence.emptyBody);
+    }
+    return InProgressProcessOutcome(response: parsed);
   } else if (isBenignInProgressConversationCreateStatus(response.statusCode)) {
     Logger.debug('processInProgressConversation: no in-progress conversation (already finalized), skipping');
-  } else {
-    PlatformManager.instance.crashReporter.reportCrash(
-      Exception('Failed to create conversation'),
-      StackTrace.current,
-      userAttributes: {'response': response.body},
-    );
+    return const InProgressProcessOutcome(absence: ProcessAbsence.notFound);
   }
-  return null;
+  PlatformManager.instance.crashReporter.reportCrash(
+    Exception('Failed to create conversation'),
+    StackTrace.current,
+    userAttributes: {'response': response.body},
+  );
+  return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
 }
 
 Future<List<ServerConversation>> getConversations({
@@ -105,16 +115,29 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
   if (response == null) return (items: <ServerConversation>[], ok: false, truncated: false);
   if (response.statusCode == 200) {
-    // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
-    var body = utf8.decode(response.bodyBytes);
-    var memories = (jsonDecode(body) as List<dynamic>)
-        .map((conversation) => ServerConversation.fromJson(conversation as Map<String, dynamic>))
-        .toList();
+    final bodyBytes = response.bodyBytes;
+    // Unlocked rows carry full transcripts, so a page can be megabytes; parse
+    // it off the UI isolate (this runs on resume, right as the user scrolls).
+    final memories = await offUiIsolate(
+        () => parseConversationListBody(jsonDecode(utf8.decode(bodyBytes)) as List<dynamic>),
+        size: bodyBytes.length,
+        threshold: conversationListBackgroundParseBytes,
+        debugName: 'conversation_list_parse');
     Logger.debug('getConversations length: ${memories.length}');
     return (items: memories, ok: true, truncated: isOmiListTruncated(response));
   }
   Logger.debug('getConversations error ${response.statusCode}');
   return (items: <ServerConversation>[], ok: false, truncated: false);
+}
+
+/// Response bodies at or above this size are parsed on a background isolate.
+@visibleForTesting
+int conversationListBackgroundParseBytes = 64 * 1024;
+
+/// Maps a decoded list body (decode the UTF-8 bytes first so multi-byte
+/// characters survive) into conversations.
+List<ServerConversation> parseConversationListBody(List<dynamic> decoded) {
+  return decoded.map((conversation) => ServerConversation.fromJson(conversation as Map<String, dynamic>)).toList();
 }
 
 bool hasSpeakerReceiptSummaryCapability(Map<String, String> headers) => headers['x-omi-speaker-receipt-summary'] == '1';
@@ -675,7 +698,8 @@ class SyncRateLimitedException implements Exception {
   final SyncRateLimitKind kind;
   final int? retryAfterSeconds;
   final String? reasonCode;
-  SyncRateLimitedException({required this.kind, this.retryAfterSeconds, this.reasonCode});
+  final int? statusCode;
+  SyncRateLimitedException({required this.kind, this.retryAfterSeconds, this.reasonCode, this.statusCode});
 
   @override
   String toString() => 'SyncRateLimitedException(kind=$kind, retryAfter=$retryAfterSeconds, reason=$reasonCode)';
@@ -889,6 +913,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
       kind: syncRateLimitKindForResponse(response),
       retryAfterSeconds: _parseRetryAfterSeconds(response),
       reasonCode: syncRateLimitReasonCode(response),
+      statusCode: response.statusCode,
     );
   } else if (isSyncRecoveryWindowExceededResponse(response)) {
     throw const SyncRecoveryWindowExceededException();

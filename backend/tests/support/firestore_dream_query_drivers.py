@@ -5,11 +5,13 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 
 from config.dream_agent import Caps
-from tests.support.firestore_query_drivers import DriverEntry, SHAPE_UID as UID
+from tests.support.firestore_query_drivers import DriverEntry, CoveredByEntry, SHAPE_UID as UID
 
 
 def producer_mode(client):
-    return patch.dict('os.environ', {'DREAM_AGENT_MODE': 'shadow', 'DREAM_AGENT_UID_ALLOWLIST': UID})
+    return patch.dict(
+        'os.environ', {'DREAM_AGENT_ENABLED': 'true', 'DREAM_AGENT_ELIGIBILITY': 'all', 'REVIEW_SURFACE_MODE': 'on'}
+    )
 
 
 def trim_overflow(client):
@@ -19,8 +21,26 @@ def trim_overflow(client):
     return patch.object(dream_store, 'dirty_count', side_effect=[501, 501, 0])
 
 
+def finish_lease():
+    return {
+        'run_id': 'shape-run',
+        'day': '2026-10-08',
+        'started_at': datetime(2026, 10, 8, tzinfo=timezone.utc),
+        'watermark': datetime(1970, 1, 1, tzinfo=timezone.utc),
+        'score': 1,
+        'mode': 'shadow',
+        'reservation_usd': 0.24,
+        'budget_charge_usd': 0.24,
+        'admission_refunded': False,
+        'max_usd_per_token': Caps().max_usd_per_token,
+        'spend_scope': 'user',
+        'dirty_dropped': 0,
+        'dirty_dropped_reported': 0,
+    }
+
+
 def finish_state(client, args, trial):
-    client.documents['dream_users/' + UID] = {'lease': {'run_id': 'shape-run'}, 'score': 1}
+    client.documents['dream_users/' + UID] = {'lease': finish_lease(), 'score': 1}
 
 
 def admission_state(client, args, trial):
@@ -29,7 +49,44 @@ def admission_state(client, args, trial):
 
 def entries():
     return (
-        DriverEntry('database.dream_store.candidates', domains={'limit': [1, 100]}),
+        DriverEntry(
+            'utils.dream_seed.load',
+            base={'uid': UID},
+            neutrals={'caps': (Caps(), 'seed size and model ceilings; no filter changes')},
+        ),
+        DriverEntry(
+            'database.dream_history.history_page',
+            base={'uid': UID},
+            domains={
+                'collection': ['conversations', 'action_items', 'people', 'memory_items'],
+                'after': [None, 'one'],
+                'limit': [1, 40],
+            },
+        ),
+        DriverEntry(
+            'database.dream_history.history_count',
+            base={'uid': UID},
+            domains={'collection': ['conversations', 'action_items', 'people', 'memory_items']},
+        ),
+        DriverEntry(
+            'database.dream_history.history_from_key',
+            base={'uid': UID},
+            domains={
+                'collection': ['conversations', 'action_items', 'people', 'memory_items'],
+                'key': ['00000000', 'ffffffff'],
+            },
+        ),
+        DriverEntry(
+            'database.dream_scheduler.candidates',
+            patchers=(producer_mode,),
+            domains={'limit': [1, 100]},
+            neutrals={'now': (datetime(2026, 10, 12, tzinfo=timezone.utc), 'post-query priority only')},
+        ),
+        DriverEntry(
+            'database.dream_scheduler.candidate_page',
+            domains={'after': [None, 'one'], 'limit': [1, 100]},
+            neutrals={'transaction': (None, 'transaction does not change query shape')},
+        ),
         DriverEntry('database.dream_store.own_runs', base={'uid': UID}, domains={'limit': [1, 10, 20]}),
         DriverEntry(
             'database.dream_store.acquire',
@@ -37,6 +94,8 @@ def entries():
             domains={'trigger': ['schedule', 'manual']},
             neutrals={
                 'caps': (Caps(), 'admission policy only'),
+                'rng': (None, 'coin does not alter query shape'),
+                'reclaim_sink': (None, 'count-only output after commit does not alter query shape'),
                 'canary': (False, 'cohort gate only'),
                 'now': (datetime(2026, 10, 9, tzinfo=timezone.utc), 'UTC accounting day only'),
             },
@@ -60,22 +119,22 @@ def entries():
             'database.dream_store.finish',
             base={
                 'uid': UID,
-                'lease': {
-                    'run_id': 'shape-run',
-                    'day': '2026-10-08',
-                    'started_at': datetime(2026, 10, 8, tzinfo=timezone.utc),
-                    'watermark': datetime(1970, 1, 1, tzinfo=timezone.utc),
-                    'score': 1,
-                    'mode': 'shadow',
-                    'reservation_usd': 0.24,
-                    'dirty_dropped': 0,
-                    'dirty_dropped_reported': 0,
-                },
+                'lease': finish_lease(),
                 'report': {'status': 'complete'},
             },
-            domains={'success': [True, False], 'refund': [True, False], 'count_failure': [True, False]},
+            domains={
+                'success': [True, False],
+                'refund': [True, False],
+                'count_failure': [True, False],
+                'deferred': [[], ['conversations/one']],
+            },
             neutrals={
-                'consumed': ([], 'post-query acknowledgement versions'),
+                'now': (datetime(2026, 10, 9, tzinfo=timezone.utc), 'UTC reset metadata only'),
+                'reviewed': ([], 'metadata writes only'),
+                'seeded': ([], 'direct settlement document selection only'),
+                'cleanup_cursor': (None, 'metadata writes only'),
+                'consumed': ([], 'settlement metadata; watermark uses the separately driven dirty_refs builder'),
+                'unavailable': ([], 'settlement metadata; watermark uses the separately driven dirty_refs builder'),
                 'release': (True, 'post-query lease policy'),
             },
             setup=finish_state,
@@ -83,7 +142,7 @@ def entries():
         DriverEntry(
             'database.dream_store.dirty_refs',
             base={'uid': UID},
-            domains={'limit': [1, 400, 500], 'newest': [True, False]},
+            domains={'limit': [1, 32, 33, 400, 500], 'newest': [True, False]},
             neutrals={'transaction': (None, 'transaction binding does not change query shape')},
         ),
         DriverEntry(
@@ -97,6 +156,14 @@ def entries():
 
 registry_extension = SimpleNamespace(
     DRIVERS={entry.function: entry for entry in entries()},
-    COVERED_BY={},
+    COVERED_BY={
+        'database.dream_scheduler.discover': CoveredByEntry(
+            'database.dream_scheduler.discover',
+            covered_by=('database.dream_scheduler.candidate_page',),
+            reason='Discovery streams only through candidate_page; its get_all calls read explicit document refs and its transaction only initializes due rows and a cursor. SDK queue races are exercised in test_dream_queue_emulator.',
+            expect_observed=False,
+            body_digest='c0e27c29293523fa0ddf6095c56b0502810590259e28ce80c43e0ac4bc826789',
+        )
+    },
     SKIPS={},
 )

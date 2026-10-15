@@ -194,6 +194,7 @@ _chat_scope_stub.chat_scope_from_config = _chat_scope_from_config
 # ---------------------------------------------------------------------------
 # Load the module under test
 # ---------------------------------------------------------------------------
+_load_module_from_file("utils.retrieval.turn_refs", BACKEND_DIR / "utils" / "retrieval" / "turn_refs.py")
 action_item_tools = _load_module_from_file(
     "utils.retrieval.tools.action_item_tools",
     BACKEND_DIR / "utils" / "retrieval" / "tools" / "action_item_tools.py",

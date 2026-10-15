@@ -1291,7 +1291,7 @@ def test_authority_veto_accounts_for_one_spent_embedding(world, monkeypatch, cap
         reconnect = OWNER_RECONNECT.labels(outcome='rejected', reason='arbitration')
         reconnect_before = reconnect._value.get()
         emitted.clear()
-        with caplog.at_level(logging.INFO, logger='routers.listen.speakers'):
+        with caplog.at_level(logging.INFO, logger='utils.observability.owner_recognition_diagnostics'):
             await speak(new, 0, seconds, start=3)
         after = (total(LIVE_SPEAKER_DECISIONS), total(OMI_SPEAKER_ID_MATCH_EXITS_TOTAL))
         assert failures and new._embedding_attempts[0] == 1
@@ -1301,7 +1301,14 @@ def test_authority_veto_accounts_for_one_spent_embedding(world, monkeypatch, cap
         ), 'each spent attempt needs exactly one live exit, not a fabricated decision'
         assert OMI_SPEAKER_ID_MATCH_EXITS_TOTAL.labels(reason='authority_unavailable')._value.get() == exit_before + 1
         assert (
-            sum('speaker_id_exit reason=authority_unavailable speaker=0 ' in row.message for row in caplog.records) == 1
+            sum(
+                'kind=live_refusal' in row.message
+                and "'reason': 'authority_unavailable'" in row.message
+                and f'uid={UID} conversation=conversation ' in row.message
+                and 'scope=new-socket ' in row.message
+                for row in caplog.records
+            )
+            == 1
         )
         assert reconnect._value.get() == reconnect_before + (seconds == 2)
         assert not visible_owner(new, 0) and not renewals

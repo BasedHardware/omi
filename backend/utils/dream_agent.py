@@ -1,300 +1,439 @@
-"""Two-stage background shaped mount with a single guarded effect boundary."""
+"""One owner session, two independent verifiers, one reversible effect boundary."""
 
 import asyncio
+from collections import Counter
+from dataclasses import replace
 from functools import partial
 from typing import Any
-from collections import Counter
 
-from pydantic import ValidationError
-
-from config.dream_agent import Caps, mode, auto_apply_kinds, apply_policy
-from database import dream_store, dream_feedback, review_changes, review_store
+from config.dream_agent import Caps, auto_apply_kinds, enabled, concurrency, PASS_TIMEOUT_SECONDS, DRAIN_TIMEOUT_SECONDS
+from database import dream_scheduler, dream_store, dream_turns, review_store
 from database.dream_dirty import dream_writing
-from models.dream_agent import Triage, Plan
-from utils import dream_reads, dream_tools, dream_transport, dream_guards
-from utils.executors import db_executor, postprocess_executor, run_blocking
-from utils.llm.shaped_agent import run_loop
-from utils.dream_metrics import record_pass
-
-from utils.dream_prompt import mount, evidence_message, evidence_chars, person_names, TRIAGE_INSTRUCTIONS, triage_budget
-
-
-async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabulary=None):
-    async def invoke(uid, lane, mount, messages):
-        if usage_sink is not None:
-            key = 'triage_evidence_chars' if lane == dream_transport.TRIAGE_LANE else 'reasoning_evidence_chars'
-            usage_sink[key] = evidence_chars(messages)
-            if lane == dream_transport.MAIN_LANE:
-                usage_sink['reasoning_attempted'] = True
-        previous_unknown = bool(usage_sink and usage_sink.get('usage_unknown'))
-        if usage_sink is not None:
-            usage_sink['usage_unknown'] = True
-        try:
-            result = (
-                await turn(uid, lane, mount, messages)
-                if turn is not None
-                else await dream_transport.model_turn(
-                    uid, lane, mount, messages, usage_sink=usage_sink, completion_limit=caps.completion_tokens
-                )
-            )
-        except (dream_transport.PreTokenFailure, dream_transport.httpx.HTTPStatusError):
-            if usage_sink is not None:
-                usage_sink['usage_unknown'] = previous_unknown
-            raise
-        if usage_sink is not None and turn is not None:
-            usage_sink['tokens'] += result.tokens
-            usage_sink['usage_unknown'] = previous_unknown
-        return result
-
-    triage_tokens = triage_budget(caps)
-    # The byte-based transport gate remains authoritative, including schema.
-    triage = await run_loop(
-        mount(
-            Triage,
-            triage_tokens,
-            TRIAGE_INSTRUCTIONS,
-        ),
-        evidence_message(records, Triage, triage_tokens, vocabulary=vocabulary),
-        partial(invoke, uid, dream_transport.TRIAGE_LANE),
-    )
-    if triage.reason != 'stopped':
-        raise ValueError('dream_triage_budget')
-    refs = list(dict.fromkeys(ref for c in triage.value.clusters for ref in c.refs))
-    if any(ref not in records for ref in refs):
-        raise ValueError('dream_unknown_cluster')
-    if not refs:
-        return Plan(), triage.tokens
-    selected = {ref: records[ref] for ref in refs[:8]}
-    main = await run_loop(
-        mount(Plan, caps.tokens - triage.tokens),
-        evidence_message(
-            selected,
-            Plan,
-            caps.tokens - triage.tokens,
-            names=person_names(records),
-            clusters=triage.value.model_dump(),
-            vocabulary=vocabulary,
-        ),
-        partial(invoke, uid, dream_transport.MAIN_LANE),
-    )
-    if main.reason != 'stopped':
-        raise ValueError('dream_reasoning_budget')
-    return main.value, triage.tokens + main.tokens
+from models.agent_tools import HarnessQuestion
+from models.agent_edit import HarnessEdit
+from utils.agent_capabilities import tools as dream_tools
+from utils import dream_review_policy, dream_capacity, dream_harness_transport, dream_seed, dream_verify
+from utils.agent_capabilities.search import OwnerSearch
+from utils.agent_capabilities.session import Session
+from utils.dream_instructions import INSTRUCTIONS
+from utils.dream_metrics import record_pass, error_code, record_reclaimed
+from database.dream_effect_fence import ACTIVE_RUN
+from utils.executors import db_executor, run_blocking
 
 
-class IdlePass(Exception):
-    """No visible evidence was selected; release the provisional admission."""
-
-
-async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=False, timeout_seconds=180, progress=None):
+async def run_session(
+    uid,
+    seed,
+    records,
+    limits,
+    *,
+    turn=None,
+    lease=None,
+    caps=None,
+    dry_run=False,
+    timeout_seconds=PASS_TIMEOUT_SECONDS,
+    bootstrap_tools=None,
+):
     caps = caps or Caps.from_env()
-    lease = await run_blocking(db_executor, dream_store.acquire, uid, caps, trigger=trigger, canary=canary)
-    if lease is None:
-        report = {'status': 'not_admitted'}
-        record_pass(report)
-        return report
+    started = asyncio.get_running_loop().time()
+    deadline = started + timeout_seconds
     report: dict[str, Any] = {
         'status': 'failed',
         'tokens': 0,
-        'cost_usd_reserved': caps.reservation_usd,
-        'mode': lease['mode'],
-        'usage_complete': False,
+        'accounted_tokens': 0,
+        'cached_tokens': 0,
+        'cache_unreported_tokens': 0,
+        'uncached_tokens': 0,
         'usage_unknown': False,
-        'run_id': lease['run_id'],
-        'trigger': trigger,
-        'records_read': 0,
-        'triage_evidence_chars': 0,
-        'reasoning_evidence_chars': 0,
-        'cost_usd': 0.0,
+        'usage_complete': False,
+        'size_bucket': limits.bucket,
+        'mode': 'on',
+        'proposed': {'edits': [], 'questions': [], 'vocabulary': []},
+        'outcomes': [],
+        'model_lanes': [],
+        'dry_run': dry_run,
     }
-    consumed = []
-    refund = False
-    success = False
-    release = True
+    session = Session(
+        uid,
+        OwnerSearch(uid),
+        limits,
+        seed,
+        authority='dream',
+        records=records,
+        instructions=INSTRUCTIONS,
+        question_policy=lambda item: item.value > 2,
+    )
+
+    async def active():
+        if not enabled():
+            raise ValueError('dream_disabled')
+        if lease is not None:
+            await run_blocking(db_executor, dream_store.assert_lease, uid, lease['run_id'])
+
+    session.check_active = active
+
+    async def usage(result):
+        report['tokens'] += result.tokens
+        report['accounted_tokens'] += result.tokens if result.accounted_tokens is None else result.accounted_tokens
+        session.accounted_model_tokens = report['accounted_tokens']
+        if result.cached_tokens is None:
+            report['cache_unreported_tokens'] += result.prompt_tokens
+        else:
+            report['cached_tokens'] += result.cached_tokens
+            report['cache_unreported_tokens'] += result.cache_unreported_tokens
+            report['uncached_tokens'] += max(
+                0, result.prompt_tokens - result.cached_tokens - result.cache_unreported_tokens
+            )
+        if lease is not None:
+            await run_blocking(db_executor, dream_turns.settle, uid, lease['run_id'], result)
+
+    async def invoke(lane, mount, messages):
+        await active()
+        remaining = limits.tokens - report['accounted_tokens'] - session.counters['search_embedding_token_upper_bound']
+        mount = replace(mount, budget=replace(mount.budget, tokens=min(mount.budget.tokens or 0, remaining)))
+        if mount.budget.tokens is None or mount.budget.tokens < 1024:
+            raise ValueError('dream_input_token_budget')
+        ceiling = dream_harness_transport.input_bytes(messages, mount)
+        completion = (
+            limits.verifier_completion_tokens
+            if lane == dream_harness_transport.VERIFY_LANE
+            else limits.completion_tokens
+        )
+        reserve = min(mount.budget.tokens, 2 * (ceiling + completion))
+        if lease is not None:
+            await run_blocking(db_executor, dream_turns.reserve, uid, lease['run_id'], reserve, caps)
+        report['model_lanes'].append(lane)
+        sink = {}
+        try:
+            if turn is not None:
+                result = await turn(uid, lane, mount, messages)
+                await usage(result)
+                return result
+            return await dream_harness_transport.model_turn(
+                uid,
+                lane,
+                mount,
+                messages,
+                completion_limit=completion,
+                model_seconds=min(
+                    limits.verifier_seconds if lane == dream_harness_transport.VERIFY_LANE else limits.model_seconds,
+                    max(1, deadline - asyncio.get_running_loop().time()),
+                ),
+                on_usage=usage,
+                usage_sink=sink,
+            )
+        finally:
+            if lane == dream_harness_transport.VERIFY_LANE and sink.get('transport_complete'):
+                report['verifier_transport_responses'] = report.get('verifier_transport_responses', 0) + 1
+            report['usage_unknown'] |= sink.get('usage_unknown', False)
+
+    async def effect(fn, *args, **kwargs):
+        await active()
+        if dry_run:
+            return 'dry_run'
+        return await run_blocking(db_executor, partial(fn, uid, *args, **kwargs))
+
     try:
         async with asyncio.timeout(timeout_seconds):
-            vocabulary = await run_blocking(db_executor, dream_store.vocabulary, uid)
-            records, consumed = await run_blocking(db_executor, dream_reads.read_changes, uid, lease, caps, vocabulary)
-            report['dirty_read'] = len(consumed)
-            report['records_read'] = len(records)
-            if not records:
-                raise IdlePass()
-            if progress is not None:
-                progress['stage'] = 'model'
-            # Gate against all private input, including names not yet in the vocabulary doc.
-            names = list(vocabulary)
-            for row in records.values():
-                for key in ('name', 'label', 'organization', 'title'):
-                    if isinstance(row.get(key), str):
-                        names.append({'spelling': row[key]})
-            plan, tokens = await plan_pass(uid, records, caps, turn=turn, usage_sink=report, vocabulary=vocabulary)
-            plan = dream_guards.filter_plan(plan, records, usage_sink=report)
-            report.update(
-                status='planned',
-                tokens=tokens,
-                cost_usd_upper_bound=tokens * caps.max_usd_per_token,
-                # A privacy timeout/fault must not leave unchecked feedback in the failed report.
-                proposed={**plan.model_dump(mode='python'), 'feedback': []},
-                outcomes=[],
-            )
-            # Reject feedback before even saving it in a per-user shadow report.
-            accepted = []
-            for feedback in plan.feedback:
-                try:
-                    await run_blocking(
-                        postprocess_executor,
-                        dream_feedback.validate,
-                        feedback,
-                        records,
-                        [*names, *[t.model_dump() for t in plan.vocabulary]],
-                        uid=uid,
+            await active()
+            try:
+                if bootstrap_tools is not None:
+                    await session.execute(bootstrap_tools)
+                    report['stop_reason'] = 'synthetic_tools'
+                else:
+                    result = await session.run(
+                        partial(invoke, dream_harness_transport.MAIN_LANE),
+                        deadline_seconds=max(1, timeout_seconds - 300),
                     )
-                    accepted.append(feedback)
-                except ValueError:
-                    counts = Counter(report.get('rejected', {}))
-                    counts['privacy_rejected'] += 1
-                    report['rejected'] = dict(counts)
-                    report['outcomes'].append({'tool': 'feedback', 'status': 'privacy_rejected'})
-            accepted = dream_guards.cap_feedback(accepted, usage_sink=report)
-            report['proposed']['feedback'] = [f.model_dump() for f in accepted]
+                    report['stop_reason'] = result.reason
+            except Exception as exc:
+                # Already staged work survives model/budget exhaustion. The live
+                # kill/lease boundary is rechecked before verification and effects.
+                report['stop_reason'] = error_code(exc) or type(exc).__name__
+                if not session.staged:
+                    raise
+            await active()
+            staged = list(session.staged.values())
+            verification_telemetry = {}
+            support, calls = await dream_verify.verify(
+                staged,
+                partial(invoke, dream_harness_transport.VERIFY_LANE),
+                tokens=min(limits.verification_tokens, max(0, limits.tokens - report['accounted_tokens'])),
+                deadline_seconds=max(0, deadline - asyncio.get_running_loop().time() - min(60, timeout_seconds / 10)),
+                verifier_seconds=limits.verifier_seconds,
+                completion_tokens=limits.verifier_completion_tokens,
+                telemetry=verification_telemetry,
+            )
+            report['verifier_calls'] = calls
+            report['verifier_transport_responses'] = max(
+                report.get('verifier_transport_responses', 0), verification_telemetry.get('transport_responses', 0)
+            )
+            report['verifier_valid_responses'] = sum(
+                isinstance(vote, bool) for votes in support.values() for vote in votes
+            )
+            decisions = Counter()
             demoted = await run_blocking(db_executor, dream_store.demoted_types, uid, caps)
-            automatic = auto_apply_kinds() - demoted
-            edit_policies = {
-                dream_tools.edit_key(edit, records): (
-                    'suggest'
-                    if dream_tools.edit_key(edit, records).split(':')[1] in demoted
-                    else apply_policy(edit.kind, automatic)
-                )
-                for edit in plan.edits
-            }
-            for edit, proposed_edit in zip(plan.edits, report['proposed']['edits']):
-                proposed_edit['policy'] = edit_policies[dream_tools.edit_key(edit, records)]
-            for term in report['proposed']['vocabulary']:
-                term['policy'] = apply_policy('vocabulary', automatic)
-            outcomes: list[dict[str, Any]] = report['outcomes']
+            automatic = auto_apply_kinds(uid) - demoted
+            offered = []
+            if not dry_run and lease is None:
+                raise ValueError('dream_lease_required')
+            effect_scope = ACTIVE_RUN.set((uid, lease['run_id']) if lease else None)
             token = dream_writing.set(True)
             try:
-
-                async def effect(fn, *args):
-                    await run_blocking(db_executor, dream_store.assert_lease, uid, lease['run_id'])
-                    # Recheck kill switch before every effect. A shadow lease cannot upgrade.
-                    if lease['mode'] != 'on' or mode() != 'on':
-                        return 'shadow'
-                    return await run_blocking(db_executor, fn, uid, *args)
-
-                remaining = caps.edits
-                for edit in plan.edits:
-                    key = dream_tools.edit_key(edit, records)
-                    if edit.target not in records or any(ref not in records for ref in edit.evidence):
-                        outcomes.append({'key': key, 'status': 'invalid_evidence'})
-                        continue
-                    try:
-                        dream_tools.validate_edit(edit, records)
-                    except (ValueError, review_store.ReviewConflict):
-                        outcomes.append({'key': key, 'status': 'invalid_evidence'})
-                        continue
-                    allowed = await run_blocking(db_executor, review_changes.agent_change_allowed, uid, key)
-                    if not allowed:
-                        status = 'suppressed'
-                    elif remaining <= 0:
-                        status = 'edit_cap'
-                    else:
-                        remaining -= 1
-                        tool = dream_tools.apply_edit if edit_policies[key] == 'auto' else dream_tools.suggest_edit
+                for item in staged:
+                    decision = dream_verify.disposition(support[item.id])
+                    auto_allowed = item.kind in automatic and not (
+                        isinstance(item.operation, HarnessEdit)
+                        and dream_tools.target_authority_protected(item.operation, item.records)
+                    )
+                    decisions[decision] += 1
+                    category = (
+                        'questions'
+                        if isinstance(item.operation, HarnessQuestion)
+                        else 'edits' if isinstance(item.operation, HarnessEdit) else 'vocabulary'
+                    )
+                    report['proposed'][category].append(
+                        {
+                            **item.operation.model_dump(mode='python'),
+                            'key': item.key,
+                            'policy': 'auto' if decision == 'agree' and auto_allowed else 'suggest',
+                        }
+                    )
+                    if decision in {'disagree', 'unverified'}:
+                        report['outcomes'].append(
+                            {'key': item.key, 'kind': item.kind, 'status': 'verifier_' + decision}
+                        )
+                    elif decision == 'agree' and auto_allowed and not isinstance(item.operation, HarnessQuestion):
                         try:
-                            status = await effect(tool, edit, records)
+                            if isinstance(item.operation, HarnessEdit):
+                                status = await effect(
+                                    dream_tools.apply_verified_edit,
+                                    item.operation,
+                                    item.records,
+                                    expected_records=item.fences,
+                                    authority='dream',
+                                )
+                            else:
+                                status = await effect(
+                                    dream_tools.apply_vocabulary,
+                                    [item.operation],
+                                    expected_records=item.fences,
+                                    verified=True,
+                                    records=item.records,
+                                )
                         except (ValueError, review_store.ReviewConflict, review_store.ReviewNotFound):
                             status = 'invalid_evidence'
-                    outcomes.append({'key': key, 'status': status, 'policy': edit_policies[key]})
-                attention = await run_blocking(db_executor, review_store.remaining_today, uid)
-                if lease['mode'] == 'on' and mode() == 'on' and plan.questions:
-                    attention = await run_blocking(
-                        db_executor,
-                        dream_store.reserve_questions,
-                        uid,
-                        lease['run_id'],
-                        min(len(plan.questions), attention),
-                    )
-                for item in plan.questions[:attention]:
-                    outcomes.append({'tool': 'ask', 'status': await effect(dream_tools.ask, item, records)})
-                # Slow tasks share the per-pass write budget; cannot bypass edit caps.
-                for task in plan.slow_tasks[:remaining]:
-                    remaining -= 1
-                    outcomes.append(
-                        {'tool': 'slow_task', 'status': await effect(dream_tools.propose_task, task, records)}
-                    )
-                terms = [t for t in plan.vocabulary if all(ref in records for ref in t.evidence)]
-                for term in terms[:remaining]:
-                    remaining -= 1
-                    policy = apply_policy('vocabulary', automatic)
-                    tool = dream_tools.apply_vocabulary if policy == 'auto' else dream_tools.suggest_vocabulary
+                        report['outcomes'].append({'key': item.key, 'kind': item.kind, 'status': status})
+                    elif item.value > 2:
+                        offered.append((item, sum(vote is True for vote in support[item.id])))
+                # Actual enqueue shares Review's daily proposal/answer attention
+                # ledger. Failed/suppressed offers cannot consume an apply slot.
+                offered.sort(key=lambda pair: (pair[0].value, pair[1]), reverse=True)
+                for item, _ in offered[:3]:
                     try:
-                        status = await effect(tool, [term]) if policy == 'auto' else await effect(tool, term, records)
+                        if isinstance(item.operation, HarnessQuestion):
+                            status = await effect(
+                                dream_review_policy.ask_ranked,
+                                item.operation,
+                                item.records,
+                                lease['run_id'] if lease else 'dry-run',
+                            )
+                        elif isinstance(item.operation, HarnessEdit):
+                            status = await effect(
+                                dream_review_policy.suggest_edit,
+                                item.operation,
+                                item.records,
+                                run_id=lease['run_id'] if lease else 'dry-run',
+                            )
+                        else:
+                            status = await effect(dream_review_policy.suggest_vocabulary, item.operation, item.records)
                     except (ValueError, review_store.ReviewConflict, review_store.ReviewNotFound):
                         status = 'invalid_evidence'
-                    outcomes.append({'tool': 'vocabulary', 'policy': policy, 'status': status})
-                for frame in plan.frames:
-                    outcomes.append(
-                        {'tool': 'frame', 'status': await effect(dream_tools.request_frame, frame, records)}
-                    )
-                for feedback in accepted:
-                    outcomes.append(
-                        {'tool': 'feedback', 'status': await effect(dream_feedback.store, feedback, records, names)}
-                    )
+                    report['outcomes'].append({'key': item.key, 'kind': item.kind, 'status': status})
             finally:
                 dream_writing.reset(token)
-            report['usage_complete'] = True
-            report['status'] = 'complete'
-            success = True
-    except IdlePass:
-        report.update(status='not_admitted', reason='idle', usage_complete=True, cost_usd_reserved=0)
-        success = True
-        refund = True
+                ACTIVE_RUN.reset(effect_scope)
+            report['verifier_outcomes'] = dict(decisions)
+            report.update(
+                status='complete',
+                notes=session.finish.notes if session.finish else '',
+                summary=session.finish.summary if session.finish else '',
+            )
     except Exception as exc:
-        report.update(status='failed', error_type=type(exc).__name__)
-        if isinstance(exc, ValidationError):
-            counts = Counter(report.get('validation_errors', {}))
-            counts.update(dream_transport.validation_counts(exc))
-            report['validation_errors'] = dict(counts)
-        release = not isinstance(exc, TimeoutError)
-        refund = report['tokens'] == 0 and not report['usage_unknown']
-        if refund:
-            report['cost_usd_reserved'] = 0
-        # No raw exception strings: provider bodies or user text may be embedded.
-    report['cost_usd'] = report['tokens'] * caps.max_usd_per_token
-    if progress is not None:
-        progress['stage'] = 'report'
-    await run_blocking(
-        db_executor,
-        dream_store.finish,
-        uid,
-        lease,
-        report,
-        success=success,
-        consumed=consumed,
-        release=release,
-        refund=refund,
-        count_failure=not success and release and report['tokens'] > 0 and report.get('reasoning_attempted', False),
+        report.update(status='failed', error_type=type(exc).__name__, error_code=error_code(exc))
+        if isinstance(exc, dream_harness_transport.CapacityWait) or str(exc) == 'dream_minute_headroom':
+            report.update(status='waiting', reason='reserved_capacity')
+    report['accounted_tokens'] += session.counters['search_embedding_token_upper_bound']
+    report.update(
+        tool_counts={key[5:]: count for key, count in session.counters.items() if key.startswith('tool:')},
+        turns=len([lane for lane in report['model_lanes'] if lane == dream_harness_transport.MAIN_LANE]),
+        rejected=dict(session.rejections),
+        resubmits_succeeded=session.counters['resubmits_succeeded'],
+        records_read=len(session.records),
+        read_bytes=session.read_bytes,
+        usage_complete=not report['usage_unknown'],
+        cost_usd=report['tokens'] * caps.max_usd_per_token,
+        cost_usd_upper_bound=report['accounted_tokens'] * caps.max_usd_per_token,
     )
-    record_pass(report)
-    return report
+    return report, session
 
 
-DRAIN_TIMEOUT_SECONDS = 120
+async def run_pass(
+    uid,
+    *,
+    caps=None,
+    turn=None,
+    trigger='schedule',
+    canary=False,
+    timeout_seconds=PASS_TIMEOUT_SECONDS,
+    progress=None,
+    dry_run=False,
+    bootstrap_tools=None,
+):
+    if not enabled():
+        report = {'status': 'not_admitted', 'reason': 'disabled'}
+        if not dry_run:
+            record_pass(report)
+        return report
+    caps = caps or Caps.from_env()
+    if bootstrap_tools is not None and not canary:
+        raise ValueError('dream_bootstrap_requires_synthetic_canary')
+    slot = await dream_capacity.claim(concurrency(), slot_seconds=timeout_seconds + 120) if not dry_run else None
+    if not dry_run and slot is None:
+        report = {'status': 'waiting', 'reason': 'reserved_capacity'}
+        record_pass(report)
+        return report
+    lease = None
+    release_slot = False
+    try:
+        seed, records, dirty, limits = await run_blocking(db_executor, dream_seed.load, uid, caps)
+        limits = replace(
+            limits,
+            completion_tokens=min(limits.completion_tokens, caps.completion_tokens),
+            verifier_completion_tokens=min(limits.verifier_completion_tokens, caps.completion_tokens),
+        )
+        caps = replace(caps, tokens=limits.tokens)
+        if not dry_run:
+            reclaimed = {}
+            try:
+                lease = await run_blocking(
+                    db_executor, dream_store.acquire, uid, caps, trigger=trigger, canary=canary, reclaim_sink=reclaimed
+                )
+            finally:
+                if reclaimed:
+                    record_reclaimed(**reclaimed)
+            if lease is None:
+                release_slot = True
+                report = {'status': 'not_admitted'}
+                record_pass(report)
+                return report
+        if limits.bucket == 'empty' and not seed.get('targets'):
+            report: dict[str, Any] = {
+                'status': 'not_admitted',
+                'reason': 'idle',
+                'tokens': 0,
+                'accounted_tokens': 0,
+                'usage_unknown': False,
+                'usage_complete': True,
+                'size_bucket': 'empty',
+                'mode': 'on',
+                'proposed': {'edits': [], 'questions': [], 'vocabulary': []},
+                'outcomes': [],
+            }
+            session = Session(
+                uid,
+                OwnerSearch(uid),
+                limits,
+                seed,
+                authority='dream',
+                records=records,
+                instructions=INSTRUCTIONS,
+                question_policy=lambda item: item.value > 2,
+            )
+        else:
+            report, session = await run_session(
+                uid,
+                seed,
+                records,
+                limits,
+                turn=turn,
+                lease=lease,
+                caps=caps,
+                dry_run=dry_run or canary,
+                timeout_seconds=timeout_seconds,
+                bootstrap_tools=bootstrap_tools,
+            )
+        if progress is not None:
+            progress['report'] = report
+        if lease is not None:
+            report.update(
+                run_id=lease['run_id'], trigger=trigger, mode=lease['mode'], cost_usd_reserved=caps.reservation_usd
+            )
+            consumed = [item for item in dirty if item['collection'] + '/' + item['id'] in session.records]
+            unavailable = [
+                {**item, 'transient': session.unavailable[item['collection'] + '/' + item['id']]}
+                for item in dirty
+                if item['collection'] + '/' + item['id'] in session.unavailable
+            ]
+            await run_blocking(
+                db_executor,
+                dream_store.finish,
+                uid,
+                lease,
+                report,
+                success=report['status'] == 'complete' or report.get('reason') == 'idle',
+                consumed=consumed,
+                unavailable=unavailable,
+                reviewed=set(session.records),
+                refund=report['tokens'] == 0 and not report['usage_unknown'],
+                release=report.get('error_type') != 'TimeoutError',
+            )
+        if report.get('reason') == 'idle':
+            report.pop('run_id', None)
+        if not dry_run:
+            record_pass(report)
+        release_slot = report.get('error_type') != 'TimeoutError'
+        return report
+    except Exception as exc:
+        release_slot = not isinstance(exc, TimeoutError)
+        raise
+    finally:
+        # Canceled/timed-out IO may still hold a synchronous operation. Its
+        # capacity and owner leases retain their TTL fences until reclaim.
+        if slot is not None and release_slot:
+            await dream_capacity.release(slot)
 
 
-async def drain(*, limit=100):
-    if mode() == 'off':
+async def drain(*, limit=5000):
+    if not enabled() or limit <= 0:
         return []
     results = []
     try:
         async with asyncio.timeout(DRAIN_TIMEOUT_SECONDS):
-            for uid in await run_blocking(db_executor, dream_store.candidates, limit=max(0, min(limit, 100))):
-                if mode() == 'off':
-                    break
-                results.append(await run_pass(uid))
+            if await dream_capacity.available_model() is None:
+                report = {'status': 'waiting', 'reason': 'reserved_capacity'}
+                record_pass(report)
+                return [report]
+            page = await run_blocking(db_executor, dream_scheduler.candidates, limit=min(limit, 5000))
+            owners = iter(page)
+
+            async def worker():
+                for uid in owners:
+                    if not enabled():
+                        return
+                    try:
+                        report = await run_pass(uid)
+                    except Exception as exc:
+                        report = {'status': 'failed', 'error_type': type(exc).__name__, 'error_code': error_code(exc)}
+                    results.append(report)
+                    while report['status'] == 'waiting' and enabled():
+                        await asyncio.sleep(60)
+                        report = await run_pass(uid)
+                        results.append(report)
+
+            async with asyncio.TaskGroup() as group:
+                for _ in range(concurrency()):
+                    group.create_task(worker())
     except TimeoutError:
-        # Cancellation leaves any in-flight lease/reservation intact. Offloaded
-        # storage may still settle; never admit another pass for that user.
         results.append({'status': 'deadline'})
     return results

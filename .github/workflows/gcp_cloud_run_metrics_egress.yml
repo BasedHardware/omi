@@ -46,6 +46,18 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
+      # Required repo or prod Environment variable; fail before credentials/Helm.
+      - name: Validate prod dead-man notification channels
+        if: github.event.inputs.environment == 'prod'
+        env:
+          ALERT_CHANNELS: ${{ vars.MONITORING_DEADMAN_NOTIFICATION_CHANNELS }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${ALERT_CHANNELS//[[:space:]]/}" ]]; then
+            echo "MONITORING_DEADMAN_NOTIFICATION_CHANNELS must be created before running prod monitoring." >&2
+            exit 1
+          fi
+
       - name: Resolve environment-specific release contract
         env:
           ENV_SLUG: ${{ vars.ENV }}
@@ -134,13 +146,46 @@ jobs:
       - name: Deploy Prometheus scrape configuration
         run: |
           set -euo pipefail
+          rollback_flags=(--atomic)
+          if [[ "$MONITORING_NAMESPACE" == prod-omi-monitoring ]]; then
+            # The previous revision scales down with PVC whenScaled=Delete.
+            # Its automatic rollback could delete the new replica's history.
+            # Parent reviews old values with Retain before a manual rollback.
+            rollback_flags=()
+          fi
           helm upgrade --install "$STACK_RELEASE" prometheus-community/kube-prometheus-stack \
             --version 75.15.1 \
             --namespace "$MONITORING_NAMESPACE" \
             --values "$STACK_VALUES" \
-            --atomic \
+            --skip-crds \
+            "${rollback_flags[@]}" \
             --wait \
             --timeout 15m
+
+      - name: Verify operator-created production Prometheus replicas
+        if: github.event.inputs.environment == 'prod'
+        run: |
+          set -euo pipefail
+          PROD_CONTEXT=gke_based-hardware_us-central1_prod-omi-gke
+          PROD_NAMESPACE=prod-omi-monitoring
+          PROMETHEUS_STS=prometheus-prod-omi-kube-prometheus-s-prometheus
+          kubectl --context "$PROD_CONTEXT" --namespace "$PROD_NAMESPACE" \
+            wait --for=jsonpath='{.spec.replicas}'=2 \
+            "statefulset/$PROMETHEUS_STS" --timeout=5m
+          kubectl --context "$PROD_CONTEXT" --namespace "$PROD_NAMESPACE" \
+            rollout status "statefulset/$PROMETHEUS_STS" --timeout=10m
+          umask 077
+          kubectl --context "$PROD_CONTEXT" --namespace "$PROD_NAMESPACE" \
+            get statefulset "$PROMETHEUS_STS" -o json > "$RUNNER_TEMP/prometheus-statefulset.json"
+          kubectl --context "$PROD_CONTEXT" --namespace "$PROD_NAMESPACE" \
+            get pods -l operator.prometheus.io/name=prod-omi-kube-prometheus-s-prometheus \
+            -o json > "$RUNNER_TEMP/prometheus-pods.json"
+          kubectl --context "$PROD_CONTEXT" --namespace "$PROD_NAMESPACE" \
+            get persistentvolumeclaims -o json > "$RUNNER_TEMP/prometheus-pvcs.json"
+          python3 backend/scripts/verify_prometheus_replica_readiness.py \
+            --statefulset-json "$RUNNER_TEMP/prometheus-statefulset.json" \
+            --pods-json "$RUNNER_TEMP/prometheus-pods.json" \
+            --pvcs-json "$RUNNER_TEMP/prometheus-pvcs.json"
 
       - name: Verify deployed egress resources
         run: |
@@ -152,6 +197,18 @@ jobs:
             --timeout=5m
           kubectl get service "$EXPORTER_RELEASE" \
             --namespace "$MONITORING_NAMESPACE"
+
+      # Runs after Helm so a Monitoring permission gap cannot block the Grafana/Prometheus
+      # rollout; it still fails the job (fail closed) when the dead-man cannot be reconciled.
+      - name: Ensure external prod Grafana dead-man
+        if: github.event.inputs.environment == 'prod'
+        env:
+          ALERT_CHANNELS: ${{ vars.MONITORING_DEADMAN_NOTIFICATION_CHANNELS }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/ensure_grafana_deadman.py \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --notification-channels="$ALERT_CHANNELS"
 
   provision-live-alerts:
     # Grafana alert provisioning is independent of Helm deploy health: a

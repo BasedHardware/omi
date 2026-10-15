@@ -222,17 +222,72 @@ class SamePersonItem {
   }
 }
 
+class SpellingContextSegment {
+  const SpellingContextSegment({required this.text, this.speakerLabel, this.isUser = false});
+  final String text;
+  final String? speakerLabel;
+  final bool isUser;
+
+  static SpellingContextSegment fromJson(Map<String, dynamic> json) => SpellingContextSegment(
+        text: _str(json['text']) ?? '',
+        speakerLabel: _str(json['speaker_label']),
+        isUser: json['is_user'] == true,
+      );
+}
+
+class SpellingContext {
+  const SpellingContext({
+    required this.conversationTitle,
+    required this.segments,
+    required this.mainIndex,
+    this.conversationDate,
+    this.quoteStart,
+    this.quoteEnd,
+  });
+  final String conversationTitle;
+  final DateTime? conversationDate;
+  final List<SpellingContextSegment> segments;
+  final int mainIndex;
+
+  /// UTF-16 code-unit offsets in the main segment, matching Dart String indexes.
+  final int? quoteStart;
+  final int? quoteEnd;
+
+  SpellingContextSegment get main => segments[mainIndex];
+
+  static SpellingContext? fromJson(Map<String, dynamic>? json) {
+    if (json == null) return null;
+    final segments = _maps(json['segments']).map(SpellingContextSegment.fromJson).toList(growable: false);
+    final mainIndex = json['main_index'];
+    if (mainIndex is! int || mainIndex < 0 || mainIndex >= segments.length || segments.length > 3) return null;
+    return SpellingContext(
+      conversationTitle: _str(json['conversation_title']) ?? '',
+      conversationDate: _date(json['conversation_date']),
+      segments: segments,
+      mainIndex: mainIndex,
+      quoteStart: json['quote_start'] is int ? json['quote_start'] as int : null,
+      quoteEnd: json['quote_end'] is int ? json['quote_end'] as int : null,
+    );
+  }
+}
+
 class SpellingItem {
-  const SpellingItem({required this.termId, required this.options, this.allowCustom = true});
+  const SpellingItem({required this.termId, required this.options, this.allowCustom = true, this.context});
   final String termId;
   final List<String> options;
   final bool allowCustom;
+  final SpellingContext? context;
 
   static SpellingItem? fromJson(Map<String, dynamic>? json) {
     final id = _str(json?['term_id']);
     final options = _strings(json?['options']);
     if (id == null || options.isEmpty) return null;
-    return SpellingItem(termId: id, options: options, allowCustom: json?['allow_custom'] != false);
+    return SpellingItem(
+      termId: id,
+      options: options,
+      allowCustom: json?['allow_custom'] != false,
+      context: SpellingContext.fromJson(_map(json?['context'])),
+    );
   }
 }
 
@@ -259,7 +314,8 @@ class AgentProposalItem {
 
   static AgentProposalItem? fromJson(Map<String, dynamic>? json) {
     if (json == null) return null;
-    final edit = _map(json['edit']);
+    final operation = _map(json['operation']);
+    final edit = operation?.isNotEmpty == true ? operation : _map(json['edit']);
     final vocabulary = _map(json['vocabulary']);
     final targetLabel = _str(json['target_label']) ?? '';
     if (edit != null) {
@@ -269,8 +325,13 @@ class AgentProposalItem {
         editKind: kind,
         targetLabel: targetLabel,
         otherLabel: _str(json['other_label']),
-        before: _str(edit['before']) ?? '',
-        after: _str(edit['after']) ?? '',
+        before: (_str(edit['before']) ?? '').isEmpty
+            ? _str(json['target_content']) ?? targetLabel
+            : _str(edit['before']) ?? '',
+        after: (_str(edit['after']) ?? '').isEmpty &&
+                {'supersede_memory', 'merge_people', 'merge_tasks', 'merge_conversations'}.contains(kind)
+            ? _str(json['other_content']) ?? _str(json['other_label']) ?? ''
+            : _str(edit['after']) ?? '',
         reason: _str(edit['reason']),
       );
     }
@@ -465,6 +526,10 @@ class ReviewChange {
     required this.createdAt,
     this.reason,
     this.snippet,
+    this.editKind,
+    this.before,
+    this.after,
+    this.context,
     this.refs = const [],
     this.undone = false,
   });
@@ -473,6 +538,10 @@ class ReviewChange {
   final String title;
   final String? reason;
   final String? snippet;
+  final String? editKind;
+  final String? before;
+  final String? after;
+  final SpellingContext? context;
   final List<ReviewChangeRef> refs;
   final DateTime createdAt;
   final bool undone;
@@ -483,6 +552,10 @@ class ReviewChange {
         title: title,
         reason: reason,
         snippet: snippet,
+        editKind: editKind,
+        before: before,
+        after: after,
+        context: context,
         refs: refs,
         createdAt: createdAt,
         undone: undone ?? this.undone,
@@ -499,6 +572,10 @@ class ReviewChange {
       title: title,
       reason: _str(json['reason']),
       snippet: _str(json['snippet']),
+      editKind: _str(json['edit_kind']),
+      before: _str(json['before']),
+      after: json['after'] is String ? json['after'] as String : null,
+      context: SpellingContext.fromJson(_map(json['context'])),
       refs: _maps(json['refs'])
           .map((r) {
             final type = _str(r['type']);

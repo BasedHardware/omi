@@ -5,6 +5,7 @@ import logging
 import os
 
 from utils.env_loader import firebase_admin_options, load_backend_env
+from utils.logging_config import configure_split_stream_logging
 from utils.firebase_admin_runtime import (
     firebase_verify_only_credential,
     install_firebase_auth_mutation_guard,
@@ -15,7 +16,8 @@ from config.chat_first_e2e_fixture import is_chat_first_e2e_harness_runtime
 load_backend_env()  # No-op if no env files exist (production); stage + local overrides otherwise
 install_google_adc_guard()
 
-logging.basicConfig(level=logging.INFO)
+# INFO/DEBUG to stdout, WARNING+ to stderr, so GKE does not store routine lines as ERROR.
+configure_split_stream_logging(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 import firebase_admin
@@ -30,6 +32,8 @@ install_firebase_auth_mutation_guard()
 
 from routers import messaging
 from routers import (
+    budget_choice,
+    candidate_integration_sweep,
     chat_receipts,
     dream_cohort,
     dream_report,
@@ -54,6 +58,7 @@ from routers import (
     sync,
     apps,
     payment,
+    storefront,
     integration,
     conversations,
     conversation_mutations,
@@ -126,6 +131,7 @@ from routers import (
     email_preferences,
     mobile_feedback,
     device_diagnostics,
+    client_telemetry,
 )
 from routers.listen.registry import proactive_message_dispatcher
 
@@ -206,6 +212,10 @@ app.add_middleware(
     allow_methods=['*'],
     allow_headers=['*'],
     expose_headers=[
+        'X-Omi-Effective-Limit',
+        'X-Omi-Has-More',
+        'X-Omi-Next-Offset',
+        'X-Omi-Next-Cursor',
         'X-Next-Cursor',
         'X-Scan-Truncated',
         'X-Omi-Memory-As-Of',
@@ -218,11 +228,13 @@ app.add_middleware(
     ],
 )
 
+app.include_router(budget_choice.router)
 app.include_router(messaging.router)
 app.include_router(proactivity.router)
 app.include_router(dream_cohort.router)
 app.include_router(dream_report.router)
 app.include_router(dream_sweep.router)
+app.include_router(candidate_integration_sweep.router)
 app.include_router(transcribe.router)
 app.include_router(static_map.router)
 app.include_router(omni_relay.router)
@@ -284,6 +296,7 @@ app.include_router(auth.router)  # Added auth router (for the main Omi App, this
 
 
 app.include_router(payment.router)
+app.include_router(storefront.router)
 app.include_router(api_key_management.mcp_router)
 app.include_router(mcp.router)
 app.include_router(mcp_sse.router)
@@ -302,6 +315,7 @@ app.include_router(phone_calls.router)
 app.include_router(agent_tools.router)
 app.include_router(tools.router)
 app.include_router(metrics.router)
+app.include_router(client_telemetry.router)
 app.include_router(fair_use_admin.router)
 app.include_router(staged_tasks.router)
 app.include_router(focus_sessions.router)
@@ -344,6 +358,7 @@ methods_timeout = {
 paths_timeout = {
     "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
     "/v2/dream-agent/sweep": 150,  # Drain has its own 120s bound; Scheduler allows 180s.
+    "/v2/candidate-integrations/sweep": 90,  # Sweep stops at 50s; Scheduler allows 120s.
     "/v2/dream-agent/canary": 90,
     "/v1/dream/runs": 90,
     "/v2/sync-backfill-sequencer/sweep": 150,  # Below Scheduler's 180s deadline.
@@ -371,7 +386,7 @@ app.add_middleware(FirestoreTierMiddleware)
 async def startup_event():
     from utils.messaging.adapters.runtime import start_adapters
 
-    app.state.messaging_runtime = start_adapters(messaging.register_adapter)
+    app.state.messaging_runtime = await start_adapters(messaging.register_adapter)
     start_metrics_sidecar_server()
     start_background_task(live_stt_health.refresh_forever(), name='live_stt_fleet_health')
     batch_pressure.start_from_env()

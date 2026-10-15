@@ -11,8 +11,12 @@ from typing import Any, Protocol
 from urllib.parse import quote, urlparse
 
 from utils.messaging.adapters.base import BaseAdapter
-from utils.messaging.adapters.media import MEDIA_TYPES
-from utils.messaging.adapters.rendering import plain, split_text
+from utils.messaging.adapters.media import MEDIA_TYPES, OUTBOUND_MEDIA_TYPES, is_audio_video
+from utils.messaging.adapters.modalities import emoji_only, location_text
+from utils.share_links import share_base_url
+from utils.messaging.adapters.rendering import plain, split_text, item_list_link, valid_item_link
+from utils.observability.fallback import record_fallback
+from utils.messaging.delivery_context import send_reply_target, send_first_chunk
 from utils.messaging.adapters.transport import request_json, ProviderError
 from utils.messaging.contracts import ChannelCapabilities, ChannelMessage, InboundAttachment
 from utils.messaging.turn_context import bound_provider_clock, parse_provider_instant
@@ -50,7 +54,7 @@ class IMessageProvider(Protocol):
 
     def verify(self, body, headers) -> bool: ...
     def parse(self, body) -> tuple[ChannelMessage, ...]: ...
-    async def send(self, chat, parts, operation) -> dict[str, Any]: ...
+    async def send(self, chat, parts, operation, *, reply_to=None) -> dict[str, Any]: ...
     async def typing(self, chat, active) -> None: ...
     async def react(self, message_id, reaction) -> dict[str, Any]: ...
     async def upload(self, artifact, data) -> str: ...
@@ -111,20 +115,39 @@ class LinqProvider:
             parts = data['message']['parts']
         else:
             raise ValueError('Unsupported Linq webhook version')
-        text = '\n'.join(str(p['value']) for p in parts if p['type'] in ('text', 'link'))
+        text = '\n'.join(str(p.get('value', '')) for p in parts if p.get('type') in ('text', 'link'))
         command = text.strip().lower()
         proof = _link_code(text)
-        attachments = tuple(
-            InboundAttachment(
-                p['url'],
-                p.get('filename', 'attachment'),
-                p.get('mime_type', 'application/octet-stream'),
-                p.get('size_bytes', 0),
-                p['type'] == 'voice_memo',
-            )
-            for p in parts
-            if p['type'] in ('media', 'voice_memo')
-        )
+        attachments = []
+        acknowledgement = False
+        unsupported = False
+        for part in parts:
+            kind = part.get('type')
+            if kind in ('media', 'voice_memo'):
+                if part.get('sticker') or part.get('mime_type') == 'image/gif':
+                    acknowledgement = True
+                    continue
+                attachment = InboundAttachment(
+                    part['url'],
+                    part.get('filename', 'attachment'),
+                    part.get('mime_type', 'application/octet-stream'),
+                    part.get('size_bytes', 0),
+                    kind == 'voice_memo',
+                    part.get('duration_ms', 0) / 1000,
+                )
+                from dataclasses import replace
+
+                attachments.append(replace(attachment, voice=is_audio_video(attachment)))
+            elif kind == 'location':
+                text += '\n' + location_text(part.get('location', part), part)
+            elif kind == 'imessage_app':
+                unsupported = True
+        if not text.strip() and not attachments and not acknowledgement and not unsupported:
+            return ()
+        quoted = data.get('reply_to') or data.get('message', {}).get('reply_to') or {}
+        quoted_text = quoted.get('text') or quoted.get('value')
+        if not quoted_text and quoted.get('parts'):
+            quoted_text = '\n'.join(str(p.get('value', '')) for p in quoted['parts'] if p.get('type') == 'text')
         # Message ID, not delivery/event ID: two received events for one message
         # must not buy duplicate ratio credit or re-execute a write.
         # sent_at is the user's send time. Webhook created_at and local now() are
@@ -141,12 +164,32 @@ class LinqProvider:
                 reply_to=message_id,
                 link_proof=proof,
                 unlink=command in ('unlink', '/unlink', 'stop', 'unsubscribe'),
-                command='help' if command in ('help', '/help') else ('undo' if command == 'undo' else None),
-                attachments=attachments,
+                command=(
+                    'unsupported'
+                    if unsupported
+                    else (
+                        'ack'
+                        if (
+                            acknowledgement
+                            and not text.strip()
+                            and not attachments
+                            or emoji_only(text)
+                            and not attachments
+                        )
+                        else (
+                            'help'
+                            if command in ('help', '/help')
+                            else ('new' if command == 'new chat' else 'undo' if command == 'undo' else None)
+                        )
+                    )
+                ),
+                attachments=tuple(attachments),
+                quoted_text=quoted_text[:2000] if isinstance(quoted_text, str) else None,
+                quoted_message_id=str(quoted['message_id'])[:200] if quoted.get('message_id') else None,
             ),
         )
 
-    async def api(self, method, path, *, body=None, idempotent=False):
+    async def api(self, method, path, *, body=None, idempotent=False, before_request=None):
         return await request_json(
             self.transport,
             method,
@@ -155,15 +198,38 @@ class LinqProvider:
             json=body,
             idempotent=idempotent,
             sleep=self.sleep,
+            before_request=before_request,
         )
 
-    async def send(self, chat, parts, operation):
-        return await self.api(
-            'POST',
-            '/chats/' + quote(chat, safe='') + '/messages',
-            body={'message': {'parts': parts, 'idempotency_key': operation}, 'preferred_service': 'iMessage'},
-            idempotent=True,
-        )
+    async def send(self, chat, parts, operation, *, reply_to=None):
+        message = {'parts': parts, 'idempotency_key': operation}
+        # Preserve the chat-scoped envelope proven by the October 11 repair.
+        body = {'message': message, 'preferred_service': 'iMessage'}
+        if reply_to:
+            message['reply_to'] = {'message_id': reply_to}
+        path = '/chats/' + quote(chat, safe='') + '/messages'
+
+        async def prepare_thread():
+            resolver = send_reply_target.get()
+            if resolver is None or not send_first_chunk.get():
+                return
+            current = await resolver()
+            if current:
+                message['reply_to'] = {'message_id': current}
+            else:
+                message.pop('reply_to', None)
+
+        try:
+            return await self.api('POST', path, body=body, idempotent=True, before_request=prepare_thread)
+        except ProviderError as error:
+            if not message.get('reply_to') or error.status_code not in (400, 404, 422):
+                raise  # ambiguous delivery must not change the request or replay
+            record_fallback(
+                component='other', from_mode='threaded_reply', to_mode='plain_reply', reason='other', outcome='degraded'
+            )
+            message.pop('reply_to')
+            message['idempotency_key'] = operation + ':unthreaded'
+            return await self.api('POST', path, body=body, idempotent=True)
 
     async def typing(self, chat, active):
         await self.api('POST' if active else 'DELETE', '/chats/' + quote(chat, safe='') + '/typing', idempotent=True)
@@ -218,7 +284,7 @@ class IMessageAdapter(BaseAdapter):
             reactions=True,
             max_text_len=1200,
             media_in=MEDIA_TYPES,
-            media_out=tuple(m for m in MEDIA_TYPES if m != 'audio/ogg'),
+            media_out=tuple(m for m in OUTBOUND_MEDIA_TYPES if m != 'audio/ogg'),
             rate_limits={'chat_per_minute': 30, 'max_send_receive_ratio': max_ratio},
         )
 
@@ -229,7 +295,27 @@ class IMessageAdapter(BaseAdapter):
         return self.client.parse(body)
 
     def render(self, text):
-        return split_text(plain(text), self.capabilities.max_text_len)
+        return split_text(
+            re.sub(re.escape(share_base_url()) + r'/?(?=[\s).,!?#]|$)', 'Omi', plain(text)),
+            self.capabilities.max_text_len,
+        )
+
+    async def item_presentation(self, message, text, items):
+        if len(items) > 1:
+            text = plain(text)
+            # A shorter id is a string prefix of a longer one (`ab` / `abc`, `1` / `10`).
+            # Replace longer URL spellings first so the short form cannot eat the long one.
+            patterns = []
+            for item in items:
+                for url in (item['url'], item['url'].removeprefix('https://')):
+                    patterns.extend((' (' + url + ')', '(' + url + ')', url))
+            for pattern in sorted(set(patterns), key=len, reverse=True):
+                text = text.replace(pattern, '')
+            text = text.strip()
+        card = None
+        if items and await self.ledger.has_outbound(message):
+            card = items[0]['url'] if len(items) == 1 else item_list_link(items)
+        return text, card
 
     async def typing(self, message, active=True):
         await self.client.typing(message.external_chat_id, active)
@@ -237,26 +323,36 @@ class IMessageAdapter(BaseAdapter):
     async def download(self, attachment):
         return await self.client.download(attachment)
 
-    async def send(self, message, *, text=None, artifact=None, draft=False):
+    async def send(self, message, *, text=None, artifact=None, draft=False, link=None):
         if draft:
             return
         await self.pace(message.external_chat_id, 2.05)
         operation = self.operation(
-            message, 'artifact:' + artifact.file_store_ref if artifact else 'text:' + (text or '')
+            message,
+            (
+                ('link:' + link)
+                if link
+                else ('artifact:' + artifact.file_store_ref if artifact else 'text:' + (text or ''))
+            ),
         )
         if not await self.ledger.begin(message, operation, ratio=self.max_ratio, retry_reserved=True):
             return
-        if artifact:
+        if link:
+            if not valid_item_link(link):
+                raise ValueError('Item link required')
+            parts = [{'type': 'link', 'value': link}]
+        elif artifact:
             data = await self.owned_bytes(artifact)
             attachment_id = await self.client.upload(artifact, data)
             parts = [{'type': 'media', 'attachment_id': attachment_id}]
         else:
             parts = [{'type': 'text', 'value': text}]
-        result = await self.client.send(message.external_chat_id, parts, operation)
+        reply_to = await self.reply_target(message)
+        result = await self.client.send(message.external_chat_id, parts, operation, reply_to=reply_to)
         provider_id = result.get('id') or result.get('message', {}).get('id')
         if not provider_id:
             raise ProviderError('Missing provider delivery receipt')
-        await self.ledger.commit(message, operation, provider_id)
+        await self.ledger.commit(message, operation, provider_id, message_sent=True)
 
     async def action(self, message, action, value):
         if action == 'contact' and not self.contact_card:

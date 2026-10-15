@@ -5,6 +5,7 @@ from typing import Sequence
 
 from database import candidates, conversations, review_changes, review_store as store
 from models.action_item import TaskCreatePayload
+from models.review_context import enrich_spelling
 from models.candidate import CandidateAction, CandidateStatus, CandidateSubjectKind
 from models.review import (
     ChangeRef,
@@ -174,6 +175,7 @@ def get_items(uid: str, *, include_agent_proposals: bool = False):
         for item, source, version in _sources(uid):
             if item.kind == 'agent_proposal' and not include_agent_proposals:
                 continue
+            item = enrich_spelling(item, source, load_conversation=lambda key: conversations.get_conversation(uid, key))
             if store.offer_item(uid, item, source, version):
                 eligible.append(item)
     ranked = rank_review_items(eligible, remaining)
@@ -208,7 +210,7 @@ def answer_item(uid: str, item_id: str, answer: ReviewAnswer | ReviewAnswerV2, *
             # Review stores an evidence version, permitting a new-evidence question.
             pass
         elif item.agent_proposal:
-            from utils.dream_tools import answer_proposal
+            from utils.agent_capabilities.tools import answer_proposal
 
             payload = getattr(answer, 'agent_proposal', None)
             if payload is None:
@@ -299,14 +301,19 @@ def answer_item(uid: str, item_id: str, answer: ReviewAnswer | ReviewAnswerV2, *
             value = answer.spelling.value.strip()
             if not value or (not item.spelling.allow_custom and value not in item.spelling.options):
                 raise store.ReviewConflict('Spelling is not an allowed option')
-            save_user_fact(
-                uid,
-                f'vocabulary:{item.spelling.term_id}',
-                value,
-                action_id=f'review:{store.safe_id(item_id)}',
-                predicate='vocabulary',
-            )
-            applied = True
+            if state['source'].get('spelling_edit'):
+                from utils.agent_capabilities.tools import answer_spelling
+
+                applied = answer_spelling(uid, state['source'], value)
+            else:
+                save_user_fact(
+                    uid,
+                    f'vocabulary:{item.spelling.term_id}',
+                    value,
+                    action_id=f'review:{store.safe_id(item_id)}',
+                    predicate='vocabulary',
+                )
+                applied = True
     except (
         store.ReviewConflict,
         store.ReviewNotFound,

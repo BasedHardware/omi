@@ -1769,6 +1769,9 @@ class AppLocalizationsNl extends AppLocalizations {
       'Het lijkt erop dat er meerdere sprekers in de opname zijn. Zorg ervoor dat je op een rustige locatie bent en probeer het opnieuw.';
 
   @override
+  String get discardedOnlyRecording => 'That recording was too short or empty to keep.';
+
+  @override
   String get tooShortDesc => 'Er is niet genoeg spraak gedetecteerd. Spreek meer en probeer het opnieuw.';
 
   @override
@@ -5655,11 +5658,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get downloadingFromSdCard => 'Downloaden van SD-kaart';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Verwerken $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count gesprekken aangemaakt';
   }
@@ -9109,18 +9107,10 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current van $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'Op je apparaat';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Downloaden van je apparaat';
-
-  @override
-  String get newestFirst => 'Nieuwste eerst';
 
   @override
   String get noSyncedRecordingsYet => 'Nog geen gesynchroniseerde opnames';
@@ -9865,6 +9855,33 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get memoryGraph => 'Herinneringengrafiek';
+
+  @override
+  String guidedVoiceExperience(String part) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'unavailable': 'Voice transcription is unavailable right now. Type your answer instead.',
+        'type': 'Type Your Answer Instead',
+        'typing': 'Your answer',
+        'heard': 'Here\'s what I heard',
+        'transcribing': 'Got it, transcribing…',
+        'confirm': 'Use This Answer',
+        'answer': 'Save Answer',
+        'retry': 'Try Speaking Again',
+        'title': 'Here\'s what I\'ll remember',
+        'question': 'What should I focus on this week?',
+        'fallback': 'I’ll use these to help you.',
+        'thinking': 'Thinking about your answers…',
+        'failed': 'We couldn\'t transcribe that answer. You can type it instead or try speaking again.',
+        'engine': 'The microphone couldn\'t start. Try again or type your answer instead.',
+        'retryTranscription': 'Retry transcription',
+        'namePrompt': 'My name is ___, and I usually ___.',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String voiceIntroduction(String part) {
@@ -12001,9 +12018,6 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Lokale kopieën';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -12323,6 +12337,9 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Gesprekscontext';
+
+  @override
   String get reviewQuestionSpelling => 'Hoe schrijf je dit?';
 
   @override
@@ -12417,6 +12434,15 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get reviewRecentChanges => 'Recente wijzigingen';
+
+  @override
+  String get reviewChangeAfter => 'Na';
+
+  @override
+  String get reviewChangeBefore => 'Voor';
+
+  @override
+  String get reviewChangeRemoved => 'Verwijderd uit de actieve lijst';
 
   @override
   String get reviewChangesIntro =>
@@ -13045,4 +13071,394 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get reviewProposalConflict => 'Dit is veranderd sinds Dream het voorstelde, dus er is niets toegepast.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count items',
+      one: '1 item',
+      zero: 'Geen items',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get paywallRecommended => 'Recommended';
+
+  @override
+  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
+
+  @override
+  String get paywallOtherPlans => 'See all plans';
+
+  @override
+  String get paywallComparePlans => 'See plans';
+
+  @override
+  String get paywallYourPlan => 'Your plan';
+
+  @override
+  String get paywallNotNow => 'Not now';
+
+  @override
+  String get paywallTryAgain => 'Try again';
+
+  @override
+  String get paywallManageBilling => 'Manage billing';
+
+  @override
+  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
+
+  @override
+  String get paywallPlans => 'Plans';
+
+  @override
+  String get firstCaptureTitle => 'How will you capture?';
+
+  @override
+  String get firstCaptureDescription => 'Choose how you want to capture your first conversation.';
+
+  @override
+  String get firstCaptureOmi => 'I Have an Omi';
+
+  @override
+  String get firstCapturePhone => 'This Phone';
+
+  @override
+  String get firstCaptureWatch => 'Apple Watch';
+
+  @override
+  String get firstCaptureSkip => 'Skip for Now';
+
+  @override
+  String get firstCapturePrompt =>
+      'Tell Omi what you\'re working on today, or what\'s on your mind. Talk for about 30 seconds.';
+
+  @override
+  String get firstCaptureKeepGoing => 'Keep going… 30 seconds is ideal.';
+
+  @override
+  String get firstCaptureReady => 'You can finish now, or keep talking.';
+
+  @override
+  String get firstCaptureStart => 'Start Recording';
+
+  @override
+  String get firstCaptureFinish => 'Finish Recording';
+
+  @override
+  String get firstCaptureListening => 'Listening… your words will appear here.';
+
+  @override
+  String get firstCaptureProcessing => 'Creating your first conversation…';
+
+  @override
+  String get firstCaptureResult => 'Your first conversation';
+
+  @override
+  String get firstCaptureEmpty => 'I didn\'t catch enough speech, try again with a few sentences';
+
+  @override
+  String get watchCaptureTitle => 'Record from your Apple Watch';
+
+  @override
+  String get watchCaptureOpen => 'Open Omi on your Apple Watch.';
+
+  @override
+  String get watchCaptureRecord => 'Tap Record. Allow microphone access if asked.';
+
+  @override
+  String get watchCaptureSync => 'Your recording syncs to Omi on this phone.';
+
+  @override
+  String get pairingBluetoothOff => 'Turn on Bluetooth on your phone, then try again.';
+
+  @override
+  String get pairingBluetoothPermission => 'Allow Bluetooth access for Omi in Settings, then try again.';
+
+  @override
+  String get pairingNearbyPermission => 'Allow Nearby devices access for Omi in Settings, then try again.';
+
+  @override
+  String get pairingLocationPermission =>
+      'Allow location access for Omi in Settings so this phone can find your device, then try again.';
+
+  @override
+  String get pairingNotFoundOrDropped =>
+      'Couldn\'t reach your Omi. Make sure it\'s charged, close to your phone, and its light is blinking, then try again.';
+
+  @override
+  String get pairingBondRecovery => 'Forget Omi in your phone’s Bluetooth settings, then try pairing again.';
+
+  @override
+  String get pairingHowTo => 'How to pair';
+
+  @override
+  String get firstCaptureWatchInstructions =>
+      'Open Omi on your Apple Watch and tap Record. Allow microphone access if asked. Your capture will sync to Omi on this phone.';
+
+  @override
+  String get firstCaptureWatchInstall =>
+      'In the Watch app on your iPhone, install Omi on your Apple Watch. Then open Omi on your watch and tap Record.';
+
+  @override
+  String get firstCaptureWatchPair =>
+      'Pair your Apple Watch with this iPhone using the Watch app, then install and open Omi on your watch.';
+
+  @override
+  String get firstCaptureUnavailable =>
+      'Recording could not start. Check microphone access and your connection, then try again.';
+
+  @override
+  String get firstCaptureDelayed =>
+      'Your recording is taking longer to process. You can check your conversations on Home or try again.';
+
+  @override
+  String get firstCaptureEmptyTitle => 'Let\'s try that again';
+
+  @override
+  String get firstCaptureShortTitle => 'Finish This Recording?';
+
+  @override
+  String get firstCaptureShortWarning => 'A few more sentences help Omi understand you. About 30 seconds is ideal.';
+
+  @override
+  String get firstCaptureCancelTitle => 'Leave This Recording?';
+
+  @override
+  String get firstCaptureCancelWarning =>
+      'Going back stops this recording. Keep talking to give Omi a few more sentences.';
+
+  @override
+  String get firstCaptureSiriTip => 'Tip: Enable Omi in Shortcuts → Siri.';
+
+  @override
+  String get paywallOutlineHeadline => 'Mis nooit meer een woord.';
+
+  @override
+  String get paywallCancelAnytime => 'Opzeggen kan altijd.';
+
+  @override
+  String get connectAnAgent => 'Een agent koppelen';
+
+  @override
+  String get connectAnAgentSubtitle => 'Krijg een installatieprompt voor Claude, ChatGPT, Codex of elke andere agent';
+
+  @override
+  String syncCardSyncingAmount(String amount) {
+    return '$amount audio synchroniseren';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Opnamen synchroniseren';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Downloaden van je Omi · $done van $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Uploaden · $done van $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return '$amount omzetten in gesprekken';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done van $total klaar · je kunt dit scherm verlaten';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount klaar om te synchroniseren';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → telefoon';
+
+  @override
+  String get syncStepLabelUpload => 'Uploaden';
+
+  @override
+  String get syncStepLabelTranscribe => 'Transcriberen';
+
+  @override
+  String get syncDetailsTitle => 'Synchronisatiedetails';
+
+  @override
+  String get syncDetailsRightNow => 'Op dit moment';
+
+  @override
+  String get syncDetailsYourOmi => 'Je Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Overdrachtssnelheid';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Wacht op je Omi';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Wacht op deze telefoon';
+
+  @override
+  String get syncDetailsTranscribing => 'Transcriberen op Omi';
+
+  @override
+  String get syncDetailsForSupport => 'Voor support';
+
+  @override
+  String get syncDetailsAudioFiles => 'Audiobestanden';
+
+  @override
+  String get syncDetailsServerJobs => 'Serverjobs (klaar / totaal)';
+
+  @override
+  String get syncDetailsCopy => 'Details kopiëren voor support';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Beschikbaar met Operator en Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app zit vol';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Op de wachtlijst';
+
+  @override
+  String get chatAppsOnWaitlist => 'Je staat op de wachtlijst';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Je staat op de wachtlijst. We laten het je weten zodra er plek is.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Je bent klaar, $name';
+  }
+
+  @override
+  String get onboardingActDemoSummary =>
+      'Lunch met Sam, die in juni naar Lissabon verhuist. Je wilt de presentatie vóór vrijdag naar je team sturen en op weg naar huis melk halen.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Presentatie vóór vrijdag naar het team sturen';
+
+  @override
+  String get onboardingActDemoTask2 => 'Op weg naar huis melk halen';
+
+  @override
+  String get onboardingActDemoTitle => 'Lunch met Sam';
+
+  @override
+  String get onboardingActDictateBody => 'Zeg het op jouw manier. Omi doet de rest.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Praat gewoon. Je Omi luistert.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Net geluncht met Sam, ze verhuist in juni naar Lissabon! Herinner me eraan de presentatie vóór vrijdag naar het team te sturen en op weg naar huis melk te halen.';
+
+  @override
+  String get onboardingActDictateHint => 'Tik op het vinkje als je klaar bent';
+
+  @override
+  String get onboardingActDictateTitle => 'Vertel Omi over je dag';
+
+  @override
+  String get onboardingActIntro => 'Probeer Omi eens.';
+
+  @override
+  String get onboardingActJustNow => 'Zojuist';
+
+  @override
+  String get onboardingActMicAllow => 'Microfoon toestaan';
+
+  @override
+  String get onboardingActMicBody => 'Zodat Omi je hoort als je tegen hem praat.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Je Omi stuurt nog geen geluid. Gebruik voorlopig je telefoon.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi heeft je microfoon nodig';
+
+  @override
+  String get onboardingActNoAudioOmi => 'We horen je Omi niet. Controleer of hij aan staat en dichtbij is.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'We horen je nog niet. Probeer iets harder te praten.';
+
+  @override
+  String get onboardingActNotesLabel => 'Je dag, samengevat';
+
+  @override
+  String get onboardingActPhoneMic => 'Telefoonmicrofoon';
+
+  @override
+  String get onboardingActRateTitle => 'Bevalt Omi tot nu toe?';
+
+  @override
+  String get onboardingActRemembers => 'Omi onthoudt het, zodat jij dat niet hoeft';
+
+  @override
+  String get onboardingActSavedToTasks => 'Opgeslagen in je taken';
+
+  @override
+  String get onboardingActTasksLabel => 'Omi heeft je to-do\'s opgepikt';
+
+  @override
+  String get onboardingActWriting => 'Samenvatten…';
+
+  @override
+  String get onboardingActYourWords => 'Dit zei je';
+
+  @override
+  String get onboardingConnectOmi => 'Omi verbinden';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Tik op je Omi om te verbinden.';
+
+  @override
+  String get onboardingNoOmiYet => 'Heb je je Omi nog niet?';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Nog niet besteld';
+
+  @override
+  String get onboardingOmiOrdered => 'Ik heb hem besteld';
+
+  @override
+  String get onboardingPermissionTapToFix => 'Tik om te herstellen';
+
+  @override
+  String get homePendingTitle => 'Gesprekken onderweg';
+
+  @override
+  String get homePendingCatchingUp => 'Eerdere audio wordt ingehaald';
+
+  @override
+  String get onTheWayTitle => 'Onderweg';
+
+  @override
+  String get onTheWayAlmostReady => 'Bijna klaar';
+
+  @override
+  String get activityEmpty => 'Nog geen activiteit';
+
+  @override
+  String get activityNewSemantics => 'Activiteit, nieuwe items';
+
+  @override
+  String get activityLoadFailed => 'Niet al je activiteit kon worden geladen';
+
+  @override
+  String get activityNewItem => 'Nieuw';
 }

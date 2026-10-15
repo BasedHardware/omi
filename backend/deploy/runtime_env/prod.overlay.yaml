@@ -39,8 +39,8 @@ overlay:
   gke:
     backend-listen:
       env:
-        DREAM_AGENT_MODE: {value: 'on', category: rollout}
-        DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+        DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
+        DREAM_AGENT_ELIGIBILITY: {value: 'all', category: rollout}
         CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
         # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
         PROACTIVITY_V2_POSTHOG_TOKEN:
@@ -121,6 +121,28 @@ overlay:
           value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
         STT_RESILIENT_RECONNECT:
           value: 'false'
+        # Publish presence with an empty allowlist and drain old sockets before deploying this cohort.
+        STT_LIVE_DEMAND_ENABLED:
+          value: 'true'
+          category: rollout
+        STT_LIVE_DEMAND_PERCENT:
+          value: '0'
+          category: rollout
+        STT_LIVE_DEMAND_UID_ALLOWLIST:
+          value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
+          category: rollout
+        STT_LIVE_DEMAND_MIN_DWELL_SECONDS:
+          value: '15'
+          category: rollout
+        MOBILE_STANDARD_BATCH_ENABLED:
+          value: 'true'
+          category: rollout
+        MOBILE_STANDARD_BATCH_PERCENT:
+          value: '0'
+          category: rollout
+        MOBILE_STANDARD_BATCH_UIDS:
+          value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
+          category: rollout
         STT_FAILOVER_RECOVERY_ENABLED:
           value: 'true'
           category: rollout
@@ -176,11 +198,11 @@ overlay:
         HOSTED_PARAKEET_API_URL:
           value: http://parakeet.omi.me
         HOSTED_SPEAKER_EMBEDDING_API_URL:
-          value: http://diarizer.omi.me:80
+          value: http://172.16.160.20/diarizer
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
         HOSTED_TRANSLATION_API_URL:
-          value: http://nllb.omi.me
+          value: http://172.16.160.20/nllb
         MEMORY_BELIEF_MODEL_ENABLED:
           value: 'false'
         MEMORY_BELIEF_AUTOMATION_PAUSED:
@@ -285,8 +307,9 @@ overlay:
           category: rollout
     pusher:
       env:
-        DREAM_AGENT_MODE: {value: 'on', category: rollout}
-        DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+        <<: &batch_cohort {"HOSTED_DIARIZATION_API_URL": {"value": "http://172.16.160.20/diarizer-batch", "category": "service_discovery"}, "TRANSCRIPTION_FINAL_PASS_DIARIZER": {"value": "pyannote_shadow", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_BACKEND": {"value": "pyannote", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST": {"value": "vi7SA9ckQCe4ccobWNxlbdcNdC23", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_PERCENT": {"value": "1", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE": {"value": "true", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED": {"value": "true", "category": "rollout"}, "TRANSCRIPTION_SHADOW_ENABLED": {"value": "true", "category": "rollout"}, "TRANSCRIPTION_SHADOW_KILL_SWITCH": {"value": "false", "category": "rollout"}, "TRANSCRIPTION_SHADOW_UID_ALLOWLIST": {"value": "vi7SA9ckQCe4ccobWNxlbdcNdC23", "category": "rollout"}, "TRANSCRIPTION_SHADOW_PERCENT": {"value": "1", "category": "rollout"}, "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS": {"value": "80", "category": "rollout"}, "TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS": {"value": "10", "category": "rollout"}, "TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS": {"value": "1000", "category": "rollout"}}
+        DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
+        DREAM_AGENT_ELIGIBILITY: {value: 'all', category: rollout}
         CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
         # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
         PROACTIVITY_V2_POSTHOG_TOKEN:
@@ -337,21 +360,6 @@ overlay:
         SONIOX_WIRE_LEDGER: {value: 'true', category: rollout}
         SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
-        TRANSCRIPTION_SHADOW_ENABLED:
-          value: 'true'
-          category: rollout
-        TRANSCRIPTION_SHADOW_KILL_SWITCH:
-          value: 'false'
-          category: rollout
-        TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-          category: rollout
-        TRANSCRIPTION_SHADOW_PERCENT:
-          value: '0'
-          category: rollout
-        TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
-          value: '1'
-          category: rollout
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
         FREE_TIER_LOCAL_PROCESSING:
@@ -374,7 +382,7 @@ overlay:
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'false'
         HOSTED_SPEAKER_EMBEDDING_API_URL:
-          value: http://diarizer.omi.me:80
+          value: http://172.16.160.20/diarizer
         CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
           value: '100'
           category: rollout
@@ -543,24 +551,27 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
-          # David-only channel launch; recovery runs inside this backend process.
+          <<: *batch_cohort
+          # Telegram all-paid launch; iMessage retains the exact legacy cohort without a seat counter.
           OMI_MESSAGING_CHANNELS: {value: 'on', category: rollout}
           OMI_MESSAGING_CHANNELS_UIDS: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          OMI_MESSAGING_CHANNEL_POLICY: {value: '{"telegram":{"enabled":true,"cohort":"*"},"imessage":{"enabled":true,"cohort":["vi7SA9ckQCe4ccobWNxlbdcNdC23"],"seat_cap":"off"}}', category: rollout}
+          OMI_TELEGRAM_STREAMING: {value: 'none', category: rollout}
+          OMI_TELEGRAM_SHARED_PACING: {value: 'on', category: rollout}
           OMI_TELEGRAM_ENABLED: {value: 'on', category: rollout}
           OMI_IMESSAGE_ENABLED: {value: 'on', category: rollout}
           OMI_IMESSAGE_PROVIDER: {value: 'linq', category: rollout}
           OMI_IMESSAGE_MAX_SEND_RECEIVE_RATIO: {value: '3', category: rollout}
           OMI_MESSAGING_LINK_TARGETS: {value: '{"telegram":{"provider":"telegram","address":"omi_chat_bot","deep_link_template":"https://t.me/{address}?start={proof}"},"imessage":{"provider":"linq","address":"+12062808403"}}', category: rollout}
-          DREAM_AGENT_MODE: {value: 'on', category: rollout}
-          DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
+          DREAM_AGENT_ELIGIBILITY: {value: 'all', category: rollout}
           # Spelling fixes go to Review until auto-apply requires supporting context (Run Now passes run here).
-          DREAM_AGENT_AUTO_APPLY_KINDS: {value: 'title,overview,vocabulary', category: rollout}
           # Dogfood self-report + Run Now (GET/POST /v1/dream/runs) for the dream cohort only.
-          DREAM_SELF_REPORT_MODE: {value: 'on', category: rollout}
-          # 2026-10-09: hourly dogfood + manual runs; reserve room for both users and canary.
-          DREAM_AGENT_PASSES_PER_DAY: {value: '24', category: rollout}
-          DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '20', category: rollout}
-          DREAM_AGENT_DAILY_USD: {value: '60', category: rollout}
+          DREAM_AGENT_PASSES_PER_DAY: {value: '2', category: rollout}
+          DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
+          DREAM_AGENT_DAILY_USD: {value: '10', category: rollout}
+          DREAM_AGENT_GLOBAL_DAILY_USD: {value: '15000', category: rollout}
+          DREAM_AGENT_TOKENS_PER_MINUTE: {value: '2000000', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
           PROACTIVITY_V2_POSTHOG_TOKEN:
@@ -569,6 +580,10 @@ overlay:
           PROACTIVITY_V2_POSTHOG_HOST:
             value: https://us.posthog.com
             category: rollout
+          # Public project token for billing capture only. Not a secret mount.
+          POSTHOG_BILLING_API_KEY:
+            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+            category: telemetry
           POSTHOG_HOST:
             value: https://us.posthog.com
             category: telemetry
@@ -634,7 +649,7 @@ overlay:
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
-            value: http://diarizer.omi.me:80
+            value: http://172.16.160.20/diarizer
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'false'
           MEMORY_BELIEF_AUTOMATION_PAUSED:
@@ -755,24 +770,37 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         forbidden_env:
+        - DEEPGRAM_SELF_HOSTED_ENABLED
+        - DEEPGRAM_SELF_HOSTED_URL
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
+            value: 'true'
+            category: rollout
+          SYNC_REPROCESS_COALESCE_ENABLED:
+            value: 'true'
+            category: rollout
+          SYNC_REPROCESS_SETTLE_SECONDS:
+            value: '600'
+            category: rollout
+          CONVERSATION_LLM_INPUT_DEDUPE_ENABLED:
+            value: 'true'
+            category: rollout
+          <<: *batch_cohort
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout
-          DREAM_AGENT_MODE: {value: 'on', category: rollout}
-          # Dream passes run here; mode=on admission and Review proposals require the Review surface.
+          DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
+          DREAM_AGENT_ELIGIBILITY: {value: 'all', category: rollout}
           REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
-          DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
-          # Spelling fixes go to Review until auto-apply requires supporting context (scheduled passes run here).
-          DREAM_AGENT_AUTO_APPLY_KINDS: {value: 'title,overview,vocabulary', category: rollout}
-          # 2026-10-09: hourly dogfood + manual runs; reserve room for both users and canary.
-          DREAM_AGENT_PASSES_PER_DAY: {value: '24', category: rollout}
-          DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '20', category: rollout}
-          DREAM_AGENT_DAILY_USD: {value: '60', category: rollout}
+          DREAM_AGENT_PASSES_PER_DAY: {value: '2', category: rollout}
+          DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
+          DREAM_AGENT_DAILY_USD: {value: '10', category: rollout}
+          DREAM_AGENT_GLOBAL_DAILY_USD: {value: '15000', category: rollout}
+          DREAM_AGENT_TOKENS_PER_MINUTE: {value: '2000000', category: rollout}
           DREAM_AGENT_CANARY_UID: {value: 'dream-canary-prod-01', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
@@ -827,7 +855,7 @@ overlay:
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
-            value: http://diarizer.omi.me:80
+            value: http://172.16.160.20/diarizer
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'false'
           MEMORY_BELIEF_AUTOMATION_PAUSED:
@@ -934,16 +962,31 @@ overlay:
       backend-sync-backfill:
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         forbidden_env:
+        - DEEPGRAM_SELF_HOSTED_ENABLED
+        - DEEPGRAM_SELF_HOSTED_URL
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
+            value: 'true'
+            category: rollout
+          SYNC_REPROCESS_COALESCE_ENABLED:
+            value: 'true'
+            category: rollout
+          SYNC_REPROCESS_SETTLE_SECONDS:
+            value: '600'
+            category: rollout
+          CONVERSATION_LLM_INPUT_DEDUPE_ENABLED:
+            value: 'true'
+            category: rollout
+          <<: *batch_cohort
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout
-          DREAM_AGENT_MODE: {value: 'on', category: rollout}
-          DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
+          DREAM_AGENT_ELIGIBILITY: {value: 'all', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
           SYNC_PHASE_METRICS_PROJECT: {value: based-hardware, category: telemetry}
@@ -993,7 +1036,7 @@ overlay:
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
-            value: http://diarizer.omi.me:80
+            value: http://172.16.160.20/diarizer
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'false'
           MEMORY_BELIEF_AUTOMATION_PAUSED:
@@ -1087,6 +1130,8 @@ overlay:
       backend-integration:
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         forbidden_env:
+        - DEEPGRAM_SELF_HOSTED_ENABLED
+        - DEEPGRAM_SELF_HOSTED_URL
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -1095,8 +1140,8 @@ overlay:
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout
-          DREAM_AGENT_MODE: {value: 'on', category: rollout}
-          DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
+          DREAM_AGENT_ELIGIBILITY: {value: 'all', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
           PROACTIVITY_V2_POSTHOG_TOKEN:
@@ -1142,7 +1187,7 @@ overlay:
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
-            value: http://diarizer.omi.me:80
+            value: http://172.16.160.20/diarizer
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'false'
           MEMORY_BELIEF_AUTOMATION_PAUSED:

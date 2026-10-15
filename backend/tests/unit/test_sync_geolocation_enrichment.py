@@ -23,7 +23,7 @@ real modules behind that later files could not re-import cleanly.
 import os
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -73,6 +73,7 @@ def _build_pipeline_fakes() -> dict:
         'utils.conversations.lifecycle',
         'utils.conversations.location',
         'utils.conversations.process_conversation',
+        'utils.dream_vocabulary',
         'utils.sync.bridge',
         'utils.executors',
         'utils.fair_use',
@@ -95,6 +96,7 @@ def _build_pipeline_fakes() -> dict:
     ]
     for name in heavy_leaves:
         fakes[name] = AutoMockModule(name)
+    fakes['utils.dream_vocabulary'].keyterms = AsyncMock(side_effect=lambda uid, existing: existing)
     return fakes
 
 

@@ -33,8 +33,6 @@ if str(BACKEND_DIR) not in sys.path:
 
 DEFAULT_PROJECT = "based-hardware"
 MAINTENANCE_ENABLED_ENV = "MEMORY_CANONICAL_MAINTENANCE_ENABLED"
-CONSOLIDATION_ENABLED_ENV = "MEMORY_CANONICAL_CONSOLIDATION_ENABLED"
-BATCH_CAP_ENV = "MEMORY_CANONICAL_CONSOLIDATION_BATCH_CAP"
 
 
 @dataclass(frozen=True)
@@ -100,8 +98,6 @@ def _configure_env(*, project: str) -> None:
     os.environ["GOOGLE_CLOUD_PROJECT"] = project
     os.environ["GOOGLE_CLOUD_PROJECT_ID"] = project
     # Force single-item canary isolation for this harness.
-    os.environ[BATCH_CAP_ENV] = "1"
-    os.environ.setdefault(CONSOLIDATION_ENABLED_ENV, "true")
     os.environ.setdefault(MAINTENANCE_ENABLED_ENV, "true")
 
 
@@ -215,8 +211,8 @@ def _promote_one(db_client: Any, *, uid: str, memory_id: str, run_id: str) -> li
         memory_text=str(item.content or ""),
         evidence_ids=evidence_ids,
         subject_entity_id="user",
-        predicate="prefers_progressive_memory_rollout",
-        arguments={"topic": "canonical_memory_cutover"},
+        predicate=item.predicate,
+        arguments=item.arguments,
         relationship_to_user="self",
         aboutness="primary_user",
         basis_for_memory="explicit",
@@ -273,8 +269,6 @@ def run_proof(args: argparse.Namespace) -> ProofResult:
         errors.append("apply_requires_explicit_uid_and_project")
     if os.environ.get(MAINTENANCE_ENABLED_ENV, "true").lower() == "false":
         errors.append("MEMORY_CANONICAL_MAINTENANCE_ENABLED=false")
-    if os.environ.get(CONSOLIDATION_ENABLED_ENV, "true").lower() == "false":
-        errors.append("MEMORY_CANONICAL_CONSOLIDATION_ENABLED=false")
     if gateway_mode != "gateway" and not args.allow_direct_llm:
         errors.append("require_OMI_LLM_GATEWAY_FEATURE_MODE=gateway_or_--allow-direct-llm")
     if not os.environ.get("ENCRYPTION_SECRET"):

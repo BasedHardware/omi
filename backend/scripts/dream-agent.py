@@ -24,7 +24,7 @@ def main():
         print(json.dumps(dream_feedback.read_patterns(k=Caps.from_env().anonymous_k)))
         return
     if mode() == 'off':
-        parser.error('DREAM_AGENT_MODE is off')
+        parser.error('DREAM_AGENT_ENABLED is false')
     if args.seed_ref:
         if not args.uid:
             parser.error('--seed-ref requires --uid')

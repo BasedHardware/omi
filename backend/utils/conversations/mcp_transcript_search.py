@@ -19,6 +19,7 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence
 
+from models.transcript_segment import legacy_conversation_segment_id
 from utils.conversations.transcript_chunks import build_transcript_chunks
 from utils.executors import db_executor, run_blocking
 from utils.log_sanitizer import sanitize
@@ -127,11 +128,22 @@ def chat_transcript_excerpts(
             continue
         if cid not in chunks_by_id:
             conv = allowed[cid]
+            # Chunk windows depend on segment count, not text length. Adding refs
+            # here preserves indexed chunk positions and leaves embedding text unchanged.
+            segments = [
+                (
+                    {
+                        **segment,
+                        'text': f"#{segment.get('id') or legacy_conversation_segment_id(cid, index)} {segment['text']}",
+                    }
+                    if (segment.get('text') or '').strip()
+                    else segment
+                )
+                for index, segment in enumerate(conv.get('transcript_segments') or [])
+            ]
             chunks_by_id[cid] = {
                 chunk['chunk_index']: chunk['text']
-                for chunk in build_transcript_chunks(
-                    conv.get('transcript_segments') or [], conv.get('started_at') or conv.get('created_at')
-                )
+                for chunk in build_transcript_chunks(segments, conv.get('started_at') or conv.get('created_at'))
             }
         excerpt = chunks_by_id[cid].get(chunk_index)
         if excerpt:
@@ -360,6 +372,8 @@ def resolve_mcp_conversation_search_ids(
     """Search summary vectors; transcript snippets are rebuilt after hydration."""
     limit = max(1, min(int(limit or 10), 250))
     shared_vector: Optional[List[float]] = embed_query(query) if embed_query is not None else None
+    if embed_query is not None and not shared_vector:
+        return []
     vector_kw: Dict[str, Any] = {"query_vector": shared_vector} if shared_vector is not None else {}
     return query_vectors(query, uid, starts_at=starts_at, ends_at=ends_at, k=limit, **vector_kw) or []
 

@@ -4,7 +4,7 @@ from threading import Lock
 from typing import Any
 
 import os
-from google.api_core.exceptions import InvalidArgument
+from google.api_core.exceptions import Aborted, InvalidArgument
 from google.cloud import firestore
 
 from database.document_ids import document_id_from_seed
@@ -303,11 +303,29 @@ _EXPIRED_TRANSACTION_MARKER = "transaction has expired"
 
 
 def is_expired_transaction_error(error: BaseException) -> bool:
-    """True for the Firestore 400 that retires a transaction id mid-flight."""
-    return isinstance(error, InvalidArgument) and _EXPIRED_TRANSACTION_MARKER in str(error).lower()
+    """True when Firestore has retired the transaction id mid-flight.
+
+    A commit reports that as ``InvalidArgument`` 400. A streaming read
+    (``BatchGetDocuments`` / ``RunQuery``) reports the same retirement as
+    ``Aborted`` 409, raised from ``google.api_core.grpc_helpers``. The SDK
+    retries ``Aborted`` only when ``_commit`` raises it, and that retry reuses
+    the dead id, so the read-path ``Aborted`` has to be recognized here.
+    """
+    return isinstance(error, (InvalidArgument, Aborted)) and _EXPIRED_TRANSACTION_MARKER in str(error).lower()
 
 
 _DOCUMENT_SIZE_LIMIT_MARKER = "exceeds the maximum allowed size"
+
+# Google RPC codes whose rejections do not change when the same write is
+# retried: the row's size, its ACL, or the database's policy refuses the
+# operation itself, not this attempt at it.
+_PERMANENT_WRITE_CODE_MARKERS = (
+    _DOCUMENT_SIZE_LIMIT_MARKER,
+    "the request must be modified",  # failed_precondition envelope
+    "permission denied",  # permission_denied on the row or database
+    "caller does not have permission",
+    "forbidden for",  # policy refusals phrased as ``... forbidden for ...``
+)
 
 
 def is_document_size_limit_error(error: BaseException) -> bool:
@@ -318,6 +336,22 @@ def is_document_size_limit_error(error: BaseException) -> bool:
     rather than loop.
     """
     return isinstance(error, InvalidArgument) and _DOCUMENT_SIZE_LIMIT_MARKER in str(error).lower()
+
+
+def is_permanent_firestore_write_rejection(error: BaseException) -> bool:
+    """True when Firestore refused the write itself, not this attempt at it.
+
+    The document-size 400 is the volume case, but the same permanence holds for
+    a permission-denied row and for failed-precondition policy refusals: no
+    retry of the same write can succeed, so callers must move the payload to
+    storage that still accepts it (or a different row) instead of looping.
+    Transient classes — contention (``Aborted``), an expired transaction id,
+    availability faults — return False; callers keep their retry.
+    """
+    if is_document_size_limit_error(error):
+        return True
+    message = str(error).lower()
+    return any(marker in message for marker in _PERMANENT_WRITE_CODE_MARKERS[1:])
 
 
 # The SDK's ``_Transactional`` raises a bare ValueError once its own attempts are spent.
@@ -388,20 +422,33 @@ def firestore_document_kind(error: BaseException) -> str:
     return 'other'
 
 
-def run_transactional(client: Any, transactional_callable: Any, *args: Any, attempts: int = 3, **kwargs: Any) -> Any:
+def run_transactional(
+    client: Any,
+    transactional_callable: Any,
+    *args: Any,
+    attempts: int = 3,
+    initial_transaction: Any = None,
+    **kwargs: Any,
+) -> Any:
     """Run a ``@firestore.transactional`` callable, restarting it on an expired transaction.
 
     ``_Transactional.__call__`` retries contention by replaying the *same* transaction id,
-    which is exactly what cannot work once Firestore has retired that id: the commit comes
-    back ``400 The referenced transaction has expired or is no longer valid`` and nothing
-    was written. The SDK treats that as fatal, so recovery requires a brand-new transaction
-    and belongs to this boundary rather than to every caller — callers that own a live
-    WebSocket session have no way to distinguish it from a real write failure.
+    which is exactly what cannot work once Firestore has retired that id. The commit comes
+    back ``400 The referenced transaction has expired or is no longer valid``; a streaming
+    read comes back ``409`` ``Aborted`` with the same message, and the SDK does not retry
+    that read. Nothing was written. Recovery requires a brand-new transaction and belongs
+    to this boundary rather than to every caller — callers that own a live WebSocket
+    session have no way to distinguish it from a real write failure.
+    ``initial_transaction`` lets an outer contention budget own the first transaction;
+    expiry still replaces it with a new transaction under the existing attempt limit.
     """
     for attempt in range(1, max(1, attempts) + 1):
         try:
-            return transactional_callable(client.transaction(), *args, **kwargs)
-        except InvalidArgument as error:
+            transaction = (
+                initial_transaction if attempt == 1 and initial_transaction is not None else client.transaction()
+            )
+            return transactional_callable(transaction, *args, **kwargs)
+        except (InvalidArgument, Aborted) as error:
             if attempt >= attempts or not is_expired_transaction_error(error):
                 raise
             logger.warning('Firestore transaction expired, restarting attempt=%d/%d', attempt, attempts)

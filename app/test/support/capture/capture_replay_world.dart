@@ -17,6 +17,8 @@ import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/capture/capture_controller.dart';
+import 'package:omi/services/capture/capture_wedge_monitor.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/scenarios/native_event_vector.dart';
@@ -292,6 +294,9 @@ class CaptureReplayWorld {
 
   /// Runs when the controller asks the server to process the in-progress conversation.
   void Function()? onProcessInProgress;
+
+  /// When set, Process Now returns this outcome instead of a transport miss.
+  Future<InProgressProcessOutcome> Function()? processOutcome;
   int tokenRefreshCalls = 0;
   final List<String> timeline = [];
 
@@ -307,6 +312,7 @@ class CaptureReplayWorld {
   CaptureReplayWorld({required this.tempDir, required this.clock, required this.uploads, required this.pendantCodec});
 
   CalendarCaptureGapMonitor? calendarGapMonitor;
+  CaptureWedgeMonitor? captureWedgeMonitor;
 
   bool _disposed = false;
   bool _controllerDisposed = false;
@@ -320,6 +326,7 @@ class CaptureReplayWorld {
     bool supportsBatch = true,
     BleAudioCodec pendantCodec = BleAudioCodec.pcm16,
     CalendarCaptureGapMonitor? calendarGapMonitor,
+    CaptureWedgeMonitor? captureWedgeMonitor,
   }) async {
     TestWidgetsFlutterBinding.ensureInitialized();
     final start = startTime ?? defaultStart;
@@ -330,6 +337,7 @@ class CaptureReplayWorld {
       pendantCodec: pendantCodec,
     );
     world.calendarGapMonitor = calendarGapMonitor;
+    world.captureWedgeMonitor = captureWedgeMonitor;
     world.connected = initiallyConnected;
     await world._bootGeneration(supportsBatch: supportsBatch, initialPrefs: initialPrefs, firstBoot: true);
     return world;
@@ -393,6 +401,7 @@ class CaptureReplayWorld {
     _controller = _ReplayCaptureController(
       world: this,
       calendarGapMonitor: calendarGapMonitor,
+      captureWedgeMonitor: captureWedgeMonitor,
       walService: wal,
       phoneMicRecorder: mic,
       phoneMicBatchSupported: supportsBatch,
@@ -413,10 +422,12 @@ class CaptureReplayWorld {
       inProgressConversationLoader: () async {},
       deviceConnectionLoader: (deviceId) async => deviceConnection,
       omiCallState: omiCall,
-      processInProgressConversation: () async {
+      processInProgressOutcome: () async {
         processCalls++;
         onProcessInProgress?.call();
-        return null;
+        final custom = processOutcome;
+        if (custom != null) return custom();
+        return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
       },
       audioCodecLoader: (deviceId) async => pendantCodec,
       microphonePermissionRequester: () async => allowMic,
@@ -608,9 +619,10 @@ class _ReplayCaptureController extends CaptureController {
     super.microphonePermissionRequester,
     super.conversationLocationCapture,
     super.deviceConnectionLoader,
-    super.processInProgressConversation,
+    super.processInProgressOutcome,
     super.omiCallState,
     super.calendarGapMonitor,
+    super.captureWedgeMonitor,
   });
 
   @override

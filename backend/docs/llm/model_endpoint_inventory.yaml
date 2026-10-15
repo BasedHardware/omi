@@ -143,7 +143,6 @@ surfaces:
   - utils/llm/working_observations.py::feature:memory_l1
   - utils/memory/belief_backfill.py::feature:<dynamic>
   - utils/memory/belief_evidence.py::feature:memory_conflict
-  - utils/memory/canonical_consolidation.py::feature:memory_conflict
   - utils/retrieval/graph.py::feature:chat_graph
   - utils/screen_frames/judge.py::feature:<dynamic>
   - utils/translation_core/providers.py::feature:translation
@@ -168,6 +167,7 @@ surfaces:
   fallback_on_deny: n/a_allowed
   call_sites:
   - utils/retrieval/agentic.py::feature:chat_agent
+  - utils/retrieval/shaped_chat.py::feature:chat_agent
   - utils/messaging/history.py::feature:chat_graph
   current_provider_model: gateway lane omi:auto:chat-agent (openai/gpt-x-luna); direct OpenAI only when OMI_LLM_CHAT_AGENT_ROUTE=direct
   request_shape: streaming OpenAI chat-completions with function tools; independent tool_use blocks run concurrently

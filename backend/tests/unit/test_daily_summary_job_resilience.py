@@ -9,6 +9,13 @@ seams (fake Redis, injected clock, injected per-user worker).
 """
 
 import asyncio
+import functools
+import json
+import logging
+import re
+import subprocess
+import sys
+import tempfile
 import threading
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -17,6 +24,7 @@ from types import ModuleType, SimpleNamespace
 from typing import Any, Dict, Iterator, List, Tuple
 
 import pytest
+import yaml
 
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
@@ -578,7 +586,6 @@ def test_scheduled_send_carries_the_memory_review_card() -> None:
     ``memories_learned``, so the parameter kept its None default, the summary's
     list was always empty, and the block was never attached on the only path real
     users receive. The card was dead in production as shipped."""
-    import json
 
     with _loaded_send_path([_MEMORY]) as (notifications, sends, seen):
         notifications._send_summary_notification(('uid-00', ['token-00']))
@@ -771,64 +778,117 @@ def test_saved_half_hour_zone_cohort_survives_rollover_inside_the_same_utc_hour(
         assert served == [('tail', original)]
 
 
+def _final_tick_failure_job(notifications, notification_db, failure_kind, failures):
+    """Twelve hour-11 recipients at 11:45 UTC; ``uid-00`` fails ``failures`` times."""
+    original = datetime(2026, 10, 3, 11, 45, tzinfo=timezone.utc)
+    clock = {'now': original}
+
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            now = clock['now']
+            return now.astimezone(tz) if tz else now.replace(tzinfo=None)
+
+    notifications.datetime = FixedDateTime
+    notifications.pytz = SimpleNamespace(utc=timezone.utc, all_timezones=['UTC'], timezone=lambda name: timezone.utc)
+    users = [(f'uid-{i:02}', [], 'UTC') for i in range(12)]
+    reads: List[int] = []
+
+    def selector(zones, hour):
+        reads.append(hour)
+        return users if hour == 11 else []
+
+    notification_db.get_users_for_daily_summary_indexed = selector
+    attempts: List[Tuple[Any, ...]] = []
+    failure = {
+        'generation': RuntimeError('generation failed'),
+        'delivery': notifications.DailySummaryDeliveryError('delivery failed'),
+        'timeout': TimeoutError('worker timed out'),
+    }[failure_kind]
+    remaining = {'failures': failures}
+
+    def worker(user):
+        attempts.append((user[0], notifications._display_date_for_now(user[2], user[3]), user[4], user[5]))
+        if user[0] == 'uid-00' and remaining['failures']:
+            remaining['failures'] -= 1
+            raise failure
+
+    notifications._send_summary_notification = worker
+    return original, clock, reads, attempts
+
+
 @pytest.mark.parametrize('failure_kind', ['generation', 'delivery', 'timeout'])
-def test_final_tick_failure_is_retained_across_noon_until_retry_succeeds(failure_kind) -> None:
+def test_final_tick_failure_is_retried_alone_across_noon(failure_kind) -> None:
     with _loaded_job() as (notifications, notification_db, redis, _fallbacks):
-        original = datetime(2026, 10, 3, 11, 45, tzinfo=timezone.utc)
-        now = original
-
-        class FixedDateTime(datetime):
-            @classmethod
-            def now(cls, tz=None):
-                return now.astimezone(tz) if tz else now.replace(tzinfo=None)
-
-        notifications.datetime = FixedDateTime
-        notifications.pytz = SimpleNamespace(
-            utc=timezone.utc, all_timezones=['UTC'], timezone=lambda name: timezone.utc
+        original, clock, reads, attempts = _final_tick_failure_job(
+            notifications, notification_db, failure_kind, failures=1
         )
-        users = [(f'uid-{i:02}', [], 'UTC') for i in range(12)]
-        reads = []
 
-        def selector(zones, hour):
-            reads.append(hour)
-            return users if hour == 11 else []
-
-        notification_db.get_users_for_daily_summary_indexed = selector
-        attempts = []
-        failure = {
-            'generation': RuntimeError('generation failed'),
-            'delivery': notifications.DailySummaryDeliveryError('delivery failed'),
-            'timeout': TimeoutError('worker timed out'),
-        }[failure_kind]
-        failures_remaining = 2
-
-        def worker(user):
-            nonlocal failures_remaining
-            attempts.append((user[0], notifications._display_date_for_now(user[2], user[3]), user[4], user[5]))
-            if user[0] == 'uid-00' and failures_remaining:
-                failures_remaining -= 1
-                raise failure
-
-        notifications._send_summary_notification = worker
-        for tick in range(2):
-            now = original + timedelta(minutes=15 * tick)
-            outcome = asyncio.run(notifications.send_daily_summary_notification())
-            assert not outcome.ok and not outcome.complete
-            saved = notifications.summary_budget.read_job_cursor(notifications.summary_budget.job_cursor_key())
-            assert saved['uid'] == 'uid-00', 'later batch progress must not overwrite the failed recipient'
-            assert saved['retry_recipients'] == {'uid-00': failure_kind in ('delivery', 'timeout')}
-            assert notifications.summary_budget.cursor_cohort_utc(saved) == original
-
-        now = original + timedelta(minutes=30)
         outcome = asyncio.run(notifications.send_daily_summary_notification())
+        assert not outcome.ok and not outcome.complete
+        saved = notifications.summary_budget.read_job_cursor(notifications.summary_budget.job_cursor_key())
+        assert saved['uid'] == 'uid-00', 'later batch progress must not overwrite the failed recipient'
+        assert saved['retry_recipients'] == {'uid-00': failure_kind in ('delivery', 'timeout')}
+        assert saved['retry_only'] is True, 'the cohort was fully walked; only the failure is owed'
+        assert notifications.summary_budget.cursor_cohort_utc(saved) == original
+        first_pass = len(attempts)
+
+        clock['now'] = original + timedelta(minutes=15)
+        outcome = asyncio.run(notifications.send_daily_summary_notification())
+
         assert outcome.ok and outcome.complete
-        assert reads == [11, 11, 11, 12]
+        assert reads == [11, 11, 12], 'the current cohort runs in the same tick as the retry'
         assert redis.store == {}
-        retries = [attempt for attempt in attempts if attempt[0] == 'uid-00']
-        assert len(retries) == 3
-        assert {attempt[1] for attempt in retries} == {original.date() - timedelta(days=1)}
-        assert retries[1][2:] == (failure_kind in ('delivery', 'timeout'), True)
-        assert {'uid-08', 'uid-11'} <= {attempt[0] for attempt in attempts}, 'healthy later batches still run'
+        retry_pass = attempts[first_pass:]
+        assert [attempt[0] for attempt in retry_pass] == ['uid-00'], 'served recipients are not re-walked'
+        assert retry_pass[0][1] == original.date() - timedelta(days=1)
+        assert retry_pass[0][2:] == (failure_kind in ('delivery', 'timeout'), True)
+
+
+@pytest.mark.parametrize('failure_kind', ['generation', 'delivery', 'timeout'])
+def test_a_recipient_that_fails_its_retry_does_not_pin_the_cohort(failure_kind, caplog) -> None:
+    """One dead recipient (no deliverable device, say) used to keep the cohort
+    open until the 2h staleness cutoff, starving every current cohort behind it."""
+    with _loaded_job() as (notifications, notification_db, redis, _fallbacks):
+        original, clock, reads, attempts = _final_tick_failure_job(
+            notifications, notification_db, failure_kind, failures=99
+        )
+
+        asyncio.run(notifications.send_daily_summary_notification())
+        clock['now'] = original + timedelta(minutes=15)
+        with caplog.at_level(logging.WARNING):
+            outcome = asyncio.run(notifications.send_daily_summary_notification())
+
+        assert outcome.ok and outcome.complete
+        assert reads == [11, 11, 12]
+        assert redis.store == {}
+        assert [attempt[0] for attempt in attempts].count('uid-00') == 2
+        assert 'daily_summary_retry_exhausted uid=uid-00' in caplog.text
+
+
+def test_a_failure_in_an_incomplete_walk_resumes_the_whole_cohort() -> None:
+    """Retry-only resumption is for cohorts that were fully walked. A pass that
+    also left recipients unreached must keep its full rotated resume."""
+    with _loaded_job() as (notifications, notification_db, redis, _fallbacks):
+        notifications._get_timezones_grouped_by_hour = lambda *_args: {22: [f'tz-{i:02d}' for i in range(40)]}
+
+        def read_users(timezones: List[str], _target_hour: int) -> List[Any]:
+            if 'tz-30' in timezones:
+                raise RuntimeError('firestore unavailable')
+            return _users(3)
+
+        def worker(user: Tuple[Any, ...]) -> None:
+            if user[0] == 'uid-01':
+                raise RuntimeError('generation failed')
+
+        notification_db.get_users_for_daily_summary_indexed = read_users
+        notifications._send_summary_notification = worker
+
+        asyncio.run(notifications.send_daily_summary_notification())
+
+        saved = notifications.summary_budget.read_job_cursor(notifications.summary_budget.job_cursor_key())
+        assert saved['retry_recipients'] == {'uid-01': False}
+        assert 'retry_only' not in saved
 
 
 def test_recipient_metrics_and_appended_summary_fields(caplog) -> None:
@@ -887,6 +947,85 @@ def test_current_day_generation_metric_excludes_backfill(created, retry, expecte
         assert {
             outcome: metrics.RECIPIENTS.labels(outcome=outcome)._value.get() - before[outcome] for outcome in before
         } == {outcome: int(outcome == expected) for outcome in before}
+
+
+@functools.lru_cache(maxsize=1)
+def _recap_log_metric_specs() -> Dict[str, Dict[str, Any]]:
+    """Execute the workflow's embedded LogMetric builder; return {metric name: LogMetric body}."""
+    import json
+
+    workflow = yaml.load(
+        (BACKEND_DIR.parent / '.github/workflows/gcp_notifications_job.yml').read_text(), Loader=yaml.BaseLoader
+    )
+    step = next(
+        step
+        for step in workflow['jobs']['deploy']['steps']
+        if step['name'] == 'Provision daily recap outcome log metrics'
+    )
+    builder = step['run'].split("<<'PY_LOG_METRICS'\n", 1)[1].split('\nPY_LOG_METRICS', 1)[0]
+    with tempfile.TemporaryDirectory() as target:
+        subprocess.run([sys.executable, '-', target], input=builder, text=True, check=True)
+        return {path.stem: json.loads(path.read_text()) for path in Path(target).glob('*.json')}
+
+
+def _extract(extractor: str, payload: str) -> str:
+    """Apply a Cloud Logging REGEXP_EXTRACT(textPayload, "...") extractor the way Logging does."""
+    match = re.fullmatch(r'REGEXP_EXTRACT\(textPayload, "(.+)"\)', extractor)
+    assert match, extractor
+    found = re.search(match.group(1), payload)
+    return found.group(1) if found else ''
+
+
+def _text_payload(record: Any) -> str:
+    # logging.basicConfig in modal/job.py writes LEVEL:logger:message to stderr -> textPayload.
+    return f'{record.levelname}:utils.other.notifications:{record.getMessage()}'
+
+
+@pytest.mark.parametrize('created,retry', [(True, False), (True, True), (False, False)])
+def test_generated_log_line_feeds_the_recap_log_metric(caplog, created, retry) -> None:
+    """The durable core-feature counter counts exactly current-day generations.
+
+    The job's Prometheus counters never reached Cloud Monitoring (the sidecar's
+    exports were rejected), so this log line is the outcome signal. A filter
+    token or extractor that drifts from the emitted text is the same outage as no
+    signal at all.
+    """
+    spec = _recap_log_metric_specs()['daily_summary_recap_generated']
+    token = spec['filter'].split('textPayload:"', 1)[1].rstrip('"')
+    with _loaded_job() as (notifications, _db, _redis, _fallbacks):
+        notifications._generate_and_store_daily_summary = lambda *_a, **_k: (
+            {'id': 'recap', 'notification_delivery_completed': True},
+            created,
+            None,
+        )
+        notifications._backfill_recent_daily_summaries = lambda *_a: None
+        with caplog.at_level('INFO'):
+            notifications._send_summary_notification(('uid-7', [], 'UTC', None, False, retry))
+    payloads = [_text_payload(r) for r in caplog.records if token in _text_payload(r)]
+    assert len(payloads) == int(created)
+    for payload in payloads:
+        assert _extract(spec['labelExtractors']['retry'], payload) == str(retry)
+
+
+def test_failed_log_line_feeds_the_recap_failure_log_metric(caplog) -> None:
+    spec = _recap_log_metric_specs()['daily_summary_user_failed']
+    token = spec['filter'].split('textPayload:"', 1)[1].rstrip('"')
+    with _loaded_job() as (notifications, _db, _redis, _fallbacks):
+
+        class APIConnectionError(Exception):
+            pass
+
+        def worker(user):
+            if user[0] == 'uid-01':
+                raise APIConnectionError('Connection error.')
+
+        notifications._send_summary_notification = worker
+        with caplog.at_level('INFO'):
+            asyncio.run(notifications._send_bulk_summary_notification(_users(3), target_hour=22))
+    payloads = [_text_payload(r) for r in caplog.records if token in _text_payload(r)]
+    assert len(payloads) == 1
+    assert _extract(spec['labelExtractors']['reason'], payloads[0]) == 'generation_error'
+    assert _extract(spec['labelExtractors']['error_type'], payloads[0]) == 'APIConnectionError'
 
 
 def test_cursor_age_metric_retains_abandonment_signature_then_resets_on_fresh_tick() -> None:

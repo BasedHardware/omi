@@ -226,3 +226,20 @@ def marked_prefix_request(namespace: str, stable_text: str, volatile_text: str) 
         return None, None
     parts = content_parts_with_breakpoint(stable_text, volatile_text)
     return prefix_cache_key(namespace, stable_text), [{'role': 'user', 'content': parts}]
+
+
+def chat_cache_options():
+    """Chat TTL config is constrained to the gateway/provider's supported contract."""
+    import os
+
+    ttl = os.getenv('OMI_CHAT_PROMPT_CACHE_TTL', '30m')
+    if ttl != '30m':
+        import logging
+        from utils.observability.fallback import record_fallback
+
+        logging.getLogger(__name__).warning('Unsupported chat cache TTL; explicit caching disabled')
+        record_fallback(
+            component='other', from_mode='explicit_cache', to_mode='none', reason='other', outcome='degraded'
+        )
+        return None
+    return {'mode': 'explicit', 'ttl': ttl}

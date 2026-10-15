@@ -4,10 +4,19 @@ import {
   getOmiInstallLink,
   getOmiPlatformDeepLink,
 } from '@/src/lib/conversation-share-platform-link.mjs';
-import { isItemLinkId, itemLinkWebHandoff } from '@/src/lib/item-link.mjs';
+import {
+  isItemLinkId,
+  isMacDesktopUserAgent,
+  itemLinkWebHandoff,
+  itemListMacDeepLink,
+  itemListQuery,
+  itemListWebHandoff,
+} from '@/src/lib/item-link.mjs';
+import { MacOpenButton } from './mac-open-button';
 
 const APP_STORE = 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163';
 const PLAY_STORE = 'https://play.google.com/store/apps/details?id=com.friend.ios';
+const IPAD_USER_AGENT = 'iPad';
 
 /**
  * What h.omi.me/<kind>/<id> shows when the Omi app did not open the link.
@@ -24,10 +33,55 @@ export async function ItemLinkFallback({
   if (!isItemLinkId(id)) notFound();
 
   const userAgent = (await headers()).get('user-agent') || '';
+  return (
+    <FallbackView
+      userAgent={userAgent}
+      appPath={`${kind}/${id}`}
+      webHandoff={itemLinkWebHandoff(kind, id)}
+    />
+  );
+}
+
+/**
+ * What h.omi.me/items?… shows when no Omi app opened the link. Same rules as
+ * a single item: the items are never read; only their kinds and ids, which
+ * are already in the URL, go into the app and sign-in links. On a Mac the
+ * primary action opens Omi for Mac.
+ */
+export async function ItemListLinkFallback({
+  items,
+}: {
+  items: { kind: 'conversation' | 'task' | 'memory'; id: string }[];
+}) {
+  const userAgent = (await headers()).get('user-agent') || '';
+  return (
+    <FallbackView
+      userAgent={userAgent}
+      appPath={items.length ? `items?${itemListQuery(items)}` : 'items'}
+      webHandoff={itemListWebHandoff(items)}
+      macDeepLink={
+        items.length > 0 && isMacDesktopUserAgent(userAgent)
+          ? itemListMacDeepLink(items)
+          : undefined
+      }
+    />
+  );
+}
+
+function FallbackView({
+  userAgent,
+  appPath,
+  webHandoff,
+  macDeepLink,
+}: {
+  userAgent: string;
+  appPath: string;
+  webHandoff: string;
+  macDeepLink?: string;
+}) {
   const isMobile = /android|iphone|ipad|ipod/i.test(userAgent);
-  const openInApp = getOmiPlatformDeepLink(userAgent, `${kind}/${id}`);
+  const openInApp = getOmiPlatformDeepLink(userAgent, appPath);
   const install = getOmiInstallLink(userAgent);
-  const webHandoff = itemLinkWebHandoff(kind, id);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[#0B0F17] px-4 py-24 text-center">
@@ -39,7 +93,14 @@ export async function ItemLinkFallback({
       </p>
 
       <div className="flex w-full max-w-xs flex-col gap-3">
-        {isMobile ? (
+        {macDeepLink ? (
+          <MacOpenButton
+            href={macDeepLink}
+            // iPadOS Safari reports a Mac user agent; on a touch screen open the iOS app.
+            touchHref={getOmiPlatformDeepLink(IPAD_USER_AGENT, appPath)}
+            touchInstallHref={getOmiInstallLink(IPAD_USER_AGENT)}
+          />
+        ) : isMobile ? (
           <>
             <a
               href={openInApp}

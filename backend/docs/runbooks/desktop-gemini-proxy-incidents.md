@@ -53,7 +53,7 @@ Legacy Rust evidence for pre-Python revisions:
 ```text
 resource.type="cloud_run_revision"
 resource.labels.service_name="omi-desktop-backend"
-textPayload:"gemini_provider_request"
+(textPayload:"gemini_provider_request" OR jsonPayload.message:"gemini_provider_request")
 timestamp>="-30m"
 ```
 

@@ -11,13 +11,12 @@ import logging
 import asyncio
 import json
 import uuid
-import re
 import base64
 from datetime import datetime, timezone
 from typing import Optional
 from utils.executors import db_executor, llm_executor, run_blocking
 from utils.messaging.receipt_presentation import app_receipt_text
-from utils.messaging.adapters.rendering import CITATION_PATTERN
+from utils.chat_citations import resolve_conversation_citations
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import iterate_in_threadpool
@@ -429,16 +428,7 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
                     type(evidence_exc).__name__,
                 )
 
-        # cited extraction
-        citation_pattern = CITATION_PATTERN
-        cited_conversation_idxs = {
-            int(index)
-            for marker in re.finditer(citation_pattern, response)
-            for index in re.findall(r'\d+', marker.group(0))
-        }
-        if cited_conversation_idxs:
-            response = re.sub(citation_pattern, '', response)
-        memories = [memories[i - 1] for i in cited_conversation_idxs if 0 < i and i <= len(memories)]
+        response, memories = resolve_conversation_citations(response, memories)
 
         memories_id = extract_memory_ids(memories) if memories else []
         receipt_blocks = [receipt.content_block for receipt in callback_data.get('action_receipts', ())]
@@ -456,6 +446,8 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
                     'kind': 'conversation',
                     'id': memory['id'],
                     'title': memory.get('structured', {}).get('title', 'Conversation'),
+                    # The answer cited these by number, so they link even when prose paraphrases the title.
+                    'cited': True,
                 }
                 for memory in memories
                 if memory.get('id')
@@ -502,7 +494,14 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
                 from utils.messaging.undo import UndoStore
 
                 UndoStore().bind_message(uid, receipt.id, ai_message.id)
-        ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
+        ai_message.memories = MessageConversation.safe_build_many(
+            memories if len(memories) < 5 else memories[:5],
+            on_error=lambda member, exc: logger.warning(
+                'Skipping malformed memory conversation %s: %s',
+                member.get('id') if isinstance(member, dict) else getattr(member, 'id', None),
+                type(exc).__name__,
+            ),
+        )
         usage_app_id = app_id_from_app or compat_app_id
         if usage_app_id and runtime is None:
             try:
