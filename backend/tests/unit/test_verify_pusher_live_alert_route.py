@@ -746,3 +746,82 @@ def test_development_fleet_rejects_unprotected_keep_last(verifier, monkeypatch):
         'https://monitor.omiapi.com', 'dummy-token', 1, 'gated', alert_set='live-stt'
     )
     assert any(uid in failure and 'execErrState' in failure for failure in failures)
+
+
+@pytest.mark.parametrize('phase', ['prepublish', 'postrollout'])
+@pytest.mark.parametrize(
+    'target,error_state,success',
+    [
+        ('https://monitor.omiapi.com', 'Error', True),
+        ('https://monitor.omiapi.com', 'KeepLast', False),
+        ('https://monitor.omi.me', 'KeepLast', True),
+        ('https://monitor.omi.me', 'Error', False),
+        ('https://MONITOR.OMI.ME/', 'KeepLast', True),
+        ('https://monitor.omi.me/', 'Error', False),
+    ],
+)
+def test_pusher_cli_uses_target_error_policy(
+    verifier, monkeypatch, tmp_path, capsys, phase, target, error_state, success
+):
+    rules, datasource, up, metrics, contacts = _inputs(verifier)
+    assert len(rules) == 7
+    for rule in rules.values():
+        rule['execErrState'] = error_state
+
+    def read(base, path, _token, **kwargs):
+        assert base == target.rstrip('/').lower()
+        if path.startswith(verifier.ALERT_RULE_LIST_PATH + '/'):
+            return rules[path.rsplit('/', 1)[-1]]
+        if path.endswith('/health'):
+            return datasource
+        if path.endswith('/contact-points'):
+            return contacts
+        return up if 'min%28up' in path else metrics
+
+    monkeypatch.setitem(verifier._run_pusher_gate.__globals__, '_request_json', read)
+    monkeypatch.setattr(
+        'sys.argv',
+        [
+            'verify_pusher_live_alert_route.py',
+            '--grafana-url',
+            target,
+            '--token-file',
+            str(_token_file(tmp_path)),
+            '--phase',
+            phase,
+        ],
+    )
+    assert verifier.main() == (0 if success else 1)
+    output = capsys.readouterr().out
+    if not success:
+        assert sum('execErrState does not match' in line for line in output.splitlines()) == 7
+
+
+def test_development_pusher_policy_changes_only_error_state_and_is_detached(verifier):
+    canonical = verifier._committed_rules()
+    development = verifier._committed_rules(production=False)
+    for uid, expected in canonical.items():
+        assert expected['execErrState'] == 'KeepLast'
+        assert development[uid] == {**expected, 'execErrState': 'Error'}
+    uid = verifier.RULE_UIDS[0]
+    development[uid]['labels']['alert_identity'] = 'changed'
+    assert verifier._committed_rules() == canonical
+
+
+def test_development_pusher_still_rejects_unrelated_definition_drift(verifier):
+    rules, datasource, up, metrics, contacts = _inputs(verifier)
+    for rule in rules.values():
+        rule['execErrState'] = 'Error'
+    uid = verifier.RULE_UIDS[0]
+    rules[uid]['condition'] = 'wrong'
+    errors = verifier.validate_live_route(
+        rules, datasource, up, metrics, contacts, phase='postrollout', production=False
+    )
+    assert errors == [f'live alert rule {uid} condition does not match the committed rule']
+
+
+@pytest.mark.parametrize(
+    'url', ['https://user@monitor.omi.me', 'https://monitor.omi.me:443', 'https://monitor.omi.me/x']
+)
+def test_origin_policy_rejects_credentials_ports_and_paths(verifier, url):
+    assert not verifier._approved_grafana_url(url)

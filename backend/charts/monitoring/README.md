@@ -107,9 +107,11 @@ local validation, not a live acceptance receipt.
 The existing `grafana_dashboard_provisioning.yml` validates dashboard JSON and
 split/combined alert equality. Main updates provision development dashboards;
 production requires explicit `environment=prod` dispatch from main. The job binds
-Environment `prod` or `development`, so each Grafana instance receives its own
-`MONITOR_GRAFANA_TOKEN`. A revoked token still needs an operator rotation: this
-change cannot repair the HTTP401 by itself. Never use the TV `GRAFANA_TOKEN`.
+the protected `prod` Environment or `development`; production uses its existing
+`MONITOR_GRAFANA_TOKEN`, while development may inherit the repository's dev token.
+PR #21686 restored legacy dashboard provisioning through monitoring-specific
+Environments; the broader alert writer requires protected production authority
+and a permission probe. Rotate only failed credentials. Never use TV `GRAFANA_TOKEN`.
 
 The production path upserts `alert-rules.json` by stable UID, backs up live rules
 before writes, preserves UI/API provenance and notification timing, retains
