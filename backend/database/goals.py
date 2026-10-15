@@ -88,6 +88,13 @@ class GoalConflictError(GoalStoreError):
     pass
 
 
+class GoalValidationError(GoalStoreError):
+    """Request input rejected at the store seam (e.g. an alias merge that makes
+    the metric contradict itself). Maps to 422 at the route, not 500."""
+
+    pass
+
+
 def _get_db(firestore_client: Any = None) -> Any:
     if firestore_client is not None:
         return firestore_client
@@ -572,6 +579,19 @@ def create_goal_idempotent(
     return apply(transaction)
 
 
+def _metric_validation_message(exc: ValidationError) -> str:
+    """Client-facing detail for a metric contradiction raised at the merge."""
+    errors = exc.errors()
+    if errors:
+        msg = errors[0].get('msg') or ''
+        # Pydantic prefixes custom ValueError messages with 'Value error, '.
+        if msg.startswith('Value error, '):
+            msg = msg[len('Value error, ') :]
+        if msg:
+            return msg
+    return 'Invalid goal metric'
+
+
 def update_goal(
     uid: str,
     goal_id: str,
@@ -596,14 +616,21 @@ def update_goal(
         metric = GoalMetric.model_validate(metric_value) if metric_value is not None else None
     elif any(key in patch for key in legacy_metric_keys):
         current_metric = _metric_from_storage(current) or GoalMetric(type=GoalType.scale, current=0, target=0)
-        metric = GoalMetric(
-            type=GoalType(patch.get('goal_type', current_metric.type.value)),
-            current=float(patch.get('current_value', current_metric.current)),
-            target=float(patch.get('target_value', current_metric.target)),
-            min=patch.get('min_value', current_metric.min),
-            max=patch.get('max_value', current_metric.max),
-            unit=patch.get('unit', current_metric.unit),
-        )
+        try:
+            metric = GoalMetric(
+                type=GoalType(patch.get('goal_type', current_metric.type.value)),
+                current=float(patch.get('current_value', current_metric.current)),
+                target=float(patch.get('target_value', current_metric.target)),
+                min=patch.get('min_value', current_metric.min),
+                max=patch.get('max_value', current_metric.max),
+                unit=patch.get('unit', current_metric.unit),
+            )
+        except ValidationError as exc:
+            # A released alias patch (e.g. min_value=30) is validated in
+            # isolation by the request model, so the contradiction only
+            # surfaces when merged with the stored metric. Surface it as
+            # request input, not a server fault.
+            raise GoalValidationError(_metric_validation_message(exc)) from exc
     else:
         metric = _metric_from_storage(current)
     if 'metric' in patch or clear_metric or any(key in patch for key in legacy_metric_keys):

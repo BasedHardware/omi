@@ -98,14 +98,9 @@ class LocalRecordingsProvider extends ChangeNotifier {
     BleBridge.instance.addBatchRecordingFinalizedListener(_onRecordingFinalized);
     _jobs = _loadJobs();
     // Trigger (a): auto-upload offline-fallback recordings once the initial scan
-    // is in. Trigger (b): whenever connectivity is (re)gained.
-    refresh().then((_) {
-      _maybeAutoUpload();
-      if (_ownedJobs().isNotEmpty) {
-        _startReconcileTimer();
-        _reconcile();
-      }
-    });
+    // is in (_afterFirstPublishedScan — a refresh started meanwhile may supersede
+    // this one). Trigger (b): whenever connectivity is (re)gained.
+    refresh();
     _connectivitySub = ConnectivityService().onConnectionChange.listen((connected) {
       if (connected) _maybeAutoUpload();
     });
@@ -140,30 +135,42 @@ class LocalRecordingsProvider extends ChangeNotifier {
     return LocalRecordingState.pending;
   }
 
+  int _scanGeneration = 0;
+
   /// Rescan the recordings directory and rebuild [recordings]. Cheap and
   /// idempotent — call it on app foreground, after a BLE disconnect, etc.
+  ///
+  /// The listing is async, so overlapping scans can finish out of order; only
+  /// the newest scan publishes its results or rewrites the owners file.
   Future<void> refresh() async {
+    final generation = ++_scanGeneration;
     _isLoading = true;
     notifyListeners();
     try {
       final dir = await _dir();
       if (dir == null || !await dir.exists()) {
-        _recordings = [];
+        if (generation == _scanGeneration) _recordings = [];
         return;
       }
       final uid = SharedPreferencesUtil().uid;
       final ownersFile = File('${dir.path}/$_ownersFileName');
-      final owners = _readOwners(ownersFile);
+      final owners = await _readOwners(ownersFile);
       if (owners == null) {
-        _recordings = [];
-        _ownedNames = {};
+        if (generation == _scanGeneration) {
+          _recordings = [];
+          _ownedNames = {};
+        }
         return;
       }
       var ownersChanged = false;
       final list = <LocalRecording>[];
       final seen = <String>{};
       final onDisk = <String>{};
-      for (final entity in dir.listSync().whereType<File>()) {
+      // This directory also holds every offline-sync WAL file, so it can have
+      // thousands of entries; list it without blocking the UI isolate (refresh
+      // runs on every app resume).
+      final files = await dir.list().where((entity) => entity is File).cast<File>().toList();
+      for (final entity in files) {
         final name = entity.path.split('/').last;
         // Only batch recordings (audio_omibatch* — includes the omibatchlimitless
         // marker) — never offline-sync WAL flushes, which share this directory and
@@ -188,9 +195,13 @@ class LocalRecordingsProvider extends ChangeNotifier {
         );
         if (rec != null) list.add(rec);
       }
+      bool current() => generation == _scanGeneration;
+      if (!current()) return;
       final ownerCount = owners.length;
       owners.removeWhere((name, _) => !onDisk.contains(name));
-      if (ownersChanged || owners.length != ownerCount) await _writeOwners(ownersFile, owners);
+      if (ownersChanged || owners.length != ownerCount) await _writeOwners(ownersFile, owners, stillCurrent: current);
+      // A newer scan may have started during the owners write.
+      if (!current()) return;
       list.sort((a, b) => b.timerStart.compareTo(a.timerStart));
       _recordings = list;
       _ownedNames = seen;
@@ -198,11 +209,29 @@ class LocalRecordingsProvider extends ChangeNotifier {
     } catch (e) {
       Logger.error('LocalRecordings: scan failed: $e');
     } finally {
-      _isLoading = false;
+      if (generation == _scanGeneration) _isLoading = false;
       // Resume polling if recordings are still awaiting transcription (e.g. the
       // timer was dropped while backgrounded and we just resumed).
       if (_ownedJobs().isNotEmpty) _startReconcileTimer();
-      if (!_disposed) notifyListeners();
+      if (!_disposed && generation == _scanGeneration) {
+        notifyListeners();
+        if (!_firstScanPublished) {
+          _firstScanPublished = true;
+          _afterFirstPublishedScan();
+        }
+      }
+    }
+  }
+
+  bool _firstScanPublished = false;
+
+  /// Runs once, after the first scan that was not superseded, so it sees the
+  /// recordings that scan published.
+  void _afterFirstPublishedScan() {
+    _maybeAutoUpload();
+    if (_ownedJobs().isNotEmpty) {
+      _startReconcileTimer();
+      _reconcile();
     }
   }
 
@@ -576,7 +605,9 @@ class LocalRecordingsProvider extends ChangeNotifier {
 
   // ───────────────────────── sidecar ─────────────────────────
 
-  Future<void> _writeOwners(File file, Map<String, String> owners) async {
+  /// [stillCurrent] is checked right before the rename so a superseded scan
+  /// never replaces the owners file a newer scan wrote.
+  Future<void> _writeOwners(File file, Map<String, String> owners, {bool Function()? stillCurrent}) async {
     final temp = File('${file.path}.${DateTime.now().microsecondsSinceEpoch}.tmp');
     final handle = await temp.open(mode: FileMode.write);
     try {
@@ -585,13 +616,17 @@ class LocalRecordingsProvider extends ChangeNotifier {
     } finally {
       await handle.close();
     }
+    if (stillCurrent != null && !stillCurrent()) {
+      await temp.delete();
+      return;
+    }
     await temp.rename(file.path);
   }
 
-  Map<String, String>? _readOwners(File file) {
+  Future<Map<String, String>?> _readOwners(File file) async {
     try {
-      if (!file.existsSync()) return {};
-      final decoded = jsonDecode(file.readAsStringSync());
+      if (!await file.exists()) return {};
+      final decoded = jsonDecode(await file.readAsString());
       if (decoded is! Map<String, dynamic>) return null;
       final owners = <String, String>{};
       for (final entry in decoded.entries) {

@@ -230,7 +230,7 @@ async def _post_dev_webhook(
                 last_response = response
                 last_exception = None
                 if 200 <= response.status_code < 300:
-                    logger.info(
+                    logger.debug(
                         f'{webhook_name}: delivery succeeded status={response.status_code} '
                         f'attempt={attempt_number}/{attempts} url={log_url}'
                     )

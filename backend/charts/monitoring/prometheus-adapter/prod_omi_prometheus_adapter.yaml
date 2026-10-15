@@ -129,14 +129,14 @@ rules:
           namespace:
             resource: namespace
       seriesQuery: parakeet_request_duration_seconds_bucket{namespace!=""}
-    - metricsQuery: avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{<<.LabelMatchers>>}[1m]))
+    - metricsQuery: avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{container="parakeet",<<.LabelMatchers>>}[1m]))
       name:
         as: parakeet_gpu_utilization
       resources:
         overrides:
           namespace:
             resource: namespace
-      seriesQuery: DCGM_FI_DEV_GPU_UTIL{namespace!=""}
+      seriesQuery: DCGM_FI_DEV_GPU_UTIL{container="parakeet",namespace!=""}
     # Keep for the prod NLLB chart's concurrency HPA, even while live is CPU-only.
     - name:
         as: "nllb_active_requests_total"

@@ -31,6 +31,7 @@ def pipeline():
     fakes = _build_pipeline_fakes()
     lifecycle = AutoMockModule('utils.conversations.lifecycle')
     bridge = AutoMockModule('utils.sync.bridge')
+    final_pass = AutoMockModule('utils.conversations.final_pass_sync')
     bridge.finish_sync_bridges = lambda uid, cid: cid
     fakes.update(
         {
@@ -40,6 +41,7 @@ def pipeline():
             'utils.conversations.deterministic_minimum': deterministic_minimum,
             'utils.conversations.lifecycle': lifecycle,
             'utils.sync.bridge': bridge,
+            'utils.conversations.final_pass_sync': final_pass,
         }
     )
     with stub_modules(fakes):
@@ -47,6 +49,7 @@ def pipeline():
             'utils.sync.pipeline', Path(__file__).resolve().parents[2] / 'utils/sync/pipeline.py'
         )
         module.ingest_test_seam = lifecycle
+        module.final_pass_test_seam = final_pass
         module.real_bridge = real_bridge
         module.AudioSegment = AudioSegment
         module.get_timestamp_from_path = lambda path: float(Path(path).stem)
@@ -509,3 +512,33 @@ def test_persistence_errors_keep_audio_and_do_not_blame_stt(pipeline, caplog, er
     assert f'firestore_doc_kind={kind} ' in event
     assert 'private' not in event and '2026-10-03' not in event
     module.prerecorded.assert_called_once()
+
+
+@pytest.mark.parametrize('legacy_failure', [False, True])
+def test_sync_budget_refusal_retains_legacy_and_logs_only_uid_hash(pipeline, monkeypatch, caplog, legacy_failure):
+    import hashlib
+
+    module, store = pipeline
+    uid = 'synthetic-private-uid'
+    monkeypatch.setattr(module, 'sync_enabled_for', lambda _: True)
+    monkeypatch.setattr(module, '_download_audio_bytes', lambda _: b'synthetic')
+    monkeypatch.setattr(
+        module.final_pass_test_seam, 'run_sync_final_pass', lambda *a, **kw: (None, {'outcome': 'skipped_budget'})
+    )
+    legacy = MagicMock(side_effect=RuntimeError('synthetic') if legacy_failure else None)
+    monkeypatch.setattr(module, 'identify_speakers_for_segments', legacy)
+    response = {'new_memories': set(), 'updated_memories': set()}
+    with caplog.at_level(logging.INFO):
+        assert module.process_segment('1700000000.wav', uid, response, threading.Lock(), [])
+    legacy.assert_called_once()
+    assert conversations(store)[0]['transcript_segments'][0]['text'] == 'Keep the capture.'
+    events = [
+        r.message
+        for r in caplog.records
+        if 'event=sync_final_pass' in r.message or 'event=sync_speaker_id' in r.message
+    ]
+    assert len(events) == (2 if legacy_failure else 1)
+    digest = hashlib.sha256(('sync-final-pass:' + uid).encode()).hexdigest()
+    assert all(f'uid_hash={digest}' in event and uid not in event for event in events)
+    assert 'outcome=skipped_budget' in events[0]
+    assert 'lane=' in events[0] and 'duration_seconds=' in events[0]

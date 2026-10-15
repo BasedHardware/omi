@@ -59,17 +59,15 @@ def _ws_c_import_isolation():
     from utils.memory.memory_service import MemoryService
     from utils.memory.canonical_required_processing import ProcessedRequiredMemory, process_required_memory_item
     from utils.memory.canonical_consolidation import (
-        ConsolidationAgentBatch,
         ConsolidationAgentDecision,
-        run_canonical_consolidation,
+        complete_required_intake,
     )
 
     module_globals["MemoryService"] = MemoryService
     module_globals["ProcessedRequiredMemory"] = ProcessedRequiredMemory
     module_globals["process_required_memory_item"] = process_required_memory_item
-    module_globals["ConsolidationAgentBatch"] = ConsolidationAgentBatch
     module_globals["ConsolidationAgentDecision"] = ConsolidationAgentDecision
-    module_globals["run_canonical_consolidation"] = run_canonical_consolidation
+    module_globals["complete_required_intake"] = complete_required_intake
     yield
     restore_sys_modules(saved)
 
@@ -1226,19 +1224,12 @@ def test_stage_all_candidate_can_be_reviewed_processed_and_routed_by_l2(_trusted
         confidence="high",
         rationale="Reviewed legacy source was normalized before L2 admission.",
     )
-    with patch(
-        "utils.memory.canonical_consolidation.query_memory_vector_candidates",
-        return_value=SimpleNamespace(hits=[], rejected_count=0),
-    ):
-        promoted = run_canonical_consolidation(
-            LEGACY_UID,
-            db_client=db,
-            now=datetime.now(timezone.utc),
-            run_id="legacy-stage-upgrade",
-            llm_invoke=lambda _prompt: json.dumps(
-                ConsolidationAgentBatch(decisions=[decision]).model_dump(mode="json")
-            ),
-        )
+    promoted = complete_required_intake(
+        LEGACY_UID,
+        db_client=db,
+        now=datetime.now(timezone.utc),
+        run_id="legacy-stage-upgrade",
+    )
 
     assert promoted.promoted_memory_ids == [memory_id]
     assert db.docs[item_path]["tier"] == MemoryTier.long_term.value

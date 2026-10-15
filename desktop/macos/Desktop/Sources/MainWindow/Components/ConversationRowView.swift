@@ -387,11 +387,15 @@ struct ConversationRowView: View {
       // Title + metadata below
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         HStack(spacing: OmiSpacing.sm) {
-          Text(conversation.displayTitle)
-            .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(titleColor)
-            .lineLimit(1)
-            .help(conversation.displayTitle)
+          // The locked badge already says "Saved and waiting"; the title slot
+          // stays quiet so the pill isn't duplicated beside itself.
+          if conversation.displayState != .locked {
+            Text(conversation.displayTitle)
+              .scaledFont(size: OmiType.body, weight: .medium)
+              .foregroundColor(titleColor)
+              .lineLimit(1)
+              .help(conversation.displayTitle)
+          }
 
           statusCluster(phase: phase)
 
@@ -433,11 +437,14 @@ struct ConversationRowView: View {
       // Title + time/duration below
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         HStack(spacing: OmiSpacing.sm) {
-          Text(conversation.displayTitle)
-            .scaledFont(size: OmiType.subheading, weight: .medium)
-            .foregroundColor(titleColor)
-            .lineLimit(1)
-            .help(conversation.displayTitle)
+          // The locked badge carries the waiting copy; no duplicate title.
+          if conversation.displayState != .locked {
+            Text(conversation.displayTitle)
+              .scaledFont(size: OmiType.subheading, weight: .medium)
+              .foregroundColor(titleColor)
+              .lineLimit(1)
+              .help(conversation.displayTitle)
+          }
 
           statusCluster(phase: phase)
 

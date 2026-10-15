@@ -120,6 +120,7 @@ from utils.other.storage import (
     download_syncing_temporal_file,
     enqueue_conversation_artifact_build,
     get_syncing_file_temporal_signed_url,
+    link_archive_captures,
     precache_conversation_audio,
     schedule_syncing_temporal_file_deletion,
     upload_audio_chunk,
@@ -1391,6 +1392,7 @@ def process_segment(
             if sync_enabled_for(uid) and audio_bytes is not None:
                 from utils.conversations.final_pass_sync import run_sync_final_pass
 
+                final_pass_started = time.monotonic()
                 final_segments, final_outcome = run_sync_final_pass(
                     uid,
                     audio_bytes,
@@ -1400,7 +1402,13 @@ def process_segment(
                     scope=speaker_scope or f'sync:{timestamp}',
                     owner_reserved=owner_reserved,
                 )
-                logger.info('event=sync_final_pass outcome=%s', final_outcome['outcome'])
+                logger.info(
+                    'event=sync_final_pass outcome=%s uid_hash=%s lane=%s duration_seconds=%.3f',
+                    final_outcome['outcome'],
+                    hashlib.sha256(('sync-final-pass:' + uid).encode()).hexdigest(),
+                    _bounded_sync_lane(sync_lane),
+                    time.monotonic() - final_pass_started,
+                )
             if final_segments and sync_enabled_for(uid):
                 transcript_segments = final_segments
                 for segment in transcript_segments:
@@ -1417,7 +1425,11 @@ def process_segment(
                     owner_reserved=owner_reserved,
                 )
         except Exception as e:
-            logger.warning('event=sync_speaker_id outcome=failed exception_type=%s', _bounded_exception_type(e))
+            logger.warning(
+                'event=sync_speaker_id outcome=failed exception_type=%s uid_hash=%s',
+                _bounded_exception_type(e),
+                hashlib.sha256(('sync-final-pass:' + uid).encode()).hexdigest(),
+            )
         finally:
             if audio_bytes is not None and not private_cloud_sync_enabled:
                 audio_bytes = None
@@ -1611,7 +1623,19 @@ def _reprocess_merged_conversations(
     per conversation: a replaced/reopened conversation must not block siblings in the
     same batch.
     """
+    from config.sync_reprocess import coalesce_enabled
+
+    coalescing = coalesce_enabled() and not user_selected
     merged = response.pop('_merged', {})
+    if coalescing:
+        # Partial-result IDs survive a crash after append/checkpoint but before
+        # this outbox mark, even when lineage enrichment recovery is disabled.
+        # Re-enroll that durable debt; exact-input dedupe handles completed
+        # replays without depending on a transient per-attempt _merged map.
+        recovered = set(response.get('new_memories') or []) | set(response.get('updated_memories') or [])
+        recovered -= set(response.get(_RESPONSE_FENCED_CONVERSATION_IDS) or [])
+        for conversation_id in recovered:
+            merged.setdefault(conversation_id, _LINEAGE_RETRY_LANGUAGE)
     if user_selected:
         # Rule-discard intake does not enroll enrichment. Process Now is an
         # explicit keep choice, so include those retained rows too. Apply it
@@ -1624,7 +1648,12 @@ def _reprocess_merged_conversations(
         try:
             if user_selected and not lifecycle_service.restore_discarded(uid, conversation_id):
                 raise SyncConversationPersistenceFenced('selected recording no longer exists')
-            _reprocess_conversation_after_update(uid, conversation_id, language)
+            if coalescing:
+                from utils.sync.reprocess import mark
+
+                mark(uid, conversation_id, language)
+            else:
+                _reprocess_conversation_after_update(uid, conversation_id, language)
         except SyncConversationPersistenceFenced:
             fenced_ids.add(conversation_id)
             response.setdefault(_RESPONSE_FENCED_CONVERSATION_IDS, set()).add(conversation_id)
@@ -1634,7 +1663,7 @@ def _reprocess_merged_conversations(
                 on_fenced()
             logger.info('event=sync_conversation_reprocess outcome=fenced conversation_id=%s', conversation_id)
         except Exception as e:
-            if user_selected or is_destructive_operation_in_progress(e):
+            if coalescing or user_selected or is_destructive_operation_in_progress(e):
                 raise
             logger.error(f'sync: failed to reprocess merged conversation {conversation_id}: {e}')
     # A task-mode worker whose every conversation was superseded by a newer
@@ -2029,6 +2058,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     recording_session_id: Optional[str] = None,
     audio_start_seconds: Optional[float] = None,
     audio_end_seconds: Optional[float] = None,
+    raw_capture_paths: Optional[list[str]] = None,
 ):
     """Async coordinator for the full sync pipeline (decode → VAD → fair-use → STT → LLM).
 
@@ -2893,6 +2923,14 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             # conversations play exactly like realtime ones. Gated on the user's setting.
             if private_cloud_sync_enabled:
                 await run_blocking(sync_executor, _finalize_sync_audio_files, uid, response)
+            if raw_capture_paths:
+                await run_blocking(
+                    storage_executor,
+                    link_archive_captures,
+                    uid,
+                    raw_capture_paths,
+                    sorted(set(response['new_memories']) | set(response['updated_memories'])),
+                )
             schedule_person_voice_learning_retries(uid, response, _RESPONSE_FENCED_CONVERSATION_IDS)
 
             stage_timings['stt_llm_ms'] = int((time.monotonic() - t0) * 1000)

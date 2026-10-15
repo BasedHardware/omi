@@ -26,6 +26,7 @@ from llm_gateway.gateway.accounting import (
 )
 from llm_gateway.gateway.proactivity_budget import attempt_scope, context_from_request
 from llm_gateway.gateway.accounting_sink import schedule_attempt_trace
+from llm_gateway.gateway.dream_usage import with_dream_usage
 from llm_gateway.gateway.auth import ServiceAuthDependency
 from llm_gateway.gateway.config_loader import GatewayConfig
 from llm_gateway.gateway.credentials import (
@@ -150,7 +151,10 @@ async def create_chat_completion(
             request_id=request_id,
             api_surface='openai_chat_completions',
         )
-        return JSONResponse(content=result.response, headers=_jit_receipt_headers(accounting_context, attempt_trace))
+        return JSONResponse(
+            content=with_dream_usage(result.response, resolved_route.lane.lane_id, attempt_trace),
+            headers=_jit_receipt_headers(accounting_context, attempt_trace),
+        )
     except asyncio.CancelledError:
         if accounting_context is not None:
             schedule_attempt_trace(accounting_context, attempt_trace)
@@ -209,7 +213,11 @@ async def create_chat_completion(
                 request_id=request_id,
                 api_surface='openai_chat_completions',
             )
-        return _error_response(exc)
+        response = _error_response(exc)
+        if resolved_route is not None:
+            content = with_dream_usage(json.loads(bytes(response.body)), resolved_route.lane.lane_id, attempt_trace)
+            return JSONResponse(status_code=response.status_code, content=content)
+        return response
     except Exception:
         if accounting_context is not None:
             schedule_attempt_trace(accounting_context, attempt_trace)

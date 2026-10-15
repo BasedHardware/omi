@@ -39,7 +39,7 @@ class Bucket:
     def blob(self, name):
         return Blob(self, name)
 
-    def list_blobs(self, *, prefix):
+    def list_blobs(self, *, prefix, **kwargs):
         return [self.blob(name) for name in list(self.objects) if name.startswith(prefix)]
 
 
