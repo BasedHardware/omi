@@ -251,3 +251,29 @@ def test_keep_last_without_all_active_paging_canaries_fails_before_backup(provis
         provisioner.reconcile(api, desired, backup=tmp_path / 'backup')
     assert not (tmp_path / 'backup').exists()
     assert api.events == []
+
+
+@pytest.mark.parametrize(
+    'field,value', [('record', {'metric': 'changed', 'from': 'A'}), ('missingSeriesEvalsToResolve', 99)]
+)
+def test_semantic_rule_fields_are_detected_in_drift_and_post_write_readback(provisioner, tmp_path, field, value):
+    desired = {'example': {**rule(), 'record': None}}
+    api = FakeGrafana({'example': {**rule(), field: value}})
+    assert field in provisioner.reconcile(api, desired)[0]
+
+    class RetainsSemanticDrift(FakeGrafana):
+        def request(self, path, body=None, method='GET', *, editable=False):
+            result = super().request(path, body, method, editable=editable)
+            if method in ('POST', 'PUT'):
+                self.live[body['uid']][field] = value
+            return result
+
+    stale = RetainsSemanticDrift({})
+    assert field in provisioner.reconcile(stale, desired, backup=tmp_path / 'backup')[0]
+
+
+def test_nullable_semantic_defaults_do_not_create_spurious_writes(provisioner, tmp_path):
+    desired = {'example': {**rule(), 'record': None, 'missingSeriesEvalsToResolve': None}}
+    api = FakeGrafana({'example': rule()})
+    assert provisioner.reconcile(api, desired, backup=tmp_path / 'backup') == []
+    assert api.writes == []

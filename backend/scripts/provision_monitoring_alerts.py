@@ -36,6 +36,8 @@ FIELDS = (
     'labels',
     'isPaused',
     'notification_settings',
+    'record',
+    'missingSeriesEvalsToResolve',
 )
 API = '/api/v1/provisioning/alert-rules'
 RECEIVER = 'Omi - Services Alerting (Telegram)'
@@ -57,7 +59,9 @@ def index_rules(payload: object) -> dict[str, dict]:
 
 
 def definition(rule: dict) -> dict:
-    return {key: rule[key] for key in FIELDS if key in rule}
+    # Grafana12.1 nullable semantic fields use null and omission equivalently.
+    nullable = {'record', 'missingSeriesEvalsToResolve'}
+    return {key: rule[key] for key in FIELDS if key in rule and (key not in nullable or rule[key] is not None)}
 
 
 def load_rules(path: Path) -> dict[str, dict]:
