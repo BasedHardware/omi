@@ -434,8 +434,14 @@ def test_present_key_and_held_run_lock_never_retire(retirement, monkeypatch):
     for job_id in ('live', 'locked'):
         _register(job_id, job_id, 0, db=retirement)
         monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda job: None)
-        assert uid_sequencer._claim_next(job_id)['job_id'] == job_id
-        assert registry.get_owner(job_id)['active_job_id'] == job_id
+        claim = uid_sequencer._claim_next(job_id)
+        if job_id == 'live':
+            assert claim['job_id'] == job_id
+            assert registry.get_owner(job_id)['active_job_id'] == job_id
+        else:
+            assert claim is None
+            assert registry.get_owner(job_id) == {}
+            assert registry.pending_head(job_id)['job_id'] == job_id
     uid_sequencer.release_job_run_lock.assert_not_called()
 
 
@@ -526,3 +532,32 @@ def test_raw_job_existence_does_not_parse_corrupt_json(monkeypatch):
     redis.set('sync_job:corrupt', b'{not-json')
     assert sync_jobs.sync_job_key_exists('corrupt')
     assert not sync_jobs.sync_job_key_exists('missing')
+
+
+def test_competing_retirement_cannot_dispatch_an_expired_head(retirement, monkeypatch):
+    _register('a', 'expired', 0, db=retirement)
+    _register('a', 'live', 1, db=retirement)
+    held = set()
+    original_retire = registry.retire_expired
+    interleaved = []
+
+    def acquire(job_id):
+        if job_id in held:
+            return None
+        held.add(job_id)
+        return 'token'
+
+    def retire(uid, job_id, **kwargs):
+        # A competing kick arrives after the first claimant locked the head,
+        # before its Firestore retirement transaction has committed.
+        assert uid_sequencer._claim_next(uid) is None
+        assert registry.get_owner(uid) == {}
+        interleaved.append(job_id)
+        return original_retire(uid, job_id, **kwargs)
+
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', acquire)
+    monkeypatch.setattr(uid_sequencer, 'release_job_run_lock', lambda job_id, token: held.remove(job_id))
+    monkeypatch.setattr(registry, 'retire_expired', retire)
+    assert uid_sequencer._claim_next('a')['job_id'] == 'live'
+    assert interleaved == ['expired']
+    assert not held

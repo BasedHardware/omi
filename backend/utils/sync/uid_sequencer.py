@@ -6,6 +6,7 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
+from enum import Enum
 from typing import Any
 
 from prometheus_client import Counter
@@ -31,20 +32,26 @@ EXPIRED_RETIRED = Counter(
 )
 
 
+class _RetirementOutcome(Enum):
+    RETIRED = 'retired'
+    KEEP = 'keep'
+    LOCK_HELD = 'lock_held'
+
+
 def retire_expired_enabled() -> bool:
     return production_stage() and os.getenv('SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM', 'false').strip().lower() == 'true'
 
 
-def _retire_expired(uid: str, job_id: str, *, epoch: int | None = None) -> bool:
+def _retire_expired(uid: str, job_id: str, *, epoch: int | None = None) -> _RetirementOutcome:
     # Malformed job JSON must never count as absence. Redis errors propagate.
     if sync_job_key_exists(job_id):
-        return False
+        return _RetirementOutcome.KEEP
     token = try_acquire_job_run_lock(job_id)
     if token is None:
-        return False
+        return _RetirementOutcome.LOCK_HELD
     try:
         if sync_job_key_exists(job_id):
-            return False
+            return _RetirementOutcome.KEEP
         retired = registry.retire_expired(uid, job_id, epoch=epoch)
     finally:
         release_job_run_lock(job_id, token)
@@ -56,7 +63,7 @@ def _retire_expired(uid: str, job_id: str, *, epoch: int | None = None) -> bool:
             source,
             extra={'json_fields': {'event': 'sync_backfill_expired_retired', 'source': source, 'outcome': 'retired'}},
         )
-    return retired
+    return _RetirementOutcome.RETIRED if retired else _RetirementOutcome.KEEP
 
 
 def _claim_next(uid: str, *, retire_limit: int = MAX_EXPIRED_RETIREMENTS) -> dict[str, Any] | None:
@@ -65,7 +72,12 @@ def _claim_next(uid: str, *, retire_limit: int = MAX_EXPIRED_RETIREMENTS) -> dic
             head = registry.pending_head(uid)
             if head is None:
                 return None
-            if not _retire_expired(uid, head['job_id']):
+            outcome = _retire_expired(uid, head['job_id'])
+            if outcome is _RetirementOutcome.LOCK_HELD:
+                # Another retirement/worker owns this head. Never promote it
+                # into a Cloud Task while that owner is checking its absence.
+                return None
+            if outcome is not _RetirementOutcome.RETIRED:
                 break
         else:
             # Leave the next head durable for the bounded periodic sweep.
@@ -193,7 +205,11 @@ def reconcile_uid(
         registry.defer_owner(uid, registry.HEARTBEAT_SECONDS, now=current)
         return 'invalid'
     state = owner.get('active_state')
-    if retire_expired_enabled() and state == 'dispatching' and _retire_expired(uid, job_id, epoch=epoch):
+    if (
+        retire_expired_enabled()
+        and state == 'dispatching'
+        and _retire_expired(uid, job_id, epoch=epoch) is _RetirementOutcome.RETIRED
+    ):
         kick(uid, retire_limit=retire_limit)
         return 'expired_retired'
     deadline = owner.get('dispatch_retry_at') if state == 'dispatching' else owner.get('lease_expires_at')
