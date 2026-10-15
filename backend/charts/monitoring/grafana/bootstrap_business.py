@@ -74,12 +74,13 @@ def main():
         )
         if account["role"] != "Admin":
             raise ValueError("Unexpected service account role")
+        token_name = f"{name}:{args.token_name}"
         tokens_path = f'/api/serviceaccounts/{account["id"]}/tokens'
-        if any(token["name"] == args.token_name for token in client.call("GET", tokens_path)):
+        if any(token["name"] == token_name for token in client.call("GET", tokens_path)):
             raise ValueError("Token receipt already exists; recover the saved output or choose an explicit rotation")
         if (args.output_dir / filename).exists():
             raise ValueError("Credential output already exists")
-        token = client.call("POST", tokens_path, {"name": args.token_name, "secondsToLive": 7776000})["key"]
+        token = client.call("POST", tokens_path, {"name": token_name, "secondsToLive": 7776000})["key"]
         write_private(args.output_dir / filename, {"token": token, "orgId": org_id, "teamId": team_id})
     write_private(
         args.output_dir / "runtime-configmap.json",
