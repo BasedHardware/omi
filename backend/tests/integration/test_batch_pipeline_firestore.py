@@ -23,9 +23,11 @@ def store():
         pytest.skip('loopback Firestore emulator required; no cloud fallback')
     client = firestore.Client(project='demo-batch-pipeline', credentials=AnonymousCredentials())
     store = FirestoreStore(f'batch_pipeline_test_{uuid.uuid4().hex}', firestore_client=client)
+    for uid in ('synthetic-owner', 'light', 'fresh', 'a', 'b'):
+        client.collection('users').document(uid).set({'data_protection_level': 'enhanced'})
     yield store
     # Isolated emulator namespace only; do not delete or inspect other namespaces.
-    for table in ('jobs', 'queues', 'owners', 'control', 'results', 'gpus'):
+    for table in ('jobs', 'queues', 'owners', 'control', 'results', 'gpus', 'intakes'):
         for doc in client.collection(f'{store.namespace}_{table}').stream():
             doc.reference.delete()
     client.close()
@@ -124,3 +126,122 @@ def test_shared_gpu_has_one_flight_across_competing_worker_transactions(store, m
     assert second.pull(122, capacity=replace(capacity, observed_at=122)) == []
     assert first.acknowledge_gpu_idle('emulator-gpu', lease.token)
     assert len(second.pull(122, capacity=replace(capacity, observed_at=122))) == 1
+
+
+def test_atomic_intake_vs_legacy_retry_and_rollback(store, monkeypatch):
+    from dataclasses import replace
+    from database.batch_pipeline_intake import admit
+    from database import sync_ledger
+    from utils.batch_pipeline.contracts import ProjectionBinding
+    from utils.batch_pipeline.intake import durable_status
+    from utils.batch_pipeline.scheduler import owner_key
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
+
+    def forbidden(*args):
+        raise AssertionError('batch content must never check Redis absence for takeover')
+
+    monkeypatch.setattr(sync_ledger, 'get_sync_job', forbidden)
+    content_id = 'content_' + uuid.uuid4().hex
+
+    def submit(number):
+        segment = f'segment-{number}'
+        value = replace(work(segment), privacy_generation=0)
+        binding = ProjectionBinding('synthetic-owner', f'bp_{number}', content_id, (segment,))
+        return admit(
+            store,
+            [value],
+            binding,
+            100,
+            namespace=store.namespace,
+            intake={
+                'owner_id': binding.owner_id,
+                'owner_key': owner_key(binding.owner_id),
+                'content_id': content_id,
+                'segment_ids': [segment],
+                'total_files': 1,
+                'lane': 'backfill',
+            },
+        )
+
+    ref = sync_ledger.sync_content_ledger_ref(store.client, 'synthetic-owner', content_id)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            receipts = list(pool.map(submit, [1, 2]))
+        assert receipts[0] == receipts[1]
+        winner = receipts[0]['job_id']
+        row = ref.get().to_dict()
+        assert 'expires_at' not in row  # No TTL may remove pending route ownership.
+        monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')
+        assert submit(3)['job_id'] == winner
+        legacy = sync_ledger.claim_sync_content(
+            'synthetic-owner', content_id, 'legacy-retry', 'backfill', firestore_client=store.client
+        )
+        assert legacy['outcome'] == 'busy' and legacy['dispatch_protocol'] == 'batch_v1'
+        assert legacy['job_id'] == winner
+        assert durable_status(store, 'synthetic-owner', winner)['status'] == 'queued'
+        assert len(list(store.client.collection(f'{store.namespace}_jobs').stream())) == 1
+        assert store.run(lambda tx: tx.get('jobs', 'segment-3')) == {}
+    finally:
+        ref.delete()
+
+
+def test_late_intake_is_atomic_and_revocation_fences_heartbeat_and_result(store, monkeypatch):
+    from dataclasses import replace
+    from database.batch_pipeline_intake import admit
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+    from utils.batch_pipeline.contracts import ProjectionBinding
+    from utils.batch_pipeline.scheduler import LateCapture
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
+    queue = Scheduler(store)
+    queue.enqueue(work('committed', capture=10), 0)
+    lease = queue.pull(0)[0]
+    queue.complete(WorkResult('committed', 'gs://synthetic/result'), lease.token, 1)
+    OrderedMerge(store).commit_next('synthetic-owner', 2)
+    late = replace(work('late', capture=1), privacy_generation=0)
+    binding = ProjectionBinding('synthetic-owner', 'bp_late', 'content_' + uuid.uuid4().hex, ('late',))
+    with pytest.raises(LateCapture):
+        admit(store, [late], binding, 3, namespace=store.namespace)
+    assert store.run(lambda tx: tx.get('content', f'synthetic-owner/{binding.content_id}')) == {}
+    assert store.run(lambda tx: tx.get('jobs', 'late')) == {}
+    assert store.projection_pending() == ['committed']
+    queue.enqueue(replace(work('revoked', capture=20), conversation_id='deleted-source'), 3)
+    running = queue.pull(3)[0]
+    tombstone = (
+        store.client.collection('users')
+        .document('synthetic-owner')
+        .collection('deleted_conversations')
+        .document('deleted-source')
+    )
+    tombstone.set({'deleted': True})
+    try:
+        with pytest.raises(BatchPrivacyBlocked):
+            queue.heartbeat('revoked', running.token, 4)
+        with pytest.raises(BatchPrivacyBlocked):
+            queue.complete(WorkResult('revoked', 'gs://synthetic/late-result'), running.token, 4)
+        assert OrderedMerge(store).committed_result('revoked') == {}
+    finally:
+        tombstone.delete()
+
+
+def test_revoked_ring_head_does_not_starve_other_owners_or_priorities(store):
+    from dataclasses import replace
+
+    queue = Scheduler(store)
+    queue.enqueue(replace(work('blocked', owner='a', priority=Priority.FRESH), conversation_id='deleted'), 0)
+    queue.enqueue(work('fresh-ok', owner='fresh', priority=Priority.FRESH), 0)
+    queue.enqueue(work('deep-ok', owner='b'), 0)
+    tombstone = store.client.collection('users').document('a').collection('deleted_conversations').document('deleted')
+    tombstone.set({'deleted': True})
+    try:
+        assert queue.pull(1)[0].item.segment_id == 'fresh-ok'
+        assert queue.pull(1)[0].item.segment_id == 'deep-ok'
+        assert queue.pull(1) == []
+        assert store.run(lambda tx: tx.get('jobs', 'blocked'))['state'] == 'ready'
+    finally:
+        tombstone.delete()

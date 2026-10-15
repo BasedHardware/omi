@@ -19,9 +19,21 @@ _BATCH_PIPELINE_INDEXES = tuple(
         ('merge', (_asc('owner_key'), _asc('merge_pending'), _asc('capture_at'), _asc('segment_id'))),
         ('lease', (_asc('state'), _asc('lease_until'))),
         ('retry', (_asc('state'), _asc('available_at'))),
+        ('result_ready', (_asc('state'), _asc('enqueued_at'))),
+        ('predecessor', (_asc('next'), _asc('state'))),
         ('ready_age', (_asc('priority'), _asc('state'), _asc('enqueued_at'))),
         ('pending_age', (_asc('priority'), _asc('merge_pending'), _asc('enqueued_at'))),
     )
+)
+
+_BATCH_PROJECTION_INDEXES = tuple(
+    FirestoreIndexRequirement(
+        f'{namespace}_projection',
+        f'{namespace}_results',
+        'COLLECTION',
+        (_asc('projection_state'), _asc('committed_at')),
+    )
+    for namespace in ('batch_pipeline_prod', 'batch_pipeline_dev')
 )
 
 SYNC_PIPELINE_INDEX_REQUIREMENTS = (
@@ -38,4 +50,5 @@ SYNC_PIPELINE_INDEX_REQUIREMENTS = (
         (_asc('uid'), _asc('accepted_at'), _asc('__name__')),
     ),
     *_BATCH_PIPELINE_INDEXES,
+    *_BATCH_PROJECTION_INDEXES,
 )

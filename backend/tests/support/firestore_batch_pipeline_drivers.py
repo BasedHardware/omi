@@ -1,11 +1,39 @@
 """Executable query coverage for the dormant batch pipeline's stage namespaces."""
 
+from unittest.mock import patch
+from datetime import datetime, timezone
+
 from tests.support.firestore_query_drivers import DriverEntry, CoveredByEntry
 
 
 def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
+        DriverEntry(
+            'database.batch_pipeline_staging.unsettled',
+            domains={'namespace': namespaces},
+            neutrals={
+                'before': (datetime(2026, 10, 15, tzinfo=timezone.utc), 'timestamp operand only'),
+                'limit': (100, 'bounded page size only'),
+            },
+        ),
+        DriverEntry(
+            'utils.sync.reprocess.sweep',
+            neutrals={'now': (100.0, 'UTC time operand only'), 'limit': (100, 'bounded page size only')},
+            patchers=(lambda client: patch('utils.sync.reprocess.owns_runtime', return_value=True),),
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.projection_pending',
+            domains={'namespace': namespaces},
+            neutrals={'limit': (100, 'bounded page size only')},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.projection_pending',
+            covered_by=('database.batch_pipeline_store.projection_pending',),
+            reason='thin store adapter forwards namespace and bounded page size unchanged',
+            expect_observed=False,
+            body_digest='351a3ea949d6033cf3f2003805681af4af223cd0db4a12dc2869e70fb2a74d59',
+        ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreTransaction.first_pending',
             covered_by=('database.batch_pipeline_store.first_pending',),
@@ -35,7 +63,7 @@ def entries():
         ),
         DriverEntry(
             'database.batch_pipeline_store.due',
-            domains={'namespace': namespaces, 'state': ['leased', 'retry']},
+            domains={'namespace': namespaces, 'state': ['leased', 'retry', 'result_ready']},
             neutrals={'now': (1.0, 'timestamp operand only'), 'limit': (100, 'bounded page size')},
         ),
         DriverEntry(

@@ -21,6 +21,10 @@ class MemoryTransaction:
     def put(self, table, key, value):
         self.rows[(table, key)] = deepcopy(value)
 
+    def check_privacy(self, uid, conversation_ids=(), expected_generation=None):
+        # This hermetic state-machine store models authorized synthetic accounts.
+        return expected_generation or 0
+
     def first_pending(self, owner_key):
         jobs = [
             v

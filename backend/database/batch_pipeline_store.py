@@ -11,7 +11,9 @@ from typing import Any, Callable, Protocol, TypeVar
 
 from google.cloud import firestore
 
-from database._client import get_firestore_client
+from database._client import get_data_plane_firestore_client
+from database.batch_pipeline_privacy import assert_batch_write_allowed
+from utils.sync.stage import collection_name
 
 T = TypeVar('T')
 
@@ -20,6 +22,7 @@ class Transaction(Protocol):
     def get(self, table: str, key: str) -> dict: ...
     def put(self, table: str, key: str, value: dict) -> None: ...
     def first_pending(self, owner_key: str) -> dict | None: ...
+    def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int: ...
 
 
 class Store(Protocol):
@@ -37,6 +40,14 @@ class FirestoreTransaction:
         self.writes: dict[tuple[str, str], dict] = {}
 
     def _ref(self, table: str, key: str):
+        if table == 'content':
+            uid, content_id = key.split('/', 1)
+            return (
+                self.client.collection('users')
+                .document(uid)
+                .collection(collection_name('sync_content_ledger'))
+                .document(content_id)
+            )
         return self.client.collection(f'{self.namespace}_{table}').document(key)
 
     def get(self, table: str, key: str) -> dict:
@@ -52,9 +63,36 @@ class FirestoreTransaction:
     def first_pending(self, owner_key: str) -> dict | None:
         return first_pending(self.client, self.namespace, owner_key, transaction=self.transaction)
 
+    def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
+        return assert_batch_write_allowed(
+            self.client,
+            self.transaction,
+            uid,
+            conversation_ids=conversation_ids,
+            expected_generation=expected_generation,
+        )
+
     def flush(self):
         if len(self.writes) > 450:
             raise RuntimeError('batch transaction write budget exceeded')
+        guarded = set()
+        for (table, key), value in self.writes.items():
+            if table not in {'jobs', 'results'}:
+                continue
+            job = value if table == 'jobs' else self.get('jobs', key)
+            identity = (job['owner_id'], job.get('conversation_id'), job.get('privacy_generation'))
+            if identity in guarded:
+                continue
+            guarded.add(identity)
+            generation = assert_batch_write_allowed(
+                self.client,
+                self.transaction,
+                job['owner_id'],
+                conversation_ids=(job['conversation_id'],) if job.get('conversation_id') else (),
+                expected_generation=job.get('privacy_generation'),
+            )
+            if table == 'jobs' and value.get('privacy_generation') is None:
+                value['privacy_generation'] = generation
         for (table, key), value in self.writes.items():
             self.transaction.set(self._ref(table, key), value)
 
@@ -85,7 +123,7 @@ class FirestoreStore:
     @property
     def client(self):
         self._require_stage()
-        return self._client if self._client is not None else get_firestore_client()
+        return self._client if self._client is not None else get_data_plane_firestore_client()
 
     def run(self, body):
         @firestore.transactional
@@ -103,6 +141,20 @@ class FirestoreStore:
     def oldest(self, priority: int, *, ready_only: bool = False) -> float | None:
         return oldest(self.client, self.namespace, priority, ready_only=ready_only)
 
+    def projection_pending(self, limit: int = 100) -> list[str]:
+        return projection_pending(self.client, self.namespace, limit)
+
+
+def projection_pending(client: Any, namespace: str, limit: int = 100) -> list[str]:
+    docs = (
+        client.collection(f'{namespace}_results')
+        .where('projection_state', 'in', ['pending', 'persisted', 'ready'])
+        .order_by('committed_at')
+        .limit(max(1, min(limit, 100)))
+        .stream()
+    )
+    return [doc.id for doc in docs]
+
 
 def first_pending(client: Any, namespace: str, owner_key: str, *, transaction: Any = None) -> dict | None:
     docs = list(
@@ -118,9 +170,9 @@ def first_pending(client: Any, namespace: str, owner_key: str, *, transaction: A
 
 
 def due(client: Any, namespace: str, state: str, now: float, limit: int = 100) -> list[str]:
-    if state not in {'leased', 'retry'}:
+    if state not in {'leased', 'retry', 'result_ready'}:
         raise ValueError('only recoverable states may be scanned')
-    field = 'lease_until' if state == 'leased' else 'available_at'
+    field = {'leased': 'lease_until', 'retry': 'available_at', 'result_ready': 'enqueued_at'}[state]
     docs = (
         client.collection(f'{namespace}_jobs')
         .where('state', '==', state)

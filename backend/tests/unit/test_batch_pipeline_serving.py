@@ -1,0 +1,151 @@
+"""Private pull/complete RPC enforces identity and stage while admission is off."""
+
+from dataclasses import asdict
+import time
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+import pytest
+
+from routers import batch_pipeline as module
+from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
+from utils.batch_pipeline.contracts import PoolCapacity
+from utils.batch_pipeline.serving import Serving
+from utils.batch_pipeline.scheduler import Scheduler
+
+
+@pytest.fixture
+def api(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')
+    store = MemoryStore()
+    service = Serving(store)
+    Scheduler(store).enqueue(item('synthetic'), time.time())
+    monkeypatch.setattr(module, 'serving_for_stage', lambda stage: service)
+    app = FastAPI()
+    app.include_router(module.router)
+    app.dependency_overrides[module.verify_worker] = lambda: 0
+    return TestClient(app), store
+
+
+def test_unconfigured_or_unauthenticated_worker_cannot_pull(monkeypatch):
+    monkeypatch.delenv('BATCH_PIPELINE_WORKER_AUDIENCE', raising=False)
+    monkeypatch.delenv('BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT', raising=False)
+    app = FastAPI()
+    app.include_router(module.router)
+    response = TestClient(app).post('/v2/batch-pipeline/pull', json={'stage': 'dev'})
+    assert response.status_code == 403
+
+
+def test_stage_and_capacity_required_before_claim(api):
+    client, store = api
+    assert (
+        client.post(
+            '/v2/batch-pipeline/pull', json={'stage': 'prod', 'capacity': asdict(PoolCapacity(time.time(), 1))}
+        ).status_code
+        == 409
+    )
+    assert client.post('/v2/batch-pipeline/pull', json={'stage': 'dev'}).status_code == 422
+    assert store.rows['jobs', 'synthetic']['state'] == 'ready'
+
+
+def test_flag_off_drains_pull_heartbeat_and_idempotent_complete(api):
+    client, store = api
+    pulled = client.post(
+        '/v2/batch-pipeline/pull', json={'stage': 'dev', 'limit': 1, 'capacity': asdict(PoolCapacity(time.time(), 1))}
+    )
+    assert pulled.status_code == 200
+    lease = pulled.json()['leases'][0]
+    token = {'segment_id': 'synthetic', 'token': lease['token']}
+    heartbeat = client.post(
+        '/v2/batch-pipeline/heartbeat',
+        json={'stage': 'dev', 'leases': [token, {'segment_id': 'foreign', 'token': 'stale'}]},
+    )
+    assert heartbeat.json() == {'accepted': ['synthetic']}
+    body = {
+        'stage': 'dev',
+        'token': lease['token'],
+        'result': {'segment_id': 'synthetic', 'result_uri': 'gs://synthetic/result', 'outcome': 'success'},
+    }
+    assert client.post('/v2/batch-pipeline/complete', json=body).json()['accepted']
+    assert client.post('/v2/batch-pipeline/complete', json=body).json()['accepted']
+    assert len([1 for table, _ in store.rows if table == 'results']) == 1
+    body['token'] = 'old-token'
+    assert not client.post('/v2/batch-pipeline/complete', json=body).json()['accepted']
+
+
+def test_default_off_serving_startup_does_not_construct_store_or_task(monkeypatch):
+    from utils.batch_pipeline import serving
+
+    monkeypatch.delenv('BATCH_PIPELINE_SERVING_ENABLED', raising=False)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('disabled serving touched runtime')
+
+    monkeypatch.setattr(serving, 'serving_for_stage', forbidden)
+    monkeypatch.setattr(serving, 'start_background_task', forbidden)
+    assert serving.start_serving_from_env() is None
+
+
+def test_rollback_reconcile_runs_cleanup_and_projection_without_cohort_check(monkeypatch):
+    from unittest.mock import Mock
+
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')
+    cleanup, projector = Mock(), Mock()
+    store = MemoryStore()
+    Serving(store, cleanup=cleanup, projector=projector).reconcile()
+    cleanup.assert_called_once()
+    assert cleanup.call_args.args[0] is store
+    projector.sweep.assert_called_once()
+
+
+def test_storage_cleanup_failure_does_not_stop_projection_or_lease_recovery():
+    from unittest.mock import Mock
+
+    projector = Mock()
+    cleanup = Mock(side_effect=TimeoutError('synthetic storage unavailable'))
+    Serving(MemoryStore(), projector=projector, cleanup=cleanup).reconcile()
+    projector.sweep.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_production_pump_lazily_composes_rpc_authorization_and_completes(api, monkeypatch):
+    """The exact default Pump path used by B's runtime calls the backend seal."""
+    import json
+    import io
+    from types import SimpleNamespace
+    from utils.batch_pipeline import pump as pump_module, admission
+    from utils.batch_pipeline.compute_client import ComputeClient
+    from utils.batch_pipeline.contracts import WorkResult
+    from unittest.mock import Mock
+
+    client, store = api
+    row = store.rows['jobs', 'synthetic']
+    row['requires_compute_admission'] = True
+    row['projection_binding'] = {'job_id': 'bp_job', 'content_id': 'content'}
+    store.rows['intakes', 'bp_job'] = {'total_audio_seconds': 30}
+    monkeypatch.setattr(admission, 'reserve_backfill_speech', Mock(return_value=SimpleNamespace(allowed=True)))
+    calls = []
+
+    def send(request, timeout):
+        calls.append(request.full_url)
+        response = client.post('/v2/batch-pipeline/authorize-compute', json=json.loads(request.data))
+        assert response.status_code == 200
+        return io.BytesIO(response.content)
+
+    transport = ComputeClient('https://synthetic.invalid', 'audience', 'dev', token=lambda: 'service-token', send=send)
+    monkeypatch.setattr(pump_module, 'compute_client_from_env', lambda: transport)
+
+    class Worker:
+        calls = 0
+
+        def process_batch(self, items):
+            self.calls += 1
+            return [WorkResult(item.segment_id, 'gs://synthetic/authorized-result') for item in items]
+
+    worker = Worker()
+    pump = pump_module.Pump(Scheduler(store), worker, capacity=lambda: PoolCapacity(time.time(), 1))
+    assert await pump.run_once() == 1
+    assert worker.calls == 1 and len(calls) == 1
+    assert store.rows['jobs', 'synthetic']['state'] == 'committed'
+    assert store.rows['jobs', 'synthetic']['compute_admission_token'] == store.rows['jobs', 'synthetic']['token']

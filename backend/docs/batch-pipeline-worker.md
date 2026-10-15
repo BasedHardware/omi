@@ -1,176 +1,154 @@
 # Batch pipeline worker
 
-Default-off PR 1 contract. Claude owns deployment; Grok reviews pushes.
+Default-off PR #21674. Claude leads shipment; Grok reviews pushes. Local tests,
+index declarations, GPU benchmarks and production qualification are separate evidence.
 
-## Current flow and evidence
+## Current flow and measured bottlenecks
 
-`POST /v2/sync-local-files` stages uploads, claims the content ledger, creates a
-Redis progress job and dispatches a Cloud Task. `sync_backfill_sequencer` can
-serialize backfill before compute. The worker decodes, runs VAD/STT and merges
-conversations inside the request. The 45-day content ledger checkpoints results
-and metering; Redis run epochs fence retries. `diarizer/batch_main.py` is a
-separate batch-only GPU service; its v2 admission caps remain independent.
+The legacy sync router saves uploads, claims a 45-day content ledger, creates
+Redis progress and dispatches Cloud Tasks. The backfill sequencer serializes
+owners before decode/VAD/STT and conversation merge. Redis run epochs fence
+worker mutations. `diarizer/batch_main.py` is an independent batch service.
 
-Lead's October 15 aggregate snapshot: ~1.07M jobs, 983 owners, oldest ~6 days;
-David's reported wait is 47 hours. Unbound/LEGACY capture classification routes
-~99% to backfill. One job per owner, queue concurrency 40 (now 60), and Cloud Run
-18 instances × 6 concurrency at ~13 seconds/job constrain dispatch; supplied
-batch estimate is ~1.5s/audio-hour; full-chain throughput remains unqualified. GPUs average
-~7% utilization. Supplied batch RTFs are ~0.04 on T4 for pyannote and 0.0025 on L4
-for Parakeet. These are supplied measurements.
-`SYNC_LEGACY_FRESH_ENABLED` remains independently owned and unchanged.
+Lead's October 15 aggregate snapshot: approximately 1.07M jobs, 983 owners,
+oldest six days; David reports 47 hours. Unbound/LEGACY capture classification
+routes approximately 99% to backfill. One job per owner, queue concurrency
+40 (now 60), and 18 Cloud Run instances × 6 concurrency at approximately
+13 seconds/job constrain dispatch. Supplied GPU utilization is approximately
+7%; batch pyannote T4 RTF is 0.04 and Parakeet L4 RTF 0.0025. The supplied
+1.5 seconds/audio-hour batch estimate is not qualified full-chain capacity.
+`SYNC_LEGACY_FRESH_ENABLED` remains independently owned; its classification
+feeds this queue unchanged.
 
-## Target and ownership
+## Target, ownership and work units
 
-Uploads persist immutable work records; GPU workers pull bounded batches across
-owners. Compute can run concurrently for one owner. Strict priority is fresh,
-recent backfill, deep backfill. Existing lane classification is authoritative:
-legacy-fresh promotion happens upstream; this queue does not reinterpret it.
-Recent backfill means a known recording age ≤7 days; older or unknown age is deep.
-Missing usable capture clocks are refused before acceptance; the client retains audio.
-Backfill uses idle slots only. Already running GPU work is not preempted; each
-new pull checks fresh before selecting backfill.
+Uploads land before compute; dedicated GPU workers pull across owners. Fresh
+has strict priority over recent backfill (known age ≤7 days), then deep backfill
+(older/unknown age). Duration-cost deficit round robin prevents one heavy owner
+from monopolizing admission to compute. Compute is parallel per owner; merge
+and projection preserve the order of admitted captures.
 
-A owns `config/batch_pipeline.py`, `database/batch_pipeline*.py`,
-`utils/batch_pipeline/{contracts,capacity,scheduler,merge,metrics}.py`, matching unit tests,
-and this document. B owns `diarizer/batch_pipeline*`, GPU-chain tests and its
-benchmark records. B may add a dedicated provider config module; coordinate any
-contract changes through this document before changing A's files. Neither agent
-edits the other's paths. Both commit explicit paths and rebase before pushing.
+A owns cohort config, intake, scheduler/store, ordered log, serving supervision,
+heartbeat, metrics, query/index declarations and associated tests. B owns GPU
+chain, encrypted artifact adapters, model/runtime packaging and dedicated GPU
+chart. C owns legacy-compatible projection, content-ledger integration,
+enrichment and client completion. D owns deletion/protection fences, erasure
+and retention. Shared types meet in `utils.batch_pipeline.contracts`; commits
+name owned paths, preserve peers' edits and never stash or force-push.
 
-## Durable state and fairness
+Intake strictly decodes every uploaded frame to canonical PCM WAV, retaining
+capture clocks. Consecutive files are packed into conversation/capture spans
+up to one hour; small gaps become silence, larger gaps/overlaps start another
+unit. Longer captures split at exact sample boundaries. These are queue units,
+not five-minute chunks; B independently packs short model windows by length.
+Original geolocation, recording-lineage and capture proof metadata are frozen
+in a bounded ancillary WAV context chunk, encrypted with the audio.
+Malformed/missing capture clocks or incomplete decode refuse the upload.
+BYOK refuses cloud batch intake until a private worker path exists.
 
-Firestore namespaces must match explicit prod/dev runtime stage; test namespaces
-require loopback-bound emulator clients. Jobs record protocol version 1 and immutable segment ID,
-owner, capture timestamp, priority, estimated audio cost, staged-audio reference,
-admission time; mutable state contains attempt, fencing token, lease deadline,
-retry deadline, immutable versioned encrypted result reference and merge status. Audio/transcript bodies remain
-outside scheduler metadata. Stable segment IDs deduplicate admission.
+## Durable model and admission
 
-A scheduler control record keeps bounded active-owner rings per priority;
-per-owner/class documents keep deficit and linked FIFO head/tail. Jobs are
-individual documents, so queue length does not grow a document. Duration-based
-deficit round robin adds a 30-second quantum; cost is bounded to the existing
-7,200-second audio limit. Owner activation and each pull transact with the
-control record, giving fleet-wide fairness and a strict priority decision.
-The control record requires load qualification before expansion. Active-owner capacity is
-bounded and admission fails explicitly rather than dropping accepted jobs.
+Production/dev namespaces match explicit runtime stage and customer-data
+Firestore; test namespaces require injected loopback emulator clients.
+Jobs contain immutable segment/owner/capture identity, duration, priority,
+unit kind, source conversation, privacy generation and encrypted audio URI.
+Mutable state contains attempt, fenced token/deadline, retry time, result URI,
+queue link and merge status. No transcript/audio bodies enter queue metadata.
 
-Leases have unique tokens, heartbeat extends only an unexpired current lease,
-and completion rejects expired/replaced tokens. Expiry returns work through
-exponential backoff; five attempts dead-letter. Dead letters retain references
-and block ordered merge until explicit operator redrive;
-never silently drop audio. Recovery scans are bounded and idempotent.
+One transaction binds content-ledger `dispatch_protocol=batch_v1`, the complete
+sibling set and frozen projection binding, queue entries and durable
+`intakes/bp_<job>` status. Simultaneous legacy/batch claims serialize on that
+same content document. A duplicate follows its existing owner. Legacy claim,
+bind and release paths refuse batch ownership even after Redis expiry or
+cohort rollback. Pending batch claims have no TTL; completion starts retention.
+An ambiguous admission reply never releases or dispatches a legacy twin.
 
-## Ordered merge and crash boundary
+Owner/class queues store linked FIFO head/tail and duration deficit. Bounded
+priority rings live in scheduler control; a 30-second quantum pays each job's
+cost. Owner admission and pull transact through control, providing fleet-wide
+priority/fairness. Owner capacity and transaction size fail explicitly before
+acceptance; control contention needs load qualification.
 
-Per-owner pending records sort by `(capture_at, segment_id)`. A transaction reads
-the earliest pending item and commits only a completed result, advances the owner
-watermark and creates a result-log entry with the stable segment ID. Admission
-and commit both read/write the owner fence, so concurrent admission cannot insert
-an earlier item unnoticed. Duplicate IDs are checked before the watermark; identical re-admission and
-re-commit return existing state, conflicting immutable fields fail. A capture older than the committed watermark is rejected for explicit
-late-capture handling; it must never silently corrupt ordering. Lead must ratify
-that late-capture policy before rollout. Ordering covers admitted work, not
-unknown audio still on a device.
+## Lease, merge and late-capture policy
 
-The durable result log is the atomic commit boundary and resumable outbox.
-Conversation projection/metering must consume stable segment IDs idempotently;
-external callbacks cannot be made exactly-once by a completion marker. Before serving intake, atomically bind the durable job/protocol to the existing
-content ledger, retain staged audio beyond queue residence, and resolve retries
-from durable state even after Redis expiry or flag rollback. Preserve lookback,
-fair-use and backfill speech caps; qualify projection and account deletion. Rollback stops new
-admission, drains accepted records with their recorded protocol, and retains
-staging/results. Never send an accepted item concurrently through the old worker.
+Leases last 120 seconds. The pump renews every 20 seconds concurrently with
+blocking GPU work; unresolved timeout/lost ownership forbids result publication. Transient failures
+keep renewing; a successful token-fenced renewal restores permission. Fenced
+queue heads rotate without content writes, allowing other owners to progress. Results
+carry the original token. Expiry retries with exponential backoff; attempt five
+becomes a retained dead letter. Explicit redrive is required; no accepted audio
+is silently dropped. Shutdown stops pulling and drains non-preemptible compute
+with heartbeat intact.
 
-## B's interface
+Ordered merge commits only the earliest pending `(capture_at, segment_id)`.
+Admission and commit share the owner revision fence. The result log records a
+stable segment ID and predecessor; C's transactional projection cursor follows
+that predecessor, so replay cannot append or mark enrichment twice. Bounded
+recovery scans repair crashes after compute, log commit and projection writes.
 
-`utils.batch_pipeline.contracts.WorkItem`: `segment_id`, `owner_id`,
-`capture_at` (UTC epoch seconds), `audio_uri`, `duration_seconds`, `priority`,
-`unit_kind` (default conversation; capture_span for bounded live chunks).
-`LeasedWork`: `item`, `token`, `attempt`, `lease_until`.
-`WorkResult`: `segment_id`, `result_uri` (durable encrypted result reference),
-`outcome` (`success` or `silence`).
-B implements `process_batch(items: Sequence[WorkItem]) -> Sequence[WorkResult]`.
-Exactly one result per successful item, identified by ID, independent of input
-order; every omitted/failed item retries through `Scheduler.fail`. Decode failure
-never means silence. The reference retains codec/provenance for B’s decoder. A worker heartbeats each lease throughout model work,
-then submits results with the matching token. Decode once → VAD → words provider
-(default Parakeet) → pyannote. No cloud credentials or model initialization at
-import. Batch size/audio limits are B-owned; scheduler bounds pulls to 32 items.
+The simplest safe late rule is implemented: a new capture at/before the
+committed watermark receives HTTP 409 `sync_capture_before_watermark` before
+admission. Client audio remains retained for explicit recovery. No historical
+rewrite, silent acceptance or legacy fallback occurs. Identical existing
+content/segment retries resolve before this check. Ordering covers admitted
+work, not unknown audio remaining on a device. Lead must account for this
+explicit recovery limitation when choosing a cohort.
+
+## Worker and protection interfaces
+
+`WorkItem` names segment/owner, capture time, encrypted audio URI, duration,
+priority, unit kind, optional conversation and pinned privacy generation.
+`LeasedWork` adds token/attempt/deadline. B implements
+`process_batch(Sequence[WorkItem]) -> Sequence[WorkResult]`; results may arrive
+out of order. Each result supplies segment ID, encrypted URI and success/silence.
+Missing/failed items retry; decode/provider failures never become silence.
+
+B's dedicated process composes A's `Pump`, a fresh `PoolCapacity` callback and
+CUDA synchronization. Optional service-OIDC pull/heartbeat/complete/fail APIs
+use the same contract. Production jobs require an OIDC compute-admission seal from the backend before
+inference. Fresh restrictions are rechecked; backfill reserves the full-content
+audio upper bound with existing content-idempotent policy. Refusals defer without
+using failure attempts. No configured policy client means no GPU spend.
+C projection runs on the backend, including durable
+sweep and legacy playback/enrichment. D checks account/source deletion,
+protection and generation inside each mutation transaction. Encrypted,
+owner-bound, generation-pinned objects have a pre-upload deletion outbox.
+Completion-only retention never expires pending results or dead letters.
+
+## Capacity and autoscaling
+
+Conversation units run only on dedicated batch GPUs. Shared-live stays off;
+future admission requires explicit capture spans ≤120 seconds, fresh slack,
+empty live queue, utilization/memory headroom and one durable reservation per
+physical GPU. Expired compute leases do not release GPU ownership: only the
+hardware owner acknowledges CUDA idle. Non-preemptible work never moves onto
+live Parakeet pods merely because it is 03:00Z. The approximately 25% listen
+trough is an opportunity to measure slack, not permission to run.
+
+Export oldest pending/ready age per class, freshness, admission-to-lease owner
+wait, transition rates/jobs per second, and GPU utilization/headroom. No owner
+labels. Autoscale on ready-age with fresh/recent/deep targets 30/300/3600 seconds;
+reject stale samples. B's dedicated chart documents the external-metric HPA.
+CPU is not the scale signal; non-preemptible batch latency still needs bounds.
 
 ## Flags, rollout and rollback
 
-`BATCH_PIPELINE_ENABLED=false`, `BATCH_PIPELINE_UID_ALLOWLIST=''`,
-`BATCH_PIPELINE_PERCENT=0`; read at call time, deterministic owner cohorts.
-Global false wins; allowlist OR SHA-256 owner bucket below percent admits.
-Invalid percentages fail closed; percentage cohorts nest. Disabled admission
-invokes the original callback with identical args
-and no queue/store calls. Existing sync routes remain unchanged until the
-projection integration is qualified; enabling config alone is insufficient.
-Workers recover already accepted protocol records even if admission is disabled.
+Admission requires `BATCH_PIPELINE_ENABLED=true` plus explicit UID allowlist or
+stable SHA-256 percentage; defaults are false/empty/zero. Configuration of
+providers alone cannot select real uploads. `BATCH_PIPELINE_SERVING_ENABLED`
+and B's worker switch independently default off. Enable qualified drain/worker
+infrastructure before a cohort; keep them enabled during admission rollback.
+Shared-live and VAD compaction remain off.
 
-Lead's sequence: hermetic fake/emulator → isolated dev synthetic data → David
-only → 1% → 5% → all. Hold **at least 12 hours at every live step**, compare
-quality, duplicate side effects, stuck merges, retries, backlog and GPU capacity.
-Dev identities can reach production Firestore: never run dev real-user writes.
-On regression disable new admission, retain readers and recovery workers, drain
-or explicitly migrate accepted jobs under fences; do not delete queue state.
-
-## Metrics and queue-age scaling
-
-Export `omi_batch_pipeline_oldest_age_seconds{priority}` including leased,
-retrying and merge-blocked work; ready-age is separately exported for capacity.
-Record per-owner wait in an unlabeled histogram (no UID labels), completed jobs/s,
-lease expiry/retry/dead-letter counts and merge lag. Compare GPU utilization from
-the existing exporter. Missing/stale queue metrics are an alarm, not zero backlog.
-
-Use GKE external-metric HPA (Prometheus adapter) on ready-item age, target 30s
-fresh, 300s recent and 3600s deep; clamp to qualified GPU min/max and use 300s
-scale-down stabilization. Keep one warm replica for pulling/metrics; use a
-separate backfill pool/quota so deep age cannot consume reserved fresh capacity.
-Cloud Run CPU/concurrency autoscaling does not directly consume queue-age metrics:
-a scheduler/controller must set bounded minimum instances or use GKE workers.
-No production chart or autoscaler is changed by this PR. A stale metric must retain last capacity and alert. Capacity and signal freshness require a dev load
-receipt before David's canary. Hold on any duplicate visible side effect, lost
-accepted item, stuck merge >12h, stale metrics >60s, or fresh p95 lease wait >30s.
-Keep model admission/memory limits and reserved fresh capacity in qualification;
-already-running long backfill can violate the fresh latency target.
-
-## Capacity-aware worker integration
-
-Queue units are conversations/capture spans (target ≤1h, hard ceiling 7200s),
-never internal ASR windows. Dedicated batch GPUs own conversation-sized jobs.
-`Scheduler.pull(..., capacity=PoolCapacity(...))` caps leases to available slots
-and protects fresh reservations; `max_item_seconds` sets each pool’s unit ceiling.
-Live workers declare `pool=live` and require matching snapshots; no-snapshot
-pulls are dedicated-batch-only. Samples expire after 15s. An off-peak trough
-(~25% lower listen load near 03:00Z, lead evidence) is a forecast, not slack.
-
-Shared-live borrowing defaults off (`BATCH_PIPELINE_SHARED_LIVE_ENABLED=false`).
-It requires an exclusive grant from the live pool admission owner, one slot,
-no live queue, <50% GPU utilization and ≥8GiB headroom. Only a ≤120s capture_span
-may lease; conversations stay dedicated. Physical `gpu_id` reservations serialize
-workers transactionally. Completion/expiry never releases hardware; the owner
-must acknowledge_gpu_idle after verified CUDA quiescence. Stale acknowledgments
-cannot clear a newer flight. Longer units are never split into merge jobs.
-These conservative thresholds are unqualified; retain the kill switch until
-model-memory and live-latency acceptance. Exporters must derive grants from
-live queue age, GPU utilization/headroom and in-flight ownership, never CPU.
-
-`Scheduler` exposes enqueue/pull/heartbeat/complete/fail/recover/redrive_dead;
-`OrderedMerge` exposes commit_next/committed_result. Heartbeat ≤30s for 120s
-leases, recover every 5s, refresh one QueueMetrics registry every 15s. Discard
-results after lease loss. Bounded deficit accrual may return empty before long
-items earn credit; continue polling. Ring cap: 1024 active owners per class.
-
-Expose the registry through the worker exporter; adapter max-ready-age signals
-must exclude samples older than 60s. Ten declared stage indexes need READY receipts. Emulator contention verifies
-transactions, not production throughput. Serving pump, ledger projection,
-deletion, late-capture policy and backlog migration remain qualification gates.
-
-Strict priority is a **compute admission** guarantee. Within one owner, an
-unfinished earlier backfill item still blocks publication of later fresh results.
-Fresh publication latency therefore needs a separately ratified bounded merge
-window/stream policy if it must overtake that owner's backlog; this PR does not
-silently weaken capture ordering to make that claim.
+Lead's rollout: hermetic/emulator → isolated dev synthetic identity → David
+only → 1% → 5% → all, at least 12 hours between cohorts. Require production
+indexes READY, retirement of pre-protocol intake revisions, privacy/deletion,
+playback, accounting, lineage and full-chain
+quality/capacity acceptance before expansion. Inspect per-class age, per-owner
+wait, throughput, GPU use, errors, duplicate/projected receipts and live latency.
+General captures containing disconnected speech groups still require multipart
+projection/deletion qualification; the initial safe projector refuses them.
+Turning admission off returns new unowned uploads to legacy; existing batch
+claims drain through their recorded protocol. Never copy in-flight work into
+legacy or purge pending artifacts to roll back. Detailed RPC/index/operator
+settings are in `batch-pipeline-serving.md`; no merge/deploy is authorized here.

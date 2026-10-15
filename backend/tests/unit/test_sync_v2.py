@@ -32,6 +32,11 @@ from io import BytesIO
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+# Keep additive batch imports real before legacy fixtures replace package roots.
+from utils.batch_pipeline import intake as _batch_intake  # noqa: F401
+from routers import batch_pipeline as _batch_router  # noqa: F401
+from models import sync_job_status as _sync_job_status  # noqa: F401
 from fastapi.routing import APIRoute
 from models.users import PlanType
 from utils.executors import run_blocking as _production_run_blocking
