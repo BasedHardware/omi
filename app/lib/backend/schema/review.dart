@@ -314,7 +314,8 @@ class AgentProposalItem {
 
   static AgentProposalItem? fromJson(Map<String, dynamic>? json) {
     if (json == null) return null;
-    final edit = _map(json['edit']);
+    final operation = _map(json['operation']);
+    final edit = operation?.isNotEmpty == true ? operation : _map(json['edit']);
     final vocabulary = _map(json['vocabulary']);
     final targetLabel = _str(json['target_label']) ?? '';
     if (edit != null) {
@@ -573,7 +574,7 @@ class ReviewChange {
       snippet: _str(json['snippet']),
       editKind: _str(json['edit_kind']),
       before: _str(json['before']),
-      after: _str(json['after']),
+      after: json['after'] is String ? json['after'] as String : null,
       context: SpellingContext.fromJson(_map(json['context'])),
       refs: _maps(json['refs'])
           .map((r) {

@@ -141,7 +141,7 @@ async def run_loop(
             if observe_turn is not None:
                 await observe_turn(turn)
             if budget.tokens is not None and accounted > budget.tokens:
-                return LoopResult(None, "token_budget", index + 1, used, tokens, accounted)
+                return LoopResult(turn.value, "token_budget", index + 1, used, tokens, accounted)
             value = turn.value
             if not turn.tool_calls:
                 return LoopResult(value, 'stopped', index + 1, used, tokens, accounted)
@@ -155,6 +155,7 @@ async def run_loop(
             messages.extend(turn.messages)
             tool_result = await execute_tools(turn.tool_calls)
             if isinstance(tool_result, LoopStop):
+                messages.extend(tool_result.messages)
                 return LoopResult(tool_result.value, 'finished', turns, used, tokens, accounted)
             messages.extend(tool_result)
         return LoopResult(value, 'turn_budget', turns, used, tokens, accounted)

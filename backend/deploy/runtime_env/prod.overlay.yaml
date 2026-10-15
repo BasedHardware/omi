@@ -567,7 +567,7 @@ overlay:
           DREAM_AGENT_PASSES_PER_DAY: {value: '2', category: rollout}
           DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
           DREAM_AGENT_DAILY_USD: {value: '10', category: rollout}
-          DREAM_AGENT_GLOBAL_DAILY_USD: {value: '100', category: rollout}
+          DREAM_AGENT_GLOBAL_DAILY_USD: {value: '15000', category: rollout}
           DREAM_AGENT_TOKENS_PER_MINUTE: {value: '2000000', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
@@ -784,7 +784,7 @@ overlay:
           DREAM_AGENT_PASSES_PER_DAY: {value: '2', category: rollout}
           DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
           DREAM_AGENT_DAILY_USD: {value: '10', category: rollout}
-          DREAM_AGENT_GLOBAL_DAILY_USD: {value: '100', category: rollout}
+          DREAM_AGENT_GLOBAL_DAILY_USD: {value: '15000', category: rollout}
           DREAM_AGENT_TOKENS_PER_MINUTE: {value: '2000000', category: rollout}
           DREAM_AGENT_CANARY_UID: {value: 'dream-canary-prod-01', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}

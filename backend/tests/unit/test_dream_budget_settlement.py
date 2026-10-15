@@ -37,7 +37,9 @@ def db(monkeypatch):
 
 
 def caps():
-    return Caps(tokens=432768, passes=24, daily_usd=250, global_daily_usd=1000, max_usd_per_token=RATE)
+    return Caps(
+        tokens=432768, passes=24, daily_usd=250, global_daily_usd=1000, global_spend_shards=1, max_usd_per_token=RATE
+    )
 
 
 def ledger(db, uid=UID, day=None):
@@ -63,7 +65,8 @@ def test_known_cost_and_lease_finish_share_one_transaction(db):
     assert {path for path, _ in tx.sets} == {
         run_path,
         ('dream_users', UID, 'spend', lease['day']),
-        ('dream_global_spend', lease['day']),
+        ('dream_global_spend', lease['day'] + '-0'),
+        ('dream_due', UID),
     }
     assert ('dream_users', UID) in {path for path, _ in tx.updates}
     before = deepcopy(db.rows)

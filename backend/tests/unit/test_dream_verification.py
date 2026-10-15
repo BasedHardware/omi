@@ -31,7 +31,9 @@ def test_two_independent_batched_invocations_have_identical_evidence_without_his
 
     votes, calls = asyncio.run(verify([proposal()], turn, tokens=10000, deadline_seconds=5))
     assert calls == 2 and disposition(votes['synthetic-proposal']) == 'agree'
-    assert messages_seen[0] == messages_seen[1] and len(messages_seen[0]) == 2
+    assert messages_seen[0][0] != messages_seen[1][0]
+    assert messages_seen[0][1] == messages_seen[1][1] and len(messages_seen[0]) == 2
+    assert '"reason"' not in messages_seen[0][1]['content']
     assert 'Canadian' in messages_seen[0][1]['content']
 
 
@@ -40,9 +42,10 @@ def test_verifier_missing_duplicate_or_unknown_ids_cannot_authorize_apply():
         return Turn(tokens=12, value=VerificationBatch(decisions=[]))
 
     votes, calls = asyncio.run(verify([proposal()], turn, tokens=10000, deadline_seconds=5))
-    assert calls == 2 and disposition(votes['synthetic-proposal']) == 'split'
+    assert calls == 2 and disposition(votes['synthetic-proposal']) == 'unverified'
     assert disposition([False, False]) == 'disagree'
-    assert disposition([True, False]) == disposition([True]) == 'split'
+    assert disposition([True, False]) == 'split'
+    assert disposition([True]) == 'unverified'
 
 
 def test_oversized_evidence_is_not_silently_truncated_into_support():

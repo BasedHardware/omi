@@ -11,8 +11,9 @@ from models.agent_edit import HarnessEdit
 from models.dream_edit import Term
 from models.agent_refs import base_ref, has_ref, cited_value
 from utils.agent_capabilities import tools as dream_tools
-from utils.agent_capabilities.guards import verbatim_quote, vocabulary_rejection
+from utils.agent_capabilities.guards import verbatim_quote
 from utils.executors import db_executor, run_blocking
+from utils.agent_capabilities.errors import ToolError
 
 
 @dataclass
@@ -42,7 +43,7 @@ def references(operation: HarnessEdit | Term | HarnessQuestion) -> tuple[str, ..
 
 
 def question_key(question):
-    return 'dream:question:' + review_store.fingerprint([question.kind, question.source_ref, question.quote])
+    return 'agent:question:' + review_store.fingerprint([question.kind, question.source_ref, question.quote])
 
 
 async def stage(
@@ -54,34 +55,47 @@ async def stage(
     if isinstance(operation, HarnessQuestion) and operation.same_person:
         people = {operation.same_person.left.entity_id, operation.same_person.right.entity_id}
         refs = (*refs, *(ref for ref, row in records.items() if row.get('entity_id') in people))
-    if not refs or any(not has_ref(ref, records) or ('#' in ref and cited_value(ref, records) is None) for ref in refs):
-        raise ValueError('dream_unknown_evidence')
+    for ref in refs:
+        if not has_ref(ref, records) or ('#' in ref and cited_value(ref, records) is None):
+            raise ToolError(
+                'agent_unknown_evidence',
+                field='evidence',
+                ref=ref,
+                expected='Read this owner ref and cite its current segment id',
+            )
+    if not refs:
+        raise ToolError('agent_unknown_evidence', field='evidence', expected='At least one fully read owner ref')
     if isinstance(operation, HarnessEdit):
         dream_tools.validate_edit(operation, records, authority=authority)
         if operation.kind == 'spelling' and not verbatim_quote(
             operation.before, cited_value(operation.target, records)
         ):
-            raise ValueError('dream_invalid_target')
+            raise ToolError(
+                'agent_target_quote_mismatch',
+                field='before',
+                ref=operation.target,
+                expected='Exact text in this cited segment',
+            )
         key = dream_tools.edit_key(operation, records)
         value, why_it_matters = operation.value, operation.why_it_matters
     elif isinstance(operation, HarnessQuestion):
         if not verbatim_quote(operation.quote, cited_value(operation.source_ref, records)):
-            raise ValueError('dream_invalid_question_evidence')
+            raise ValueError('agent_invalid_question_evidence')
         if operation.same_person:
             entities = {row.get('entity_id') for row in records.values()}
             if any(
                 person.entity_id not in entities for person in (operation.same_person.left, operation.same_person.right)
             ):
-                raise ValueError('dream_unknown_person')
+                raise ValueError('agent_unknown_person')
         key = await run_blocking(db_executor, question_key, operation)
         value, why_it_matters = operation.value, operation.why_it_matters
     else:
-        rejection = vocabulary_rejection(operation)
-        if rejection:
-            raise ValueError('dream_' + rejection)
+        from utils.agent_capabilities.registry import get_kind
+
+        get_kind('vocabulary').validate(operation, records, authority=authority)
         key = dream_tools.vocabulary_key(operation)
-    if not await run_blocking(db_executor, review_changes.agent_change_allowed, uid, key):
-        raise ValueError('dream_suppressed')
+    if authority == 'dream' and not await run_blocking(db_executor, review_changes.agent_change_allowed, uid, key):
+        raise ValueError('agent_suppressed')
     scoped = {base_ref(ref): records[base_ref(ref)] for ref in refs}
     source = {'records': scoped}
     # Current snapshots are checked at proposal time and fenced again at commit.
@@ -92,7 +106,7 @@ async def stage(
             if node and node.get('redirect_entity_id'):
                 raise ValueError('agent_person_already_merged')
     if len(json.dumps({'source': source, 'fences': fences}, default=str, ensure_ascii=False).encode()) > 256000:
-        raise ValueError('dream_proposal_byte_budget')
+        raise ValueError('agent_proposal_byte_budget')
     await run_blocking(db_executor, dream_tools.revalidate_proposal, uid, source)
     if isinstance(operation, HarnessEdit):
         await run_blocking(db_executor, dream_tools.validate_canonical_proposal, uid, operation)
@@ -106,7 +120,7 @@ async def stage(
         decoded = await run_blocking(db_executor, review_store.decode_doc, uid, raw)
         existing = (decoded or {}).get('source', [])
         if len(existing) >= 500:
-            raise ValueError('dream_vocabulary_cap')
+            raise ValueError('agent_vocabulary_cap')
     return Staged(
         id=await run_blocking(db_executor, review_store.safe_id, key),
         key=key,

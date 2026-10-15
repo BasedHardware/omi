@@ -155,6 +155,9 @@ def _decorator(*_args, **_kwargs):
 @pytest.fixture
 def conversations_db():
     """Load the production query function against a minimal in-memory Firestore seam."""
+    # Load the pure policy/registry before the fixture closes the utils import path.
+    import config.dream_agent  # noqa: F401
+
     firestore = _Firestore([])
 
     google = ModuleType("google")

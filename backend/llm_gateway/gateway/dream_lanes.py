@@ -15,6 +15,7 @@ def dream_lane_items(desktop_lanes, desktop_artifacts):
         reserved = (
             route['provider_options'].get('reserved_capacity_only') is True
             and 'reserved_capacity_unavailable' in route['fallback_policy']['fallback_on']
+            and route['fallbacks'] == [{'provider': 'openai', 'model': 'gpt-6-luna'}]
         )
         lane_id = 'omi:auto:dream-' + stage
         route_id = 'route.dream_' + stage + '.001'
@@ -36,7 +37,7 @@ def dream_lane_items(desktop_lanes, desktop_artifacts):
         )
         route['evidence'] = {
             'benchmark_snapshot': 'dream.harness.v2',
-            'eval_report': 'backend.tests.unit.test_dream_harness',
+            'eval_report': 'backend.tests.unit.test_dream_session',
             'benchmark_source': 'omi_eval',
             'dev_only': False,
         }

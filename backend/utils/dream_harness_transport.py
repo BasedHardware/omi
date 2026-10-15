@@ -153,6 +153,8 @@ async def model_turn(
     # Account before parsing so a billed malformed verifier response is paid.
     if on_usage is not None:
         await on_usage(turn)
+    if usage_sink is not None:
+        usage_sink['transport_complete'] = True
     choice = body['choices'][0]
     if choice.get('finish_reason') in {'length', 'max_tokens'}:
         raise ValueError('dream_response_truncated')

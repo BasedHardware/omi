@@ -76,14 +76,23 @@ def entries(edit, current, *, authority, change_id):
 def project(uid, conversation, *, firestore_client=None):
     if not conversation.get('has_transcript_corrections') or 'transcript_segments' not in conversation:
         return conversation
-    key = conversation.get('id')
-    if not key:
-        raise ValueError('Transcript projection requires a conversation id')
-    segments = apply_entries(
-        conversation['transcript_segments'], load_entries(uid, key, firestore_client=firestore_client)
-    )
-    conversation['transcript_segments'] = segments
-    filter_projected_translations(uid, conversation)
+    try:
+        key = conversation.get('id')
+        inline = conversation.get('transcript_correction_overlay')
+        rows = (
+            review_store.require_doc(uid, inline)['source']
+            if inline is not None
+            else load_entries(uid, key, firestore_client=firestore_client)
+        )
+        conversation['transcript_segments'] = apply_entries(conversation['transcript_segments'], rows)
+        filter_projected_translations(uid, conversation)
+    except Exception:
+        # Rendering must remain available even with stale anchors, missing or
+        # corrupt encrypted data, or storage outages. Transaction writers are strict.
+        from utils.dream_metrics import OVERLAY_READ_FAILURES
+
+        OVERLAY_READ_FAILURES.inc()
+        conversation['transcript_segments'] = originals(conversation['transcript_segments'])
     return conversation
 
 
@@ -134,7 +143,7 @@ def load_entries(uid, conversation_id, *, firestore_client=None, transaction=Non
     if raw is None:
         raise review_store.ReviewConflict('Transcript correction overlay unavailable')
     rows = review_store.require_doc(uid, raw).get('source')
-    if not isinstance(rows, list) or len(rows) > 500:
+    if not isinstance(rows, list) or len(rows) > 10000:
         raise review_store.ReviewConflict('Transcript correction overlay invalid')
     return rows
 

@@ -3872,9 +3872,7 @@ def eligible_merge_target(conversation: Optional[dict]) -> bool:
     conversation". Discarded rows stay eligible; the merge path reprocesses
     and revives them.
     """
-    return (
-        bool(conversation) and not is_soft_deleted(conversation) and not conversation.get('has_transcript_corrections')
-    )
+    return bool(conversation) and not is_soft_deleted(conversation)
 
 
 def select_closest_conversation(conversations, start_timestamp: int, end_timestamp: int) -> Optional[dict]:
@@ -3985,12 +3983,7 @@ def promote_final_pass_if_current(
         )
         # Derived references/materializations outside structured have their own
         # contracts. Refuse promotion until those consumers support remapping.
-        if (
-            current.get('has_transcript_corrections')
-            or current.get('translation_materializations')
-            or current.get('apps_results')
-            or current.get('note_claims')
-        ):
+        if current.get('translation_materializations') or current.get('apps_results') or current.get('note_claims'):
             return False
         # The owning write boundary reapplies the current, remapped receipt.
         patch['transcript_segments'] = apply_manual_assignments(
@@ -4006,7 +3999,12 @@ def promote_final_pass_if_current(
                 }
             ),
         }
-        prepared = encode_conversation_for_write(uid, patch, current.get('data_protection_level') or 'standard')
+        prepared = _prepare_conversation_for_write(
+            patch,
+            uid,
+            current.get('data_protection_level') or 'standard',
+            preserve_transcript_identity=bool(current.get('has_transcript_corrections')),
+        )
         guard_match_score_size(prepared, current, getattr(parent, 'path', None))
         transaction.update(parent, prepared)
         return True

@@ -16,7 +16,7 @@ from models.review import ReviewChange, ChangeRef
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from utils.conversations.transcript_hash import transcript_sha256_for_binding
 from models.review_context import build_context, question_source
-from utils.review_projection import sync_conversations
+from utils.review_projection import sync_conversations, sync_transcript_chunks
 from utils.agent_capabilities.transcripts import original_fingerprint, apply_entries
 
 
@@ -59,8 +59,10 @@ def record_change(
         blocked = marker.get(transaction=tx).exists
         data = store.decode_doc(uid, overlay.get(transaction=tx).to_dict()) or {'source': []}
         store.validate_records(uid, tx, expected_records)
-        if existing or blocked:
+        if existing or (blocked and authority == 'dream'):
             raise store.ReviewConflict('Transcript correction already applied or undone')
+        if current and current.get('transcript_corrections_moved_to'):
+            raise store.ReviewConflict('Transcript correction anchors moved to a merged capture')
         if current != expected_document or not current or current.get('deleted') or current.get('is_locked'):
             raise store.ReviewConflict('Transcript changed while preparing a correction')
         # Read and validate the current overlay in this transaction too. Captured
@@ -84,11 +86,17 @@ def record_change(
                     for row in data['source']
                     if not row['undone']
                     and row['segment_index'] == index
-                    and (correction['kind'] == 'transcript' or row['after'] in correction['before'])
+                    and (
+                        correction['kind'] == 'transcript'
+                        or row['kind'] == 'transcript'
+                        or row['after'] in correction['before']
+                    )
                 }
             )
         combined = [*data['source'], *enriched]
-        if len(combined) > 500 or len(json.dumps(combined, default=str).encode()) > 256000:
+        if (authority == 'dream' and sum(row.get('source') == 'dream' for row in combined) > 500) or len(
+            json.dumps(combined, default=str).encode()
+        ) > 700000:
             raise ValueError('dream_transcript_overlay_budget')
         anchor_indices = sorted({row['segment_index'] for row in enriched})
         receipt = {
@@ -112,7 +120,14 @@ def record_change(
         )
 
         def write(transaction):
-            transaction.update(target, {**patch, 'has_transcript_corrections': True})
+            transaction.update(
+                target,
+                {
+                    **patch,
+                    'has_transcript_corrections': True,
+                    'transcript_correction_overlay': store.encode_doc(uid, {'source': combined}),
+                },
+            )
             transaction.set(overlay, store.encode_doc(uid, {'source': combined}))
             transaction.set(journal, store.encode_doc(uid, result))
 
@@ -125,6 +140,7 @@ def record_change(
     sync_conversations(
         uid, [{'collection': 'conversations', 'document_id': conversation_id}], firestore_client=database
     )
+    sync_transcript_chunks(uid, conversation_id, firestore_client=database)
     return parse_payload_strict(ReviewChange, result['change'], document_path=journal.path)
 
 
@@ -170,7 +186,11 @@ def set_undone(uid, change_id, undone):
                     not later['undone']
                     and later['change_id'] != change_id
                     and later['segment_index'] == row['segment_index']
-                    and (change_id in later.get('depends_on', []) or later['before'] == row['after'])
+                    and (
+                        row['kind'] == 'transcript'
+                        or change_id in later.get('depends_on', [])
+                        or later['before'] == row['after']
+                    )
                 ):
                     raise store.ReviewConflict('Transcript has a dependent newer correction')
         if not undone and any(
@@ -202,8 +222,9 @@ def set_undone(uid, change_id, undone):
                 restored_fields['client_processing'] = firestore.DELETE_FIELD
 
         def write(transaction):
-            if restored_fields:
-                transaction.update(target, restored_fields)
+            transaction.update(
+                target, {**restored_fields, 'transcript_correction_overlay': store.encode_doc(uid, {'source': updated})}
+            )
             transaction.set(overlay, store.encode_doc(uid, {'source': updated}))
             transaction.update(journal, store.encode_doc(uid, {'change': result['change']}))
             if undone:
@@ -230,6 +251,7 @@ def set_undone(uid, change_id, undone):
         [{'collection': 'conversations', 'document_id': result['transcript_overlay']['conversation_id']}],
         firestore_client=store.client(),
     )
+    sync_transcript_chunks(uid, result['transcript_overlay']['conversation_id'], firestore_client=store.client())
     return parse_payload_strict(ReviewChange, result['change'], document_path=journal.path)
 
 
@@ -248,6 +270,8 @@ def edit_user_segment(uid, conversation_id, segment_id, text, *, firestore_clien
     target = database.collection('users').document(uid).collection('conversations').document(conversation_id)
     for _attempt in range(3):
         raw = target.get().to_dict()
+        if raw and raw.get('transcript_corrections_moved_to'):
+            return 'conflict'
         if not raw or raw.get('deleted'):
             return 'not_found'
         if raw.get('is_locked'):

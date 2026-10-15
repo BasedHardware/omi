@@ -1,3 +1,5 @@
+from utils import dream_review_policy
+
 """Full-owner memory hygiene through canonical commits and the real Review seam."""
 
 from copy import deepcopy
@@ -309,7 +311,7 @@ def test_hygiene_attention_admission_checks_live_lease(hygiene):
     db, records = hygiene
     db.rows.setdefault(('dream_users', UID), {})['lease'] = {'run_id': 'newer-run', 'mode': 'on'}
     with pytest.raises(review_store.ReviewConflict, match='dream_lease_lost'):
-        dream_tools.suggest_hygiene(UID, edit(), records()[0], 'stale-synthetic-run')
+        dream_review_policy.suggest_hygiene(UID, edit(), records()[0], 'stale-synthetic-run')
     assert not any(path[-2] == 'review_proposals' for path in db.rows)
 
 

@@ -178,3 +178,29 @@ def test_canary_uses_scheduler_oidc_and_long_declared_deadline():
     sweep = next(row for row in prod if row['name'] == 'dream-agent-sweep-hourly')
     assert canary['target']['oidc'] == sweep['target']['oidc']
     assert int(canary['attempt_deadline'][:-1]) > dream_canary.DEADLINE_SECONDS
+
+
+def test_empty_verifier_decisions_are_a_healthy_non_apply(canary, monkeypatch):
+    from models.agent_tools import VerificationBatch
+
+    original = dream_agent.dream_harness_transport.model_turn
+
+    async def empty(uid, lane, mount, messages, **kwargs):
+        result = await original(uid, lane, mount, messages, **kwargs)
+        result.value = VerificationBatch(decisions=[])
+        return result
+
+    monkeypatch.setattr(dream_agent.dream_harness_transport, 'model_turn', empty)
+    assert asyncio.run(dream_canary.check())['status'] == 'pass'
+
+
+def test_completed_malformed_verifier_payload_is_a_healthy_non_apply(canary, monkeypatch):
+    original = dream_agent.dream_harness_transport.model_turn
+
+    async def malformed(uid, lane, mount, messages, **kwargs):
+        await original(uid, lane, mount, messages, **kwargs)
+        kwargs['usage_sink']['transport_complete'] = True
+        raise ValueError('Synthetic malformed decision payload')
+
+    monkeypatch.setattr(dream_agent.dream_harness_transport, 'model_turn', malformed)
+    assert asyncio.run(dream_canary.check())['status'] == 'pass'

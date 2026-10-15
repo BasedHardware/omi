@@ -23,7 +23,11 @@ INSTRUCTIONS = (
 def evidence(item):
     # No seed, planner messages, prior notes, or another verifier's response.
     rows = {ref: minimal_context(ref, item.records) for ref in item.refs}
-    return {**item.payload(), 'evidence': rows}
+    payload = item.payload()
+    payload['operation'] = {
+        key: value for key, value in payload['operation'].items() if key not in {'reason', 'why_it_matters'}
+    }
+    return {**payload, 'evidence': rows}
 
 
 def minimal_context(ref, records):
@@ -69,7 +73,9 @@ def batches(staged, byte_limit=24000):
         yield batch
 
 
-async def verify(staged, model_turn, *, tokens, deadline_seconds, completion_tokens=4096, verifier_seconds=120):
+async def verify(
+    staged, model_turn, *, tokens, deadline_seconds, completion_tokens=4096, verifier_seconds=120, telemetry=None
+):
     support = {item.id: [] for item in staged}
     used = 0
     calls = 0
@@ -79,12 +85,17 @@ async def verify(staged, model_turn, *, tokens, deadline_seconds, completion_tok
         seed = [{'role': 'user', 'content': 'UNTRUSTED VERIFICATION DATA\n' + json.dumps(batch, default=str)}]
         # Each invocation has a freshly framed mount, with no response from the
         # other verifier. Sequential execution also bounds reserved concurrency.
-        for _ in range(2):
+        for verifier in range(2):
             remaining_seconds = deadline - asyncio.get_running_loop().time()
             if tokens - used < 1024 or remaining_seconds <= 0:
                 break
             mount = Mount(
-                instructions=INSTRUCTIONS,
+                instructions=INSTRUCTIONS
+                + (
+                    ' Audit evidence first, then test the correction for unsupported claims.'
+                    if verifier == 0
+                    else ' Act as an independent falsifier: look for counterexamples, attribution errors and missing support before deciding.'
+                ),
                 schema=VerificationBatch,
                 budget=Budget(turns=1, tokens=tokens - used, deadline_seconds=min(verifier_seconds, remaining_seconds)),
             )
@@ -93,6 +104,8 @@ async def verify(staged, model_turn, *, tokens, deadline_seconds, completion_tok
                 nonlocal used, calls
                 calls += 1
                 turn = await model_turn(active, messages)
+                if telemetry is not None:
+                    telemetry['transport_responses'] = telemetry.get('transport_responses', 0) + 1
                 used += turn.tokens if turn.accounted_tokens is None else turn.accounted_tokens
                 return turn
 
@@ -115,4 +128,6 @@ def disposition(votes):
         return 'agree'
     if len(votes) == 2 and all(vote is False for vote in votes):
         return 'disagree'
-    return 'split'
+    if len(votes) == 2 and all(isinstance(vote, bool) for vote in votes):
+        return 'split'
+    return 'unverified'

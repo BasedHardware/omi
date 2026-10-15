@@ -54,8 +54,14 @@ def test_only_strictly_older_leases_are_reclaimed(db, context, offset):
     before = deepcopy(db.rows)
     new = acquire(db, NOW + timedelta(seconds=deadline(context) + offset), context=context)
     if offset <= 0:
-        assert new is None and db.rows == before
-        assert not db.transactions[-1].has_written
+        assert new is None
+        state = ('dream_users', UID)
+        assert db.rows[state]['lease'] == before[state]['lease']
+        assert db.rows[DIRTY] == before[DIRTY]
+        for path, row in before.items():
+            if path != state:
+                assert db.rows[path] == row
+        assert db.rows[('dream_due', UID)]['due_at'] == old['started_at'] + timedelta(seconds=1741)
     else:
         assert new['run_id'] != old['run_id']
         assert db.rows[('dream_users', UID)]['lease'] == new
@@ -68,7 +74,7 @@ def test_only_strictly_older_leases_are_reclaimed(db, context, offset):
             ('users', UID, 'dream_runs', old['run_id']),
             ('dream_users', UID),
             ('dream_users', UID, 'spend', old['day']),
-            ('dream_global_spend', old['day']),
+            ('dream_global_spend', old['day'] + '-' + str(old['global_shard'])),
         }
         assert not any('dirty' in path or 'reviews' in path for path in paths)
 
@@ -163,9 +169,11 @@ def test_reclamation_commits_even_when_new_admission_is_denied(db, trigger, reas
 def test_reclamation_recharges_same_day_before_applying_daily_cap(db):
     old = acquire(db)
     db.rows[('dream_users', UID)]['lease']['budget_charge_usd'] = 0
-    db.rows[('dream_users', UID, 'spend', old['day'])]['reserved_usd'] = 249.7
+    db.rows[('dream_users', UID, 'spend', old['day'])]['reserved_usd'] = 250 - caps().reservation_usd * 1.5
     assert acquire(db, NOW + timedelta(seconds=deadline('bounded') + 1)) is None
-    assert db.rows[('dream_users', UID, 'spend', old['day'])]['reserved_usd'] == pytest.approx(249.94)
+    assert db.rows[('dream_users', UID, 'spend', old['day'])]['reserved_usd'] == pytest.approx(
+        250 - caps().reservation_usd * 0.5
+    )
     assert db.rows[('dream_users', UID)]['lease'] is None
 
 

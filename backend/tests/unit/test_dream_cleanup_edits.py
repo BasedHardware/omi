@@ -48,6 +48,9 @@ def task(key):
 @pytest.fixture
 def store(monkeypatch):
     db = DreamFirestore()
+    from database import vector_db
+
+    monkeypatch.setattr(vector_db, 'index', None)
     monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
     monkeypatch.setattr(review_store, 'get_firestore_client', lambda: db)
     monkeypatch.setattr(task_intelligence_control, 'get_firestore_client', lambda: db)
@@ -123,7 +126,7 @@ def test_later_user_edit_generation_or_deletion_prevents_cleanup_reversal(store,
         if key[2:3] == ('review_changes',)
     )
     if changed == 'row':
-        store.rows[('users', UID, 'action_items', 'one')]['description'] = 'A later user edit'
+        store.rows[('users', UID, 'action_items', 'one')]['superseded_by'] = 'a-later-survivor'
     elif changed == 'generation':
         store.rows[('users', UID, 'task_intelligence_control', 'state')]['account_generation'] = 1
     else:
@@ -146,7 +149,7 @@ def test_later_user_edit_generation_or_deletion_prevents_cleanup_reversal(store,
 def test_user_created_edited_linked_or_recurring_tasks_are_protected(store, field, value):
     seen = records(store)
     seen['action_items/one'][field] = value
-    with pytest.raises(ValueError, match='dream_task_user_protected'):
+    with pytest.raises(ValueError, match='agent_task_user_protected'):
         dream_tools.validate_edit(edit('retire_task'), seen)
 
 
@@ -260,7 +263,7 @@ def test_person_bootstrap_cannot_bless_post_bootstrap_changes(store, monkeypatch
 def test_autonomous_person_merge_preserves_user_identity(store, field):
     seen = person_merge_records(store)
     seen['people/right'][field] = True
-    with pytest.raises(ValueError, match='dream_person_user_protected'):
+    with pytest.raises(ValueError, match='agent_person_user_protected'):
         dream_tools.validate_edit(person_merge(), seen, authority='dream')
     dream_tools.validate_edit(person_merge(), seen, authority='user')
 

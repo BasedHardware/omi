@@ -58,13 +58,13 @@ def seed(queue, count):
         }
 
 
-def test_repeated_writes_coalesce_without_reading_state(queue):
+def test_repeated_writes_coalesce_with_one_bounded_priority_read(queue):
     for _ in range(50):
         dream_store.mark_dirty(UID, [('conversations', 'same'), ('conversations', 'same')])
     rows = dream_store.dirty_refs(UID)
     assert len(rows) == 1 and rows[0].to_dict()['change_count'] == 50
     assert queue.rows[('dream_users', UID)]['score'] == 50
-    assert queue.reads == [('users', UID)] * 50
+    assert queue.reads == [('users', UID), ('dream_users', UID)] * 50
     assert not queue.transactions
     dream_store.mark_dirty(UID, [('conversations', 'other')])
     assert dream_store.dirty_refs(UID)[0].to_dict()['id'] == 'other'

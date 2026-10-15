@@ -36,25 +36,9 @@ class _Unchanged(Exception):
     pass
 
 
-ALLOWED_FIELDS = {
-    'knowledge_nodes': {'label', 'label_lower', 'aliases', 'aliases_lower', 'merged_entity_ids', 'redirect_entity_id'},
-    'people': {'name', 'aliases', 'organization', 'subtitle', 'is_dismissed', 'dismissed_at', 'updated_at'},
-    'conversations': {
-        'user_title',
-        'structured.title',
-        'structured.overview',
-        'structured.sections',
-        'structured.note_claims',
-        'transcript_segments',
-        'manual_speaker_assignments',
-        'dream_duplicate_of',
-        'dream_duplicate',
-        'language',
-    },
-    'action_items': {'status', 'completed', 'completed_at', 'deleted', 'superseded_by', 'updated_at'},
-    'entity_pages': {'summary', 'updated_at'},
-    'dream_vocabulary': {'source'},
-}
+from utils.agent_capabilities.registry import journal_fields
+
+ALLOWED_FIELDS = journal_fields()
 
 
 class AgentEdit(BaseModel):
@@ -78,7 +62,12 @@ def _wire(data: dict) -> ReviewChange:
 
 def agent_change_allowed(uid: str, edit_key: str) -> bool:
     """Dream MUST check this key before planning an edit; record also enforces it."""
-    return not store.user(uid).collection('review_do_not_redo').document(store.safe_id(edit_key)).get().exists
+    keys = [edit_key]
+    if edit_key.startswith('agent:'):
+        keys.append('dream:' + edit_key.removeprefix('agent:'))
+    return not any(
+        store.user(uid).collection('review_do_not_redo').document(store.safe_id(key)).get().exists for key in keys
+    )
 
 
 def suppress_agent_change(uid: str, edit_key: str) -> None:
@@ -146,7 +135,7 @@ def record_agent_change(
                 raise store.ReviewConflict('Change identity conflict')
             result.update(existing)
             raise _Unchanged
-        if blocked:
+        if blocked and not store.is_user_request(uid):
             raise store.ReviewConflict('Agent edit was undone by the user')
         store.validate_records(uid, tx, expected_records)
         records = []
@@ -173,7 +162,9 @@ def record_agent_change(
             'entity_merge': list(entity_merge) if entity_merge else None,
         }
         if exact_undo:
-            journal.update(review_exact_undo.journal_fences(edits, rows, expected_records, witnesses=witness_records))
+            journal.update(
+                review_exact_undo.journal_fences(edits, rows, expected_records, witnesses=witness_records, uid=uid)
+            )
         mutations = (
             [memory_ledger.merge_entities(*entity_merge, evidence={'review_change_id': change.change_id})]
             if entity_merge
@@ -340,7 +331,12 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
                 survivor = (
                     store.user(uid).collection(survivor_collection).document(survivor_id).get(transaction=tx).to_dict()
                 )
-                if survivor is None or store.fingerprint(survivor) != expected_fence:
+                observed = (
+                    review_exact_undo.witness_snapshot(uid, survivor_path, survivor)
+                    if isinstance(expected_fence, dict) and survivor is not None
+                    else store.fingerprint(survivor)
+                )
+                if survivor is None or observed != expected_fence:
                     raise store.ReviewConflict('Cleanup survivor has a newer edit')
         rows = []
         exact_restores = {}
@@ -364,7 +360,25 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
                     .get(transaction=tx)
                     .to_dict()
                 )
-                if any(not row['undone'] for row in store.require_doc(uid, overlay)['source']):
+                from database.conversations import decode_transcript_segments_verified
+
+                def decode(state):
+                    return decode_transcript_segments_verified(
+                        uid, state.get('value') or [], bool(current.get('transcript_segments_compressed'))
+                    )
+
+                before_segments = decode(edit['before']['transcript_segments'])
+                after_segments = decode(edit['after']['transcript_segments'])
+                touched = {
+                    index
+                    for index in range(max(len(before_segments), len(after_segments)))
+                    if index >= min(len(before_segments), len(after_segments))
+                    or before_segments[index].get('text') != after_segments[index].get('text')
+                }
+                if any(
+                    not row['undone'] and row['segment_index'] in touched
+                    for row in store.require_doc(uid, overlay)['source']
+                ):
                     raise store.ReviewConflict('Transcript has a dependent newer correction')
             if any(read_field_state(current, key) != value for key, value in edit[expected].items()):
                 raise store.ReviewConflict('Target has a newer edit')

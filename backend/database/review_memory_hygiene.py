@@ -169,7 +169,7 @@ def record_change(uid, change, edit, edit_key, *, expected_records=None):
                 raise store.ReviewConflict('Memory change identity conflict')
             return parse_payload_strict(ReviewChange, prior['change'], document_path='review_changes')
         store.validate_records(uid, tx, expected_records)
-        if blocked:
+        if blocked and not store.is_user_request(uid):
             raise store.ReviewConflict('Memory operation was undone')
         keys = [target_id, *([other_id] if other_id else []), *([new_id] if new_id else [])]
         before = {

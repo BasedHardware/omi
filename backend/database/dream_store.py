@@ -50,6 +50,17 @@ def spend_ref(database, uid, day):
     return state_ref(database, uid).collection('spend').document(day)
 
 
+def global_spend_ref(database, uid, day, *, shards=64, shard=None):
+    slot = int(sha256(uid.encode()).hexdigest(), 16) % shards if shard is None else shard
+    return database.collection('dream_global_spend').document(day + '-' + str(slot))
+
+
+def lease_global_ref(database, uid, lease):
+    if 'global_shard' not in lease:
+        return database.collection('dream_global_spend').document(lease['day'])
+    return global_spend_ref(database, uid, lease['day'], shard=lease['global_shard'])
+
+
 def lease_spend_ref(database, uid, lease):
     return (
         spend_ref(database, uid, lease['day'])
@@ -85,6 +96,11 @@ def mark_dirty(uid, refs, *, canary=False, firestore_client=None):
     plan = (user.get('subscription') or {}).get('plan', user.get('plan', ''))
     weight = 2 if plan in PAID_PLAN_IDS else 1
     refs = list(dict.fromkeys(refs))
+    priority_state = state.get().to_dict() or {}
+    from database.dream_scheduler import due_time
+
+    now = datetime.now(timezone.utc)
+    priority_due = min(now, due_time({**priority_state, 'score': priority_state.get('score', 0) + weight}, now))
     for start in range(0, len(refs), WRITE_CHUNK):
         batch = database.batch()
         for collection, key in refs[start : start + WRITE_CHUNK]:
@@ -104,6 +120,7 @@ def mark_dirty(uid, refs, *, canary=False, firestore_client=None):
         # score before this product write has finished queuing all its refs.
         if start + WRITE_CHUNK >= len(refs):
             batch.set(state, {'score': firestore.Increment(weight)}, merge=True)
+            batch.set(database.collection('dream_due').document(uid), {'due_at': priority_due})
         batch.commit()
         trim_dirty(uid, firestore_client=database)
     return True
@@ -173,7 +190,7 @@ def acquire(
     spend = spend_ref(database, uid, day)
     owner = database.collection('users').document(uid)
     run_id = str(uuid4())
-    global_spend = database.collection('dream_global_spend').document(day)
+    global_spend = global_spend_ref(database, uid, day, shards=caps.global_spend_shards)
 
     def admit(tx, data, budget, user, global_budget):
         passes = int(data.get('passes', 0)) if data.get('day') == day else 0
@@ -186,6 +203,12 @@ def acquire(
         interval = timedelta(hours=6 if data.get('size_bucket') == 'heavy' else 24)
         hunt_due = not canary and (not isinstance(last_pass, datetime) or now - last_pass >= interval)
         has_dirty = dirty_count(uid, transaction=tx, firestore_client=database) > 0
+        tomorrow = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        if trigger != 'manual' and passes >= caps.passes:
+            return None, {'next_due_at': tomorrow}
+        if data.get('lease'):
+            started = data['lease'].get('started_at') or now
+            return None, {'next_due_at': started + timedelta(seconds=1741)}
         if (
             mode() == 'off'
             or (not canary and os.getenv('REVIEW_SURFACE_MODE', 'off') != 'on')
@@ -198,11 +221,14 @@ def acquire(
             or caps.edits < 1
             or caps.max_usd_per_token <= 0
             or float(budget.get('reserved_usd', 0)) + caps.reservation_usd > caps.daily_usd
-            or float(global_budget.get('reserved_usd', 0)) + caps.reservation_usd > caps.global_daily_usd
+            or float(global_budget.get('reserved_usd', 0)) + caps.reservation_usd
+            > caps.global_daily_usd / caps.global_spend_shards
         ):
             if trigger == 'manual':
                 raise AdmissionDenied('dream_budget_unavailable')
-            return None, {}
+            from database.dream_scheduler import due_time
+
+            return None, {'next_due_at': max(now + timedelta(minutes=5), due_time(data, now))}
         lease = {
             'run_id': run_id,
             'day': day,
@@ -216,6 +242,10 @@ def acquire(
             'spend_scope': 'user',
             'score': data.get('score', 0),
             'global_spend_scope': True,
+            'global_shard': int(sha256(uid.encode()).hexdigest(), 16) % caps.global_spend_shards,
+            'global_shard_cap': caps.global_daily_usd / caps.global_spend_shards,
+            'daily_cap': caps.daily_usd,
+            'passes_per_day': caps.passes,
             'hunt': not has_dirty,
             'canary': canary,
             'mode': 'shadow' if canary else mode(),
@@ -257,7 +287,7 @@ def acquire(
             previous_charge = float(abandoned.get('budget_charge_usd', reservation))
             old_budget['reserved_usd'] = float(old_budget.get('reserved_usd', 0)) + reservation - previous_charge
             if abandoned.get('global_spend_scope'):
-                old_global_spend = database.collection('dream_global_spend').document(abandoned['day'])
+                old_global_spend = lease_global_ref(database, uid, abandoned)
                 old_global_budget = old_global_spend.get(transaction=tx).to_dict() or {}
                 old_global_budget['reserved_usd'] = (
                     float(old_global_budget.get('reserved_usd', 0)) + reservation - previous_charge
@@ -321,6 +351,8 @@ def acquire(
             )
         elif reclaimed or patch:
             tx.set(state, {**data, **patch})
+        if patch.get('next_due_at'):
+            tx.set(database.collection('dream_due').document(uid), {'due_at': patch['next_due_at']})
         return lease, reclaimed, denial
 
     lease, reclaimed, denial = claim(database.transaction())
@@ -361,9 +393,7 @@ def finish(
     # Leases admitted before this change still belong to the old shared ledger.
     # Never debit a new user ledger for a reservation it did not acquire.
     spend = lease_spend_ref(database, uid, lease)
-    global_spend = (
-        database.collection('dream_global_spend').document(lease['day']) if lease.get('global_spend_scope') else None
-    )
+    global_spend = lease_global_ref(database, uid, lease) if lease.get('global_spend_scope') else None
     report['dirty_dropped'] = max(0, lease['dirty_dropped'] - lease['dirty_dropped_reported'])
     failure_eligible = count_failure and not success and release and not refund
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
@@ -567,6 +597,16 @@ def finish(
                         merge=True,
                     )
         tx.update(state, patch)
+        from database.dream_scheduler import due_time
+
+        next_due = due_time({**data, **patch}, now)
+        if data.get('day') == now.date().isoformat() and data.get('passes', 0) >= current_lease.get(
+            'passes_per_day', 2
+        ):
+            next_due = deferred_until
+        if not release:
+            next_due = now + timedelta(seconds=1740)
+        tx.set(database.collection('dream_due').document(uid), {'due_at': next_due})
         return settled
 
     report.update(complete(database.transaction()))
@@ -613,7 +653,7 @@ def demoted_types(uid, caps, *, firestore_client=None):
     counts = {}
     for snapshot in rows:
         data = _review_store().decode_doc(uid, snapshot.to_dict()) or {}
-        if not data.get('edit_key', '').startswith('dream:') or data.get('phase', 'applied') != 'applied':
+        if not data.get('edit_key', '').startswith(('dream:', 'agent:')) or data.get('phase', 'applied') != 'applied':
             continue
         kind = data['edit_key'].split(':')[1]
         total, undone = counts.get(kind, (0, 0))

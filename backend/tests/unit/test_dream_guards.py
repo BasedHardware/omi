@@ -171,7 +171,7 @@ def test_apply_rechecks_quality_before_journaling(monkeypatch):
     source = row()
     monkeypatch.setattr(review_changes, 'agent_change_allowed', lambda *a: True)
     monkeypatch.setattr(review_changes, 'record_agent_change', lambda *a, **k: pytest.fail('unsafe journal'))
-    with pytest.raises(ValueError, match='dream_summary_ungrounded'):
+    with pytest.raises(ValueError, match='agent_summary_ungrounded'):
         dream_tools.apply_edit('invented', edit(after='Quantum particle experiments'), {'conversations/c1': source})
 
 
@@ -345,7 +345,7 @@ def test_compounds_and_specialized_terms_are_not_common_single_words(word):
 def test_apply_rechecks_task_policy_before_any_journal_or_storage(monkeypatch):
     records = task_records(updated_at=LATER_TIME)
     monkeypatch.setattr(review_changes, 'agent_change_allowed', lambda *a: pytest.fail('unsafe task reached journal'))
-    with pytest.raises(ValueError, match='dream_stale_task_evidence'):
+    with pytest.raises(ValueError, match='agent_stale_task_evidence'):
         dream_tools.apply_edit('invented', task_edit(), records)
 
 
@@ -368,6 +368,6 @@ def test_close_with_independent_evidence_uses_reversible_journal_and_fences_curr
     assert kwargs['expected_documents'] == {'t1': raw}
     # A changed source must fail the policy even when its updated_at was not refreshed.
     raw['conversation_id'] = 'later'
-    with pytest.raises(ValueError, match='dream_stale_task_evidence'):
+    with pytest.raises(ValueError, match='agent_stale_task_evidence'):
         dream_tools.apply_edit('invented', task_edit(), records)
     assert len(writes) == 1

@@ -97,7 +97,12 @@ async def check():
             # Schema bytes dominate the cap; only 256 completion tokens per lane.
             # Allow 48 half-hour checks plus retries, sharing the global ceiling.
             caps = replace(
-                Caps.from_env(), tokens=min(96000, Caps.from_env().tokens), passes=96, edits=1, completion_tokens=256
+                Caps.from_env(),
+                tokens=min(96000, Caps.from_env().tokens),
+                passes=96,
+                manual_runs=96,
+                edits=1,
+                completion_tokens=256,
             )
             ref = 'conversations/' + dream_canary.RECORD_ID
             edit = fixture_edit()
@@ -130,7 +135,7 @@ async def check():
                 != {
                     dream_harness_transport.VERIFY_LANE,
                 }
-                or report.get('verifier_valid_responses') != 2
+                or report.get('verifier_transport_responses') != 2
                 or report.get('tool_counts', {}).get('propose_edit') != 1
             ):
                 error = report.get('error_type') or 'CanaryFailure'
@@ -155,13 +160,35 @@ async def check():
             original = await run_blocking(
                 db_executor, conversations.get_conversation_raw_snapshot, uid, dream_canary.RECORD_ID
             )
-            if (
-                await run_blocking(
-                    db_executor, tools.apply_edit, uid, edit, records, authority='user', expected_records=fences
+            from database.dream_effect_fence import ACTIVE_RUN
+
+            probe_lease = await run_blocking(db_executor, dream_store.acquire, uid, caps, canary=True, trigger='manual')
+            if not probe_lease:
+                raise CanaryFailure('journal_not_admitted')
+            scope = ACTIVE_RUN.set((uid, probe_lease['run_id']))
+            try:
+                status = await run_blocking(
+                    db_executor,
+                    tools.apply_verified_edit,
+                    uid,
+                    edit,
+                    records,
+                    authority='dream',
+                    expected_records=fences,
                 )
-                != 'applied'
-            ):
-                raise CanaryFailure('journal_missing')
+                if status != 'applied':
+                    raise CanaryFailure('journal_missing')
+            finally:
+                ACTIVE_RUN.reset(scope)
+                await run_blocking(
+                    db_executor,
+                    dream_store.finish,
+                    uid,
+                    probe_lease,
+                    {'reason': 'idle', 'tokens': 0, 'usage_unknown': False},
+                    success=True,
+                    refund=True,
+                )
             key = tools.edit_key(edit, records)
             change = tools.dream_change_view.edit_change(uid, edit, records, key)
             stage = 'undo'

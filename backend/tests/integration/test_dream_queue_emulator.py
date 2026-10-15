@@ -21,7 +21,6 @@ from config.dream_agent import Caps
 from database import _client, conversations, dream_store, dream_history, review_store
 from utils.agent_capabilities import reads as dream_reads
 from utils.agent_capabilities import evidence as dream_context
-from utils.dream_diagnostics import path_count
 from utils.llm.shaped_agent import Turn
 from models.dream_edit import Edit
 
@@ -603,3 +602,131 @@ def test_manual_overlay_projection_boundaries_dependencies_and_atomic_invalidati
     review_changes.set_undone(uid, first_id, True)
     assert document.get().to_dict()['client_processing'] == original['client_processing']
     assert document.get().to_dict()['transcript_segments'] == original['transcript_segments']
+
+
+def test_due_queue_discovers_owners_once_orders_staleness_and_reschedules_caps(monkeypatch):
+    from database import dream_scheduler
+    from config import dream_control
+
+    database = emulator_client()
+    monkeypatch.setattr(dream_control, 'allowed', lambda: True)
+    monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
+    monkeypatch.setenv('DREAM_AGENT_ELIGIBILITY', 'all')
+    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
+    now = datetime.now(timezone.utc)
+    for key, ago in [('synthetic-old', 3), ('synthetic-new', 1), ('synthetic-fresh', 0)]:
+        database.collection('users').document(key).set({})
+        database.collection('dream_users').document(key).set({'last_attempt_at': now - timedelta(days=ago)})
+    selected = dream_scheduler.candidates(limit=5000, now=now, firestore_client=database)
+    assert selected == ['synthetic-old', 'synthetic-new']
+    # Independent discovery cursor advances even with no session admitted.
+    assert database.collection('dream_scheduler').document('discovery').get().to_dict()['after'] is None
+    database.collection('dream_users').document('synthetic-old').set(
+        {'day': now.date().isoformat(), 'passes': 2}, merge=True
+    )
+    assert dream_store.acquire('synthetic-old', Caps(), now=now, firestore_client=database) is None
+    assert 'synthetic-old' not in dream_scheduler.candidates(limit=5000, now=now, firestore_client=database)
+    # A dirty write atomically requeues a future hunt; discovery never overwrites it.
+    dream_store.mark_dirty('synthetic-fresh', [('conversations', 'invented')], firestore_client=database)
+    assert dream_scheduler.candidates(limit=5000, now=now, firestore_client=database)[0] == 'synthetic-fresh'
+
+
+def test_real_flag_doc_can_stop_all_dream_hosts_without_env_rollout(monkeypatch):
+    from config import dream_control
+
+    database = emulator_client()
+    monkeypatch.setattr(_client, 'get_firestore_client', lambda: database)
+    ref = database.collection('dream_control').document('global')
+    ref.set({'enabled': False})
+    assert dream_control.load_flag() is False
+    ref.set({'enabled': True})
+    assert dream_control.load_flag() is True
+
+
+def test_real_merge_relocates_offsets_and_undo_receipts_without_rewriting_capture(monkeypatch):
+    from copy import deepcopy
+    from database import review_changes, review_transcript_changes
+    from database.review_overlay_merge import transfer
+
+    database = emulator_client()
+    monkeypatch.setattr(_client, '_firestore_client', database)
+    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
+    uid = 'synthetic-overlay-merge-' + str(uuid4())
+    owner = database.collection('users').document(uid)
+    owner.set({})
+    source = {
+        'id': 'one',
+        'status': 'completed',
+        'data_protection_level': 'enhanced',
+        'transcript_segments': [{'id': 'speech', 'start': 0, 'end': 4, 'text': 'Invented workshop plan.'}],
+    }
+    prefix = {
+        'id': 'prefix',
+        'status': 'completed',
+        'data_protection_level': 'enhanced',
+        'transcript_segments': [{'id': 'intro', 'start': 0, 'end': 2, 'text': 'Synthetic introduction.'}],
+    }
+    for row in [source, prefix]:
+        owner.collection('conversations').document(row['id']).set(
+            conversations.encode_conversation_for_write(uid, row, 'enhanced')
+        )
+    assert (
+        review_transcript_changes.edit_user_segment(uid, 'one', 'speech', 'Owner requested synthetic wording.') == 'ok'
+    )
+    journal = next(owner.collection('review_changes').stream())
+    change_id = review_store.require_doc(uid, journal.to_dict())['change']['change_id']
+    merged = {
+        **source,
+        'id': 'merged',
+        'transcript_segments': [
+            *prefix['transcript_segments'],
+            {**source['transcript_segments'][0], 'start': 100, 'end': 104},
+        ],
+    }
+    merged_doc = owner.collection('conversations').document('merged')
+    merged_raw = conversations.encode_conversation_for_write(uid, merged, 'enhanced')
+    merged_doc.set(merged_raw)
+    assert transfer(uid, ['prefix', 'one'], 'merged', firestore_client=database)
+    moved = review_store.require_doc(uid, journal.reference.get().to_dict())['transcript_overlay']
+    assert moved['conversation_id'] == 'merged' and moved['corrections'][0]['segment_index'] == 1
+    assert moved['corrections'][0]['start'] == 100
+    assert review_transcript_changes.edit_user_segment(uid, 'one', 'speech', 'A stale source write.') == 'conflict'
+    assert (
+        conversations.get_conversation(uid, 'merged')['transcript_segments'][1]['text']
+        == 'Owner requested synthetic wording.'
+    )
+    review_changes.set_undone(uid, change_id, True)
+    assert conversations.get_conversation(uid, 'merged')['transcript_segments'][1]['text'] == 'Invented workshop plan.'
+    assert merged_doc.get().to_dict()['transcript_segments'] == merged_raw['transcript_segments']
+    review_changes.set_undone(uid, change_id, False)
+    assert (
+        conversations.get_conversation(uid, 'merged')['transcript_segments'][1]['text']
+        == 'Owner requested synthetic wording.'
+    )
+
+
+def test_merge_seals_sources_even_when_no_overlay_existed_at_admission(monkeypatch):
+    from database import review_transcript_changes
+    from database.review_overlay_merge import transfer
+
+    database = emulator_client()
+    monkeypatch.setattr(_client, '_firestore_client', database)
+    uid = 'synthetic-plain-merge-' + str(uuid4())
+    owner = database.collection('users').document(uid)
+    owner.set({})
+    row = {
+        'id': 'source',
+        'status': 'completed',
+        'data_protection_level': 'enhanced',
+        'transcript_segments': [{'id': 'speech', 'start': 0, 'end': 4, 'text': 'An invented capture.'}],
+    }
+    for key in ['source', 'destination']:
+        owner.collection('conversations').document(key).set(
+            conversations.encode_conversation_for_write(uid, {**row, 'id': key}, 'enhanced')
+        )
+    assert transfer(uid, ['source'], 'destination', firestore_client=database)
+    assert review_transcript_changes.edit_user_segment(uid, 'source', 'speech', 'Stale source wording.') == 'conflict'
+    assert (
+        review_transcript_changes.edit_user_segment(uid, 'destination', 'speech', 'Requested destination wording.')
+        == 'ok'
+    )

@@ -3,6 +3,7 @@
 from copy import deepcopy
 
 from database import review_store as store
+from database.review_field_states import read_field_state
 
 
 def patched_row(row, patch):
@@ -30,7 +31,7 @@ def restored_row(row, fields):
     return result
 
 
-def journal_fences(edits, rows, expected_records, witnesses=None):
+def journal_fences(edits, rows, expected_records, witnesses=None, *, uid=None):
     # The ordinary owned-field journal still performs reversal. Full-row hashes
     # ensure a later user edit cannot be touched by cleanup's Undo/Redo.
     journal: dict = {
@@ -38,8 +39,9 @@ def journal_fences(edits, rows, expected_records, witnesses=None):
             {
                 'collection': edit.collection,
                 'document_id': edit.document_id,
-                'before': store.fingerprint(raw),
-                'after': store.fingerprint(patched_row(raw, edit.patch)),
+                'fields': list(edit.patch),
+                'before': {key: read_field_state(raw, key) for key in edit.patch},
+                'after': {key: read_field_state(patched_row(raw, edit.patch), key) for key in edit.patch},
             }
             for edit, _, raw in rows
         ],
@@ -52,7 +54,9 @@ def journal_fences(edits, rows, expected_records, witnesses=None):
     if witnesses:
         # Redo-only survivor fences for merges: the hidden target points at a
         # survivor this edit never owned, so Redo must verify it is unchanged.
-        journal['witness_fences'] = {path: store.fingerprint(raw) for path, raw in witnesses.items() if raw is not None}
+        journal['witness_fences'] = {
+            path: witness_snapshot(uid, path, raw) for path, raw in witnesses.items() if raw is not None
+        }
     return journal
 
 
@@ -75,6 +79,35 @@ def validate_row(journal, collection, key, current, expected):
     )
     if fence is None:
         return False
-    if current is None or store.fingerprint(current) != fence[expected]:
+    observed = (
+        {key: read_field_state(current or {}, key) for key in fence['fields']}
+        if 'fields' in fence
+        else store.fingerprint(current)
+    )
+    if current is None or observed != fence[expected]:
         raise store.ReviewConflict('Cleanup row has a newer edit')
     return True
+
+
+def witness_snapshot(uid, path, raw):
+    collection = path.split('/')[0]
+    fields = {
+        'action_items': (
+            'description',
+            'owner',
+            'due_at',
+            'source',
+            'account_generation',
+            'status',
+            'deleted',
+            'superseded_by',
+            'completed',
+        ),
+        'conversations': ('status', 'deleted', 'discarded', 'dream_duplicate', 'dream_duplicate_of', 'is_locked'),
+    }.get(collection, ('name', 'redirect_entity_id'))
+    result: dict = {'fields': {key: read_field_state(raw, key) for key in fields}}
+    if collection == 'conversations':
+        from utils.agent_capabilities.transcripts import original_fingerprint
+
+        result['speech'] = original_fingerprint(uid, raw)
+    return result

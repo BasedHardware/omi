@@ -159,7 +159,7 @@ def test_memory_correction_key_survives_undo_tail_and_tool_kind_changes():
     assert original == dream_tools.edit_key(tail, {tail.target: row})
     rewrite = tail.model_copy(update={'kind': 'memory', 'before': '', 'after': 'Alice prefers Widgets'})
     assert original == dream_tools.edit_key(rewrite, {rewrite.target: row})
-    assert original.startswith('dream:memory:')
+    assert original.startswith('agent:memory:')
     changed = dict(row, content='Alise now prefers Robots')
     assert original != dream_tools.edit_key(tail, {tail.target: changed})
 
@@ -218,5 +218,5 @@ def test_invalid_or_wrong_segment_spelling_cannot_widen_target(fragment):
             ]
         }
     }
-    with pytest.raises(ValueError, match='dream_invalid_target'):
+    with pytest.raises(ValueError, match='agent_target_(term_missing|quote_mismatch)'):
         dream_tools.validate_edit(spelling('conversations/c1#' + fragment), records)

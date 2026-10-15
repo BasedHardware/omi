@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from uuid import NAMESPACE_URL, uuid5
 
 from models.agent_refs import base_ref, cited_value
-from models.review import ReviewChange, ChangeRef
+from models.review import ReviewChange
 from models.review_context import build_context, question_source
 
 
@@ -26,19 +26,9 @@ def change_id_for_key(uid, key):
 
 
 def edit_change(uid, edit, records, key):
-    row = records[base_ref(edit.target)]
-    before = edit.before or label(row)
-    after = edit.after or (label(records[base_ref(edit.other)]) if edit.other else '')
-    refs = []
-    if edit.kind == 'merge_people':
-        before = label(row) + ' + ' + label(records[base_ref(edit.other)])
-        after = label(row)
-        refs = [
-            ChangeRef(type='person', id=base_ref(ref).split('/', 1)[1], label=label(records[base_ref(ref)]))
-            for ref in (edit.target, edit.other)
-        ]
-    elif edit.kind == 'merge_memories':
-        before = label(row) + ' + ' + label(records[base_ref(edit.other)])
+    from utils.agent_capabilities.registry import get_kind
+
+    before, after, refs = get_kind(edit.kind).change_view(edit, records)
     source_ref = (
         edit.target
         if edit.target.startswith('conversations/')

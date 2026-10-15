@@ -553,3 +553,26 @@ async def test_invalid_request_after_first_stream_chunk_never_calls_luna(monkeyp
         assert not luna.calls
     finally:
         await vertex.aclose()
+
+
+@pytest.mark.parametrize('lane', ['omi:auto:dream-reasoning', 'omi:auto:dream-verify'])
+@pytest.mark.parametrize('failure', [FailureClass.RESERVED_CAPACITY_UNAVAILABLE, FailureClass.PROVIDER_429_OMI_PAID])
+def test_both_dream_lanes_keep_exact_luna_fallback_and_allow_reserved_recovery(lane, failure):
+    config = load_gateway_config()
+    route = config.route_artifacts[config.lanes[lane].active_route]
+    assert route.provider_options['reserved_capacity_only'] is True
+    assert route.fallbacks == [ProviderRef(provider='openai', model='gpt-6-luna')]
+    assert can_try_next_provider(route, route.primary, failure)
+    assert is_lkg_eligible(route, failure)
+
+
+def test_dream_route_derivation_refuses_a_future_gemini_fallback():
+    from llm_gateway.gateway.dream_lanes import dream_lane_items
+
+    config = load_gateway_config()
+    route = config.route_artifacts[config.lanes['omi:auto:dream-reasoning'].active_route]
+    lane = config.lanes['omi:auto:dream-reasoning']
+    changed = route.model_dump(mode='json')
+    changed['fallbacks'] = [{'provider': 'gemini', 'model': 'synthetic-payg'}]
+    _, routes = dream_lane_items([lane.model_dump(mode='json')], [changed])
+    assert all(r['primary'] == {'provider': 'openai', 'model': 'gpt-6-luna'} and not r['fallbacks'] for r in routes)

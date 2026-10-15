@@ -62,6 +62,10 @@ def user_request_authority(uid: str):
         _USER_REQUEST_OWNER.reset(token)
 
 
+def is_user_request(uid):
+    return _USER_REQUEST_OWNER.get() == uid
+
+
 def require_enabled(uid: str | None = None) -> None:
     if uid is not None and _USER_REQUEST_OWNER.get() == uid:
         return

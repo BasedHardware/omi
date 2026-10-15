@@ -563,7 +563,8 @@ class GeneratedTerm {
 }
 
 class GeneratedAgentProposalItem {
-  final Map<String, dynamic>? edit;
+  final GeneratedEdit? edit;
+  final Map<String, dynamic>? operation;
   final String? otherContent;
   final String? otherLabel;
   final String? targetContent;
@@ -572,6 +573,7 @@ class GeneratedAgentProposalItem {
 
   const GeneratedAgentProposalItem({
     this.edit,
+    this.operation,
     this.otherContent,
     this.otherLabel,
     this.targetContent,
@@ -581,7 +583,8 @@ class GeneratedAgentProposalItem {
 
   factory GeneratedAgentProposalItem.fromJson(Map<String, dynamic> json) {
     return GeneratedAgentProposalItem(
-      edit: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["edit"]), "edit", _readMap, requiredField: false, nullable: true),
+      edit: _readFieldValue<GeneratedEdit>(_readField(json, const ["edit"]), "edit", (value) => _readObject(value, GeneratedEdit.fromJson), requiredField: false, nullable: true),
+      operation: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["operation"]), "operation", _readMap, requiredField: false, nullable: true),
       otherContent: _readFieldValue<String>(_readField(json, const ["other_content"]), "other_content", _readString, requiredField: false, nullable: true),
       otherLabel: _readFieldValue<String>(_readField(json, const ["other_label"]), "other_label", _readString, requiredField: false, nullable: true),
       targetContent: _readFieldValue<String>(_readField(json, const ["target_content"]), "target_content", _readString, requiredField: false, nullable: true),
@@ -592,7 +595,8 @@ class GeneratedAgentProposalItem {
 
   Map<String, dynamic> toJson() {
     return {
-      'edit': edit,
+      'edit': edit?.toJson(),
+      'operation': operation,
       'other_content': otherContent,
       'other_label': otherLabel,
       'target_content': targetContent,

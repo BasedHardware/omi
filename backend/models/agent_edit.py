@@ -1,37 +1,22 @@
 """Shared reversible edit contract, additive to the released Review edit arm."""
 
-from typing import Literal
 from pydantic import Field, model_validator
 from models.dream_edit import Edit, MemoryHygieneEdit, Strict, QUESTION_VALUE_DESCRIPTION
+from utils.agent_capabilities.registry import EDIT_KINDS
 
 
 class HarnessEdit(Strict):
-    kind: Literal[
-        'spelling',
-        'title',
-        'overview',
-        'memory',
-        'entity_summary',
-        'close_task',
-        'merge_memories',
-        'retire_memory',
-        'supersede_memory',
-        'dismiss_person',
-        'merge_people',
-        'merge_tasks',
-        'retire_task',
-        'merge_conversations',
-        'set_language',
-    ] = Field(
+    kind: str = Field(
+        json_schema_extra={'enum': list(EDIT_KINDS)},
         description=(
             'Correct evidenced defects, never style or low importance. Retire memories only for garbage, '
             'contradiction or facts spoken by someone else but attributed to the owner. Supersede only with '
             'a newer fact about the same attribute. Dismiss junk person detections (filler, nationalities, '
             'fragments), never a real person. Merge tasks only when they represent the same obligation; '
-            'retire duplicates or someone else\'s task misfiled to the owner. Never change manual or edited '
+            'retire duplicates or someone else\'s task misfiled to the owner. Autonomous agents must not change manual or edited '
             'tasks. Merge conversations only for overlapping captures of the same speech, preserving both '
             'records and audio. Set language to the language actually spoken, never translate speech.'
-        )
+        ),
     )
     target: str = Field(min_length=3, max_length=256, description=Edit.model_fields['target'].description)
     other: str = Field(
@@ -70,28 +55,10 @@ class HarnessEdit(Strict):
     def semantics(self):
         if not self.reason.strip():
             raise ValueError('An edit requires a nonblank reason')
-        if self.kind in {'retire_memory', 'supersede_memory'}:
-            self.after = self.after.strip()
-        elif self.effective_from:
+        from utils.agent_capabilities.registry import get_kind
+
+        spec = get_kind(self.kind)
+        if self.effective_from and spec.schema_rule != 'hygiene':
             raise ValueError('Only memory supersession may carry effective_from')
-        payload = self.model_dump(exclude={'value', 'why_it_matters'})
-        if self.kind not in {'retire_memory', 'supersede_memory'}:
-            payload.pop('effective_from', None)
-        if self.kind in {'retire_memory', 'supersede_memory'}:
-            MemoryHygieneEdit.model_validate(payload)
-        elif self.kind in {'merge_tasks', 'merge_conversations'}:
-            if not self.other or self.other == self.target or self.after:
-                raise ValueError('A merge needs a distinct other ref and preserves its text')
-        elif self.kind == 'merge_memories':
-            if not self.other or self.other == self.target or not self.after.strip() or len(self.after) > 2000:
-                raise ValueError('A memory merge requires a distinct other ref and combined fact text')
-            Edit.model_validate(payload)
-        elif self.kind in {'dismiss_person', 'retire_task'}:
-            if self.other or self.after:
-                raise ValueError('Dismissal and retirement change status only')
-        elif self.kind == 'set_language':
-            if self.other or not self.after.strip() or len(self.after) > 32:
-                raise ValueError('Language requires a bounded tag, not a second record')
-        else:
-            Edit.model_validate(payload)
+        spec.schema(self)
         return self

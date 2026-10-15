@@ -1,3 +1,5 @@
+from utils import dream_review_policy
+
 """Review endpoints through FastAPI and real loopback Firestore transactions."""
 
 from concurrent.futures import ThreadPoolExecutor
@@ -652,7 +654,7 @@ def test_real_spelling_fact_has_authority_600(harness):
 
 
 @pytest.mark.parametrize('kind', ['title', 'overview'])
-def test_dream_summary_edits_apply_undo_redo_and_suppress(harness, kind):
+def test_agent_summary_edits_apply_undo_redo_and_suppress(harness, kind):
     from models.dream_edit import Edit
     from utils.agent_capabilities import tools as dream_tools
 
@@ -762,7 +764,7 @@ def dream_task_proposal(harness, *, kind='retire_task', index=1):
     refs = [f'action_items/{task_id}', f'conversations/{conversation_id}']
     records = {ref: dream_reads.read_record(uid, ref) for ref in refs}
     edit = Edit(kind=kind, target=refs[0], reason='Toy boat work is done', evidence=[refs[1]])
-    status = dream_tools.suggest_edit(uid, edit, records)
+    status = dream_review_policy.suggest_edit(uid, edit, records)
     item_id = 'agent_proposal:' + store.safe_id(dream_tools.edit_key(edit, records))
     return edit, records, status, item_id
 
@@ -792,7 +794,7 @@ def test_dream_suggestion_accept_journals_undo_and_exact_retry(harness, kind):
     assert len(changes) == 1
     assert client.post(f'/v1/review/changes/{changes[0]["change_id"]}/undo').status_code == 200
     assert target.get().to_dict() == before
-    assert dream_tools.suggest_edit(uid, edit, records) == 'suppressed'
+    assert dream_review_policy.suggest_edit(uid, edit, records) == 'suppressed'
     assert client.get('/v2/review/items').json()['items'] == []
 
 
@@ -808,7 +810,8 @@ def test_dream_dismiss_is_durable_across_versions(harness):
     assert list(user.collection('review_changes').stream()) == []
     records[edit.evidence[0]]['structured']['title'] = 'New evidence version'
     assert (
-        dream_tools.suggest_edit(uid, edit.model_copy(update={'reason': 'Different wording'}), records) == 'suppressed'
+        dream_review_policy.suggest_edit(uid, edit.model_copy(update={'reason': 'Different wording'}), records)
+        == 'suppressed'
     )
     assert user.collection('action_items').document(edit.target.split('/')[1]).get().to_dict()['status'] == 'active'
     assert client.get('/v2/review/items').json()['items'] == []
@@ -844,7 +847,7 @@ def test_dream_attention_cap_is_atomic_and_idempotent(harness):
     from utils.agent_capabilities import tools as dream_tools
 
     for edit, records, status, item_id in proposals:
-        assert dream_tools.suggest_edit(uid, edit, records) == (
+        assert dream_review_policy.suggest_edit(uid, edit, records) == (
             'already_suggested' if status == 'suggested' else 'suggestion_cap'
         )
     assert len(list(user.collection('review_proposals').stream())) == 3
@@ -868,7 +871,7 @@ def test_dream_entity_summary_and_vocabulary_journal_roundtrip(harness):
         reason='Summarize toy company',
         evidence=['knowledge_nodes/org'],
     )
-    assert dream_tools.suggest_edit(uid, edit, {edit.target: row}) == 'suggested'
+    assert dream_review_policy.suggest_edit(uid, edit, {edit.target: row}) == 'suggested'
     item_id = client.get('/v2/review/items').json()['items'][0]['item_id']
     response = client.post(f'/v2/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'accept'}})
     assert response.status_code == 200, response.text
@@ -876,7 +879,7 @@ def test_dream_entity_summary_and_vocabulary_journal_roundtrip(harness):
     assert store.decode_doc(uid, cache.get().to_dict())['summary'] == edit.after
     assert edit.after not in str(cache.get().to_dict())
     term = Term(kind='project', spelling='ToyBoat', evidence=[edit.target])
-    with pytest.raises(ValueError, match='dream_vocabulary_requires_acceptance'):
+    with pytest.raises(ValueError, match='agent_vocabulary_requires_acceptance'):
         dream_tools.apply_vocabulary(uid, [term])
     assert dream_tools.apply_vocabulary(uid, [term], user_accepted=True) == 'applied'
     vocabulary = user.collection('dream_vocabulary').document('current')
@@ -887,7 +890,7 @@ def test_dream_entity_summary_and_vocabulary_journal_roundtrip(harness):
         assert client.post(f'/v1/review/changes/{change["change_id"]}/undo').status_code == 200
     assert cache.get().to_dict() == {}
     assert vocabulary.get().to_dict() == {}
-    assert dream_tools.suggest_edit(uid, edit, {edit.target: row}) == 'suppressed'
+    assert dream_review_policy.suggest_edit(uid, edit, {edit.target: row}) == 'suppressed'
     for change in changes:
         assert client.post(f'/v1/review/changes/{change["change_id"]}/redo').status_code == 200
     assert store.decode_doc(uid, cache.get().to_dict())['summary'] == edit.after
@@ -951,7 +954,7 @@ def test_dream_canonical_memory_suggestion_accept_and_undo(harness, monkeypatch,
         reason='Update synthetic fact',
         evidence=refs,
     )
-    assert dream_tools.suggest_edit(uid, edit, records) == 'suggested'
+    assert dream_review_policy.suggest_edit(uid, edit, records) == 'suggested'
     item_id = client.get('/v2/review/items').json()['items'][0]['item_id']
     response = client.post(f'/v2/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'accept'}})
     assert response.status_code == 200, response.text
@@ -987,7 +990,7 @@ def test_dream_people_merge_suggestion_accept_and_undo(harness):
     edit = Edit(
         kind='merge_people', target=refs[0], other=refs[1], reason='Synthetic duplicate identity', evidence=refs
     )
-    assert dream_tools.suggest_edit(uid, edit, records) == 'suggested'
+    assert dream_review_policy.suggest_edit(uid, edit, records) == 'suggested'
     item_id = client.get('/v2/review/items').json()['items'][0]['item_id']
     response = client.post(f'/v2/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'accept'}})
     assert response.status_code == 200, response.text
@@ -996,7 +999,7 @@ def test_dream_people_merge_suggestion_accept_and_undo(harness):
     change = client.get('/v1/review/changes').json()['changes'][0]
     assert client.post(f'/v1/review/changes/{change["change_id"]}/undo').status_code == 200
     assert 'redirect_entity_id' not in other.get().to_dict()
-    assert dream_tools.suggest_edit(uid, edit, records) == 'suppressed'
+    assert dream_review_policy.suggest_edit(uid, edit, records) == 'suppressed'
 
 
 def test_dream_suggestions_share_question_budget_and_reset_next_day(harness, monkeypatch):

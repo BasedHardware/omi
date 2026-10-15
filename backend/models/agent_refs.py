@@ -8,6 +8,11 @@ def base_ref(ref: str) -> str:
     return ref.partition('#')[0]
 
 
+def canonical_ref(ref: str) -> str:
+    """New sessions use one memory ref spelling; stored legacy receipts still decode."""
+    return 'memory_items/' + ref.removeprefix('memories/') if ref.startswith('memories/') else ref
+
+
 def has_ref(ref: str, records) -> bool:
     return base_ref(ref) in records
 

@@ -3,6 +3,20 @@ import 'package:omi/backend/schema/gen/review_wire.g.dart' as wire;
 import 'package:omi/backend/schema/review.dart';
 
 void main() {
+  test('retirement preserves the empty after state through generated wires', () {
+    final change = ReviewChange.fromJson({
+      'change_id': 'synthetic-retired-task',
+      'kind': 'other',
+      'edit_kind': 'retire_task',
+      'title': 'Retire task',
+      'created_at': '2026-10-15T00:00:00Z',
+      'before': 'Invented duplicate obligation',
+      'after': '',
+    });
+    expect(change!.after, '');
+    expect(change.copyWith(undone: true).after, '');
+  });
+
   test('verified applied changes preserve before after context through Undo state copies', () {
     final change = ReviewChange.fromGenerated(wire.GeneratedReviewChange.fromJson({
       'change_id': 'synthetic-verified',

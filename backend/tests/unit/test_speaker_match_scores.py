@@ -788,6 +788,9 @@ def test_manual_merge_retains_bounded_donor_scores(monkeypatch, score_merge_modu
     from datetime import timedelta
 
     merge, notifications = score_merge_modules
+    from database import review_overlay_merge
+
+    monkeypatch.setattr(review_overlay_merge, 'transfer', lambda *args, **kwargs: True)
     now = datetime(2026, 10, 5, tzinfo=timezone.utc)
     sources = {
         cid: dict(

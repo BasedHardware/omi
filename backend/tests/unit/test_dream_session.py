@@ -24,10 +24,8 @@ def test_guard_feedback_distinguishes_stale_scope_and_schema_repairs():
         rejection(ReviewConflict('Replacement must share privacy, subject and attribute'))['reason']
         == 'agent_memory_scope_mismatch'
     )
-    assert rejection(RuntimeError('Synthetic private text')) == {
-        'status': 'rejected',
-        'reason': 'dream_stale_or_unavailable',
-    }
+    failure = rejection(RuntimeError('Synthetic private text'))
+    assert failure['code'] == 'agent_stale_or_unavailable' and failure['retryable'] is False
     try:
         ProposeEdit.model_validate(
             {
@@ -175,8 +173,8 @@ def test_unknown_refs_and_oversized_reads_return_feedback_without_authorizing_ed
     active = session(store, monkeypatch, limits=SessionLimits(read_call_bytes=8, read_bytes=8), seed_records=False)
     active.known.add('conversations/one')
     replies = asyncio.run(active.execute([call('read', {'refs': ['conversations/foreign', 'conversations/one']})]))
-    assert 'dream_unknown_ref' in replies[0]['content']
-    assert 'dream_read_byte_budget' in replies[0]['content']
+    assert 'agent_unknown_ref' in replies[0]['content']
+    assert 'agent_read_byte_budget' in replies[0]['content']
     assert not active.records and not active.staged
 
 
@@ -212,11 +210,12 @@ def test_malformed_tool_payloads_and_unknown_tools_do_not_abort_the_session(stor
         )
     )
     assert len(replies) == 3 and active.rejections['schema'] == 2
-    assert active.rejections['dream_unknown_tool'] == 1 and not active.staged
+    assert active.rejections['agent_unknown_tool'] == 1 and not active.staged
 
 
 def test_all_profiles_bound_light_users_and_leave_verifier_headroom():
     light, heavy = SessionLimits.for_size(3), SessionLimits.for_size(1000)
-    assert light.turns < heavy.turns and light.read_bytes < heavy.read_bytes
+    assert light.turns == heavy.turns == 64 and light.read_bytes < heavy.read_bytes
+    assert light.tokens < heavy.tokens
     assert light.verification_tokens > 0 and heavy.verification_tokens < heavy.tokens
     assert SessionLimits.for_size(3, token_ceiling=32000).tokens == 32000

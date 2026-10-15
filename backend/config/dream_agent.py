@@ -5,24 +5,9 @@ import os
 from dataclasses import dataclass
 from config.plan_catalog import PAID_PLAN_IDS
 
-AUTO = frozenset(
-    {
-        'spelling',
-        'title',
-        'overview',
-        'vocabulary',
-        'merge_memories',
-        'retire_memory',
-        'supersede_memory',
-        'dismiss_person',
-        'merge_people',
-        'merge_tasks',
-        'retire_task',
-        'merge_conversations',
-        'set_language',
-    }
-)
-SUGGEST = frozenset({'close_task', 'memory', 'entity_summary'})
+from utils.agent_capabilities.registry import AUTO, KINDS
+
+SUGGEST = frozenset(name for name, spec in KINDS.items() if spec.default_policy == 'suggest')
 KNOWN_KINDS = AUTO | SUGGEST
 SUGGESTIONS_PER_DAY = 3
 PASS_TIMEOUT_SECONDS = 1620
@@ -33,7 +18,9 @@ FINISH_MARGIN_SECONDS = 30
 
 
 def enabled():
-    return os.getenv('DREAM_AGENT_ENABLED', 'false').strip().lower() == 'true'
+    from config.dream_control import allowed
+
+    return os.getenv('DREAM_AGENT_ENABLED', 'false').strip().lower() == 'true' and allowed()
 
 
 def mode():
@@ -106,7 +93,9 @@ class Caps:
     passes: int = 2
     edits: int = 25
     daily_usd: float = 10.0
-    global_daily_usd: float = 100.0
+    global_daily_usd: float = 15000.0
+    global_spend_shards: int = 64
+    expected_tokens: int = 12000
     tokens_per_minute: int = 2000000
     max_usd_per_token: float = 0.00001
     undo_rate: float = 0.2
@@ -122,7 +111,8 @@ class Caps:
             passes=int(number('DREAM_AGENT_PASSES_PER_DAY', 2)),
             edits=int(number('DREAM_AGENT_EDITS_PER_PASS', 25)),
             daily_usd=number('DREAM_AGENT_DAILY_USD', 10),
-            global_daily_usd=number('DREAM_AGENT_GLOBAL_DAILY_USD', 100),
+            global_daily_usd=number('DREAM_AGENT_GLOBAL_DAILY_USD', 15000),
+            expected_tokens=int(number('DREAM_AGENT_EXPECTED_TOKENS', 12000)),
             tokens_per_minute=int(number('DREAM_AGENT_TOKENS_PER_MINUTE', 2000000)),
             max_usd_per_token=number('DREAM_AGENT_MAX_USD_PER_TOKEN', 0.00001),
             undo_rate=number('DREAM_AGENT_UNDO_RATE', 0.2),
@@ -133,8 +123,10 @@ class Caps:
 
     @property
     def reservation_usd(self):
-        return self.tokens * self.max_usd_per_token
+        return min(self.tokens, self.expected_tokens) * self.max_usd_per_token
 
 
 def concurrency():
-    return max(1, min(8, int(number('DREAM_AGENT_CONCURRENCY', 2))))
+    caps = Caps.from_env()
+    derived = math.ceil(caps.tokens_per_minute / max(1, caps.expected_tokens) * 2)
+    return max(1, min(512, int(number('DREAM_AGENT_CONCURRENCY', derived))))

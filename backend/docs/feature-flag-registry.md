@@ -349,9 +349,10 @@ and an explicit empty literal renders as `''`.
 | `COMMITMENT_FOLLOWUP_TASKS_QUEUE` | One-shot commitment due callback transport; absent disables scheduling | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `DIARIZATION_V2_ENABLED` | Enable the separate batch-only diarizer app; default false; startup loads models before readiness | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `DREAM_AGENT_CANARY_UID` | Dedicated synthetic UID in dream-canary- namespace; unset disables canary | backend | env | closed | — | — | {value: 'dream-canary-prod-01', category: rollout} | — | pending | — | dazheng |
-| `DREAM_AGENT_CONCURRENCY` | Parallel Dream workers and shared reserved background slots; default 2; bounded 1 to 8 | backend | env | closed | — | — | — | — | pending | — | dazheng |
+| `DREAM_AGENT_CONCURRENCY` | Parallel Dream workers and shared reserved slots; derived default 334 at 2M TPM and 12k expected tokens; bounded 1 to 512 | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `DREAM_AGENT_ELIGIBILITY` | Eligible owner policy: all default, paid or allowlist; invalid values fail closed | backend | env | closed | — | — | all (backend-listen (chart), pusher (chart)); {value: 'all', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | keep | — | dazheng |
-| `DREAM_AGENT_GLOBAL_DAILY_USD` | Global UTC-day conservative reservation ceiling; default 100 USD | backend | env | closed | — | — | {value: '100', category: rollout} | — | keep | — | dazheng |
+| `DREAM_AGENT_EXPECTED_TOKENS` | Expected session tokens for initial spend holds and derived concurrency; default 12000; actual turn reservations enforce ceilings | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `DREAM_AGENT_GLOBAL_DAILY_USD` | Global UTC-day conservative reservation ceiling across 64 fixed shards; default 15000 USD | backend | env | closed | — | — | {value: '15000', category: rollout} | — | keep | — | dazheng |
 | `DREAM_AGENT_MANUAL_RUNS_PER_DAY` | Separate manual dream allowance per UTC day; default 3 | backend | env | closed | — | — | {value: '3', category: rollout} | — | pending | — | dazheng |
 | `DREAM_AGENT_TOKENS_PER_MINUTE` | Configured reserved-capacity headroom ceiling; default 2000000 tokens per minute | backend | env | closed | — | — | {value: '2000000', category: rollout} | — | keep | — | dazheng |
 | `FIRESTORE_CACHE_ENABLED` | Enable Firestore response cache | backend | env | closed | — | — | — | — | keep | — | unowned |
@@ -433,7 +434,8 @@ their code default (`fail` tells you which way a missing value resolves).
 - `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` — Incident stop for stored meeting context lookup (fail: open)
 - `DESKTOP_LOOP_WATCHDOG_ENABLED` — Desktop event-loop stall warning and liveness signal; default on, false disables both (fail: open)
 - `DIARIZATION_V2_ENABLED` — Enable the separate batch-only diarizer app; default false; startup loads models before readiness (fail: closed)
-- `DREAM_AGENT_CONCURRENCY` — Parallel Dream workers and shared reserved background slots; default 2; bounded 1 to 8 (fail: closed)
+- `DREAM_AGENT_CONCURRENCY` — Parallel Dream workers and shared reserved slots; derived default 334 at 2M TPM and 12k expected tokens; bounded 1 to 512 (fail: closed)
+- `DREAM_AGENT_EXPECTED_TOKENS` — Expected session tokens for initial spend holds and derived concurrency; default 12000; actual turn reservations enforce ceilings (fail: closed)
 - `FIRESTORE_CACHE_ENABLED` — Enable Firestore response cache (fail: closed)
 - `FREE_TIER_MEMORY_SUPPRESSION` — Suppress cloud memory extraction for eligible free users (fail: closed)
 - `FREE_TIER_MEMORY_SUPPRESSION_COHORT` — Admitted UIDs for free-tier memory suppression (fail: closed)

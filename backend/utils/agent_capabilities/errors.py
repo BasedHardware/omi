@@ -61,7 +61,10 @@ def schema_feedback(row):
     if row['type'] == 'value_error':
         message = message.removeprefix('Value error, ')
         if message not in SCHEMA_MESSAGES:
-            return {}
+            return {
+                'message': 'Field violates the capability contract',
+                'expected': 'Use a registered kind and its documented fields',
+            }
     return {'message': message}
 
 
@@ -70,5 +73,34 @@ def rejection_code(error):
     if message in CONFLICT_CODES:
         return CONFLICT_CODES[message]
     if message.startswith(('dream_', 'agent_')) and len(message) < 80 and message.replace('_', '').isalnum():
-        return message
-    return 'dream_stale_or_unavailable'
+        return message.replace('dream_', 'agent_', 1)
+    return 'agent_stale_or_unavailable'
+
+
+class ToolError(ValueError):
+    def __init__(self, code, *, field=None, ref=None, expected=None, retryable=True):
+        super().__init__(code)
+        self.details = dict(code=code, field=field, ref=ref, expected=expected, retryable=retryable)
+
+
+def actionable(error):
+    if isinstance(error, ToolError):
+        return error.details
+    code = rejection_code(error).replace('dream_', 'agent_', 1)
+    fields = {
+        'agent_argument_budget': ('arguments', 'At most 32768 argument bytes'),
+        'agent_invalid_arguments': ('arguments', 'A JSON object matching the tool schema'),
+        'agent_unknown_tool': ('function.name', 'search/read/propose_edit/ask/learn_term/finish'),
+        'agent_invalid_target': ('target', 'A fully read owner collection/id ref with its exact segment id'),
+        'agent_invalid_spelling': ('before', 'An exact nonempty term of at most 50 characters and its correction'),
+    }
+    field, expected = fields.get(code, (None, 'Refresh the record and use the current seen reference'))
+    infra = code in {'agent_stale_or_unavailable', 'agent_read_unavailable'}
+
+    return dict(
+        code=code,
+        field=field,
+        ref=None,
+        expected=expected if not infra else 'Storage/provider must recover',
+        retryable=not infra,
+    )

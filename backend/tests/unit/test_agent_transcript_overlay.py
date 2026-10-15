@@ -240,7 +240,7 @@ async def test_immediate_user_edits_still_obey_the_session_edit_cap(store, monke
     assert (await session.propose(first))['status'] == 'applied'
     session.records['conversations/one'] = seen()
     second = first.model_copy(update={'before': 'Owner title', 'after': 'Another owner title'})
-    with pytest.raises(ValueError, match='dream_edit_cap'):
+    with pytest.raises(ValueError, match='agent_edit_cap'):
         await session.propose(second)
     assert seen()['structured']['title'] == 'Owner title'
 

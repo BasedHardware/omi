@@ -195,7 +195,8 @@ export interface AgentProposalAnswer {
 }
 
 export interface AgentProposalItem {
-  edit?: Edit | HarnessEdit | MemoryHygieneEdit | null;
+  edit?: Edit | null;
+  operation?: HarnessEdit | MemoryHygieneEdit | null;
   other_content?: string | null;
   other_label?: string | null;
   target_content?: string | null;
@@ -2852,7 +2853,7 @@ export interface HarnessEdit {
   before?: string;
   effective_from?: string;
   evidence: Array<string>;
-  kind: "spelling" | "title" | "overview" | "memory" | "entity_summary" | "close_task" | "merge_memories" | "retire_memory" | "supersede_memory" | "dismiss_person" | "merge_people" | "merge_tasks" | "retire_task" | "merge_conversations" | "set_language";
+  kind: "spelling" | "title" | "overview" | "memory" | "merge_memories" | "retire_memory" | "supersede_memory" | "merge_people" | "entity_summary" | "close_task" | "dismiss_person" | "merge_tasks" | "retire_task" | "merge_conversations" | "set_language";
   other?: string;
   reason: string;
   target: string;

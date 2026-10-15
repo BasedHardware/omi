@@ -6,7 +6,6 @@ import zlib
 
 from fastapi import HTTPException
 from database import conversations, action_items, users, candidates
-from utils.dream_diagnostics import initialize
 from utils.entity_pages import _facts, resolve_entity  # pyright: ignore[reportPrivateUsage]
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService
@@ -26,7 +25,7 @@ READ_COLLECTIONS = {
 }
 
 
-class DreamTranscriptReadError(RuntimeError):
+class AgentTranscriptReadError(RuntimeError):
     """A stored speech blob cannot be verified; never mistake it for empty speech."""
 
 
@@ -62,11 +61,12 @@ def read_record(uid, ref, *, control_cache=None, diagnostics=None):
             )
             row = conversations.prepare_conversation_for_read(raw, uid)
             if row is None or not isinstance(row.get('transcript_segments', []), list):
-                raise ValueError('dream_transcript_shape')
+                raise ValueError('agent_transcript_shape')
         except (TypeError, ValueError, zlib.error) as exc:
             if diagnostics is not None:
-                initialize(diagnostics)['input_content_counts']['transcript_decode_failed'] += 1
-            raise DreamTranscriptReadError('Dream transcript unavailable') from exc
+                counts = diagnostics.setdefault('input_content_counts', {})
+                counts['transcript_decode_failed'] = counts.get('transcript_decode_failed', 0) + 1
+            raise AgentTranscriptReadError('Dream transcript unavailable') from exc
         row.setdefault('id', key)
         return row
     if collection in {'memories', 'memory_items'}:

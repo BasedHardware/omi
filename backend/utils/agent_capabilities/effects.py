@@ -24,11 +24,8 @@ def apply_staged(uid, item, *, authority, verified=False):
             return tools.apply_verified_edit(
                 uid, item.operation, item.records, expected_records=item.fences, authority=authority
             )
-        return tools.apply_vocabulary(
-            uid,
-            [item.operation],
-            expected_records=item.fences,
-            user_accepted=authority == 'user',
-            verified=verified,
-            records=item.records,
+        from utils.agent_capabilities.registry import get_kind
+
+        return get_kind('vocabulary').apply(
+            uid, item.operation, item.records, expected_records=item.fences, authority=authority
         )

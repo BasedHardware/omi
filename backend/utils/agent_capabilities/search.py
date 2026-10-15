@@ -1,4 +1,4 @@
-"""Owner-scoped bounded Dream search over existing search and history authorities."""
+"""Owner-scoped bounded agent search over existing search and history authorities."""
 
 from collections import Counter
 
@@ -52,7 +52,7 @@ class OwnerSearch:
     async def read(self, ref):
         return await run_blocking(db_executor, dream_reads.read_record, self.uid, base_ref(ref))
 
-    async def search(self, request):
+    async def search(self, request, *, byte_budget=64000):
         query = request.vocabulary or request.query
         found = []
         counts = Counter()
@@ -83,7 +83,7 @@ class OwnerSearch:
                 elif collection == 'conversations' and query and request.mode == 'semantic':
                     counts['embedding_token_upper_bound'] += len(query.encode()) * 3
                     if vector_db.index is None:
-                        raise RuntimeError('dream_search_unconfigured')
+                        raise RuntimeError('agent_search_unconfigured')
                     ids = await run_blocking(
                         llm_executor,
                         vector_db.query_vectors,
@@ -121,6 +121,13 @@ class OwnerSearch:
                         cursors[collection] = ref.partition('/')[2]
                     row = await self.read(ref)
                     counts['hydrated'] += 1
+                    from utils.agent_capabilities.session import serialized_bytes
+
+                    size = serialized_bytes(row)
+                    counts['read_bytes'] += size
+                    if counts['read_bytes'] > byte_budget:
+                        counts['budget_exhausted'] += 1
+                        break
                     if row is None or not matches(row, request):
                         continue
                     text = snippet(row)
@@ -140,7 +147,7 @@ class OwnerSearch:
                 counts['failed_paths'] += 1
                 record_fallback(
                     component='agent_tools',
-                    from_mode='dream_search',
+                    from_mode='agent_search',
                     to_mode='remaining_paths',
                     reason='other',
                     outcome='degraded',

@@ -39,13 +39,12 @@ tasks and captures. Owners with no usable history finish without a model call.
 
 At graceful finish, two independent verifier calls see only each staged edit,
 its cited evidence and minimal context, never planner history, seed notes or each
-other's response. Batches use server proposal IDs; duplicate/missing IDs fail
+other's response or the proposer's reason. The two mounts use distinct audit/falsification framing. Batches use server proposal IDs; duplicate/missing IDs fail
 verification. Staging budgets reserve verification capacity, so turn/tool/read
 exhaustion can still verify accepted proposals.
 
 Both agree plus auto eligibility plus no Undo-rate demotion permits journaled
-apply. Both disagree drops the proposal and increments a count. Split, incomplete
-or demoted proposals can use Review, ranked by value then verifier support.
+apply. Both disagree drops the proposal and increments a count. A true boolean split or agreed demoted proposal can use Review. Missing, invalid and zero-vote results are unverified and neither apply nor enter Review. Eligible proposals are ranked by value then verifier support.
 Values 1–2 are never offered; proposal/answer attention shares three UTC-day
 slots. User-authored facts (`direct_user_statement`, `explicit_remember`,
 `onboarding`) require explicit Review acceptance even when both verifiers agree.
@@ -83,7 +82,7 @@ keeps the 30-day window and preserves semantic suppression.
 Captured `transcript_segments` are never rewritten by a new correction. An
 owner-scoped encrypted `transcript_corrections/<conversation_id>` document holds
 segment anchors, before/after, kind, source, change ID, creation time, dependencies
-and undone state. Product reads render original speech plus active corrections.
+and undone state. New writes mirror the encrypted overlay inline on the conversation, avoiding a per-row read on lists. Product reads render original speech plus active corrections. Read/decode/anchor failures increment `agent_overlay_read_failures_total` and render captured speech; transactional writers remain strict. The 500-entry limit applies to autonomous entries, leaving owner edits separate headroom.
 Segment APIs expose `original_text` alongside the corrected `text`; old clients
 continue displaying `text`. Read tools, MCP/dev APIs, summaries, reprocessing and
 index readers use the same projection. Storage encoding removes in-memory
@@ -102,41 +101,41 @@ those alternative recognizer outputs.
 
 New receipts fence only their captured anchors, so unrelated speech appended to
 the capture does not block Undo. Capture writers preserve corrected anchors;
-destructive manual merges and ingest absorption refuse captures with overlay
-history. Dream duplicate cleanup retains both captures with a reversible link.
-Deleting a conversation also purges its sibling correction document.
+speaker-only final-pass promotion preserves those same IDs, text and clocks. Explicit manual merges transactionally relocate overlay anchors and Undo receipts after processing; once receipts move, recovery retains the destination. Ingest append checks only the existing corrected anchors. Dream duplicate cleanup retains both captures with a reversible link.
+Apply and Undo rebuild transcript chunk vectors from the projection as well as syncing the conversation index. Deleting a conversation also purges its sibling correction document.
 
 ## Admission, fairness and budgets
 
-`DREAM_AGENT_ENABLED` is the global kill switch: false prevents admission,
+`DREAM_AGENT_ENABLED` and the operator document `dream_control/global.enabled` jointly control the global kill switch (10-second last-known cache; async callers refresh in the DB executor): false prevents admission,
 dispatch and effects, including late executor completions. Code defaults false;
 the prod overlay ships true with `DREAM_AGENT_ELIGIBILITY=all`. Eligibility also
 supports `paid` and `allowlist`; invalid settings deny admission. Release-channel
 metadata is informational and cannot exclude Store users.
 
-An hourly sweep rotates bounded 100-owner pages from the users collection,
-rehydrates Dream state in a bounded batch, and admits dirty, hunt-due or stale-
-lease owners. Within a page, backlog score and age determine priority. Cursor
-advancement covers only a contiguous attempted/skipped prefix; capacity waits
-cannot skip unattempted owners. Hunts are due after 24 hours, or six hours for
-heavy owners. Stale leases are reclaimable after 1740 seconds and retain
-conservative charges for ambiguous attempts.
+An hourly sweep drains a durable `dream_due` queue ordered by due time, which
+combines backlog and staleness. Product writes enqueue immediately. Independent
+discovery scans 20 pages of 499 owners (9,980/hour), initializing missing rows
+transactionally without overwriting dirty work or waiting for model sessions.
+Future hunts remain queued (24 hours, six for heavy owners); daily-capped owners
+are deferred rather than blocking the queue head. Each drain admits up to 5,000
+owners with concurrency derived from reserved TPM and expected tokens (334 at
+defaults, configurable, bounded at 512). Minute holds refund unused tokens after
+each turn. Stale leases reclaim after 1740 seconds with unknown charges retained.
 
 | Owner bucket | Size | Turns | Tools | Read bytes | Token ceiling |
 | --- | --- | --- | --- | --- | --- |
-| Empty/light | 0–19 | 3 | 16 | 64,000 | 96,000 |
-| Medium | 20–79 | 6 | 48 | 192,000 | 160,000 |
-| Heavy | 80+ | 12 | 64 | 512,000 | 256,000 |
+| Empty/light | 0–19 | 64 | 128 | 64,000 | 96,000 |
+| Medium | 20–79 | 64 | 192 | 192,000 | 160,000 |
+| Heavy | 80+ | 64 | 256 | 512,000 | 256,000 |
 
 Each read call is capped at 64,000 bytes; edits cap at 25, questions at three.
 Session ceilings also obey `DREAM_AGENT_TOKENS_PER_PASS` and
 `DREAM_AGENT_EDITS_PER_PASS`. Default admission caps are two passes and three
-manual runs per UTC day, $10 per owner/day, $100 globally/day, and configured
+manual runs per UTC day, $10 per owner/day, $15,000 globally/day, and configured
 reserved headroom of 2,000,000 tokens/minute. The conservative USD ceiling uses
 `DREAM_AGENT_MAX_USD_PER_TOKEN` (default 0.00001); it is a reservation upper
-bound, not a provider price quote. Turns settle observed usage as they occur;
-unknown or failed attempts retain their conservative charge. Search embedding
-work is bounded and included in accounting. Never clear an unknown lease merely
+bound, not a provider price quote. Admission holds the expected 12,000 tokens ($0.12), not the session ceiling. Per-turn reservation atomically tops up both owner and a fixed hash shard before dispatch; 64 disjoint shard quotas sum to the global cap. Turns settle observed usage as they occur;
+unknown or failed attempts retain their conservative charge. Search hydration/snippets debit the session read-byte budget; embedding work is bounded and included in accounting. Turns are a loose backstop; token/USD accounting controls spend. Never clear an unknown lease merely
 because its HTTP caller timed out.
 
 Pass 1620s < drain 1680s < HTTP 1710s < Scheduler 1740s. Reasoning turns have a

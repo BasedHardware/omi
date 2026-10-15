@@ -8,14 +8,13 @@ outside this PR.
 
 An explicit user mutation carries a temporary owner-scoped authority through
 the journal writer even when autonomous Review admission is disabled. It grants
-no access to another owner and ends with the mutation. User edits keep the same
-source, generation, suppression and session edit caps; immediate apply does not
+no access to another owner and ends with the mutation. User edits keep source, generation and session edit caps; autonomous suppression and cleanup protections apply only to Dream. Immediate apply does not
 turn a shared session into an unbounded write loop.
 
 | Module | Responsibility |
 | --- | --- |
 | `session.py` | Seen refs, budgets, precise tool results, resubmission and the sanctioned shaped-agent loop |
-| `limits.py` | Bounded session resource profiles |
+| `limits.py` | Caller-supplied bounded resource limits (Dream bucket policy lives in `config/dream_session.py`) |
 | `search.py` | Owner-scoped lexical, semantic and temporal discovery with opaque cursors |
 | `reads.py` | Decrypted records behind visibility, lock and source-generation boundaries |
 | `evidence.py` | Snapshot container; session roles stay outside persisted records |
@@ -23,6 +22,7 @@ turn a shared session into an unbounded write loop.
 | `guards.py` | Shared deterministic quality and eligibility checks |
 | `errors.py` | Stable non-content mutation errors shared with HTTP boundaries |
 | `effects.py` | Explicit authority and verification boundary for staged effects |
+| `registry.py`, `kind_schema.py`, `kind_keys.py`, `kind_views.py` | One declaration per kind selects schema, validation, semantic key, apply, Undo, display, allowed fields and default policy |
 | `tools.py` | Reversible domain mutations and Review acceptance through existing writers |
 | `cleanup_edits.py` | Protected tasks/people, same-speech duplicate links and language guards |
 | `change_view.py` | Before/after and surrounding speech for the encrypted change receipt |
@@ -30,14 +30,14 @@ turn a shared session into an unbounded write loop.
 | `transcripts.py` | Immutable captured text, encrypted correction overlays and read/storage projections |
 
 Tool schemas and uniform `collection/id#segment` refs live in `models/agent_tools.py`,
-`models/agent_edit.py` and `models/agent_refs.py`. Search grants a ref; full read
+`models/agent_edit.py` and `models/agent_refs.py`. New sessions canonicalize legacy `memories/` aliases to `memory_items/`; stored receipts remain readable. Search grants a ref; full read
 grants a record snapshot. Staging rechecks it and captures storage fences. Domain
 writers recheck those fences in the transaction that journals the effect. Dream
 also checks its live owner lease and global kill switch inside that transaction.
 
 `database/review_transcript_changes.py` commits overlay entries and any generated
 summary patch with the journal. The conversation read boundary renders active
-corrections and exposes original text alongside the projection. Storage encoding
+corrections from an encrypted inline copy and exposes original text alongside the projection. Reads fall back to captured speech with a counter on unavailable or invalid overlays; transactional mutation paths remain strict. Storage encoding
 restores captured text. Undo marks overlay entries inactive and checks speech
 anchors and newer dependent edits; historical in-place receipts retain their
 existing reversal path. The existing manual segment-edit API creates a user
@@ -53,3 +53,5 @@ entire write stack.
 Dream owns scheduling, admission, prompts, verification decisions, demotion,
 attention ranking and counts-only telemetry outside this package. The capability
 layer never chooses a provider or owns background-job cadence.
+
+Dream injects its instructions, seed, low-value question policy and Review queue/ranking from `utils/dream_instructions.py` and `utils/dream_review_policy.py`. Tool failures carry `code`, `field`, `ref`, `expected`, and `retryable`; infrastructure failures are non-retryable.

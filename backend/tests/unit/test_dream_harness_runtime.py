@@ -108,7 +108,9 @@ def test_two_verifiers_select_apply_review_or_drop_and_report_counts(runtime, vo
     assert runtime.rows[('dream_users', UID)]['lease'] is None
     day = next(key[3] for key in runtime.rows if key[:3] == ('dream_users', UID, 'spend'))
     assert runtime.rows[('dream_users', UID, 'spend', day)]['reserved_usd'] == pytest.approx(0.0005)
-    assert runtime.rows[('dream_global_spend', day)]['reserved_usd'] == pytest.approx(0.0005)
+    assert sum(
+        row['reserved_usd'] for key, row in runtime.rows.items() if key[0] == 'dream_global_spend'
+    ) == pytest.approx(0.0005)
     assert runtime.rows[('dream_users', UID, 'spend', day)]['observed_usd'] == pytest.approx(0.0005)
     if status == 'applied':
         changes = [

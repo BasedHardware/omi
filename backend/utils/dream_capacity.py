@@ -172,7 +172,7 @@ async def claim(limit, *, slot_seconds=SLOT_SECONDS):
     model = await available_model()
     if model is None:
         return None
-    limit = max(1, min(limit, 8))
+    limit = max(1, min(limit, 512))
     token = str(uuid4())
     local = _local()
     index = next((i for i in range(limit) if local.slots.get(i, ('', 0))[1] <= time.monotonic()), None)

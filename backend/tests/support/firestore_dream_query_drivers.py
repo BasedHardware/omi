@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 
 from config.dream_agent import Caps
-from tests.support.firestore_query_drivers import DriverEntry, SHAPE_UID as UID
+from tests.support.firestore_query_drivers import DriverEntry, CoveredByEntry, SHAPE_UID as UID
 
 
 def producer_mode(client):
@@ -156,6 +156,14 @@ def entries():
 
 registry_extension = SimpleNamespace(
     DRIVERS={entry.function: entry for entry in entries()},
-    COVERED_BY={},
+    COVERED_BY={
+        'database.dream_scheduler.discover': CoveredByEntry(
+            'database.dream_scheduler.discover',
+            covered_by=('database.dream_scheduler.candidate_page',),
+            reason='Discovery streams only through candidate_page; its get_all calls read explicit document refs and its transaction only initializes due rows and a cursor. SDK queue races are exercised in test_dream_queue_emulator.',
+            expect_observed=False,
+            body_digest='c0e27c29293523fa0ddf6095c56b0502810590259e28ce80c43e0ac4bc826789',
+        )
+    },
     SKIPS={},
 )

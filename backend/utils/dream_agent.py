@@ -12,9 +12,10 @@ from database.dream_dirty import dream_writing
 from models.agent_tools import HarnessQuestion
 from models.agent_edit import HarnessEdit
 from utils.agent_capabilities import tools as dream_tools
-from utils import dream_capacity, dream_harness_transport, dream_seed, dream_verify
+from utils import dream_review_policy, dream_capacity, dream_harness_transport, dream_seed, dream_verify
 from utils.agent_capabilities.search import OwnerSearch
 from utils.agent_capabilities.session import Session
+from utils.dream_instructions import INSTRUCTIONS
 from utils.dream_metrics import record_pass, error_code, record_reclaimed
 from database.dream_effect_fence import ACTIVE_RUN
 from utils.executors import db_executor, run_blocking
@@ -52,7 +53,16 @@ async def run_session(
         'model_lanes': [],
         'dry_run': dry_run,
     }
-    session = Session(uid, OwnerSearch(uid), limits, seed, authority='dream', records=records)
+    session = Session(
+        uid,
+        OwnerSearch(uid),
+        limits,
+        seed,
+        authority='dream',
+        records=records,
+        instructions=INSTRUCTIONS,
+        question_policy=lambda item: item.value > 2,
+    )
 
     async def active():
         if not enabled():
@@ -113,6 +123,8 @@ async def run_session(
                 usage_sink=sink,
             )
         finally:
+            if lane == dream_harness_transport.VERIFY_LANE and sink.get('transport_complete'):
+                report['verifier_transport_responses'] = report.get('verifier_transport_responses', 0) + 1
             report['usage_unknown'] |= sink.get('usage_unknown', False)
 
     async def effect(fn, *args, **kwargs):
@@ -142,6 +154,7 @@ async def run_session(
                     raise
             await active()
             staged = list(session.staged.values())
+            verification_telemetry = {}
             support, calls = await dream_verify.verify(
                 staged,
                 partial(invoke, dream_harness_transport.VERIFY_LANE),
@@ -149,8 +162,12 @@ async def run_session(
                 deadline_seconds=max(0, deadline - asyncio.get_running_loop().time() - min(60, timeout_seconds / 10)),
                 verifier_seconds=limits.verifier_seconds,
                 completion_tokens=limits.verifier_completion_tokens,
+                telemetry=verification_telemetry,
             )
             report['verifier_calls'] = calls
+            report['verifier_transport_responses'] = max(
+                report.get('verifier_transport_responses', 0), verification_telemetry.get('transport_responses', 0)
+            )
             report['verifier_valid_responses'] = sum(
                 isinstance(vote, bool) for votes in support.values() for vote in votes
             )
@@ -182,8 +199,10 @@ async def run_session(
                             'policy': 'auto' if decision == 'agree' and auto_allowed else 'suggest',
                         }
                     )
-                    if decision == 'disagree':
-                        report['outcomes'].append({'key': item.key, 'kind': item.kind, 'status': 'verifier_disagree'})
+                    if decision in {'disagree', 'unverified'}:
+                        report['outcomes'].append(
+                            {'key': item.key, 'kind': item.kind, 'status': 'verifier_' + decision}
+                        )
                     elif decision == 'agree' and auto_allowed and not isinstance(item.operation, HarnessQuestion):
                         try:
                             if isinstance(item.operation, HarnessEdit):
@@ -214,20 +233,20 @@ async def run_session(
                     try:
                         if isinstance(item.operation, HarnessQuestion):
                             status = await effect(
-                                dream_tools.ask_ranked,
+                                dream_review_policy.ask_ranked,
                                 item.operation,
                                 item.records,
                                 lease['run_id'] if lease else 'dry-run',
                             )
                         elif isinstance(item.operation, HarnessEdit):
                             status = await effect(
-                                dream_tools.suggest_edit,
+                                dream_review_policy.suggest_edit,
                                 item.operation,
                                 item.records,
                                 run_id=lease['run_id'] if lease else 'dry-run',
                             )
                         else:
-                            status = await effect(dream_tools.suggest_vocabulary, item.operation, item.records)
+                            status = await effect(dream_review_policy.suggest_vocabulary, item.operation, item.records)
                     except (ValueError, review_store.ReviewConflict, review_store.ReviewNotFound):
                         status = 'invalid_evidence'
                     report['outcomes'].append({'key': item.key, 'kind': item.kind, 'status': status})
@@ -321,7 +340,16 @@ async def run_pass(
                 'proposed': {'edits': [], 'questions': [], 'vocabulary': []},
                 'outcomes': [],
             }
-            session = Session(uid, OwnerSearch(uid), limits, seed, authority='dream', records=records)
+            session = Session(
+                uid,
+                OwnerSearch(uid),
+                limits,
+                seed,
+                authority='dream',
+                records=records,
+                instructions=INSTRUCTIONS,
+                question_policy=lambda item: item.value > 2,
+            )
         else:
             report, session = await run_session(
                 uid,
@@ -376,41 +404,36 @@ async def run_pass(
             await dream_capacity.release(slot)
 
 
-async def drain(*, limit=100):
+async def drain(*, limit=5000):
     if not enabled() or limit <= 0:
         return []
     results = []
-    page = None
-    tried = set()
-    stop = asyncio.Event()
     try:
         async with asyncio.timeout(DRAIN_TIMEOUT_SECONDS):
             if await dream_capacity.available_model() is None:
                 report = {'status': 'waiting', 'reason': 'reserved_capacity'}
                 record_pass(report)
                 return [report]
-            page = await run_blocking(db_executor, dream_scheduler.candidates, limit=min(limit, 100))
+            page = await run_blocking(db_executor, dream_scheduler.candidates, limit=min(limit, 5000))
             owners = iter(page)
 
             async def worker():
                 for uid in owners:
-                    if not enabled() or stop.is_set():
+                    if not enabled():
                         return
                     try:
                         report = await run_pass(uid)
                     except Exception as exc:
                         report = {'status': 'failed', 'error_type': type(exc).__name__, 'error_code': error_code(exc)}
                     results.append(report)
-                    if report['status'] == 'waiting':
-                        stop.set()
-                        return
-                    tried.add(uid)
+                    while report['status'] == 'waiting' and enabled():
+                        await asyncio.sleep(60)
+                        report = await run_pass(uid)
+                        results.append(report)
 
             async with asyncio.TaskGroup() as group:
                 for _ in range(concurrency()):
                     group.create_task(worker())
     except TimeoutError:
         results.append({'status': 'deadline'})
-    if page is not None:
-        await run_blocking(db_executor, dream_scheduler.advance, page, tried)
     return results

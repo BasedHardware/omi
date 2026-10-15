@@ -3,7 +3,7 @@
 from copy import deepcopy
 import sys
 
-from database import conversations, memory_ledger, review_store, review_transcript_changes
+from database import conversations, memory_ledger, review_store, review_transcript_changes, vector_db
 from tests.support.dream_firestore import DreamFirestore
 
 
@@ -28,6 +28,9 @@ def install_store(monkeypatch, uid, conversation_id, snapshot, *, store=None, en
     monkeypatch.setattr(memory_ledger, 'transactional', lambda fn: fn)
     monkeypatch.setattr(conversations, 'db', database)
     monkeypatch.setattr(conversations.firestore, 'transactional', lambda fn: fn)
+    # These transaction tests have no vector provider; projection/index tests
+    # install their own index and verify the post-commit rebuild separately.
+    monkeypatch.setattr(vector_db, 'index', None)
     return database
 
 

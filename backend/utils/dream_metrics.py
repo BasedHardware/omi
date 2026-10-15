@@ -41,7 +41,7 @@ ERROR_TYPES = {
     'NotFound',
     'DeadlineExceeded',
     'AdmissionDenied',
-    'DreamTranscriptReadError',
+    'AgentTranscriptReadError',
     'InvalidModelResponse',
     'LeaseAbandoned',
 }
@@ -105,7 +105,7 @@ def error_code(exc):
     return code if isinstance(code, str) and code in DREAM_VALUE_ERROR_CODES else None
 
 
-DREAM_VALUE_ERROR_CODES = (
+BASE_VALUE_ERROR_CODES = (
     LEGACY_ERROR_CODES
     | frozenset(CONFLICT_CODES.values())
     | frozenset(
@@ -206,7 +206,7 @@ def record_pass(report):
         REJECTED.labels(label).inc(max(0, int(count)))
     RESUBMITS.inc(max(0, int(report.get('resubmits_succeeded', 0))))
     for decision, count in report.get('verifier_outcomes', {}).items():
-        if decision in {'agree', 'split', 'disagree'}:
+        if decision in {'agree', 'split', 'disagree', 'unverified'}:
             DECISIONS.labels(decision).inc(max(0, int(count)))
     for row in report.get('outcomes', []):
         if row.get('status') == 'applied' and row.get('kind') in KNOWN_KINDS:
@@ -229,6 +229,19 @@ def record_pass(report):
     )
 
 
+DREAM_VALUE_ERROR_CODES = (
+    BASE_VALUE_ERROR_CODES
+    | frozenset(code.replace('dream_', 'agent_', 1) for code in BASE_VALUE_ERROR_CODES)
+    | {
+        'agent_target_term_missing',
+        'agent_target_quote_mismatch',
+        'agent_fragment_not_supported',
+        'agent_unread_ref',
+        'agent_question_policy',
+    }
+)
+
+
 def record_reclaimed(age_s, size_bucket=None):
     ABANDONED.inc()
     logger.info('Dream lease reclaimed age_s=%d', age_s)
@@ -237,3 +250,8 @@ def record_reclaimed(age_s, size_bucket=None):
 def record_undo(change):
     kind = change.edit_kind or change.kind
     UNDO.labels(kind if kind in KNOWN_KINDS else 'other').inc()
+
+
+OVERLAY_READ_FAILURES = Counter(
+    "agent_overlay_read_failures_total", "Original transcript rendered after projection failure"
+)
