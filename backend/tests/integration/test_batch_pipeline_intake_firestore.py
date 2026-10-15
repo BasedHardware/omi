@@ -122,6 +122,7 @@ async def test_accepted_upload_drains_after_rollback_with_encrypted_context_and_
                 'diarization': {'turns': [{'start': 0, 'end': 1, 'speaker': 'SPEAKER_00'}]},
                 'audio_seconds': 4,
                 'speech_seconds': 1,
+                'speech_spans': [{'start': 0, 'end': 1}],
                 'words_provider': 'parakeet',
             }
             return [WorkResult(work.segment_id, artifacts.persist_result(work, payload))]
