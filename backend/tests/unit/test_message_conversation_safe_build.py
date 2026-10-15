@@ -51,8 +51,9 @@ def test_malformed_members_are_skipped_without_raising():
     ]
     skipped = []
     out = MessageConversation.safe_build_many(members, on_error=lambda m, e: skipped.append((m, type(e).__name__)))
-    assert [m.id for m in out] == ['ok1', 'ok2']
-    assert len(skipped) == 4
+    # bad created_at is malformed too — only ok1 survives; five members report.
+    assert [m.id for m in out] == ['ok1']
+    assert len(skipped) == 5
 
 
 def test_no_on_error_callback_still_skips():
