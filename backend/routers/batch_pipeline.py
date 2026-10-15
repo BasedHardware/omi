@@ -68,6 +68,10 @@ class FailRequest(WorkerRequest):
     token: str = Field(min_length=1, max_length=128)
 
 
+class RedriveRequest(WorkerRequest):
+    segment_id: str = Field(min_length=1, max_length=128, pattern=r'^[^/]+$')
+
+
 class IdleRequest(WorkerRequest):
     gpu_id: str = Field(min_length=1, max_length=128)
     token: str = Field(min_length=1, max_length=128)
@@ -111,6 +115,15 @@ async def fail(body: FailRequest):
         accepted = await run_blocking(
             db_executor, body.service().queue().fail, body.segment_id, body.token, time.time()
         )
+    except BatchPrivacyBlocked:
+        accepted = False
+    return {'accepted': accepted}
+
+
+@router.post('/redrive-dead', include_in_schema=False)
+async def redrive_dead(body: RedriveRequest):
+    try:
+        accepted = await run_blocking(db_executor, body.service().queue().redrive_dead, body.segment_id, time.time())
     except BatchPrivacyBlocked:
         accepted = False
     return {'accepted': accepted}

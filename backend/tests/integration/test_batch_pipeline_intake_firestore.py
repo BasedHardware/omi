@@ -138,4 +138,46 @@ async def test_accepted_upload_drains_after_rollback_with_encrypted_context_and_
     assert intake.durable_status(store, uid, job_id)['status'] == 'completed'
     assert projector.project(segment) == result
     assert len(list(user.collection('conversations').stream())) == 1
+    # A device can later upload older retained audio. The shipping app accepts202
+    # and keeps its WAL until this same durable projection reports completed.
+    from utils.batch_pipeline.scheduler import owner_key
+
+    owner_before = store.run(lambda tx: tx.get('owners', owner_key(uid)))
+    first_segment = segment
+    late_path = tmp_path / 'audio_omi_pcm16_16000_1750000000.bin'
+    late_path.write_bytes((struct.pack('<I', len(frame)) + frame) * 4)
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    late_response = await intake.accept_upload(
+        uid=uid,
+        job_id=uuid4().hex,
+        content_id=uuid4().hex,
+        paths=[str(late_path)],
+        lane='backfill',
+        recording_age_seconds=110,
+        source='omi',
+        should_lock=False,
+        conversation_id=None,
+        client_device_id=None,
+        client_platform='ios',
+        intake_context={'geolocation': None},
+    )
+    assert late_response.status_code == 202
+    job_id = json.loads(late_response.body)['job_id']
+    segment = store.run(lambda tx: tx.get('intakes', job_id))['segment_ids'][0]
+    assert intake.durable_status(store, uid, job_id)['status'] == 'queued'
+    late_job = store.run(lambda tx: tx.get('jobs', segment))
+    assert late_job['late_capture'] and late_job['capture_at'] == 1750000000
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')
+    assert await pump.run_once() == 1
+    entry = store.run(lambda tx: tx.get('results', segment))
+    assert entry['previous_segment_id'] == first_segment
+    assert entry['capture_at'] == 1750000000 and entry['late_capture']
+    late_result = projector.project(segment)
+    assert late_result['failed_segments'] == 0
+    assert intake.durable_status(store, uid, job_id)['status'] == 'completed'
+    assert projector.project(segment) == late_result
+    owner_after = store.run(lambda tx: tx.get('owners', owner_key(uid)))
+    assert owner_after['watermark'] == owner_before['watermark']
+    assert owner_after['log_tail'] == segment
+    assert owner_after['projection_watermark'] == segment
     client.close()

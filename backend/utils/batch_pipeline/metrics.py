@@ -26,6 +26,12 @@ class QueueMetrics:
             ['priority', 'worker_release', 'namespace'],
             registry=registry,
         )
+        self.retry_age = Gauge(
+            'omi_batch_pipeline_retry_age_seconds',
+            'Age since first compute failure; alert above 600 seconds',
+            ['priority', 'worker_release', 'namespace'],
+            registry=registry,
+        )
         self.refreshed_at = Gauge(
             'omi_batch_pipeline_metrics_refreshed_at_seconds',
             'Last complete queue sample timestamp',
@@ -52,12 +58,13 @@ class QueueMetrics:
         for priority in Priority:
             pending = store.oldest(int(priority), ready_only=False)
             ready = store.oldest(int(priority), ready_only=True)
-            samples.append((priority, pending, ready))
-        for priority, pending, ready in samples:
+            samples.append((priority, pending, ready, store.oldest_retry(int(priority))))
+        for priority, pending, ready, retry in samples:
             self.oldest_age.labels(LABELS[priority], *self.scope).set(
                 max(0.0, now - pending) if pending is not None else 0
             )
             self.ready_age.labels(LABELS[priority], *self.scope).set(max(0.0, now - ready) if ready is not None else 0)
+            self.retry_age.labels(LABELS[priority], *self.scope).set(max(0.0, now - retry) if retry is not None else 0)
         self.refreshed_at.labels(*self.scope).set(now)
 
     def record(self, event: str, *, wait_seconds: float | None = None) -> None:

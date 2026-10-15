@@ -2,27 +2,25 @@
 
 from dataclasses import asdict
 import hashlib
+import math
 import uuid
 
 from database.batch_pipeline_store import Store, Transaction
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from config.batch_pipeline import shared_live_enabled
+from config.batch_pipeline import shared_live_enabled, scheduler_control_key
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity
 from utils.batch_pipeline.metrics import QueueMetrics
+from utils.batch_pipeline.control import read_control, activate, field, migrate_legacy
 
 QUANTUM_SECONDS = 30.0
 LEASE_SECONDS = 120.0
-MAX_ATTEMPTS = 5
+RETRY_BACKOFF_CAP_SECONDS = 600
 MAX_ACTIVE_OWNERS = 1024
 MAX_VISITS = 128
 
 
 def owner_key(owner_id: str) -> str:
     return hashlib.sha256(owner_id.encode()).hexdigest()
-
-
-def _control(tx: Transaction) -> dict:
-    return tx.get('control', 'scheduler') or {'rings': {str(int(p)): [] for p in Priority}}
 
 
 def _append(tx: Transaction, control: dict, job: dict) -> None:
@@ -32,7 +30,8 @@ def _append(tx: Transaction, control: dict, job: dict) -> None:
     if not queue['head']:
         if len(ring) >= MAX_ACTIVE_OWNERS:
             raise RuntimeError('active owner capacity exceeded; admission must retry')
-        ring.append(queue_key)
+        if queue_key not in ring:
+            ring.append(queue_key)
         queue['head'] = job['segment_id']
         queue['deficit'] = 0.0
         queue['continuing'] = False
@@ -43,7 +42,8 @@ def _append(tx: Transaction, control: dict, job: dict) -> None:
     queue['tail'] = job['segment_id']
     job['next'] = ''
     tx.put('queues', queue_key, queue)
-    tx.put('control', 'scheduler', control)
+    activate(control, job['priority'], job['available_at'])
+    tx.put('control', scheduler_control_key(job['owner_key']), control)
 
 
 def owns_lease(job: dict, token: str, now: float) -> bool:
@@ -52,17 +52,14 @@ def owns_lease(job: dict, token: str, now: float) -> bool:
 
 def _defer(job: dict, now: float, reason: str) -> None:
     job.update(
-        state='dead' if job['attempt'] >= MAX_ATTEMPTS else 'retry',
-        available_at=now + min(3600, 5 * 2 ** (job['attempt'] - 1)),
+        state='retry',
+        available_at=now + min(RETRY_BACKOFF_CAP_SECONDS, 5 * 2 ** min(7, max(0, job['attempt'] - 1))),
+        retry_started_at=job.get('retry_started_at', now),
         token='',
         lease_until=0.0,
         # Only bounded machine reason codes belong here, never provider errors/text.
         failure=reason,
     )
-
-
-class LateCapture(ValueError):
-    """Admission refused; caller retains audio and must never dispatch legacy."""
 
 
 class Scheduler:
@@ -91,9 +88,7 @@ class Scheduler:
         key = owner_key(item.owner_id)
         owner = tx.get('owners', key)
         watermark = owner.get('watermark')
-        if watermark and (item.capture_at, item.segment_id) <= (watermark['capture_at'], watermark['segment_id']):
-            raise LateCapture('capture precedes committed watermark; retain audio for explicit recovery')
-        control = _control(tx)
+        control = read_control(tx, scheduler_control_key(key))
         job = {
             **immutable,
             'protocol_version': 1,
@@ -105,6 +100,9 @@ class Scheduler:
             'lease_until': 0.0,
             'available_at': now,
             'merge_pending': True,
+            'late_capture': bool(
+                watermark and (item.capture_at, item.segment_id) <= (watermark['capture_at'], watermark['segment_id'])
+            ),
         }
         _append(tx, control, job)
         tx.put('jobs', item.segment_id, job)
@@ -147,57 +145,70 @@ class Scheduler:
     def _pull_one(
         self, now: float, *, allow_backfill: bool, max_seconds: float, shared_gpu_id: str | None = None
     ) -> LeasedWork | None:
-        token = uuid.uuid4().hex  # Stable across this transaction's retries.
+        for priority in Priority:
+            if priority != Priority.FRESH and not allow_backfill:
+                break
+            for _ in range(128):
+                shard = self.store.control_candidate(int(priority), self.pool, now)
+                if shard is None:
+                    break
+                receipt, eligible = self._pull_shard(now, shard, priority, max_seconds, shared_gpu_id)
+                if receipt:
+                    lease, enqueued_at = receipt
+                    if self.metrics:
+                        self.metrics.record('leased', wait_seconds=now - enqueued_at)
+                    return lease
+                if eligible == 'reserved':
+                    return None
+                if eligible:
+                    # Bounded deficit accrual must not bypass eligible fresh work.
+                    continue
+            else:
+                return None
+        return None
+
+    def _pull_shard(self, now, shard, priority, max_seconds, shared_gpu_id):
+        token = uuid.uuid4().hex
 
         def commit(tx):
             gpu_key = owner_key(shared_gpu_id) if shared_gpu_id is not None else ''
             gpu = tx.get('gpus', gpu_key) if gpu_key else {}
-            # A model cannot be preempted by lease expiry. Keep the hardware
-            # reservation until its owner explicitly acknowledges GPU quiescence.
             if gpu.get('token'):
-                return None
-            control = _control(tx)
-            ring = next((control['rings'][str(int(p))] for p in Priority if control['rings'][str(int(p))]), None)
-            if not ring:
-                return None
-            if not allow_backfill and ring is not control['rings'][str(int(Priority.FRESH))]:
-                return None
-            skipped = set()
-            # Budget bounded transactions; fresh deficits must accrue before backfill.
+                return None, 'reserved'
+            control = read_control(tx, shard)
+            ring = control['rings'][str(int(priority))]
+            eligible_queues, blocked = {}, set()
+            owner_count = max(1, len(ring))
             for _ in range(MAX_VISITS):
+                if not ring:
+                    break
                 queue_key = ring[0]
                 queue = tx.get('queues', queue_key)
-                job = tx.get('jobs', queue['head'])
+                job = tx.get('jobs', queue['head']) if queue.get('head') else {}
+                if not job:
+                    ring.pop(0)  # A completed purge may have removed this queue.
+                    continue
                 job.setdefault('unit_kind', 'conversation')
-                try:
-                    tx.check_privacy(
-                        job['owner_id'],
-                        (job['conversation_id'],) if job.get('conversation_id') else (),
-                        job.get('privacy_generation'),
-                    )
-                    eligible = job['duration_seconds'] <= max_seconds and not (
-                        gpu_key and job['unit_kind'] != 'capture_span'
-                    )
-                except BatchPrivacyBlocked:
-                    eligible = False
-                if not eligible:
-                    # Preserve the fenced job for D's erasure; rotating only
-                    # scheduling metadata cannot resurrect its content. Other
-                    # owners and eligible lower classes must keep progressing.
-                    skipped.add(queue_key)
+                if queue_key not in eligible_queues and queue_key not in blocked:
+                    try:
+                        tx.check_privacy(
+                            job['owner_id'],
+                            (job['conversation_id'],) if job.get('conversation_id') else (),
+                            job.get('privacy_generation'),
+                        )
+                        allowed = job['duration_seconds'] <= max_seconds and not (
+                            gpu_key and job['unit_kind'] != 'capture_span'
+                        )
+                    except BatchPrivacyBlocked:
+                        allowed = False
+                    if allowed:
+                        eligible_queues[queue_key] = job['duration_seconds']
+                    else:
+                        blocked.add(queue_key)
+                if queue_key in blocked:
                     ring.append(ring.pop(0))
-                    ring = next(
-                        (
-                            control['rings'][str(int(p))]
-                            for p in Priority
-                            if (allow_backfill or p == Priority.FRESH)
-                            and any(key not in skipped for key in control['rings'][str(int(p))])
-                        ),
-                        None,
-                    )
-                    if ring is None:
-                        tx.put('control', 'scheduler', control)
-                        return None
+                    if len(blocked) == len(ring):
+                        break
                     continue
                 if not queue['continuing']:
                     queue['deficit'] += QUANTUM_SECONDS
@@ -206,6 +217,17 @@ class Scheduler:
                     queue['continuing'] = False
                     ring.append(ring.pop(0))
                     tx.put('queues', queue_key, queue)
+                    # Skip empty DRR rounds in metadata, not repeated privacy IO.
+                    if len(eligible_queues) + len(blocked) == len(ring):
+                        rounds = min(
+                            max(0, math.ceil((duration - tx.get('queues', key)['deficit']) / QUANTUM_SECONDS))
+                            for key, duration in eligible_queues.items()
+                        )
+                        if rounds > 1:
+                            for key in eligible_queues:
+                                other = tx.get('queues', key)
+                                other['deficit'] += (rounds - 1) * QUANTUM_SECONDS
+                                tx.put('queues', key, other)
                     continue
                 queue['deficit'] -= cost
                 queue['head'] = job['next']
@@ -228,19 +250,18 @@ class Scheduler:
                     )
                 tx.put('queues', queue_key, queue)
                 tx.put('jobs', job['segment_id'], job)
-                tx.put('control', 'scheduler', control)
+                control[field(int(priority), 'active')] = bool(ring)
+                control[field(int(priority), 'service')] += cost / owner_count
+                tx.put('control', shard, control)
                 item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
-                return LeasedWork(item, token, job['attempt'], job['lease_until']), job['enqueued_at']
-            tx.put('control', 'scheduler', control)
-            return None
+                return (LeasedWork(item, token, job['attempt'], job['lease_until']), job['enqueued_at']), True
+            control[field(int(priority), 'active')] = bool(ring)
+            if not eligible_queues:
+                control[field(int(priority), self.pool + '_available_at')] = now + 30
+            tx.put('control', shard, control)
+            return None, bool(eligible_queues)
 
-        receipt = self.store.run(commit)
-        if receipt is None:
-            return None
-        lease, enqueued_at = receipt
-        if self.metrics:
-            self.metrics.record('leased', wait_seconds=now - enqueued_at)
-        return lease
+        return self.store.run(commit)
 
     def heartbeat(self, segment_id: str, token: str, now: float) -> bool:
         def commit(tx):
@@ -270,6 +291,7 @@ class Scheduler:
             if job.get('requires_compute_admission') and job.get('compute_admission_token') != token:
                 return False, False
             job.update(state='result_ready', result=asdict(result))
+            job.pop('retry_started_at', None)
             tx.put('jobs', result.segment_id, job)
             return True, True
 
@@ -289,7 +311,7 @@ class Scheduler:
 
         outcome = self.store.run(commit)
         if outcome and self.metrics:
-            self.metrics.record('dead' if outcome == 'dead' else 'retry')
+            self.metrics.record('retry')
         return bool(outcome)
 
     def defer(self, segment_id: str, token: str, now: float, retry_after: float = 30) -> bool:
@@ -312,6 +334,7 @@ class Scheduler:
         return self.store.run(commit)
 
     def recover(self, now: float, limit: int = 100) -> int:
+        self.store.run(lambda tx: migrate_legacy(tx, now))
         recovered = 0
         for state in ('leased', 'retry'):
             for segment_id in self.store.due(state, now, limit):
@@ -320,9 +343,9 @@ class Scheduler:
                     job = tx.get('jobs', segment_id)
                     if job.get('state') == 'leased' and job['lease_until'] <= now:
                         _defer(job, now, 'lease_expired')
-                        event = 'dead' if job['state'] == 'dead' else 'lease_expired'
+                        event = 'lease_expired'
                     elif job.get('state') == 'retry' and job['available_at'] <= now:
-                        control = _control(tx)
+                        control = read_control(tx, scheduler_control_key(job['owner_key']))
                         job['state'] = 'ready'
                         _append(tx, control, job)
                         event = 'retry'
@@ -331,27 +354,37 @@ class Scheduler:
                     tx.put('jobs', segment_id, job)
                     return event
 
-                event = self.store.run(commit)
+                try:
+                    event = self.store.run(commit)
+                except BatchPrivacyBlocked:
+                    self.store.quarantine_fenced(segment_id, now)
+                    continue
                 if event:
                     recovered += 1
                     if self.metrics:
                         self.metrics.record(event)
         return recovered
 
+    @staticmethod
+    def redrive_in_transaction(tx: Transaction, job: dict, now: float) -> bool:
+        if job.get('state') != 'dead' or not job.get('merge_pending'):
+            return False
+        control = read_control(tx, scheduler_control_key(job['owner_key']))
+        job.update(
+            state='ready',
+            available_at=now,
+            failure='',
+            token='',
+            lease_until=0.0,
+            retry_started_at=job.get('retry_started_at', now),
+        )
+        _append(tx, control, job)
+        tx.put('jobs', job['segment_id'], job)
+        return True
+
     def redrive_dead(self, segment_id: str, now: float) -> bool:
-        """Explicit operator action only; preserve capture position and immutable ID."""
-
-        def commit(tx):
-            job = tx.get('jobs', segment_id)
-            if job.get('state') != 'dead':
-                return False
-            control = _control(tx)
-            job.update(state='ready', attempt=0, available_at=now, failure='')
-            _append(tx, control, job)
-            tx.put('jobs', segment_id, job)
-            return True
-
-        return self.store.run(commit)
+        """Authenticated recovery of historical dead records; never skips a gap."""
+        return self.store.run(lambda tx: self.redrive_in_transaction(tx, tx.get('jobs', segment_id), now))
 
     def acknowledge_gpu_idle(self, gpu_id: str, token: str) -> bool:
         """Only the hardware admission owner may call this after GPU quiescence.

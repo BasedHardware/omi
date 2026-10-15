@@ -45,7 +45,7 @@ A status job uses `bp_` prefix and the stage-qualified `intakes/{job_id}` record
 Polling reads durable queue/ledger state. Legacy job IDs perform no new batch
 store lookup and retain their existing response. Cohort intake failures return
 503 with audio retained; no fallback worker is started. Late captures receive
-409 `sync_capture_before_watermark`; retain local audio for explicit recovery.
+202 and append after the committed log tail, preserving their capture clocks.
 BYOK cohorts receive a retryable refusal until their worker path is qualified.
 
 ## Internal worker RPC
@@ -60,7 +60,7 @@ RPC gates, so already accepted work drains after rollback.
 - `POST /pull`: `{stage, limit:1..32, pool:batch|live, capacity:PoolCapacity}`;
   returns `{leases:[LeasedWork]}` using dataclass field names from contracts.
 - `POST /heartbeat`: `{stage, leases:[{segment_id,token}]}` (maximum32);
-  returns `{accepted:[segment_id]}`. Renew every20s; any lost/ambiguous token
+  returns `{accepted:[segment_id]}`. Renew every 20s; any lost/ambiguous token
   invalidates that result. Continue draining CUDA before shutdown/reuse.
 - `POST /authorize-compute`: same body as heartbeat; returns `{allowed:[segment_id],
   retry_after:{segment_id:seconds}}`. Rechecks current fresh restrictions or
@@ -69,6 +69,8 @@ RPC gates, so already accepted work drains after rollback.
   fenced and required for completion.
 - `POST /complete`: `{stage,token,result:{segment_id,result_uri,outcome}}`;
   returns `{accepted:bool}`. Exact duplicate completion is idempotent.
+- `POST /redrive-dead`: `{stage,segment_id}`; redrives historical pending dead
+  heads without skipping an ordered gap; returns `{accepted:bool}`.
 - `POST /fail`: `{stage,segment_id,token}`; returns `{accepted:bool}`.
 - `POST /gpu-idle`: `{stage,gpu_id,token}`; hardware owner only, after CUDA
   quiescence. Expiry/completion never proves a shared GPU idle.
@@ -129,3 +131,38 @@ Before the first cohort, verify pending-age/owner-wait/jobs-per-second plus GPU
 utilization, actual full-chain latency/memory, correct client conversations and
 playback, content accounting/limits, lineage, deletion and restart/replay. Keep
 VAD compaction and shared-live off until their independent quality gates pass.
+
+
+## Recovery and late captures
+
+Compute failures and expired leases remain ordered, pending retries forever,
+with exponential backoff capped at 600s. Alert when
+`omi_batch_pipeline_retry_age_seconds{priority="fresh"}` exceeds 600s (same for
+recent/deep), scoped by worker_release/namespace; metric freshness must remain
+under 60s. Age persists through requeue/lease until successful completion.
+Historical dead heads are redriven by authenticated `POST
+/v2/batch-pipeline/redrive-dead` with `{stage, segment_id}` or by authorized
+client job polling, including admission rollback. No route skips an ordered gap.
+A privacy-fenced lease is separately revoked to `privacy_blocked`; erasure still
+belongs to the durable deletion outbox.
+
+Late captures receive the usual202 and keep their original capture time. They
+append after the committed predecessor; a separate capture high watermark stays
+monotonic. Shipping app `conversations.dart:810-923` recognizes only the existing
+`sync_content_in_progress`409; `local_wal_sync.dart:2127-2136` retains files on 202,
+and 1756-1762 deletes only completed/synced files. No late-capture409 is emitted.
+
+Control state uses 64 owner-hash shards, selected by indexed per-priority virtual
+service, with duration DRR inside each shard. Add these composites for BOTH
+batch_pipeline_prod/dev before enablement:
+
+| Collection suffix | Fields ascending | Purpose |
+| --- | --- | --- |
+| jobs | priority, retry_started_at | first-failure age |
+| control | pN_active, pN_service, pN_batch_available_at | dedicated pull, N=0,1,2 |
+| control | pN_active, pN_service, pN_live_available_at | short live-pool pull, N=0,1,2 |
+
+These 14 additional composite declarations require production READY evidence;
+loopback tests do not prove serving index readiness. A single pull updates only
+one shard. Old global rings migrate in bounded recovery transactions; normal
+admission/pull never writes the global control document.

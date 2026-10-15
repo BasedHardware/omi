@@ -11,7 +11,7 @@ operator settings, RPCs and index readiness are in
 | --- | --- | --- |
 | Shared contract | `contracts.py`, `capacity.py` | Immutable work/results, original VAD evidence, pool ceilings and fresh capacity checks; the A/B meeting point. |
 | Upload intake | `intake.py`, `audio.py` | Cohort admission, canonical capture-unit boundaries and bounded encrypted context. |
-| Durable scheduling | `scheduler.py`, `merge.py` | Priority/owner fairness, token-fenced leases, retry/dead letters and capture-ordered result log. |
+| Durable scheduling | `scheduler.py`, `control.py`, `merge.py` | Priority/owner fairness, token-fenced leases, capped indefinite retry and capture-ordered result log. |
 | Compute loop | `pump.py`, `compute_client.py` | Pull/heartbeat/drain interface used by the GPU runtime; service-OIDC authorization before model spend. |
 | Spend policy | `admission.py` | Backend-only original quota guards and lease-bound compute seals. |
 | Encrypted artifacts | `artifacts.py`, `artifact_policy.py` | Authenticated object IO, immutable generations and privacy-fenced object registration. |
@@ -34,8 +34,10 @@ the minimal upload/status hooks. GPU runtime/model implementations live under
   multipart receipts. D owns privacy/deletion fences and retention.
 - Existing content follows its recorded protocol; batch admission failures never
   start a legacy twin. Admission rollback leaves accepted work draining.
-- A committed watermark cannot be rewritten by a late capture: intake returns409
-  and the client retains audio for explicit recovery.
+- Late captures keep original clocks and append after the committed log tail;
+  the capture high watermark never regresses. Historical dead heads are redriven.
+- Privacy-fenced recovery is isolated by `database/batch_pipeline_recovery.py`;
+  it revokes leases without clearing privacy fences or resurrecting content.
 - Dedicated GPUs receive conversation-sized units (intake maximum one hour).
   Shared-live admission remains separately off, bounded to120s and one hardware
   flight; lease expiry never proves non-preemptible CUDA idle.

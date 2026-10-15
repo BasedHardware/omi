@@ -65,36 +65,47 @@ bind and release paths refuse batch ownership even after Redis expiry or
 cohort rollback. Pending batch claims have no TTL; completion starts retention.
 An ambiguous admission reply never releases or dispatches a legacy twin.
 
-Owner/class queues store linked FIFO head/tail and duration deficit. Bounded
-priority rings live in scheduler control; a 30-second quantum pays each job's
-cost. Owner admission and pull transact through control, providing fleet-wide
-priority/fairness. Owner capacity and transaction size fail explicitly before
-acceptance; control contention needs load qualification.
+Owner/class FIFO queues retain a 30-second duration DRR deficit. Owner-hash
+selects one of 64 control documents, each holding three priority rings. Pull
+queries eligible shards by minimum per-class virtual service, then transacts
+only the selected shard. Service advances by audio seconds/active owners,
+sharing capacity fairly across differently populated shards; DRR shares within
+a shard. Fresh shards are exhausted before lower classes. Ineligible heads
+rotate; pool-specific 30s pauses avoid hot polling. Admission unpauses its shard.
+Recovery migrates old global rings in bounded metadata-only transactions.
 
 ## Lease, merge and late-capture policy
 
-Leases last 120 seconds. The pump renews every 20 seconds concurrently with
-blocking GPU work; unresolved timeout/lost ownership forbids result publication. Transient failures
-keep renewing; a successful token-fenced renewal restores permission. Fenced
-queue heads rotate without content writes, allowing other owners to progress. Results
-carry the original token. Expiry retries with exponential backoff; attempt five
-becomes a retained dead letter. Explicit redrive is required; no accepted audio
-is silently dropped. Shutdown stops pulling and drains non-preemptible compute
-with heartbeat intact.
+Leases last 120s; concurrent heartbeats renew every 20s. Lost ownership forbids
+publication. Failures/expiry retry indefinitely with exponential backoff capped
+at 600s, retaining `merge_pending`. Alert on first-failure age over 600s.
+Fenced recovery records move to `privacy_blocked` in a separate transaction
+that rechecks the fence; other owners continue. D still owns erasure.
+Authenticated internal `redrive-dead` and owner status polling redrive historical
+dead heads without skipping audio. Shutdown drains non-preemptible compute.
 
-Ordered merge commits only the earliest pending `(capture_at, segment_id)`.
-Admission and commit share the owner revision fence. The result log records a
-stable segment ID and predecessor; C's transactional projection cursor follows
-that predecessor, so replay cannot append or mark enrichment twice. Bounded
-recovery scans repair crashes after compute, log commit and projection writes.
+Merge selects the earliest currently pending `(capture_at, segment_id)`, fenced
+by the owner revision. Each entry has a stable ID, predecessor and sequence;
+C follows predecessors idempotently. A late capture is admitted normally (202),
+retains its original clock and appends after the committed log tail. The capture
+high watermark never regresses; committed history is never rewritten. Ordering
+covers available pending captures, not unknown device audio.
+`conversations.dart:810-923` handles only `sync_content_in_progress`409;
+`local_wal_sync.dart` retains audio after202 and deletes only after completion.
+No new client error contract is required.
 
-The simplest safe late rule is implemented: a new capture at/before the
-committed watermark receives HTTP 409 `sync_capture_before_watermark` before
-admission. Client audio remains retained for explicit recovery. No historical
-rewrite, silent acceptance or legacy fallback occurs. Identical existing
-content/segment retries resolve before this check. Ordering covers admitted
-work, not unknown audio remaining on a device. Lead must account for this
-explicit recovery limitation when choosing a cohort.
+| Firestore step, one segment | Reads (approximate) | Writes |
+| --- | --- | --- |
+| Authorize/register encrypted artifact |10|1|
+| Admit |6|7; one owner shard|
+| Pull |9 plus visited-owner privacy checks|job, queue, one shard|
+| Heartbeat20s |6|1|
+| Complete + ordered merge |14|4|
+| Projection complete |15 plus conversation reads|ledger, usage, job, expiry|
+
+Counts exclude retries/contention; empty priority probes add index reads.
+Every 15s metric refresh uses nine bounded queries. No ordinary admission/pull
+writes the legacy global control; shard contention/load still needs qualification.
 
 ## Worker and protection interfaces
 
@@ -115,7 +126,7 @@ C projection runs on the backend, including durable
 sweep and legacy playback/enrichment. D checks account/source deletion,
 protection and generation inside each mutation transaction. Encrypted,
 owner-bound, generation-pinned objects have a pre-upload deletion outbox.
-Completion-only retention never expires pending results or dead letters.
+Completion-only retention never expires pending work.
 
 ## Capacity and autoscaling
 
@@ -127,7 +138,7 @@ hardware owner acknowledges CUDA idle. Non-preemptible work never moves onto
 live Parakeet pods merely because it is 03:00Z. The approximately 25% listen
 trough is an opportunity to measure slack, not permission to run.
 
-Export oldest pending/ready age per class, freshness, admission-to-lease owner
+Export oldest pending/ready/retry age per class, freshness, admission-to-lease owner
 wait, transition rates/jobs per second, and GPU utilization/headroom. No owner
 labels. Autoscale on ready-age with fresh/recent/deep targets 30/300/3600 seconds;
 reject stale samples. B's dedicated chart documents the external-metric HPA.
@@ -148,8 +159,7 @@ indexes READY, retirement of pre-protocol intake revisions, privacy/deletion,
 playback, accounting, lineage and full-chain
 quality/capacity acceptance before expansion. Inspect per-class age, per-owner
 wait, throughput, GPU use, errors, duplicate/projected receipts and live latency.
-General captures containing disconnected speech groups still require multipart
-projection/deletion qualification; the initial safe projector refuses them.
+Multipart projection/deletion still requires rollout qualification.
 Turning admission off returns new unowned uploads to legacy; existing batch
 claims drain through their recorded protocol. Never copy in-flight work into
 legacy or purge pending artifacts to roll back. Detailed RPC/index/operator

@@ -141,6 +141,20 @@
           "order": "ASCENDING"
         },
         {
+          "fieldPath": "retry_started_at",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_prod_jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "priority",
+          "order": "ASCENDING"
+        },
+        {
           "fieldPath": "merge_pending",
           "order": "ASCENDING"
         },
@@ -255,6 +269,20 @@
           "order": "ASCENDING"
         },
         {
+          "fieldPath": "retry_started_at",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_dev_jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "priority",
+          "order": "ASCENDING"
+        },
+        {
           "fieldPath": "merge_pending",
           "order": "ASCENDING"
         },
@@ -288,6 +316,222 @@
         },
         {
           "fieldPath": "committed_at",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_prod_control",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "p0_active",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "p0_service",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "p0_batch_available_at",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_prod_control",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "p0_active",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "p0_service",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "p0_live_available_at",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_prod_control",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "p1_active",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "p1_service",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "p1_batch_available_at",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_prod_control",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "p1_active",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "p1_service",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "p1_live_available_at",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_prod_control",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "p2_active",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "p2_service",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "p2_batch_available_at",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_prod_control",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "p2_active",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "p2_service",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "p2_live_available_at",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_dev_control",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "p0_active",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "p0_service",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "p0_batch_available_at",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_dev_control",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "p0_active",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "p0_service",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "p0_live_available_at",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_dev_control",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "p1_active",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "p1_service",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "p1_batch_available_at",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_dev_control",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "p1_active",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "p1_service",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "p1_live_available_at",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_dev_control",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "p2_active",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "p2_service",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "p2_batch_available_at",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_dev_control",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "p2_active",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "p2_service",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "p2_live_available_at",
           "order": "ASCENDING"
         }
       ]

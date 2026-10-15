@@ -2,6 +2,7 @@
 
 from collections.abc import Callable, Iterable
 from datetime import datetime, timedelta, timezone
+from config.batch_pipeline import scheduler_control_key
 from typing import Any
 
 from google.cloud import firestore
@@ -59,7 +60,7 @@ def _delete_job(client: Any, namespace: str, snapshot: Any, *, retain_ordering: 
         result = result_ref.get(transaction=transaction).to_dict() or {}
         owner_ref = client.collection(f'{namespace}_owners').document(key)
         owner = owner_ref.get(transaction=transaction).to_dict() or {}
-        control_ref = client.collection(f'{namespace}_control').document('scheduler')
+        control_ref = client.collection(f'{namespace}_control').document(scheduler_control_key(key))
         control = control_ref.get(transaction=transaction).to_dict() or {'rings': {}}
         queue_key = f"{job['priority']}_{key}"
         queue_ref = client.collection(f'{namespace}_queues').document(queue_key)
@@ -192,7 +193,7 @@ def purge_batch_owner(
 def _purge_owner_fairness(client: Any, namespace: str, key: str) -> None:
     @firestore.transactional
     def remove(transaction):
-        control_ref = client.collection(f'{namespace}_control').document('scheduler')
+        control_ref = client.collection(f'{namespace}_control').document(scheduler_control_key(key))
         snapshot = control_ref.get(transaction=transaction)
         control = snapshot.to_dict() or {'rings': {}}
         queue_keys = {f'{priority}_{key}' for priority in range(3)}

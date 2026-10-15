@@ -24,11 +24,12 @@ class OrderedMerge:
                 raise RuntimeError('result log exists for pending job; reconciliation required')
             watermark = owner.get('watermark')
             position = {'capture_at': job['capture_at'], 'segment_id': job['segment_id']}
-            if watermark and (position['capture_at'], position['segment_id']) <= (
-                watermark['capture_at'],
-                watermark['segment_id'],
-            ):
-                raise RuntimeError('non-monotone merge candidate')
+            late = bool(
+                watermark
+                and (position['capture_at'], position['segment_id'])
+                <= (watermark['capture_at'], watermark['segment_id'])
+            )
+            tail = owner.get('log_tail', watermark['segment_id'] if watermark else None)
             entry = {
                 **position,
                 'protocol_version': job['protocol_version'],
@@ -36,7 +37,9 @@ class OrderedMerge:
                 'owner_id': job['owner_id'],
                 'conversation_id': job.get('conversation_id'),
                 'privacy_generation': job.get('privacy_generation'),
-                'previous_segment_id': watermark['segment_id'] if watermark else None,
+                'previous_segment_id': tail,
+                'late_capture': late,
+                'log_sequence': owner.get('log_sequence', 0) + 1,
                 'result': job['result'],
                 'committed_at': now,
                 'projection_state': 'pending',
@@ -44,7 +47,12 @@ class OrderedMerge:
             tx.put('results', job['segment_id'], entry)
             job.update(state='committed', merge_pending=False)
             tx.put('jobs', job['segment_id'], job)
-            owner.update(watermark=position, revision=owner.get('revision', 0) + 1)
+            owner.update(
+                watermark=watermark if late else position,
+                log_tail=job['segment_id'],
+                log_sequence=entry['log_sequence'],
+                revision=owner.get('revision', 0) + 1,
+            )
             tx.put('owners', key, owner)
             return entry
 

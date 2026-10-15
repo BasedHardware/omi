@@ -87,3 +87,23 @@ def test_exported_age_and_freshness_have_the_hpa_release_namespace_scope():
     scope = {'worker_release': 'synthetic-worker', 'namespace': 'synthetic'}
     assert registry.get_sample_value('omi_batch_pipeline_ready_age_seconds', {**scope, 'priority': 'deep'}) == 100
     assert registry.get_sample_value('omi_batch_pipeline_metrics_refreshed_at_seconds', scope) == 100
+
+
+def test_retry_age_survives_requeue_and_clears_only_after_success():
+    from utils.batch_pipeline.contracts import WorkResult
+
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('retry-head'), 0)
+    lease = queue.pull(1)[0]
+    queue.fail('retry-head', lease.token, 2)
+    queue.recover(7)
+    metrics.refresh(store, 1000)
+    labels = {'priority': 'deep', 'worker_release': 'unscoped', 'namespace': 'unscoped'}
+    assert registry.get_sample_value('omi_batch_pipeline_retry_age_seconds', labels) == 998
+    lease = queue.pull(1000)[0]
+    queue.complete(WorkResult('retry-head', 'gs://results/retry'), lease.token, 1001)
+    metrics.refresh(store, 1002)
+    assert registry.get_sample_value('omi_batch_pipeline_retry_age_seconds', labels) == 0

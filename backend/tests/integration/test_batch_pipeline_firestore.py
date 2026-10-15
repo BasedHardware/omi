@@ -67,8 +67,11 @@ def test_parallel_claims_ordered_commit_and_recovery(store):
     assert merge.commit_next('synthetic-owner', 128) is None
     assert merge.committed_result('a')['result']['result_uri'] == 'gs://results/a'
     assert not queue.enqueue(work('a', 1), 129)
-    with pytest.raises(ValueError, match='watermark'):
-        queue.enqueue(work('late', 0), 129)
+    assert queue.enqueue(work('late', 0), 129)
+    late = queue.pull(129)[0]
+    assert queue.complete(WorkResult('late', 'gs://results/late'), late.token, 130)
+    entry = merge.commit_next('synthetic-owner', 131)
+    assert entry['capture_at'] == 0 and entry['previous_segment_id'] == 'c' and entry['late_capture']
 
 
 def test_competing_admission_and_merge_never_regresses_watermark(store):
@@ -88,11 +91,19 @@ def test_competing_admission_and_merge_never_regresses_watermark(store):
         admission = pool.submit(admit_earlier)
         commit = pool.submit(merge.commit_next, 'synthetic-owner', 2)
         admitted, committed = admission.result(), commit.result()
-    if admitted:
-        assert committed is None
-        assert merge.committed_result('later') == {}
-    else:
-        assert committed['segment_id'] == 'later'
+    assert admitted
+    lease = queue.pull(2)[0]
+    queue.complete(WorkResult('earlier', 'gs://results/earlier'), lease.token, 3)
+    entries = [committed] if committed else []
+    while entry := merge.commit_next('synthetic-owner', 4):
+        entries.append(entry)
+    assert {v['segment_id'] for v in entries} == {'earlier', 'later'}
+    assert entries[0]['previous_segment_id'] is None
+    assert entries[1]['previous_segment_id'] == entries[0]['segment_id']
+    from utils.batch_pipeline.scheduler import owner_key
+
+    owner = store.run(lambda tx: tx.get('owners', owner_key('synthetic-owner')))
+    assert owner['watermark'] == {'capture_at': 2, 'segment_id': 'later'}
 
 
 def test_priority_and_owner_fairness_are_durable_across_instances(store):
@@ -103,8 +114,8 @@ def test_priority_and_owner_fairness_are_durable_across_instances(store):
     first.enqueue(work('light', owner='light'), 0)
     first.enqueue(work('fresh', owner='fresh', priority=Priority.FRESH), 0)
     assert first.pull(1)[0].item.segment_id == 'fresh'
-    assert second.pull(1)[0].item.segment_id == 'h0'
-    assert first.pull(1)[0].item.segment_id == 'light'
+    first_two = [second.pull(1)[0].item.segment_id, first.pull(1)[0].item.segment_id]
+    assert set(first_two) == {'h0', 'light'}
     assert second.pull(1)[0].item.segment_id == 'h1'
 
 
@@ -193,7 +204,6 @@ def test_late_intake_is_atomic_and_revocation_fences_heartbeat_and_result(store,
     from database.batch_pipeline_intake import admit
     from database.batch_pipeline_privacy import BatchPrivacyBlocked
     from utils.batch_pipeline.contracts import ProjectionBinding
-    from utils.batch_pipeline.scheduler import LateCapture
 
     monkeypatch.setenv('OMI_ENV_STAGE', 'local')
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
@@ -205,11 +215,17 @@ def test_late_intake_is_atomic_and_revocation_fences_heartbeat_and_result(store,
     OrderedMerge(store).commit_next('synthetic-owner', 2)
     late = replace(work('late', capture=1), privacy_generation=0)
     binding = ProjectionBinding('synthetic-owner', 'bp_late', 'content_' + uuid.uuid4().hex, ('late',))
-    with pytest.raises(LateCapture):
-        admit(store, [late], binding, 3, namespace=store.namespace)
-    assert store.run(lambda tx: tx.get('content', f'synthetic-owner/{binding.content_id}')) == {}
-    assert store.run(lambda tx: tx.get('jobs', 'late')) == {}
-    assert store.projection_pending() == ['committed']
+    admit(store, [late], binding, 3, namespace=store.namespace)
+    assert (
+        store.run(lambda tx: tx.get('content', f'synthetic-owner/{binding.content_id}'))['dispatch_protocol']
+        == 'batch_v1'
+    )
+    assert store.run(lambda tx: tx.get('jobs', 'late'))['late_capture']
+    running = queue.pull(3)[0]
+    queue.complete(WorkResult('late', 'gs://synthetic/late'), running.token, 3)
+    entry = OrderedMerge(store).commit_next('synthetic-owner', 3)
+    assert entry['previous_segment_id'] == 'committed' and entry['capture_at'] == 1
+    assert store.projection_pending() == ['committed', 'late']
     queue.enqueue(replace(work('revoked', capture=20), conversation_id='deleted-source'), 3)
     running = queue.pull(3)[0]
     tombstone = (
@@ -245,3 +261,46 @@ def test_revoked_ring_head_does_not_starve_other_owners_or_priorities(store):
         assert store.run(lambda tx: tx.get('jobs', 'blocked'))['state'] == 'ready'
     finally:
         tombstone.delete()
+
+
+@pytest.mark.parametrize('limit', [1, 100])
+def test_fenced_expired_lease_does_not_block_recovery_behind_it(store, limit):
+    from dataclasses import replace
+
+    queue = Scheduler(store)
+    queue.enqueue(replace(work('fenced', owner='a'), conversation_id='deleted'), 0)
+    queue.pull(0)
+    queue.enqueue(work('normal', owner='b'), 0)
+    normal = queue.pull(1)[0]
+    assert not store.quarantine_fenced('normal', 2)
+    assert store.run(lambda tx: tx.get('jobs', 'normal'))['token'] == normal.token
+    tombstone = store.client.collection('users').document('a').collection('deleted_conversations').document('deleted')
+    tombstone.set({'deleted': True})
+    try:
+        # Page size one: first scan must quarantine the fenced head independently.
+        assert queue.recover(122, limit=limit) == (1 if limit == 100 else 0)
+        assert store.run(lambda tx: tx.get('jobs', 'fenced'))['state'] == 'privacy_blocked'
+        if limit == 1:
+            assert queue.recover(122, limit=1) == 1
+        assert store.due('leased', 122, 1) == []
+        queue.recover(127, limit=1)
+        lease = queue.pull(127)[0]
+        assert lease.item.segment_id == 'normal' and lease.token != normal.token
+        assert queue.complete(WorkResult('normal', 'gs://results/normal'), lease.token, 128)
+    finally:
+        tombstone.delete()
+
+
+def test_distinct_owners_write_distinct_control_shards(store):
+    from config.batch_pipeline import scheduler_control_key
+    from utils.batch_pipeline.scheduler import owner_key
+
+    queue = Scheduler(store)
+    for owner in ('a', 'b'):
+        queue.enqueue(work(owner, owner=owner), 0)
+    keys = {scheduler_control_key(owner_key(uid)) for uid in ('a', 'b')}
+    assert len(keys) == 2
+    controls = store.client.collection(f'{store.namespace}_control')
+    assert {doc.id for doc in controls.stream()} == keys
+    assert not controls.document('scheduler').get().exists
+    assert {v.item.owner_id for v in queue.pull(1, 2)} == {'a', 'b'}

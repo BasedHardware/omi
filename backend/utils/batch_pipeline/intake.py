@@ -20,7 +20,7 @@ from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.audio import decode_units, with_context
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.retention import batch_artifact_authorize
-from utils.batch_pipeline.scheduler import LateCapture, owner_key
+from utils.batch_pipeline.scheduler import Scheduler, owner_key
 from utils.executors import db_executor, run_blocking, storage_executor, sync_executor
 from utils.other.local_storage import create_storage_client
 from utils.sync.admission_responses import sync_content_in_progress_response
@@ -59,18 +59,16 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
         tx.check_privacy(uid, sources, jobs[0].get('privacy_generation') if jobs else None)
         result = ledger.get('result')
         completed = ledger.get('status') == 'completed' and is_valid_completed_sync_content_result(result)
-        dead = any(job.get('state') == 'dead' for job in jobs)
+        if not completed:
+            for job in jobs:
+                Scheduler.redrive_in_transaction(tx, job, time.time())
         status = (
             'completed'
             if completed
             else (
-                'failed'
-                if dead
-                else (
-                    'processing'
-                    if any(job.get('state') in {'leased', 'result_ready', 'committed'} for job in jobs)
-                    else 'queued'
-                )
+                'processing'
+                if any(job.get('state') in {'leased', 'result_ready', 'committed'} for job in jobs)
+                else 'queued'
             )
         )
         return {
@@ -81,10 +79,9 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             'total_segments': result.get('total_segments', len(jobs)) if completed else len(jobs),
             'processed_segments': sum(job.get('state') == 'committed' for job in jobs),
             'successful_segments': result.get('total_segments', len(jobs)) if completed else 0,
-            'failed_segments': int(dead),
+            'failed_segments': 0,
             'result': result if completed else None,
-            'poll_after_ms': 0 if completed or dead else 3000,
-            **({'reason_code': 'batch_dead_letter', 'error': 'Audio recovery requires retry'} if dead else {}),
+            'poll_after_ms': 0 if completed else 3000,
         }
 
     return store.run(read)
@@ -248,15 +245,6 @@ async def accept_upload(
             status = await run_blocking(db_executor, durable_status, store, uid, outcome['job_id'])
             return _start_response(status) if status else sync_content_in_progress_response(outcome['job_id'])
         return sync_content_in_progress_response(outcome.get('job_id'))
-    except LateCapture:
-        return JSONResponse(
-            status_code=409,
-            headers={'Retry-After': '3600'},
-            content={
-                'code': 'sync_capture_before_watermark',
-                'detail': 'Capture predates committed history; local audio was not consumed. Explicit recovery is required.',
-            },
-        )
     except BatchPrivacyBlocked:
         return JSONResponse(
             status_code=409,

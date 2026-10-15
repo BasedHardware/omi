@@ -22,6 +22,7 @@ _BATCH_PIPELINE_INDEXES = tuple(
         ('result_ready', (_asc('state'), _asc('enqueued_at'))),
         ('predecessor', (_asc('next'), _asc('state'))),
         ('ready_age', (_asc('priority'), _asc('state'), _asc('enqueued_at'))),
+        ('retry_age', (_asc('priority'), _asc('retry_started_at'))),
         ('pending_age', (_asc('priority'), _asc('merge_pending'), _asc('enqueued_at'))),
     )
 )
@@ -34,6 +35,18 @@ _BATCH_PROJECTION_INDEXES = tuple(
         (_asc('projection_state'), _asc('committed_at')),
     )
     for namespace in ('batch_pipeline_prod', 'batch_pipeline_dev')
+)
+
+_BATCH_CONTROL_INDEXES = tuple(
+    FirestoreIndexRequirement(
+        f'{namespace}_control_{priority}_{pool}',
+        f'{namespace}_control',
+        'COLLECTION',
+        (_asc(f'p{priority}_active'), _asc(f'p{priority}_service'), _asc(f'p{priority}_{pool}_available_at')),
+    )
+    for namespace in ('batch_pipeline_prod', 'batch_pipeline_dev')
+    for priority in (0, 1, 2)
+    for pool in ('batch', 'live')
 )
 
 SYNC_PIPELINE_INDEX_REQUIREMENTS = (
@@ -51,4 +64,5 @@ SYNC_PIPELINE_INDEX_REQUIREMENTS = (
     ),
     *_BATCH_PIPELINE_INDEXES,
     *_BATCH_PROJECTION_INDEXES,
+    *_BATCH_CONTROL_INDEXES,
 )

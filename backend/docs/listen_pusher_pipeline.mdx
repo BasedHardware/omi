@@ -4859,12 +4859,17 @@ synthetic uploaded segment to appear exactly once, including these cases.
 ### Dormant batch pull protocol
 
 [Batch pipeline worker](batch-pipeline-worker.md) defines a separate default-off
-pull queue and ordered result log. Existing sync admission, content-ledger
-projection, live listen/pusher and legacy-fresh routing remain unchanged.
-`BATCH_PIPELINE_ENABLED`, its owner allowlist and percentage gate only the explicit
-admission seam; no serving sync route calls it yet. Accepted protocol records
-must retain their recovery worker when admission is disabled. Conversation
-projection, deletion integration and late-capture policy are rollout gates.
+pull queue with 64 owner-hash scheduler shards and per-owner ordered result log.
+The sync route selects it only with `BATCH_PIPELINE_ENABLED` plus owner
+allowlist/percentage; an atomic content-ledger protocol seal prevents a legacy
+twin. Admission rollback leaves accepted work draining with 20s heartbeats.
+Compute failures retain the ordered head and retry with a 600s backoff cap;
+historical dead heads can be redriven by authenticated internal RPC or owner
+polling. Privacy-fenced recovery is isolated without clearing deletion fences.
+Late captures receive 202, retain their original clock and append after the
+committed tail; no unsupported 409 or capture-watermark regression occurs.
+Conversation projection, deletion, indexes READY and GPU qualification remain
+rollout gates. See [serving settings](batch-pipeline-serving.md).
 
 ### Dark batch-worker GPU and compaction boundaries (PR 21674)
 

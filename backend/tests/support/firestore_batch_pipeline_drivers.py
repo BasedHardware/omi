@@ -56,6 +56,29 @@ def entries():
             expect_observed=False,
             body_digest='ce672d79f4c8c453f5096d0ff9a6a074277caff55c0ae5cb80900698125f0327',
         ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.control_candidate',
+            covered_by=('database.batch_pipeline_store.control_candidate',),
+            reason='thin store adapter forwards namespace and bounded query arguments unchanged',
+            expect_observed=False,
+            body_digest='73808da191932dbe29ef2a4d06712add5c584fb0b6e93f980ff666c08df60288',
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.oldest_retry',
+            covered_by=('database.batch_pipeline_store.oldest_retry',),
+            reason='thin store adapter forwards namespace and bounded query arguments unchanged',
+            expect_observed=False,
+            body_digest='8d77904364b37100b5816f0252831ef6cf8807930dba8671cdc56bf603340315',
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.control_candidate',
+            domains={'namespace': namespaces, 'priority': [0, 1, 2], 'pool': ['batch', 'live']},
+            neutrals={'now': (1.0, 'eligibility timestamp operand only')},
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.oldest_retry',
+            domains={'namespace': namespaces, 'priority': [0, 1, 2]},
+        ),
         DriverEntry(
             'database.batch_pipeline_store.first_pending',
             base={'owner_key': 'owner-hash'},

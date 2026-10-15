@@ -5,7 +5,8 @@ from threading import RLock
 
 import pytest
 
-from config.batch_pipeline import admit_or_legacy, enabled_for, priority_for
+from config.batch_pipeline import admit_or_legacy, enabled_for, priority_for, scheduler_control_key
+from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.contracts import Priority, WorkItem, WorkResult
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.scheduler import Scheduler, LEASE_SECONDS
@@ -62,6 +63,34 @@ class MemoryStore:
         ]
         return min(jobs) if jobs else None
 
+    def control_candidate(self, priority, pool, now):
+        from utils.batch_pipeline.control import field
+
+        candidates = [
+            (v[field(priority, 'service')], v[field(priority, pool + '_available_at')], key)
+            for (table, key), v in self.rows.items()
+            if table == 'control'
+            and v.get(field(priority, 'active'))
+            and v[field(priority, pool + '_available_at')] <= now
+        ]
+        return min(candidates)[2] if candidates else None
+
+    def oldest_retry(self, priority):
+        values = [
+            v['retry_started_at']
+            for (table, _), v in self.rows.items()
+            if table == 'jobs' and v.get('priority') == priority and 'retry_started_at' in v
+        ]
+        return min(values) if values else None
+
+    def quarantine_fenced(self, segment_id, now):
+        raise AssertionError('privacy isolation must use real emulator transactions')
+
+
+def colliding_owner(owner):
+    shard = scheduler_control_key(owner_key(owner))
+    return next(str(n) for n in range(10000) if scheduler_control_key(owner_key(str(n))) == shard)
+
 
 def item(segment, owner='heavy', capture=1, duration=30, priority=Priority.DEEP, unit_kind='conversation'):
     return WorkItem(segment, owner, capture, f'gs://synthetic/{segment}', duration, priority, unit_kind)
@@ -73,14 +102,15 @@ def test_heavy_owner_does_not_starve_light_owner():
         queue.enqueue(item(f'h{n}'), 0)
     queue.enqueue(item('light', owner='light'), 0)
     pulled = queue.pull(1, 3)
-    assert [v.item.owner_id for v in pulled] == ['heavy', 'light', 'heavy']
+    assert 'light' in [v.item.owner_id for v in pulled[:2]]
+    assert len(pulled) == 3
 
 
 def test_duration_deficit_round_robin():
     queue = Scheduler(MemoryStore())
     for n in range(9):
         queue.enqueue(item(f's{n}', owner='short', duration=10), 0)
-    queue.enqueue(item('long', owner='long', duration=60), 0)
+    queue.enqueue(item('long', owner=colliding_owner('short'), duration=60), 0)
     pulled = queue.pull(1, 8)
     # Two 30s rounds give the long owner 60s and short owner six 10s items.
     assert sum(v.item.duration_seconds for v in pulled[:6]) == 60
@@ -101,7 +131,6 @@ def test_maximum_duration_progress_without_backfill_bypass():
     queue = Scheduler(MemoryStore())
     queue.enqueue(item('long', duration=7200, priority=Priority.FRESH), 0)
     queue.enqueue(item('deep'), 0)
-    assert queue.pull(1) == []  # Bounded first deficit-accumulation transaction.
     assert queue.pull(1)[0].item.segment_id == 'long'
     assert queue.pull(1)[0].item.segment_id == 'deep'
 
@@ -126,19 +155,22 @@ def test_lease_expiry_backoff_and_stale_result_fencing():
     assert not queue.complete(WorkResult('a', 'gs://results/changed'), second.token, 999)
 
 
-def test_retries_end_in_dead_letter_and_block_merge():
+def test_failures_retry_forever_with_capped_backoff_and_pending_head():
     store = MemoryStore()
     queue = Scheduler(store)
     queue.enqueue(item('a'), 0)
-    for attempt in range(1, 6):
+    for attempt in range(1, 21):
         now = attempt * 1000
         queue.recover(now)
         lease = queue.pull(now)[0]
         assert lease.attempt == attempt
         assert queue.fail('a', lease.token, now + 1)
         assert not queue.fail('a', lease.token, now + 1)
-    assert store.rows['jobs', 'a']['state'] == 'dead'
-    assert queue.recover(99999) == 0
+        job = store.rows['jobs', 'a']
+        assert job['state'] == 'retry' and job['merge_pending']
+        assert 0 < job['available_at'] - (now + 1) <= 600
+        assert job['retry_started_at'] == 1001
+    assert queue.recover(99999) == 1
     assert OrderedMerge(store).commit_next('heavy', 99999) is None
 
 
@@ -160,8 +192,16 @@ def test_out_of_order_completion_and_idempotent_ordered_commit():
     assert not queue.enqueue(item('a', capture=1), 4)
     with pytest.raises(ValueError, match='different immutable'):
         queue.enqueue(item('a', capture=99), 4)
-    with pytest.raises(ValueError, match='watermark'):
-        queue.enqueue(item('late', capture=1), 4)
+    assert queue.enqueue(item('late', capture=1), 4)
+    lease = queue.pull(4)[0]
+    assert queue.complete(WorkResult('late', 'gs://results/late'), lease.token, 5)
+    late = merge.commit_next('heavy', 6)
+    assert late['previous_segment_id'] == 'c' and late['late_capture']
+    assert late['capture_at'] == 1
+    owner = store.rows['owners', owner_key('heavy')]
+    assert owner['watermark'] == {'capture_at': 2, 'segment_id': 'c'}
+    assert owner['log_tail'] == 'late'
+    assert merge.commit_next('heavy', 7) is None
 
 
 def test_flags_off_identity_and_cohort_validation(monkeypatch):
@@ -196,7 +236,7 @@ def test_priority_respects_existing_lane():
         priority_for('unknown', 1)
 
 
-def test_expired_fifth_attempt_dead_letters_without_retry():
+def test_expired_leases_never_terminal_state_ordered_head():
     store = MemoryStore()
     queue = Scheduler(store)
     queue.enqueue(item('a'), 0)
@@ -206,7 +246,8 @@ def test_expired_fifth_attempt_dead_letters_without_retry():
         lease = queue.pull(now)[0]
         assert queue.recover(now + LEASE_SECONDS) == 1
         assert not queue.heartbeat('a', lease.token, now + LEASE_SECONDS)
-    assert store.rows['jobs', 'a']['state'] == 'dead'
+    assert store.rows['jobs', 'a']['state'] == 'retry'
+    assert store.rows['jobs', 'a']['merge_pending']
 
 
 def test_dead_letter_redrive_preserves_order_and_identity():
@@ -220,17 +261,14 @@ def test_dead_letter_redrive_preserves_order_and_identity():
             queue.complete(WorkResult('b', 'gs://results/b'), lease.token, 1)
         else:
             queue.fail('a', lease.token, 1)
-    for attempt in range(2, 6):
-        now = attempt * 1000
-        queue.recover(now)
-        lease = queue.pull(now)[0]
-        queue.fail('a', lease.token, now + 1)
+    # A historical terminal job from the previous implementation.
+    store.rows['jobs', 'a'].update(state='dead', available_at=0)
     merge = OrderedMerge(store)
     assert merge.commit_next('heavy', 9999) is None
     assert queue.redrive_dead('a', 9999)
     assert not queue.redrive_dead('a', 9999)
     lease = queue.pull(9999)[0]
-    assert lease.attempt == 1
+    assert lease.attempt == 2
     queue.complete(WorkResult('a', 'gs://results/a'), lease.token, 10000)
     assert merge.commit_next('heavy', 10001)['segment_id'] == 'a'
     assert merge.commit_next('heavy', 10001)['segment_id'] == 'b'
@@ -244,7 +282,7 @@ def test_owner_capacity_fails_atomically_without_dropping_work(monkeypatch):
     queue = Scheduler(store)
     queue.enqueue(item('a', owner='a'), 0)
     with pytest.raises(RuntimeError, match='capacity'):
-        queue.enqueue(item('b', owner='b'), 0)
+        queue.enqueue(item('b', owner=colliding_owner('a')), 0)
     assert ('jobs', 'b') not in store.rows
     assert queue.pull(1)[0].item.segment_id == 'a'
 
@@ -343,8 +381,9 @@ def test_shared_gpu_exclusivity_survives_completion_and_lease_expiry(monkeypatch
 
     lease = first.pull(1, capacity=capacity(1))[0]
     assert second.pull(1, capacity=capacity(1)) == []
-    assert first.heartbeat('a', lease.token, 60)
-    assert first.complete(WorkResult('a', 'gs://results/a'), lease.token, 61)
+    name = lease.item.segment_id
+    assert first.heartbeat(name, lease.token, 60)
+    assert first.complete(WorkResult(name, f'gs://results/{name}'), lease.token, 61)
     # Result completion alone cannot attest that asynchronous CUDA is idle.
     assert second.pull(61, capacity=capacity(61)) == []
     assert not first.acknowledge_gpu_idle('same-gpu', 'stale-token')
@@ -356,7 +395,7 @@ def test_shared_gpu_exclusivity_survives_completion_and_lease_expiry(monkeypatch
     # Expiry fences the old job, but never preempts/re-admits the physical GPU.
     assert first.pull(182, capacity=capacity(182)) == []
     assert second.acknowledge_gpu_idle('same-gpu', next_lease.token)
-    assert first.pull(182, capacity=capacity(182))[0].item.segment_id == 'c'
+    assert first.pull(182, capacity=capacity(182))[0].item.segment_id not in {name, next_lease.item.segment_id}
 
 
 def test_conversation_kind_never_runs_on_live_pool_even_when_short(monkeypatch):
@@ -371,3 +410,32 @@ def test_conversation_kind_never_runs_on_live_pool_even_when_short(monkeypatch):
     assert queue.pull(1, capacity=PoolCapacity(1, 1)) == []
     assert Scheduler(queue.store).pull(1, capacity=capacity) == []
     assert Scheduler(queue.store).pull(1)[0].item.unit_kind == 'conversation'
+
+
+def test_shards_weight_service_by_active_owner_count_and_preserve_global_priority():
+    store = MemoryStore()
+    queue = Scheduler(store)
+    other = colliding_owner('heavy')
+    assert scheduler_control_key(owner_key('light')) != scheduler_control_key(owner_key('heavy'))
+    for owner in ('heavy', other, 'light'):
+        for n in range(12):
+            queue.enqueue(item(f'{owner}-{n}', owner=owner), 0)
+    queue.enqueue(item('fresh-across-shards', owner='fresh', priority=Priority.FRESH), 0)
+    assert queue.pull(1)[0].item.segment_id == 'fresh-across-shards'
+    pulled = queue.pull(1, 18)
+    counts = {uid: sum(v.item.owner_id == uid for v in pulled) for uid in ('heavy', other, 'light')}
+    assert set(counts.values()) == {6}
+    assert ('control', 'scheduler') not in store.rows
+    assert len([key for table, key in store.rows if table == 'control']) >= 2
+
+
+def test_legacy_ring_migration_preserves_pending_work():
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('legacy'), 0)
+    key = scheduler_control_key(owner_key('heavy'))
+    store.rows['control', 'scheduler'] = {'rings': store.rows.pop(('control', key))['rings']}
+    assert queue.pull(1) == []
+    queue.recover(1)
+    assert queue.pull(1)[0].item.segment_id == 'legacy'
+    assert store.rows['control', 'scheduler']['rings']['2'] == []

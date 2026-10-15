@@ -13,6 +13,7 @@ from google.cloud import firestore
 
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_privacy import assert_batch_write_allowed
+from database.batch_pipeline_recovery import quarantine_fenced
 from utils.sync.stage import collection_name
 
 T = TypeVar('T')
@@ -29,6 +30,9 @@ class Store(Protocol):
     def run(self, body: Callable[[Transaction], T]) -> T: ...
     def due(self, state: str, now: float, limit: int) -> list[str]: ...
     def oldest(self, priority: int, *, ready_only: bool) -> float | None: ...
+    def oldest_retry(self, priority: int) -> float | None: ...
+    def control_candidate(self, priority: int, pool: str, now: float) -> str | None: ...
+    def quarantine_fenced(self, segment_id: str, now: float) -> bool: ...
 
 
 class FirestoreTransaction:
@@ -141,6 +145,15 @@ class FirestoreStore:
     def oldest(self, priority: int, *, ready_only: bool = False) -> float | None:
         return oldest(self.client, self.namespace, priority, ready_only=ready_only)
 
+    def control_candidate(self, priority: int, pool: str, now: float) -> str | None:
+        return control_candidate(self.client, self.namespace, priority, pool, now)
+
+    def oldest_retry(self, priority: int) -> float | None:
+        return oldest_retry(self.client, self.namespace, priority)
+
+    def quarantine_fenced(self, segment_id: str, now: float) -> bool:
+        return quarantine_fenced(self.client, self.namespace, segment_id, now)
+
     def projection_pending(self, limit: int = 100) -> list[str]:
         return projection_pending(self.client, self.namespace, limit)
 
@@ -189,3 +202,33 @@ def oldest(client: Any, namespace: str, priority: int, *, ready_only: bool = Fal
     query = query.where('state', '==', 'ready') if ready_only else query.where('merge_pending', '==', True)
     docs = list(query.order_by('enqueued_at').limit(1).stream())
     return docs[0].to_dict()['enqueued_at'] if docs else None
+
+
+def control_candidate(client: Any, namespace: str, priority: int, pool: str, now: float) -> str | None:
+    if priority not in (0, 1, 2) or pool not in {'batch', 'live'}:
+        raise ValueError('bounded priority and pool required')
+    prefix = f'p{priority}_'
+    service, available = prefix + 'service', prefix + pool + '_available_at'
+    docs = list(
+        client.collection(f'{namespace}_control')
+        .where(prefix + 'active', '==', True)
+        .where(service, '>=', 0)
+        .where(available, '<=', now)
+        .order_by(service)
+        .order_by(available)
+        .limit(1)
+        .stream()
+    )
+    return docs[0].id if docs else None
+
+
+def oldest_retry(client: Any, namespace: str, priority: int) -> float | None:
+    docs = list(
+        client.collection(f'{namespace}_jobs')
+        .where('priority', '==', priority)
+        .where('retry_started_at', '>=', 0)
+        .order_by('retry_started_at')
+        .limit(1)
+        .stream()
+    )
+    return docs[0].to_dict()['retry_started_at'] if docs else None

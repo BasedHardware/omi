@@ -51,3 +51,11 @@ def admit_or_legacy(owner_id: str, admit: Callable[..., T], legacy: Callable[...
 
 def shared_live_enabled() -> bool:
     return os.getenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', 'false').lower() == 'true'
+
+
+SCHEDULER_SHARDS = 64
+
+
+def scheduler_control_key(hashed_owner: str) -> str:
+    """Pure shard identity shared by scheduling and privacy cleanup."""
+    return f'scheduler_{int(hashed_owner[:8], 16) % SCHEDULER_SHARDS:02d}'

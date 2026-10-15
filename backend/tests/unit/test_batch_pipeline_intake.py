@@ -9,7 +9,7 @@ from database.batch_pipeline_intake import AdmissionDisabled, admit
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
 from utils.batch_pipeline.contracts import ProjectionBinding
 from utils.batch_pipeline.intake import durable_status, get_durable_job_status
-from utils.batch_pipeline.scheduler import LateCapture, owner_key
+from utils.batch_pipeline.scheduler import owner_key
 
 NAMESPACE = 'batch_pipeline_test_intake'
 
@@ -75,13 +75,31 @@ def test_legacy_owner_cannot_be_taken_even_when_redis_expired(cohort):
     assert not any(table == 'jobs' for table, _ in store.rows)
 
 
-def test_late_capture_rejects_entire_admission_and_keeps_watermark(cohort):
+def test_late_capture_admits_without_rewriting_high_watermark(cohort):
     store = MemoryStore()
-    store.rows['owners', owner_key('synthetic-owner')] = {'watermark': {'capture_at': 2, 'segment_id': 'committed'}}
-    before = dict(store.rows)
-    with pytest.raises(LateCapture):
-        submit(store, *proposal())
-    assert store.rows == before  # No content claim or partial sibling queue.
+    watermark = {'capture_at': 2, 'segment_id': 'committed'}
+    store.rows['owners', owner_key('synthetic-owner')] = {'watermark': watermark}
+    assert submit(store, *proposal())['outcome'] == 'batch'
+    job = store.rows['jobs', 'segment']
+    assert job['capture_at'] == 1 and job['late_capture'] and job['merge_pending']
+    assert store.rows['owners', owner_key('synthetic-owner')]['watermark'] == watermark
+    assert durable_status(store, 'synthetic-owner', 'bp_first')['status'] == 'queued'
+
+
+def test_client_poll_redrives_historical_dead_even_after_admission_rollback(cohort, monkeypatch):
+    from utils.batch_pipeline.scheduler import Scheduler
+
+    store = MemoryStore()
+    submit(store, *proposal())
+    queue = Scheduler(store)
+    queue.pull(100)
+    store.rows['jobs', 'segment'].update(state='dead', token='', lease_until=0)
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')
+    status = durable_status(store, 'synthetic-owner', 'bp_first')
+    assert status['status'] == 'queued' and status['failed_segments'] == 0
+    assert status['poll_after_ms'] == 3000
+    assert queue.pull(9999999999)[0].item.segment_id == 'segment'
+    assert sum(table == 'jobs' for table, _ in store.rows) == 1
 
 
 def test_lost_admission_ack_retries_without_duplicate_queue_or_binding(cohort):

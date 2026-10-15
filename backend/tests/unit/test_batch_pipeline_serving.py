@@ -185,3 +185,19 @@ async def test_landed_reprocess_busy_response_remains_retryable(monkeypatch, sta
     monkeypatch.setattr(module, 'run_enrichment', Mock(return_value=status))
     response = await module.enrichment_response({'kind': 'sync_reprocess', 'key': 'a' * 64, 'task_token': 'b' * 32})
     assert response.status_code == code
+
+
+def test_historical_dead_redrive_is_authenticated_stage_bound_and_idempotent(api, monkeypatch):
+    client, store = api
+    Scheduler(store).pull(time.time())
+    store.rows['jobs', 'synthetic'].update(state='dead', token='', lease_until=0)
+    path = '/v2/batch-pipeline/redrive-dead'
+    assert client.post(path, json={'stage': 'prod', 'segment_id': 'synthetic'}).status_code == 409
+    assert client.post(path, json={'stage': 'dev', 'segment_id': 'synthetic'}).json() == {'accepted': True}
+    assert client.post(path, json={'stage': 'dev', 'segment_id': 'synthetic'}).json() == {'accepted': False}
+    assert store.rows['jobs', 'synthetic']['merge_pending']
+    app = FastAPI()
+    app.include_router(module.router)
+    monkeypatch.delenv('BATCH_PIPELINE_WORKER_AUDIENCE', raising=False)
+    monkeypatch.delenv('BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT', raising=False)
+    assert TestClient(app).post(path, json={'stage': 'dev', 'segment_id': 'synthetic'}).status_code == 403
