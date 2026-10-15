@@ -80,6 +80,7 @@ class Scheduler:
             control = _control(tx)
             job = {
                 **immutable,
+                'protocol_version': 1,
                 'owner_key': key,
                 'enqueued_at': now,
                 'state': 'ready',

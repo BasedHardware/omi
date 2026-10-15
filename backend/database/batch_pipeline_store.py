@@ -5,6 +5,7 @@ The transaction callback must be pure; it may be retried by Firestore.
 """
 
 from copy import deepcopy
+import os
 import re
 from typing import Any, Callable, Protocol, TypeVar
 
@@ -67,9 +68,23 @@ class FirestoreStore:
             raise ValueError('explicit batch_pipeline_{prod,dev,test_<id>} namespace required')
         self.namespace = namespace
         self._client = firestore_client
+        self._require_stage()
+
+    def _require_stage(self):
+        if self.namespace.startswith('batch_pipeline_test_'):
+            host = os.getenv('FIRESTORE_EMULATOR_HOST', '')
+            if not host.startswith(('127.0.0.1:', 'localhost:')):
+                raise RuntimeError('test namespace requires a loopback emulator; no cloud fallback')
+            if self._client is not None and getattr(self._client, '_emulator_host', None) != host:
+                raise RuntimeError('injected test client must be bound to the loopback emulator')
+        else:
+            stage = os.getenv('OMI_ENV_STAGE', '').strip().lower()
+            if stage not in {'prod', 'dev'} or self.namespace != f'batch_pipeline_{stage}':
+                raise RuntimeError('batch namespace must match explicit runtime stage')
 
     @property
     def client(self):
+        self._require_stage()
         return self._client if self._client is not None else get_firestore_client()
 
     def run(self, body):

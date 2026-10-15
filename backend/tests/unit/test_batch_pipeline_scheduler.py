@@ -243,3 +243,21 @@ def test_owner_capacity_fails_atomically_without_dropping_work(monkeypatch):
         queue.enqueue(item('b', owner='b'), 0)
     assert ('jobs', 'b') not in store.rows
     assert queue.pull(1)[0].item.segment_id == 'a'
+
+
+def test_store_stage_boundary_refuses_implicit_or_cross_stage_access(monkeypatch):
+    from database.batch_pipeline_store import FirestoreStore
+
+    monkeypatch.delenv('OMI_ENV_STAGE', raising=False)
+    with pytest.raises(RuntimeError, match='stage'):
+        FirestoreStore('batch_pipeline_prod')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    with pytest.raises(RuntimeError, match='stage'):
+        FirestoreStore('batch_pipeline_prod')
+    assert FirestoreStore('batch_pipeline_dev').namespace == 'batch_pipeline_dev'
+    monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
+    with pytest.raises(RuntimeError, match='loopback'):
+        FirestoreStore('batch_pipeline_test_boundary')
+    monkeypatch.setenv('FIRESTORE_EMULATOR_HOST', '127.0.0.1:18974')
+    with pytest.raises(RuntimeError, match='injected'):
+        FirestoreStore('batch_pipeline_test_boundary', firestore_client=object())

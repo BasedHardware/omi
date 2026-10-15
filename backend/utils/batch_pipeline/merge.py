@@ -31,6 +31,7 @@ class OrderedMerge:
                 raise RuntimeError('non-monotone merge candidate')
             entry = {
                 **position,
+                'protocol_version': job['protocol_version'],
                 'owner_key': key,
                 'result': job['result'],
                 'committed_at': now,
