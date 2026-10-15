@@ -62,7 +62,7 @@ import {
   getCustomerPortal,
 } from '@/lib/api';
 import { SUPPORTED_LANGUAGES } from '@/types/user';
-import { decodePlan, planGrantsPaidCapability } from '@/types/user';
+import { decodePlan, planDisplayName, planGrantsPaidCapability } from '@/types/user';
 import type {
   DailySummarySettings,
   UserSubscription,
@@ -70,6 +70,12 @@ import type {
   UsageHistoryPoint,
   PricingOption,
 } from '@/types/user';
+import {
+  trackPaywallOpened,
+  trackUpgradePlanSelected,
+  trackUpgradeSucceeded,
+} from '@/lib/analytics/subscriptionFunnel';
+import { TranscriptionUsageMeter } from './TranscriptionUsageMeter';
 import { clearRetiredExperimentalFeaturesStorage } from './retiredExperimentalFeatures';
 
 // ============================================================================
@@ -834,7 +840,7 @@ function UnknownPlanCard() {
   );
 }
 
-function UsageSectionContent({
+export function UsageSectionContent({
   allUsage,
   subscription,
   onSubscriptionUpdate,
@@ -898,26 +904,28 @@ function UsageSectionContent({
   const monthlyUsage = allUsage?.monthly;
   const periods: UsagePeriod[] = ['today', 'monthly', 'yearly', 'all_time'];
 
-  // Default limits for basic plan (1200 minutes = 72000 seconds)
-  const limits = {
-    transcription_seconds: 72000, // 1200 minutes
-    words_transcribed: 50000,
-    insights_gained: 100,
-    memories_created: 50,
-  };
-
   const planIdentity = subscription
     ? subscription.plan_identity ?? decodePlan(subscription.plan)
     : null;
-  const isUnlimited = planIdentity ? planGrantsPaidCapability(planIdentity) : false;
+  // Paid status chooses billing actions, never the size of the listening allowance.
+  const isPaid = planIdentity ? planGrantsPaidCapability(planIdentity) : false;
   const isUnknownPlan = planIdentity?.kind === 'unknown';
+  const currentPlanName = planIdentity
+    ? planDisplayName(planIdentity)
+    : 'Plan unavailable';
   const isCancelingSubscription = subscription?.cancel_at_period_end;
-
-  // Calculate usage percentages for basic plan
-  const getUsagePercent = (used: number, limit: number) => {
-    if (limit <= 0) return 0;
-    return Math.min((used / limit) * 100, 100);
-  };
+  // `Paywall Opened` is an impression of the plan choices actually being
+  // visible. Basic users reach them through "See plans", paid users see the
+  // grid on mount; unknown-plan users never see choices here.
+  const plansImpressionRecorded = useRef(false);
+  useEffect(() => {
+    if (activeTab !== 'plan' || !cachedPlans?.length) return;
+    if (!subscription || plansImpressionRecorded.current) return;
+    if (isUnknownPlan) return;
+    if (!isPaid && !showUpgradeOptions) return;
+    plansImpressionRecorded.current = true;
+    trackPaywallOpened('usage_page', subscription.plan);
+  }, [subscription, isPaid, isUnknownPlan, showUpgradeOptions, activeTab, cachedPlans]);
 
   // Sort pricing options: monthly first, then annual
   const sortedOptions = cachedPlans
@@ -948,9 +956,13 @@ function UsageSectionContent({
         return;
       }
 
-      if (isUnlimited && !isCancelingSubscription && !isCurrentPlan) {
+      const tier = selectedOption?.plan_id ?? 'unknown';
+      const interval = selectedOption?.interval ?? selectedOption?.title ?? 'unknown';
+      trackUpgradePlanSelected(tier, interval, 'usage_page');
+      if (isPaid && !isCancelingSubscription && !isCurrentPlan) {
         const result = await upgradeSubscription(selectedPriceId);
         if (result?.status === 'success' || result?.scheduled_start) {
+          trackUpgradeSucceeded(tier, interval);
           onSubscriptionUpdate();
         } else {
           setError(result?.message || 'Failed to upgrade plan');
@@ -965,6 +977,7 @@ function UsageSectionContent({
           };
           window.addEventListener('focus', handleFocus);
         } else if (result?.status === 'reactivated') {
+          trackUpgradeSucceeded(tier, interval);
           onSubscriptionUpdate();
         } else {
           setError('Failed to create checkout session');
@@ -1049,7 +1062,7 @@ function UsageSectionContent({
         <div className="space-y-6">
           {isUnknownPlan ? (
             <UnknownPlanCard />
-          ) : !isUnlimited ? (
+          ) : !isPaid ? (
             /* BASIC PLAN VIEW */
             <>
               {/* Current Plan Card */}
@@ -1062,7 +1075,7 @@ function UsageSectionContent({
                     </div>
                     <div>
                       <h3 className="text-xl font-semibold text-text-primary">
-                        Basic Plan
+                        {currentPlanName}
                       </h3>
                       <p className="text-sm text-text-tertiary">Free tier</p>
                     </div>
@@ -1072,7 +1085,7 @@ function UsageSectionContent({
                       onClick={() => setShowUpgradeOptions(true)}
                       className="rounded-xl bg-text-primary px-5 py-2.5 text-sm font-semibold text-bg-primary shadow-lg shadow-black/40 transition-all hover:bg-text-primary/90"
                     >
-                      Upgrade to Unlimited
+                      See plans
                     </button>
                     {subscription?.stripe_subscription_id && (
                       <button
@@ -1086,93 +1099,21 @@ function UsageSectionContent({
                   </div>
                 </div>
 
-                {/* Monthly Listening Usage */}
-                <div className="mb-6 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-                  <div className="mb-3 flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-amber-400" />
-                    <span className="text-sm font-semibold text-amber-400">
-                      Monthly Listening Limit
-                    </span>
-                  </div>
-                  <div className="mb-2 flex items-baseline justify-between">
-                    <span className="text-2xl font-bold text-text-primary">
-                      {monthlyUsage
-                        ? Math.round(monthlyUsage.transcription_seconds / 60)
-                        : 0}
-                      <span className="ml-1 text-sm font-normal text-text-tertiary">
-                        / 1,200 min
-                      </span>
-                    </span>
-                    <span className="text-sm text-text-tertiary">
-                      {monthlyUsage
-                        ? 1200 - Math.round(monthlyUsage.transcription_seconds / 60)
-                        : 1200}{' '}
-                      min left
-                    </span>
-                  </div>
-                  <div className="h-2.5 overflow-hidden rounded-full bg-bg-quaternary">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-400 transition-all duration-500"
-                      style={{
-                        width: `${
-                          monthlyUsage
-                            ? getUsagePercent(
-                                monthlyUsage.transcription_seconds,
-                                limits.transcription_seconds,
-                              )
-                            : 0
-                        }%`,
-                      }}
-                    />
-                  </div>
-                </div>
+                <TranscriptionUsageMeter subscription={subscription} />
 
                 {/* What's Included - Checklist */}
                 <div>
                   <h4 className="mb-3 text-sm font-semibold text-text-secondary">
                     What&apos;s included
                   </h4>
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-amber-500/20">
-                        <Clock className="h-3 w-3 text-amber-400" />
-                      </div>
-                      <span className="text-sm text-text-secondary">
-                        <span className="font-medium text-text-primary">
-                          1,200 minutes
-                        </span>{' '}
-                        of listening per month
-                        <span className="ml-1 text-xs text-amber-400">(limited)</span>
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-green-500/20">
-                        <Check className="h-3 w-3 text-green-400" />
-                      </div>
-                      <span className="text-sm text-text-secondary">
-                        <span className="font-medium text-text-primary">Unlimited</span>{' '}
-                        words transcribed
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-green-500/20">
-                        <Check className="h-3 w-3 text-green-400" />
-                      </div>
-                      <span className="text-sm text-text-secondary">
-                        <span className="font-medium text-text-primary">Unlimited</span>{' '}
-                        insights
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-green-500/20">
-                        <Check className="h-3 w-3 text-green-400" />
-                      </div>
-                      <span className="text-sm text-text-secondary">
-                        <span className="font-medium text-text-primary">Unlimited</span>{' '}
-                        memories
-                      </span>
-                    </div>
-                  </div>
+                  <ul className="space-y-3">
+                    {DEFAULT_PLAN_FEATURES.map((feature) => (
+                      <li key={feature} className="flex items-center gap-3">
+                        <Check className="h-4 w-4 text-text-secondary" />
+                        <span className="text-sm text-text-secondary">{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               </Card>
 
@@ -1192,9 +1133,7 @@ function UsageSectionContent({
                       <h4 className="text-lg font-semibold text-text-primary">
                         Choose a Plan
                       </h4>
-                      <p className="text-sm text-text-tertiary">
-                        Unlock unlimited listening time
-                      </p>
+                      <p className="text-sm text-text-tertiary">Choose your plan</p>
                     </div>
                     <button
                       onClick={() => setShowUpgradeOptions(false)}
@@ -1329,7 +1268,7 @@ function UsageSectionContent({
               </Card>
             </>
           ) : (
-            /* UNLIMITED PLAN VIEW */
+            /* PAID PLAN VIEW — the server allowance remains independent. */
             <>
               {/* Header */}
               <div className="flex items-center gap-3">
@@ -1338,7 +1277,7 @@ function UsageSectionContent({
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-text-primary">
-                    {isCancelingSubscription ? 'Your Plan' : 'Manage Your Plan'}
+                    {currentPlanName}
                   </h3>
                   {subscription?.current_period_end && (
                     <p className="text-xs text-text-quaternary">
@@ -1349,6 +1288,8 @@ function UsageSectionContent({
                   )}
                 </div>
               </div>
+
+              <TranscriptionUsageMeter subscription={subscription} />
 
               {/* Plan Selection */}
               {sortedOptions.length > 0 ? (

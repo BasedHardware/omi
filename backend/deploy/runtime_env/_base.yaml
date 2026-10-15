@@ -12,6 +12,17 @@ environment_shared:
       - conversation.finalize.persisted
       - memory.canonical.mutate
       env:
+        AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
+        AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+        BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+        AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
         AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
         LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
         LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -168,6 +179,12 @@ environment_shared:
         PARAKEET_WINDOW_DIARIZATION:
           value: 'false'
           category: rollout
+        PARAKEET_WINDOW_DEADLINE_CUT_ENABLED:
+          value: 'false'
+          category: rollout
+        PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS:
+          value: '1.2'
+          category: reliability
         PARAKEET_WINDOW_PACE_SECONDS:
           value: '6'
           category: rollout
@@ -332,6 +349,17 @@ environment_shared:
       - memory.canonical.mutate
       values_file: backend/charts/pusher/{env}_omi_pusher_values.yaml
       env:
+        AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
+        AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+        BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+        AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
         AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
         LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
         LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -480,6 +508,8 @@ environment_shared:
     services:
       backend:
         forbidden_env:
+        - DEEPGRAM_SELF_HOSTED_ENABLED
+        - DEEPGRAM_SELF_HOSTED_URL
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -510,6 +540,17 @@ environment_shared:
             secret: MEMORY_V3_CURSOR_SECRET
             version: latest
         env:
+          AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
+          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+          BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+          AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           REDIS_DB_PORT:
             value: '13151'
             category: service_discovery
@@ -664,6 +705,9 @@ environment_shared:
             value: '{env}-v1'
             category: memory_rollout
       backend-sync:
+        forbidden_env:
+        - DEEPGRAM_SELF_HOSTED_ENABLED
+        - DEEPGRAM_SELF_HOSTED_URL
         capabilities:
         - conversation.finalize.persisted
         - memory.canonical.mutate
@@ -690,6 +734,17 @@ environment_shared:
             secret: GOOGLE_MAPS_API_KEY
             version: latest
         env:
+          AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
+          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+          BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+          AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           OMI_VERTEX_RESERVATION_PROJECT:
             value: '{compute_project}'
             category: runtime_identity
@@ -750,6 +805,18 @@ environment_shared:
             provisional: true
             value: 'on'
             category: rollout
+          SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
+            value: 'false'
+            category: rollout
+          SYNC_REPROCESS_COALESCE_ENABLED:
+            value: 'false'
+            category: rollout
+          SYNC_REPROCESS_SETTLE_SECONDS:
+            value: '600'
+            category: rollout
+          CONVERSATION_LLM_INPUT_DEDUPE_ENABLED:
+            value: 'false'
+            category: rollout
           USE_VERTEX_AI:
             value: 'true'
           STT_PRERECORDED_MODEL:
@@ -791,6 +858,12 @@ environment_shared:
             provisional: true
             value: '2592000'
             category: rollout
+          SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
+          SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'false', category: rollout}
+          SYNC_LEGACY_FRESH_UID_ALLOWLIST: {value: '', category: rollout}
+          SYNC_LEGACY_FRESH_PERCENT: {value: '0', category: rollout}
+          SYNC_LEGACY_FRESH_HOURLY_TOKENS: {value: '60', category: reliability}
+          SYNC_LEGACY_FRESH_BURST_TOKENS: {value: '10', category: reliability}
           SYNC_FRESH_MAX_AGE_SECONDS:
             provisional: true
             value: '21600'
@@ -839,6 +912,9 @@ environment_shared:
             value: canonical_memory_atoms
             category: memory_rollout
       backend-sync-backfill:
+        forbidden_env:
+        - DEEPGRAM_SELF_HOSTED_ENABLED
+        - DEEPGRAM_SELF_HOSTED_URL
         secrets:
           GOOGLE_CLIENT_SECRET:
             secret: GOOGLE_CLIENT_SECRET
@@ -853,6 +929,17 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
+          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+          BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+          AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           REDIS_DB_PORT:
             value: '13151'
             category: service_discovery
@@ -909,6 +996,18 @@ environment_shared:
             provisional: true
             value: 'on'
             category: rollout
+          SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
+            value: 'false'
+            category: rollout
+          SYNC_REPROCESS_COALESCE_ENABLED:
+            value: 'false'
+            category: rollout
+          SYNC_REPROCESS_SETTLE_SECONDS:
+            value: '600'
+            category: rollout
+          CONVERSATION_LLM_INPUT_DEDUPE_ENABLED:
+            value: 'false'
+            category: rollout
           USE_VERTEX_AI:
             value: 'true'
           STT_PRERECORDED_MODEL:
@@ -950,6 +1049,12 @@ environment_shared:
             provisional: true
             value: '2592000'
             category: rollout
+          SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
+          SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'false', category: rollout}
+          SYNC_LEGACY_FRESH_UID_ALLOWLIST: {value: '', category: rollout}
+          SYNC_LEGACY_FRESH_PERCENT: {value: '0', category: rollout}
+          SYNC_LEGACY_FRESH_HOURLY_TOKENS: {value: '60', category: reliability}
+          SYNC_LEGACY_FRESH_BURST_TOKENS: {value: '10', category: reliability}
           SYNC_FRESH_MAX_AGE_SECONDS:
             provisional: true
             value: '21600'
@@ -987,6 +1092,9 @@ environment_shared:
             category: memory_rollout
         provisional: true
       backend-integration:
+        forbidden_env:
+        - DEEPGRAM_SELF_HOSTED_ENABLED
+        - DEEPGRAM_SELF_HOSTED_URL
         secrets:
           GOOGLE_CLIENT_SECRET:
             secret: GOOGLE_CLIENT_SECRET
@@ -1004,6 +1112,17 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
+          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+          BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+          AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           REDIS_DB_PORT:
             value: '13151'
             category: service_discovery
@@ -1244,9 +1363,6 @@ environment_shared:
           MEMORY_CANONICAL_MAINTENANCE_ENABLED:
             category: memory_rollout
             value: 'true'
-          MEMORY_CANONICAL_MAINTENANCE_FLEX:
-            category: memory_rollout
-            value: 'true'
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
@@ -1265,9 +1381,6 @@ environment_shared:
             category: rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
-            category: memory_rollout
-          MEMORY_CANONICAL_CONSOLIDATION_ENABLED:
-            value: 'true'
             category: memory_rollout
           OMI_BACKGROUND_FLEX_CAPABLE:
             value: 'true'

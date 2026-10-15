@@ -23,6 +23,10 @@ from prometheus_client import make_asgi_app  # type: ignore[reportUnknownVariabl
 
 from gpu_worker import GPUWorker, AudioDurationExceededError
 from batch_engine import BatchEngine, QueueFullError, QueueTimeoutError
+
+# The image build overwrites omi_logging_config.py with backend/utils/logging_config.py.
+# Importing utils.logging_config in the NeMo process hits NeMo's utils package.
+from omi_logging_config import configure_split_stream_logging, quiet_repetitive_nemo_logs
 from transcribe import (
     transcribe_file,
     transcribe_file_v2,
@@ -33,14 +37,14 @@ from transcribe import (
 from stream_handler import StreamSession, warmup_rnnt_decoder
 from admission import StreamAdmissionController
 
-logging.basicConfig(level=logging.INFO)
-# httpx logs every outbound request at INFO; the per-segment diarizer embedding
-# calls (one per audio segment) flood the log pipeline with 200 OK noise. Keep
-# only warnings/errors (4xx/5xx, timeouts) from httpx. See issue #8080.
-logging.getLogger("httpx").setLevel(logging.WARNING)
-# The internal HTTP LB already logs every request to this service (successes
-# sampled, errors in full), so Uvicorn's per-request access line is a duplicate.
+# INFO/DEBUG to stdout, WARNING+ to stderr. Also quiets httpx/httpcore.
+# The internal HTTP LB already logs every request (successes sampled, errors in
+# full), so Uvicorn's per-request access line is a duplicate.
+configure_split_stream_logging(level=logging.INFO)
 logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+# nemo_logger does not propagate. Drop only the per-batch timestamps INFO and
+# the two repetitive Lhotse dataloader warnings; other NeMo errors still emit.
+quiet_repetitive_nemo_logs()
 logger = logging.getLogger(__name__)
 
 _ASR_BUCKETS = (0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0)
@@ -435,6 +439,7 @@ async def stream_transcribe(
 
     session: Optional[StreamSession] = None
     active_gauge_owned = False
+    finalize_requested = False
     t0 = time.monotonic()
     try:
         session = StreamSession(sample_rate=sample_rate, vad_threshold=vad_threshold, hangover_s=hangover_s)
@@ -464,6 +469,7 @@ async def stream_transcribe(
                     await websocket.send_json(seg)
             elif "text" in msg:
                 if msg["text"] == "finalize":
+                    finalize_requested = True
                     break
     except WebSocketDisconnect:
         pass
@@ -482,6 +488,11 @@ async def stream_transcribe(
                         await websocket.send_json(seg)
                     except Exception:
                         break
+                else:
+                    # Finish only after every tail segment was delivered. A
+                    # handler return alone can drop TCP without a close frame.
+                    if finalize_requested:
+                        await websocket.close(code=1000)
         except Exception as e:
             logger.error(f"v3/stream flush error: {e}")
         finally:

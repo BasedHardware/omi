@@ -1,9 +1,8 @@
-"""Canonical Short-term maintenance and the sole L2 routing handoff.
+"""Deterministic retention, owed intake completion and canonical outbox delivery.
 
-The historical generic promotion pass was intentionally removed. Broad L1
-observations remain Short-term until ``run_canonical_consolidation`` returns one
-validated, item-addressed terminal route. A durable route commits the
-Short-term-to-Long-term transition and its graph assertion in one transaction.
+Retrospective semantic consolidation is owned by Dream. This host retains the
+legacy disposition primitive for TTL and explicit, receipted durable-required
+submissions; it never chooses cleanup outcomes with a model.
 """
 
 from __future__ import annotations
@@ -29,19 +28,19 @@ from jobs.short_term_lifecycle_worker import (
 )
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState
 from utils.memory.atom_keyword_index import delete_atom_keyword_doc, sync_atom_keyword_index_for_item
-from models.memory_apply import MemoryControlState
+from models.memory_apply import MemoryControlState, WriterMode
 from utils.memory.canonical_consolidation import (
-    CONSOLIDATION_ATTEMPT_LEASE_SECONDS,
     ConsolidationAgentDecision,
-    ConsolidationReport,
+    RequiredIntakeCompletion,
     apply_consolidation_decision,
-    run_canonical_consolidation,
+    complete_required_intake,
 )
 from utils.memory.canonical_required_processing import (
     REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS,
     RequiredMemoryProcessingReport,
     RequiredMemoryProcessor,
     run_required_memory_processing,
+    run_required_memory_processing_async,
 )
 from utils.memory.canonical_vector_sync import delete_canonical_memory_vector, sync_canonical_memory_vector
 from utils.memory.memory_system import (
@@ -51,6 +50,8 @@ from utils.memory.memory_system import (
 )
 from utils.memory.short_term_lifecycle import ShortTermDisposition, effective_short_term_expiry
 from utils.memory.belief_model import belief_model_enabled
+
+from utils.executors import db_executor, run_blocking
 
 logger = logging.getLogger(__name__)
 
@@ -75,17 +76,21 @@ class CanonicalShortTermMaintenanceReport:
     uid: str
     skipped_reason: Optional[str] = None
     required_processing: Optional[RequiredMemoryProcessingReport] = None
-    consolidation: Optional[ConsolidationReport] = None
+    required_intake: Optional[RequiredIntakeCompletion] = None
     lifecycle: Optional[CanonicalShortTermLifecycleReport] = None
     outbox: Optional[Dict[str, Any]] = None
 
     @property
     def promoted_count(self) -> int:
-        return len(self.consolidation.promoted_memory_ids) if self.consolidation is not None else 0
+        return len(self.required_intake.promoted_memory_ids) if self.required_intake is not None else 0
 
     @property
     def routed_count(self) -> int:
-        return len(self.consolidation.batched_memory_ids) if self.consolidation is not None else 0
+        return (
+            (len(self.required_intake.promoted_memory_ids) + len(self.required_intake.failed_memory_ids))
+            if self.required_intake is not None
+            else 0
+        )
 
 
 def _delete_atom_projection_and_citations(uid: str, memory_id: str, *, db_client: Any) -> bool:
@@ -244,6 +249,31 @@ def _merge_canonical_outbox_summaries(*summaries: Dict[str, Any]) -> Dict[str, A
     return merged
 
 
+async def _drain_canonical_outbox_async(uid, *, db_client, run_id, now, job_budget_guard=None):
+    """Borrow a DB worker for one delivery tick, never for an entire drain."""
+    config = await run_blocking(db_executor, _canonical_outbox_worker_config, run_id=run_id, event_limit=1)
+    effects = await run_blocking(db_executor, _canonical_outbox_side_effects, db_client=db_client)
+    result = _merge_canonical_outbox_summaries({'uid': uid, 'worker_id': config.worker_id})
+    for _ in range(500):
+        if job_budget_guard is not None:
+            job_budget_guard()
+        tick = await run_blocking(
+            db_executor,
+            run_canonical_memory_outbox_worker_tick,
+            db_client=db_client,
+            uid=uid,
+            config=config,
+            side_effects=effects,
+            now=now,
+        )
+        result = _merge_canonical_outbox_summaries(
+            result, {'uid': uid, 'worker_id': config.worker_id, 'ticks': 1, **tick}
+        )
+        if int(tick.get('leased_count') or 0) < config.limit:
+            break
+    return result
+
+
 def run_canonical_short_term_ttl_lifecycle(
     uid: str,
     *,
@@ -365,19 +395,15 @@ def run_canonical_short_term_maintenance(
     db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: str,
-    llm_invoke: Optional[Callable[[str], str]] = None,
-    recurrence_signal_sink: Optional[Callable[..., int]] = None,
     required_processor: Optional[RequiredMemoryProcessor] = None,
     required_processing_attempt_lease_seconds: int = REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS,
     required_processing_result_guard: Optional[Callable[[], None]] = None,
     required_processing_limit: int = 0,
-    consolidation_attempt_lease_seconds: int = CONSOLIDATION_ATTEMPT_LEASE_SECONDS,
-    consolidation_result_guard: Optional[Callable[[], None]] = None,
     job_budget_guard: Optional[Callable[[], None]] = None,
 ) -> CanonicalShortTermMaintenanceReport:
     """Drain prior projections, run maintenance phases, then project their commits."""
     client: Any = db_client if db_client is not None else default_db_client
-    ensure_canonical_apply_control_state(uid, db_client=client)
+    control = ensure_canonical_apply_control_state(uid, db_client=client)
 
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
     # Settle already-committed invalidations before reading Short-term rows.
@@ -392,7 +418,8 @@ def run_canonical_short_term_maintenance(
     )
     if job_budget_guard is not None:
         job_budget_guard()
-    if required_processing_limit > 0:
+    compatibility_intake = control.writer_mode == WriterMode.compatibility
+    if required_processing_limit > 0 and compatibility_intake:
         required_processing = run_required_memory_processing(
             uid,
             db_client=client,
@@ -404,25 +431,28 @@ def run_canonical_short_term_maintenance(
         )
     else:
         required_processing = RequiredMemoryProcessingReport(uid=uid)
-    lifecycle = run_canonical_short_term_ttl_lifecycle(
-        uid,
-        db_client=client,
-        now=current_time,
-        run_id=run_id,
-        job_budget_guard=job_budget_guard,
-    )
-    if job_budget_guard is not None:
-        job_budget_guard()
-    consolidation = run_canonical_consolidation(
-        uid,
-        db_client=client,
-        now=current_time,
-        run_id=run_id,
-        llm_invoke=llm_invoke,
-        recurrence_signal_sink=recurrence_signal_sink,
-        attempt_lease_seconds=consolidation_attempt_lease_seconds,
-        result_guard=consolidation_result_guard,
-    )
+    if compatibility_intake:
+        lifecycle = run_canonical_short_term_ttl_lifecycle(
+            uid,
+            db_client=client,
+            now=current_time,
+            run_id=run_id,
+            job_budget_guard=job_budget_guard,
+        )
+        if job_budget_guard is not None:
+            job_budget_guard()
+        required_intake = complete_required_intake(
+            uid,
+            db_client=client,
+            now=current_time,
+            run_id=run_id,
+            job_budget_guard=job_budget_guard,
+        )
+    else:
+        # Ledger accounts retain their existing daily-sweep lifecycle/formation
+        # owner. Previously the entire host was skipped, including its outbox.
+        lifecycle = CanonicalShortTermLifecycleReport(uid=uid, skipped_reason='daily_sweep_lifecycle_owner')
+        required_intake = RequiredIntakeCompletion(uid=uid)
     # In production, use a post-commit timestamp so events created during this
     # pass are immediately due. Explicit test/replay clocks remain deterministic.
     if job_budget_guard is not None:
@@ -439,7 +469,99 @@ def run_canonical_short_term_maintenance(
     return CanonicalShortTermMaintenanceReport(
         uid=uid,
         required_processing=required_processing,
-        consolidation=consolidation,
+        required_intake=required_intake,
+        lifecycle=lifecycle,
+        outbox=outbox,
+    )
+
+
+async def run_canonical_short_term_maintenance_async(
+    uid: str,
+    *,
+    db_client: Any = None,
+    now: Optional[datetime] = None,
+    run_id: str,
+    required_processor: Optional[RequiredMemoryProcessor] = None,
+    required_processing_attempt_lease_seconds: int = REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS,
+    required_processing_result_guard: Optional[Callable[[], None]] = None,
+    required_processing_limit: int = 0,
+    job_budget_guard: Optional[Callable[[], None]] = None,
+) -> CanonicalShortTermMaintenanceReport:
+    """Drain prior projections, run maintenance phases, then project their commits."""
+    client: Any = db_client if db_client is not None else default_db_client
+    control = await run_blocking(db_executor, ensure_canonical_apply_control_state, uid, db_client=client)
+
+    current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
+    # Settle already-committed invalidations before reading Short-term rows.
+    # A malformed row must not starve an unrelated privacy/delete projection.
+    pre_outbox_now = current_time if now is not None else datetime.now(timezone.utc)
+    pre_outbox = await _drain_canonical_outbox_async(
+        uid,
+        db_client=client,
+        run_id=run_id,
+        now=pre_outbox_now,
+        job_budget_guard=job_budget_guard,
+    )
+    if job_budget_guard is not None:
+        job_budget_guard()
+    compatibility_intake = control.writer_mode == WriterMode.compatibility
+    if required_processing_limit > 0 and compatibility_intake:
+        required_processing = await run_required_memory_processing_async(
+            uid,
+            db_client=client,
+            processor=required_processor,
+            now=current_time,
+            attempt_lease_seconds=required_processing_attempt_lease_seconds,
+            result_guard=required_processing_result_guard,
+            limit=required_processing_limit,
+            job_budget_guard=job_budget_guard,
+        )
+    else:
+        required_processing = RequiredMemoryProcessingReport(uid=uid)
+    if compatibility_intake:
+        lifecycle = await run_blocking(
+            db_executor,
+            run_canonical_short_term_ttl_lifecycle,
+            uid,
+            limit=25,
+            db_client=client,
+            now=current_time,
+            run_id=run_id,
+            job_budget_guard=job_budget_guard,
+        )
+        if job_budget_guard is not None:
+            job_budget_guard()
+        required_intake = await run_blocking(
+            db_executor,
+            complete_required_intake,
+            uid,
+            db_client=client,
+            now=current_time,
+            run_id=run_id,
+            job_budget_guard=job_budget_guard,
+        )
+    else:
+        # Ledger accounts retain their existing daily-sweep lifecycle/formation
+        # owner. Previously the entire host was skipped, including its outbox.
+        lifecycle = CanonicalShortTermLifecycleReport(uid=uid, skipped_reason='daily_sweep_lifecycle_owner')
+        required_intake = RequiredIntakeCompletion(uid=uid)
+    # In production, use a post-commit timestamp so events created during this
+    # pass are immediately due. Explicit test/replay clocks remain deterministic.
+    if job_budget_guard is not None:
+        job_budget_guard()
+    outbox_now = current_time if now is not None else datetime.now(timezone.utc)
+    post_outbox = await _drain_canonical_outbox_async(
+        uid,
+        db_client=client,
+        run_id=run_id,
+        now=outbox_now,
+        job_budget_guard=job_budget_guard,
+    )
+    outbox = _merge_canonical_outbox_summaries(pre_outbox, post_outbox)
+    return CanonicalShortTermMaintenanceReport(
+        uid=uid,
+        required_processing=required_processing,
+        required_intake=required_intake,
         lifecycle=lifecycle,
         outbox=outbox,
     )

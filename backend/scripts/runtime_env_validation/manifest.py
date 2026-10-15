@@ -376,8 +376,6 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
         errors.append(ValidationError(scope, 'missing env MEMORY_ENABLED'))
     for required_env in (
         'MEMORY_CANONICAL_MAINTENANCE_ENABLED',
-        'MEMORY_CANONICAL_MAINTENANCE_FLEX',
-        'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
         'OMI_BACKGROUND_FLEX_CAPABLE',
         'PINECONE_INDEX_NAME',
         'TYPESENSE_HOST_PORT',
@@ -447,14 +445,11 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
                         'OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE must be true for production canonical maintenance',
                     )
                 )
-        job_flex = (_manifest_literal_env_value(job_env, 'MEMORY_CANONICAL_MAINTENANCE_FLEX') or '').strip().lower()
-        if job_flex != 'true':
-            errors.append(
-                ValidationError(
-                    scope,
-                    'MEMORY_CANONICAL_MAINTENANCE_FLEX must be true while canonical maintenance is enabled',
-                )
-            )
+        if (_manifest_literal_env_value(job_env, 'OMI_BACKGROUND_FLEX_CAPABLE') or '').strip().lower() != 'true':
+            errors.append(ValidationError(scope, 'OMI_BACKGROUND_FLEX_CAPABLE must be true for owed required intake'))
+        for retired_flag in ('MEMORY_CANONICAL_MAINTENANCE_FLEX', 'MEMORY_CANONICAL_CONSOLIDATION_ENABLED'):
+            if retired_flag in job_env:
+                errors.append(ValidationError(scope, f'retired cleanup env {retired_flag} must be absent'))
 
     # Non-job hosts must not enable the ST→LT cron (would duplicate maintenance).
     for other_job_name, raw_other_job in jobs.items():

@@ -42,6 +42,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _log_skipped_memory(member, exc) -> None:
+    logger.warning(
+        'Skipping malformed memory conversation %s: %s',
+        member.get('id') if isinstance(member, dict) else getattr(member, 'id', None),
+        type(exc).__name__,
+    )
+
+
 def _log_skipped_message(record, exc) -> None:
     logger.warning(
         'Skipping malformed chat message %s: %s',
@@ -340,7 +348,9 @@ def process_voice_message_segment(
         memories_id=memories_id,
     )
     chat_db.add_message(uid, ai_message.model_dump())
-    ai_message.memories = memories if len(memories) < 5 else memories[:5]
+    # Same defensive conversion as process_message — raw members can be dicts
+    # or live objects; assigning them untyped breaks model_dump() serialization.
+    ai_message.memories = MessageConversation.safe_build_many(memories[:5], on_error=_log_skipped_memory)
     if app_id:
         record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
@@ -533,7 +543,11 @@ async def process_voice_message_segment_stream(
             await run_blocking(db_executor, chat_db.add_message_to_chat_session, uid, chat_session.id, ai_message.id)
 
         await run_blocking(db_executor, chat_db.add_message, uid, ai_message.model_dump())
-        ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
+        # Convert memories defensively — a non-mapping member or a doc missing
+        # structured/created_at must not raise here: add_message already
+        # persisted this id, and a throw abandons the write while a fresh
+        # in-memory id desyncs the client from the stored document.
+        ai_message.memories = MessageConversation.safe_build_many(memories[:5], on_error=_log_skipped_memory)
 
         if app_id:
             await run_blocking(

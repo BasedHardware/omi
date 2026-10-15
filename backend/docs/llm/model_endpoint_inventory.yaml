@@ -143,7 +143,6 @@ surfaces:
   - utils/llm/working_observations.py::feature:memory_l1
   - utils/memory/belief_backfill.py::feature:<dynamic>
   - utils/memory/belief_evidence.py::feature:memory_conflict
-  - utils/memory/canonical_consolidation.py::feature:memory_conflict
   - utils/retrieval/graph.py::feature:chat_graph
   - utils/screen_frames/judge.py::feature:<dynamic>
   - utils/translation_core/providers.py::feature:translation

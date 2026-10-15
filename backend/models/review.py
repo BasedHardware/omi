@@ -1,11 +1,12 @@
 """Review v1 wire contract shared with the mobile client."""
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Literal, Optional, get_args
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator, model_serializer
 
-from models.dream_edit import Edit, Term
+from models.dream_edit import Edit, MemoryHygieneEdit, Term
+from models.agent_edit import HarnessEdit
 
 EntityType = Literal['person', 'organization', 'project']
 ReviewKind = Literal['speaker', 'task', 'same_person', 'spelling']
@@ -101,12 +102,63 @@ class SpellingItem(SpellingQuestionPayload):
 class AgentProposalItem(BaseModel):
     target_label: str = ''
     other_label: Optional[str] = None
+    # Validated full fact contents for hygiene proposals so approval surfaces
+    # show the real row, not the 180-character label prefix. None = not sent.
+    target_content: Optional[str] = None
+    other_content: Optional[str] = None
+    # Retain the existing wire arm: older mobile decoders read `edit` and its
+    # string kind, and would drop proposals sent under a new sibling arm.
     edit: Optional[Edit] = None
+    operation: Optional[HarnessEdit | MemoryHygieneEdit] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def additive_operation(cls, value):
+        if not isinstance(value, dict):
+            return value
+        value = dict(value)
+        edit = value.get('operation') or value.get('edit')
+        payload = edit.model_dump() if isinstance(edit, BaseModel) else edit
+        if payload and (
+            isinstance(edit, (HarnessEdit, MemoryHygieneEdit))
+            or payload.get('kind') not in get_args(Edit.model_fields['kind'].annotation)
+        ):
+            value['operation'] = edit
+            kind = payload['kind']
+            legacy = {
+                'retire_memory': 'memory',
+                'supersede_memory': 'memory',
+                'dismiss_person': 'merge_people',
+                'merge_tasks': 'retire_task',
+                'merge_conversations': 'overview',
+                'set_language': 'overview',
+            }.get(kind, kind)
+            # Preserve the released response branch and enum. Rich new operation
+            # data is additive; acceptance resolves the server-owned operation.
+            mirror = {key: payload[key] for key in Edit.model_fields if key in payload}
+            mirror['kind'] = legacy
+            mirror['other'] = mirror.get('other', '') if legacy in {'merge_people', 'merge_memories'} else ''
+            if legacy in {'overview', 'title'}:
+                mirror['target'] = payload['target'].split('#')[0]
+                mirror['evidence'] = [mirror['target']]
+                mirror['before'] = ''
+                mirror['after'] = payload.get('after') or payload['reason'][:1000]
+            value['edit'] = mirror
+        return value
+
     vocabulary: Optional[Term] = None
+
+    @model_serializer(mode='wrap')
+    def preserve_existing_wire(self, handler):
+        data = handler(self)
+        for field in ('target_content', 'other_content', 'operation'):
+            if getattr(self, field) is None:
+                data.pop(field, None)
+        return data
 
     @model_validator(mode='after')
     def single_operation(self):
-        if (self.edit is not None) + (self.vocabulary is not None) != 1:
+        if sum(item is not None for item in (self.edit, self.vocabulary)) != 1:
             raise ValueError('Exactly one agent operation is required')
         return self
 
@@ -266,6 +318,10 @@ class ReviewChange(BaseModel):
     title: str
     reason: Optional[str] = None
     snippet: Optional[str] = None
+    edit_kind: Optional[str] = Field(default=None, max_length=64)
+    before: Optional[str] = Field(default=None, max_length=4000)
+    after: Optional[str] = Field(default=None, max_length=4000)
+    context: Optional[SpellingContext] = None
     refs: list[ChangeRef] = Field(default_factory=list)
     created_at: datetime
     undone: bool = False

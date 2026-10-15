@@ -50,7 +50,7 @@ class _ReviewPageState extends State<ReviewPage> {
         message: l10n.reviewCaughtUpBody,
         action: Column(
           mainAxisSize: MainAxisSize.min,
-          children: [_RecentChangesLink(), _DreamReportLink(probe: widget.probeDreamReport)],
+          children: [_RecentChangesLink(), DreamReportLink(probe: widget.probeDreamReport)],
         ),
       );
     } else {
@@ -68,7 +68,7 @@ class _ReviewPageState extends State<ReviewPage> {
                 margin: const EdgeInsets.only(bottom: OmiSpacing.sm),
               ),
             Center(child: _RecentChangesLink()),
-            Center(child: _DreamReportLink(probe: widget.probeDreamReport)),
+            Center(child: DreamReportLink(probe: widget.probeDreamReport)),
           ],
         ),
       );
@@ -109,16 +109,16 @@ class _RecentChangesLink extends StatelessWidget {
 Future<bool> _defaultDreamProbe() async => await dream_api.getDreamReport(limit: 1) is ApiSuccess;
 
 /// Shown only to accounts in the dream cohort: the report endpoint answers 404 for everyone else.
-class _DreamReportLink extends StatefulWidget {
-  const _DreamReportLink({this.probe});
+class DreamReportLink extends StatefulWidget {
+  const DreamReportLink({super.key, this.probe});
 
   final Future<bool> Function()? probe;
 
   @override
-  State<_DreamReportLink> createState() => _DreamReportLinkState();
+  State<DreamReportLink> createState() => DreamReportLinkState();
 }
 
-class _DreamReportLinkState extends State<_DreamReportLink> {
+class DreamReportLinkState extends State<DreamReportLink> {
   bool _available = false;
 
   @override

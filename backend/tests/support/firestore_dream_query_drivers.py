@@ -5,11 +5,13 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 
 from config.dream_agent import Caps
-from tests.support.firestore_query_drivers import DriverEntry, SHAPE_UID as UID
+from tests.support.firestore_query_drivers import DriverEntry, CoveredByEntry, SHAPE_UID as UID
 
 
 def producer_mode(client):
-    return patch.dict('os.environ', {'DREAM_AGENT_MODE': 'shadow', 'DREAM_AGENT_UID_ALLOWLIST': UID})
+    return patch.dict(
+        'os.environ', {'DREAM_AGENT_ENABLED': 'true', 'DREAM_AGENT_ELIGIBILITY': 'all', 'REVIEW_SURFACE_MODE': 'on'}
+    )
 
 
 def trim_overflow(client):
@@ -48,18 +50,9 @@ def admission_state(client, args, trial):
 def entries():
     return (
         DriverEntry(
-            'database.dream_context_reads.subject_memory_refs', base={'uid': UID, 'subject': 'person:synthetic'}
-        ),
-        DriverEntry(
-            'database.dream_context_reads.temporal_neighbours',
-            base={
-                'uid': UID,
-                'start': datetime(2026, 10, 9, tzinfo=timezone.utc),
-                'anchor': datetime(2026, 10, 9, 1, tzinfo=timezone.utc),
-                'end': datetime(2026, 10, 9, 2, tzinfo=timezone.utc),
-            },
-            domains={'collection': ['conversations', 'screen_activity']},
-            neutrals={'excluded_ids': ((), 'post-query exclusion within a fixed 12-row scan per side')},
+            'utils.dream_seed.load',
+            base={'uid': UID},
+            neutrals={'caps': (Caps(), 'seed size and model ceilings; no filter changes')},
         ),
         DriverEntry(
             'database.dream_history.history_page',
@@ -85,6 +78,7 @@ def entries():
         ),
         DriverEntry(
             'database.dream_scheduler.candidates',
+            patchers=(producer_mode,),
             domains={'limit': [1, 100]},
             neutrals={'now': (datetime(2026, 10, 12, tzinfo=timezone.utc), 'post-query priority only')},
         ),
@@ -162,6 +156,14 @@ def entries():
 
 registry_extension = SimpleNamespace(
     DRIVERS={entry.function: entry for entry in entries()},
-    COVERED_BY={},
+    COVERED_BY={
+        'database.dream_scheduler.discover': CoveredByEntry(
+            'database.dream_scheduler.discover',
+            covered_by=('database.dream_scheduler.candidate_page',),
+            reason='Discovery streams only through candidate_page; its get_all calls read explicit document refs and its transaction only initializes due rows and a cursor. SDK queue races are exercised in test_dream_queue_emulator.',
+            expect_observed=False,
+            body_digest='c0e27c29293523fa0ddf6095c56b0502810590259e28ce80c43e0ac4bc826789',
+        )
+    },
     SKIPS={},
 )

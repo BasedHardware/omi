@@ -361,11 +361,10 @@ _driver(
     serving=False,
 )
 _driver(
-    'utils.memory.canonical_consolidation.list_pending_consolidation_items',
+    'utils.memory.canonical_consolidation._required_intake_page',
     base={'uid': UID},
-    domains={'start_after': [None, (T0, 'memory-1')]},
-    neutrals={'now': NOW, 'limit': LIMIT},
-    profile='maintenance-consolidation',
+    domains={'cursor': [None, {'captured_at': T0, 'memory_id': 'memory-1'}]},
+    profile='maintenance-required-intake',
     serving=False,
 )
 _driver(
@@ -387,13 +386,6 @@ _driver(
     base={'deadline': T1},
     neutrals={'limit': LIMIT},
     profile='maintenance-global-expiry',
-    serving=False,
-)
-_driver(
-    'utils.memory.canonical_short_term_maintenance_cron.count_active_short_term',
-    base={'uid': UID},
-    neutrals={'cap': (11, 'caps tally only')},
-    profile='maintenance-short-term-count',
     serving=False,
 )
 for function in (

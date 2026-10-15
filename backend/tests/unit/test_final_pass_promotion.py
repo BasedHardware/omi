@@ -9,7 +9,9 @@ from utils.conversations import speaker_resolution as resolution
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreSnapshot
 
 
-@pytest.mark.parametrize('fence', ['current', 'revision', 'deleted', 'account_deleting', 'locked', 'flag_off'])
+@pytest.mark.parametrize(
+    'fence', ['current', 'corrected', 'revision', 'deleted', 'account_deleting', 'locked', 'flag_off']
+)
 def test_promotion_is_atomic_preserves_manual_edits_and_fences_current_revision(monkeypatch, fence):
     uid, cid = 'synthetic-user', 'synthetic-conversation'
     revision = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -38,6 +40,26 @@ def test_promotion_is_atomic_preserves_manual_edits_and_fences_current_revision(
         },
     )
     data['_test_revision'] = other if fence == 'revision' else revision
+    if fence == 'corrected':
+        from database import review_store
+
+        data['has_transcript_corrections'] = True
+        data['transcript_correction_overlay'] = review_store.encode_doc(
+            uid,
+            {
+                'source': [
+                    {
+                        'segment_id': 'old',
+                        'segment_index': 0,
+                        'start': 0,
+                        'before': 'sentence',
+                        'after': 'workshop',
+                        'kind': 'spelling',
+                        'undone': False,
+                    }
+                ]
+            },
+        )
     if fence == 'deleted':
         data['deleted'] = True
     if fence == 'locked':
@@ -57,13 +79,20 @@ def test_promotion_is_atomic_preserves_manual_edits_and_fences_current_revision(
     written = db.promote_final_pass_if_current(
         uid, cid, [candidate], expected_updated_at=revision, clock_offset=0, firestore_client=client
     )
-    assert written == (fence == 'current')
+    assert written == (fence in {'current', 'corrected'})
     stored = db.prepare_conversation_for_read(client.rows[path], uid)
     if written:
         segment = stored['transcript_segments'][0]
         assert segment['id'] == 'old' and segment['is_user'] is False
-        assert segment['text'] == old.text
-        assert segment['translations'] == [{'lang': 'fr', 'text': 'synthetic translation'}]
+        assert segment['text'] == (old.text.replace('sentence', 'workshop') if fence == 'corrected' else old.text)
+        raw_speech = db.decode_transcript_segments_verified(
+            uid, client.rows[path]['transcript_segments'], bool(client.rows[path].get('transcript_segments_compressed'))
+        )
+        assert raw_speech[0]['text'] == old.text
+        assert segment['translations'] == (
+            [] if fence == 'corrected' else [{'lang': 'fr', 'text': 'synthetic translation'}]
+        )
+        assert raw_speech[0]['translations'] == [{'lang': 'fr', 'text': 'synthetic translation'}]
         assert stored['structured']['notes'][0]['source_segment_ids'] == ['old']
         assert stored['manual_speaker_assignments']['segments']['old']['generation'] == 1
     else:

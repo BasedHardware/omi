@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-sync-assignment-read-abort-escapes-retry",
+  "violated_contract": "Concurrent same-account sync intake must retry explicit atomic Firestore contention at both read and commit boundaries before failing the recoverable upload.",
+  "canonical_prevention": "Wrap the complete assignment transaction in the shared bounded fresh-transaction contention helper, preserve expiry recovery and atomic segment/index writes, and verify the real SDK read boundary plus concurrent durable convergence.",
+  "canonical_prevention_artifact": [
+    "backend/database/firestore_transaction_retry.py",
+    "backend/tests/unit/test_sync_assignment_contention_retry.py",
+    "backend/scripts/sync_assignment_contention_emulator_test.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/conversations.py"
+  ],
+  "status": "open"
+}

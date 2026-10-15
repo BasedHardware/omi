@@ -2,6 +2,41 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.489",
+      "date": "2026-10-15",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.488",
+      "date": "2026-10-15",
+      "changes": [
+        "Fixed memories that refused to disappear: memories deleted everywhere else (or on emptied accounts) no longer linger on the desktop, stuck unsynced local memories are cleared after 30 days, and a delayed server delete now retries in the background instead of popping back"
+      ]
+    },
+    {
+      "version": "0.12.487",
+      "date": "2026-10-15",
+      "changes": [
+        "Transcript corrections preserve the original recording text and remain reversible"
+      ]
+    },
+    {
+      "version": "0.12.486",
+      "date": "2026-10-15",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.485",
+      "date": "2026-10-14",
+      "changes": [
+        "Saved conversations waiting on your allowance show a waiting state instead of a padlock"
+      ]
+    },
+    {
       "version": "0.12.484",
       "date": "2026-10-14",
       "changes": [

@@ -75,6 +75,8 @@ from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.support.dream_firestore import DreamFirestore
+from tests.support.transcript_correction_store import install_store, target_updates, read
 from utils.conversations.transcript_hash import transcript_sha256
 import utils.managed_compute as managed_compute
 from utils.managed_compute import Decision
@@ -1141,10 +1143,7 @@ def _decoded_segments(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _install_text_edit_db(monkeypatch: pytest.MonkeyPatch, snapshot: dict[str, Any] | None, *, exists: bool = True):
-    ref = _TextEditRef(_TextEditSnapshot(snapshot, exists=exists))
-    monkeypatch.setattr(conversations_db, 'db', _TextEditFirestore(ref))
-    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
-    return ref
+    return install_store(monkeypatch, _UID, _CONV_ID, snapshot if exists else None)
 
 
 def _assignable_conversation(*, with_projection: bool = True) -> Conversation:
@@ -1212,21 +1211,21 @@ def test_segment_text_edit_clears_projection_in_the_same_write(monkeypatch) -> N
         'client_processing': {'structure': {'title': PROJECTION_TITLE}},
         'structured': {'title': 'keep-title', 'overview': 'keep-overview'},
     }
-    ref = _install_text_edit_db(monkeypatch, snapshot)
+    store = _install_text_edit_db(monkeypatch, snapshot)
 
     result = conversations_db.update_conversation_segment_text(_UID, _CONV_ID, 's1', 'new text')
 
     assert result == 'ok'
-    assert len(ref.update_calls) == 1
-    payload = ref.update_calls[0]
-    assert payload['client_processing'] is conversations_db.firestore.DELETE_FIELD
-    assert payload['client_processing'] is google_firestore.DELETE_FIELD
-    assert payload['client_processing'] is not None
-    assert {segment['id']: segment['text'] for segment in _decoded_segments(payload)} == {
+    patches = target_updates(store, _UID, _CONV_ID)
+    assert len(patches) == 1
+    payload = patches[0]
+    assert 'client_processing' not in store.rows[('users', _UID, 'conversations', _CONV_ID)]
+    assert {segment['id']: segment['text'] for segment in read(store, _UID, _CONV_ID)['transcript_segments']} == {
         's1': 'new text',
         's2': 'keep',
     }
     assert 'structured' not in payload
+    assert 'transcript_segments' not in payload
 
 
 # red-proof: write structured=None alongside the clear so a no-projection doc is mutated
@@ -1237,15 +1236,18 @@ def test_segment_text_edit_without_projection_does_not_touch_other_fields(monkey
         'transcript_segments': [{'id': 's1', 'text': 'old'}],
         'structured': {'title': 'keep-title', 'overview': 'keep-overview'},
     }
-    ref = _install_text_edit_db(monkeypatch, snapshot)
+    store = _install_text_edit_db(monkeypatch, snapshot)
 
     result = conversations_db.update_conversation_segment_text(_UID, _CONV_ID, 's1', 'new text')
 
     assert result == 'ok'
-    payload = ref.update_calls[0]
-    assert payload['client_processing'] is conversations_db.firestore.DELETE_FIELD
+    payload = target_updates(store, _UID, _CONV_ID)[0]
+    assert 'client_processing' not in store.rows[('users', _UID, 'conversations', _CONV_ID)]
     assert 'structured' not in payload
-    assert {segment['id']: segment['text'] for segment in _decoded_segments(payload)} == {'s1': 'new text'}
+    assert 'transcript_segments' not in payload
+    assert {segment['id']: segment['text'] for segment in read(store, _UID, _CONV_ID)['transcript_segments']} == {
+        's1': 'new text'
+    }
 
 
 # red-proof: still call `invalidate_client_processing` on the not-found path
@@ -1256,12 +1258,12 @@ def test_segment_text_edit_does_not_clear_when_mutation_does_not_write(monkeypat
         'transcript_segments': [{'id': 's1', 'text': 'old'}],
         'client_processing': {'structure': {'title': PROJECTION_TITLE}},
     }
-    ref = _install_text_edit_db(monkeypatch, snapshot)
+    store = _install_text_edit_db(monkeypatch, snapshot)
 
     result = conversations_db.update_conversation_segment_text(_UID, _CONV_ID, 'missing', 'x')
 
     assert result == 'segment_not_found'
-    assert ref.update_calls == []
+    assert not store.transactions
 
 
 # red-proof: skip `invalidate_client_processing` when the flag is set
@@ -1969,10 +1971,7 @@ def _t1_mutation() -> dict[str, Any]:
 
 
 def _install_strict_conversation_db(monkeypatch: pytest.MonkeyPatch, snapshot: dict[str, Any]) -> StrictFirestore:
-    store = StrictFirestore({_CONV_PATH: dict(snapshot)})
-    monkeypatch.setattr(conversations_db, 'db', store)
-    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
-    return store
+    return install_store(monkeypatch, _UID, _CONV_ID, snapshot, encode=False)
 
 
 def _row(store: StrictFirestore) -> dict[str, Any]:

@@ -6,6 +6,25 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Windowed live transcription deadlines
+
+`PARAKEET_WINDOW_DEADLINE_CUT_ENABLED` defaults to `false` in code and
+both listen manifests. Qualification must explicitly enable it in the target
+listen cohort. While enabled, a successful nonempty POST can release its held
+tail through the existing timestamp-preserving cut only when the remaining
+first-text/progress deadline is at most
+`PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS` (default `1.2`, approximately
+the observed POST p95; invalid/nonpositive values use the default). A normal
+first POST after six seconds of capture retains sentence anchoring. Neither a
+full audio pace nor the next pacing wait increases the allowance.
+
+Emitted text advances the existing capture anchor and cancels the applicable
+deadline. Empty answers and stalled in-flight POSTs retain the original deadline
+and replay/failover behavior. This opt-in mitigation only rescues a nonempty
+answer returning near expiry; it does not extend the deadline or guarantee
+survival for a held answer returned earlier. Forced releases remain included in
+`omi_stt_window_forced_cuts_total`.
+
 ## Demand-driven live provider lane
 
 The `/v4/listen` runtime owns the dark-by-default live-demand policy. Existing
@@ -48,6 +67,13 @@ Rollout, lease/capacity details, test acceptance and rollback belong to the
 [demand-driven live STT runbook](./operational/demand-driven-live-stt.md). The
 lead starts at at most 5% and waits at least 12 hours before any expansion.
 
+
+Parakeet `/v3/stream` receives literal `finalize`, flushes its remaining
+transcript segments, then sends WebSocket close 1000 after every tail send has
+succeeded (including an empty tail). Returning without that frame previously
+made production callers observe synthetic 1006. Client disconnects and failed
+flush/tail delivery retain their existing failure lifecycle; session cleanup and
+admission release run in every case.
 
 The standalone `POST /v1/stt/transcribe` Parakeet proxy uses the shared
 managed-transcription allowance before calling the provider. It probes the
@@ -766,6 +792,16 @@ side effect. Completed fanout replays do not repeat the write.
 
 ## Duplicate captures across devices
 
+Dream's verified `merge_conversations` cleanup is separate from ingest merging.
+It requires completed, uncurated captures with overlapping time and matching
+speech. The journal atomically adds `dream_duplicate_of` to the redundant row;
+current/default visibility hides that row without changing lifecycle status,
+moving segments, or deleting either recording's audio. Review preserves the two
+labels and surrounding speech. Exact row and account-generation fences protect
+Undo/Redo, which removes/restores the link. A later user edit conflicts. Existing
+capture ownership, finalization, relevance discard and compliance remain with
+their current writers.
+
 An Omi device paired to the phone app and the macOS app in the same room open
 two independent `/v4/listen` streams, and each stream owns its own
 conversation — cross-source sockets never share one, because the two captures
@@ -973,6 +1009,15 @@ any error keeps both. Every answered pair stores a server-only
 `smart_merge_decision` (numbers and ids, no text) on the new conversation.
 For a merge verdict, the decision is persisted before the absorb transaction
 so a retry reuses the same score.
+
+The absorb transaction also refuses either parent when
+`has_transcript_corrections` is set. User and agent corrections live in an
+encrypted overlay anchored to captured segments; folding their source rows would
+invalidate those anchors and Undo receipts. The live-parent check runs before
+planning or writing inside the transaction, including when a correction races a
+previously computed merge verdict. Both captures and their original speech stay
+intact. Dream's duplicate-capture correction uses a reversible hide-with-link
+instead of this ingest absorb path.
 
 One more deterministic gate never reaches Jev: a discarded capture of the same
 source and `client_device_id` whose `started_at`/`finished_at` interval
@@ -4649,8 +4694,49 @@ unchanged bytes; the account-deletion storage gate/purge owns this prefix. It ha
 no application TTL. Sync playback and backend VAD's conversation assignment stay
 unchanged. Deploy archive acceptance on backend-sync before advertising permission
 on listen; rollback revokes new batching but continues accepting pending files.
+Production dogfood binds the three `MOBILE_STANDARD_BATCH_*` flags only on
+backend-listen: enabled, percentage zero, and David
+(`vi7SA9ckQCe4ccobWNxlbdcNdC23`) allowlisted. Sync archive acceptance is
+unconditional; backend, sync workers and pusher require no admission flags.
+Demand-driven STT presence must finish its empty-allowlist rollout and drain
+old sockets before the David-only listen cohort is deployed. Production Helm
+workflow source is pinned to `main`; its branch input cannot select an
+intermediate presence-only commit. The lead must pre-roll presence on the
+existing dark revision before dispatching the cohort workflow.
 Policy, storage-parity evidence, bounds, VAD benchmark and lead-owned 5%/12-hour
 ramp: [mobile Standard batch](../../app/docs/mobile-standard-batch.md).
+
+### Forward canonical audio archive (default off)
+
+`AUDIO_CANONICAL_PACKING_ENABLED=true` plus `BUCKET_CANONICAL_AUDIO` routes new
+mobile as-captured Opus to a separate regional canonical archive. Pusher also
+archives its supplied PCM16 capture bytes there after committing playback. Both
+intakes retain their existing primary writes first; optional canonical errors
+are logged and metered without failing those writes. Mobile keeps writing its
+`raw-mobile-batch/` object during rollout. Successful bucket policy reads are
+cached for five minutes per client and bucket. No existing objects are packed. Owner/day tar shards carry stored-byte
+SHA-256, source generations, formats, provenance and conversation ranges. Source
+erasure requires hash verification and embedded-manifest round-trip; durable
+owner intents resume partial cleanup. Account wipe sweeps sources, packs and
+indexes even when the flag is off. Linked conversation audio deletion rewrites
+only affected packs. Bucket provisioning, exact lifecycle rules, pricing and
+rollback are in `deploy/storage-lifecycle/FORWARD.md`; this code does not apply
+bucket policies or deploy a scheduler.
+
+Canonical conversation erasure has a durable owner-scoped deletion marker.
+Intake checks it before and after source/receipt publication, cleans racing
+uploads, and packing rejects marked captures. Manual merges preserve canonical
+bytes, retarget packed and unpacked conversation ranges to the survivor, and
+publish transitive source→survivor links for late retries. Manifest rewrites are
+durable and verified; later survivor deletion re-lists sources, indexes and packs
+before releasing the owner gate. Only the explicit privacy endpoint and account
+wipe erase canonical audio. Shared cache/merge cleanup never implies privacy erasure.
+PCM ranges include sample counts, full tail duration and plaintext byte ranges;
+enhanced encryption envelopes use a **big-endian** uint32 length prefix.
+
+### Historical sync queue retirement
+
+Backfill ownership and expired-head retirement are defined in [the two-lane runbook](runbooks/sync-two-lane.md#expired-head-retirement-train-1). Under `SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM`, Redis-absent unbound waiting work is retired transactionally before dispatch, with a bounded loop and a per-job run lock. Dispatching owners are reconciled under the same guard; running/bound work remains protected. Retirement emits `sync_backfill_expired_retired` and never counts as completed transcription or deletes client audio. Flutter/macOS retain queued WAL audio for completion or 404-triggered re-upload.
 
 ### Shared Gateway caller routes
 
@@ -4661,3 +4747,112 @@ programming and caller reachability before deploying.
 
 Caller deploy order, route requirements and independent rollback are documented
 in [the Gateway caller runbook](internal-gateway-callers.md).
+
+### Sync batch final-pass admission
+
+The optional sync final pass shares a fleet Redis budget across fresh and backfill
+(10 audio-hours and 1,000 attempts per UTC hour) and one in-flight call per process.
+Admission refuses immediately, before embeddings and batch work. Redis connect/read
+I/O has finite 0.5s timeouts; a stalled peer cannot retain the final-pass slot. Exhaustion, Redis
+failure or invalid limits retains legacy speakers and logs
+`event=sync_final_pass outcome=skipped_budget`. Retries consume another reservation.
+`TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS` and
+`TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS` declare the limits. Production defaults stay at stage B (David-only); selecting complete
+stage C explicitly enables 1% plus David on all four hosts. Outcome/failure logs use the full
+SHA-256 of `sync-final-pass:` plus UID for correlation, with no identity metric label.
+
+Long-audio batch qualification uses the same final-pass HTTP client and public
+corpus only; see [the stage C load method and probe commands](diarizer-batch-stagec-load.md).
+Its wall/RTF scenarios remain unqualified until the lead fills the timing table.
+
+### As-captured archive trial
+
+The default-off `AUDIO_ARCHIVE_*` cohort captures original live Opus packets
+before they are transformed for STT/pusher, using the same
+`omi-wal-uint32le-opus-v1` container and shared canonical writer as the mobile
+Standard archive. Live packs are owner/conversation/hour/channel bounded at
+16 MiB; non-Opus PCM uses lossless FLAC. v1/v2 offline intake archives original
+uploaded files before decode and acceptance. Raw metadata records unknown
+legacy provenance explicitly; storage consent never authorizes training.
+
+PCM remains available in dual-write. READ prefers complete, checksum-verified
+raw spans; STOP_PCM skips a batch only when committed raw reconstructs every
+PCM range, verified by capture-PCM hash or byte-identical decode. Missing spans,
+checksum failures or identity mismatches keep today's
+path. Rollback STOP_PCM first; retain READ for raw-only history until verified
+PCM regeneration. Archive tail flushing runs after STT drain, outside its deadline.
+Regional cache routing never relocates canonical capture. Account and conversation
+deletion purge live and noncurrent generations across configured buckets.
+
+The [archive runbook](runbooks/sync-ingest-archive.md) owns flag phases, bucket
+provisioning, C023 estimates, playback/byte/deletion canaries and David's
+≤5%/≥12h ramp. No live deployment or deletion is part of this change.
+### Recent LEGACY offline-sync admission
+
+V2 resolves identity from `X-App-Platform` + `X-Device-Id-Hash`, but grants
+DEVICE_BOUND capture-time trust only after verifying `X-Omi-Sync-Capture-Manifest`
+and the server conversation window. A present device header alone is not proof.
+Pure offline capture has no such server window; partial conversation drains
+cannot claim the existing immutable manifest either.
+
+`SYNC_LEGACY_FRESH_ENABLED=true` (code/dev/prod default false) lets whole LEGACY
+batches whose oldest capture is within `SYNC_FRESH_MAX_AGE_SECONDS` enter fresh
+capacity only for an exact UID in `SYNC_LEGACY_FRESH_UID_ALLOWLIST` (default
+empty), or a stable SHA-256 UID bucket in `SYNC_LEGACY_FRESH_PERCENT` (default
+zero). Buckets match transcription final pass; the master flag disables both.
+Malformed/non-finite percentages select nobody beyond the allowlist; finite
+percentages clamp to 0–100. The atomic Redis token reservation still applies to
+every selected account. Existing historical jobs are never moved. Trust remains LEGACY. Each
+request costs `max(1, ceil(actual multipart bytes / MiB))`; defaults refill 60
+tokens/hour with a ten-token burst per account across replicas and devices.
+`SYNC_LEGACY_FRESH_HOURLY_TOKENS` supports 1–120 and
+`SYNC_LEGACY_FRESH_BURST_TOKENS` 1–60. Bad config, unknown file size or Redis
+failure demotes to backfill. Budget Redis connect/read I/O has a one-second
+timeout and runs off the event loop. Upload retries spend again; timestamp/session-id
+changes cannot reset the account budget. The budget bounds work admission,
+not billed speech. A fresh-only hard restriction or daily ceiling demotes a
+promoted LEGACY batch to backfill before persistence and final admission metrics,
+so optional promotion never introduces a fair-use 429. DEVICE_BOUND fresh keeps
+its existing 429 response. Trusted manifests retain their existing route. Future,
+invalid/missing timestamps, mixed historical batches and lookback rejection
+keep their existing semantics. Deprecated V1 stays unchanged.
+
+`omi_sync_lane_admissions_total{lane,trust,reason}` and `sync_lane_admission`
+record the final budget and fresh-gate decision. New reasons: `recent_legacy_capture`,
+`legacy_fresh_budget_exceeded`, `legacy_fresh_budget_unavailable`,
+`legacy_fresh_hard_restricted`, `legacy_fresh_daily_ceiling`. No account
+labels are added. Optional final-pass logs now include `lane` and
+`duration_seconds`, covering decoding, embedding triage, diarization and naming
+inside the adapter. These times exclude the preceding WAV download and are
+not whole-job latency. See [drain qualification](runbooks/sync-legacy-fresh-drain.md).
+
+
+### Sync assignment contention retry
+
+Fresh uploads can overlap for one account: clients serialize the HTTP POST, but
+continue uploading after the asynchronous 202 response. Backfill sequencing
+reduces overlap among backfill jobs; it does not exclude fresh/live writes.
+Atomic assignment reads/writes `users/{uid}/sync_assignment/recent`, relevant
+UTC day index documents, and canonical/donor conversation documents. Segments
+are embedded in conversations; separate content ledgers do not serialize these
+assignment transactions.
+
+`SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED=true` (default false everywhere) wraps
+sync assignment in the existing shared bounded contention helper. Five outer
+attempts use fresh transactions and equal-jitter backoff (maximum 2.4s total
+sleep), retaining the SDK's five commit attempts and the existing three-attempt
+expired-ID restart. The outer budget also handles read-time `Aborted`, which the
+SDK's commit-only retry misses. Only explicit aborts/cause chains are replayed;
+ambiguous transport failures and unrelated invalid arguments still escape.
+Indexes, conversation append, dedupe and revision ownership remain atomic.
+The static `firestore_transaction_contention operation=sync_assignment` log
+records retry/recovered/exhausted without identity/content fields. Disable the
+flag to restore the previous boundary; no schema migration is needed.
+
+A later content revision may fence an older enrichment pass after its intake
+already committed. That job can ACK `outcome=superseded` with zero successful
+segments. Prove convergence with processed-segment receipts and actual segment
+IDs in the surviving conversation; a zero-success ACK alone is not proof of
+no loss. User-deletion/assignment supersession is a different path and must not
+be treated as evidence that content landed. Qualification requires every
+synthetic uploaded segment to appear exactly once, including these cases.

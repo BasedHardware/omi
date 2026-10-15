@@ -12501,6 +12501,15 @@ class AppLocalizationsFr extends AppLocalizations {
   String get reviewRecentChanges => 'Modifications récentes';
 
   @override
+  String get reviewChangeAfter => 'Après';
+
+  @override
+  String get reviewChangeBefore => 'Avant';
+
+  @override
+  String get reviewChangeRemoved => 'Retiré de la liste active';
+
+  @override
   String get reviewChangesIntro =>
       'Ce qu’Omi a modifié de lui-même ces 30 derniers jours. Annulez tout ce qui semble incorrect.';
 
@@ -13397,4 +13406,129 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get chatAppsWaitlistJoined =>
       'Vous êtes sur la liste d\'attente. Nous vous préviendrons dès qu\'une place se libère.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Tout est prêt, $name';
+  }
+
+  @override
+  String get onboardingActDemoSummary =>
+      'Déjeuner avec Sam, qui part vivre à Lisbonne en juin. Vous voulez envoyer la présentation à l\'équipe d\'ici vendredi et prendre du lait en rentrant.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Envoyer la présentation à l\'équipe d\'ici vendredi';
+
+  @override
+  String get onboardingActDemoTask2 => 'Prendre du lait en rentrant';
+
+  @override
+  String get onboardingActDemoTitle => 'Déjeuner avec Sam';
+
+  @override
+  String get onboardingActDictateBody => 'Dites-le à votre façon. Omi s\'occupe du reste.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Parlez simplement. Votre Omi vous écoute.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Je viens de déjeuner avec Sam, elle déménage à Lisbonne en juin ! Rappelle-moi d\'envoyer la présentation à l\'équipe d\'ici vendredi et de prendre du lait en rentrant.';
+
+  @override
+  String get onboardingActDictateHint => 'Touchez la coche quand vous avez fini';
+
+  @override
+  String get onboardingActDictateTitle => 'Racontez votre journée à Omi';
+
+  @override
+  String get onboardingActIntro => 'Essayons Omi.';
+
+  @override
+  String get onboardingActJustNow => 'À l\'instant';
+
+  @override
+  String get onboardingActMicAllow => 'Autoriser le micro';
+
+  @override
+  String get onboardingActMicBody => 'Pour qu\'Omi vous entende quand vous lui parlez.';
+
+  @override
+  String get onboardingActMicFallbackBody =>
+      'Votre Omi n\'envoie pas encore de son. Utilisez votre téléphone pour l\'instant.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi a besoin de votre micro';
+
+  @override
+  String get onboardingActNoAudioOmi => 'On n\'entend pas votre Omi. Vérifiez qu\'il est allumé et proche.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'On ne vous entend pas encore. Parlez un peu plus fort.';
+
+  @override
+  String get onboardingActNotesLabel => 'Votre journée, résumée';
+
+  @override
+  String get onboardingActPhoneMic => 'Micro du téléphone';
+
+  @override
+  String get onboardingActRateTitle => 'Omi vous plaît pour l\'instant ?';
+
+  @override
+  String get onboardingActRemembers => 'Omi s\'en souvient pour vous';
+
+  @override
+  String get onboardingActSavedToTasks => 'Enregistré dans vos tâches';
+
+  @override
+  String get onboardingActTasksLabel => 'Omi a repéré vos tâches';
+
+  @override
+  String get onboardingActWriting => 'Résumé en cours…';
+
+  @override
+  String get onboardingActYourWords => 'Voici ce que vous avez dit';
+
+  @override
+  String get onboardingConnectOmi => 'Connecter Omi';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Touchez votre Omi pour le connecter.';
+
+  @override
+  String get onboardingNoOmiYet => 'Vous n\'avez pas encore votre Omi ?';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Pas encore commandé';
+
+  @override
+  String get onboardingOmiOrdered => 'Je l\'ai commandé';
+
+  @override
+  String get onboardingPermissionTapToFix => 'Touchez pour corriger';
+
+  @override
+  String get homePendingTitle => 'Conversations en route';
+
+  @override
+  String get homePendingCatchingUp => 'Rattrapage de l\'audio précédent';
+
+  @override
+  String get onTheWayTitle => 'En route';
+
+  @override
+  String get onTheWayAlmostReady => 'Presque prêt';
+
+  @override
+  String get activityEmpty => 'Aucune activité pour l\'instant';
+
+  @override
+  String get activityNewSemantics => 'Activité, nouveaux éléments';
+
+  @override
+  String get activityLoadFailed => 'Impossible de charger toute votre activité';
+
+  @override
+  String get activityNewItem => 'Nouveau';
 }
