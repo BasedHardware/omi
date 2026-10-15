@@ -19,11 +19,6 @@ on:
         options:
           - development
           - prod
-      retire_legacy_grafana:
-        description: 'Retire legacy anonymous Grafana only; skips Helm and breaks old anonymous TV links'
-        required: false
-        default: false
-        type: boolean
 
 # Monitoring releases share one mutation domain per environment. Do not cancel
 # an in-flight Helm upgrade because --atomic rollback must be allowed to finish.
@@ -38,7 +33,7 @@ jobs:
   deploy:
     # workflow_dispatch can be started from any ref in the UI. Only reviewed
     # main configuration may receive deployment credentials.
-    if: github.ref == 'refs/heads/main' && inputs.retire_legacy_grafana != true
+    if: github.ref == 'refs/heads/main'
     environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       contents: read
@@ -218,7 +213,7 @@ jobs:
   provision-live-alerts:
     # Grafana alert provisioning is independent of Helm deploy health: a
     # Helm failure must not suppress live-STT alert updates.
-    if: github.ref == 'refs/heads/main' && inputs.retire_legacy_grafana != true
+    if: github.ref == 'refs/heads/main'
     environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       contents: read
@@ -273,50 +268,3 @@ jobs:
             --mode fleet \
             --alert-set live-stt \
             --fail-on gated
-
-  retire-legacy-grafana:
-    timeout-minutes: 15
-    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.environment == 'prod' && inputs.retire_legacy_grafana
-    environment: prod
-    permissions:
-      contents: read
-      id-token: write
-    runs-on: ubuntu-latest
-    steps:
-      - uses: google-github-actions/auth@v3
-        with:
-          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
-          service_account: omi-ci-monitoring-prod@based-hardware.iam.gserviceaccount.com
-      - uses: google-github-actions/setup-gcloud@v3
-      - name: Record rollback and retire legacy anonymous access
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Never print service env or secret references. Preserve immutable image.
-          prior=$(gcloud run services describe omi-grafana --project=based-hardware --region=us-central1 --format='json(status.traffic)' |
-            python3 -c 'import json,sys; traffic=json.load(sys.stdin)["status"]["traffic"]; assert not any(r.get("tag") for r in traffic), "tagged revision URLs require a parent retirement plan"; rows=[r for r in traffic if r.get("percent",0)>0]; assert len(rows)==1 and rows[0]["percent"]==100, "split traffic requires a parent plan"; print(rows[0]["revisionName"])')
-          image=$(gcloud run revisions describe "$prior" --project=based-hardware --region=us-central1 --format='value(status.imageDigest)')
-          test -n "$prior"
-          test -n "$image"
-          [[ "$image" == *@sha256:* ]]
-          printf 'Legacy rollback revision: %s\nLegacy image: %s\n' "$prior" "$image" >> "$GITHUB_STEP_SUMMARY"
-          created=$(gcloud run services update omi-grafana --project=based-hardware --region=us-central1 \
-            --image="$image" --update-env-vars=GF_AUTH_ANONYMOUS_ENABLED=false --no-traffic --quiet \
-            --format='value(status.latestCreatedRevisionName)')
-          [[ "$created" == omi-grafana-* ]]
-          # Explicit exact-revision promotion also handles previously pinned traffic.
-          gcloud run services update-traffic omi-grafana --project=based-hardware --region=us-central1 \
-            --to-revisions="${created}=100" --quiet
-          served=$(gcloud run services describe omi-grafana --project=based-hardware --region=us-central1 --format='json(status.traffic)' |
-            python3 -c 'import json,sys; rows=[r for r in json.load(sys.stdin)["status"]["traffic"] if r.get("percent",0)>0]; assert len(rows)==1 and rows[0]["percent"]==100; print(rows[0]["revisionName"])')
-          [[ "$served" == "$created" ]]
-          printf 'Legacy private revision: %s\n' "$created" >> "$GITHUB_STEP_SUMMARY"
-          for base in 'https://admin.omi.me/grafana' 'https://omi-grafana-208440318997.us-central1.run.app/grafana'; do
-            deadline=$((SECONDS + 300))
-            while true; do
-              status=$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 15 "$base/api/datasources" || true)
-              if [[ "$status" == 401 || "$status" == 403 ]]; then break; fi
-              if (( SECONDS >= deadline )); then echo 'Legacy closure verification timed out' >&2; exit 1; fi
-              sleep 5
-            done
-          done

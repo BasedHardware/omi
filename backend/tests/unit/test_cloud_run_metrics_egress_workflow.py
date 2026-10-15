@@ -5,7 +5,6 @@ Cloud Monitoring exporter and the Prometheus scrape configuration.
 """
 
 from pathlib import Path
-from types import SimpleNamespace
 
 import yaml
 
@@ -45,7 +44,7 @@ def test_workflow_owns_dev_auto_deploy_and_manual_production() -> None:
         'cancel-in-progress': 'false',
     }
     assert workflow['jobs']['deploy']['steps'][0]['with']['ref'] == '${{ github.sha }}'
-    assert workflow['jobs']['deploy']['if'] == "github.ref == 'refs/heads/main' && inputs.retire_legacy_grafana != true"
+    assert workflow['jobs']['deploy']['if'] == "github.ref == 'refs/heads/main'"
     assert workflow['jobs']['deploy']['environment'] == (
         "${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}"
     )
@@ -74,7 +73,7 @@ def test_workflow_provisions_live_stt_alerts_independently_of_helm() -> None:
     assert 'Import allowlisted live-STT Grafana alerts' not in deploy_names
     assert 'Verify imported live-STT Grafana alert coverage' not in deploy_names
 
-    assert provision['if'] == "github.ref == 'refs/heads/main' && inputs.retire_legacy_grafana != true"
+    assert provision['if'] == "github.ref == 'refs/heads/main'"
     assert provision['environment'] == deploy['environment']
     assert provision['permissions'] == {'contents': 'read'}
     assert 'needs' not in provision
@@ -154,31 +153,3 @@ def test_production_verifies_operator_created_replicas_before_egress_success() -
     assert 'gke_based-hardware_us-central1_prod-omi-gke' in script
     assert 'verify_prometheus_replica_readiness.py' in script
     assert all(flag in script for flag in ['--statefulset-json', '--pods-json', '--pvcs-json'])
-
-
-def test_retirement_dispatch_cannot_run_helm_or_live_alert_mutations() -> None:
-    jobs = _workflow()['jobs']
-    normal = {'deploy', 'provision-live-alerts'}
-    cases = [
-        ('refs/heads/main', 'workflow_dispatch', 'prod', True, {'retire-legacy-grafana'}),
-        ('refs/heads/main', 'workflow_dispatch', 'prod', False, normal),
-        ('refs/heads/main', 'push', 'development', False, normal),
-        ('refs/heads/unsafe', 'workflow_dispatch', 'prod', True, set()),
-        ('refs/heads/main', 'workflow_dispatch', 'development', True, set()),
-    ]
-    for ref, event, environment, retire, expected in cases:
-        inputs = SimpleNamespace(environment=environment, retire_legacy_grafana=retire)
-        context = {
-            'github': SimpleNamespace(ref=ref, event_name=event, event=SimpleNamespace(inputs=inputs)),
-            'inputs': inputs,
-            'true': True,
-        }
-        # Evaluate only the trusted checked-in boolean predicates; no API calls
-        # or deployment commands run. This catches a retirement dispatch also
-        # entering the otherwise independent alert-provisioning mutation domain.
-        enabled = {
-            name
-            for name, job in jobs.items()
-            if eval(job['if'].replace('&&', ' and ').replace('||', ' or '), {'__builtins__': {}}, context)
-        }
-        assert enabled == expected

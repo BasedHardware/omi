@@ -91,16 +91,12 @@ This prioritizes valid authentication. Continuous interaction without reloads
 requires an authenticated reverse proxy instead. Never extend JWTs or enable
 anonymous sessions to hide expiry.
 
-Legacy retirement is required before cutover: the old publisher no longer sends
-v2, but deleting the old board alone cannot close anonymous Infinity queries.
-The existing `gcp_cloud_run_metrics_egress.yml` has an explicit prod-only manual input
-`retire_legacy_grafana=true`; this mode skips normal Helm/alert jobs, records
-rollback metadata and disables legacy
-anonymous access with the current immutable image. **This breaks old anonymous
-TV/share links**, so the parent selects the migration window. The CI identity
-needs scoped service-update/actAs permissions for that existing service; a denial
-fails closed. Then parent runs `retire_legacy_board.py --apply` with the existing
-legacy `GRAFANA_TOKEN` to remove only the old v2 board. No data store is deleted.
+Legacy anonymous datasource access must be closed before cutover; deleting the
+old board alone is insufficient. The parent has disabled anonymous access on the
+legacy service; keep both origins private during rollout and rollback. No new
+legacy deployment or compute-identity actAs grant is required. After successful
+cutover, `retire_legacy_board.py --apply` can remove only the old v2 board using
+the existing legacy token. No data store is deleted.
 
 ## Parent-owned production application
 
@@ -115,7 +111,13 @@ status/frame counts. The browser acceptance must use a real signed-in admin and
 confirm the native Canvas cards render correctly on Grafana 13.1.3.
 
 Before mutation record the current Helm revision, admin serving image/revision
-and baseline windows. Review `helm diff upgrade` for chart 75.15.1 with current
+and baseline windows. Take a cold snapshot of the active Grafana disk with the
+workload stopped and disk detached, then restore its recorded replica count.
+Save pre-13 release values privately. Restore a failed upgrade from that snapshot
+to a new disk/PVC with the recorded 12.x image; retain the migrated original.
+Capture rule identity/count/state/health and evaluation timestamps before/after;
+any per-rule health change or stalled enabled rule blocks acceptance. Require a
+complete observation of at least 15 minutes, extending it for long rule intervals. Review `helm diff upgrade` for chart 75.15.1 with current
 values, then upgrade with the same args plus `--wait --timeout 15m`. Parent owns
 Helm and privileged Grafana calls. Admin deploys via `gcp_admin.yml` with explicit
 `environment=prod`; preserve its candidate/browser acceptance. After applying,
@@ -123,8 +125,8 @@ observe at least 15 minutes and compare 5xx/restarts/alert-evaluation health wit
 the preceding 24–48h. Local tests and HTTP health alone do not establish this.
 
 Rollback the admin via `GRAFANA_EMBED_ENABLED=false` and that same workflow.
-Restore Helm's recorded revision after checking SQLite schema downgrade support;
-keep the PVC and a consistent pre-upgrade database backup. The 12.1.0 ->13.1.3
+Restore the pre-upgrade database snapshot to a new disk/PVC using the recorded
+image/values; retain both the original PVC and consistent backup. The 12.1.0 ->13.1.3
 upgrade crosses a major version: validate existing alert evaluation, installed
 plugins and schema migration, and plan rollback from that backup rather than
 assuming an in-place binary downgrade is safe. Disable JWT only after the admin

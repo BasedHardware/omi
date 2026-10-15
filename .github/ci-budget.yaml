@@ -1181,13 +1181,13 @@
       "budget_p50_minutes": 5,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0.01,
-      "if": "github.ref == 'refs/heads/main' && inputs.retire_legacy_grafana != true",
+      "expected_runs_per_day": 0,
+      "if": "github.ref == 'refs/heads/main'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "One additional manual legacy Grafana retirement per100days budgeted conservatively; retirement-only input skips normal Helm/alert jobs. No PR runs, five-minute p50 budget.",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1199,31 +1199,13 @@
       "budget_p50_minutes": 5,
       "display_name": "provision-live-alerts",
       "expected_runs_class": "non-pr",
-      "expected_runs_per_day": 0.01,
-      "if": "github.ref == 'refs/heads/main' && inputs.retire_legacy_grafana != true",
+      "expected_runs_per_day": 0,
+      "if": "github.ref == 'refs/heads/main'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "One additional manual legacy Grafana retirement per100days budgeted conservatively; retirement-only input skips normal Helm/alert jobs. No PR runs, five-minute p50 budget.",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "gcp_cloud_run_metrics_egress.yml/retire-legacy-grafana": {
-      "budget_p50_minutes": 5,
-      "display_name": "retire-legacy-grafana",
-      "expected_runs_class": "non-pr",
-      "expected_runs_per_day": 0.01,
-      "if": "github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.environment == 'prod' && inputs.retire_legacy_grafana",
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [],
-      "owner": "CI maintainers",
-      "rationale": "One additional manual legacy Grafana retirement per100days budgeted conservatively; retirement-only input skips normal Helm/alert jobs. No PR runs, five-minute p50 budget.",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3979,7 +3961,7 @@
     "gcp_cloud_run_metrics_egress.yml": {
       "name": "Deploy Cloud Run Metrics Egress",
       "owner": "CI maintainers",
-      "rationale": "Add explicit prod-only legacy anonymous Grafana retirement mode under monitoring authority, skipping normal Helm/alert deploys in that mode; existing monitoring flow unchanged otherwise.",
+      "rationale": "Initial workflow inventory",
       "triggers": {
         "push": {
           "branches": [
@@ -4004,12 +3986,6 @@
               ],
               "required": "true",
               "type": "choice"
-            },
-            "retire_legacy_grafana": {
-              "default": "false",
-              "description": "Retire legacy anonymous Grafana only; skips Helm and breaks old anonymous TV links",
-              "required": "false",
-              "type": "boolean"
             }
           }
         }
