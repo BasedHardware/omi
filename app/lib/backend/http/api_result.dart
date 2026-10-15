@@ -92,7 +92,7 @@ ApiFailure<T> _authFailure<T>(AuthTokenResult result) {
   return ApiFailure(ApiProblem(transient ? ApiProblemKind.authTransient : ApiProblemKind.authTerminal));
 }
 
-Duration? _retryAfter(http.Response response, DateTime Function() now) {
+Duration? parseApiRetryAfter(http.Response response, DateTime Function() now) {
   final raw = response.headers['retry-after'];
   if (raw == null) return null;
   final seconds = int.tryParse(raw.trim());
@@ -126,7 +126,7 @@ ApiResult<T> _classifyResponse<T>(http.Response response, T Function(String) dec
     ApiProblem(
       kind,
       statusCode: response.statusCode,
-      retryAfter: kind == ApiProblemKind.rateLimited ? _retryAfter(response, now) : null,
+      retryAfter: kind == ApiProblemKind.rateLimited ? parseApiRetryAfter(response, now) : null,
     ),
   );
 }
@@ -139,9 +139,11 @@ Future<ApiResult<T>> executeApi<T>({
   ApiSend? send,
   ApiExecutionSeams? execution,
   DateTime Function()? now,
+  bool Function()? canSend,
 }) async {
   final clock = now ?? DateTime.now;
   try {
+    if (canSend != null && !canSend()) return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
     if (send != null) {
       return _classifyResponse(await send(request), decode, clock);
     }
@@ -152,6 +154,7 @@ Future<ApiResult<T>> executeApi<T>({
       body: request.body,
       method: request.method,
       execution: execution,
+      canSend: canSend,
       onAuthRefresh: (result) => observedRefresh = result,
     );
     if (response.statusCode == 401 && observedRefresh is AuthTokenTransientFailure) {

@@ -83,10 +83,10 @@ enum MemoryLayer: String, Codable, CaseIterable, Identifiable {
     switch self {
     case .shortTerm:
       return
-        "Recent observations from your activity. May decay or promote to Long-term when corroborated."
+        "Recent things Omi noticed. They move to Long-term if they keep coming up, or fade if they don't."
     case .longTerm:
       return
-        "Durable facts Omi keeps long-term - stable details about you, your preferences, and your life."
+        "Lasting facts about you, your preferences, and your life."
     case .archive:
       return "Aged-out long-term memories. Hidden by default; search Archive to find them."
     }
@@ -858,7 +858,6 @@ extension APIClient {
 // MARK: - Memories API
 
 extension APIClient {
-  private static let canonicalLifecycleExposedHeader = "X-Omi-Memory-Canonical-Lifecycle-Exposed"
   private static let deviceScopeSupportedHeader = "X-Omi-Memory-Device-Scope-Supported"
   private static let defaultDeleteSupportedHeader = "X-Omi-Memory-Default-Delete-Supported"
   private static let nextCursorHeader = "X-Omi-Memory-Next-Cursor"
@@ -1023,10 +1022,11 @@ extension APIClient {
 
     let memories = try decoder.decode([ServerMemory].self, from: data)
     try validateExpectedOwner(authPolicy)
-    let lifecycleHeader = httpResponse.value(forHTTPHeaderField: Self.canonicalLifecycleExposedHeader)
-    let canonicalLifecycleExposed = lifecycleHeader == "true"
     let deviceScopeHeader = httpResponse.value(forHTTPHeaderField: Self.deviceScopeSupportedHeader)
     let deviceScopeSupported = deviceScopeHeader.map { $0.caseInsensitiveCompare("true") == .orderedSame }
+    // Current and pre-universal servers pair device-scope support with canonical
+    // lifecycle exposure on this route, including for empty and mixed-tier pages.
+    let canonicalLifecycleExposed = deviceScopeSupported == true
     let defaultMemoryDeleteSupported =
       httpResponse.value(forHTTPHeaderField: Self.defaultDeleteSupportedHeader) == "true"
     let nextCursor = httpResponse.value(forHTTPHeaderField: Self.nextCursorHeader)
@@ -1283,26 +1283,6 @@ extension APIClient {
       body: batch,
       includeBYOK: false,
       authorizationSnapshot: authorizationSnapshot)
-  }
-
-  /// Deletes a memory by ID.
-  ///
-  /// A 404 completes normally. The caller asked for this memory to be gone, and the
-  /// backend reporting it absent already satisfies that — delete is idempotent in
-  /// intent, so "it is not here" is the requested end state, not a failure.
-  ///
-  /// This is load-bearing rather than defensive. The desktop cache routinely outlives
-  /// the backend row: nothing prunes a local row whose memory was deleted on another
-  /// device, because `reconcileCacheIfNeeded` deliberately fails closed while the list
-  /// endpoint cannot prove scope completeness. Every one of those orphans answers 404
-  /// on delete, and treating that as an error made the caller restore the row it had
-  /// just removed — so the memory could never be cleared from this device at all.
-  func deleteMemory(id: String) async throws {
-    do {
-      try await delete("v3/memories/\(id)")
-    } catch APIError.httpError(statusCode: 404, _) {
-      return
-    }
   }
 
   /// Edits a memory's content

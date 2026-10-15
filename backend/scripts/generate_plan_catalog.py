@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / 'backend'))
 CATALOG_PATH = ROOT / 'backend' / 'config' / 'plan_catalog.json'
 GENERATED_PATH = ROOT / 'backend' / 'config' / 'plan_catalog_generated.py'
 CATALOG_REPO_PATH = CATALOG_PATH.relative_to(ROOT).as_posix()
@@ -258,21 +259,11 @@ def _validate_allocation_profiles(profiles: Any, errors: list[str]) -> tuple[set
             if not isinstance(profile, dict):
                 errors.append(f'{path}: expected an object')
                 continue
-            _unexpected_keys(profile, {'full_desktop', 'cloud_screen_vectors', 'proactivity_daily'}, path, errors)
+            _unexpected_keys(profile, {'full_desktop', 'cloud_screen_vectors'}, path, errors)
             if not isinstance(profile.get('full_desktop'), bool):
                 errors.append(f'{path}.full_desktop: expected a boolean')
             if not isinstance(profile.get('cloud_screen_vectors'), bool):
                 errors.append(f'{path}.cloud_screen_vectors: expected a boolean')
-            limits = profile.get('proactivity_daily')
-            if not isinstance(limits, dict):
-                errors.append(f'{path}.proactivity_daily: expected an object')
-                continue
-            _unexpected_keys(
-                limits, {'proactive_extraction', 'proactive_reasoning'}, f'{path}.proactivity_daily', errors
-            )
-            for operation, value in limits.items():
-                if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
-                    errors.append(f'{path}.proactivity_daily.{operation}: expected a positive integer')
 
     fair_use = profiles.get('fair_use')
     if isinstance(fair_use, dict):
@@ -383,6 +374,9 @@ def _find_floats(value: Any, path: str = 'catalog') -> Iterable[str]:
 def validate_catalog(catalog: Mapping[str, Any]) -> list[str]:
     errors: list[str] = []
     expected_root_keys = {
+        'entitlement_versions',
+        'ladder_v1_stripe_prices',
+        'proactivity_v2_budget',
         'schema_version',
         'catalog_revision',
         'authority',
@@ -394,6 +388,23 @@ def validate_catalog(catalog: Mapping[str, Any]) -> list[str]:
         'recognized_stripe_products',
     }
     _unexpected_keys(catalog, expected_root_keys, 'catalog', errors)
+    budget = catalog.get('proactivity_v2_budget', {})
+    if (
+        not isinstance(budget, dict)
+        or budget.get('fraction_basis_points') != 1000
+        or budget.get('days_per_month') != 30
+    ):
+        errors.append('catalog.proactivity_v2_budget: expected 10 percent over 30 days')
+    else:
+        prices = budget.get('monthly_reference_cents')
+        if (
+            not isinstance(prices, dict)
+            or prices.get('basic') != 0
+            or not any(type(v) is int and v > 0 for v in prices.values())
+        ):
+            errors.append('catalog.proactivity_v2_budget: nonnegative integer reference prices required')
+        elif any(type(v) is not int or v < 0 for v in prices.values()):
+            errors.append('catalog.proactivity_v2_budget: invalid reference price')
     if catalog.get('schema_version') != 1:
         errors.append('catalog.schema_version: expected 1')
     revision = catalog.get('catalog_revision')
@@ -557,7 +568,9 @@ def validate_catalog(catalog: Mapping[str, Any]) -> list[str]:
             if not isinstance(entry, dict):
                 errors.append(f'{path}: expected an object')
                 continue
-            _unexpected_keys(entry, {'price_id', 'plan_id', 'interval', 'environment'}, path, errors)
+            _unexpected_keys(
+                entry, {'price_id', 'plan_id', 'interval', 'environment', 'entitlement_version'}, path, errors
+            )
             price_id = entry.get('price_id')
             plan_id = entry.get('plan_id')
             interval = entry.get('interval')
@@ -605,6 +618,9 @@ def validate_catalog(catalog: Mapping[str, Any]) -> list[str]:
             else:
                 seen_products[product_id] = str(plan_id)
 
+    from scripts.entitlement_catalog_validation import validate_entitlement_versions
+
+    errors.extend(validate_entitlement_versions(catalog))
     for float_path in _find_floats(catalog):
         errors.append(f'{float_path}: floats are forbidden; use exact integer minor units')
     return errors
@@ -669,6 +685,9 @@ def validate_compatibility(previous: Mapping[str, Any], current: Mapping[str, An
                 f'compatibility: recognized Stripe price {price_id} cannot change from {mapping} to {current_prices[price_id]}'
             )
 
+    from scripts.entitlement_catalog_validation import validate_entitlement_compatibility
+
+    errors.extend(validate_entitlement_compatibility(previous, current))
     current_products = _recognized_product_map(current)
     for product_id, plan_id in sorted(_recognized_product_map(previous).items()):
         if product_id not in current_products:
@@ -830,6 +849,10 @@ CATALOG_SHA256: Final = {catalog_digest(catalog)!r}
 CATALOG_REVISION: Final = {catalog['catalog_revision']!r}
 CATALOG_AUTHORITY: Final = {_python_literal(catalog['authority'])}
 OPEN_PLAN_DECISIONS: Final = {_python_literal(catalog['open_decisions'])}
+PROACTIVITY_V2_BUDGET: Final[dict[str, Any]] = {_python_literal(catalog.get('proactivity_v2_budget', {}))}
+ENTITLEMENT_VERSIONS: Final[dict[str, Any]] = {_python_literal(catalog['entitlement_versions'])}
+LADDER_V1_STRIPE_PRICES: Final[list[str]] = {_python_literal(catalog['ladder_v1_stripe_prices'])}
+RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS: Final[dict[str, Any]] = {_python_literal({entry['price_id']: entry['entitlement_version'] for entry in catalog['recognized_stripe_prices']})}
 MEASUREMENT_CONTRACTS: Final = {_python_literal(catalog['measurement_contracts'])}
 PLAN_CATALOG_DATA: Final[dict[str, dict[str, Any]]] = {_python_literal(plan_data)}
 PLAN_TYPE_VALUES: Final[frozenset[str]] = frozenset({_python_literal(plan_ids)})
@@ -861,6 +884,9 @@ PHONE_CALL_PROFILE_DEFAULTS: Final[dict[str, dict[str, Any]]] = {_python_literal
 
 
 __all__ = [
+    'ENTITLEMENT_VERSIONS',
+    'LADDER_V1_STRIPE_PRICES',
+    'RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS',
     'BILLING_ENV_VAR_PLAN_TYPES',
     'CATALOG_AUTHORITY',
     'CATALOG_REVISION',

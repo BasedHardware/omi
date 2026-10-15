@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-person-pin-subtitle.png",
+      "platform": "mobile-ios",
+      "description": "Person page: Pin switch with the new subtitle",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

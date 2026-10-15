@@ -1,10 +1,11 @@
 """Stable person rename and bounded exact-alias retention."""
 
 from datetime import datetime, timezone
-from typing import Any
+from database import chat_edits
+from typing import Any, Optional
 
 from google.api_core.exceptions import NotFound
-from google.cloud.firestore_v1 import transactional
+from google.cloud.firestore_v1 import FieldFilter, transactional
 
 
 def normalized_person_alias(value: Any) -> str | None:
@@ -17,7 +18,9 @@ def normalized_person_alias(value: Any) -> str | None:
 
 
 @transactional
-def update_person_name_transaction(transaction: Any, person_ref: Any, name: str) -> bool:
+def update_person_name_transaction(
+    transaction: Any, person_ref: Any, name: str, expected_chat_state: dict | None = None
+) -> bool:
     """Rename one stable person while retaining bounded exact aliases."""
 
     snapshot = person_ref.get(transaction=transaction)
@@ -25,6 +28,10 @@ def update_person_name_transaction(transaction: Any, person_ref: Any, name: str)
         return False
     raw = snapshot.to_dict()
     data = raw if isinstance(raw, dict) else {}
+    if expected_chat_state is not None:
+        fields = {key: data[key] for key in chat_edits.FIELDS['person'] if key in data}
+        if chat_edits.encode(fields) != expected_chat_state['before']:
+            raise PermissionError('Person changed before rename')
     normalized_name = normalized_person_alias(name)
     if normalized_name is None:
         return False
@@ -42,22 +49,92 @@ def update_person_name_transaction(transaction: Any, person_ref: Any, name: str)
     prior_name = normalized_person_alias(data.get('name'))
     if prior_name is not None and prior_name.casefold() not in seen:
         aliases.append(prior_name)
+    patch = {
+        'name': normalized_name,
+        'aliases': aliases[-24:],
+        'updated_at': datetime.now(timezone.utc),
+        'is_user_created': True,
+    }
+    transaction.update(person_ref, patch)
+    if expected_chat_state is not None:
+        expected_chat_state['after'] = chat_edits.encode(patch)
+    return True
+
+
+def rename_person_retaining_aliases(
+    db_client: Any, uid: str, person_id: str, name: str, *, expected_chat_state: dict | None = None
+) -> bool:
+    """Rename an owner-scoped person and map concurrent deletion to missing."""
+
+    person_ref = db_client.collection('users').document(uid).collection('people').document(person_id)
+    try:
+        if expected_chat_state is not None:
+            return update_person_name_transaction(db_client.transaction(), person_ref, name, expected_chat_state)
+        return update_person_name_transaction(db_client.transaction(), person_ref, name)
+    except NotFound:
+        return False
+
+
+@transactional
+def dismiss_person_transaction(transaction: Any, person_ref: Any) -> bool:
+    """Soft-dismiss one person while preserving its history and voice data."""
+
+    snapshot = person_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return False
+    raw = snapshot.to_dict()
+    data = raw if isinstance(raw, dict) else {}
+    if data.get('is_dismissed') is True:
+        return True
+    now = datetime.now(timezone.utc)
     transaction.update(
         person_ref,
         {
-            'name': normalized_name,
-            'aliases': aliases[-24:],
-            'updated_at': datetime.now(timezone.utc),
+            'is_dismissed': True,
+            'dismissed_at': now,
+            'updated_at': now,
         },
     )
     return True
 
 
-def rename_person_retaining_aliases(db_client: Any, uid: str, person_id: str, name: str) -> bool:
-    """Rename an owner-scoped person and map concurrent deletion to missing."""
+def dismiss_person_soft(db_client: Any, uid: str, person_id: str) -> bool:
+    """Soft-dismiss an owner-scoped person and map concurrent deletion to missing."""
 
     person_ref = db_client.collection('users').document(uid).collection('people').document(person_id)
     try:
-        return update_person_name_transaction(db_client.transaction(), person_ref, name)
+        return dismiss_person_transaction(db_client.transaction(), person_ref)
     except NotFound:
         return False
+
+
+def list_people(
+    db_client: Any, uid: str, *, include_dismissed: bool = False, limit: Optional[int] = None
+) -> list[dict[str, Any]]:
+    """List owner-scoped people, hiding soft-dismissed records by default."""
+
+    people_ref = db_client.collection('users').document(uid).collection('people')
+    if limit is not None:
+        people_ref = people_ref.limit(limit)
+    result = []
+    for person in people_ref.stream():
+        data = person.to_dict()
+        if not include_dismissed and data.get('is_dismissed') is True:
+            continue
+        data.setdefault('id', person.id)
+        result.append(data)
+    return result
+
+
+def find_person_by_name(db_client: Any, uid: str, name: str) -> dict[str, Any] | None:
+    """Find the first active owner-scoped person with an exact display name."""
+
+    people_ref = db_client.collection('users').document(uid).collection('people')
+    query = people_ref.where(filter=FieldFilter('name', '==', name))
+    for person in query.stream():
+        data = person.to_dict()
+        if data.get('is_dismissed') is True:
+            continue
+        data.setdefault('id', person.id)
+        return data
+    return None

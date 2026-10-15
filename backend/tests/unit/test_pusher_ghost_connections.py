@@ -601,12 +601,29 @@ class TestListenRuntimeSupervisor:
 
     def test_runtime_supervisor_session_is_torn_down_in_finally(self):
         tree = ast.parse(_read_source(LISTEN_RUNTIME_SRC))
-        handler = None
+        runtime_class = None
         for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == 'run':
-                handler = node
+            if isinstance(node, ast.ClassDef) and node.name == 'ListenSessionRuntime':
+                runtime_class = node
                 break
-        assert handler is not None, 'ListenSessionRuntime.run not found'
+        assert runtime_class is not None, 'ListenSessionRuntime class not found'
+        methods = {
+            sub.name: sub for sub in runtime_class.body if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+        run_wrapper = methods.get('run')
+        assert run_wrapper is not None, 'ListenSessionRuntime.run not found'
+        delegates = any(
+            isinstance(node, ast.Await)
+            and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Attribute)
+            and isinstance(node.value.func.value, ast.Name)
+            and node.value.func.value.id == 'self'
+            and node.value.func.attr == '_run'
+            for node in ast.walk(run_wrapper)
+        )
+        assert delegates, 'ListenSessionRuntime.run must await self._run()'
+        handler = methods.get('_run')
+        assert handler is not None, 'ListenSessionRuntime._run not found'
 
         found_start_in_try = False
         found_end_in_finally = False
@@ -623,10 +640,23 @@ class TestListenRuntimeSupervisor:
                             finally_calls.append(sub.func.attr)
                 if 'start_session' in try_calls:
                     found_start_in_try = True
-                if 'end_session' in finally_calls:
-                    found_end_in_finally = True
+                if '_teardown' in finally_calls:
+                    teardown = methods.get('_teardown')
+                    if teardown is not None:
+                        for sub in ast.walk(teardown):
+                            if not (isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute)):
+                                continue
+                            called = methods.get(sub.func.attr)
+                            if called is not None and any(
+                                isinstance(leaf, ast.Call)
+                                and isinstance(leaf.func, ast.Attribute)
+                                and leaf.func.attr == 'end_session'
+                                for leaf in ast.walk(called)
+                            ):
+                                found_end_in_finally = True
 
         assert found_start_in_try, "task_supervisor.start_session() must be in try body"
+        assert found_end_in_finally, "task_supervisor.end_session() must be reachable from the finally teardown chain"
         assert 'await self._teardown()' in _read_source(LISTEN_RUNTIME_SRC)
         assert 'self.task_supervisor.end_session()' in _read_source(LISTEN_RUNTIME_SRC)
 

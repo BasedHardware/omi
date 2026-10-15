@@ -13,7 +13,7 @@ extension Notification.Name {
 /// Hand-edits are respected: reads and writes go through read-modify-write on
 /// the raw JSON so entries this UI does not understand survive untouched.
 enum LocalMcpStore {
-  struct Entry: Identifiable, Equatable {
+  struct Entry: Identifiable, Equatable, Sendable {
     let name: String
     /// "command …args" for stdio entries, the URL for remote ones.
     let summary: String

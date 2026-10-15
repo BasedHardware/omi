@@ -462,8 +462,10 @@ jobs:
           esac
 
           if [[ "$SCOPE_APPLIES" == 'true' && "$FULL_CI" != 'true' ]]; then
-            echo 'deferred: fork PR — a maintainer adds label ci:full, then Re-run all jobs' | tee -a "$GITHUB_STEP_SUMMARY" >&2
-            exit 1
+            required_result=skipped
+            notice='fork PR — a maintainer adds label ci:full, then Re-run all jobs'
+            echo "::notice title=Heavy CI deferred::$notice"
+            echo "Heavy CI deferred: $notice" >> "$GITHUB_STEP_SUMMARY"
           fi
 
           failed=0

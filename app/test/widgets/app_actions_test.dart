@@ -18,6 +18,7 @@ App _app({
   bool external = false,
   bool paid = false,
   List<AuthStep> authSteps = const [],
+  String? setupCompletedUrl,
 }) {
   return App(
     id: 'app-1',
@@ -34,7 +35,8 @@ App _app({
     deleted: false,
     isPaid: paid,
     isUserPaid: false,
-    externalIntegration: external ? ExternalIntegration(authSteps: authSteps) : null,
+    externalIntegration:
+        external ? ExternalIntegration(authSteps: authSteps, setupCompletedUrl: setupCompletedUrl) : null,
   );
 }
 
@@ -91,6 +93,9 @@ void main() {
 
     await pump(tester, _app(external: true, authSteps: [AuthStep(name: 'Sign in', url: 'https://example.com')]));
     expect(find.text('View'), findsOneWidget);
+
+    await pump(tester, _app(external: true, setupCompletedUrl: 'https://example.com/setup-done'));
+    expect(find.text('Enable'), findsOneWidget, reason: 'a completion probe alone does not provide a setup flow');
     await tearDownProvider(tester);
   });
 

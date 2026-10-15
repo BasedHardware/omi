@@ -92,3 +92,30 @@ def test_randomized_edits_agree_with_an_independent_per_segment_oracle(seed):
             assert (segment['is_user'], segment['person_id']) == (owner, person)
             if person:
                 assert acknowledged_teaching(conversation, person, [segment['id']]) == allow_training
+
+
+def test_apply_manual_assignments_handles_missing_is_user_or_person_id():
+    """Verify that legacy decisions missing is_user or person_id keys do not crash with KeyError."""
+    segments = [
+        {'id': 's1', 'speaker_id': 0, 'text': 'Hello'},
+        {'id': 's2', 'speaker_id': 1, 'text': 'World'},
+    ]
+    # Receipt where speaker decision has no 'is_user' key
+    receipt_no_is_user = {
+        'generation': 1,
+        'speakers': {'0': {'generation': 1, 'person_id': 'person_alice'}},
+    }
+    updated = apply_manual_assignments(segments, receipt_no_is_user)
+    assert updated[0]['is_user'] is False
+    assert updated[0]['person_id'] == 'person_alice'
+    assert updated[0]['speaker_identity_status'] == 'not_user'
+
+    # Receipt where segment decision has no 'person_id' key
+    receipt_no_person_id = {
+        'generation': 2,
+        'segments': {'s2': {'generation': 2, 'is_user': True}},
+    }
+    updated2 = apply_manual_assignments(segments, receipt_no_person_id)
+    assert updated2[1]['is_user'] is True
+    assert updated2[1]['person_id'] is None
+    assert updated2[1]['speaker_identity_status'] == 'user'

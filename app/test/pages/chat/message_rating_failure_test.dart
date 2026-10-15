@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 Finder faIcon(FaIconData icon) => find.byWidgetPredicate((w) => w is FaIcon && w.icon?.codePoint == icon.codePoint);
 
@@ -13,6 +14,8 @@ bool thumbsDownLit(WidgetTester tester) =>
     tester.widget<FaIcon>(faIcon(FontAwesomeIcons.thumbsDown)).color == Colors.white;
 
 void main() {
+  // These assertions describe the dark appearance; the app now starts light by default.
+  setUpAll(() => OmiColors.active = OmiPalette.dark);
   Future<void> pumpBar(WidgetTester tester, {int? currentNps, required bool saves}) async {
     await tester.pumpWidget(
       MaterialApp(

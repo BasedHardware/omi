@@ -9,6 +9,7 @@ enum OmiBleConnectionPolicy {
         case hydrateReady
         case awaitDiscovery
         case discoverServices
+        case awaitCaptureReset
     }
 
     enum DiscoveryFailureAction: Equatable {
@@ -32,11 +33,22 @@ enum OmiBleConnectionPolicy {
         peripheralState: CBPeripheralState,
         nativeReady: Bool,
         hasCompleteServices: Bool,
-        discoveryInFlight: Bool
+        discoveryInFlight: Bool,
+        captureResetInProgress: Bool = false
     ) -> ReadyRecoveryAction {
+        if captureResetInProgress { return .awaitCaptureReset }
         guard peripheralState == .connected else { return .connect }
         if hasCompleteServices { return nativeReady ? .replayReady : .hydrateReady }
         return discoveryInFlight ? .awaitDiscovery : .discoverServices
+    }
+
+    static func captureResetCanConnect(disconnectObserved: Bool, alreadyReconnected: Bool,
+                                       authorized: Bool, pairingLost: Bool) -> Bool {
+        disconnectObserved && !alreadyReconnected && authorized && !pairingLost
+    }
+
+    static func captureResetReady(disconnectObserved: Bool, freshConnection: Bool, source: String) -> Bool {
+        disconnectObserved && freshConnection && source == "discovery"
     }
 
     static func discoveryFailureAction(

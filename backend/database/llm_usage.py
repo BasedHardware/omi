@@ -82,7 +82,7 @@ def _plan_key(uid: str, firestore_client: Any | None) -> str:
     return resolve_usage_plan_id(uid, firestore_client=firestore_client) or _UNATTRIBUTED_PLAN
 
 
-def _nested(update: Dict[str, Any]) -> Dict[str, Any]:
+def nest_usage_fields(update: Dict[str, Any]) -> Dict[str, Any]:
     """Expand dotted field paths into nested maps, for writes that use ``set(..., merge=True)``.
 
     Firestore treats a dot as a field PATH in ``update()`` but as a literal character in ``set()``. These
@@ -178,6 +178,10 @@ def record_llm_usage(
     input_tokens: int,
     output_tokens: int,
     *,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
+    surface: str | None = None,
+    turn_id: str | None = None,
     cost_usd: float | None = None,
     cost_status: str = 'missing',
     cost_exclusion: str | None = None,
@@ -245,7 +249,36 @@ def record_llm_usage(
         cost_exclusion=cost_exclusion,
     )
 
-    usage_ref.set(_nested(update_data), merge=True)
+    for prefix in (f'{feature}.{safe_model}', plan_prefix):
+        if feature == 'chat_agent':
+            update_data[f'{prefix}.cache_read_tokens'] = firestore.Increment(cache_read_tokens)
+            update_data[f'{prefix}.cache_write_tokens'] = firestore.Increment(cache_write_tokens)
+    if feature == 'chat_agent' and surface in {'app', 'telegram', 'imessage', 'other'}:
+        counters = {
+            'input_tokens': input_tokens,
+            'output_tokens': output_tokens,
+            'cache_read_tokens': cache_read_tokens,
+            'cache_write_tokens': cache_write_tokens,
+            'call_count': 1,
+        }
+        for field, value in counters.items():
+            update_data[f'chat_agent_surfaces.{surface}.{safe_model}.{field}'] = firestore.Increment(value)
+        if turn_id:
+            batch = client.batch()
+            batch.set(usage_ref, nest_usage_fields(update_data), merge=True)
+            turn_ref = usage_ref.collection('chat_agent_turns').document(hashlib.sha256(turn_id.encode()).hexdigest())
+            batch.set(
+                turn_ref,
+                {
+                    'surface': surface,
+                    'updated_at': now,
+                    'models': {safe_model: {k: firestore.Increment(v) for k, v in counters.items()}},
+                },
+                merge=True,
+            )
+            batch.commit()
+            return
+    usage_ref.set(nest_usage_fields(update_data), merge=True)
 
 
 @transactional  # pyright: ignore[reportUntypedFunctionDecorator]
@@ -279,7 +312,7 @@ def _record_chat_quota_question_transaction(
         update.update(usage_update_for(plan_key, doc_id))
     else:
         _record_plan_metadata(update, plan_key, cost_status='missing', cost_exclusion='chat_token_cost_not_recorded')
-    transaction.set(usage_ref, _nested(update), merge=True)
+    transaction.set(usage_ref, nest_usage_fields(update), merge=True)
     return True
 
 
@@ -368,7 +401,7 @@ def _release_chat_quota_question_transaction(
         'last_updated': now,
     }
     _record_plan_bucket(update, plan_key, 'backend_chat', quota_questions=-1, count_call=False)
-    transaction.set(usage_ref, _nested(update), merge=True)
+    transaction.set(usage_ref, nest_usage_fields(update), merge=True)
     return True
 
 
@@ -604,7 +637,7 @@ def record_llm_usage_bucket(
         count_call=count_call,
         firestore_client=firestore_client,
     )
-    ref.set(_nested(update), merge=True)
+    ref.set(nest_usage_fields(update), merge=True)
 
 
 def usage_bucket_update(
@@ -695,7 +728,7 @@ def record_llm_cost_exclusion(
     plan_key = _plan_key(uid, firestore_client)
     update: Dict[str, Any] = {'date': today, 'last_updated': datetime.now(timezone.utc)}
     _record_plan_metadata(update, plan_key, cost_status='excluded', cost_exclusion=cost_exclusion)
-    ref.set(_nested(update), merge=True)
+    ref.set(nest_usage_fields(update), merge=True)
 
 
 def _merge_cost_status(existing: str | None, observed: str) -> str:

@@ -446,7 +446,9 @@ class TestSourceTrackUsageWrapping:
         """utils/app_integrations.py must wrap proactive notification LLM calls."""
         source = (BACKEND_ROOT / "utils" / "app_integrations.py").read_text(encoding="utf-8")
         count = source.count("with track_usage(uid, Features.PROACTIVE_NOTIFICATION):")
-        assert count >= 3, f"Expected >= 3 PROACTIVE_NOTIFICATION wrappers, found {count}"
+        # The legacy mentor orchestrator's two wrappers were deleted with the pipeline;
+        # the remaining app-plugin proactive generator call must stay usage-tracked.
+        assert count >= 1, f"Expected >= 1 PROACTIVE_NOTIFICATION wrappers, found {count}"
 
     def test_followup_py(self):
         """utils/llm/followup.py must wrap the LLM call with FOLLOWUP."""

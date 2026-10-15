@@ -6,6 +6,7 @@ import pytest
 
 from routers.listen.receiver import ListenReceiver
 from utils.onboarding import ONBOARDING_QUESTIONS, OnboardingHandler
+from utils.stt.recovery_state import LiveRecoveryController
 from utils.stt.speaker_identity import SpeakerProviderEpoch
 
 
@@ -63,12 +64,14 @@ async def test_receiver_enqueues_client_transcript_for_onboarding_only_in_custom
     receiver = object.__new__(ListenReceiver)
     receiver.speaker_provider_epoch = SpeakerProviderEpoch()
     receiver._pending_live_failover = None
+    receiver._candidate_token = None
     receiver.host = SimpleNamespace(
         onboarding_handler=SimpleNamespace(completed=False),
         use_custom_stt=True,
         transcripts=SimpleNamespace(enqueue=enqueued.append),
         stt_service=None,
     )
+    receiver.recovery = LiveRecoveryController(receiver.host)
     frame = json.dumps(
         {
             'type': 'suggested_transcript',

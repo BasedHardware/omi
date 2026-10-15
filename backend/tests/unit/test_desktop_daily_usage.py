@@ -6,6 +6,7 @@ import database.daily_summaries as daily_summaries_db
 import database.memories as memories_db
 import database.notifications as notifications_db
 import routers.users as users_router
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
 
 def _usage_db(existing=None):
@@ -183,35 +184,23 @@ def test_memories_created_does_not_stream_when_aggregation_fails():
 # ---------------------------------------------------------------------------
 
 
-def _user_doc_db(existing_user: dict | None):
-    fake_db = MagicMock()
-    user_ref = fake_db.collection.return_value.document.return_value
-    snapshot = MagicMock()
-    snapshot.exists = existing_user is not None
-    snapshot.to_dict.return_value = existing_user
-    user_ref.get.return_value = snapshot
-    return fake_db, user_ref
-
-
 def test_set_user_time_zone_if_missing_writes_for_a_document_without_one():
-    fake_db, user_ref = _user_doc_db({'email': 'desktop-only@example.com'})
-    with patch.object(notifications_db, 'db', fake_db):
-        assert notifications_db.set_user_time_zone_if_missing('uid1', 'America/New_York') is True
-    user_ref.set.assert_called_once_with(
-        {
-            'time_zone': 'America/New_York',
-            'daily_summary_enabled': True,
-            'daily_summary_hour_local': 22,
-        },
-        merge=True,
-    )
+    path = ('users', 'uid1')
+    store = StrictFirestore({path: {'email': 'desktop-only@example.com'}})
+    assert notifications_db.set_user_time_zone_if_missing('uid1', 'America/New_York', firestore_client=store) is True
+    assert store.rows[path] == {
+        'email': 'desktop-only@example.com',
+        'time_zone': 'America/New_York',
+        'daily_summary_enabled': True,
+        'daily_summary_hour_local': 22,
+    }
 
 
 def test_set_user_time_zone_if_missing_leaves_a_mobile_written_zone_alone():
-    fake_db, user_ref = _user_doc_db({'time_zone': 'Asia/Tokyo'})
-    with patch.object(notifications_db, 'db', fake_db):
-        assert notifications_db.set_user_time_zone_if_missing('uid1', 'America/New_York') is False
-    user_ref.set.assert_not_called()
+    path = ('users', 'uid1')
+    store = StrictFirestore({path: {'time_zone': 'Asia/Tokyo'}})
+    assert notifications_db.set_user_time_zone_if_missing('uid1', 'America/New_York', firestore_client=store) is False
+    assert store.rows[path] == {'time_zone': 'Asia/Tokyo'}
 
 
 def _heartbeat_request(users_router):

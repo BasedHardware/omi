@@ -4,6 +4,7 @@
 // meeting-detection notice ('meeting:toast' — Phase 5). Main owns visibility +
 // auto-dismiss; hover pause reuses the same IPC for both kinds.
 import { useEffect, useState } from 'react'
+import { ThumbsUp, ThumbsDown } from 'lucide-react'
 import type { InsightPayload, MeetingToastPayload, WhatsNewPayload } from '../../../../shared/types'
 import './insight-toast.css'
 
@@ -135,7 +136,6 @@ function MeetingCard({ p }: { p: MeetingToastPayload }): React.JSX.Element {
 
 export function InsightToast(): React.JSX.Element {
   const [content, setContent] = useState<ToastContent | null>(null)
-  const [feedbackError, setFeedbackError] = useState(false)
 
   useEffect(() => {
     document.body.classList.add('insight-toast-body')
@@ -151,6 +151,9 @@ export function InsightToast(): React.JSX.Element {
     void window.omi.whatsNewGetPending?.().then((p) => {
       if (p) setContent((cur) => cur ?? { type: 'whatsnew', p })
     })
+    void window.omi.proactivityNotificationPending?.().then((p) => {
+      if (p) setContent((cur) => cur ?? { type: 'insight', p })
+    })
     return () => {
       document.body.classList.remove('insight-toast-body')
       offInsight()
@@ -159,35 +162,23 @@ export function InsightToast(): React.JSX.Element {
     }
   }, [])
 
+  useEffect(() => {
+    if (content?.type !== 'insight' || !content.p.proactivityItemID) return
+    const id = content.p.proactivityItemID
+    const frame = requestAnimationFrame(() => window.omi.proactivityNotificationRendered?.(id))
+    return () => cancelAnimationFrame(frame)
+  }, [content])
+
   if (!content) return <div className="insight-toast-body" />
   if (content.type === 'meeting') return <MeetingCard p={content.p} />
   if (content.type === 'whatsnew') return <WhatsNewCard p={content.p} />
 
   const insight = content.p
-  const jitFeedback = insight.jit
-  const submitJitFeedback = (
-    action: 'useful' | 'false_positive' | 'snooze' | 'disable' | 'missed_or_late'
-  ): void => {
-    if (!jitFeedback) return
-    setFeedbackError(false)
-    void window.omi
-      .jitFeedback({
-        eventId: jitFeedback.eventId,
-        lane: jitFeedback.lane,
-        action,
-        subjectId: jitFeedback.subjectId,
-        triggerRevision: jitFeedback.triggerRevision,
-        accountGeneration: jitFeedback.accountGeneration,
-        ...(action === 'snooze'
-          ? { snoozedUntil: new Date(Date.now() + 60 * 60_000).toISOString() }
-          : {})
-      })
-      .then(() => window.omi.insightDismiss())
-      .catch(() => setFeedbackError(true))
-  }
   return (
     <div
-      className="insight-card"
+      className={
+        insight.proactivityItemID ? 'insight-card insight-card--proactivity' : 'insight-card'
+      }
       onMouseEnter={() => window.omi.insightHoverStart()}
       onMouseLeave={() => window.omi.insightHoverEnd()}
     >
@@ -203,40 +194,33 @@ export function InsightToast(): React.JSX.Element {
       </div>
       <div className="insight-headline">{insight.headline}</div>
       <div className="insight-advice">{insight.advice}</div>
-      {jitFeedback?.rewindFrameId !== undefined ? (
-        <button
-          className="insight-foot"
-          onClick={() => void window.omi.rewindFocusFrame(jitFeedback.rewindFrameId!)}
-        >
-          Open keyframe in Rewind
-        </button>
-      ) : null}
       <div className="insight-foot">{insight.sourceApp}</div>
-      {jitFeedback ? (
-        <div className="meeting-actions" aria-label="JIT feedback">
+      {insight.proactivityItemID ? (
+        <div className="meeting-actions">
           <button
             className="meeting-btn meeting-btn-primary"
-            onClick={() => submitJitFeedback('useful')}
+            onClick={() => window.omi.proactivityNotificationOpen(insight.proactivityItemID!)}
           >
-            Useful
+            Open
           </button>
-          <button className="meeting-btn" onClick={() => submitJitFeedback('false_positive')}>
-            Not relevant
+          <button
+            className="meeting-btn"
+            aria-label="Helpful"
+            onClick={() =>
+              window.omi.proactivityNotificationFeedback(insight.proactivityItemID!, 'thumbs_up')
+            }
+          >
+            <ThumbsUp size={14} />
           </button>
-          <button className="meeting-btn" onClick={() => submitJitFeedback('snooze')}>
-            Snooze
+          <button
+            className="meeting-btn"
+            aria-label="Not helpful"
+            onClick={() =>
+              window.omi.proactivityNotificationFeedback(insight.proactivityItemID!, 'thumbs_down')
+            }
+          >
+            <ThumbsDown size={14} />
           </button>
-          <button className="meeting-btn" onClick={() => submitJitFeedback('disable')}>
-            Disable trigger
-          </button>
-          <button className="meeting-btn" onClick={() => submitJitFeedback('missed_or_late')}>
-            Missed / late
-          </button>
-        </div>
-      ) : null}
-      {feedbackError ? (
-        <div role="alert" className="insight-foot">
-          Couldn&apos;t save feedback; it will stay available to retry.
         </div>
       ) : null}
     </div>

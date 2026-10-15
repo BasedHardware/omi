@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-shared-batch-pressure-blocks-live",
+  "violated_contract": "A latency-sensitive live STT lane sharing GPU batch capacity with historical work must not let backfill queue depth or processing order deny healthy live admissions or delay fresh windows indefinitely.",
+  "canonical_prevention": "Mark live requests explicitly, schedule live work ahead of backfill with a bounded aged-backfill turn, expose per-replica live pressure independently of total batch pressure, and fail closed when any replica lacks fresh valid live telemetry. Retain a per-listen-process session cap measured against pod CPU and memory limits.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_parakeet_batch_engine.py",
+    "backend/tests/unit/test_parakeet_window_live.py",
+    "backend/scripts/benchmark_parakeet_window_capacity.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/parakeet/",
+    "backend/utils/stt/"
+  ],
+  "status": "open"
+}

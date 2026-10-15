@@ -84,73 +84,65 @@ def test_cache_aligned_history_limit_grows_then_resets_without_shrinking_below_p
     assert chat_db.cache_aligned_history_limit(26) == 10
 
 
-def test_cache_aligned_history_read_is_scoped_and_overfetches_hidden_records():
-    fake_db = MagicMock()
-    messages_ref = _messages_ref(fake_db)
-    messages_ref.where.return_value = messages_ref
-    messages_ref.count.return_value.get.side_effect = [_count(21), _count(2)]
-    visible_messages = [{"id": f"m{i}"} for i in range(13)]
-
-    with patch.object(chat_db, "db", fake_db), patch.object(
-        chat_db, "get_messages", return_value=visible_messages
-    ) as get_messages:
-        result = chat_db.get_cache_aligned_messages("u1", app_id="app-1", chat_session_id="session-1")
-
-    # 21 raw - 2 reported = 19 visible; the 10+8 epoch has grown to 11.
-    assert result == visible_messages[:11]
-    get_messages.assert_called_once_with(
-        "u1",
-        limit=13,
-        app_id="app-1",
-        chat_session_id="session-1",
-    )
-    scoped_filters = [call.kwargs["filter"] for call in messages_ref.where.call_args_list]
-    assert [(filter_.field_path, filter_.value) for filter_ in scoped_filters] == [
-        ("chat_session_id", "session-1"),
-        ("reported", True),
+def _visibility_rows(messages_ref, rows):
+    messages_ref.select.return_value.stream.return_value = [
+        SimpleNamespace(to_dict=lambda row=row: row) for row in rows
     ]
 
 
-def test_cache_aligned_history_caps_reported_overfetch_for_large_lifetime_count():
-    """A large lifetime reported count must not cause unbounded Firestore reads.
-
-    A user with hundreds or thousands of old reported messages should not stream
-    all of them on every chat send. The raw read is capped to
-    CHAT_HISTORY_REPORTED_RAW_SCAN_CAP plus the visible limit.
-    """
+def test_cache_aligned_history_counts_only_visible_rows_in_the_session():
     fake_db = MagicMock()
     messages_ref = _messages_ref(fake_db)
     messages_ref.where.return_value = messages_ref
-    # 500 total, 300 reported → 200 visible; visible_limit = 10 + (190 % 8) = 10 + 6 = 16
-    messages_ref.count.return_value.get.side_effect = [_count(500), _count(300)]
-    visible_messages = [{"id": f"m{i}"} for i in range(66)]
-
+    rows = [{'sender': 'human', 'type': 'text'} for _ in range(19)]
+    rows += [{'reported': True} for _ in range(2)]
+    rows += [{'sender': 'ai', 'metadata': '{"chatFirstIntentSource":"capture_arrival"}'} for _ in range(1201)]
+    rows += [{'sender': 'ai', 'reported': True, 'type': 'task'}]
+    _visibility_rows(messages_ref, rows)
+    visible_messages = [{"id": f"m{i}"} for i in range(11)]
     with patch.object(chat_db, "db", fake_db), patch.object(
         chat_db, "get_messages", return_value=visible_messages
     ) as get_messages:
-        result = chat_db.get_cache_aligned_messages("u1", app_id="app-1")
-
-    expected_raw_limit = 16 + chat_db.CHAT_HISTORY_REPORTED_RAW_SCAN_CAP  # 16 + 50 = 66
-    get_messages.assert_called_once_with(
-        "u1",
-        limit=min(500, expected_raw_limit),
-        app_id="app-1",
-        chat_session_id=None,
+        assert chat_db.get_cache_aligned_messages("u1", app_id="app-1", chat_session_id="session-1") == visible_messages
+    # 19 visible rows select an 11-row epoch, regardless of the automatic count.
+    get_messages.assert_called_once_with("u1", limit=11, app_id="app-1", chat_session_id="session-1")
+    messages_ref.select.assert_called_once_with(
+        ['reported', 'sender', 'metadata', 'message_source', 'type', 'content_blocks']
     )
-    assert result == visible_messages[:16]
+    filter_ = messages_ref.where.call_args.kwargs['filter']
+    assert (filter_.field_path, filter_.value) == ('chat_session_id', 'session-1')
+    messages_ref.count.assert_not_called()
+
+
+def test_cache_aligned_history_excludes_reported_rows_without_overfetching_visible_rows():
+    fake_db = MagicMock()
+    messages_ref = _messages_ref(fake_db)
+    messages_ref.where.return_value = messages_ref
+    _visibility_rows(messages_ref, [{} for _ in range(200)] + [{'reported': True} for _ in range(300)])
+    visible_messages = [{"id": f"m{i}"} for i in range(16)]
+    with patch.object(chat_db, "db", fake_db), patch.object(
+        chat_db, "get_messages", return_value=visible_messages
+    ) as get_messages:
+        assert chat_db.get_cache_aligned_messages("u1", app_id="app-1") == visible_messages
+    get_messages.assert_called_once_with("u1", limit=16, app_id="app-1", chat_session_id=None)
 
 
 def test_cache_aligned_history_without_session_is_scoped_to_app():
     fake_db = MagicMock()
     messages_ref = _messages_ref(fake_db)
     messages_ref.where.return_value = messages_ref
-    messages_ref.count.return_value.get.side_effect = [_count(1), _count(0)]
-
+    _visibility_rows(messages_ref, [{}])
     with patch.object(chat_db, "db", fake_db), patch.object(chat_db, "get_messages", return_value=[{"id": "m1"}]):
         assert chat_db.get_cache_aligned_messages("u1", app_id="app-1") == [{"id": "m1"}]
+    filter_ = messages_ref.where.call_args.kwargs['filter']
+    assert (filter_.field_path, filter_.value) == ('plugin_id', 'app-1')
 
-    scoped_filters = [call.kwargs["filter"] for call in messages_ref.where.call_args_list]
-    assert [(filter_.field_path, filter_.value) for filter_ in scoped_filters] == [
-        ("plugin_id", "app-1"),
-        ("reported", True),
-    ]
+
+def test_cache_aligned_history_all_automatic_is_empty_without_loading_payloads():
+    fake_db = MagicMock()
+    messages_ref = _messages_ref(fake_db)
+    messages_ref.where.return_value = messages_ref
+    _visibility_rows(messages_ref, [{'metadata': '{"chatFirstIntentId":"old"}'}])
+    with patch.object(chat_db, "db", fake_db), patch.object(chat_db, "get_messages") as get_messages:
+        assert chat_db.get_cache_aligned_messages("u1") == []
+    get_messages.assert_not_called()

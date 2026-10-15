@@ -31,6 +31,8 @@ from db import (
 )
 from models import ChatToolResponse
 
+REQUEST_TIMEOUT = (5, 30)
+
 load_dotenv()
 
 
@@ -153,7 +155,8 @@ def refresh_access_token(refresh_token: str) -> Optional[dict]:
                 "client_secret": GOOGLE_CLIENT_SECRET,
                 "refresh_token": refresh_token,
                 "grant_type": "refresh_token"
-            }
+            },
+            timeout=REQUEST_TIMEOUT,
         )
 
         if response.status_code == 200:
@@ -180,15 +183,15 @@ def calendar_api_request(uid: str, method: str, endpoint: str, params: dict = No
 
     try:
         if method == "GET":
-            response = requests.get(url, headers=headers, params=params)
+            response = requests.get(url, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
         elif method == "POST":
-            response = requests.post(url, headers=headers, json=json_data)
+            response = requests.post(url, headers=headers, json=json_data, timeout=REQUEST_TIMEOUT)
         elif method == "PUT":
-            response = requests.put(url, headers=headers, json=json_data)
+            response = requests.put(url, headers=headers, json=json_data, timeout=REQUEST_TIMEOUT)
         elif method == "PATCH":
-            response = requests.patch(url, headers=headers, json=json_data)
+            response = requests.patch(url, headers=headers, json=json_data, timeout=REQUEST_TIMEOUT)
         elif method == "DELETE":
-            response = requests.delete(url, headers=headers)
+            response = requests.delete(url, headers=headers, timeout=REQUEST_TIMEOUT)
         else:
             return None
 
@@ -1186,7 +1189,8 @@ async def google_callback(
                 "code": code,
                 "grant_type": "authorization_code",
                 "redirect_uri": GOOGLE_REDIRECT_URI
-            }
+            },
+            timeout=REQUEST_TIMEOUT,
         )
 
         if response.status_code != 200:

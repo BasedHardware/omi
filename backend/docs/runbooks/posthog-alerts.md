@@ -100,6 +100,19 @@ returns `NULL`; the `Device Disconnected` volume alert owns that failure. A
 one-sided connection-emission regression returns a low ratio and triggers this
 alert even when overall traffic changes.
 
+## Candidate battery alerts (not yet provisioned)
+
+These two series are read by `web/admin/app/api/omi/stats/device-health` and
+drawn on the mobile TV board. They are not part of the weekly volume or
+connection-balance contracts above. Creating the insights and alerts is a
+PostHog project write, handled outside this repository. Do not add an
+alert-provisioning lane for them.
+
+| Series | What it measures | Suggested threshold |
+|---|---|---|
+| Pendant drain by firmware | `Mobile Device Health Daily`: p50 of `drain_percent_per_hour` by firmware, using only samples between 0.1 and 100 (`quantileIf`). Most events report drain 0, so an unfiltered p50 is not the signal. | p50 rises to more than 2× the trailing 7-day median for that firmware. |
+| Phone drain by build | `Phone Battery Sample` (shipping in a parallel PR): p50 drain per hour by OS and app build, from consecutive off-charger samples. Until events exist the admin route returns `awaiting_instrumentation`. | p50 for a build rises to more than 2× the predecessor build. |
+
 ## Setup and verification
 
 1. In PostHog, open **Product analytics → Insights → New insight** and create

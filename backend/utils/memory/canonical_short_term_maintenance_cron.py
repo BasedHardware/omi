@@ -1,4 +1,4 @@
-"""Scheduled universal short-term maintenance (TTL audit + consolidation dreaming).
+"""Scheduled universal short-term maintenance (TTL audit, owed explicit intake and outbox delivery).
 
 Hosted by the dedicated ``memory-maintenance-job`` Cloud Run Job
 (``backend/modal/memory_maintenance_job.py``). The global maintenance switch
@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from collections.abc import Callable
 from typing import Any, Iterable, Optional, Protocol, cast
 
@@ -19,16 +19,14 @@ from pydantic import ValidationError
 from google.cloud import firestore
 
 from database._client import db as default_db_client
-from database.memory_collections import MemoryCollections
 from jobs.short_term_lifecycle_worker import fetch_expiry_urgent_short_term_memory_items_firestore
-from models.product_memory import DEFAULT_SHORT_TERM_TTL, MemoryItemStatus, MemoryLayer
+from models.product_memory import DEFAULT_SHORT_TERM_TTL
 from utils.executors import db_executor, run_blocking
 from utils.log_sanitizer import sanitize_validation_error
-from utils.observability.fallback import record_fallback
-from utils.memory.canonical_consolidation import CONSOLIDATION_ATTEMPT_LEASE_SECONDS
+from utils.memory.canonical_required_processing import invoke_required_memory_processor
 from utils.memory.short_term_promotion import (
     CanonicalShortTermMaintenanceReport,
-    run_canonical_short_term_maintenance,
+    run_canonical_short_term_maintenance_async,
 )
 from utils.memory.memory_system import (
     CANONICAL_MEMORY_MAINTENANCE_CURSOR_PATH,
@@ -40,34 +38,14 @@ from utils.memory.promotion_flex import (
     PromotionFlexDeferred,
     PromotionFlexRunRouter,
 )
-from scripts.enrich_historical_memory_graph import (
-    MAX_PAGE_SIZE,
-    MAX_STRUCTURED_SCAN_SIZE,
-    run_enrichment,
-)
 
 logger = logging.getLogger(__name__)
 
 MEMORY_CANONICAL_MAINTENANCE_ENABLED_ENV = "MEMORY_CANONICAL_MAINTENANCE_ENABLED"
-MEMORY_CANONICAL_MAINTENANCE_FLEX_ENV = "MEMORY_CANONICAL_MAINTENANCE_FLEX"
-MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED_ENV = "MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED"
-MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE_ENV = "MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE"
-MEMORY_CANONICAL_GRAPH_BACKFILL_SCAN_SIZE_ENV = "MEMORY_CANONICAL_GRAPH_BACKFILL_SCAN_SIZE"
-DEFAULT_GRAPH_BACKFILL_PAGE_SIZE = 5
-# The historical planner has a hard 20-second deadline per candidate.  Keep
-# the scheduled scan to a small, page-relative look-ahead so one account
-# cannot exhaust the Cloud Run Job's one-hour budget before later users run.
-GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER = 5
-DEFAULT_GRAPH_BACKFILL_SCAN_SIZE = DEFAULT_GRAPH_BACKFILL_PAGE_SIZE * GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER
 MAX_MAINTENANCE_UIDS_PER_RUN = 400
 EXPIRY_ADJUDICATION_LOOKAHEAD = DEFAULT_SHORT_TERM_TTL / 2
 CANONICAL_MEMORY_MAINTENANCE_SEED_CURSOR_PATH = "canonical_memory_maintenance_control/seed_cursor"
 CANONICAL_MEMORY_MAINTENANCE_SEED_SCHEMA_VERSION = 1
-CANONICAL_MEMORY_DREAMING_STATE_COLLECTION = "canonical_memory_dreaming_state"
-DREAMING_MIN_INTERVAL = timedelta(hours=20)
-OVERFLOW_SHORT_TERM_THRESHOLD = 10
-ACTIVE_SHORT_TERM_COUNT_CAP = OVERFLOW_SHORT_TERM_THRESHOLD + 1
-DREAMING_STATE_SCHEMA_VERSION = 1
 
 
 class CanonicalMaintenanceInventoryUnavailable(RuntimeError):
@@ -188,108 +166,6 @@ def _persist_registry_cursor(db_client: Any, last_uid: str, *, expected_generati
         ref.set(next_payload, merge=True)
     except Exception as exc:
         raise CanonicalMaintenanceInventoryUnavailable("canonical maintenance cursor unavailable") from exc
-
-
-def maintenance_flex_forced() -> bool:
-    return os.getenv(MEMORY_CANONICAL_MAINTENANCE_FLEX_ENV, "false").lower() == "true"
-
-
-def _dreaming_state_path(uid: str) -> str:
-    return f"{CANONICAL_MEMORY_DREAMING_STATE_COLLECTION}/{uid}"
-
-
-def _parse_dreamed_at(raw: object) -> Optional[datetime]:
-    if isinstance(raw, datetime):
-        return raw if raw.tzinfo is not None else raw.replace(tzinfo=timezone.utc)
-    if isinstance(raw, str) and raw.strip():
-        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-        return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
-    return None
-
-
-def read_last_dreamed_at(uid: str, *, db_client: Any) -> Optional[datetime]:
-    try:
-        snapshot = db_client.document(_dreaming_state_path(uid)).get()
-    except Exception:
-        return None
-    if not getattr(snapshot, "exists", False):
-        return None
-    payload = snapshot.to_dict() if hasattr(snapshot, "to_dict") else None
-    if not isinstance(payload, dict) or payload.get("schema_version") != DREAMING_STATE_SCHEMA_VERSION:
-        return None
-    return _parse_dreamed_at(payload.get("last_dreamed_at"))
-
-
-def persist_last_dreamed_at(uid: str, *, db_client: Any, now: datetime) -> None:
-    payload = {
-        "uid": uid,
-        "schema_version": DREAMING_STATE_SCHEMA_VERSION,
-        "last_dreamed_at": now.astimezone(timezone.utc).isoformat(),
-    }
-    try:
-        db_client.document(_dreaming_state_path(uid)).set(payload, merge=True)
-    except Exception as exc:
-        logger.warning(
-            "canonical_short_term_maintenance_cron: dreaming_state_write_failed uid=%s error=%s",
-            uid,
-            type(exc).__name__,
-        )
-
-
-def count_active_short_term(uid: str, *, db_client: Any, cap: int = ACTIVE_SHORT_TERM_COUNT_CAP) -> Optional[int]:
-    """Return how many active Short-term rows exist, capped at ``cap``.
-
-    ``None`` means the query could not run. Callers fail open to "has work,
-    not overflow" so a missing index cannot skip a user or mark the whole
-    fleet as hourly overflow.
-    """
-    collection = getattr(db_client, "collection", None)
-    if not callable(collection):
-        return None
-    try:
-        query: Any = collection(MemoryCollections(uid=uid).memory_items)
-        where = getattr(query, "where", None)
-        if callable(where):
-            query = where("tier", "==", MemoryLayer.short_term.value)
-            query = query.where("status", "==", MemoryItemStatus.active.value)
-        limit = getattr(query, "limit", None)
-        if callable(limit):
-            query = limit(max(1, cap))
-        stream = getattr(query, "stream", None)
-        if not callable(stream):
-            return None
-        return sum(1 for _ in cast(Iterable[object], stream()))
-    except Exception:
-        return None
-
-
-def user_has_active_short_term(uid: str, *, db_client: Any) -> bool:
-    """Return True when the account still has at least one active Short-term row.
-
-    Fail open to True so a query/index miss cannot skip a user who still needs
-    dreaming. Injected unit-test fakes without a collection API also keep work.
-    """
-    count = count_active_short_term(uid, db_client=db_client, cap=1)
-    return True if count is None else count > 0
-
-
-def recently_dreamed(uid: str, *, db_client: Any, now: datetime) -> bool:
-    last_dreamed_at = read_last_dreamed_at(uid, db_client=db_client)
-    if last_dreamed_at is None:
-        return False
-    return now - last_dreamed_at < DREAMING_MIN_INTERVAL
-
-
-def _is_ledger_writer(uid: str, *, db_client: Any) -> bool:
-    """Ledger-mode accounts own formation via the daily sweep, not dreaming."""
-    try:
-        from models.memory_apply import WriterMode
-        from utils.memory.memory_system import ensure_canonical_apply_control_state
-
-        control = ensure_canonical_apply_control_state(uid, db_client=db_client)
-        return getattr(control, "writer_mode", None) == WriterMode.ledger
-    except Exception:
-        return False
 
 
 def _read_seed_cursor(db_client: Any) -> str:
@@ -466,51 +342,6 @@ def canonical_maintenance_enabled() -> bool:
     return raw.lower() == "true"
 
 
-def canonical_graph_backfill_enabled() -> bool:
-    """Keep graph migration work opt-in until the deployment contract enables it."""
-    return os.getenv(MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED_ENV, "false").lower() == "true"
-
-
-def canonical_graph_backfill_page_size() -> int:
-    """Return the bounded per-user assertion-enrichment budget for one cron run."""
-    raw = os.getenv(
-        MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE_ENV,
-        str(DEFAULT_GRAPH_BACKFILL_PAGE_SIZE),
-    )
-    try:
-        value = int(raw)
-    except ValueError:
-        return DEFAULT_GRAPH_BACKFILL_PAGE_SIZE
-    return min(MAX_PAGE_SIZE, max(1, value))
-
-
-def canonical_graph_backfill_scan_size(*, page_size: int | None = None) -> int:
-    """Return the cursor scan window, bounded to a small current-page multiple.
-
-    The durable keyset cursor advances after every completed scan, so the cron
-    no longer needs a corpus-sized candidate window to avoid rereading writes.
-    Keep enough look-ahead to skip temporarily ineligible rows, but cap both
-    the default and an explicit override at five current apply pages.  This
-    bounds serial 20-second planner calls while retaining the global
-    ``MAX_STRUCTURED_SCAN_SIZE`` ceiling.
-    """
-    current_page_size = page_size if page_size is not None else canonical_graph_backfill_page_size()
-    current_page_size = min(MAX_PAGE_SIZE, max(1, current_page_size))
-    maximum = min(
-        MAX_STRUCTURED_SCAN_SIZE,
-        current_page_size * GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER,
-    )
-    raw = os.getenv(
-        MEMORY_CANONICAL_GRAPH_BACKFILL_SCAN_SIZE_ENV,
-        str(DEFAULT_GRAPH_BACKFILL_SCAN_SIZE),
-    )
-    try:
-        value = int(raw)
-    except ValueError:
-        value = DEFAULT_GRAPH_BACKFILL_SCAN_SIZE
-    return min(maximum, max(current_page_size, value))
-
-
 @dataclass
 class CanonicalShortTermMaintenanceCronSummary:
     run_id: str
@@ -526,18 +357,13 @@ class CanonicalShortTermMaintenanceCronSummary:
     routed_total: int = 0
     promoted_total: int = 0
     skipped_users: int = 0
-    skipped_no_short_term: int = 0
-    skipped_recently_dreamed: int = 0
-    skipped_ledger_writer: int = 0
-    dreamed_users: int = 0
+    maintained_users: int = 0
+    recurrence_receipts_delivered: int = 0
     flex_deferred: bool = False
-    recurrence_candidates_total: int = 0
     outbox_delivered_total: int = 0
     outbox_retryable_failures_total: int = 0
     outbox_dead_letters_total: int = 0
     outbox_ack_failures_total: int = 0
-    graph_enriched_total: int = 0
-    graph_enrichment_blocked_total: int = 0
     completed_uids: tuple[str, ...] = ()
     errors: list[str] = field(default_factory=_empty_errors)
 
@@ -551,8 +377,6 @@ def _coerce_run_id(run_id: Optional[str], *, now: datetime) -> str:
 def _skipped_reason(report: CanonicalShortTermMaintenanceReport) -> Optional[str]:
     if report.skipped_reason:
         return report.skipped_reason
-    if report.consolidation and report.consolidation.skipped_reason:
-        return report.consolidation.skipped_reason
     return None
 
 
@@ -566,13 +390,12 @@ def _safe_maintenance_error(uid: str, exc: Exception) -> str:
     return f"uid={uid}: {type(exc).__name__}"
 
 
-def run_universal_short_term_maintenance(
+async def run_canonical_short_term_maintenance_cron(
     *,
     db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: Optional[str] = None,
-    recurrence_signal_persister: Optional[Callable[..., int]] = None,
-    recurrence_signal_consumer: Optional[Callable[..., int]] = None,
+    recurrence_inbox_drain: Optional[Callable[..., int]] = None,
     uid_inventory: Optional[CanonicalMaintenanceUIDInventory] = None,
     inventory_limit: int = MAX_MAINTENANCE_UIDS_PER_RUN,
 ) -> CanonicalShortTermMaintenanceCronSummary:
@@ -594,14 +417,16 @@ def run_universal_short_term_maintenance(
         return CanonicalShortTermMaintenanceCronSummary(run_id=effective_run_id, user_count=0)
 
     client = db_client if db_client is not None else default_db_client
-    flex_run = PromotionFlexRunRouter(db_client=client, force_enabled=maintenance_flex_forced())
+    flex_run = await run_blocking(db_executor, PromotionFlexRunRouter, db_client=client, force_enabled=True)
     expiry_inventory = ExpiryOrderedMaintenanceInventory(uids=())
     registry_uids: tuple[str, ...] = ()
     registry_cursor_generation = 0
     inventory_errors: list[str] = []
     if uid_inventory is None:
         try:
-            expiry_inventory = expiry_ordered_maintenance_uid_inventory(
+            expiry_inventory = await run_blocking(
+                db_executor,
+                expiry_ordered_maintenance_uid_inventory,
                 client,
                 now=current_time,
                 limit=inventory_limit,
@@ -618,8 +443,12 @@ def run_universal_short_term_maintenance(
             # Real clients expose ``document`` and therefore receive the
             # generation snapshot used by the final CAS commit.
             if callable(getattr(client, "document", None)):
-                _registry_cursor, registry_cursor_generation = _read_registry_cursor_state(client)
-            registry_uids = bounded_canonical_memory_uid_inventory(
+                _registry_cursor, registry_cursor_generation = await run_blocking(
+                    db_executor, _read_registry_cursor_state, client
+                )
+            registry_uids = await run_blocking(
+                db_executor,
+                bounded_canonical_memory_uid_inventory,
                 client,
                 limit=inventory_limit,
                 persist_cursor=False,
@@ -635,7 +464,9 @@ def run_universal_short_term_maintenance(
         ]
     else:
         try:
-            uids = _resolve_maintenance_uids(client, uid_inventory=uid_inventory, limit=inventory_limit)
+            uids = await run_blocking(
+                db_executor, _resolve_maintenance_uids, client, uid_inventory=uid_inventory, limit=inventory_limit
+            )
         except CanonicalMaintenanceInventoryUnavailable as exc:
             inventory_errors.append("canonical_uid_inventory_unavailable")
             logger.warning(
@@ -685,46 +516,31 @@ def run_universal_short_term_maintenance(
                 uid,
             )
             break
-        stm_count = count_active_short_term(uid, db_client=client)
-        if stm_count == 0:
-            summary.skipped_no_short_term += 1
-            summary.skipped_users += 1
-            completed_uids.add(uid)
-            logger.info("canonical_short_term_maintenance_cron: uid=%s skipped_reason=no_active_short_term", uid)
-            continue
-        overflow = stm_count is not None and stm_count > OVERFLOW_SHORT_TERM_THRESHOLD
-        expiry_urgent = uid in expiry_inventory.uids
-        if recently_dreamed(uid, db_client=client, now=current_time) and not overflow and not expiry_urgent:
-            summary.skipped_recently_dreamed += 1
-            summary.skipped_users += 1
-            completed_uids.add(uid)
-            logger.info("canonical_short_term_maintenance_cron: uid=%s skipped_reason=recently_dreamed", uid)
-            continue
-        if _is_ledger_writer(uid, db_client=client):
-            summary.skipped_ledger_writer += 1
-            summary.skipped_users += 1
-            completed_uids.add(uid)
-            logger.info("canonical_short_term_maintenance_cron: uid=%s skipped_reason=writer_mode_ledger", uid)
-            continue
-        promotion_llm_invoke = flex_run.llm_invoke_for_uid(uid)
+        # The shared Flex router remains only for owed explicit normalization.
+        # Semantic cleanup, recurrence discovery and maintenance dreaming are gone.
+        model = flex_run.llm_for_uid(
+            uid,
+            standard_feature="memory_l2",
+            flex_feature="memory_l2_flex",
+            workload="required_memory_intake",
+        )
+        if model is None:
+            summary.errors.append(f"uid={uid}: required_processor_not_configured")
+
+        def normalize(item):
+            return invoke_required_memory_processor(item, model)
+
         try:
-            report = run_canonical_short_term_maintenance(
+            report = await run_canonical_short_term_maintenance_async(
                 uid,
                 db_client=client,
                 now=maintenance_now,
                 run_id=effective_run_id,
-                recurrence_signal_sink=recurrence_signal_persister,
-                required_processing_limit=0,
-                llm_invoke=promotion_llm_invoke,
-                consolidation_attempt_lease_seconds=(
-                    MEMORY_PROMOTION_FLEX_LEASE_SECONDS
-                    if promotion_llm_invoke is not None
-                    else CONSOLIDATION_ATTEMPT_LEASE_SECONDS
-                ),
-                consolidation_result_guard=(
-                    flex_run.assert_result_current if promotion_llm_invoke is not None else None
-                ),
-                job_budget_guard=flex_run.require_job_budget if flex_run.control.enabled else None,
+                required_processor=normalize if model is not None else None,
+                required_processing_limit=25 if model is not None else 0,
+                required_processing_attempt_lease_seconds=MEMORY_PROMOTION_FLEX_LEASE_SECONDS,
+                required_processing_result_guard=flex_run.assert_result_current,
+                job_budget_guard=flex_run.require_job_budget,
             )
         except PromotionFlexDeferred as exc:
             summary.flex_deferred = True
@@ -743,7 +559,6 @@ def run_universal_short_term_maintenance(
 
         promoted = _promoted_count(report)
         skipped = _skipped_reason(report)
-        trigger = report.consolidation.trigger_reason if report.consolidation else None
         summary.routed_total += report.routed_count
         summary.promoted_total += promoted
         if report.lifecycle is not None:
@@ -776,19 +591,9 @@ def run_universal_short_term_maintenance(
                 f"retryable={retryable_count}:"
                 f"quarantined={quarantined_count}"
             )
-        consolidation_errors = report.consolidation.errors if report.consolidation is not None else []
-        consolidation_blocked = bool(report.consolidation and report.consolidation.watermark_blocked)
-        if consolidation_blocked or consolidation_errors:
-            retryable_count = len(report.consolidation.retryable_memory_ids) if report.consolidation is not None else 0
-            quarantined_count = (
-                len(report.consolidation.quarantined_memory_ids) if report.consolidation is not None else 0
-            )
+        if report.required_intake and report.required_intake.failed_memory_ids:
             summary.errors.append(
-                f"uid={uid}: consolidation_failed:"
-                f"blocked={int(consolidation_blocked)}:"
-                f"retryable={retryable_count}:"
-                f"quarantined={quarantined_count}:"
-                f"errors={len(consolidation_errors)}"
+                f"uid={uid}: required_intake_failed:count={len(report.required_intake.failed_memory_ids)}"
             )
         if outbox_retryable or outbox_dead_letters or outbox_ack_failures or outbox_error_count:
             summary.errors.append(
@@ -798,72 +603,22 @@ def run_universal_short_term_maintenance(
                 f"ack={outbox_ack_failures}:"
                 f"errors={outbox_error_count}"
             )
-        if recurrence_signal_consumer is not None and report.consolidation is not None:
+        summary.maintained_users += 1
+        if recurrence_inbox_drain is not None:
             try:
-                summary.recurrence_candidates_total += recurrence_signal_consumer(
-                    uid,
-                    report.consolidation.recurrence_signals,
-                    firestore_client=client,
+                summary.recurrence_receipts_delivered += await run_blocking(
+                    db_executor, recurrence_inbox_drain, uid, firestore_client=client
                 )
             except Exception as exc:
-                message = f"uid={uid}: recurrence_consumer:{type(exc).__name__}"
-                summary.errors.append(message)
-                logger.warning("canonical_short_term_maintenance_cron: %s", message)
-                record_fallback(
-                    component="other",
-                    from_mode="recurrence_maintenance",
-                    to_mode="recurrence_inbox_retry",
-                    reason="other",
-                    outcome="degraded",
-                )
-        if report.routed_count == 0:
-            summary.skipped_users += 1
-        summary.dreamed_users += 1
-        consolidation = report.consolidation
-        dream_incomplete = bool(
-            consolidation is not None
-            and (consolidation.watermark_blocked or consolidation.errors or consolidation.retryable_memory_ids)
-        )
-        if not dream_incomplete:
-            persist_last_dreamed_at(uid, db_client=client, now=current_time)
+                summary.errors.append(f'uid={uid}: recurrence_delivery:{type(exc).__name__}')
         completed_uids.add(uid)
-
         logger.info(
-            "canonical_short_term_maintenance_cron: uid=%s trigger_reason=%s routed_count=%d "
-            "promoted_count=%d skipped_reason=%s",
+            "canonical_short_term_maintenance_cron: uid=%s routed_count=%d promoted_count=%d skipped_reason=%s",
             uid,
-            trigger,
             report.routed_count,
             promoted,
             skipped,
         )
-
-        if not canonical_graph_backfill_enabled():
-            continue
-        try:
-            graph_page_size = canonical_graph_backfill_page_size()
-            graph_report = run_enrichment(
-                uid=uid,
-                # The database client is injected above; this is retained only
-                # for the CLI contract and is never used by this cron path.
-                firestore_project=os.getenv("GOOGLE_CLOUD_PROJECT", "canonical-memory"),
-                limit=graph_page_size,
-                apply=True,
-                confirm_uid=uid,
-                structured_only=False,
-                apply_limit=graph_page_size,
-                scan_limit=canonical_graph_backfill_scan_size(page_size=graph_page_size),
-                db_client=client,
-            )
-            graph_outcomes = graph_report.get("outcomes", {})
-            summary.graph_enriched_total += int(graph_outcomes.get("committed", 0))
-            summary.graph_enrichment_blocked_total += sum(
-                int(value) for key, value in graph_outcomes.items() if key not in {"committed", "idempotent_skip"}
-            )
-        except Exception as exc:
-            message = f"uid={uid}: graph_enrichment:{type(exc).__name__}"
-            summary.errors.append(message)
-            logger.warning("canonical_short_term_maintenance_cron: %s", message)
 
     last_completed_registry_uid: Optional[str] = None
     for registry_uid in registry_uids:
@@ -872,7 +627,9 @@ def run_universal_short_term_maintenance(
         last_completed_registry_uid = registry_uid
     if uid_inventory is None and last_completed_registry_uid:
         try:
-            _persist_registry_cursor(
+            await run_blocking(
+                db_executor,
+                _persist_registry_cursor,
                 client,
                 last_completed_registry_uid,
                 expected_generation=registry_cursor_generation,
@@ -885,57 +642,12 @@ def run_universal_short_term_maintenance(
             )
 
     logger.info(
-        "canonical_short_term_maintenance_cron: done run_id=%s user_count=%d routed_total=%d "
-        "promoted_total=%d dreamed_users=%d skipped_no_short_term=%d skipped_recently_dreamed=%d "
-        "skipped_ledger_writer=%d "
-        "flex_deferred=%s expiry_urgent_users=%d expiry_urgent_items=%d "
-        "expired_active_candidates_total=%d "
-        "expired_without_terminal_disposition_total=%d expired_with_recorded_disposition_total=%d "
-        "expired_terminal_dispositions_total=%d graph_enriched_total=%d graph_enrichment_blocked_total=%d "
-        "skipped_users=%d errors=%d",
+        "canonical_short_term_maintenance_cron: done run_id=%s user_count=%d maintained_users=%d promoted_total=%d errors=%d",
         effective_run_id,
         summary.user_count,
-        summary.routed_total,
+        summary.maintained_users,
         summary.promoted_total,
-        summary.dreamed_users,
-        summary.skipped_no_short_term,
-        summary.skipped_recently_dreamed,
-        summary.skipped_ledger_writer,
-        summary.flex_deferred,
-        summary.expiry_urgent_users,
-        summary.expiry_urgent_items,
-        summary.expired_active_candidates_total,
-        summary.expired_without_terminal_disposition_total,
-        summary.expired_with_recorded_disposition_total,
-        summary.expired_terminal_dispositions_total,
-        summary.graph_enriched_total,
-        summary.graph_enrichment_blocked_total,
-        summary.skipped_users,
         len(summary.errors),
     )
     summary.completed_uids = tuple(sorted(completed_uids))
     return summary
-
-
-async def run_canonical_short_term_maintenance_cron(
-    *,
-    db_client: Any = None,
-    now: Optional[datetime] = None,
-    run_id: Optional[str] = None,
-    recurrence_signal_persister: Optional[Callable[..., int]] = None,
-    recurrence_signal_consumer: Optional[Callable[..., int]] = None,
-    uid_inventory: Optional[CanonicalMaintenanceUIDInventory] = None,
-    inventory_limit: int = MAX_MAINTENANCE_UIDS_PER_RUN,
-) -> CanonicalShortTermMaintenanceCronSummary:
-    """Async entrypoint: offload sync Firestore maintenance to ``db_executor``."""
-    return await run_blocking(
-        db_executor,
-        run_universal_short_term_maintenance,
-        db_client=db_client,
-        now=now,
-        run_id=run_id,
-        recurrence_signal_persister=recurrence_signal_persister,
-        recurrence_signal_consumer=recurrence_signal_consumer,
-        uid_inventory=uid_inventory,
-        inventory_limit=inventory_limit,
-    )

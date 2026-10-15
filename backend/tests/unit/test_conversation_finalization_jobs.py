@@ -1088,7 +1088,9 @@ def test_worker_budget_survives_failed_write_and_crashed_lease_replay():
     assert conversation_ref.data['discarded'] is False
     assert conversation_ref.data['transcript_segments'] == [{'text': 'persisted'}]
     assert conversation_ref.data['finalization_status'] == 'dead_letter'
-    assert conversation_ref.data['structured'] == {'title': '', 'overview': ''}
+    # A kept row never lands untitled: the deterministic first-sentence title.
+    assert conversation_ref.data['structured'] == {'title': 'persisted', 'overview': ''}
+    assert conversation_ref.data['summary_retryable'] is True
     api_row = Conversation.model_validate(
         {
             'id': 'conversation-1',
@@ -1099,7 +1101,8 @@ def test_worker_budget_survives_failed_write_and_crashed_lease_replay():
             'transcript_segments': [{'text': 'persisted', 'is_user': False, 'start': 0, 'end': 1}],
         }
     )
-    assert api_row.structured.title == ''
+    assert api_row.structured.title == 'persisted'
+    assert api_row.summary_retryable is True
     assert api_row.discarded is False
 
 
@@ -1257,17 +1260,12 @@ def test_durable_summary_reads_a_fixed_projection_shard_set_without_job_aggregat
         'dead_letter': 1,
         'terminal_unknown': 0,
         'oldest_nonterminal_age_seconds': 0.0,
+        'oldest_blocked_byok_age_seconds': 0.0,
     }
 
 
 def test_oldest_nonterminal_age_sees_jobs_that_carry_no_reconcile_after_at():
-    """A BYOK job is invisible to ``reconcile_after_at`` and must still age.
-
-    ``_resume_blocked_byok_job_txn`` and the BYOK retry path delete
-    ``reconcile_after_at`` outright, so the old due-page implementation reported
-    0 while those jobs sat unfinished indefinitely.  Asking ``status`` directly
-    is what makes them visible.
-    """
+    """Legacy rows without due timestamps still age; blocked rows age separately."""
 
     created_at = datetime.now(timezone.utc) - timedelta(days=30)
 
@@ -1302,6 +1300,8 @@ def test_oldest_nonterminal_age_sees_jobs_that_carry_no_reconcile_after_at():
             return self
 
         def stream(self):
+            if self._status == 'blocked_byok':
+                return iter([Snapshot({'created_at': created_at - timedelta(days=10)})])
             if self._status != 'queued':
                 return iter(())
             # No ``reconcile_after_at`` key at all — exactly the resumed BYOK shape.
@@ -1315,7 +1315,8 @@ def test_oldest_nonterminal_age_sees_jobs_that_carry_no_reconcile_after_at():
 
     summary = jobs.get_finalization_job_summary(firestore_client=Client())
 
-    assert summary['oldest_nonterminal_age_seconds'] > 29 * 24 * 3600
+    assert 29 * 24 * 3600 < summary['oldest_nonterminal_age_seconds'] < 31 * 24 * 3600
+    assert 39 * 24 * 3600 < summary['oldest_blocked_byok_age_seconds'] < 41 * 24 * 3600
 
 
 class _BoundedReplayCollection:
@@ -1696,6 +1697,32 @@ def test_complete_orphan_completes_only_an_unchanged_orphan_generation():
     assert transaction.updates == [(orphan, {'status': 'completed'})]
 
 
+def test_complete_orphan_gives_an_untitled_row_its_deterministic_title():
+    transaction = _Transaction()
+    now = _now()
+    admitted = now - timedelta(seconds=1000)
+    orphan = _Ref(
+        'orphan',
+        {
+            'status': 'processing',
+            'processing_admitted_at': admitted,
+            'structured': {'title': '', 'overview': '', 'category': 'other'},
+            'transcript_segments': [{'text': 'Call the plumber tomorrow. Also groceries.'}],
+        },
+    )
+
+    assert jobs._complete_orphan_conversation_txn(transaction, orphan, admitted, now, 'uid-1') is True
+    assert transaction.updates == [
+        (
+            orphan,
+            {
+                'status': 'completed',
+                'structured': {'title': 'Call the plumber tomorrow.', 'overview': '', 'category': 'other'},
+            },
+        )
+    ]
+
+
 def test_complete_orphan_fences_a_row_a_finalizer_claimed_after_discovery():
     transaction = _Transaction()
     now = _now()
@@ -1831,3 +1858,13 @@ def test_advance_cursor_succeeds_on_first_write_when_doc_absent():
     assert result is True
     assert transaction.sets[0][1]['generation'] == 1
     assert transaction.sets[0][1]['resume_after_path'] == 'users/u/c/first'
+
+
+def test_selfheal_cursor_preserves_verification_deadline(monkeypatch):
+    entry = {'uid': 'u1', 'conversation_id': 'c1', 'job_id': 'j1', 'admitted_at': _now()}
+    ref = _Ref('in_progress_content_sweep', {'pending_verifications': [entry]})
+    client = SimpleNamespace(collection=lambda name: _Collection({'in_progress_content_sweep': ref}))
+
+    cursor = jobs.get_in_progress_content_sweep_cursor(firestore_client=client)
+
+    assert cursor['pending_verifications'] == [entry]

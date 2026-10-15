@@ -7,6 +7,7 @@ from itertools import islice
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from utils.conversations.mcp_transcript_search import build_transcript_match_snippets
+from utils.retrieval.turn_refs import register_record_ref
 from utils.retrieval.tools import conversation_jit_gate as _jit_gate
 
 JIT_CONVERSATION_RETRIEVAL_CONFIG_KEY = _jit_gate.JIT_CONVERSATION_RETRIEVAL_CONFIG_KEY
@@ -265,6 +266,7 @@ def _format_summary_card(card: Dict[str, Any], index: int) -> str:
     """Format one independently admissible summary record."""
     lines = [
         f"Conversation card #{index}",
+        f"ref: conversations/{card['conversation_id']}",
         f"conversation_ref: {card['conversation_ref']}",
         f"summary_evidence_ref: {card['summary_evidence_ref']}",
         f"conversation_id: {card['conversation_id']}",
@@ -324,6 +326,8 @@ def format_jit_results(
     max_transcript_snippets: int = 3,
     evidence_references: Optional[List[Dict[str, Any]]] = None,
     conversations_collected: Optional[List[Dict[str, Any]]] = None,
+    coverage_note: Optional[str] = None,
+    configurable: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Render only whole records whose text and reference can be admitted together."""
     bounded_conversations = list(conversations_data)[:MAX_JIT_CONVERSATIONS]
@@ -347,9 +351,9 @@ def format_jit_results(
             rejected_or_duplicate = True
             continue
         candidates.append((data, card, existing_card_index))
+    blocks: List[str] = [coverage_note] if coverage_note else []
     if not candidates:
-        return JIT_TRUNCATION_MARKER if bounded_conversations else ""
-    blocks: List[str] = []
+        return "\n\n".join(blocks + ([JIT_TRUNCATION_MARKER] if bounded_conversations else []))
     admitted: List[Tuple[Dict[str, Any], Dict[str, Any]]] = []
     first_card_index = len(conversations_collected) + 1 if conversations_collected is not None else 1
     new_card_count = 0
@@ -368,6 +372,8 @@ def format_jit_results(
         blocks.append(block)
         admitted.append((data, card))
         _append_collected_conversation(conversations_collected, card)
+        if configurable is not None:
+            register_record_ref(configurable, 'conversations', card['conversation_id'])
         new_card_count += 1
 
     if hydrate_transcript_windows:
@@ -458,6 +464,7 @@ def format_active_jit_conversations(
     configurable: Dict[str, Any],
     query: Optional[str] = None,
     max_transcript_segments: int = 0,
+    coverage_note: Optional[str] = None,
 ) -> str:
     """Render the opt-in card/evidence contract and populate the shared evidence sink."""
     hydrate, window_segments = _jit_transcript_options(max_transcript_segments)
@@ -475,4 +482,6 @@ def format_active_jit_conversations(
         max_transcript_snippets=min(window_segments, MAX_JIT_TRANSCRIPT_SNIPPETS) if hydrate else 0,
         evidence_references=evidence_references,
         conversations_collected=conversations_collected,
+        coverage_note=coverage_note,
+        configurable=configurable,
     )

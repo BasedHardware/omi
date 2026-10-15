@@ -1,0 +1,613 @@
+{
+  "acceptance": {
+    "desktop_health_event": "retained",
+    "device_disconnected": "retained",
+    "lane4_fallback_triage": "pending",
+    "lane4_voice_panel": "pending",
+    "live_canary": "pending",
+    "posthog_retirement_flag": "default_off",
+    "transport_shadow_flag": "default_off"
+  },
+  "measured": {
+    "fallback": {
+      "areas": {
+        "ptt_cascade": 1,
+        "realtime_hub": 1,
+        "screen_task_gate": 1
+      },
+      "degraded": 1,
+      "exhausted": 1,
+      "recovered": 1
+    },
+    "screen_task": {
+      "durations": {
+        "ocr_ms": {
+          "buckets": [
+            {
+              "count": 0,
+              "le_seconds": 0.05
+            },
+            {
+              "count": 2,
+              "le_seconds": 0.1
+            },
+            {
+              "count": 2,
+              "le_seconds": 0.25
+            },
+            {
+              "count": 2,
+              "le_seconds": 0.5
+            },
+            {
+              "count": 2,
+              "le_seconds": 1
+            },
+            {
+              "count": 2,
+              "le_seconds": 2
+            },
+            {
+              "count": 2,
+              "le_seconds": 5
+            },
+            {
+              "count": 2,
+              "le_seconds": 10
+            },
+            {
+              "count": 2,
+              "le_seconds": 30
+            },
+            {
+              "count": 2,
+              "le_seconds": 60
+            },
+            {
+              "count": 2,
+              "le_seconds": 120
+            },
+            {
+              "count": 2,
+              "le_seconds": 300
+            },
+            {
+              "count": 2,
+              "le_seconds": 900
+            },
+            {
+              "count": 2,
+              "le_seconds": 3600
+            },
+            {
+              "count": 2,
+              "le_seconds": 86400
+            },
+            {
+              "count": 2,
+              "le_seconds": "+Inf"
+            }
+          ],
+          "count": 2,
+          "sum_ms": 180
+        },
+        "retrieval_ms": {
+          "buckets": [
+            {
+              "count": 1,
+              "le_seconds": 0.05
+            },
+            {
+              "count": 1,
+              "le_seconds": 0.1
+            },
+            {
+              "count": 2,
+              "le_seconds": 0.25
+            },
+            {
+              "count": 2,
+              "le_seconds": 0.5
+            },
+            {
+              "count": 2,
+              "le_seconds": 1
+            },
+            {
+              "count": 2,
+              "le_seconds": 2
+            },
+            {
+              "count": 2,
+              "le_seconds": 5
+            },
+            {
+              "count": 2,
+              "le_seconds": 10
+            },
+            {
+              "count": 2,
+              "le_seconds": 30
+            },
+            {
+              "count": 2,
+              "le_seconds": 60
+            },
+            {
+              "count": 2,
+              "le_seconds": 120
+            },
+            {
+              "count": 2,
+              "le_seconds": 300
+            },
+            {
+              "count": 2,
+              "le_seconds": 900
+            },
+            {
+              "count": 2,
+              "le_seconds": 3600
+            },
+            {
+              "count": 2,
+              "le_seconds": 86400
+            },
+            {
+              "count": 2,
+              "le_seconds": "+Inf"
+            }
+          ],
+          "count": 2,
+          "sum_ms": 220
+        },
+        "gate_ms": {
+          "buckets": [
+            {
+              "count": 2,
+              "le_seconds": 0.05
+            },
+            {
+              "count": 2,
+              "le_seconds": 0.1
+            },
+            {
+              "count": 2,
+              "le_seconds": 0.25
+            },
+            {
+              "count": 2,
+              "le_seconds": 0.5
+            },
+            {
+              "count": 2,
+              "le_seconds": 1
+            },
+            {
+              "count": 2,
+              "le_seconds": 2
+            },
+            {
+              "count": 2,
+              "le_seconds": 5
+            },
+            {
+              "count": 2,
+              "le_seconds": 10
+            },
+            {
+              "count": 2,
+              "le_seconds": 30
+            },
+            {
+              "count": 2,
+              "le_seconds": 60
+            },
+            {
+              "count": 2,
+              "le_seconds": 120
+            },
+            {
+              "count": 2,
+              "le_seconds": 300
+            },
+            {
+              "count": 2,
+              "le_seconds": 900
+            },
+            {
+              "count": 2,
+              "le_seconds": 3600
+            },
+            {
+              "count": 2,
+              "le_seconds": 86400
+            },
+            {
+              "count": 2,
+              "le_seconds": "+Inf"
+            }
+          ],
+          "count": 2,
+          "sum_ms": 80
+        },
+        "extraction_ms": {
+          "buckets": [
+            {
+              "count": 0,
+              "le_seconds": 0.05
+            },
+            {
+              "count": 0,
+              "le_seconds": 0.1
+            },
+            {
+              "count": 0,
+              "le_seconds": 0.25
+            },
+            {
+              "count": 0,
+              "le_seconds": 0.5
+            },
+            {
+              "count": 1,
+              "le_seconds": 1
+            },
+            {
+              "count": 1,
+              "le_seconds": 2
+            },
+            {
+              "count": 1,
+              "le_seconds": 5
+            },
+            {
+              "count": 1,
+              "le_seconds": 10
+            },
+            {
+              "count": 1,
+              "le_seconds": 30
+            },
+            {
+              "count": 1,
+              "le_seconds": 60
+            },
+            {
+              "count": 1,
+              "le_seconds": 120
+            },
+            {
+              "count": 1,
+              "le_seconds": 300
+            },
+            {
+              "count": 1,
+              "le_seconds": 900
+            },
+            {
+              "count": 1,
+              "le_seconds": 3600
+            },
+            {
+              "count": 1,
+              "le_seconds": 86400
+            },
+            {
+              "count": 1,
+              "le_seconds": "+Inf"
+            }
+          ],
+          "count": 1,
+          "sum_ms": 800
+        },
+        "delivery_ms": {
+          "buckets": [
+            {
+              "count": 1,
+              "le_seconds": 0.05
+            },
+            {
+              "count": 1,
+              "le_seconds": 0.1
+            },
+            {
+              "count": 1,
+              "le_seconds": 0.25
+            },
+            {
+              "count": 1,
+              "le_seconds": 0.5
+            },
+            {
+              "count": 1,
+              "le_seconds": 1
+            },
+            {
+              "count": 1,
+              "le_seconds": 2
+            },
+            {
+              "count": 1,
+              "le_seconds": 5
+            },
+            {
+              "count": 1,
+              "le_seconds": 10
+            },
+            {
+              "count": 1,
+              "le_seconds": 30
+            },
+            {
+              "count": 1,
+              "le_seconds": 60
+            },
+            {
+              "count": 1,
+              "le_seconds": 120
+            },
+            {
+              "count": 1,
+              "le_seconds": 300
+            },
+            {
+              "count": 1,
+              "le_seconds": 900
+            },
+            {
+              "count": 1,
+              "le_seconds": 3600
+            },
+            {
+              "count": 1,
+              "le_seconds": 86400
+            },
+            {
+              "count": 1,
+              "le_seconds": "+Inf"
+            }
+          ],
+          "count": 1,
+          "sum_ms": 40
+        },
+        "capture_to_terminal_ms": {
+          "buckets": [
+            {
+              "count": 0,
+              "le_seconds": 0.05
+            },
+            {
+              "count": 1,
+              "le_seconds": 0.1
+            },
+            {
+              "count": 1,
+              "le_seconds": 0.25
+            },
+            {
+              "count": 2,
+              "le_seconds": 0.5
+            },
+            {
+              "count": 2,
+              "le_seconds": 1
+            },
+            {
+              "count": 3,
+              "le_seconds": 2
+            },
+            {
+              "count": 3,
+              "le_seconds": 5
+            },
+            {
+              "count": 3,
+              "le_seconds": 10
+            },
+            {
+              "count": 3,
+              "le_seconds": 30
+            },
+            {
+              "count": 3,
+              "le_seconds": 60
+            },
+            {
+              "count": 3,
+              "le_seconds": 120
+            },
+            {
+              "count": 3,
+              "le_seconds": 300
+            },
+            {
+              "count": 3,
+              "le_seconds": 900
+            },
+            {
+              "count": 3,
+              "le_seconds": 3600
+            },
+            {
+              "count": 3,
+              "le_seconds": 86400
+            },
+            {
+              "count": 3,
+              "le_seconds": "+Inf"
+            }
+          ],
+          "count": 3,
+          "sum_ms": 1990
+        }
+      },
+      "eligible_frames": 3,
+      "policy_rejected": 1,
+      "pre_upload_failed": 1,
+      "rejected": 1,
+      "terminals": 3
+    },
+    "voice": {
+      "floating_voice": {
+        "latency_count": 1,
+        "latency_histogram": {
+          "buckets": [
+            {
+              "count": 0,
+              "le_seconds": 0.05
+            },
+            {
+              "count": 0,
+              "le_seconds": 0.1
+            },
+            {
+              "count": 0,
+              "le_seconds": 0.25
+            },
+            {
+              "count": 0,
+              "le_seconds": 0.5
+            },
+            {
+              "count": 0,
+              "le_seconds": 1
+            },
+            {
+              "count": 1,
+              "le_seconds": 2
+            },
+            {
+              "count": 1,
+              "le_seconds": 5
+            },
+            {
+              "count": 1,
+              "le_seconds": 10
+            },
+            {
+              "count": 1,
+              "le_seconds": 30
+            },
+            {
+              "count": 1,
+              "le_seconds": 60
+            },
+            {
+              "count": 1,
+              "le_seconds": 120
+            },
+            {
+              "count": 1,
+              "le_seconds": 300
+            },
+            {
+              "count": 1,
+              "le_seconds": 900
+            },
+            {
+              "count": 1,
+              "le_seconds": 3600
+            },
+            {
+              "count": 1,
+              "le_seconds": 86400
+            },
+            {
+              "count": 1,
+              "le_seconds": "+Inf"
+            }
+          ],
+          "count": 1,
+          "sum_ms": 1800
+        },
+        "latency_sum_ms": 1800,
+        "started": 2,
+        "terminal_excluded": 0,
+        "terminal_failure": 1,
+        "terminal_success": 1,
+        "terminal_unknown": 0
+      },
+      "physical_shortcut": {
+        "latency_count": 1,
+        "latency_histogram": {
+          "buckets": [
+            {
+              "count": 0,
+              "le_seconds": 0.05
+            },
+            {
+              "count": 0,
+              "le_seconds": 0.1
+            },
+            {
+              "count": 0,
+              "le_seconds": 0.25
+            },
+            {
+              "count": 0,
+              "le_seconds": 0.5
+            },
+            {
+              "count": 0,
+              "le_seconds": 1
+            },
+            {
+              "count": 0,
+              "le_seconds": 2
+            },
+            {
+              "count": 1,
+              "le_seconds": 5
+            },
+            {
+              "count": 1,
+              "le_seconds": 10
+            },
+            {
+              "count": 1,
+              "le_seconds": 30
+            },
+            {
+              "count": 1,
+              "le_seconds": 60
+            },
+            {
+              "count": 1,
+              "le_seconds": 120
+            },
+            {
+              "count": 1,
+              "le_seconds": 300
+            },
+            {
+              "count": 1,
+              "le_seconds": 900
+            },
+            {
+              "count": 1,
+              "le_seconds": 3600
+            },
+            {
+              "count": 1,
+              "le_seconds": 86400
+            },
+            {
+              "count": 1,
+              "le_seconds": "+Inf"
+            }
+          ],
+          "count": 1,
+          "sum_ms": 4200
+        },
+        "latency_sum_ms": 4200,
+        "started": 2,
+        "terminal_excluded": 1,
+        "terminal_failure": 0,
+        "terminal_success": 1,
+        "terminal_unknown": 0
+      }
+    }
+  },
+  "schema_version": 1
+}

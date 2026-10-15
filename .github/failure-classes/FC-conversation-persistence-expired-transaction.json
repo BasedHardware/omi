@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-conversation-persistence-expired-transaction",
+  "violated_contract": "A Firestore write whose transaction id was retired mid-flight must be retried on a fresh transaction, not surfaced as an unhandled error that loses the write.",
+  "canonical_prevention": "Route every @firestore.transactional invocation in database/conversations.py through database._client.run_transactional so expired-transaction commits restart with a fresh transaction up to three attempts.",
+  "canonical_prevention_artifact": [
+    "backend/database/conversations.py",
+    "backend/tests/unit/"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/conversations.py"
+  ],
+  "status": "open"
+}

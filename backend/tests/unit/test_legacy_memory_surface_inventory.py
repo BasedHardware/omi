@@ -193,3 +193,17 @@ def test_checked_in_inventory_has_no_baseline_growth() -> None:
     growth, _shrinkage = inventory.compare_counts(current, baseline)
 
     assert growth == []
+
+
+def test_canonical_apply_metadata_key_is_not_a_legacy_promotion_surface(tmp_path):
+    root = tmp_path / 'backend' / 'utils' / 'memory'
+    root.mkdir(parents=True)
+    (root / 'fixture.py').write_text(
+        "patch = {'promotion_audit': metadata}\n"
+        "promotion_audit_worker(item)\n"
+        "from legacy import promotion_audit\n"
+        "promotion(item)\n"
+    )
+    rule = next(rule for rule in inventory.RULES if rule.classification == 'consolidation_promotion')
+    findings = inventory.scan(tmp_path, (rule,))
+    assert [finding.line for finding in findings] == [2, 3, 4]

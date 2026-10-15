@@ -31,7 +31,9 @@ os.environ.setdefault('OPENROUTER_API_KEY', 'fake-key-for-hermetic-tests')
 # triggers an encoding lookup, avoiding a download in hermetic CI.
 if 'tiktoken' not in sys.modules:
     _tiktoken_stub = ModuleType('tiktoken')
-    _tiktoken_stub.encoding_for_model = lambda model: type('Encoding', (), {'encode': lambda self, text: list(text)})()
+    _Encoding = type('Encoding', (), {'encode': lambda self, text: list(text)})
+    _Encoding.encode_ordinary = _Encoding.encode  # Match tiktoken's token-counting API without downloads.
+    _tiktoken_stub.encoding_for_model = lambda model: _Encoding()
     sys.modules['tiktoken'] = _tiktoken_stub
 
 from testing.hermetic_network import block_outbound_network

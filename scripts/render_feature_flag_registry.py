@@ -8,6 +8,7 @@ header marker, never from wall-clock time, so CI drift checks are stable.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from datetime import date
@@ -42,6 +43,7 @@ def _parse_mapping(text: str) -> dict[str, Any]:
     """
     root: dict[str, Any] = {}
     stack: list[tuple[int, dict[str, Any]]] = [(-1, root)]
+    anchors: dict[str, dict[str, Any]] = {}
     for raw in text.splitlines():
         stripped = raw.strip()
         if not stripped or stripped.startswith("#") or stripped.startswith("- "):
@@ -55,7 +57,18 @@ def _parse_mapping(text: str) -> dict[str, Any]:
         parent = stack[-1][1]
         if not isinstance(parent, dict):
             continue
-        if rest == "":
+        if key == "<<":
+            # Shared cohort overlays use a JSON-compatible flow mapping anchor
+            # and merge aliases so one data edit updates every serving host.
+            if rest.startswith("&"):
+                anchor, literal = rest[1:].split(" ", 1)
+                anchors[anchor] = json.loads(literal)
+                parent.update(anchors[anchor])
+            elif rest.startswith("*"):
+                parent.update(anchors[rest[1:]])
+            else:
+                raise ValueError(f"unsupported mapping merge: {rest}")
+        elif rest == "":
             child: dict[str, Any] = {}
             parent[key] = child
             stack.append((indent, child))
@@ -110,9 +123,7 @@ def _manifest_envs(path: Path) -> dict[str, dict[str, str]]:
     return hosts
 
 
-def _effective_envs(
-    base: dict[str, dict[str, str]], overlay: dict[str, dict[str, str]]
-) -> dict[str, dict[str, str]]:
+def _effective_envs(base: dict[str, dict[str, str]], overlay: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
     """Effective per-host env for one environment: base inheritance + overlay."""
     merged: dict[str, dict[str, str]] = {host: dict(env) for host, env in base.items()}
     for host, env in overlay.items():
@@ -337,9 +348,7 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
 
     lines += ["## Running experiments", ""]
     experiments = [
-        entry
-        for entry in flags
-        if entry.get("lifecycle") == "experiment" and entry.get("decision") != "kill"
+        entry for entry in flags if entry.get("lifecycle") == "experiment" and entry.get("decision") != "kill"
     ]
     if experiments:
         lines += [
@@ -404,9 +413,7 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
         for entry in rows:
             surfaces = ", ".join(entry.get("surfaces", []))
             review_by = entry.get("review_by", "—")
-            base, dev, prod = (
-                _env_columns(entry["key"], index) if entry.get("kind") == "env" else ("—", "—", "—")
-            )
+            base, dev, prod = _env_columns(entry["key"], index) if entry.get("kind") == "env" else ("—", "—", "—")
             lines.append(
                 "| "
                 + " | ".join(
@@ -434,11 +441,7 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
         entry
         for entry in flags
         if entry.get("kind") == "env"
-        and all(
-            entry["key"] not in env
-            for scope in index.values()
-            for env in scope.values()
-        )
+        and all(entry["key"] not in env for scope in index.values() for env in scope.values())
     ]
     if undeclared:
         lines += [
@@ -459,7 +462,7 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
     if retired:
         lines += [
             "Code was deleted but an external row may still exist. Names cover PostHog",
-            "keys and shipped local preference keys; the sync reports live PostHog",
+            "keys, env switches, and shipped local preference keys; the sync reports live PostHog",
             "leftovers as read-only delete candidates. Never re-read these names for",
             "admission.",
             "",

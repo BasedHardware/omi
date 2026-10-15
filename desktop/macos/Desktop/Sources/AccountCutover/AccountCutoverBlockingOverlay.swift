@@ -39,7 +39,7 @@ struct AccountCutoverBlockingOverlay: View {
         latestBuildNumber: nil,
         title: "Migration in Progress",
         message: strandedNewData
-          ? "Your account is in maintenance after a migration rollback. Some newer data may be stranded."
+          ? "Your account is under maintenance. Some recent data may not appear until it's finished."
           : "Your account is migrating. Product features are paused until migration finishes.",
         ctaText: "OK",
         downloadURL: DesktopUpdatePolicyResponse.stableManualDownloadURL.absoluteString,

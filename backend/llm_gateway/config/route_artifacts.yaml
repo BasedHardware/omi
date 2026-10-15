@@ -1,6 +1,6 @@
 route_artifacts:
   - route_artifact_id: route.public_shared_conversation_chat.2026_07_19.001
-    artifact_digest: sha256:f9900baf225db6fc1386b668d008d9fe9de391f1ea8c1b1b3de15e6486800df4
+    artifact_digest: sha256:924ae4bff8c10c127e7971c0a38e26f035aa692c45afe818e62bd760bee0cda9
     lane_id: omi:auto:public-shared-conversation-chat
     surface: openai.chat_completions
     primary:
@@ -9,9 +9,6 @@ route_artifacts:
     fallbacks: []
     provider_options:
       reasoning_effort: minimal
-    output_budget:
-      experiment: public_shared_conversation_chat
-      max_completion_tokens: 600
     timeouts:
       request_ms: 20000
     retry:
@@ -55,7 +52,7 @@ route_artifacts:
         - invalid_config
 
   - route_artifact_id: route.public_shared_conversation_chat.2026_09_27.001
-    artifact_digest: sha256:c3a116b05f7f5564e1926565ba7a272f4ae862a89ac0f6edd8811ac4beac2bb7
+    artifact_digest: sha256:3a59bcf4065c913dd0ee3c46478ae00445f6a3fd7d2e7f49df3482272caacfd4
     lane_id: omi:auto:public-shared-conversation-chat
     surface: openai.chat_completions
     primary:
@@ -64,9 +61,6 @@ route_artifacts:
     fallbacks: []
     provider_options:
       reasoning_effort: none
-    output_budget:
-      experiment: public_shared_conversation_chat
-      max_completion_tokens: 600
     timeouts:
       request_ms: 20000
     retry:

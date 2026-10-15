@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, TypedDict, cast
+from database.dream_dirty import after_write
 
 try:
     from google.api_core.exceptions import NotFound as FirestoreNotFound  # type: ignore[reportAssignmentType]  # fallback class below rebinds the name in stub-less test envs
@@ -31,7 +32,8 @@ from database import short_term_memories as short_term_db
 from ._client import get_firestore_client
 from models.memories import confidence_fields_for_evidence, merge_evidence_sets
 from utils import encryption
-from utils.other.list_budget import ListReadBudget, budgeted_get_all, budgeted_stream_list
+from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_get_all, budgeted_stream_list
+from utils.other.portability_read import current_portability_read, verified_encrypted_read
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 import logging
 
@@ -156,11 +158,6 @@ def get_memory_ids(uid: str, *, firestore_client: Any = None) -> List[str]:
     return [doc.id for doc in coll.select([]).stream()]
 
 
-# *********************************
-# ******* ENCRYPTION HELPERS ******
-# *********************************
-
-
 def _encrypt_memory_data(memory_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
     data = copy.deepcopy(memory_data)
 
@@ -174,17 +171,21 @@ def _encrypt_memory_data(memory_data: Dict[str, Any], uid: str) -> Dict[str, Any
 def _decrypt_memory_data(memory_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
     data = copy.deepcopy(memory_data)
 
+    in_portability_export = current_portability_read() is not None
     if 'content' in data and isinstance(data['content'], str):
+        raw_content = data['content']
         try:
-            data['content'] = encryption.decrypt(data['content'], uid)
+            data['content'] = encryption.decrypt(raw_content, uid)
         except Exception:
             pass
+        data['content'] = verified_encrypted_read(raw_content, data['content'])
     if 'evidence' in data and isinstance(data['evidence'], str):
         try:
-            decrypted = encryption.decrypt(data['evidence'], uid)
+            decrypted = verified_encrypted_read(data['evidence'], encryption.decrypt(data['evidence'], uid))
             data['evidence'] = json.loads(decrypted)
         except Exception:
-            pass
+            if in_portability_export:
+                raise
     return data
 
 
@@ -554,6 +555,35 @@ def count_memories_created(uid: str, start_date: datetime, end_date: datetime, *
     return 0
 
 
+def count_default_visible_memories(uid: str, *, firestore_client: Any = None) -> int:
+    """Cheap approximation of how many memories the default ``/v3/memories`` list shows.
+
+    Uses at most two single-field ``count()`` aggregations and no new index:
+
+    * Canonical store first: ``memory_items`` with ``status == 'active'``. This
+      drops superseded, hidden, and tombstoned items like the default list, but
+      still counts Archive-tier items (hidden unless ``include_archive``) and does
+      not apply short-term expiry or device-scope filtering, which only run in
+      Python after the read.
+    * An account with no active canonical item falls back to the whole legacy
+      ``memories`` collection. User-rejected or invalidated legacy rows cannot be
+      excluded server-side (see ``_memory_passes_list_visibility``), so they are
+      counted.
+
+    The two stores are never summed: dual-store ids would be double-counted
+    (see ``count_memories_created``).
+    """
+    database = _get_db(firestore_client)
+    canonical_collection = database.collection(MemoryCollections(uid=uid).memory_items)
+    canonical_active = canonical_collection.where(filter=FieldFilter('status', '==', 'active')).count().get()
+    canonical_count = int(canonical_active[0][0].value or 0)
+    if canonical_count:
+        return canonical_count
+    legacy_collection = database.collection(users_collection).document(uid).collection(memories_collection)
+    legacy_count = legacy_collection.count().get()
+    return int(legacy_count[0][0].value or 0)
+
+
 _HISTORICAL_SCAN_PAGE_MAX = 500
 HistoricalScanCursor = tuple[datetime, str]
 
@@ -698,6 +728,7 @@ def get_non_filtered_memories(
 
 @set_data_protection_level(data_arg_name='data')
 @prepare_for_write(data_arg_name='data', prepare_func=_prepare_data_for_write)
+@after_write('memories')
 def create_memory(uid: str, data: Dict[str, Any], *, firestore_client: Any = None) -> Dict[str, Any]:
     database = _get_db(firestore_client)
     user_ref = database.collection(users_collection).document(uid)
@@ -725,6 +756,7 @@ def create_memory(uid: str, data: Dict[str, Any], *, firestore_client: Any = Non
 
 @set_data_protection_level(data_arg_name='data')
 @prepare_for_write(data_arg_name='data', prepare_func=_prepare_data_for_write)
+@after_write('memories')
 def save_memories(uid: str, data: List[Dict[str, Any]], *, firestore_client: Any = None) -> Optional[Dict[str, Any]]:
     if not data:
         return
@@ -884,16 +916,27 @@ def get_memories_by_ids(
     memories_ref = user_ref.collection(memories_collection)
 
     doc_refs = [memories_ref.document(memory_id) for memory_id in memory_ids]
-    docs = budgeted_get_all(database, doc_refs, budget)
 
-    memories: List[Dict[str, Any]] = []
-    for doc in docs:
-        if doc.exists:
-            memory_data = _prepare_memory_for_read(_typed_doc(doc), uid)
-            if memory_data:
-                memories.append(memory_data)
+    def _memories_from_docs(docs: List[Any]) -> List[Dict[str, Any]]:
+        memories: List[Dict[str, Any]] = []
+        for doc in docs:
+            if doc.exists:
+                memory_data = _prepare_memory_for_read(_typed_doc(doc), uid)
+                if memory_data:
+                    memories.append(memory_data)
+        return memories
 
-    return memories
+    try:
+        docs = budgeted_get_all(database, doc_refs, budget)
+    except ListReadBudgetExhausted as exc:
+        fetched = getattr(exc, 'partial_snapshots', None)
+        if not fetched:
+            raise
+        # Charge exhausted after the batch was fetched. Hand the prepared rows
+        # to the hydration caller and keep the budget flagged truncated.
+        setattr(exc, 'partial_memories', _memories_from_docs(fetched))
+        raise
+    return _memories_from_docs(docs)
 
 
 def review_memory(uid: str, memory_id: str, value: bool, *, firestore_client: Any = None) -> None:
@@ -916,6 +959,7 @@ def change_memory_visibility(uid: str, memory_id: str, value: str, *, firestore_
     memory_ref.update({'visibility': value})
 
 
+@after_write('memories')
 def update_memory_fields(uid: str, memory_id: str, data: Dict[str, Any], *, firestore_client: Any = None) -> None:
     """Updates specified fields for a memory and sets the updated_at timestamp."""
     if not data:
@@ -1399,38 +1443,43 @@ def delete_memories_for_conversation(uid: str, memory_id: str, *, firestore_clie
     return result
 
 
+class MemoryUnlockCount(int):
+    """Sum of unlocked memory rows, plus whether either bounded page filled up."""
+
+    page_saturated: bool
+
+    def __new__(cls, total: int, *, page_saturated: bool) -> 'MemoryUnlockCount':
+        value = int.__new__(cls, total)
+        value.page_saturated = page_saturated
+        return value
+
+
 @_account_write_gated
-def unlock_all_memories(uid: str, *, firestore_client: Any = None) -> None:
+def unlock_all_memories(uid: str, *, firestore_client: Any = None, limit: Optional[int] = None) -> int:
     """
     Unlock both released legacy rows and canonical product-memory rows.
+
+    The numeric value is ``legacy_count + canonical_count``. When ``limit`` is
+    set, ``page_saturated`` is true if either collection returned a full page.
+    A 60 + 60 pair is drained; callers must not treat the sum as one page.
     """
     database = _get_db(firestore_client)
     legacy_ref = database.collection(users_collection).document(uid).collection(memories_collection)
     canonical_ref = database.collection(MemoryCollections(uid=uid).memory_items)
 
-    def commit_updates(docs: Any, update: Dict[str, Any]) -> int:
-        batch = database.batch()
-        count = 0
-        total = 0
-        for doc in docs:
-            batch.update(doc.reference, update)
-            count += 1
-            total += 1
-            if count >= 499:  # Firestore batch limit is 500
-                batch.commit()
-                batch = database.batch()
-                count = 0
-        if count > 0:
-            batch.commit()
-        return total
+    from database.locked_content import unlock_query_rows
 
-    legacy_count = commit_updates(
-        legacy_ref.where(filter=FieldFilter('is_locked', '==', True)).stream(),
+    legacy_count = unlock_query_rows(
+        database,
+        legacy_ref.where(filter=FieldFilter('is_locked', '==', True)),
         {'is_locked': False},
+        limit=limit,
     )
-    canonical_count = commit_updates(
-        canonical_ref.where(filter=FieldFilter('promotion.is_locked', '==', True)).stream(),
+    canonical_count = unlock_query_rows(
+        database,
+        canonical_ref.where(filter=FieldFilter('promotion.is_locked', '==', True)),
         {'promotion.is_locked': False},
+        limit=limit,
     )
     logger.info(
         "Unlocked all memories for user %s legacy_count=%d canonical_count=%d",
@@ -1438,6 +1487,8 @@ def unlock_all_memories(uid: str, *, firestore_client: Any = None) -> None:
         legacy_count,
         canonical_count,
     )
+    page_saturated = limit is not None and (legacy_count >= limit or canonical_count >= limit)
+    return MemoryUnlockCount(legacy_count + canonical_count, page_saturated=page_saturated)
 
 
 # **************************************

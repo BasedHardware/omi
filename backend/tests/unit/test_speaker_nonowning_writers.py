@@ -27,8 +27,10 @@ def test_stale_nonowner_preserves_current_segment_set_and_content(world, fields)
 
 
 @pytest.mark.asyncio
-async def test_translation_does_not_publish_a_retired_segment(world):
+async def test_translation_does_not_publish_a_retired_segment(world, monkeypatch):
     store, path, old = world
+    monkeypatch.setenv('TRANSLATION_DEMAND_GATE_ENABLED', 'false')
+    monkeypatch.setenv('TRANSLATION_ONOPEN_ENABLED', 'false')
     cached = deepcopy(store.rows[path])
     store.rows[path]['transcript_segments'] = [old[0]]
 

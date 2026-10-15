@@ -18,6 +18,7 @@ loop here would buy nothing.
 from __future__ import annotations
 
 import json
+import math
 import re
 import urllib.parse
 from datetime import datetime, timezone
@@ -39,6 +40,7 @@ from omi_cli.errors import CliError, RateLimitError, ServerError, TransportError
 
 USER_AGENT = f"omi-cli/{__version__} (+https://github.com/BasedHardware/omi)"
 DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
+CHAT_STREAM_TIMEOUT = httpx.Timeout(120.0, connect=10.0)
 MAX_RETRY_ATTEMPTS = 4
 # Maximum server-supplied Retry-After the CLI will wait before retrying. When
 # the hint exceeds this, automatic retries stop and the caller gets the mapped
@@ -117,6 +119,36 @@ class OmiClient:
     def delete(self, path: str) -> Any:
         return self._request("DELETE", path)
 
+    def stream_post_lines(
+        self,
+        path: str,
+        *,
+        json_body: Mapping[str, Any],
+        headers: Optional[Mapping[str, str]] = None,
+    ) -> Iterator[str]:
+        """Stream one POST response without replaying a possibly accepted chat turn.
+
+        Unlike ordinary reads, retrying after a stream disconnect could send the
+        user's message twice. The caller owns parsing the application protocol.
+        """
+        try:
+            with self._http.stream(
+                "POST", path, json=json_body, headers=headers, timeout=CHAT_STREAM_TIMEOUT
+            ) as response:
+                if self._verbose:
+                    import sys
+
+                    sys.stderr.write(f"[debug] POST {path} → {response.status_code} (stream)\n")
+                if not 200 <= response.status_code < 300:
+                    response.read()
+                    raise self._error_from_response(response)
+                yield from response.iter_lines()
+        except (httpx.TransportError, httpx.DecodingError) as exc:
+            raise TransportError(
+                message="Chat connection interrupted",
+                detail="The message may have reached Omi. Check `omi chat --history` before sending it again.",
+            ) from exc
+
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
@@ -146,7 +178,9 @@ class OmiClient:
         try:
             for attempt in retrying:
                 with attempt:
-                    response = self._http.request(method, path, params=cleaned_params, json=json_body)
+                    response = self._http.request(
+                        method, path, params=cleaned_params, json=json_body,
+                        headers=self._bearer_headers_for(path))
                     self._maybe_log(method, path, response)
                     if response.status_code >= 500:
                         retry_after = _parse_retry_after(response.headers.get("Retry-After"))
@@ -243,6 +277,21 @@ class OmiClient:
             "User-Agent": USER_AGENT,
             "Accept": "application/json",
         }
+
+    def _bearer_headers_for(self, path: str) -> Optional[dict[str, str]]:
+        """Per-request credential pick for a dual-credential profile.
+
+        A browser-login profile carries BOTH a Firebase ID token and the
+        minted dev key: ``/v1/dev/user/*`` routes authenticate through the
+        backend's ``get_api_key_auth`` which only accepts an ``omi_dev_…``
+        key — a JWT there 401s. ``/v2/*`` (and ``POST /v1/dev/keys``) need
+        the ID token instead. One shared client header can't serve both, so
+        the dev-user family overrides it here. None → the client's default
+        Authorization applies unchanged."""
+        p = self._profile
+        if p.auth_method == "oauth" and p.api_key and                 path.startswith("/v1/dev/user"):
+            return {"Authorization": f"Bearer {p.api_key}"}
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -373,15 +422,25 @@ def _format_validation_error(entry: Any) -> str:
     return str(msg or entry)
 
 
+# RFC 9110 delay-seconds is ``1*DIGIT`` (ASCII digits only).
+_DELAY_SECONDS_RE = re.compile(r"[0-9]+")
+
+
 def _parse_retry_after(value: Optional[str]) -> Optional[float]:
     """Parse the Retry-After header per RFC 9110 (delay-seconds or HTTP-date)."""
     if not value:
         return None
     cleaned = value.strip()
-    try:
-        return max(0.0, float(cleaned))
-    except ValueError:
-        pass
+    # float() also accepts signs, fractions, exponents, underscores, inf/nan
+    # and non-ASCII digits. None of those are delay-seconds, so only a plain
+    # digit run takes the numeric path; anything else falls through to the
+    # HTTP-date parse below.
+    if _DELAY_SECONDS_RE.fullmatch(cleaned):
+        parsed = float(cleaned)
+        # A digit run too long for a float overflows to inf, which must not
+        # become an infinite cooldown.
+        if math.isfinite(parsed):
+            return parsed
 
     try:
         dt = parsedate_to_datetime(cleaned)

@@ -22,7 +22,9 @@ def _conversation(cid='c1', hours_ago=2, segments=None, **extra):
     }
 
 
-def _select(conversations, *, owner_has_voice=True, named_allowed=True, answered=None, people=None, limit=4):
+def _select(
+    conversations, *, owner_has_voice=True, named_allowed=True, answered=None, people=None, limit=4, owner_evidence=None
+):
     return selection.select_prompts(
         conversations,
         now=NOW,
@@ -31,10 +33,11 @@ def _select(conversations, *, owner_has_voice=True, named_allowed=True, answered
         answered=answered or set(),
         people=people or {},
         limit=limit,
+        owner_evidence=owner_evidence,
     )
 
 
-def test_owner_missed_asks_is_this_you_on_loudest_unnamed_voice():
+def test_evidenced_unnamed_voice_can_ask_owner_question():
     conversation = _conversation(
         segments=[
             _segment('a', 0, 0, 6),
@@ -42,7 +45,7 @@ def test_owner_missed_asks_is_this_you_on_loudest_unnamed_voice():
             _segment('c', 0, 9, 14),
         ]
     )
-    prompts = _select([conversation])
+    prompts = _select([conversation], owner_evidence=lambda c, runs: (runs[0], 0.50) if runs else None)
     assert prompts[0].kind == SpeakerTagPromptKind.owner_check
     assert prompts[0].origin == SpeakerTagPromptOrigin.unnamed
     assert prompts[0].speaker_id == 0
@@ -57,7 +60,12 @@ def test_named_prompts_hidden_without_entitlement_but_owner_check_stays_free():
             _segment('c', 2, 16, 24, person_id='p1'),
         ]
     )
-    prompts = _select([conversation], named_allowed=False, people={'p1': 'Sam'})
+    prompts = _select(
+        [conversation],
+        owner_evidence=lambda c, runs: (runs[0], 0.50) if runs else None,
+        named_allowed=False,
+        people={'p1': 'Sam'},
+    )
     assert {p.kind for p in prompts} == {SpeakerTagPromptKind.owner_check}
     assert prompts[0].origin == SpeakerTagPromptOrigin.auto_user
 
@@ -356,8 +364,83 @@ def test_contended_owner_is_an_unnamed_free_owner_check_even_with_a_stale_projec
             _segment('b', 1, 8, 16, is_user=False, speaker_identity_status='ambiguous'),
         ]
     )
-    prompts = _select([conversation], named_allowed=False)
+    prompts = _select(
+        [conversation], owner_evidence=lambda c, runs: (runs[0], 0.50) if runs else None, named_allowed=False
+    )
     assert len(prompts) == 1
     assert prompts[0].kind == SpeakerTagPromptKind.owner_check
     assert prompts[0].origin == SpeakerTagPromptOrigin.unnamed
     assert prompts[0].suggested_person_id is None
+
+
+def _select_with(conversations, **extra):
+    return selection.select_prompts(
+        conversations,
+        now=NOW,
+        owner_has_voice=True,
+        named_allowed=True,
+        answered=set(),
+        prior_enabled=extra.pop('prior_enabled', True),
+        **extra,
+    )
+
+
+def test_ignored_voice_is_never_asked_again():
+    conversation = _conversation(segments=[_segment('a', 0, 0, 3, is_user=True), _segment('b', 1, 3, 11)])
+    assert _select_with([conversation], people={})
+    assert _select_with([conversation], people={}, ignored={'c1:1'}) == []
+
+
+def test_pinned_near_miss_on_unnamed_voice_asks_about_that_person():
+    candidates = [{'person_id': 'p2', 'level': 2, 'suggest': True}, {'person_id': 'p1', 'level': 1}]
+    conversation = _conversation(
+        segments=[_segment('a', 0, 0, 3, is_user=True), _segment('b', 1, 3, 11, voice_candidates=candidates)]
+    )
+    prompts = _select_with([conversation], people={'p1': 'Sam', 'p2': 'Maya'}, pinned={'p2'})
+    assert prompts[0].kind == SpeakerTagPromptKind.confirm_person
+    assert prompts[0].origin == SpeakerTagPromptOrigin.unnamed
+    assert prompts[0].suggested_person_id == 'p2' and prompts[0].suggested_person_name == 'Maya'
+    # A suggestion for someone no longer pinned falls back to "Who is this?".
+    fallback = _select_with([conversation], people={'p1': 'Sam', 'p2': 'Maya'}, pinned=set())
+    assert fallback[0].kind == SpeakerTagPromptKind.identify
+
+
+def test_identify_candidates_rank_by_voice_match_pinned_first_then_recency():
+    recent = _conversation('c0', hours_ago=5, segments=[_segment('z', 0, 0, 2, person_id='p4')])
+    voice = [{'person_id': 'p1', 'level': 2}, {'person_id': 'p2', 'level': 2}, {'person_id': 'p3', 'level': 3}]
+    conversation = _conversation(
+        segments=[_segment('a', 0, 0, 3, is_user=True), _segment('b', 1, 3, 11, voice_candidates=voice)]
+    )
+    people = {'p1': 'Sam', 'p2': 'Jordan', 'p3': 'Alex', 'p4': 'Priya'}
+    prompts = _select_with([conversation, recent], people=people, pinned={'p2'})
+    identify = next(p for p in prompts if p.kind == SpeakerTagPromptKind.identify)
+    assert [c.person_id for c in identify.candidates] == ['p3', 'p2', 'p1', 'p4']
+    assert [c.match_level for c in identify.candidates] == [3, 2, 2, None]
+    assert [c.pinned for c in identify.candidates] == [False, True, False, False]
+    assert identify.suggested_person_ids == ['p3', 'p2', 'p1', 'p4']
+
+
+def test_malformed_voice_candidates_are_ignored():
+    merged = selection.run_voice_candidates(
+        [
+            {'id': 'a', 'voice_candidates': [{'person_id': 'p1', 'level': 1}, 'junk', {'person_id': 'p2', 'level': 9}]},
+            {'id': 'b', 'voice_candidates': [{'person_id': 'p1', 'level': 2, 'suggest': True}, {'level': 2}]},
+            {'id': 'c', 'voice_candidates': 'nope'},
+            {'id': 'x', 'voice_candidates': [{'person_id': 'p9', 'level': 3}]},
+        ],
+        ['a', 'b', 'c'],
+    )
+    assert merged == {'p1': {'level': 2, 'suggest': True}}
+
+
+def test_flag_off_ignores_persisted_pinned_candidates(monkeypatch):
+    monkeypatch.setenv('PINNED_SPEAKER_PRIOR_ENABLED', 'false')
+    conversation = _conversation(
+        segments=[
+            _segment('a', 0, 0, 3, is_user=True),
+            _segment('b', 1, 3, 11, voice_candidates=[{'person_id': 'p2', 'level': 2, 'suggest': True}]),
+        ]
+    )
+    prompt = _select_with([conversation], people={'p2': 'Maya'}, pinned={'p2'}, prior_enabled=False)[0]
+    assert prompt.kind == SpeakerTagPromptKind.identify
+    assert prompt.suggested_person_id is None

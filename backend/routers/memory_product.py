@@ -5,6 +5,7 @@ remains an importable alias. Registers ``/memory/*`` product paths.
 """
 
 from datetime import datetime, timezone
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -35,6 +36,21 @@ from utils.memory.vector_search_service import (
 from utils.other import endpoints as auth
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+def _sanitize_search_error(exc: ValueError, context: str) -> HTTPException:
+    logger.warning(f"{context} rejected: {type(exc).__name__}")
+    message = str(exc)
+    if "limit" in message:
+        detail = "Invalid limit parameter"
+    elif "offset" in message:
+        detail = "Invalid offset parameter"
+    elif "as_of" in message:
+        detail = "Invalid as_of parameter"
+    else:
+        detail = "Invalid search parameters"
+    return HTTPException(status_code=400, detail=detail)
 
 
 def _current_time() -> datetime:
@@ -131,7 +147,7 @@ def search_product_memory(
             as_of=as_of if effective_view != 'released' else None,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise _sanitize_search_error(exc, "Product memory search") from exc
 
     response['policy'] = _policy_payload(policy)
     response['global_read_gate'] = global_read_gate
@@ -187,7 +203,7 @@ def search_vector_memory(
             now=_current_time(),
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise _sanitize_search_error(exc, "Vector memory search") from exc
 
     response['policy'] = _policy_payload(policy)
     response['global_read_gate'] = global_read_gate
@@ -239,7 +255,7 @@ def search_archive_memory(
             offset=offset,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise _sanitize_search_error(exc, "Archive memory search") from exc
 
     response['policy'] = _policy_payload(policy)
     response['global_read_gate'] = global_read_gate

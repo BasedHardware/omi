@@ -1,0 +1,62 @@
+# David-only floor 1; lift to 6 after cohort qualification (max 18).
+# Separate release only: -f prod_omi_diarizer_values.yaml -f this file.
+# Lead-owned opt-in deployment; never install over prod-omi-diarizer.
+fullnameOverride: prod-omi-diarizer-batch
+command: [uvicorn, "batch_main:app", "--host", "0.0.0.0", "--port", "8080", "--loop", uvloop]
+replicaCount: 1
+# New batch release uses the shared Gateway; it has no legacy callers to retain.
+ingress:
+  enabled: false
+gateway:
+  enabled: true
+  name: prod-omi-internal-gateway
+  pathPrefix: /diarizer-batch
+  timeoutSeconds: 900
+# Replace the inherited embedding affinity entirely. Both label and taint
+# isolate batch capacity from existing embedding and other GPU workloads.
+affinity: null
+nodeSelector:
+  cloud.google.com/gke-nodepool: diarizer-batch-pool
+  service: diarizer-batch
+  env: prod
+tolerations:
+  - key: omi.ai/diarizer-batch
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+  - key: nvidia.com/gpu
+    operator: Equal
+    value: present
+    effect: NoSchedule
+env:
+  - name: DIARIZATION_V2_ENABLED
+    value: "true"
+  - name: HUGGINGFACE_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: HUGGINGFACE_TOKEN
+podMonitoring:
+  enabled: false
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 18
+  requestLatencyP99: null
+  queueDepthAverageValue: 1
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Pods
+          value: 3
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 900
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120
+backendConfig:
+  name: prod-omi-diarizer-batch-backend-config
+  timeoutSeconds: 900

@@ -43,3 +43,40 @@ class MemoriesEmptyOrError extends StatelessWidget {
     return emptyState;
   }
 }
+
+/// Compact retry notice shown above retained rows when a later page of a
+/// progressive load failed: the visible list is honest-but-incomplete, not a
+/// silent success.
+class MemoriesPartialLoadBanner extends StatelessWidget {
+  final VoidCallback onRetry;
+
+  const MemoriesPartialLoadBanner({super.key, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return KeyedSubtree(
+      key: const Key('memories_partial_load_banner'),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                context.l10n.couldNotLoadMemories,
+                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            OmiButton.secondary(
+              key: const Key('memories_partial_load_retry'),
+              label: context.l10n.tryAgain,
+              size: OmiButtonSize.compact,
+              onPressed: onRetry,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

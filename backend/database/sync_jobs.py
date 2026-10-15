@@ -34,6 +34,7 @@ from config.sync_telemetry import bounded_correlation_ref, bounded_exception_cla
 from database import sync_dead_letters
 from database.redis_db import r
 from utils.sync import stage as sync_stage
+from utils.sync.assignment_errors import bounded_sync_assignment_subtype
 
 logger = logging.getLogger(__name__)
 
@@ -276,21 +277,9 @@ def _as_redis_text(value: Any) -> str:
     return str(value)
 
 
-def _read_raw_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
-    """Raw job doc without the stale self-heal read-side mutation."""
-    data = r.get(_key(f'{JOB_KEY_PREFIX}{job_id}'))
-    if not data:
-        return None
-    try:
-        job = json.loads(_as_redis_text(data))
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return None
-    return cast(Dict[str, Any], job) if isinstance(job, dict) else None
-
-
-def get_raw_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
-    """Read without the status-poll stale mutation; sequencer recovery owns its lease check."""
-    return _read_raw_sync_job(job_id)
+def sync_job_key_exists(job_id: str) -> bool:
+    """Raw existence proof: corrupt JSON is present; Redis failures propagate."""
+    return bool(r.exists(_key(f'{JOB_KEY_PREFIX}{job_id}')))
 
 
 def sync_job_run_lock_present(job_id: str) -> bool:
@@ -658,6 +647,7 @@ def _log_sync_job_finalized(
     attempt_ref: Optional[str] = None,
     failure_phase: Optional[str] = None,
     failure_class: Optional[str] = None,
+    failure_subtype: Optional[str] = None,
 ) -> None:
     default_outcome = 'success' if status == 'completed' else status
     outcome = result.get('outcome', default_outcome)
@@ -667,7 +657,7 @@ def _log_sync_job_finalized(
     logger.info(
         'event=sync_transcription_job_finalized status=%s outcome=%s '
         'provider=%s model=%s lane=%s total_segments=%d failed_segments=%d '
-        'job_ref=%s attempt_ref=%s failure_phase=%s failure_class=%s',
+        'job_ref=%s attempt_ref=%s failure_phase=%s failure_class=%s failure_subtype=%s',
         status,
         outcome if outcome in _SYNC_JOB_OUTCOMES else 'upstream_error',
         provider if provider in _SYNC_PROVIDERS else 'unknown',
@@ -679,6 +669,7 @@ def _log_sync_job_finalized(
         bounded_correlation_ref(attempt_ref),
         bounded_sync_phase(failure_phase),
         bounded_exception_class(failure_class),
+        bounded_sync_assignment_subtype(failure_subtype),
     )
 
 
@@ -689,6 +680,7 @@ def finalize_sync_job(
     attempt_ref: Optional[str] = None,
     failure_phase: Optional[str] = None,
     failure_class: Optional[str] = None,
+    failure_subtype: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Finalize a sync job with a truthful terminal status.
 
@@ -698,8 +690,8 @@ def finalize_sync_job(
     ``partial_failure`` or ``failed``.
 
     The diagnostic kwargs are logging-only: they join the terminal log line to
-    the worker attempt and first-failure phase/class but are never written
-    into the stored result or returned document.
+    the worker attempt and first-failure phase/class/subtype but are never
+    written into the stored result or returned document.
     """
     status, total, failed, updates = _sync_job_finalization_updates(result, completed_at=time.time())
     dead_letter = status in ('failed', 'partial_failure')
@@ -720,6 +712,7 @@ def finalize_sync_job(
             attempt_ref=attempt_ref,
             failure_phase=failure_phase,
             failure_class=failure_class,
+            failure_subtype=failure_subtype,
         )
     return finalized
 
@@ -734,6 +727,7 @@ def _fenced_finalize_sync_job(
     attempt_ref: Optional[str] = None,
     failure_phase: Optional[str] = None,
     failure_class: Optional[str] = None,
+    failure_subtype: Optional[str] = None,
 ) -> FencedSyncJobMutation:
     """Publish a terminal result only while the caller retains the run lock.
 
@@ -766,6 +760,7 @@ def _fenced_finalize_sync_job(
             attempt_ref=attempt_ref,
             failure_phase=failure_phase,
             failure_class=failure_class,
+            failure_subtype=failure_subtype,
         )
     return mutation
 
@@ -779,6 +774,7 @@ def fenced_finalize_sync_job(
     attempt_ref: Optional[str] = None,
     failure_phase: Optional[str] = None,
     failure_class: Optional[str] = None,
+    failure_subtype: Optional[str] = None,
 ) -> FencedSyncJobMutation:
     """Publish ordinary worker terminal work only from the processing state."""
     return _fenced_finalize_sync_job(
@@ -790,6 +786,7 @@ def fenced_finalize_sync_job(
         attempt_ref=attempt_ref,
         failure_phase=failure_phase,
         failure_class=failure_class,
+        failure_subtype=failure_subtype,
     )
 
 
@@ -802,6 +799,7 @@ def fenced_finalize_sync_job_from_durable_ledger(
     attempt_ref: Optional[str] = None,
     failure_phase: Optional[str] = None,
     failure_class: Optional[str] = None,
+    failure_subtype: Optional[str] = None,
 ) -> FencedSyncJobMutation:
     """Converge a validated content-ledger completion after a task retry.
 
@@ -818,6 +816,7 @@ def fenced_finalize_sync_job_from_durable_ledger(
         attempt_ref=attempt_ref,
         failure_phase=failure_phase,
         failure_class=failure_class,
+        failure_subtype=failure_subtype,
     )
 
 

@@ -4,11 +4,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/memories.dart';
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/action_item.dart';
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/memory_review.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/action_items/day_tasks_page.dart';
+import 'package:omi/pages/conversations/day_conversations_page.dart';
+import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart' show parseRecapDate;
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/widgets/components/memory_review_card.dart';
@@ -201,6 +207,83 @@ void main() {
     await tester.pump(const Duration(milliseconds: 900));
 
     expect(reviews, ['mem-cold']);
+  });
+
+  testWidgets('the conversations stat opens the day page with the recap-day bounds', (tester) async {
+    final bounds = <({DateTime start, DateTime end})>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: ThemeData.dark(),
+        home: DailySummaryDetailPage(
+          summaryId: 'summary-nav',
+          summary: _summary(locations: const []),
+          dayConversationsFetcher: ({required endDate, limit = 50, offset = 0, required startDate}) async {
+            bounds.add((start: startDate, end: endDate));
+            return (items: <ServerConversation>[], ok: true, truncated: false);
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 900));
+
+    final stat = find.byKey(const ValueKey('recap_conversations_stat'));
+    expect(stat, findsOneWidget);
+    final semantics = tester.widget<Semantics>(stat);
+    expect(semantics.properties.label, '1 conversation');
+
+    await tester.tap(stat);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 900));
+
+    expect(find.byType(DayConversationsPage), findsOneWidget);
+    expect(bounds, hasLength(1));
+    expect(bounds.first.start, DateTime(2026, 7, 15));
+    expect(bounds.first.end, DateTime(2026, 7, 16).subtract(const Duration(microseconds: 1)));
+  });
+
+  testWidgets('the tasks stat opens the day tasks page with the recap-day bounds', (tester) async {
+    final bounds = <({DateTime start, DateTime end})>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: ThemeData.dark(),
+        home: DailySummaryDetailPage(
+          summaryId: 'summary-nav-tasks',
+          summary: _summary(locations: const []),
+          dayTasksFetcher: ({required endDate, limit = 50, offset = 0, required startDate}) async {
+            bounds.add((start: startDate, end: endDate));
+            return const ApiSuccess(ActionItemsResponse(actionItems: []));
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 900));
+
+    final stat = find.byKey(const ValueKey('recap_tasks_stat'));
+    expect(stat, findsOneWidget);
+    final semantics = tester.widget<Semantics>(stat);
+    expect(semantics.properties.label, '0 tasks');
+
+    await tester.tap(stat);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 900));
+
+    expect(find.byType(DayTasksPage), findsOneWidget);
+    expect(bounds, hasLength(1));
+    expect(bounds.first.start, DateTime(2026, 7, 15));
+    expect(bounds.first.end, DateTime(2026, 7, 16).subtract(const Duration(microseconds: 1)));
+  });
+
+  test('impossible recap dates never parse to a navigable day', () {
+    expect(parseRecapDate('2026-02-30'), isNull);
+    expect(parseRecapDate('2026-13-01'), isNull);
+    expect(parseRecapDate('15-07-2026'), isNull);
+    expect(parseRecapDate('2026-07-15'), DateTime(2026, 7, 15));
   });
 
   testWidgets('shows positive desktop watching and proactive stats', (tester) async {

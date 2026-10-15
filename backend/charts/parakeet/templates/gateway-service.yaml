@@ -1,0 +1,17 @@
+{{- if .Values.gateway.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ printf "%s-gw" (include "parakeet.fullname" . | trunc 60 | trimSuffix "-") }}
+  labels:
+    {{- include "parakeet.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.port }}
+      protocol: TCP
+  selector:
+    {{- include "parakeet.selectorLabels" . | nindent 4 }}
+{{- end }}

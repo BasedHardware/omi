@@ -1,0 +1,24 @@
+{
+  "version": "1.0.558",
+  "date": "2026-10-08",
+  "changes": [
+    "Bring your history from other apps: import SRT, VTT or TXT transcripts, or a ZIP of them, from Settings > Import",
+    "Handle canonical knowledge-graph 409 conflict gracefully during onboarding rebuild",
+    "A new \"Setting up your Omi\" step shows your account being personalized at the end of onboarding, with a quick chance to rate the app while you wait.",
+    "Pendant listening pauses after your conversation timeout and resumes when you return to Omi or start charging.",
+    "Your pendant now pauses its live connection after your conversation timeout of silence instead of staying active all day, and picks back up when you open the app, tap resume, or plug in to charge — so a day of wearing Omi no longer drains your phone battery",
+    "After upgrading from the free plan, recordings go back to Omi transcription automatically, so audio webhooks fire again.",
+    "Surface microphone start errors with retry during guided voice introduction instead of indefinitely showing the recording state.",
+    "Continuous pendant capture stays active after silence; live capture uses less CPU and memory without changing saved audio.",
+    "More reliable recording: the app now detects and recovers when capture silently stops, and keeps working through interruptions.",
+    "Onboarding is one step shorter: the memory graph preview no longer appears before you finish setup.",
+    "Fix closing the pendant Device Tutorial putting a live pendant into Transcribe Later mode and blocking the phone mic",
+    "Conversation details now show when a recording is only partial.",
+    "Meetings that were not recorded no longer show up in your conversations.",
+    "Fixed invisible white text on the last steps of the device tutorial, and the setup rating question now simply asks if you are enjoying Omi.",
+    "On iPhone, the Lock Screen and Dynamic Island stay clear while your pendant records normally, and appear only when Omi is paused, can't hear your pendant, or its battery is low.",
+    "Review: a few quick questions that help Omi get names, people and tasks right, plus pages for the people, organizations and projects in your conversations",
+    "Review: more reliable handling of corrections and recent changes",
+    "Added privacy-respecting phone battery diagnostics to help detect battery drain across app releases."
+  ]
+}

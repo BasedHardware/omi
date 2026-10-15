@@ -88,8 +88,20 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
         bleManager.writeCharacteristic(peripheralUuid, serviceUuid, characteristicUuid, data, callback)
     }
 
-    override fun subscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String) {
-        bleManager.subscribeCharacteristic(peripheralUuid, serviceUuid, characteristicUuid)
+    override fun subscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String,
+                                         callback: (Result<Unit>) -> Unit) {
+        // The generated Pigeon handler has no synchronous try/catch around this
+        // call, so an exception here would escape the message handler and leave
+        // Dart waiting out its full subscription timeout. Reply instead.
+        try {
+            bleManager.subscribeCharacteristic(peripheralUuid, serviceUuid, characteristicUuid, callback)
+        } catch (e: Exception) {
+            callback(Result.failure(e))
+        }
+    }
+
+    override fun setCaptureAuthorized(uuid: String, authorized: Boolean) {
+        // Native ingress recovery is iOS-only in this cut.
     }
 
     override fun unsubscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String) {
@@ -186,7 +198,8 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
         }
         val addr = uuid.uppercase()
         val context = getActivity()?.applicationContext
-        val prefs = context?.getSharedPreferences("ble_diagnostics", Context.MODE_PRIVATE)
+        if (context == null || !DeviceHealthPersistence.enabled(context)) { callback(Result.success("{}")); return }
+        val prefs = context.getSharedPreferences("ble_diagnostics", Context.MODE_PRIVATE)
         fun array(key: String): JSONArray = try { JSONArray(prefs?.getString(key, "[]")) } catch (_: Exception) { JSONArray() }
         val battery = context?.getSharedPreferences("battery_history", Context.MODE_PRIVATE)
         val batteryHistory = try { JSONArray(battery?.getString("battery_history_$addr", "[]")) } catch (_: Exception) { JSONArray() }
@@ -195,6 +208,10 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
             deque.forEach { (ts, rssi) -> samples.put(JSONObject().put("ts", ts).put("rssi", rssi)) }
         } }
         callback(Result.success(JSONObject()
+            .put("observed_at", System.currentTimeMillis())
+            .put("identity_epoch", DeviceHealthPersistence.epoch(context))
+            .put("audio_outage_started_at", DeviceHealthPersistence.sessions(context).openSince(addr) ?: JSONObject.NULL)
+            .put("audio_packet_days", array("packet_days_$addr"))
             .put("disconnect_history_v2", array("disconnect_history_$addr"))
             .put("battery_history_v2", batteryHistory)
             .put("rssi_samples", samples)

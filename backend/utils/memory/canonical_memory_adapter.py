@@ -1,6 +1,7 @@
 """Thin adapter over canonical apply/read services for the universal MemoryService."""
 
 from __future__ import annotations
+from database.dream_dirty import after_write
 
 import copy
 import hashlib
@@ -58,6 +59,8 @@ from database.memory_apply_store import (
     privacy_deletion_receipt_id,
 )
 from database.legal_holds import (
+    assert_destructive_gate_still_ours,
+    DestructiveOperationInProgress,
     LegalHoldAuthorityUnavailable,
     assert_account_deletion_permitted,
     current_destructive_operation_token,
@@ -66,6 +69,7 @@ from database.legal_holds import (
 from database.memory_vector_repair_outbox import build_vector_repair_purge_outbox_records
 from database.memory_vector_metadata import canonical_memory_provider_id
 from database.account_deletion_projection_fence import read_account_deletion_projection_fence
+from utils.other.account_gate_http import account_gate_busy_http_exception
 from utils.other.list_budget import ListReadBudget, budgeted_document_get, budgeted_stream_list
 from models.memory_domain import (
     MemoryLayer as DomainMemoryLayer,
@@ -148,7 +152,6 @@ _DIRECT_USER_LEDGER_EVIDENCE_TYPES = {
 
 def mint_direct_user_write_authority() -> object:
     """Mint the in-process capability held by authenticated user routes.
-
     The returned object carries no user data and is intentionally checked by
     identity.  Internal integration and extraction callers cannot opt into
     the direct-user ledger seam by setting a payload field.
@@ -211,7 +214,6 @@ class CanonicalMemoryNotFoundError(ValueError):
 
 class ConversationReplacementConflictError(RuntimeError):
     """Conversation source replacement exhausted its bounded conflict retries.
-
     Subclasses :class:`RuntimeError` so pre-existing callers keep their
     ``except RuntimeError`` contract. Callers that can retry the operation —
     cascade delete, merge — get a typed signal instead of an opaque 500
@@ -1857,6 +1859,7 @@ def _resolve_duplicate_add_row(
     return None
 
 
+@after_write('memory_items')
 def write_canonical_extraction_memory(
     uid: str,
     data: Dict[str, Any],
@@ -1896,18 +1899,21 @@ def write_canonical_extraction_memory(
         apply_patch = (
             apply_direct_user_long_term_patch_firestore if direct_user_authorized else apply_long_term_patch_firestore
         )
-        result = apply_patch(
-            uid=uid,
-            operation_id=write.operation.operation_id,
-            patch_payload=write.patch_payload,
-            proposed_operation=write.operation,
-            proposed_evidence=write.evidence,
-            review_resolution=review_resolution,
-            required_source_item=required_source_item,
-            ledger_reopen_receipt=ledger_reopen_receipt,
-            allow_ledger_migration=False,
-            db_client=client,
-        )
+        try:
+            result = apply_patch(
+                uid=uid,
+                operation_id=write.operation.operation_id,
+                patch_payload=write.patch_payload,
+                proposed_operation=write.operation,
+                proposed_evidence=write.evidence,
+                review_resolution=review_resolution,
+                required_source_item=required_source_item,
+                ledger_reopen_receipt=ledger_reopen_receipt,
+                allow_ledger_migration=False,
+                db_client=client,
+            )
+        except DestructiveOperationInProgress as exc:
+            raise account_gate_busy_http_exception() from exc
         if result.status != ApplyStatus.retryable_head_mismatch:
             break
     assert result is not None
@@ -2713,6 +2719,8 @@ def replace_conversation_sourced_memories(
                 db_client=client,
             )
             break
+        except DestructiveOperationInProgress as exc:
+            raise account_gate_busy_http_exception() from exc
         except ConversationSourceReplacementConflict as exc:
             last_conflict = exc
             _backoff_before_replacement_retry(_attempt, conflict_backoff_seconds)
@@ -2729,6 +2737,7 @@ def replace_conversation_sourced_memories(
         db_client=client,
         reason="conversation_reprocess_retract",
         preserve_source_replacement_receipts=True,
+        revalidate_gate=bool(not items and claim_destructive_gate),
     )
     if belief_model_enabled() and result.committed_memory_ids:
         from utils.memory.belief_evidence import admit_committed_claims
@@ -2768,7 +2777,10 @@ def _apply_canonical_user_mutation(
             or memory_use_feedback.target_memory_id != memory_id
         ):
             raise ValueError("memory-use feedback requires exact owner mutation authority")
-        replay = read_memory_use_feedback_replay(uid, memory_use_feedback, db_client=db_client)
+        try:
+            replay = read_memory_use_feedback_replay(uid, memory_use_feedback, db_client=db_client)
+        except DestructiveOperationInProgress as exc:
+            raise account_gate_busy_http_exception() from exc
         if replay is not None:
             return replay, replay
     for _attempt in range(3):
@@ -2856,17 +2868,20 @@ def _apply_canonical_user_mutation(
         )
         if memory_use_feedback is not None:
             source_fence["memory_use_feedback"] = memory_use_feedback
-        result = apply_patch(
-            uid=uid,
-            operation_id=operation.operation_id,
-            patch_payload=patch_payload,
-            proposed_operation=operation,
-            review_resolution=review_resolution,
-            allow_ledger_migration=allow_ledger_migration,
-            trigger_feedback_receipt=trigger_feedback_receipt,
-            db_client=db_client,
-            **source_fence,
-        )
+        try:
+            result = apply_patch(
+                uid=uid,
+                operation_id=operation.operation_id,
+                patch_payload=patch_payload,
+                proposed_operation=operation,
+                review_resolution=review_resolution,
+                allow_ledger_migration=allow_ledger_migration,
+                trigger_feedback_receipt=trigger_feedback_receipt,
+                db_client=db_client,
+                **source_fence,
+            )
+        except DestructiveOperationInProgress as exc:
+            raise account_gate_busy_http_exception() from exc
         if result.status in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
             updated = (
                 result.memory_items[0]
@@ -3368,6 +3383,7 @@ def resolve_canonical_memory_review(
                     purge_stale_review_conflicts_for_memories(
                         uid,
                         [memory_id],
+                        revalidate_gate=True,
                         reason=f"canonical_review_{decision}_replay",
                         db_client=client,
                         include_legacy_commits=True,
@@ -3385,6 +3401,7 @@ def resolve_canonical_memory_review(
             purge_stale_review_conflicts_for_memories(
                 uid,
                 [memory_id],
+                revalidate_gate=True,
                 reason=f"canonical_review_{decision}",
                 db_client=client,
                 include_legacy_commits=True,
@@ -3395,6 +3412,7 @@ def resolve_canonical_memory_review(
                 db_client=client,
                 reason=f"canonical_review_{decision}",
                 include_review_queue=False,
+                revalidate_gate=True,
             )
             resolved = tombstoned[0]
             return {
@@ -3597,6 +3615,7 @@ def _tombstone_memory_items_under_gate(
     last_conflict: Optional[CanonicalMemoryTombstoneConflict] = None
     planned_items = authoritative_items
     for _attempt in range(3):
+        assert_destructive_gate_still_ours(uid, "explicit_memory_deletion", firestore_client=db_client)
         observed_control = _read_replacement_control(uid, db_client=db_client)
         all_items = (
             planned_items
@@ -3639,6 +3658,7 @@ def _tombstone_memory_items_under_gate(
         ):
             last_conflict = CanonicalMemoryTombstoneConflict("memory control changed during privacy source scan")
             continue
+        assert_destructive_gate_still_ours(uid, "explicit_memory_deletion", firestore_client=db_client)
         try:
             result = tombstone_memory_items_firestore(
                 uid=uid,
@@ -3729,12 +3749,16 @@ def purge_canonical_memory_projections(
     db_client: Any,
     reason: str,
     include_review_queue: bool = True,
+    revalidate_gate: bool = False,
+    gate_kind: str = "explicit_memory_deletion",
     preserve_source_replacement_receipts: bool = False,
 ) -> None:
     """Fail closed until every content-bearing canonical projection is gone."""
 
     unique_ids = list(dict.fromkeys(memory_id for memory_id in memory_ids if memory_id))
     for memory_id in unique_ids:
+        if revalidate_gate:
+            assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=db_client)
         _run_immediate_privacy_cleanup(
             uid,
             memory_id,
@@ -3743,21 +3767,31 @@ def purge_canonical_memory_projections(
             include_review_queue=False,
             preserve_source_replacement_receipts=preserve_source_replacement_receipts,
         )
+    if revalidate_gate:
+        assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=db_client)
     if include_review_queue and unique_ids:
         purge_stale_review_conflicts_for_memories(
             uid,
             unique_ids,
+            revalidate_gate=revalidate_gate,
+            gate_kind=gate_kind,
             reason=reason,
             db_client=db_client,
             include_legacy_commits=True,
             preserve_source_replacement_receipts=preserve_source_replacement_receipts,
         )
+    if revalidate_gate:
+        assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=db_client)
     invalidate_kg_for_memory_retraction(uid, unique_ids, db_client=db_client)
     from database.memory_ledger import finalize_canonical_privacy_tombstones
 
+    if revalidate_gate:
+        assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=db_client)
     finalize_canonical_privacy_tombstones(
         uid,
         unique_ids,
+        revalidate_gate=revalidate_gate,
+        gate_kind=gate_kind,
         firestore_client=db_client,
         preserve_source_replacement_receipts=preserve_source_replacement_receipts,
     )
@@ -3927,6 +3961,8 @@ def _retract_conversation_sourced_memories_under_gate(
     client = db_client if db_client is not None else default_db_client
     last_conflict: Optional[ConversationReplacementConflictError] = None
     for attempt in range(_RETRACT_CONFLICT_ATTEMPTS):
+        if claim_destructive_gate:
+            assert_destructive_gate_still_ours(uid, "explicit_memory_deletion", firestore_client=client)
         try:
             return replace_conversation_sourced_memories(
                 uid,
@@ -4019,6 +4055,7 @@ def _delete_canonical_memory_under_gate(uid: str, memory_id: str, *, db_client: 
         lineage_ids,
         db_client=client,
         reason="canonical_memory_delete",
+        revalidate_gate=True,
     )
     return lineage_ids
 
@@ -4066,6 +4103,7 @@ def _delete_canonical_memories_batch_under_gate(
         lineage_ids,
         db_client=client,
         reason="canonical_memory_delete_batch",
+        revalidate_gate=True,
     )
     return lineage_ids
 
@@ -4119,6 +4157,7 @@ def _delete_canonical_memories_matching(
             sorted(cleanup_ids),
             db_client=client,
             reason=reason,
+            revalidate_gate=True,
         )
 
 

@@ -86,6 +86,7 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
     dev_jobs = {job["name"]: job for job in manifest["environments"]["dev"]["jobs"]}
     prod_jobs = {job["name"]: job for job in manifest["environments"]["prod"]["jobs"]}
     assert set(dev_jobs) == {
+        "dream-agent-canary-half-hourly",
         "daily-memory-sweep-hourly",
         "day3-reengagement-email-daily",
         "frame-request-retention-hourly",
@@ -94,6 +95,9 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
         "sync-backfill-uid-sequencer",
     }
     assert set(prod_jobs) == {
+        "candidate-integration-sweep",
+        "dream-agent-canary-half-hourly",
+        "dream-agent-sweep-hourly",
         "day3-reengagement-email-daily",
         "finops-unit-cost-daily",
         "frame-request-retention-hourly",
@@ -103,6 +107,9 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
         "sync-backfill-uid-sequencer",
     }
     assert "agent-vm-reconciler-5m" not in dev_jobs
+    assert "candidate-integration-sweep" not in dev_jobs
+    assert prod_jobs["candidate-integration-sweep"]["state"] == "ENABLED"
+    assert "lifecycle" not in prod_jobs["candidate-integration-sweep"]  # active once backend-sync serves the route
     for env_jobs, project in ((dev_jobs, "based-hardware-dev"), (prod_jobs, "based-hardware")):
         job = env_jobs["frame-request-retention-hourly"]
         assert job["lifecycle"] == "planned"
@@ -182,9 +189,13 @@ def test_explicitly_selected_planned_job_can_be_created():
 
     assert differences == [resource]
     assert messages == [f"APPLIED {resource}: missing, state"]
-    assert [
-        (method, kwargs.get("params", {}).get("jobId")) for method, _, kwargs in session.calls if method == "post"
-    ] == [("post", "frame-request-retention-hourly")]
+    # Cloud Scheduler v1 create takes the full job name in the body; it has no jobId parameter.
+    posts = [(url, kwargs) for method, url, kwargs in session.calls if method == "post"]
+    assert len(posts) == 1
+    url, kwargs = posts[0]
+    assert url.endswith("/projects/based-hardware-dev/locations/us-central1/jobs")
+    assert "params" not in kwargs
+    assert kwargs["json"]["name"] == resource
 
 
 def test_check_validates_a_planned_job_after_it_exists():
@@ -260,7 +271,6 @@ def test_owner_scheduler_checks_are_scoped_and_central_reconcile_remains_full_ma
     root = Path(__file__).resolve().parents[3]
     owner_checks = {
         ".github/actions/sync-backfill-lifecycle/action.yml": "--check --jobs sync-backfill-uid-sequencer",
-        ".github/workflows/gcp_admin.yml": "--check --jobs omi-admin-stats-precompute",
         ".github/workflows/gcp_daily_memory_sweep_job.yml": "--jobs \"$SCHEDULER_JOB\" \"$LEDGER_DRAIN_SCHEDULER_JOB\"",
         ".github/workflows/gcp_daily_memory_sweep_job_auto_dev.yml": "--jobs \"$SCHEDULER_JOB\" \"$LEDGER_DRAIN_SCHEDULER_JOB\"",
         ".github/workflows/gcp_day3_reengagement_email_job.yml": "--check --jobs \"$SCHEDULER_JOB\"",
@@ -278,6 +288,36 @@ def test_owner_scheduler_checks_are_scoped_and_central_reconcile_remains_full_ma
         assert check_commands, relative_path
         assert all("--jobs" in command for command in check_commands), relative_path
 
+    admin_workflow = (root / ".github/workflows/gcp_admin.yml").read_text(encoding="utf-8")
+    assert "scheduler_reconcile.py" not in admin_workflow
+    assert "omi-admin-stats-precompute" not in admin_workflow
+
+    central_workflow = (root / ".github/workflows/gcp_scheduler_reconcile.yml").read_text(encoding="utf-8")
+    assert "--apply" in central_workflow
+    assert "--check" in central_workflow
+
+    jobs_yaml = (root / "backend/deploy/scheduler/jobs.yaml").read_text(encoding="utf-8")
+    admin_job = jobs_yaml.split("- name: omi-admin-stats-precompute", 1)[1].split("- name:", 1)[0]
+    assert "owner: .github/workflows/gcp_scheduler_reconcile.yml" in admin_job
+
     central = (root / ".github/workflows/gcp_scheduler_reconcile.yml").read_text(encoding="utf-8")
     assert '--project "$PROJECT_ID" --check' in central
     assert '--project "$PROJECT_ID" --check --jobs' not in central
+
+
+def test_notifications_cadence_covers_every_local_hour_boundary():
+    manifest = reconcile.load_manifest()
+    job = next(
+        job for job in manifest['environments']['prod']['jobs'] if job['name'] == 'notifications-job-scheduler-trigger'
+    )
+    assert job['schedule'] == '*/15 * * * *'
+    assert job['state'] == 'ENABLED'
+    assert job.get('lifecycle') is None  # Existing managed resource, scoped by the owner workflow.
+    assert job['owner'] == '.github/workflows/gcp_notifications_job.yml'
+    assert job['target']['uri'].endswith('/jobs/notifications-job:run')
+    assert job['retry']['max_retry'] == '0s'
+    # Dedicated least-privilege invoker, never the project default compute account.
+    assert (
+        job['target']['oauth']['service_account']
+        == 'notifications-job-scheduler@based-hardware.iam.gserviceaccount.com'
+    )

@@ -1,7 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/transcript_hash.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -47,13 +50,20 @@ class LocalSegmentStore {
     await dir.create(recursive: true);
     final file = _fileFor(dir, sessionId);
     final tmp = File('${file.path}.tmp');
-    final payload = <String, Object?>{
-      'encoding_version': transcriptHashEncodingVersion,
-      'session_id': sessionId,
-      'transcript_sha256': transcriptSha256(segments),
-      'segments': segments.map(_segmentToJson).toList(),
-    };
-    await tmp.writeAsString(jsonEncode(payload));
+    final rows = segments.map(_segmentToJson).toList();
+    // The rows are already canonical, and hashing them yields the same digest
+    // as hashing the segments ([transcriptSha256FromMaps] canonicalizes again).
+    final encoded = await offUiIsolate(
+        () => jsonEncode(<String, Object?>{
+              'encoding_version': transcriptHashEncodingVersion,
+              'session_id': sessionId,
+              'transcript_sha256': transcriptSha256FromMaps(rows),
+              'segments': rows,
+            }),
+        size: rows.length,
+        threshold: backgroundEncodeThreshold,
+        debugName: 'live_segments_encode');
+    await tmp.writeAsString(encoded);
     if (await file.exists()) {
       await file.delete();
     }
@@ -91,6 +101,13 @@ class LocalSegmentStore {
       await file.delete();
     }
   }
+
+  /// Sessions at or above this many segments are hashed and encoded on a
+  /// background isolate. The whole session is rewritten on each new segment,
+  /// so the cost grows with the conversation; long live captures must not
+  /// spend it on the UI isolate.
+  @visibleForTesting
+  static int backgroundEncodeThreshold = 150;
 
   static Map<String, Object?> _segmentToJson(TranscriptSegment segment) {
     final kept = canonicalizeTranscriptSegment(segment);
