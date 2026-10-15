@@ -13213,4 +13213,28 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'タップして修正';
+
+  @override
+  String get homePendingTitle => '会話を準備中';
+
+  @override
+  String get homePendingCatchingUp => '以前の音声を処理中';
+
+  @override
+  String get onTheWayTitle => '準備中';
+
+  @override
+  String get onTheWayAlmostReady => 'まもなく完了';
+
+  @override
+  String get activityEmpty => 'アクティビティはまだありません';
+
+  @override
+  String get activityNewSemantics => 'アクティビティ、新着あり';
+
+  @override
+  String get activityLoadFailed => 'アクティビティの一部を読み込めませんでした';
+
+  @override
+  String get activityNewItem => '新着';
 }
