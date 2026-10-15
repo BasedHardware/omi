@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import re
 from inspect import isawaitable
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -227,12 +227,12 @@ def _gateway_mode_enabled() -> bool:
     return os.getenv(PUBLIC_SHARED_CONVERSATION_CHAT_MODE_ENV_VAR, 'off').strip().lower() == 'gateway'
 
 
-def _gateway_messages(request: SharedConversationChatRequest, conversation: dict[str, Any]) -> list[dict[str, str]]:
+def _gateway_messages(request: SharedConversationChatRequest, conversation: object) -> list[dict[str, str]]:
     # A resolved conversation is user/server data, not a trusted shape: a
     # non-Mapping row or a non-sequence transcript_segments crashes .get()/the
     # transcript join with AttributeError/TypeError before the gateway call.
     if not isinstance(conversation, Mapping):
-        segments: list[Any] = []
+        segments: Sequence[Any] = []
     else:
         raw_segments = conversation.get('transcript_segments')
         segments = raw_segments if isinstance(raw_segments, (list, tuple)) else []
