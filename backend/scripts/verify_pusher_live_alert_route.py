@@ -153,6 +153,17 @@ def _write_rule(base_url: str, uid: str, rule: dict[str, Any], token: str, *, ex
         raise AlertRouteError(f"Grafana API request failed for {path}: {type(exc).__name__}") from exc
 
 
+def _environment_rules(rules: dict[str, dict[str, Any]], *, production: bool) -> dict[str, dict[str, Any]]:
+    """Development has no verified sentinel; retain error pages across all gates."""
+    if production:
+        return rules
+    rules = copy.deepcopy(rules)
+    for rule in rules.values():
+        if rule.get("execErrState") == "KeepLast":
+            rule["execErrState"] = "Error"
+    return rules
+
+
 def load_live_stt_import_rules(*, production: bool = True) -> dict[str, dict[str, Any]]:
     loaded: object = json.loads((ALERT_SOURCES / "live-stt.json").read_text(encoding="utf-8"))
     if not isinstance(loaded, list):
@@ -174,13 +185,7 @@ def load_live_stt_import_rules(*, production: bool = True) -> dict[str, dict[str
         if uid not in committed:
             raise AlertRouteError(f"committed import alert {uid} is missing")
         rules[uid] = committed[uid]
-    if not production:
-        # No verified development sentinel exists. Retain error pages instead
-        # of depending on production datasource IDs or mutating canonical rules.
-        rules = copy.deepcopy(rules)
-        for rule in rules.values():
-            if rule.get("execErrState") == "KeepLast":
-                rule["execErrState"] = "Error"
+    rules = _environment_rules(rules, production=production)
     for uid in canary_uids:
         canary = rules[uid]
         if (
@@ -240,13 +245,13 @@ def _run_live_stt_import(grafana_url: str, token: str) -> list[str]:
     return []
 
 
-def _committed_rules() -> dict[str, dict[str, Any]]:
+def _committed_rules(*, production: bool = True) -> dict[str, dict[str, Any]]:
     rules = json.loads(RULES.read_text(encoding="utf-8"))
     by_uid = {rule.get("uid"): rule for rule in rules if isinstance(rule, dict) and isinstance(rule.get("uid"), str)}
     missing = [uid for uid in RULE_UIDS if uid not in by_uid]
     if missing:
         raise AlertRouteError(f"committed finalization alert set is incomplete: {','.join(missing)}")
-    return {uid: by_uid[uid] for uid in RULE_UIDS}
+    return _environment_rules({uid: by_uid[uid] for uid in RULE_UIDS}, production=production)
 
 
 def load_all_committed_rules() -> dict[str, dict[str, Any]]:
@@ -430,8 +435,9 @@ def validate_live_route(
     contact_points: Any,
     *,
     phase: str,
+    production: bool = True,
 ) -> list[str]:
-    expected_rules = _committed_rules()
+    expected_rules = _committed_rules(production=production)
     errors: list[str] = []
     receivers: set[str] = set()
     for uid, expected in expected_rules.items():
@@ -489,7 +495,7 @@ def _approved_grafana_url(raw: str) -> bool:
     parsed = urllib.parse.urlparse(raw)
     return (
         parsed.scheme == "https"
-        and parsed.hostname in ALLOWED_HOSTS
+        and parsed.netloc.lower() in ALLOWED_HOSTS
         and parsed.path in ("", "/")
         and not parsed.params
         and not parsed.query
@@ -515,6 +521,7 @@ def _run_pusher_gate(grafana_url: str, token: str, phase: str, attempts: int) ->
             _request_json(grafana_url, metric_query_path, token),
             _request_json(grafana_url, "/api/v1/provisioning/contact-points", token),
             phase=phase,
+            production=grafana_url == "https://monitor.omi.me",
         )
         if not failures or attempt + 1 == attempts:
             break
@@ -566,6 +573,8 @@ def main() -> int:
     if not _approved_grafana_url(args.grafana_url):
         print("FAIL: Grafana URL must be an approved HTTPS monitoring origin")
         return 1
+    # Normalize once so trailing slash/case cannot select development policy on prod.
+    args.grafana_url = "https://" + urllib.parse.urlparse(args.grafana_url).netloc.lower()
     if args.mode == "pusher" and args.phase is None:
         print("FAIL: pusher mode requires --phase")
         return 1

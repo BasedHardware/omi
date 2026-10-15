@@ -67,9 +67,6 @@ jobs:
       group: grafana-alert-provisioning-${{ matrix.environment }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
-    # Ungated, main-only environments that hold each Grafana's MONITOR_GRAFANA_TOKEN.
-    # Without one, the job reads the repo-level secret, which is the dev token.
-    environment: monitoring-${{ matrix.environment }}
     strategy:
       matrix:
         environment: ["${{ github.event.inputs.environment || 'dev' }}"]
