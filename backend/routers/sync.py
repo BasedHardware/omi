@@ -1819,7 +1819,35 @@ async def _maintain_uid_sequencer_lease(
 @router.post('/v2/sync-backfill-sequencer/sweep', include_in_schema=False)
 async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     outcomes = await run_blocking(db_executor, uid_sequencer.sweep)
+    from utils.sync import reprocess
+
+    if reprocess.owns_runtime():
+        try:
+            repair = await run_blocking(db_executor, reprocess.sweep)
+        except Exception as error:
+            logger.error('event=sync_reprocess action=sweep outcome=error exception_type=%s', type(error).__name__)
+            repair = {'repaired': 0, 'error': 1}
+        outcomes['reprocess_repaired'] = repair['repaired']
+        outcomes['reprocess_repair_errors'] = repair['error']
     return JSONResponse(status_code=500 if outcomes.get('error') else 200, content={'outcomes': outcomes})
+
+
+async def _run_sync_reprocess(payload: dict):
+    from utils.sync import reprocess
+    from utils.sync.pipeline import _reprocess_conversation_after_update
+
+    # Dev services share the production Firestore project. Never consume its
+    # obligations outside production (except the explicitly bound emulator).
+    if not reprocess.owns_runtime():
+        return JSONResponse(status_code=200, content={'status': 'foreign_runtime'})
+    if set(payload) != {'kind', 'key', 'task_token'} or not all(
+        isinstance(payload.get(field), str) and payload[field] for field in ('key', 'task_token')
+    ):
+        return JSONResponse(status_code=400, content={'status': 'invalid_payload'})
+    status = await run_blocking(
+        sync_executor, reprocess.run, payload['key'], payload['task_token'], _reprocess_conversation_after_update
+    )
+    return JSONResponse(status_code=503 if status == 'busy' else 200, content={'status': status})
 
 
 @router.post('/v2/sync-backfill-sequencer/wake', include_in_schema=False)
@@ -1849,6 +1877,10 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         payload = await request.json()
     except Exception:
         return await _run_sync_job_body(request, task_retry_count)
+    # Reuse the authenticated worker's 1500s timeout and audience. A distinct
+    # payload kind cannot be confused with a transcription job or its lease.
+    if isinstance(payload, dict) and payload.get('kind') == 'sync_reprocess':
+        return await _run_sync_reprocess(payload)
     epoch = payload.get('sequencer_epoch') if isinstance(payload, dict) else None
     if uid_sequencer.foreign_delivery(payload):
         return JSONResponse(status_code=200, content={'status': 'foreign_stage'})
