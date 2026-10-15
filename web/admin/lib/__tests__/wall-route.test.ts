@@ -64,3 +64,20 @@ it("partial fixtures preserve source timestamps and return usable aggregates", a
   expect(data.tiles.growth_wau.value).toBe(3);
   expect(response.headers.get("Cache-Control")).toBe("private, no-store");
 });
+it("returns loading cards with 200 while a cold refresh is retained", async () => {
+  vi.mocked(verifyAdmin).mockResolvedValue({ uid: "test" });
+  vi.mocked(wallPayload).mockResolvedValue({
+    ...(await computeWall({
+      query: fail,
+      shopify: fail,
+      stripe: fail,
+      billing: fail,
+    })),
+    refreshing: true,
+  });
+  const response = await GET(
+    new NextRequest("http://localhost/api/omi/stats/wall")
+  );
+  expect(response.status).toBe(200);
+  expect((await response.json()).refreshing).toBe(true);
+});
