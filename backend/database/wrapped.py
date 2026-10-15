@@ -23,7 +23,7 @@ def _typed_doc(doc: Any) -> Dict[str, Any]:
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
 
 
-def _wrapped_doc_ref(uid: str, year: int):
+def _wrapped_doc_ref(uid: object, year: object):
     """users/{uid}/wrapped/{year} — a valid doc path needs a safe uid and a
     sane 4-digit year. An empty uid makes users//wrapped/2025 (a collection
     path, not a doc); a '/'/'\\'/traversal/control-char uid splits into a
