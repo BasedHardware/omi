@@ -408,7 +408,10 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_audio_timeline_span_env(payload)
     payload = with_capture_evidence_env(payload)
     payload = with_screen_frame_egress_env(payload)
-    payload = with_firestore_read_ledger_env(payload)
+    payload = with_firestore_read_ledger_env(payload).replace(
+        '"FIRESTORE_READ_LEDGER", "value": "1"},',
+        '"FIRESTORE_READ_LEDGER", "value": "1"},\n        {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},',
+    )
     # Keep dev snapshots complete while individual tests remove unrelated
     # gateway/secret fields. Train 1 switches remain explicitly off in dev.
     for service in ('backend-sync', 'backend-sync-backfill'):
@@ -440,7 +443,6 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         payload,
         flags=re.MULTILINE,
     )
-    # 2026-09-29: translation ships enabled; keep unrelated failure fixtures complete.
     translation_defaults = {
         'TRANSLATION_DEMAND_SHADOW_ENABLED': 'false',
         'TRANSLATION_DEMAND_GATE_ENABLED': 'true',
@@ -465,7 +467,6 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         count=1,
         flags=re.DOTALL,
     )
-    # Preserve task bindings on every Cloud Run processing host.
     payload = re.sub(
         r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
         r'\1\n        {"name": "ACTION_ITEM_REFRESH_PRESERVE_ENABLED", "value": "true"},',

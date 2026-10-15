@@ -258,7 +258,9 @@ def test_generated_dart_wire_models_cover_contract():
     assert 'class GeneratedVoiceMatchesResponse' in people_dart
 
 
-@pytest.mark.parametrize('bad', ['a/b', '../x', '.', '..', '__reserved__', 'x' * 1501, 'é' * 751])
+@pytest.mark.parametrize(
+    'bad', ['a/b', '../x', '.', '..', '__reserved__', '__reserved\nvalue__', 'x' * 1501, 'é' * 751]
+)
 def test_reject_route_rejects_invalid_storage_id_before_database(client, monkeypatch, bad):
     def unexpected(*args, **kwargs):
         pytest.fail('invalid document ID reached the database')
@@ -284,7 +286,9 @@ def test_reject_route_missing_speaker_preserves_lookup_404(client, monkeypatch, 
     assert not conversations_db.get_firestore_client().rows
 
 
-@pytest.mark.parametrize('bad', ['a/b', '../x', '.', '..', '__reserved__', 'x' * 1501, 'é' * 751])
+@pytest.mark.parametrize(
+    'bad', ['a/b', '../x', '.', '..', '__reserved__', '__reserved\nvalue__', 'x' * 1501, 'é' * 751]
+)
 def test_reject_route_rejects_invalid_body_person_before_database(client, monkeypatch, bad):
     def unexpected(*args, **kwargs):
         pytest.fail('invalid body person ID reached the database')
@@ -304,6 +308,8 @@ LEGACY_DOCUMENT_IDS = [
     'x' * 1500,
     'é' * 750,
     '__id123__',
+    '__',
+    '___',
 ]
 
 
@@ -430,7 +436,9 @@ def test_successful_rejection_preserves_opaque_ids_with_safe_telemetry_and_marke
         assert entry['conversation_id'] == document_id and entry['speaker_id'] == 3
 
 
-@pytest.mark.parametrize('bad', ['a/b', '../x', '.', '..', '__reserved__', 'x' * 1501, 'é' * 751])
+@pytest.mark.parametrize(
+    'bad', ['a/b', '../x', '.', '..', '__reserved__', '__reserved\nvalue__', 'x' * 1501, 'é' * 751]
+)
 def test_voice_matches_rejects_invalid_storage_id_before_lookup(client, monkeypatch, bad):
     async def unexpected(*args, **kwargs):
         pytest.fail('invalid document ID reached voice matching')
@@ -519,7 +527,9 @@ def test_voice_matches_logs_mask_opaque_ids_and_echoed_exception_payload(client,
     assert records[0].exc_info is None
 
 
-@pytest.mark.parametrize('bad', ['', '.', '..', 'a/b', '__reserved__', 'x' * 1501, 'é' * 751, '\ud800'])
+@pytest.mark.parametrize(
+    'bad', ['', '.', '..', 'a/b', '__reserved__', '__reserved\nvalue__', 'x' * 1501, 'é' * 751, '\ud800']
+)
 def test_document_id_guard_rejects_invalid_utf8_and_storage_shapes(bad):
     assert not speaker_labels_router._valid_document_id(bad)
 
@@ -545,3 +555,11 @@ def test_route_openapi_retains_released_unconstrained_path_types():
         for name, expected_type in types.items():
             assert schemas[name]['type'] == expected_type
             assert not {'pattern', 'minimum', 'maximum', 'minLength', 'maxLength'} & schemas[name].keys()
+
+
+def test_generated_ids_fit_the_released_doc_id_contract():
+    """Current generated document IDs remain accepted by the broad released contract."""
+    import uuid
+
+    for _ in range(1000):
+        assert speaker_labels_router._valid_document_id(str(uuid.uuid4()))
