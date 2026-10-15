@@ -23,9 +23,8 @@ void main() {
     }
   });
   for (final scale in [1.0, 2.0]) {
-    testWidgets('applied spelling shows before → after, speech in the sheet; Undo and Redo at $scale scale', (
-      tester,
-    ) async {
+    testWidgets('applied spelling shows before → after, speech in the sheet; Undo and Redo at $scale scale',
+        (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       addTearDown(() => debugDefaultTargetPlatformOverride = null);
       tester.view.physicalSize = Size(scale == 1 ? 786 : 640, 1704);
@@ -34,26 +33,22 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       OmiColors.active = OmiColors.forBrightness(Brightness.dark);
       final toggles = <bool>[];
-      await tester.pumpWidget(
-        MaterialApp(
-          debugShowCheckedModeBanner: false,
-          theme: buildOmiTheme(brightness: Brightness.dark),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)),
-            child: child!,
-          ),
-          home: RecentChangesPage(
-            loadChanges: ({cursor}) async => ApiSuccess(ReviewChangesPage(changes: [dreamSyntheticChange()])),
-            setUndone: (id, {required undone}) async {
-              expect(id, 'synthetic-spelling-change');
-              toggles.add(undone);
-              return ApiSuccess(dreamSyntheticChange(undone: undone));
-            },
-          ),
+      await tester.pumpWidget(MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: buildOmiTheme(brightness: Brightness.dark),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) =>
+            MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)), child: child!),
+        home: RecentChangesPage(
+          loadChanges: ({cursor}) async => ApiSuccess(ReviewChangesPage(changes: [dreamSyntheticChange()])),
+          setUndone: (id, {required undone}) async {
+            expect(id, 'synthetic-spelling-change');
+            toggles.add(undone);
+            return ApiSuccess(dreamSyntheticChange(undone: undone));
+          },
         ),
-      );
+      ));
       await tester.pumpAndSettle();
       // A row without a server diff still shows the change itself, its source, and no raw id.
       expect(find.text('NAMES AND TERMS'), findsOneWidget);

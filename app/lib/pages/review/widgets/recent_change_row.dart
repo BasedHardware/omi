@@ -6,11 +6,11 @@ import 'package:omi/utils/l10n_extensions.dart';
 
 /// Text Omi replaced: struck through on a red tint.
 TextStyle recentChangeRemovedStyle(TextStyle base) => base.copyWith(
-  color: OmiColors.danger,
-  decoration: TextDecoration.lineThrough,
-  decorationColor: OmiColors.danger,
-  backgroundColor: OmiColors.dangerSurface,
-);
+      color: OmiColors.danger,
+      decoration: TextDecoration.lineThrough,
+      decorationColor: OmiColors.danger,
+      backgroundColor: OmiColors.dangerSurface,
+    );
 
 /// Text Omi wrote in its place: on a green tint.
 TextStyle recentChangeAddedStyle(TextStyle base) =>
@@ -39,10 +39,9 @@ class RecentChangeDiff extends StatelessWidget {
     final beforeLines = before == null
         ? const <String>[]
         : section == RecentChangeSection.tasks
-        ? before.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList(growable: false)
-        : [before];
-    final inline =
-        !removed &&
+            ? before.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList(growable: false)
+            : [before];
+    final inline = !removed &&
         beforeLines.length <= 1 &&
         (before ?? '').length <= _inlineLimit &&
         (after ?? '').length <= _inlineLimit &&
@@ -74,19 +73,12 @@ class RecentChangeDiff extends StatelessWidget {
           if (beforeLines.isNotEmpty && after != null)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xxs),
-              child: Icon(
-                Icons.arrow_downward,
-                size: 16,
-                color: OmiColors.textSecondary,
-                semanticLabel: l10n.reviewChangeAfter,
-              ),
+              child: Icon(Icons.arrow_downward,
+                  size: 16, color: OmiColors.textSecondary, semanticLabel: l10n.reviewChangeAfter),
             ),
           if (removed)
-            Text(
-              l10n.reviewChangeRemoved,
-              key: const Key('recent_change_after'),
-              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-            )
+            Text(l10n.reviewChangeRemoved,
+                key: const Key('recent_change_after'), style: OmiType.footnote.copyWith(color: OmiColors.textSecondary))
           else if (after != null)
             _Block(text: after, key: const Key('recent_change_after'), removed: false),
         ],
@@ -107,10 +99,7 @@ class _Chip extends StatelessWidget {
   Widget build(BuildContext context) {
     final style = removed
         ? base.copyWith(
-            color: OmiColors.danger,
-            decoration: TextDecoration.lineThrough,
-            decorationColor: OmiColors.danger,
-          )
+            color: OmiColors.danger, decoration: TextDecoration.lineThrough, decorationColor: OmiColors.danger)
         : base.copyWith(color: OmiColors.success, fontWeight: FontWeight.w600);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -184,10 +173,8 @@ class RecentChangeRow extends StatelessWidget {
 
     final String meta;
     if (group.section == RecentChangeSection.terms && (multiple || places > 1)) {
-      meta = [
-        l10n.reviewChangeConversationCount(group.conversationCount),
-        l10n.reviewChangePlaceCount(places),
-      ].join(' · ');
+      meta = [l10n.reviewChangeConversationCount(group.conversationCount), l10n.reviewChangePlaceCount(places)]
+          .join(' · ');
     } else {
       meta = [
         if (recentChangeSourceTitle(latest) case final title?) title,
@@ -243,13 +230,11 @@ class RecentChangeRow extends StatelessWidget {
                 padding: const EdgeInsets.only(right: OmiSpacing.xs),
                 child: hasDiff
                     ? RecentChangeDiff(before: before, after: after, section: group.section, dimmed: undone)
-                    : Text(
-                        latest.title,
+                    : Text(latest.title,
                         style: OmiType.subhead.copyWith(
                           fontWeight: FontWeight.w600,
                           decoration: undone ? TextDecoration.lineThrough : null,
-                        ),
-                      ),
+                        )),
               ),
               if (!hasDiff && latest.snippet != null)
                 Padding(
@@ -259,11 +244,9 @@ class RecentChangeRow extends StatelessWidget {
               if (meta.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: OmiSpacing.xs, right: OmiSpacing.xs),
-                  child: Text(
-                    meta,
-                    key: const Key('recent_change_meta'),
-                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-                  ),
+                  child: Text(meta,
+                      key: const Key('recent_change_meta'),
+                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
                 ),
               if (undone)
                 Padding(
@@ -273,12 +256,10 @@ class RecentChangeRow extends StatelessWidget {
               else if (note != null)
                 Padding(
                   padding: const EdgeInsets.only(top: OmiSpacing.xxs, right: OmiSpacing.xs),
-                  child: Text(
-                    note,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-                  ),
+                  child: Text(note,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
                 ),
               Wrap(alignment: WrapAlignment.end, children: actions),
             ],

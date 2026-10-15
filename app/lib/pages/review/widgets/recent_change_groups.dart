@@ -4,21 +4,21 @@ import 'package:omi/backend/schema/review.dart';
 enum RecentChangeSection { terms, memories, tasks, titles, people, conversations, other }
 
 RecentChangeSection recentChangeSection(ReviewChange change) => switch (change.editKind) {
-  'spelling' || 'transcript' || 'vocabulary' => RecentChangeSection.terms,
-  'memory' || 'merge_memories' || 'retire_memory' || 'supersede_memory' => RecentChangeSection.memories,
-  'close_task' || 'merge_tasks' || 'retire_task' => RecentChangeSection.tasks,
-  'title' || 'overview' || 'entity_summary' => RecentChangeSection.titles,
-  'merge_people' || 'dismiss_person' => RecentChangeSection.people,
-  'merge_conversations' || 'set_language' => RecentChangeSection.conversations,
-  _ => switch (change.kind) {
-    ReviewChangeKind.rename => RecentChangeSection.terms,
-    ReviewChangeKind.mergeMemories => RecentChangeSection.memories,
-    ReviewChangeKind.closeTask => RecentChangeSection.tasks,
-    ReviewChangeKind.titleConversation => RecentChangeSection.titles,
-    ReviewChangeKind.updatePerson || ReviewChangeKind.labelSpeaker => RecentChangeSection.people,
-    ReviewChangeKind.other => RecentChangeSection.other,
-  },
-};
+      'spelling' || 'transcript' || 'vocabulary' => RecentChangeSection.terms,
+      'memory' || 'merge_memories' || 'retire_memory' || 'supersede_memory' => RecentChangeSection.memories,
+      'close_task' || 'merge_tasks' || 'retire_task' => RecentChangeSection.tasks,
+      'title' || 'overview' || 'entity_summary' => RecentChangeSection.titles,
+      'merge_people' || 'dismiss_person' => RecentChangeSection.people,
+      'merge_conversations' || 'set_language' => RecentChangeSection.conversations,
+      _ => switch (change.kind) {
+          ReviewChangeKind.rename => RecentChangeSection.terms,
+          ReviewChangeKind.mergeMemories => RecentChangeSection.memories,
+          ReviewChangeKind.closeTask => RecentChangeSection.tasks,
+          ReviewChangeKind.titleConversation => RecentChangeSection.titles,
+          ReviewChangeKind.updatePerson || ReviewChangeKind.labelSpeaker => RecentChangeSection.people,
+          ReviewChangeKind.other => RecentChangeSection.other,
+        },
+    };
 
 /// The text before the change, preferring the server-extracted span over the stored field.
 String? recentChangeBefore(ReviewChange change) => _nonEmpty(change.diff?.before) ?? _nonEmpty(change.before);

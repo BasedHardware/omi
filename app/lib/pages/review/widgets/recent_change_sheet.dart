@@ -114,10 +114,7 @@ class _Entry extends StatelessWidget {
             ),
           ),
           const SizedBox(height: OmiSpacing.xs),
-          Padding(
-            padding: const EdgeInsets.only(right: OmiSpacing.xs),
-            child: evidence,
-          ),
+          Padding(padding: const EdgeInsets.only(right: OmiSpacing.xs), child: evidence),
           if (change.undone)
             Padding(
               padding: const EdgeInsets.only(top: OmiSpacing.xs, right: OmiSpacing.xs),
@@ -170,15 +167,13 @@ class _OccurrenceText extends StatelessWidget {
     return Opacity(
       opacity: dimmed ? 0.5 : 1,
       child: Text.rich(
-        TextSpan(
-          children: [
-            if (contextBefore.isNotEmpty) TextSpan(text: contextBefore),
-            if (before.isNotEmpty) TextSpan(text: before, style: recentChangeRemovedStyle(base)),
-            if (before.isNotEmpty && after.isNotEmpty) const TextSpan(text: ' '),
-            if (after.isNotEmpty) TextSpan(text: after, style: recentChangeAddedStyle(base)),
-            if (contextAfter.isNotEmpty) TextSpan(text: contextAfter),
-          ],
-        ),
+        TextSpan(children: [
+          if (contextBefore.isNotEmpty) TextSpan(text: contextBefore),
+          if (before.isNotEmpty) TextSpan(text: before, style: recentChangeRemovedStyle(base)),
+          if (before.isNotEmpty && after.isNotEmpty) const TextSpan(text: ' '),
+          if (after.isNotEmpty) TextSpan(text: after, style: recentChangeAddedStyle(base)),
+          if (contextAfter.isNotEmpty) TextSpan(text: contextAfter),
+        ]),
         key: const Key('recent_change_occurrence'),
         style: base,
       ),
