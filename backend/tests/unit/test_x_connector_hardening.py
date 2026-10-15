@@ -25,9 +25,9 @@ from utils.x_connector import sanitize_redirect_url
         'vbscript:msgbox(1)',
         'file:///etc/passwd',
         'ftp://x.test',
-        'omi://done\nX-Injected: 1',   # CRLF injection into the redis state field
+        'omi://done\nX-Injected: 1',  # CRLF injection into the redis state field
         'omi://done\r\nsmi://evil',
-        'omi://a\tb',                # embedded control char
+        'omi://a\tb',  # embedded control char
         'x' * 3000,
         '',
         '   ',
@@ -56,10 +56,10 @@ def test_redirect_html_escapes_meta_and_js_contexts():
     # A URL carrying '"><script> must be inert in BOTH injection sinks.
     resp = x_router._redirect_html('omi://done" onclick="alert(1)" <script>bad()</script>', True, 'ok')
     body = resp.body.decode()
-    assert 'omi://done&quot;' in body              # attribute-escaped in the meta refresh
+    assert 'omi://done&quot;' in body  # attribute-escaped in the meta refresh
     assert 'onclick=\\"alert' in body or '&quot;' in body
-    assert '\\u003cscript\\u003e' in body          # < > are escaped in the JS literal
-    assert '<script>bad()' not in body           # the raw payload is gone
+    assert '\\u003cscript\\u003e' in body  # < > are escaped in the JS literal
+    assert '<script>bad()' not in body  # the raw payload is gone
 
 
 def test_redirect_html_round_trip_clean():
