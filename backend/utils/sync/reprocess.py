@@ -14,7 +14,7 @@ import os
 import random
 import time
 import uuid
-from typing import Any
+from typing import Any, Callable, TypeVar, TypeAlias
 
 from google.cloud import firestore
 from google.api_core.exceptions import AlreadyExists, FailedPrecondition, NotFound
@@ -22,6 +22,9 @@ from prometheus_client import Counter
 
 from config.sync_reprocess import settle_seconds
 from database._client import get_firestore_client
+
+Row: TypeAlias = dict[str, Any]
+ResultT = TypeVar('ResultT')
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +44,7 @@ def owns_runtime() -> bool:
     return bool(os.getenv('FIRESTORE_EMULATOR_HOST')) or production_stage()
 
 
-def _mutate(document_id: str, operation):
+def _mutate(document_id: str, operation: Callable[[Row | None], tuple[Row | None, ResultT]]) -> ResultT:
     if not owns_runtime():
         raise RuntimeError('sync reprocess outbox requires production or a Firestore emulator')
     client = get_firestore_client()
@@ -70,6 +73,7 @@ def _mutate(document_id: str, operation):
             if attempt == 9:
                 raise
             time.sleep(random.uniform(0.005, min(0.2, 0.01 * 2**attempt)))
+    raise AssertionError('outbox CAS loop must return or raise within its retry budget')
 
 
 def _dispatch_binding() -> dict[str, str]:
@@ -106,7 +110,7 @@ def _enqueue(row: dict[str, Any]) -> None:
 def mark(uid: str, conversation_id: str, language: str, *, now: float | None = None) -> None:
     current = time.time() if now is None else now
 
-    def update(old):
+    def update(old: Row | None) -> tuple[Row, tuple[Row, bool]]:
         row = dict(old or {})
         row.update(
             uid=uid,
@@ -128,11 +132,11 @@ def mark(uid: str, conversation_id: str, language: str, *, now: float | None = N
         _enqueue(row)  # Failure leaves the obligation durable for the sweep.
 
 
-def run(document_id: str, task_token: str, process, *, now: float | None = None) -> str:
+def run(document_id: str, task_token: str, process: Callable[[str, str, str], Any], *, now: float | None = None) -> str:
     current = time.time() if now is None else now
     owner = uuid.uuid4().hex
 
-    def claim(old):
+    def claim(old: Row | None) -> tuple[Row | None, tuple[str, Row | None]]:
         if old is None or old['task_token'] != task_token:
             return old, ('stale', None)
         if old.get('lease_until', 0) > current:
@@ -146,14 +150,16 @@ def run(document_id: str, task_token: str, process, *, now: float | None = None)
 
     status, row = _mutate(document_id, claim)
     if status == 'deferred':
+        assert row is not None
         _enqueue(row)
         return status
     if status != 'claimed':
         return status
+    assert row is not None
     # Exceptions leave a leased, dirty row. Retry/sweep recovers after expiry.
     process(row['uid'], row['conversation_id'], row['language'])
 
-    def finish(old):
+    def finish(old: Row | None) -> tuple[Row | None, Row | None]:
         if old is None or old.get('owner') != owner:
             return old, None
         if old['version'] == row['version']:
@@ -179,7 +185,7 @@ def sweep(*, now: float | None = None, limit: int = 100) -> dict[str, int]:
     snapshots = client.collection(COLLECTION).where('due_at', '<=', current).order_by('due_at').limit(limit).stream()
     for snapshot in snapshots:
 
-        def repair(old):
+        def repair(old: Row | None) -> tuple[Row | None, Row | None]:
             if old is None or old.get('lease_until', 0) > current:
                 return old, None
             row = dict(old)

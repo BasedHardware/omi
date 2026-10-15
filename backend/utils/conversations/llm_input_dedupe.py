@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from prometheus_client import Counter
+from pydantic import BaseModel
 
 from config.sync_reprocess import dedupe_enabled
 
@@ -40,7 +41,7 @@ def canonical(value: Any) -> Any:
         return {'bytes_sha256': hashlib.sha256(value).hexdigest()}
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
         return canonical(dataclasses.asdict(value))
-    if hasattr(value, 'model_dump'):
+    if isinstance(value, BaseModel):
         return canonical(value.model_dump(mode='python'))
     if isinstance(value, dict):
         if not all(isinstance(key, str) for key in value):
@@ -185,7 +186,7 @@ def l1_succeeded(uid: str, conversation: Any, digest: str | None) -> bool:
     ref = client.collection('users').document(uid).collection('conversations').document(conversation.id)
 
     @firestore.transactional
-    def commit(transaction):
+    def commit(transaction: Any) -> bool:
         snapshot = ref.get(transaction=transaction)
         row = snapshot.to_dict() if snapshot.exists else None
         if not row or row.get('deleted') or row.get('discarded'):
