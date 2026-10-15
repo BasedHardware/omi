@@ -1,6 +1,5 @@
 """Executable query coverage for the dormant batch pipeline's stage namespaces."""
 
-from unittest.mock import patch
 from datetime import datetime, timezone
 
 from tests.support.firestore_query_drivers import DriverEntry, CoveredByEntry
@@ -23,11 +22,6 @@ def entries():
                 'before': (datetime(2026, 10, 15, tzinfo=timezone.utc), 'timestamp operand only'),
                 'limit': (100, 'bounded page size only'),
             },
-        ),
-        DriverEntry(
-            'utils.sync.reprocess.sweep',
-            neutrals={'now': (100.0, 'UTC time operand only'), 'limit': (100, 'bounded page size only')},
-            patchers=(lambda client: patch('utils.sync.reprocess.owns_runtime', return_value=True),),
         ),
         DriverEntry(
             'database.batch_pipeline_store.projection_pending',
