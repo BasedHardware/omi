@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
 import { wallPayload } from "@/lib/wall-cache";
 import { wallPresentation } from "@/lib/wall-presentation";
@@ -11,9 +11,18 @@ export async function GET(request: NextRequest) {
   const auth = await verifyAdmin(request);
   if (auth instanceof NextResponse) return auth;
   try {
-    const payload = (await localWallFixture()) || (await wallPayload());
+    const payload =
+      (await localWallFixture()) ||
+      (await wallPayload(undefined, undefined, (work) =>
+        after(async () => {
+          await work;
+        })
+      ));
     return NextResponse.json(wallPresentation(payload), {
-      status: payload.metrics.every((m) => m.value == null) ? 502 : 200,
+      status:
+        !payload.refreshing && payload.metrics.every((m) => m.value == null)
+          ? 502
+          : 200,
       headers: { "Cache-Control": "private, no-store" },
     });
   } catch {

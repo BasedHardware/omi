@@ -4211,5 +4211,13 @@
     "onboardingNoOmiYet": "Még nincs meg az Omid?",
     "onboardingOmiNotOrdered": "Még nem rendeltem",
     "onboardingOmiOrdered": "Már megrendeltem",
-    "onboardingPermissionTapToFix": "Koppints a javításhoz"
+    "onboardingPermissionTapToFix": "Koppints a javításhoz",
+    "homePendingTitle": "Beszélgetések úton",
+    "homePendingCatchingUp": "Korábbi hang feldolgozása",
+    "onTheWayTitle": "Úton",
+    "onTheWayAlmostReady": "Majdnem kész",
+    "activityEmpty": "Még nincs tevékenység",
+    "activityNewSemantics": "Tevékenység, új elemek",
+    "activityLoadFailed": "Nem sikerült betölteni az összes tevékenységet",
+    "activityNewItem": "Új"
 }
