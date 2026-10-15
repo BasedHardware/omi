@@ -9,7 +9,7 @@ provider scope carry, never an automatic match or a mapped suggestion.
 
 from typing import Any, Dict, List, Mapping, Optional
 
-from utils.manual_speaker_assignments import _receipt_section, manual_rejected_speakers
+from utils.manual_speaker_assignments import manual_rejected_speakers, receipt_section
 from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL, canonical_speaker_label
 
 _IDENTITY_KEYS = ('person_id', 'is_user', 'use_for_speech_training', 'rejection')
@@ -44,8 +44,8 @@ def _winning(
     candidates = [
         decision
         for decision in (
-            _receipt_section(receipt, 'segments').get(segment.get('id')),
-            _receipt_section(receipt, 'speakers').get(str(segment.get('speaker_id'))),
+            receipt_section(receipt, 'segments').get(segment.get('id')),
+            receipt_section(receipt, 'speakers').get(str(segment.get('speaker_id'))),
         )
         if isinstance(decision, Mapping)
     ]
@@ -80,8 +80,8 @@ def carried_receipt(conversation: Mapping[str, Any], active_scope: Optional[str]
         # The sections are raw stored data, so a wrong-typed value is coerced to
         # {} before _active_entries iterates it — the crash site was one frame
         # earlier than the _winning() reads this receipt feeds.
-        'segments': _active_entries(_receipt_section(raw, 'segments'), active_scope),
-        'speakers': _active_entries(_receipt_section(raw, 'speakers'), active_scope),
+        'segments': _active_entries(receipt_section(raw, 'segments'), active_scope),
+        'speakers': _active_entries(receipt_section(raw, 'speakers'), active_scope),
     }
     rejected = manual_rejected_speakers(receipt)
     voices: Dict[tuple, List[Mapping[str, Any]]] = {}

@@ -37,12 +37,16 @@ class LiveTranscriptReplayReceipt(BaseModel):
     )
 
 
-def _receipt_section(receipt: object, key: str) -> Mapping:
+def receipt_section(receipt: object, key: str) -> Mapping:
     """A stored receipt is user data: a wrong-typed section must not crash the reader."""
     if not isinstance(receipt, Mapping):
         return {}
     section = receipt.get(key)
     return section if isinstance(section, Mapping) else {}
+
+
+# In-module callers keep the private name. Other modules import receipt_section.
+_receipt_section = receipt_section
 
 
 def manual_owner_reserved(receipt: Mapping) -> bool:
