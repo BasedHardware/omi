@@ -17,24 +17,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Firestore document ids used as path parameters: a caller-controlled value with
-# a path separator or traversal sequence would be read as a subcollection path by
-# document(). Restrict to a plain doc-id charset and bound the length.
 _DOC_ID_PATTERN = r'^[A-Za-z0-9_-]{1,128}$'
-_SPEAKER_ID_MAX = 1_000_000
 
 
-def _require_doc_id(value: str) -> None:
-    # Enforced in the handler rather than as a published path pattern. The
-    # released app-client contract leaves these ids unconstrained, and
-    # publishing a narrower pattern is a breaking contract change.
-    if re.fullmatch(_DOC_ID_PATTERN, value) is None:
-        raise HTTPException(status_code=422, detail='Invalid document id')
-
-
-def _require_speaker_id(speaker_id: int) -> None:
-    if speaker_id < 0 or speaker_id > _SPEAKER_ID_MAX:
-        raise HTTPException(status_code=422, detail='Invalid speaker id')
+def _is_safe_firestore_document_id(value: str) -> bool:
+    """Validate Firestore ids in handlers without narrowing released OpenAPI schemas."""
+    return re.fullmatch(_DOC_ID_PATTERN, value) is not None
 
 
 @router.post(
@@ -49,12 +37,11 @@ def reject_speaker_label(
     background_tasks: BackgroundTasks,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    _require_doc_id(conversation_id)
-    _require_speaker_id(speaker_id)
-    # The request body's person_id flows into the same document() sink as the
-    # path param; validate the exact value passed downstream — a padded or
-    # separator-carrying id is rejected outright.
-    if data.person_id is not None and not re.fullmatch(_DOC_ID_PATTERN, data.person_id):
+    if not _is_safe_firestore_document_id(conversation_id):
+        raise HTTPException(status_code=422, detail='invalid conversation_id')
+    if not 0 <= speaker_id <= 1_000_000:
+        raise HTTPException(status_code=422, detail='invalid speaker_id')
+    if data.person_id is not None and not _is_safe_firestore_document_id(data.person_id):
         raise HTTPException(status_code=400, detail='invalid person_id')
     try:
         raw, resolved, removed, _before = conversations_db.assign_conversation_speaker(
@@ -113,7 +100,8 @@ async def get_person_voice_matches(
     person_id: str,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    _require_doc_id(person_id)
+    if not _is_safe_firestore_document_id(person_id):
+        raise HTTPException(status_code=422, detail='invalid person_id')
     try:
         return await find_person_voice_matches(uid, person_id)
     except LookupError as error:
