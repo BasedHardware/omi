@@ -9,9 +9,17 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+import yaml
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = BACKEND_ROOT / 'scripts' / 'preflight-cloud-run-deploy.py'
+
+
+@pytest.fixture(autouse=True)
+def _native_yaml_fixture_loader(monkeypatch):
+    # These tests exercise binding policy; reuse the validator suite's native
+    # safe loader instead of charging a full Python YAML parse to each case.
+    monkeypatch.setattr(yaml, 'safe_load', lambda stream: yaml.load(stream, Loader=yaml.CSafeLoader))
 
 
 def load_preflight():
