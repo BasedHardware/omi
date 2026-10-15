@@ -11,10 +11,10 @@ _CANCELLED = 'cancelled'
 # caller-supplied id would otherwise be interpreted as a subcollection path by
 # document(job_id). Reject anything that is not a plain doc id.
 _JOB_ID_SAFE_CHARS = frozenset('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-')
-_MAX_IMPORT_JOBS_LIMIT = 200
+MAX_IMPORT_JOBS_LIMIT = 200
 
 
-def _validate_job_id(job_id: str) -> str:
+def _validate_job_id(job_id: object) -> str:
     """Return *job_id* if it is a safe Firestore document id, else raise ValueError.
 
     Caller-supplied ids flow into ``document(job_id)``; a slash or traversal
@@ -114,13 +114,13 @@ def get_import_job(job_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def get_import_jobs(uid: str, limit: int = 50) -> List[Dict[str, Any]]:
+def get_import_jobs(uid: object, limit: object = 50) -> List[Dict[str, Any]]:
     """Get all import jobs for a user, ordered by created_at descending."""
     if not uid or not isinstance(uid, str):
         return []
     # Clamp the page size: an unbounded or negative limit is meaningless and a
     # huge one would stream the whole collection.
-    limit = max(1, min(int(limit) if isinstance(limit, (int, float)) else 50, _MAX_IMPORT_JOBS_LIMIT))
+    limit = max(1, min(int(limit) if isinstance(limit, (int, float)) else 50, MAX_IMPORT_JOBS_LIMIT))
     query = (
         db.collection('import_jobs')
         .where(filter=FieldFilter('uid', '==', uid))
