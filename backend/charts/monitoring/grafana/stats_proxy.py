@@ -122,7 +122,7 @@ class StatsProxy:
 
 
 class Handler(BaseHTTPRequestHandler):
-    proxy = StatsProxy()
+    proxy: StatsProxy | None = None
 
     def log_message(self, *_args):
         pass
@@ -143,6 +143,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         try:
+            assert self.proxy is not None
             code, body = self.proxy.fetch(self.path)
         except Exception:
             code, body = 502, b'{"error":"stats upstream unavailable"}'
@@ -183,4 +184,5 @@ class Server(ThreadingHTTPServer):
 
 
 if __name__ == "__main__":
+    Handler.proxy = StatsProxy()
     Server(("127.0.0.1", 8899), Handler).serve_forever()
