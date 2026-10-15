@@ -464,6 +464,12 @@ Vectors are created ONCE during initial processing. Reprocessed conversations do
 
 ### Manual speaker attribution during concurrent writes
 
+Conversation and person IDs are opaque strings: send the exact stored value,
+including valid legacy Unicode or punctuation. Speaker routes validate Firestore
+storage limits before lookup without trimming IDs or adding arbitrary speaker
+number bounds. An integer speaker ID that does not exist retains the existing
+not-found response.
+
 Manual speaker decisions live in a protected sparse receipt alongside the transcript.
 Live STT merging and both processing-result writers read that receipt in their
 commit transaction. Live merging preserves every manually covered speech span,
