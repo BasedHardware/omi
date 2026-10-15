@@ -136,7 +136,9 @@ The admin-authenticated `/api/omi/stats/wall` returns the 22 contract IDs plus
 explicit capture-week-1 and plan-prepay-cash lines. Definitions, UTC cutoffs,
 primary/entry attribution and qualification come from `lib/qualified-activity.ts`.
 A bounded, coalesced 15-minute in-process cache preserves source refresh stamps
-and expires at UTC midnight. It performs no Firestore cache writes and has no
+and expires at UTC midnight. PostHog carries its upstream `last_refresh` timestamp;
+when absent, freshness is unknown and the tile dims instead of using reader time.
+It performs no Firestore cache writes and has no
 stale-on-error fallback. Counts use primary qualified platform; cohort rates use
 entry platform and include the full denominator. Rates do not add across splits:
 the split numerators and denominators do. Missing sources remain null.

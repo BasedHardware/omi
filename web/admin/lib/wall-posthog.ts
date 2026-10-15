@@ -11,7 +11,7 @@ import {
   shiftDay,
 } from "./qualified-activity";
 
-export type AggregateRows = unknown[][];
+export type AggregateRows = unknown[][] & { sourceRefreshedAt?: string | null };
 export type Query = (sql: string) => Promise<AggregateRows>;
 const ACTOR = "coalesce(toString(person_id),distinct_id)";
 
@@ -144,5 +144,8 @@ export const queryPosthog: Query = async (query) => {
     data.results.length >= 100
   )
     throw new Error("PostHog incomplete aggregate result");
-  return data.results;
+  return Object.assign(data.results, {
+    sourceRefreshedAt:
+      typeof data.last_refresh === "string" ? data.last_refresh : null,
+  });
 };

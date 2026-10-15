@@ -40,12 +40,14 @@ export function wallPresentation(payload: WallPayload, now = new Date()) {
     const state =
       m.status === "null"
         ? "UNAVAILABLE"
-        : m.stale
-        ? "STALE"
         : m.partial
         ? "PARTIAL"
         : m.reason?.includes("FIXTURE")
         ? "FIXTURE"
+        : !m.sourceRefreshedAt
+        ? "NO WATERMARK"
+        : m.stale
+        ? "STALE"
         : m.reason?.includes("LOCAL AGGREGATE REPLAY")
         ? "REPLAY"
         : m.status.toUpperCase();

@@ -9,6 +9,7 @@ import {
   utcDay,
 } from "./qualified-activity";
 import {
+  AggregateRows,
   activityQuery,
   cohortQuery,
   establishedQuery,
@@ -194,7 +195,7 @@ export async function computeWall(
     start: Date,
     stop: Date,
     reason = COVERAGE_REASON,
-    refreshed = new Date().toISOString()
+    refreshed: string | null = new Date().toISOString()
   ) {
     m.status = m.value == null ? "null" : "proxy";
     m.reason = reason;
@@ -206,7 +207,7 @@ export async function computeWall(
   }
   function fromCounts(
     id: MetricId,
-    rows: unknown[][],
+    rows: AggregateRows,
     stop: Date,
     days: number,
     numeratorIndex = 2,
@@ -254,7 +255,16 @@ export async function computeWall(
             ? (100 * counts[key].numerator) / counts[key].denominator
             : null;
     }
-    stamp(m, shiftDay(stop, -days), stop);
+    stamp(
+      m,
+      shiftDay(stop, -days),
+      stop,
+      COVERAGE_REASON +
+        (rows.sourceRefreshedAt
+          ? ""
+          : " Source refresh watermark unavailable."),
+      rows.sourceRefreshedAt ?? null
+    );
     if (m.value == null)
       m.reason = "Zero cohort denominator; " + COVERAGE_REASON;
   }
@@ -416,6 +426,9 @@ export async function computeWall(
             }Same-cutoff Omi-plan MRR / qualified MAU. ${COVERAGE_REASON}`,
             book.sourceRefreshedAt
           );
+          a.sourceRefreshedAt = mau.sourceRefreshedAt
+            ? [book.sourceRefreshedAt, mau.sourceRefreshedAt].sort()[0]
+            : null;
           a.stale = m.stale || mau.stale;
         }
       }
@@ -475,6 +488,12 @@ export async function computeWall(
           COVERAGE_REASON,
         new Date(bill.generatedAt).toISOString()
       );
+      c.sourceRefreshedAt = rows.sourceRefreshedAt
+        ? [
+            new Date(bill.generatedAt).toISOString(),
+            rows.sourceRefreshedAt,
+          ].sort()[0]
+        : null;
       c.stale = freshness(
         c.sourceRefreshedAt,
         c.dataThrough,

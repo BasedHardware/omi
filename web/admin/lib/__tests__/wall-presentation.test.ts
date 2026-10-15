@@ -9,10 +9,14 @@ it("keeps missing values null, dims stale data, and calculates the previous-peri
   const now = new Date("2026-10-15T12:00Z");
   const data = await computeWall(
     {
-      query: async () => [
-        [0, "macos", 3],
-        [1, "macos", 2],
-      ],
+      query: async () =>
+        Object.assign(
+          [
+            [0, "macos", 3],
+            [1, "macos", 2],
+          ],
+          { sourceRefreshedAt: "2026-10-15T11:59Z" }
+        ),
       shopify: fail,
       stripe: fail,
       billing: fail,
@@ -39,7 +43,10 @@ it("uses same-cutoff fixture MRR / qualified MAU", async () => {
   const now = new Date("2026-10-15T12:00Z");
   const data = await computeWall(
     {
-      query: async () => [[0, "macos", 10]],
+      query: async () =>
+        Object.assign([[0, "macos", 10]], {
+          sourceRefreshedAt: "2026-10-15T11:59Z",
+        }),
       shopify: fail,
       billing: fail,
       stripe: async () => ({
@@ -69,4 +76,23 @@ it("refuses fixture mode in production before reading any file", async () => {
   } finally {
     vi.unstubAllEnvs();
   }
+});
+
+it("does not relabel a reader evaluation as a source refresh", async () => {
+  const now = new Date("2026-10-15T12:00Z");
+  const data = await computeWall(
+    {
+      query: async () => [[0, "macos", 3]],
+      shopify: fail,
+      stripe: fail,
+      billing: fail,
+    },
+    now
+  );
+  expect(data.metrics[0].sourceRefreshedAt).toBeNull();
+  expect(wallPresentation(data, now).tiles.growth_wau).toMatchObject({
+    state: "NO WATERMARK",
+    valueColor: "#6b7280",
+    value: 3,
+  });
 });

@@ -19,6 +19,7 @@ it.skipIf(process.env.OMI_TV_LIVE_CHECK !== "1")(
       establishedQuery(completeWeek(end).end, 2),
     ]) {
       const rows = await queryPosthog(query);
+      console.info("PostHog source refresh watermark:", rows.sourceRefreshedAt);
       expect(rows.length).toBeGreaterThan(0);
     }
   },
