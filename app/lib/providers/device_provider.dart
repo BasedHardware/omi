@@ -303,6 +303,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   Future<void> setConnectedDevice(BtDevice? device) async {
+    if (device != null) {
+      final alias = SharedPreferencesUtil().deviceAlias(device.id);
+      if (alias.isNotEmpty) {
+        device = device.copyWith(name: alias);
+      }
+    }
     final generation = _sessionGeneration;
     final endedDevice = device == null ? (pairedDevice ?? connectedDevice) : null;
     final sessionStartedAt = _deviceSessionStartedAt;
@@ -458,6 +464,30 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   /// persisted pairing no longer names it.
   bool _readoptPairMovedOn(String deviceId) =>
       _readoptExpectedPair == deviceId && SharedPreferencesUtil().btDevice.id != deviceId;
+
+  Future<bool> renameDevice(String newName) async {
+    final device = connectedDevice ?? pairedDevice;
+    if (device == null || device.id.isEmpty) return false;
+
+    final normalized = newName.trim();
+    if (normalized.isEmpty) return false;
+
+    final saved = await SharedPreferencesUtil().saveDeviceAlias(device.id, normalized);
+    if (!saved) return false;
+
+    if (connectedDevice?.id == device.id) {
+      connectedDevice = connectedDevice!.copyWith(name: normalized);
+    }
+    if (pairedDevice?.id == device.id) {
+      pairedDevice = pairedDevice!.copyWith(name: normalized);
+    }
+
+    final persisted = (pairedDevice ?? connectedDevice ?? device).copyWith(name: normalized);
+    await SharedPreferencesUtil().btDeviceSet(persisted);
+    SharedPreferencesUtil().deviceName = normalized;
+    notifyListeners();
+    return true;
+  }
 
   /// Hardware find-device LED. Not account publication; left unfenced.
   Future<bool> findDevice() {
