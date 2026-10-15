@@ -1,6 +1,7 @@
 """Reservation evidence, shared storage, and state policy contracts (no network)."""
 
 import json
+from dataclasses import asdict
 import asyncio
 import time
 import logging
@@ -15,6 +16,38 @@ from utils.llm.vertex_reservation_state import ReservationState, effective_state
 from utils.llm.desktop_reservation_policy import desktop_lane, admission, refusal_body
 
 OLD, NEW = 'gemini-2.5-flash', 'gemini-3.8-flash'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('outcome', ['inconclusive', 'exception'])
+async def test_non_teaching_probe_preserves_completed_failure_window(monkeypatch, outcome):
+    from unittest.mock import AsyncMock
+
+    monkeypatch.delenv(ptr.PT_MODEL_OVERRIDE_ENV, raising=False)
+    monkeypatch.delenv(vr.STATE_OVERRIDE_ENV, raising=False)
+    client = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    store = ReservationState(client)
+    seconds, micros = await client.time()
+    now = seconds + micros / 1_000_000
+    evidence = {OLD: asdict(failures(now - 2400)), NEW: asdict(vr.Evidence(success_at=now - 100))}
+    await client.set(store.key(), json.dumps({'evidence': evidence}))
+    transact = AsyncMock(wraps=store.transact)
+    monkeypatch.setattr(store, 'transact', transact)
+
+    async def probe(*args):
+        if outcome == 'exception':
+            raise RuntimeError('synthetic inconclusive probe')
+        return outcome
+
+    try:
+        await store._run_probe(OLD, probe, store.key())
+        transact.assert_not_awaited()
+        states, _ = await store.transact(OLD, 'inconclusive')
+        assert states[OLD] == vr.State.INACTIVE
+        assert json.loads(await client.get(store.key()))['evidence'] == evidence
+    finally:
+        await store.aclose()
+        await client.aclose()
 
 
 def failures(start=1000):

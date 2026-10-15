@@ -162,7 +162,7 @@ def test_all_desktop_aliases_follow_the_moved_order(anchor):
     assert ptr.reserved_generation_model(anchor, {}) == ptr.PT_MODEL_CURRENT
     assert (
         ptr.reserved_generation_model(anchor, {ptr.PT_MODEL_CURRENT: State.ACTIVE, ptr.PT_MODEL_TARGET: State.ACTIVE})
-        is None
+        == ptr.PT_MODEL_CURRENT
     )
 
 

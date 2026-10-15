@@ -28,7 +28,7 @@ from llm_gateway.gateway.accounting import (
     vertex_usage_from_response,
 )
 from llm_gateway.gateway.cache_policy import INTERNAL_POLICY, cache_owner_scope, provider_cache_request
-from llm_gateway.gateway.vertex_cache import CacheReceipt, VertexContentCache, scoped_cache_stream
+from llm_gateway.gateway.vertex_cache import CacheReceipt, VertexContentCache, scoped_cache_stream, validated_stream
 from llm_gateway.gateway.credentials import CredentialContext
 from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef, ProviderRejection
 from llm_gateway.gateway.provider_types import (  # noqa: F401 — re-exported provider contract
@@ -513,7 +513,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                 origin_model=origin_model,
             )
         except ProviderFailure as exc:
-            exc.accounting = receipt.accounting()
+            exc.accounting = exc.accounting or receipt.accounting()
             raise
         finally:
             self._thinking_budget_context.reset(token)
@@ -558,7 +558,6 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         try:
             origin_model = '' if self._dream_mode is not None else ptr.overflow_origin_from_request(request)
             payload = _vertex_request(request)
-            # State I/O has its own bounded allowance; preserve the inference budget.
             if self._dream_mode is None:
                 await self._refresh_reservations(max(timeout_ms, 0) / 4000.0)
             deadline = self._now() + max(timeout_ms, 0) / 1000.0
@@ -569,12 +568,16 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                 if remaining_ms <= 0:
                     raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT)
                 try:
-                    async for chunk in self._stream_content_once(
-                        payload,
-                        model=model,
-                        capacity=capacity,
-                        requested_model=provider_ref.model,
-                        timeout_ms=remaining_ms,
+                    async for chunk in validated_stream(
+                        self._stream_content_once(
+                            payload,
+                            model=model,
+                            capacity=capacity,
+                            requested_model=provider_ref.model,
+                            timeout_ms=remaining_ms,
+                        ),
+                        enabled=model == ptr.PT_MODEL_CURRENT,
+                        max_bytes=_configured_max_response_bytes(),
                     ):
                         yield chunk
                     yield _openai_sse_done()
@@ -602,10 +605,12 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                     raise
 
         except ProviderFailure as exc:
-            exc.accounting = receipt.accounting()
+            exc.accounting = exc.accounting or receipt.accounting()
             raise
 
-    async def _stream_content_once(self, payload, *, model, capacity, requested_model, timeout_ms):
+    async def _stream_content_once(
+        self, payload, *, model, capacity, requested_model, timeout_ms
+    ) -> AsyncGenerator[bytes, None]:
         context = self._cache_context.get()
         if context is None:
             async for chunk in self._stream_content_uncached_once(
@@ -691,6 +696,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                     if not reported_paygo and vertex_usage_from_response(parsed).traffic_type == 'ON_DEMAND':
                         self._observe_managed_traffic(model, 'ON_DEMAND')
                         reported_paygo = True
+                    self._reject_managed_on_demand(model, parsed)
                     context = self._cache_context.get()
                     if context is not None:
                         parsed = {**parsed, '_gateway_cache_receipt': asdict(context[2])}
@@ -951,9 +957,6 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         adapted = dict(payload) if self._dream_mode is not None else ptr.model_payload(payload, model)
         thinking_budget = self._thinking_budget_context.get()
         if thinking_budget is not None:
-            # Select the control for the model actually holding the reservation,
-            # after model_payload's legacy low-thinking defaults. Capacity and
-            # endpoints remain dedicated; other callers keep those defaults.
             generation_config = adapted.get('generationConfig', {})
             config = dict(generation_config) if isinstance(generation_config, Mapping) else {}
             config['thinkingConfig'] = (
@@ -984,6 +987,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                 )
             traffic_type = completed_provisioned_traffic(parsed)
             self._observe_managed_traffic(model, vertex_usage_from_response(parsed).traffic_type)
+            self._reject_managed_on_demand(model, parsed)
             self._observe_attempt(model, capacity, response.status_code, b'', traffic_type=traffic_type)
             await self._reservations.record(
                 model,
@@ -1006,7 +1010,9 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         async def probe(model: str, location: str) -> str:
             return await probe_reservation(self._http_client, self._vertex_access_token, model, location)
 
-        self._reservation_states = await self._reservations.refresh(probe, timeout_seconds=min(1.6, budget_seconds))
+        self._reservation_states = await self._reservations.refresh(
+            probe, timeout_seconds=min(1.6, budget_seconds), apply_overrides=False
+        )
 
     async def _vertex_access_token(self) -> str:
         try:

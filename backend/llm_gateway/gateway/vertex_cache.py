@@ -20,6 +20,8 @@ from typing import Any
 import httpx
 
 from llm_gateway.gateway.accounting import ProviderResponseMetadata
+from llm_gateway.gateway.provider_types import ProviderFailure
+from llm_gateway.gateway.schemas import FailureClass
 from llm_gateway.gateway.cache_policy import INTERNAL_POLICY, estimated_prefix_tokens, split_prefix
 from llm_gateway.gateway.vertex_wire import _vertex_request  # pyright: ignore[reportPrivateUsage]
 
@@ -275,3 +277,28 @@ async def scoped_cache_stream(
             await stream.aclose()
         finally:
             variable.reset(token)
+
+
+async def validated_stream(
+    stream: AsyncGenerator[bytes, None], *, enabled: bool, max_bytes: int
+) -> AsyncGenerator[bytes, None]:
+    """Hold retiring-model output until its final traffic receipt is validated.
+
+    A rejected late ON_DEMAND receipt must not leave generated content already
+    visible. Bound retained bytes, and always close the native stream on abort.
+    """
+    pending: list[bytes] = []
+    size = 0
+    try:
+        async for chunk in stream:
+            if enabled:
+                size += len(chunk)
+                if size > max_bytes:
+                    raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID)
+                pending.append(chunk)
+            else:
+                yield chunk
+        for chunk in pending:
+            yield chunk
+    finally:
+        await stream.aclose()

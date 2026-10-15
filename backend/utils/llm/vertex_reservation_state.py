@@ -154,7 +154,7 @@ class ReservationState:
             own = evidence[m]
             if 0 <= now - at <= ACTIVE_FRESH_SECONDS and at > max(own.success_at, own.failure_start):
                 evidence[m] = observe(own, now=at, outcome='dedicated_success')
-        if model in RESERVATIONS and outcome:
+        if model in RESERVATIONS and outcome in {'dedicated_success', 'capacity_error'}:
             evidence[model] = observe(evidence[model], now=now, outcome=outcome)
         states = {m: observed_state(m, evidence, now=now) for m in RESERVATIONS}
         leases = {m: at for m, at in doc.get('leases', {}).items() if m in RESERVATIONS}
@@ -377,7 +377,11 @@ class ReservationState:
                 outcome = await probe(model, location)
         except Exception:
             outcome = 'inconclusive'
-        if model in discovery_models(os.environ) and key == self.key():
+        if (
+            outcome in {'dedicated_success', 'capacity_error'}
+            and model in discovery_models(os.environ)
+            and key == self.key()
+        ):
             await self.transact(model, outcome)
             self._snapshot = {}
 

@@ -653,6 +653,11 @@ def cutover_states(
         explicit_target = overrides.get(PT_MODEL_TARGET) if isinstance(overrides, Mapping) else None
         if explicit_target in {None, 'auto'}:
             states[PT_MODEL_TARGET] = observed.get(PT_MODEL_TARGET, State.UNKNOWN)
+    elif observed.get(PT_MODEL_TARGET) == State.ACTIVE and observed.get(PT_MODEL_CURRENT) != State.ACTIVE:
+        # A live moved order remains exclusive even after old inactivity ages
+        # out. An old-model pin cannot fabricate positive old-order evidence.
+        states[PT_MODEL_CURRENT] = observed.get(PT_MODEL_CURRENT, State.UNKNOWN)
+        states[PT_MODEL_TARGET] = State.ACTIVE
     return states
 
 
@@ -678,18 +683,11 @@ def managed_generation_action(
         return LUNA
     if override and _normalize(override) not in RESERVATIONS:
         raise ValueError('OMI_VERTEX_PT_MODEL must name a declared reservation model')
-    if states.get(PT_MODEL_CURRENT) == State.INACTIVE:
-        destination = policy(PT_MODEL_CURRENT, State.INACTIVE, lane=lane)
-        # The moved reservation belongs exclusively to Dream. A stale remap
-        # row cannot grant interactive traffic access to any Gemini model.
-        return destination if destination.kind == 'refuse' else LUNA
-    order = RESERVATIONS[PT_MODEL_CURRENT].order
-    active = [m for m, spec in RESERVATIONS.items() if spec.order == order and states.get(m) == State.ACTIVE]
-    if len(active) == 1:
-        return Action('dedicated' if active[0] == PT_MODEL_CURRENT else 'remap', active[0])
-    if not active and states.get(PT_MODEL_CURRENT, State.UNKNOWN) == State.UNKNOWN:
+    old, target = states.get(PT_MODEL_CURRENT, State.UNKNOWN), states.get(PT_MODEL_TARGET, State.UNKNOWN)
+    if old == State.ACTIVE or (old == State.UNKNOWN and target != State.ACTIVE):
         return Action('dedicated', PT_MODEL_CURRENT)
-    return LUNA
+    destination = policy(PT_MODEL_CURRENT, State.INACTIVE, lane=lane)
+    return destination if destination.kind == 'refuse' else LUNA
 
 
 def reserved_generation_model(

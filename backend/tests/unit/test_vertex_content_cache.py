@@ -4,12 +4,48 @@ import httpx
 import pytest
 
 from llm_gateway.gateway.cache_policy import apply_lane_cache_policy
-from llm_gateway.gateway.vertex_cache import CacheReceipt, VertexContentCache
+from llm_gateway.gateway.vertex_cache import CacheReceipt, VertexContentCache, validated_stream
 from llm_gateway.gateway.vertex_wire import _vertex_request
 from llm_gateway.gateway.provider_types import _VertexHttpError
 
 ENDPOINT = 'https://us-aiplatform.googleapis.com/v1/projects/synthetic-project/locations/us/publishers/google/models/gemini-3.8-flash:generateContent'
 NAME = 'projects/synthetic-project/locations/us/cachedContents/invented-cache'
+
+
+@pytest.mark.asyncio
+async def test_retiring_stream_buffer_is_bounded_and_closes_without_output():
+    from llm_gateway.gateway.provider_types import ProviderFailure
+
+    closed = []
+
+    async def source():
+        try:
+            yield b'ab'
+            yield b'cd'
+        finally:
+            closed.append(True)
+
+    output = []
+    with pytest.raises(ProviderFailure):
+        async for chunk in validated_stream(source(), enabled=True, max_bytes=3):
+            output.append(chunk)
+    assert output == [] and closed == [True]
+
+
+@pytest.mark.asyncio
+async def test_unbuffered_dream_stream_keeps_first_chunk_latency():
+    stages = []
+
+    async def source():
+        stages.append('first')
+        yield b'ab'
+        stages.append('second')
+        yield b'cd'
+
+    stream = validated_stream(source(), enabled=False, max_bytes=1)
+    assert await anext(stream) == b'ab'
+    assert stages == ['first']
+    assert [part async for part in stream] == [b'cd']
 
 
 def request():
@@ -276,7 +312,11 @@ async def test_vertex_prepared_stream_may_resume_or_close_in_another_task(monkey
         )
         monkeypatch.setattr(provider._reservations, 'record', AsyncMock())
         stream = provider.stream_chat_completion(
-            {'messages': [{'role': 'user', 'content': 'invented'}]},
+            {
+                'messages': [{'role': 'user', 'content': 'invented'}],
+                '_dream_capacity_mode': 'reserved',
+                '_gateway_cache_policy': {'lane': 'omi:auto:dream-reasoning'},
+            },
             provider_ref=ProviderRef(provider='gemini', model='gemini-3.8-flash'),
             credentials=build_omi_managed_credential_context(ServiceCaller(name='backend', user_uid='synthetic-owner')),
             timeout_ms=10000,

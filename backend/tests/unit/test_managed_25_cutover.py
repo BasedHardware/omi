@@ -1,6 +1,9 @@
 """Automatic evidence-driven 2.5 retirement with one-row destination selection."""
 
 import json
+from typing import Any
+from dataclasses import asdict
+import fakeredis.aioredis
 from dataclasses import replace
 from unittest.mock import AsyncMock
 
@@ -47,7 +50,7 @@ CASES = (
 )
 
 
-def completion(model):
+def completion(model) -> dict[str, Any]:
     return {
         'id': 'synthetic-response',
         'object': 'chat.completion',
@@ -255,6 +258,15 @@ async def test_unexpected_25_on_demand_receipt_is_visible(monkeypatch, stream):
     monkeypatch.delenv(vr.STATE_OVERRIDE_ENV, raising=False)
 
     def handler(request):
+        if request.url.path == '/v1/chat/completions':
+            if stream:
+                return httpx.Response(
+                    200,
+                    content=b'data: {"choices":[{"delta":{"content":"safe Luna"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+                )
+            body = completion('gpt-6-luna')
+            body['choices'][0]['message']['content'] = 'safe Luna'
+            return httpx.Response(200, json=body)
         assert request.headers[ptr.REQUEST_TYPE_HEADER] == 'dedicated'
         # Deliberately contradictory synthetic provider receipt; alert must see it.
         body = {
@@ -280,26 +292,36 @@ async def test_unexpected_25_on_demand_receipt_is_visible(monkeypatch, stream):
         )
         credentials = build_omi_managed_credential_context(ServiceCaller(name='backend'))
         before = UNEXPECTED_25_PAYGO.labels(lane='desktop_other')._value.get()
+        registry = ProviderRegistry(
+            {'gemini': provider, 'openai': OpenAICompatibleChatCompletionProvider(http_client=client)}
+        )
         if stream:
             prepared = await _prepared_streaming_iterator(
-                resolved,
-                credentials,
-                ProviderRegistry({'gemini': provider}),
-                resolved.active_route,
-                attempt_trace=AttemptTrace(),
+                resolved, credentials, registry, resolved.active_route, attempt_trace=AttemptTrace()
             )
-            _ = [chunk async for chunk in prepared.stream]
+            output = (prepared.first_chunk or b'') + b''.join([chunk async for chunk in prepared.stream])
+            assert b'safe Luna' in output and b'invented' not in output
         else:
-            await execute_chat_completion(resolved, credentials, ProviderRegistry({'gemini': provider}))
+            result = await execute_chat_completion(resolved, credentials, registry)
+            assert result.selected_provider == 'openai'
+            assert result.response['choices'][0]['message']['content'] == 'safe Luna'
         assert UNEXPECTED_25_PAYGO.labels(lane='desktop_other')._value.get() == before + 1
         assert provider._reservation_states.get(OLD) != vr.State.ACTIVE
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('model', [OLD, NEW, 'gemini-2.5-flash-lite', 'gemini-3.1-flash-lite'])
+@pytest.mark.parametrize(
+    'model,old_state',
+    [
+        (model, state)
+        for state in (vr.State.INACTIVE, vr.State.UNKNOWN, vr.State.ACTIVE)
+        for model in (OLD, NEW, 'gemini-2.5-flash-lite', 'gemini-3.1-flash-lite')
+        if model != OLD or state != vr.State.ACTIVE
+    ],
+)
 @pytest.mark.parametrize('capacity', ['dedicated', 'shared'])
 @pytest.mark.parametrize('stream', [False, True])
-async def test_stale_plan_cannot_dispatch_any_non_dream_flash(monkeypatch, model, capacity, stream):
+async def test_stale_plan_cannot_dispatch_any_non_dream_flash(monkeypatch, model, old_state, capacity, stream):
     from utils.llm.vertex_policy_metrics import NON_DREAM_FLASH_AFTER_CUTOVER
 
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
@@ -319,7 +341,9 @@ async def test_stale_plan_cannot_dispatch_any_non_dream_flash(monkeypatch, model
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         vertex = VertexGeminiProvider(http_client=client, access_token_supplier=AsyncMock(return_value='synthetic'))
-        monkeypatch.setattr(vertex._reservations, 'refresh', AsyncMock(return_value=observed_move()))
+        monkeypatch.setattr(
+            vertex._reservations, 'refresh', AsyncMock(return_value={OLD: old_state, NEW: vr.State.ACTIVE})
+        )
         # Simulate a stale plan, misconfigured overflow, or LKG code bypassing policy.
         monkeypatch.setattr(vertex, '_attempt_plan', lambda *args, **kwargs: [(model, capacity)])
         resolved = resolve_chat_completion_route(
@@ -348,3 +372,128 @@ async def test_stale_plan_cannot_dispatch_any_non_dream_flash(monkeypatch, model
 def test_stale_remap_destination_cannot_grant_non_dream_reserved_capacity(monkeypatch):
     monkeypatch.setitem(vr.INACTIVE_DESTINATIONS, 'desktop_other', vr.REMAP)
     assert ptr.managed_generation_action(NEW, observed_move()) == vr.LUNA
+
+
+@pytest.mark.parametrize('old', list(vr.State))
+@pytest.mark.parametrize('target', list(vr.State))
+@pytest.mark.parametrize('lane', ['desktop_other', 'macos_legacy_tasks'])
+@pytest.mark.parametrize('anchor', list(ptr.DESKTOP_TEXT_LANES))
+def test_complete_non_dream_evidence_matrix(old, target, lane, anchor):
+    action = ptr.managed_generation_action(anchor, {OLD: old, NEW: target}, lane=lane)
+    if old == vr.State.ACTIVE or old == vr.State.UNKNOWN and target != vr.State.ACTIVE:
+        assert action == vr.Action('dedicated', OLD)
+    else:
+        assert action == (vr.R if lane == 'macos_legacy_tasks' else vr.LUNA)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('stream', [False, True])
+@pytest.mark.parametrize('stale_plan', [False, True])
+@pytest.mark.parametrize('old_state', [vr.State.INACTIVE, vr.State.UNKNOWN])
+async def test_real_refresh_preserves_raw_evidence_under_25_pin(monkeypatch, stream, stale_plan, old_state):
+    from utils.llm.vertex_reservation_state import ReservationState
+    from utils.llm.vertex_policy_metrics import NON_DREAM_FLASH_AFTER_CUTOVER
+
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
+    monkeypatch.setenv(ptr.PT_MODEL_OVERRIDE_ENV, OLD)
+    monkeypatch.delenv(vr.STATE_OVERRIDE_ENV, raising=False)
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    store = ReservationState(redis)
+    seconds, micros = await redis.time()
+    now = seconds + micros / 1_000_000
+    old = vr.Evidence(success_at=now - 4000, failure_start=now - 2400, failure_at=now - 600, failure_count=4)
+    if old_state == vr.State.UNKNOWN:
+        old = vr.Evidence(success_at=now - 90000, failure_start=now - 3800, failure_at=now - 2000, failure_count=4)
+    await redis.set(
+        store.key(), json.dumps({'evidence': {OLD: asdict(old), NEW: asdict(vr.Evidence(success_at=now - 100))}})
+    )
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        assert request.url.path == '/v1/chat/completions'
+        assert json.loads(request.content)['model'] == 'gpt-6-luna'
+        if stream:
+            return httpx.Response(
+                200,
+                content=b'data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+            )
+        return httpx.Response(200, json=completion('gpt-6-luna'))
+
+    try:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            vertex = VertexGeminiProvider(http_client=client, access_token_supplier=AsyncMock(return_value='synthetic'))
+            vertex._reservations = store  # Real refresh, reducer, TIME, and Redis transaction; no refresh stub.
+            if stale_plan:
+                monkeypatch.setattr(vertex, '_attempt_plan', lambda *args, **kwargs: [(OLD, 'dedicated')])
+            metric = NON_DREAM_FLASH_AFTER_CUTOVER.labels(lane='desktop_other', model=OLD, traffic_type='dedicated')
+            before = metric._value.get()
+            resolved = resolve_chat_completion_route(
+                load_gateway_config(),
+                {'model': ptr.DESKTOP_TEXT_LANES[NEW], 'messages': [{'role': 'user', 'content': 'invented'}]},
+            )
+            registry = ProviderRegistry(
+                {'gemini': vertex, 'openai': OpenAICompatibleChatCompletionProvider(http_client=client)}
+            )
+            credentials = build_omi_managed_credential_context(ServiceCaller(name='backend'))
+            if stream:
+                prepared = await _prepared_streaming_iterator(
+                    resolved, credentials, registry, resolved.active_route, attempt_trace=AttemptTrace()
+                )
+                _ = [chunk async for chunk in prepared.stream]
+            else:
+                result = await execute_chat_completion(resolved, credentials, registry)
+                assert result.selected_provider == 'openai'
+            assert vertex._reservation_states == {OLD: old_state, NEW: vr.State.ACTIVE}
+            assert len(seen) == 1
+            assert metric._value.get() == before + int(stale_plan)
+    finally:
+        await store.aclose()
+        await redis.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('receipt_location', ['top', 'usage', 'contradictory'])
+async def test_late_25_on_demand_receipt_releases_no_stream_output(monkeypatch, receipt_location):
+    from llm_gateway.gateway.schemas import ProviderRef, FailureClass
+    from llm_gateway.gateway.provider_types import ProviderFailure
+
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
+    monkeypatch.delenv(ptr.PT_MODEL_OVERRIDE_ENV, raising=False)
+    monkeypatch.delenv(vr.STATE_OVERRIDE_ENV, raising=False)
+
+    class Body(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b'data: {"candidates":[{"content":{"parts":[{"text":"must never escape"}]}}]}\n\n'
+            final: dict[str, Any] = {
+                'candidates': [{'finishReason': 'STOP'}],
+                'usageMetadata': {'promptTokenCount': 7, 'candidatesTokenCount': 4},
+            }
+            (final if receipt_location == 'top' else final['usageMetadata'])['trafficType'] = 'ON_DEMAND'
+            if receipt_location == 'contradictory':
+                final['trafficType'] = 'PROVISIONED_THROUGHPUT'
+            yield f'data: {json.dumps(final)}\n\n'.encode()
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, stream=Body()))
+    ) as client:
+        vertex = VertexGeminiProvider(http_client=client, access_token_supplier=AsyncMock(return_value='synthetic'))
+        monkeypatch.setattr(vertex._reservations, 'refresh', AsyncMock(return_value={OLD: vr.State.ACTIVE}))
+        record = AsyncMock()
+        monkeypatch.setattr(vertex._reservations, 'record', record)
+        chunks = []
+        with pytest.raises(ProviderFailure) as raised:
+            async for chunk in vertex.stream_chat_completion(
+                {'messages': [{'role': 'user', 'content': 'invented'}]},
+                provider_ref=ProviderRef(provider='gemini', model=OLD),
+                credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+                timeout_ms=1000,
+            ):
+                chunks.append(chunk)
+        assert not chunks
+        assert raised.value.failure_class == FailureClass.RESERVED_CAPACITY_UNAVAILABLE
+        accounting = raised.value.accounting
+        assert accounting is not None and accounting.usage is not None
+        assert accounting.traffic_type == 'ON_DEMAND'
+        assert accounting.usage.prompt_tokens == 7
+        record.assert_not_awaited()

@@ -56,7 +56,23 @@ async def test_proxy_flash_screenshot_schema_cutover(monkeypatch, platform, tag,
 @pytest.mark.asyncio
 @pytest.mark.parametrize('stream', [False, True])
 @pytest.mark.parametrize(
-    'shape', ['audio', 'video', 'file', 'builtin_tool', 'output_audio', 'unknown_part', 'system_image', 'invalid_parts']
+    'shape',
+    [
+        'audio',
+        'video',
+        'file',
+        'builtin_tool',
+        'output_audio',
+        'unknown_part',
+        'system_image',
+        'invalid_parts',
+        'text_file',
+        'text_file_snake',
+        'text_audio',
+        'text_mixed_inline',
+        'system_text_file',
+        'system_text_audio',
+    ],
 )
 async def test_unsupported_screenshot_shape_is_graceful_no_task(monkeypatch, stream, shape):
     payload = screen_payload()
@@ -73,6 +89,19 @@ async def test_unsupported_screenshot_shape_is_graceful_no_task(monkeypatch, str
         payload['systemInstruction']['parts'].append(parts[1])
     elif shape == 'invalid_parts':
         payload['contents'][0]['parts'] = 1
+    elif shape in {'text_file', 'text_file_snake'}:
+        parts[1] = {
+            'text': 'invented',
+            'fileData' if shape == 'text_file' else 'file_data': {'fileUri': 'gs://synthetic-only/screen'},
+        }
+    elif shape == 'text_audio':
+        parts[1] = {'text': 'invented', 'inline_data': {'mime_type': 'audio/wav', 'data': 'AQID'}}
+    elif shape == 'text_mixed_inline':
+        parts[1].update(text='invented', inline_data={'mime_type': 'audio/wav', 'data': 'AQID'})
+    elif shape == 'system_text_file':
+        payload['systemInstruction']['parts'][0]['fileData'] = {'fileUri': 'gs://synthetic-only/screen'}
+    elif shape == 'system_text_audio':
+        payload['systemInstruction']['parts'][0]['inlineData'] = {'mimeType': 'audio/wav', 'data': 'AQID'}
     else:
         parts[1] = {'executableCode': {'code': 'synthetic'}}
     await run_proxy(monkeypatch, 'macos', 'task_extraction', stream, 'gemini-3.8-flash', 'moved', payload, refused=True)

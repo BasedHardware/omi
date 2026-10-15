@@ -219,6 +219,7 @@ def luna_unsupported_shape(payload: Mapping[str, Any]) -> bool:
         parts = instruction.get('parts', [])
         if not isinstance(parts, list) or any(not isinstance(p, Mapping) or 'text' not in p for p in parts):
             return True
+        contents = [*contents, instruction]
     for content in contents:
         if not isinstance(content, Mapping):
             return True
@@ -228,12 +229,20 @@ def luna_unsupported_shape(payload: Mapping[str, Any]) -> bool:
         for part in parts:
             if not isinstance(part, Mapping):
                 return True
-            inline = part.get('inlineData') or part.get('inline_data')
-            if isinstance(inline, Mapping):
-                mime = inline.get('mimeType', inline.get('mime_type', ''))
-                if mime not in {'image/jpeg', 'image/png', 'image/webp', 'image/gif'}:
+            if 'fileData' in part or 'file_data' in part:
+                return True
+            for key in ('inlineData', 'inline_data'):
+                if key not in part:
+                    continue
+                inline = part[key]
+                if not isinstance(inline, Mapping) or inline.get('mimeType', inline.get('mime_type', '')) not in {
+                    'image/jpeg',
+                    'image/png',
+                    'image/webp',
+                    'image/gif',
+                }:
                     return True
-            elif not any(k in part for k in ('text', 'functionCall', 'functionResponse')):
+            if not any(k in part for k in ('text', 'functionCall', 'functionResponse', 'inlineData', 'inline_data')):
                 return True
     return False
 
@@ -252,14 +261,17 @@ async def should_refuse(
     # Inspect the original wire before the bridge drops Gemini-only fields.
     payload = json.loads(_sanitize(body, action))
     observed = await refresh()
-    if observed.get('gemini-2.5-flash') == State.INACTIVE and luna_unsupported_shape(json.loads(body)):
+    cutover = observed.get('gemini-2.5-flash') == State.INACTIVE or (
+        observed.get('gemini-3.8-flash') == State.ACTIVE and observed.get('gemini-2.5-flash') != State.ACTIVE
+    )
+    if cutover and luna_unsupported_shape(json.loads(body)):
         observe_decision(desktop_lane(headers, payload), 'refuse')
         return True
     states = effective_states(observed, os.environ, admission=True)
-    if observed.get('gemini-2.5-flash') == State.INACTIVE:
+    if cutover:
         states['gemini-2.5-flash'] = State.INACTIVE
     lane = desktop_lane(headers, payload)
-    policy_model = 'gemini-2.5-flash' if observed.get('gemini-2.5-flash') == State.INACTIVE else model
+    policy_model = 'gemini-2.5-flash' if cutover else model
     return (
         admission(
             policy_model,

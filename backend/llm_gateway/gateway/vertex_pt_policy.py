@@ -11,12 +11,14 @@ from __future__ import annotations
 import logging
 import json
 import os
+from dataclasses import replace
 from contextvars import ContextVar
 from typing import Any, TypeVar
 from collections.abc import Mapping
 from collections.abc import Callable
 
 from llm_gateway.gateway.provider_types import ProviderFailure
+from llm_gateway.gateway.accounting import vertex_usage_from_response
 from llm_gateway.gateway.dream_lanes import DREAM_MODEL
 from llm_gateway.gateway.dream_provider import capacity_mode
 from llm_gateway.gateway.schemas import FailureClass
@@ -125,12 +127,37 @@ class VertexPTPolicyMixin:
         # stale plans/recovery/LKG cannot consume Dream's moved order.
         if (
             self._dream_mode is None
-            and self._reservation_states.get(ptr.PT_MODEL_CURRENT) == State.INACTIVE
             and model.startswith('gemini-')
             and 'flash' in model
+            and (
+                self._reservation_states.get(ptr.PT_MODEL_CURRENT) == State.INACTIVE
+                or self._reservation_states.get(ptr.PT_MODEL_TARGET) == State.ACTIVE
+                and (
+                    model != ptr.PT_MODEL_CURRENT or self._reservation_states.get(ptr.PT_MODEL_CURRENT) != State.ACTIVE
+                )
+            )
         ):
             observe_forbidden_flash(model, capacity, self._product_policy_lane)
             raise ProviderFailure(FailureClass.RESERVED_CAPACITY_UNAVAILABLE)
+
+    def _reject_managed_on_demand(self, model: str, payload: Mapping[str, Any]) -> None:
+        usage = payload.get('usageMetadata')
+        nested = usage.get('trafficType') if isinstance(usage, Mapping) else None
+        if (
+            model == ptr.PT_MODEL_CURRENT
+            and self._dream_mode is None
+            and (payload.get('trafficType') == 'ON_DEMAND' or nested == 'ON_DEMAND')
+        ):
+            if payload.get('trafficType') != 'ON_DEMAND':
+                self._observe_managed_traffic(model, 'ON_DEMAND')
+            error = ProviderFailure(FailureClass.RESERVED_CAPACITY_UNAVAILABLE)
+            metadata = replace(vertex_usage_from_response(payload), traffic_type='ON_DEMAND')
+            context = self._cache_context.get()
+            if context is not None:
+                context[2].traffic_type = 'ON_DEMAND'
+                metadata = context[2].accounting(metadata)
+            error.accounting = metadata
+            raise error
 
     def _observe_managed_traffic(self, model: str, traffic_type: str | None) -> None:
         observe_reported_traffic(model, traffic_type, self._product_policy_lane)
