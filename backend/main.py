@@ -352,9 +352,7 @@ methods_timeout = {
     "DELETE": os.environ.get('HTTP_DELETE_TIMEOUT'),
 }
 
-# The Cloud Tasks sync-job handler runs the whole pipeline inside the request,
-# so it needs a much higher cap than the default. Must stay below the job run
-# lock TTL (1800s) so a lock can never expire under a live run.
+# Keep the in-request Cloud Tasks pipeline cap below its 1800s lock TTL so no lock expires under live work.
 paths_timeout = {
     "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
     "/v2/dream-agent/sweep": 150,  # Drain has its own 120s bound; Scheduler allows 180s.
@@ -374,6 +372,7 @@ paths_timeout = {
 app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout, paths_timeout=paths_timeout)
 
 from utils.byok import BYOKMiddleware
+from utils.llm.desktop_proxy_lifetime import DesktopProxyDeadlineMiddleware
 
 app.add_middleware(BYOKMiddleware)
 
@@ -381,6 +380,7 @@ from database.firestore_tier_context import FirestoreTierMiddleware
 
 app.add_middleware(FirestoreTierMiddleware)
 app.add_middleware(SyncUploadMetricsMiddleware)
+app.add_middleware(DesktopProxyDeadlineMiddleware)
 
 
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring

@@ -337,12 +337,19 @@ class DesktopProxyDeadlineMiddleware:
         finished = False
         status = 500
         override = None
+        upload_drained = asyncio.Event()
+        disconnected = asyncio.Event()
 
         class ResponseDeadline(Exception):
             pass
 
         async def guarded_send(message):
             nonlocal started, status, is_sse, fixed_length, finished
+            # Older ASGI servers silently discard sends after disconnect. Let
+            # the receive owner observe a queued disconnect before committing.
+            await asyncio.sleep(0)
+            if disconnected.is_set():
+                raise ClientDisconnect
             if asyncio.get_running_loop().time() >= telemetry.request_deadline:
                 raise ResponseDeadline
             if message['type'] == 'http.response.start':
@@ -354,24 +361,68 @@ class DesktopProxyDeadlineMiddleware:
                 await send(message)
             except* OSError as errors:
                 raise ClientDisconnect from errors
+            if disconnected.is_set():
+                raise ClientDisconnect
             if message['type'] == 'http.response.start':
                 started = True
             if message['type'] == 'http.response.body' and not message.get('more_body', False):
                 finished = True
 
-        task = asyncio.create_task(self.app(scope, receive, guarded_send), name='desktop-gemini-asgi')
+        async def watch_disconnect():
+            await upload_drained.wait()
+            while (await receive())['type'] != 'http.disconnect':
+                pass
+            # Uvicorn also returns http.disconnect after successful completion.
+            if not finished:
+                disconnected.set()
+
+        async def invoke():
+            telemetry.phase = 'upload'
+            try:
+                body = await read_body(Request(scope, receive))
+            except UploadTimeout:
+                await deadline_response(telemetry, outcome='upload_timeout')(scope, receive, guarded_send)
+                return
+            except HTTPException as exc:
+                telemetry.fail_request(outcome='validation_rejected', status_code=exc.status_code, phase='upload')
+                await JSONResponse({'detail': exc.detail}, status_code=exc.status_code)(scope, receive, guarded_send)
+                return
+            delivered = False
+            upload_drained.set()
+
+            async def replay_body():
+                nonlocal delivered
+                if not delivered:
+                    delivered = True
+                    return {'type': 'http.request', 'body': body, 'more_body': False}
+                await disconnected.wait()
+                return {'type': 'http.disconnect'}
+
+            telemetry.phase = 'authorization'
+            await self.app(scope, replay_body, guarded_send)
+
+        task = asyncio.create_task(invoke(), name='desktop-gemini-asgi')
+        watcher = asyncio.create_task(watch_disconnect(), name='desktop-gemini-asgi-disconnect')
         try:
             remaining = max(0, telemetry.request_deadline - asyncio.get_running_loop().time())
-            done, _ = await asyncio.wait((task,), timeout=remaining)
-            if done:
-                expired = disconnected = False
+            done, _ = await asyncio.wait((task, watcher), timeout=remaining, return_when=asyncio.FIRST_COMPLETED)
+            if watcher in done:
+                await watcher
+            if disconnected.is_set() and not finished:
+                override = dict(outcome='client_cancelled', status_code=499, retryable=False, phase='client_disconnect')
+                telemetry.fail_request(
+                    outcome='client_cancelled', status_code=499, retryable=False, phase='client_disconnect'
+                )
+                return
+            if task in done:
+                expired = client_disconnected = False
                 try:
                     await task
                 except* ClientDisconnect:
-                    disconnected = True
+                    client_disconnected = True
                 except* ResponseDeadline:
                     expired = True
-                if disconnected and not finished:
+                if client_disconnected and not finished:
                     override = dict(
                         outcome='client_cancelled', status_code=499, retryable=False, phase='client_disconnect'
                     )
@@ -433,4 +484,4 @@ class DesktopProxyDeadlineMiddleware:
                     retryable=False,
                     phase=telemetry.phase,
                 )
-            await _drain(task)
+            await _drain(task, watcher)

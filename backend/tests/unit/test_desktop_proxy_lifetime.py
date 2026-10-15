@@ -1,7 +1,9 @@
 """Request lifetime tests use real ASGI receive/cancellation boundaries."""
 
 import asyncio
+import ast
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import httpx
@@ -14,6 +16,21 @@ from utils.byok import BYOKMiddleware
 from utils.llm import desktop_proxy_lifetime as lifetime
 
 from routers import desktop_proxy
+
+
+def test_main_installs_deadline_outside_other_middlewares():
+    tree = ast.parse((Path(__file__).parents[2] / 'main.py').read_text())
+    middleware = [
+        node.value.args[0].id
+        for node in tree.body
+        if isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Call)
+        and isinstance(node.value.func, ast.Attribute)
+        and node.value.func.attr == 'add_middleware'
+        and isinstance(node.value.args[0], ast.Name)
+    ]
+    assert middleware[-1] == 'DesktopProxyDeadlineMiddleware'
+    assert 'BYOKMiddleware' in middleware
 
 
 @pytest.mark.asyncio
@@ -869,7 +886,7 @@ async def test_simultaneous_success_and_disconnect_preserves_provider_not_reques
         'headers': [],
     }
     await lifetime.DesktopProxyDeadlineMiddleware(app)(scope, receive, send)
-    assert messages[0]['status'] == 499
+    assert not messages, 'the outer owner must not send on a disconnected transport'
     assert len(attempts) == 1
     assert build_managed_attempt_event(attempts[0]).as_dict()['outcome'] == 'success'
     events = terminals(capsys)
@@ -884,7 +901,8 @@ async def test_completed_delivery_survives_cleanup_cancellation(monkeypatch, cap
     from utils.llm import desktop_gemini_telemetry as tm
     from utils.llm.managed_spend_ledger import build_managed_attempt_event
 
-    monkeypatch.setattr(lifetime, 'REQUEST_TIMEOUT_SECONDS', 0.2)
+    budget = 10.0 if cancel else 1.0
+    monkeypatch.setattr(lifetime, 'REQUEST_TIMEOUT_SECONDS', budget)
     monkeypatch.setattr(lifetime, 'CANCEL_GRACE_SECONDS', 0.02)
     attempts = []
     monkeypatch.setattr(tm, 'schedule_managed_attempt', attempts.append)
@@ -904,7 +922,7 @@ async def test_completed_delivery_survives_cleanup_cancellation(monkeypatch, cap
     state = tm.get_proxy_telemetry(Request(scope), streaming=not outer)
     state.uid = 'synthetic-user'
     state.defer_terminal = True
-    state.request_deadline = asyncio.get_running_loop().time() + 0.2
+    state.request_deadline = asyncio.get_running_loop().time() + budget
     state.phase = 'body'
     state.note_dispatch(tm.UpstreamRoute('https://provider.invalid', {}, {}, 'ai_studio', 'server', 'us'))
     state.complete(outcome='success', status_code=200, retryable=False, upstream_status=200, phase='body')
@@ -939,3 +957,143 @@ async def test_completed_delivery_survives_cleanup_cancellation(monkeypatch, cap
     assert [(e['outcome'], e['status_code']) for e in terminals(capsys)] == [('success', 200)]
     assert len(attempts) == 1
     assert build_managed_attempt_event(attempts[0]).as_dict()['outcome'] == 'success'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('silent_return', [False, True])
+async def test_disconnect_during_delivery_has_one_receive_owner(lifetime_app, monkeypatch, capsys, silent_return):
+    from utils.llm import desktop_gemini_telemetry as tm
+    from utils.llm.managed_spend_ledger import build_managed_attempt_event
+
+    attempts = []
+    monkeypatch.setattr(tm, 'schedule_managed_attempt', attempts.append)
+    disconnected, sending = asyncio.Event(), asyncio.Event()
+    sent = False
+    receiving = False
+
+    async def receive():
+        nonlocal sent, receiving
+        assert not receiving, 'only the outer owner may receive from the server'
+        receiving = True
+        try:
+            if not sent:
+                sent = True
+                return {'type': 'http.request', 'body': b'{}', 'more_body': False}
+            await disconnected.wait()
+            return {'type': 'http.disconnect'}
+        finally:
+            receiving = False
+
+    async def provider(*args, **kwargs):
+        state = kwargs['telemetry']
+        state.uid = 'synthetic-user'
+        state.note_dispatch(tm.UpstreamRoute('https://provider.invalid', {}, {}, 'ai_studio', 'server', 'us'))
+        state.complete(outcome='success', status_code=200, retryable=False, phase='gateway')
+        return Response(b'success')
+
+    monkeypatch.setattr(desktop_proxy, '_proxy_via_gateway', provider)
+
+    async def send(message):
+        if message['type'] == 'http.response.body':
+            sending.set()
+            if silent_return:
+                # Uvicorn 0.30.5 returns normally after a socket disconnect.
+                disconnected.set()
+                await asyncio.sleep(0)
+                return
+            await asyncio.Event().wait()
+
+    scope = {
+        'type': 'http',
+        'asgi': {'spec_version': '2.3'},
+        'method': 'POST',
+        'path': '/v1/proxy/gemini/models/gemini-2.5-flash:generateContent',
+        'query_string': b'',
+        'headers': [],
+    }
+    task = asyncio.create_task(lifetime_app(scope, receive, send))
+    await asyncio.wait_for(sending.wait(), timeout=3)
+    disconnected.set()
+    await asyncio.wait_for(task, timeout=1)
+    assert [(e['outcome'], e['status_code']) for e in terminals(capsys)] == [('client_cancelled', 499)]
+    assert len(attempts) == 1
+    assert build_managed_attempt_event(attempts[0]).as_dict()['outcome'] == 'success'
+
+
+@pytest.mark.asyncio
+async def test_disconnect_during_byok_validation_cancels_before_route(lifetime_app, monkeypatch, capsys):
+    from utils import byok
+
+    validating, disconnected, cancelled = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    sent = False
+
+    async def validate(*args, **kwargs):
+        validating.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    monkeypatch.setattr(byok, 'run_blocking', validate)
+
+    async def receive():
+        nonlocal sent
+        if not sent:
+            sent = True
+            return {'type': 'http.request', 'body': b'{}', 'more_body': False}
+        await disconnected.wait()
+        return {'type': 'http.disconnect'}
+
+    async def send(message):
+        raise AssertionError('disconnected authorization must not deliver a response')
+
+    scope = {
+        'type': 'http',
+        'asgi': {'spec_version': '2.3'},
+        'method': 'POST',
+        'path': '/v1/proxy/gemini/models/gemini-2.5-flash:generateContent',
+        'query_string': b'',
+        'headers': [(b'x-byok-gemini', b'synthetic'), (b'authorization', b'Bearer synthetic')],
+    }
+    task = asyncio.create_task(lifetime_app(scope, receive, send))
+    await asyncio.wait_for(validating.wait(), timeout=3)
+    disconnected.set()
+    await asyncio.wait_for(task, timeout=1)
+    assert cancelled.is_set()
+    assert [(e['outcome'], e['status_code']) for e in terminals(capsys)] == [('client_cancelled', 499)]
+
+
+@pytest.mark.asyncio
+async def test_server_completion_disconnect_does_not_undo_delivery(lifetime_app, monkeypatch, capsys):
+    completed = asyncio.Event()
+    sent = False
+
+    async def receive():
+        nonlocal sent
+        if not sent:
+            sent = True
+            return {'type': 'http.request', 'body': b'{}', 'more_body': False}
+        await completed.wait()
+        return {'type': 'http.disconnect'}
+
+    async def provider(*args, **kwargs):
+        kwargs['telemetry'].complete(outcome='success', status_code=200, retryable=False, phase='gateway')
+        return Response(b'success')
+
+    monkeypatch.setattr(desktop_proxy, '_proxy_via_gateway', provider)
+
+    async def send(message):
+        if message['type'] == 'http.response.body' and not message.get('more_body', False):
+            completed.set()
+
+    # Exercise the actual completion wakeup, as Uvicorn does on its final send.
+    scope = {
+        'type': 'http',
+        'asgi': {'spec_version': '2.3'},
+        'method': 'POST',
+        'path': '/v1/proxy/gemini/models/gemini-2.5-flash:generateContent',
+        'query_string': b'',
+        'headers': [],
+    }
+    await lifetime_app(scope, receive, send)
+    assert [(e['outcome'], e['status_code']) for e in terminals(capsys)] == [('success', 200)]
