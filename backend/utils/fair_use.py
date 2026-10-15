@@ -149,11 +149,19 @@ def _release_lock(key: str, token: str) -> None:
 
 
 _RECORD_SPEECH_ONCE_SCRIPT = """
-if redis.call('set', KEYS[1], '1', 'EX', ARGV[4], 'NX') then
+local admitted = redis.call('set', KEYS[1], '1', 'EX', ARGV[4], 'NX')
+if admitted then
     redis.call('hincrby', KEYS[2], ARGV[1], ARGV[2])
     redis.call('expire', KEYS[2], ARGV[4])
     redis.call('zadd', KEYS[3], ARGV[3], ARGV[1])
     redis.call('expire', KEYS[3], ARGV[4])
+end
+local stale = redis.call('zrangebyscore', KEYS[3], 0, ARGV[5], 'LIMIT', 0, 128)
+for _, member in ipairs(stale) do
+    redis.call('zrem', KEYS[3], member)
+    redis.call('hdel', KEYS[2], member)
+end
+if admitted then
     return 1
 end
 return 0
@@ -201,6 +209,7 @@ def record_speech_ms(
                 speech_ms,
                 bucket_minute * FAIR_USE_BUCKET_SECONDS,
                 FAIR_USE_REDIS_RETENTION_SECONDS,
+                now - FAIR_USE_REDIS_RETENTION_SECONDS,
             )
             return
         pipe.hincrby(bucket_key, str(bucket_minute), speech_ms)
@@ -213,8 +222,9 @@ def record_speech_ms(
         # Prune old zset members older than retention window
         cutoff_ts = now - FAIR_USE_REDIS_RETENTION_SECONDS
         # First, get stale members so we can also prune the hash (#5748 reviewer fix)
-        stale_members = redis_client.zrangebyscore(zset_key, 0, cutoff_ts)
-        pipe.zremrangebyscore(zset_key, 0, cutoff_ts)
+        stale_members = redis_client.zrangebyscore(zset_key, 0, cutoff_ts, start=0, num=128)
+        for stale_member in stale_members:
+            pipe.zrem(zset_key, stale_member)
         # Prune matching hash fields to prevent unbounded growth
         if stale_members:
             stale_fields = [m.decode() if isinstance(m, bytes) else m for m in stale_members]

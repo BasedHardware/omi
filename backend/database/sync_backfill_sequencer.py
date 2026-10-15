@@ -9,21 +9,25 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from google.cloud import firestore
 from google.api_core.exceptions import NotFound
+from prometheus_client import Counter
 
 from database._client import get_firestore_client
 from utils.sync import stage as sync_stage
 
 logger = logging.getLogger(__name__)
+OWNER_REPAIRED = Counter('sync_backfill_owner_repaired', 'Missing backfill owners recreated')
 
 COLLECTION = 'sync_backfill_sequencer'
 PENDING_COLLECTION = 'sync_backfill_pending'
 LEASE_SECONDS = 30 * 60  # Longer than a Cloud Task dispatch deadline (25 minutes).
 HEARTBEAT_SECONDS = 120
+DEFAULT_REPAIR_WINDOW_SECONDS = 30 * 60
 DISPATCH_RETRY_SECONDS = 5 * 60
 WAIT_ALERT_SECONDS = 12 * 60 * 60  # Well before Redis job / staged blob expiry.
 
@@ -76,6 +80,92 @@ def is_registered(uid: str, job_id: str, *, firestore_client: Any = None) -> boo
     return _data(_root(client, uid).get()).get('active_job_id') == job_id
 
 
+def _ensure_owner(
+    transaction: Any, root: Any, owner: dict[str, Any], current: datetime, *, repair_at: Optional[datetime] = None
+) -> bool:
+    """Create or wake an owner after all reads, without resetting its epoch."""
+    if owner:
+        if 'reconcile_at' not in owner:
+            transaction.update(root, {'reconcile_at': current, 'updated_at': current})
+        return False
+    data = {'epoch': 0, 'reconcile_at': repair_at or current, 'updated_at': current}
+    if repair_at is not None:
+        data['repair_not_before'] = repair_at
+    transaction.set(root, data)
+    return True
+
+
+def repair_window_seconds(value: Optional[int] = None) -> int:
+    window = (
+        value
+        if value is not None
+        else int(os.getenv('SYNC_BACKFILL_OWNER_REPAIR_WINDOW_SECONDS', str(DEFAULT_REPAIR_WINDOW_SECONDS)))
+    )
+    if window < 1:
+        raise ValueError('repair window must be positive')
+    return window
+
+
+def _repair_waiting(owner: dict[str, Any], current: datetime) -> bool:
+    deadline = owner.get('repair_not_before')
+    return isinstance(deadline, datetime) and deadline > current
+
+
+def _has_pending(client: Any, uid: str, *, transaction: Any, excluding_job_id: Optional[str] = None) -> bool:
+    # Two unordered entries suffice to prove a successor when retiring one.
+    docs = _pending_for_uid(client, uid).limit(2 if excluding_job_id is not None else 1).stream(transaction=transaction)
+    return any(doc.id != excluding_job_id for doc in docs)
+
+
+def repair_owner(
+    uid: str,
+    *,
+    dry_run: bool = False,
+    repair_window: Optional[int] = None,
+    firestore_client: Any = None,
+    now: Optional[datetime] = None,
+) -> bool:
+    """Repair only while pending entries still exist for this UID.
+
+    The queue and owner are read together: a stale scan cannot resurrect
+    an empty queue or overwrite a concurrent dispatch. Dry-run uses a read-only
+    transaction and reports whether a repair would be needed. Scheduled repair
+    is spread over the configured window and respected by pending fallback kicks.
+    """
+    _require_production()
+    client = firestore_client or get_firestore_client()
+    root = _root(client, uid)
+    current = now or _now()
+    repair_at = current + timedelta(seconds=1 + secrets.randbelow(repair_window_seconds(repair_window)))
+
+    @firestore.transactional
+    def commit(transaction: Any) -> bool:
+        owner = _data(root.get(transaction=transaction))
+        if owner:
+            return False
+        if not _has_pending(client, uid, transaction=transaction):
+            return False
+        return True if dry_run else _ensure_owner(transaction, root, owner, current, repair_at=repair_at)
+
+    repaired = commit(client.transaction(read_only=True) if dry_run else client.transaction())
+    if repaired and not dry_run:
+        OWNER_REPAIRED.inc()
+        logger.info('event=sync_backfill_owner_repaired count=1')
+    return repaired
+
+
+def _release_owner(transaction: Any, root: Any, owner: dict[str, Any], current: datetime, *, has_pending: bool) -> None:
+    # Retain the fencing epoch indefinitely. Missing reconcile_at excludes an
+    # empty owner from the range query; admission transactionally wakes it.
+    data = {
+        'epoch': max(int(owner.get('epoch') or 0), int(owner.get('active_epoch') or 0)),
+        'updated_at': current,
+    }
+    if has_pending:
+        data['reconcile_at'] = current
+    transaction.set(root, data)
+
+
 def register_job(
     uid: str,
     job_id: str,
@@ -100,10 +190,14 @@ def register_job(
 
     @firestore.transactional
     def commit(transaction: Any) -> bool:
-        existing = _data(pending.get(transaction=transaction))
+        # Match claim/release/parking lock order; reading pending first can
+        # deadlock a concurrent owner-first presence query in pessimistic mode.
         owner = _data(root.get(transaction=transaction))
+        existing = _data(pending.get(transaction=transaction))
         if existing or owner.get('active_job_id') == job_id:
+            _ensure_owner(transaction, root, owner, accepted_at)
             return False
+        _ensure_owner(transaction, root, owner, accepted_at)
         transaction.set(
             pending,
             {
@@ -174,7 +268,8 @@ def pending_head(uid: str, *, firestore_client: Any = None) -> Optional[dict[str
     """Inspect a candidate; retirement rechecks owner and candidate atomically."""
     _require_production()
     client = firestore_client or get_firestore_client()
-    if _data(_root(client, uid).get()).get('active_job_id'):
+    owner = _data(_root(client, uid).get())
+    if owner.get('active_job_id') or _repair_waiting(owner, _now()):
         return None
     return _first_pending(client, uid)
 
@@ -190,7 +285,8 @@ def retire_expired(
     """Retire exact unbound work while caller holds its Redis lock and proves absence.
 
     An epoch selects an already-dispatching owner. A worker that began running
-    wins the transaction race. Waiting retirement never changes an owner.
+    wins the transaction race. Waiting retirement can repair a missing idle
+    owner but never releases an active reservation.
     """
     _require_production()
     client = firestore_client or get_firestore_client()
@@ -202,7 +298,7 @@ def retire_expired(
     def commit(transaction: Any) -> bool:
         owner = _data(root.get(transaction=transaction))
         if epoch is None:
-            if owner.get('active_job_id'):
+            if owner.get('active_job_id') or _repair_waiting(owner, current):
                 return False
             job = _data(pending.get(transaction=transaction))
             payload = job.get('payload') or {}
@@ -224,6 +320,9 @@ def retire_expired(
             claim = _data(ledger.get(transaction=transaction))
         elif content_id is not None:
             return False
+        has_pending = _has_pending(
+            client, uid, transaction=transaction, excluding_job_id=job_id if epoch is None else None
+        )
         if claim.get('job_id') == job_id:
             if (
                 claim.get('status') != 'processing'
@@ -239,7 +338,9 @@ def retire_expired(
                     'updated_at': current,
                 },
             )
-        transaction.delete(root if epoch is not None else pending)
+        _release_owner(transaction, root, owner, current, has_pending=has_pending)
+        if epoch is None:
+            transaction.delete(pending)
         return True
 
     return commit(client.transaction())
@@ -257,13 +358,15 @@ def claim_next(
     @firestore.transactional
     def commit(transaction: Any) -> Optional[dict[str, Any]]:
         owner = _data(root.get(transaction=transaction))
-        if owner.get('active_job_id'):
+        if owner.get('active_job_id') or _repair_waiting(owner, current):
             return None
         # Read the ordered query inside the same transaction as the owner
         # claim. A separate preselection can miss an earlier capture admitted
         # just before the claim commits.
         candidate = _first_pending(client, uid, transaction=transaction)
         if candidate is None:
+            if owner:
+                _release_owner(transaction, root, owner, current, has_pending=False)
             return None
         if expected_job_id is not None and candidate.get('job_id') != expected_job_id:
             # The Redis proof belongs to a different head. Let the next kick
@@ -273,8 +376,10 @@ def claim_next(
         job = _data(pending.get(transaction=transaction))
         if not job:
             return None
-        epoch = int(owner.get('epoch') or 0) + 1
+        epoch = max(int(owner.get('epoch') or 0), int(owner.get('active_epoch') or 0)) + 1
         active = {
+            'epoch': epoch,
+            'repair_not_before': firestore.DELETE_FIELD,
             'active_job_id': job['job_id'],
             'active_payload': job['payload'],
             'active_epoch': epoch,
@@ -360,13 +465,15 @@ def finish_job(
     _require_production()
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
+    current = now or _now()
 
     @firestore.transactional
     def commit(transaction: Any) -> bool:
         owner = _data(root.get(transaction=transaction))
         if owner.get('active_job_id') != job_id or owner.get('active_epoch') != epoch:
             return False
-        transaction.delete(root)
+        has_pending = _has_pending(client, uid, transaction=transaction)
+        _release_owner(transaction, root, owner, current, has_pending=has_pending)
         return True
 
     released = commit(client.transaction())
@@ -397,7 +504,21 @@ def defer_owner(uid: str, seconds: int, *, firestore_client: Any = None, now: Op
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
     current = now or _now()
-    root.update({'reconcile_at': current + timedelta(seconds=seconds), 'updated_at': current})
+
+    @firestore.transactional
+    def commit(transaction: Any) -> None:
+        owner = _data(root.get(transaction=transaction))
+        if not owner:
+            return
+        if not owner.get('active_job_id') and not _has_pending(client, uid, transaction=transaction):
+            _release_owner(transaction, root, owner, current, has_pending=False)
+            return
+        reconcile_at = current + timedelta(seconds=seconds)
+        if _repair_waiting(owner, reconcile_at):
+            reconcile_at = owner['repair_not_before']
+        transaction.update(root, {'reconcile_at': reconcile_at, 'updated_at': current})
+
+    commit(client.transaction())
 
 
 def redrive_job(
@@ -422,6 +543,7 @@ def redrive_job(
         transaction.update(
             root,
             {
+                'epoch': next_epoch,
                 'active_epoch': next_epoch,
                 'active_state': 'dispatching',
                 'lease_expires_at': current + timedelta(seconds=LEASE_SECONDS),
