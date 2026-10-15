@@ -168,8 +168,8 @@ runs:
           --revision-suffix=${{ inputs.revision_suffix }}
           ${{ steps.candidate-tag.outputs.flag }}
           --min-instances=3
-          --max-instances=18
-          --max=18
+          --max-instances=40
+          --max=40
           --concurrency=6
           --cpu=2
           --memory=8Gi
@@ -209,9 +209,9 @@ runs:
       if: ${{ inputs.mode == 'platform' || inputs.mode == 'dispatch' }}
       shell: bash
       run: |
-        # Reviewed drain step: 60 dispatches stays below 18 x 6 = 108 worker
-        # slots. Retain the 10/s rate, maxScale=18, 8 GiB and one owner per UID.
-        # Roll back queue concurrency to 40 on >10% p95 or retry regression.
+        # Train 1 starts at 90/15 after the 40 x 6 worker capacity is ready.
+        # Retain 8 GiB and one owner per UID. Later operator steps require
+        # latency/retry/GPU/Firestore/Redis gates and a follow-up config train.
         # Dispatch concurrency must not exceed the worker's capacity:
         # --max-instances x --concurrency (service-level --max above; the
         # service cap wins when it is lower).
@@ -225,16 +225,16 @@ runs:
           gcloud tasks queues update sync-backfill \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
-            --max-concurrent-dispatches=60 \
-            --max-dispatches-per-second=10 \
+            --max-concurrent-dispatches=90 \
+            --max-dispatches-per-second=15 \
             --min-backoff=5s \
             --max-backoff=60s
         else
           gcloud tasks queues create sync-backfill \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
-            --max-concurrent-dispatches=60 \
-            --max-dispatches-per-second=10 \
+            --max-concurrent-dispatches=90 \
+            --max-dispatches-per-second=15 \
             --min-backoff=5s \
             --max-backoff=60s
         fi
