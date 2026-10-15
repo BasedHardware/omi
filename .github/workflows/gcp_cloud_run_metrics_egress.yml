@@ -146,11 +146,19 @@ jobs:
       - name: Deploy Prometheus scrape configuration
         run: |
           set -euo pipefail
+          rollback_flags=(--atomic)
+          if [[ "$MONITORING_NAMESPACE" == prod-omi-monitoring ]]; then
+            # The previous revision scales down with PVC whenScaled=Delete.
+            # Its automatic rollback could delete the new replica's history.
+            # Parent reviews old values with Retain before a manual rollback.
+            rollback_flags=()
+          fi
           helm upgrade --install "$STACK_RELEASE" prometheus-community/kube-prometheus-stack \
             --version 75.15.1 \
             --namespace "$MONITORING_NAMESPACE" \
             --values "$STACK_VALUES" \
-            --atomic \
+            --skip-crds \
+            "${rollback_flags[@]}" \
             --wait \
             --timeout 15m
 
