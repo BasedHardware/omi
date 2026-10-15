@@ -34,9 +34,10 @@ Tool schemas and uniform `collection/id#segment` refs live in `models/agent_tool
 grants a record snapshot. Search debits only the hit payload the model receives
 (ref and snippet). Hydration that builds that snippet is bounded to the fields
 the snippet and filters need and does not consume the session read-byte budget.
-`read` is the call that debits a full record. A row that raises or resolves to
-nothing is skipped, counted, and reported as unavailable; it does not discard
-the rest of the page. History pages and seeds yield readable owner-visible
+`read` is the call that debits a full record. A missing or non-visible row is
+skipped, counted, and reported as unavailable; it does not discard the rest of
+the page. A transient hydration failure degrades that search path, so the
+result is incomplete and retryable. History pages and seeds yield readable owner-visible
 records, paging past ids that no longer resolve. Legacy `memories` is the
 `memory_items` collection at the ref boundary. Staging rechecks the snapshot and captures storage fences. Domain
 writers recheck those fences in the transaction that journals the effect. Dream

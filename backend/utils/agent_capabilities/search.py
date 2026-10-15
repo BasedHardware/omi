@@ -56,20 +56,26 @@ def _clip(value, limit):
     return None
 
 
-def project_search_row(row, *, need_speakers=False):
-    """Fields the snippet and filters use. The rest of a capture is not retained."""
+def project_search_row(row, *, person_id=None):
+    """Fields the snippet and filters use. The rest of a capture is not retained.
+
+    A speaker filter records the requested person wherever they appear. Other
+    speaker ids are not retained once the snippet window is full.
+    """
     if not isinstance(row, dict):
         return None
     stored = row.get('structured')
     structured = stored if isinstance(stored, dict) else {}
     segments = []
     remaining = 240
-    speakers = 0
+    matched_speaker = False
     for segment in row.get('transcript_segments') or []:
         if not isinstance(segment, dict):
             continue
         text = segment.get('text') if isinstance(segment.get('text'), str) else ''
         person = segment.get('person_id')
+        if person_id and person == person_id:
+            matched_speaker = True
         if remaining > 0 and text:
             kept = text[:remaining]
             item = {'text': kept}
@@ -77,12 +83,12 @@ def project_search_row(row, *, need_speakers=False):
                 item['person_id'] = person
             segments.append(item)
             remaining -= len(kept)
-            continue
-        if need_speakers and person is not None and speakers < 400:
-            segments.append({'person_id': person})
-            speakers += 1
-        if remaining <= 0 and not need_speakers:
+        if matched_speaker and remaining <= 0:
             break
+        if remaining <= 0 and not person_id:
+            break
+    if matched_speaker and not any(segment.get('person_id') == person_id for segment in segments):
+        segments.append({'person_id': person_id})
     aliases = [_clip(alias, 240) for alias in (row.get('aliases') or []) if isinstance(alias, str)][:32]
     return {
         'id': row.get('id'),
@@ -121,13 +127,18 @@ class OwnerSearch:
         )
 
     async def _projected(self, ref, request):
+        person_id = base_ref(request.person_ref).partition('/')[2] if request.person_ref else None
         try:
             full = await self.hydrate(ref, request)
-        except Exception:
+        except Exception as error:
+            # A missing or hidden row is unavailable. A transient store fault
+            # fails the path so the search is incomplete and can be retried.
+            if dream_reads.unavailable_is_transient(error):
+                raise
             return None
         if full is None:
             return None
-        row = project_search_row(full, need_speakers=bool(request.person_ref))
+        row = project_search_row(full, person_id=person_id)
         del full
         return row
 

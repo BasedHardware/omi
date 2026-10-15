@@ -7,6 +7,7 @@ import json
 import math
 import os
 import pytest
+from fastapi import HTTPException
 from pathlib import Path
 
 from config.dream_session import SessionLimits
@@ -426,7 +427,7 @@ def test_heavy_budget_reads_past_large_and_unreadable_search_hits(runtime, monke
     def lookup(ref):
         _collection, key = base_ref(ref).split('/', 1)
         if key == 'raising':
-            raise RuntimeError('Synthetic unreadable capture')
+            raise HTTPException(404, 'Synthetic missing capture')
         row = runtime.rows.get(('users', UID, _collection, key))
         return deepcopy(row) if row else None
 

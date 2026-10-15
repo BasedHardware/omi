@@ -112,11 +112,12 @@ def read_record(uid, ref, *, control_cache=None, diagnostics=None):
 
 
 def _read_memory_record(uid, key):
-    """Owner-visible memory, or None. Never an HTTP exception.
+    """Owner-visible memory, or None when the row is gone or not visible.
 
-    `MemoryService.fetch` raises 404 when a canonical row exists but is not an
-    active visible item (superseded, hidden, tombstoned, archived, invalid) and
-    402/503 for lock or store faults. Those lifecycle rows are unreadable here.
+    A 404 means the item is missing or not an active visible item (superseded,
+    hidden, tombstoned, archived, invalid). A 402 is the paid-plan lock. Those
+    are permanent. A store fault such as 503 stays an exception so the session
+    can retry it instead of acknowledging the dirty id as consumed.
     """
     try:
         canonical = read_canonical_memory_item(uid, key)
@@ -127,8 +128,10 @@ def _read_memory_record(uid, key):
         ):
             return None
         row = memory_item_to_memorydb(canonical) if canonical else MemoryService().fetch(uid, key)
-    except HTTPException:
-        return None
+    except HTTPException as exc:
+        if not unavailable_is_transient(exc):
+            return None
+        raise
     if row.user_review is False or row.visibility != 'private' or row.invalid_at is not None:
         return None
     if row.is_locked:

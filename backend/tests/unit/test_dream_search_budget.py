@@ -66,11 +66,11 @@ async def test_large_records_leave_read_budget_for_a_later_read(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_none_and_raising_rows_keep_the_rest_of_the_page(monkeypatch):
+async def test_missing_row_keeps_the_rest_of_the_page(monkeypatch):
     rows = {
         'first': {'content': 'Synthetic first fact'},
         'missing': None,
-        'raising': RuntimeError('Synthetic unreadable row'),
+        'hidden': HTTPException(404, 'Synthetic missing capture'),
         'last': {'content': 'Synthetic last fact'},
     }
     fallbacks = []
@@ -79,9 +79,49 @@ async def test_none_and_raising_rows_keep_the_rest_of_the_page(monkeypatch):
     source = _bind(monkeypatch, rows, lambda *args, **kwargs: [])
     result = await source.search(Search(query='Synthetic', collections=['conversations'], limit=4), byte_budget=8000)
     assert [hit['ref'] for hit in result['results']] == ['conversations/first', 'conversations/last']
-    assert result['unavailable_refs'] == ['conversations/missing', 'conversations/raising']
+    assert result['unavailable_refs'] == ['conversations/missing', 'conversations/hidden']
     assert result['counts']['failed_paths'] == 0 and result['counts']['unavailable'] == 2
     assert result['complete'] is True and fallbacks == []
+
+
+@pytest.mark.asyncio
+async def test_transient_hydration_degrades_the_path(monkeypatch):
+    rows = {
+        'first': {'content': 'Synthetic first fact'},
+        'raising': RuntimeError('Synthetic firestore fault'),
+        'last': {'content': 'Synthetic last fact'},
+    }
+    fallbacks = []
+    monkeypatch.setattr(search, 'keyword_search_conversation_ids', lambda **kwargs: list(rows))
+    monkeypatch.setattr(search, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
+    source = _bind(monkeypatch, rows, lambda *args, **kwargs: [])
+    result = await source.search(Search(query='Synthetic', collections=['conversations'], limit=4), byte_budget=8000)
+    assert [hit['ref'] for hit in result['results']] == ['conversations/first']
+    assert 'conversations/raising' not in result['unavailable_refs']
+    assert result['counts']['failed_paths'] == 1 and result['complete'] is False
+    assert fallbacks and fallbacks[0]['outcome'] == 'degraded'
+
+
+@pytest.mark.asyncio
+async def test_late_speaker_matches_person_filter(monkeypatch):
+    segments = [{'text': 'x' * 240, 'person_id': 'other-0'}]
+    segments.extend({'person_id': f'other-{index}'} for index in range(1, 500))
+    segments.append({'text': 'Synthetic late line', 'person_id': 'late'})
+    rows = {
+        'long': {
+            'id': 'long',
+            'structured': {'title': 'Synthetic capture', 'overview': ''},
+            'transcript_segments': segments,
+        }
+    }
+    monkeypatch.setattr(search, 'keyword_search_conversation_ids', lambda **kwargs: ['long'])
+    source = _bind(monkeypatch, rows, lambda *args, **kwargs: [])
+    result = await source.search(
+        Search(query='Synthetic', collections=['conversations'], person_ref='people/late', limit=1),
+        byte_budget=8000,
+    )
+    assert [hit['ref'] for hit in result['results']] == ['conversations/long']
+    assert result['complete'] is True
 
 
 @pytest.mark.asyncio
@@ -109,7 +149,7 @@ async def test_history_pages_past_a_full_page_of_dead_ids(monkeypatch):
         return ['raising', 'live']
 
     rows = {f'dead-{index:02d}': None for index in range(40)}
-    rows['raising'] = RuntimeError('Synthetic unreadable memory')
+    rows['raising'] = HTTPException(404, 'Synthetic missing memory')
     rows['live'] = {'content': 'Synthetic live memory'}
     source = _bind(monkeypatch, rows, history_page)
     result = await source.search(Search(collections=['memory_items'], limit=8), byte_budget=8000)
@@ -157,7 +197,9 @@ def test_memory_http_exception_is_unavailable_and_visible_memory_remains(monkeyp
 
     monkeypatch.setattr(reads.MemoryService, 'fetch', fetch)
     assert reads.read_record('synthetic-search-owner', 'memory_items/gone') is None
-    assert reads.read_record('synthetic-search-owner', 'memory_items/fault') is None
+    with pytest.raises(HTTPException) as caught:
+        reads.read_record('synthetic-search-owner', 'memory_items/fault')
+    assert caught.value.status_code == 503
 
     class Visible:
         user_review = True
@@ -176,6 +218,33 @@ def test_memory_http_exception_is_unavailable_and_visible_memory_remains(monkeyp
     monkeypatch.setattr(reads, 'read_canonical_memory_item', lambda uid, key: 'locked' if key == 'locked' else object())
     assert reads.read_record('synthetic-search-owner', 'memory_items/visible')['content'] == 'Synthetic visible memory'
     assert reads.read_record('synthetic-search-owner', 'memory_items/locked') is None
+
+
+@pytest.mark.asyncio
+async def test_transient_memory_fault_stays_retryable_and_is_not_consumed(monkeypatch):
+    monkeypatch.setattr(reads, 'read_canonical_memory_item', lambda uid, key: None)
+
+    def fetch(self, uid, key):
+        raise HTTPException(404 if key == 'gone' else 503, 'Synthetic memory store')
+
+    monkeypatch.setattr(reads.MemoryService, 'fetch', fetch)
+
+    class Source:
+        async def read(self, ref):
+            return reads.read_record('synthetic-search-owner', ref)
+
+    session = Session(
+        'synthetic-search-owner',
+        Source(),
+        SessionLimits(read_bytes=8000),
+        {'targets': ['memory_items/fault', 'memory_items/gone']},
+        authority='user',
+    )
+    loaded = await session.read(Read(refs=['memory_items/fault', 'memory_items/gone']))
+    assert loaded['errors']['memory_items/fault']['code'] == 'agent_read_unavailable'
+    assert loaded['errors']['memory_items/gone']['code'] == 'agent_record_unavailable'
+    assert session.unavailable['memory_items/fault'] is True
+    assert session.unavailable['memory_items/gone'] is False
 
 
 def test_seed_skips_dead_and_raising_dirty_ids(monkeypatch):

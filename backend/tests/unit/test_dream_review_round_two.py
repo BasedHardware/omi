@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 
 from config.dream_agent import Caps
 from database import dream_store, dream_turns
@@ -163,7 +164,7 @@ async def test_lexical_page_cursor_is_not_published_when_hydration_stops_early(m
 
     async def load(self, ref, request=None):
         if ref.endswith('/unavailable'):
-            raise RuntimeError('Synthetic unavailable capture')
+            raise HTTPException(404, 'Synthetic missing capture')
         return {'content': 'x' * 2000}
 
     monkeypatch.setattr(search.OwnerSearch, 'read', load)
