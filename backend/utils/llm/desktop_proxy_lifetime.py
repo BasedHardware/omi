@@ -385,7 +385,7 @@ class DesktopProxyDeadlineMiddleware:
             override = dict(outcome=outcome, status_code=504, retryable=False, phase=phase)
             # Classify an outstanding attempt before cancellation reaches the
             # route. A known provider result remains immutable via complete().
-            telemetry.fail_request(**override)
+            telemetry.fail_request(outcome=outcome, status_code=504, retryable=False, phase=phase)
             stopped = await _drain(task)
             if not started or stopped:
                 async with asyncio.timeout(CANCEL_GRACE_SECONDS):
