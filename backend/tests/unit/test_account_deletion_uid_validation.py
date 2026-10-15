@@ -16,7 +16,6 @@ import pytest
 import database.account_deletion_marker as marker
 import database.account_deletion_transitions as transitions
 
-
 BAD_UIDS = ['', '   ', 'a/b', 'a\\b', '../x', 'a\x00b', 'a\nb', 'x' * 200, None, 42]
 
 
