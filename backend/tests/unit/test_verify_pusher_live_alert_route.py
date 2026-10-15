@@ -678,3 +678,71 @@ def test_live_stt_postimport_gate_includes_canaries(verifier, monkeypatch, uid, 
         'https://monitor.omi.me', 'dummy-secret', 1, 'gated', alert_set='live-stt'
     )
     assert any(uid in failure for failure in failures)
+
+
+def test_development_loader_restores_errors_without_mutating_sources(verifier, monkeypatch):
+    canonical = verifier.load_all_committed_rules()
+    snapshot = copy.deepcopy(canonical)
+    monkeypatch.setitem(verifier.load_live_stt_import_rules.__globals__, 'load_all_committed_rules', lambda: canonical)
+    development = verifier.load_live_stt_import_rules(production=False)
+    assert set(development) == set(verifier.LIVE_STT_IMPORT_UIDS) | set(verifier.REDIS_CACHE_IMPORT_UIDS)
+    assert all(rule['execErrState'] != 'KeepLast' for rule in development.values())
+    assert canonical == snapshot
+    # Redis rules come directly from the shared canonical loader, so verify the
+    # development copy is detached even for nested structures.
+    uid = verifier.REDIS_CACHE_IMPORT_UIDS[0]
+    development[uid]['labels']['alert_identity'] = 'changed'
+    assert canonical == snapshot
+    production = verifier.load_live_stt_import_rules()
+    assert set(verifier.DATASOURCE_CANARY_UIDS) <= set(production)
+    assert any(rule['execErrState'] == 'KeepLast' for rule in production.values())
+
+
+@pytest.mark.parametrize('target', ['https://monitor.omiapi.com', 'https://custom.invalid'])
+def test_nonproduction_import_never_installs_or_reads_production_canaries(verifier, monkeypatch, target):
+    writes = {}
+    paths = []
+
+    def read(_base, path, _token, **kwargs):
+        paths.append(path)
+        if path == verifier.ALERT_RULE_LIST_PATH:
+            return []
+        if path.endswith('/contact-points'):
+            return [{'name': verifier.TELEGRAM_RECEIVER, 'type': 'telegram'}]
+        raise AssertionError('nonproduction must not read production canaries')
+
+    monkeypatch.setitem(verifier._run_live_stt_import.__globals__, '_request_json', read)
+    monkeypatch.setitem(
+        verifier._run_live_stt_import.__globals__,
+        '_write_rule',
+        lambda _base, uid, rule, *_args, **kwargs: writes.update({uid: rule}),
+    )
+    assert verifier._run_live_stt_import(target, 'dummy-token') == []
+    assert set(writes) == set(verifier.LIVE_STT_IMPORT_UIDS) | set(verifier.REDIS_CACHE_IMPORT_UIDS)
+    assert all(rule['execErrState'] != 'KeepLast' for rule in writes.values())
+    assert all(not any(uid in path for uid in verifier.DATASOURCE_CANARY_UIDS) for path in paths)
+
+
+def test_development_fleet_does_not_require_production_canaries(verifier, monkeypatch):
+    development = verifier.load_live_stt_import_rules(production=False)
+    monkeypatch.setitem(
+        verifier._run_fleet_coverage.__globals__, '_request_json', lambda *_args, **kwargs: list(development.values())
+    )
+    failures, report = verifier._run_fleet_coverage(
+        'https://monitor.omiapi.com', 'dummy-token', 1, 'gated', alert_set='live-stt'
+    )
+    assert failures == []
+    assert report[0] == 'FLEET committed=28 live=28 gated=28 matching=28 gated_matching=28'
+
+
+def test_development_fleet_rejects_unprotected_keep_last(verifier, monkeypatch):
+    development = verifier.load_live_stt_import_rules(production=False)
+    uid = verifier.LIVE_STT_IMPORT_UIDS[0]
+    development[uid]['execErrState'] = 'KeepLast'
+    monkeypatch.setitem(
+        verifier._run_fleet_coverage.__globals__, '_request_json', lambda *_args, **kwargs: list(development.values())
+    )
+    failures, _ = verifier._run_fleet_coverage(
+        'https://monitor.omiapi.com', 'dummy-token', 1, 'gated', alert_set='live-stt'
+    )
+    assert any(uid in failure and 'execErrState' in failure for failure in failures)

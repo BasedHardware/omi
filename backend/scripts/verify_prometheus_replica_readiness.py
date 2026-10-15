@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# LIFECYCLE: permanent
 """Validate operator-created Prometheus replicas from read-only Kubernetes JSON."""
 
 import argparse
