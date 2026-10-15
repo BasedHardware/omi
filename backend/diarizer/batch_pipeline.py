@@ -198,7 +198,7 @@ class PipelineWorker:
             try:
                 samples = self.decode(item)
                 duration = len(samples) / SAMPLE_RATE
-                if not 0 < duration <= 7200 or abs(duration - item.duration_seconds) > 0.1:
+                if not 0 < duration <= self.config.max_unit_seconds or abs(duration - item.duration_seconds) > 0.1:
                     raise ValueError('decoded duration differs from admitted capture')
                 spans = list(self.vad(samples))
                 clips = list(speech_windows(item, samples, spans, self.config))

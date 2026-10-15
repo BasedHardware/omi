@@ -276,6 +276,9 @@ def test_pool_unit_limits_reject_conversation_on_shared_live_before_decode():
     with pytest.raises(ValueError, match='capture spans'):
         worker.process_batch([item(duration=120)])
     assert worker.process_batch([replace(item(duration=120), unit_kind='capture_span')])
+    over, words, _, _, _, failures = setup_worker(config=config, decode=lambda i: Samples(120 + 1 / 16000))
+    assert over.process_batch([replace(item(duration=120), unit_kind='capture_span')]) == []
+    assert not words.calls and failures == [('a', 'ValueError')]
 
 
 def test_pool_defaults_and_unsafe_config(monkeypatch):
