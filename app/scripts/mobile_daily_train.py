@@ -465,13 +465,42 @@ def _normalize_pem(raw: str) -> str:
     return f"-----BEGIN {label}-----\n" + "\n".join(lines) + f"\n-----END {label}-----\n"
 
 
+def _resolve_key_ref(raw: str) -> str:
+    """Follow a Codemagic CLI key reference to the key itself.
+
+    The codemagic_v4 integration sets APP_STORE_CONNECT_PRIVATE_KEY to a
+    reference, not key text: `@file:<path>` or `@env:<VAR>` (the convention of
+    codemagic-cli-tools, which the publishing step resolves). Seen live
+    2026-10-15 as a 72-character single-line value.
+    """
+    value = raw.strip()
+    if value.startswith("@file:"):
+        path = os.path.expanduser(value[len("@file:") :])
+        try:
+            with open(path, encoding="utf-8") as handle:
+                return handle.read()
+        except OSError as exc:
+            raise TrainError(f"App Store Connect key reference @file: is unreadable ({type(exc).__name__})") from exc
+    if value.startswith("@env:"):
+        name = value[len("@env:") :]
+        resolved = os.environ.get(name, "")
+        if not resolved:
+            raise TrainError(f"App Store Connect key reference @env:{name} is empty")
+        return _resolve_key_ref(resolved)
+    return raw
+
+
 def _pem_shape(raw: str) -> str:
     """Non-secret description of the key text, for a diagnosable failure line."""
     armored = "-----BEGIN" in raw
     newlines = raw.count(chr(10))
     escaped = raw.count(chr(92) + "n")
     quoted = raw[:1] in ('"', "'")
-    return f"len={len(raw)} armored={armored} newlines={newlines} escaped_newlines={escaped} quoted={quoted}"
+    ref = next((scheme for scheme in ("@file", "@env") if raw.strip().startswith(scheme + ":")), "none")
+    return (
+        f"len={len(raw)} ref={ref} armored={armored} newlines={newlines} "
+        f"escaped_newlines={escaped} quoted={quoted}"
+    )
 
 
 def _asc_rest_token() -> str:
@@ -484,7 +513,7 @@ def _asc_rest_token() -> str:
     if not (issuer and key_id and pem):
         raise TrainError("missing App Store Connect credential for REST lookup")
     log(f"App Store Connect key text: {_pem_shape(pem)}")
-    pem = _normalize_pem(pem)
+    pem = _normalize_pem(_resolve_key_ref(pem))
     header = {"alg": "ES256", "kid": key_id, "typ": "JWT"}
     now = int(time.time())
     claims = {"iss": issuer, "iat": now, "exp": now + 1200, "aud": "appstoreconnect-v1"}
