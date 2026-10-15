@@ -564,7 +564,13 @@ async def get_calendar_events_tool(
         if search_query:
             now = datetime.now(timezone.utc)
             if time_max is None:
-                time_max = now
+                # The non-search path defaults a missing end to
+                # start + 7 days — do the same here. "Andy coming up?"
+                # passes a future start_date with no end; pinning the end
+                # to `now` produced a window that ended BEFORE it began,
+                # and the backwards widening never looked forward
+                # (#21709).
+                time_max = (time_min + timedelta(days=7)) if time_min else now
             if time_min is None:
                 # Default to 1 year back when searching
                 time_min = time_max - timedelta(days=365)
