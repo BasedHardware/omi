@@ -3,12 +3,11 @@ from enum import Enum
 import math
 from typing import Any, Callable, Iterable, List, Literal, Mapping, Optional
 
-from zoneinfo import ZoneInfo
-
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
 from models.person_confidence import person_confidence
+from models.time_zone_admission import is_schedulable_time_zone
 
 
 class SaveFcmTokenRequest(BaseModel):

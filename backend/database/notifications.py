@@ -13,9 +13,7 @@ once a time_zone or preference write has run (and after the one-time backfill).
 Those two fields are the write-time form of the Python defaults True / 22.
 """
 
-from zoneinfo import ZoneInfo
-
-from utils.other.time_zone import is_schedulable_time_zone
+from models.time_zone_admission import is_schedulable_time_zone
 
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
