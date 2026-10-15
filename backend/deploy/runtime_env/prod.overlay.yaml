@@ -780,6 +780,15 @@ overlay:
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'true'
             category: rollout
+          SYNC_REPROCESS_COALESCE_ENABLED:
+            value: 'true'
+            category: rollout
+          SYNC_REPROCESS_SETTLE_SECONDS:
+            value: '600'
+            category: rollout
+          CONVERSATION_LLM_INPUT_DEDUPE_ENABLED:
+            value: 'true'
+            category: rollout
           <<: *batch_cohort
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
@@ -961,6 +970,15 @@ overlay:
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
+            value: 'true'
+            category: rollout
+          SYNC_REPROCESS_COALESCE_ENABLED:
+            value: 'true'
+            category: rollout
+          SYNC_REPROCESS_SETTLE_SECONDS:
+            value: '600'
+            category: rollout
+          CONVERSATION_LLM_INPUT_DEDUPE_ENABLED:
             value: 'true'
             category: rollout
           <<: *batch_cohort

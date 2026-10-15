@@ -206,3 +206,28 @@ def test_backfill_recovery_retains_its_queue_worker_and_identity(state, monkeypa
     assert enqueue.call_args.kwargs['audience'] == 'backfill-audience'
     assert enqueue.call_args.kwargs['invoker_sa'] == 'backfill-invoker@example.invalid'
     assert enqueue.call_args.kwargs['schedule_at'] == 600
+
+
+@pytest.fixture(scope='module')
+def runtime_manifest():
+    from pathlib import Path
+    import yaml
+
+    path = Path(__file__).resolve().parents[2] / 'deploy/runtime_env.yaml'
+    return yaml.load(path.read_text(), Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader))
+
+
+def test_train1_runtime_flags_are_on_only_for_prod_sync_hosts(runtime_manifest):
+    selected = {'backend-sync', 'backend-sync-backfill'}
+    switches = ('SYNC_REPROCESS_COALESCE_ENABLED', 'CONVERSATION_LLM_INPUT_DEDUPE_ENABLED')
+    for stage, environment in runtime_manifest['environments'].items():
+        for name, service in environment['cloud_run']['services'].items():
+            env = service.get('env', {})
+            for switch in switches:
+                enabled = str(env.get(switch, {}).get('value', 'false')).lower() == 'true'
+                assert enabled == (stage == 'prod' and name in selected), (stage, name, switch)
+            if name in selected:
+                assert env['SYNC_REPROCESS_SETTLE_SECONDS']['value'] == '600'
+        for name, service in environment['gke'].items():
+            for switch in switches:
+                assert str(service.get('env', {}).get(switch, {}).get('value', 'false')).lower() != 'true'
