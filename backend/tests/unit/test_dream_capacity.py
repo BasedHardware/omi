@@ -158,3 +158,34 @@ def test_no_model_stops_before_gateway_access(monkeypatch):
             )
         )
     assert sink == {'tokens': 0}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('credential_failure', [False, True])
+async def test_keyless_probe_denial_is_advisory_without_a_provider_fallback(monkeypatch, credential_failure):
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
+    token = (
+        AsyncMock(side_effect=PermissionError('synthetic ADC denial'))
+        if credential_failure
+        else AsyncMock(return_value='synthetic-token')
+    )
+    monkeypatch.setattr(dream_capacity, '_vertex_tokens', lambda: SimpleNamespace(get_access_token=token))
+    saturated = AsyncMock()
+    monkeypatch.setattr(dream_capacity, 'mark_saturated', saturated)
+    requests = []
+
+    def denied(request):
+        requests.append(request)
+        assert request.url.path.endswith(f'/models/{OLD}:generateContent')
+        assert request.headers['X-Vertex-AI-LLM-Request-Type'] == 'dedicated'
+        assert not request.url.params
+        assert json.loads(request.content)['contents'][0]['parts'] == [{'text': 'Reply OK.'}]
+        return httpx.Response(403, json={'error': {'status': 'PERMISSION_DENIED'}})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(denied)) as client:
+        monkeypatch.setattr(dream_capacity, 'get_desktop_gemini_client', lambda: client)
+        assert await dream_capacity._probe(OLD, 'us-central1') == 'inconclusive'
+
+    assert len(requests) == (0 if credential_failure else 1)
+    assert dream_capacity._local().probe_failed_until > 0
+    saturated.assert_not_awaited()
