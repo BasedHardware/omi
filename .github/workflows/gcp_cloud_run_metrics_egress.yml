@@ -146,13 +146,46 @@ jobs:
       - name: Deploy Prometheus scrape configuration
         run: |
           set -euo pipefail
+          rollback_flags=(--atomic)
+          if [[ "$MONITORING_NAMESPACE" == prod-omi-monitoring ]]; then
+            # The previous revision scales down with PVC whenScaled=Delete.
+            # Its automatic rollback could delete the new replica's history.
+            # Parent reviews old values with Retain before a manual rollback.
+            rollback_flags=()
+          fi
           helm upgrade --install "$STACK_RELEASE" prometheus-community/kube-prometheus-stack \
             --version 75.15.1 \
             --namespace "$MONITORING_NAMESPACE" \
             --values "$STACK_VALUES" \
-            --atomic \
+            --skip-crds \
+            "${rollback_flags[@]}" \
             --wait \
             --timeout 15m
+
+      - name: Verify operator-created production Prometheus replicas
+        if: github.event.inputs.environment == 'prod'
+        run: |
+          set -euo pipefail
+          PROD_CONTEXT=gke_based-hardware_us-central1_prod-omi-gke
+          PROD_NAMESPACE=prod-omi-monitoring
+          PROMETHEUS_STS=prometheus-prod-omi-kube-prometheus-s-prometheus
+          kubectl --context "$PROD_CONTEXT" --namespace "$PROD_NAMESPACE" \
+            wait --for=jsonpath='{.spec.replicas}'=2 \
+            "statefulset/$PROMETHEUS_STS" --timeout=5m
+          kubectl --context "$PROD_CONTEXT" --namespace "$PROD_NAMESPACE" \
+            rollout status "statefulset/$PROMETHEUS_STS" --timeout=10m
+          umask 077
+          kubectl --context "$PROD_CONTEXT" --namespace "$PROD_NAMESPACE" \
+            get statefulset "$PROMETHEUS_STS" -o json > "$RUNNER_TEMP/prometheus-statefulset.json"
+          kubectl --context "$PROD_CONTEXT" --namespace "$PROD_NAMESPACE" \
+            get pods -l operator.prometheus.io/name=prod-omi-kube-prometheus-s-prometheus \
+            -o json > "$RUNNER_TEMP/prometheus-pods.json"
+          kubectl --context "$PROD_CONTEXT" --namespace "$PROD_NAMESPACE" \
+            get persistentvolumeclaims -o json > "$RUNNER_TEMP/prometheus-pvcs.json"
+          python3 backend/scripts/verify_prometheus_replica_readiness.py \
+            --statefulset-json "$RUNNER_TEMP/prometheus-statefulset.json" \
+            --pods-json "$RUNNER_TEMP/prometheus-pods.json" \
+            --pvcs-json "$RUNNER_TEMP/prometheus-pvcs.json"
 
       - name: Verify deployed egress resources
         run: |
