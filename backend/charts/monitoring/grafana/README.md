@@ -19,7 +19,10 @@ prod-only step needs `BUSINESS_GRAFANA_TOKEN` in `monitoring-prod`.
 
 ## Keyless datasource
 
-Infinity 4.1.1 is pinned and requires the accompanying Grafana 12.1.7 patch.
+Infinity 4.1.1 and Grafana 13.1.3 are pinned. The board's raw SVG field icons
+require 13.x Canvas resource handling; 12.1.7 returns valid query frames but blank
+cards ([Canvas resource handling](https://github.com/grafana/grafana/blob/v13.1.3/public/app/features/dimensions/resource.ts)).
+Local verification must include visible native cards, not just API200.
 The checked-in Python standard-library sidecar binds **127.0.0.1:8899**; it has no
 Service or host port. It accepts only GET `/api/omi/stats/<literal-route>` and
 forwards to the fixed `https://admin.omi.me` origin. It forwards no client headers,
@@ -45,7 +48,8 @@ issuer/audience/purpose and Business org mapping, with a four-minute lifetime.
 Namespaced SHA256 identities and synthetic emails avoid linking to an operator's
 Grafana identity. The org-scoped enrollment token adds the JWT-created user to
 `business-viewers` before the URL is returned. It verifies org/team/user identity
-and never grants Admin via JWT. JWKS publishes only the RSA public key.
+and never grants Admin via JWT. JWKS publishes only the RSA public key, including while the embed cutover flag
+is off, so keys can be staged before Grafana starts.
 
 Runtime settings (server only; GitHub `prod` Environment variables):
 
@@ -81,8 +85,9 @@ anonymous sessions to hide expiry.
 
 Legacy retirement is required before cutover: the old publisher no longer sends
 v2, but deleting the old board alone cannot close anonymous Infinity queries.
-The existing `gcp_admin.yml` has an explicit prod-only manual input
-`retire_legacy_grafana=true`; it records rollback metadata and disables legacy
+The existing `gcp_cloud_run_metrics_egress.yml` has an explicit prod-only manual input
+`retire_legacy_grafana=true`; this mode skips normal Helm/alert jobs, records
+rollback metadata and disables legacy
 anonymous access with the current immutable image. **This breaks old anonymous
 TV/share links**, so the parent selects the migration window. The CI identity
 needs scoped service-update/actAs permissions for that existing service; a denial
@@ -99,7 +104,7 @@ bootstrap with a new receipt without inspecting which credentials were created.
 `verify_business.py` uses Business and non-member Viewer credentials supplied in
 environment variables, exercises Infinity's real wall query, and prints only
 status/frame counts. The browser acceptance must use a real signed-in admin and
-confirm the native Canvas cards render correctly on Grafana 12.1.7.
+confirm the native Canvas cards render correctly on Grafana 13.1.3.
 
 Before mutation record the current Helm revision, admin serving image/revision
 and baseline windows. Review `helm diff upgrade` for chart 75.15.1 with current
@@ -111,7 +116,10 @@ the preceding 24–48h. Local tests and HTTP health alone do not establish this.
 
 Rollback the admin via `GRAFANA_EMBED_ENABLED=false` and that same workflow.
 Restore Helm's recorded revision after checking SQLite schema downgrade support;
-keep the PVC and a pre-upgrade database backup. Disable JWT only after the admin
+keep the PVC and a consistent pre-upgrade database backup. The 12.1.0 ->13.1.3
+upgrade crosses a major version: validate existing alert evaluation, installed
+plugins and schema migration, and plan rollback from that backup rather than
+assuming an in-place binary downgrade is safe. Disable JWT only after the admin
 rollback. Retain secret versions, org and data; do not delete them as rollback.
 
 ## Verification

@@ -166,3 +166,13 @@ it("blocks cutover while legacy anonymous datasource access remains", async () =
     fetchMock.mock.calls.some(([url]) => url.includes("secretmanager"))
   ).toBe(false);
 });
+
+it("publishes the public verification key while cutover is disabled for staged Helm startup", async () => {
+  vi.stubEnv("GRAFANA_EMBED_ENABLED", "");
+  const { GET } = await import("@/app/api/grafana/jwks/route");
+  const response = await GET();
+  expect(response.status).toBe(200);
+  const data = await response.json();
+  expect(data.keys[0]).toMatchObject({ kid: "test-key", kty: "RSA" });
+  expect(data.keys[0]).not.toHaveProperty("d");
+});

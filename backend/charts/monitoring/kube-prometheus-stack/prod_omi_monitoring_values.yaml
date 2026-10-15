@@ -57,9 +57,9 @@ alertmanager:
 
 grafana:
   enabled: true
-  # Infinity 4.1.1 requires >=12.1.7 on the 12.1 line; retain the minor version.
+  # Canvas raw SVG field icons require 13.x; match the board owner's tested host.
   image:
-    tag: 12.1.7
+    tag: 13.1.3
   plugins:
     - https://grafana.com/api/plugins/yesoreyeram-infinity-datasource/versions/4.1.1/download;yesoreyeram-infinity-datasource
   # Parent bootstrap supplies the allocated org ID; never default to monitoring.
@@ -158,11 +158,11 @@ grafana:
   imageRenderer:
     enabled: true
   grafana.ini:
-    # Grafana v12.1.0 conf/defaults.ini [database] and
-    # pkg/services/sqlstore/database_config.go (https://github.com/grafana/grafana/tree/v12.1.0).
+    # Grafana v13.1.3 conf/defaults.ini [database] and
+    # pkg/services/sqlstore/database_config.go (https://github.com/grafana/grafana/tree/v13.1.3).
     # 2026-10-12 prod lock bursts: 03:02Z (11 lines), 09:02Z (67 lines);
     # evaluation ticks dropped, API 500/502 (32.7s GET), probes failed.
-    # SQLite-only wal/query_retries/transaction_retries; defaults false/0/5.
+    # SQLite-only wal/query_retries/transaction_retries; defaults false/0/10.
     # Keep the existing sqlite3 type, grafana.db path and PVC. No busy_timeout INI option.
     database:
       wal: true

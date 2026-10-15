@@ -925,31 +925,13 @@
       "budget_p50_minutes": 5,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0.01,
+      "expected_runs_per_day": 0,
       "if": "needs.scope.outputs.applies == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "scope",
       "owner": "CI maintainers",
-      "rationale": "Explicit one-off prod legacy retirement dispatch after admin deploy; estimate one additional manual migration run per100days (0.01/day), five-minute p50 budget, no PR execution. Existing service image is retained.",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "gcp_admin.yml/retire-legacy-grafana": {
-      "budget_p50_minutes": 5,
-      "display_name": "retire-legacy-grafana",
-      "expected_runs_class": "non-pr",
-      "expected_runs_per_day": 0.01,
-      "if": "github.event_name == 'workflow_dispatch' && inputs.environment == 'prod' && inputs.retire_legacy_grafana",
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": "deploy",
-      "owner": "CI maintainers",
-      "rationale": "Explicit one-off prod legacy retirement dispatch after admin deploy; estimate one additional manual migration run per100days (0.01/day), five-minute p50 budget, no PR execution. Existing service image is retained.",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -961,13 +943,13 @@
       "budget_p50_minutes": 5,
       "display_name": "Decide admin deployment scope",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0.01,
+      "expected_runs_per_day": 0,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Explicit one-off prod legacy retirement dispatch after admin deploy; estimate one additional manual migration run per100days (0.01/day), five-minute p50 budget, no PR execution. Existing service image is retained.",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1199,13 +1181,13 @@
       "budget_p50_minutes": 5,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": "github.ref == 'refs/heads/main'",
+      "expected_runs_per_day": 0.01,
+      "if": "github.ref == 'refs/heads/main' && inputs.retire_legacy_grafana != true",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "One additional manual legacy Grafana retirement per100days budgeted conservatively; retirement-only input skips normal Helm/alert jobs. No PR runs, five-minute p50 budget.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1217,13 +1199,31 @@
       "budget_p50_minutes": 5,
       "display_name": "provision-live-alerts",
       "expected_runs_class": "non-pr",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 0.01,
       "if": "github.ref == 'refs/heads/main'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "One additional manual legacy Grafana retirement per100days budgeted conservatively; retirement-only input skips normal Helm/alert jobs. No PR runs, five-minute p50 budget.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_cloud_run_metrics_egress.yml/retire-legacy-grafana": {
+      "budget_p50_minutes": 5,
+      "display_name": "retire-legacy-grafana",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0.01,
+      "if": "github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.environment == 'prod' && inputs.retire_legacy_grafana",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "One additional manual legacy Grafana retirement per100days budgeted conservatively; retirement-only input skips normal Helm/alert jobs. No PR runs, five-minute p50 budget.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3625,7 +3625,7 @@
     "gcp_admin.yml": {
       "name": "Deploy Admin Dashboard to Cloud Run",
       "owner": "CI maintainers",
-      "rationale": "Keep existing admin scope/build/deploy triggers; add explicit manual-only prod legacy retirement input, no PR execution or automatic legacy mutation.",
+      "rationale": "Initial workflow inventory",
       "triggers": {
         "push": {
           "branches": [
@@ -3656,12 +3656,6 @@
               ],
               "required": "false",
               "type": "choice"
-            },
-            "retire_legacy_grafana": {
-              "default": "false",
-              "description": "Disable anonymous access on legacy omi-grafana (breaks old anonymous TV links)",
-              "required": "false",
-              "type": "boolean"
             }
           }
         }
@@ -3985,7 +3979,7 @@
     "gcp_cloud_run_metrics_egress.yml": {
       "name": "Deploy Cloud Run Metrics Egress",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Add explicit prod-only legacy anonymous Grafana retirement mode under monitoring authority, skipping normal Helm/alert deploys in that mode; existing monitoring flow unchanged otherwise.",
       "triggers": {
         "push": {
           "branches": [
@@ -4010,6 +4004,12 @@
               ],
               "required": "true",
               "type": "choice"
+            },
+            "retire_legacy_grafana": {
+              "default": "false",
+              "description": "Retire legacy anonymous Grafana only; skips Helm and breaks old anonymous TV links",
+              "required": "false",
+              "type": "boolean"
             }
           }
         }

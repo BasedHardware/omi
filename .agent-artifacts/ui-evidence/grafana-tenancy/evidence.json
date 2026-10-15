@@ -7,6 +7,13 @@
       "description": "Real local dashboard error state with mocked 503 embed response; no production access or acceptance claim",
       "captured_by": "agent",
       "source": "playwright-e2e"
+    },
+    {
+      "file": "002-web-grafana-native-canvas-fixture.png",
+      "platform": "web",
+      "description": "Grafana13.1.3 viewport rendering23 synthetic Canvas cards through authenticated Business org and Infinity; labels disclose fixture data; not production acceptance",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
     }
   ]
 }
