@@ -4163,5 +4163,7 @@
     "onTheWayTitle": "På vej",
     "onTheWayAlmostReady": "Næsten klar",
     "activityEmpty": "Ingen aktivitet endnu",
-    "activityNewSemantics": "Aktivitet, nye elementer"
+    "activityNewSemantics": "Aktivitet, nye elementer",
+    "activityLoadFailed": "Kunne ikke indlæse al din aktivitet",
+    "activityNewItem": "Ny"
 }

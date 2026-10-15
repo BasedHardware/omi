@@ -13448,4 +13448,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Aktivitāte, jauni vienumi';
+
+  @override
+  String get activityLoadFailed => 'Neizdevās ielādēt visu jūsu aktivitāti';
+
+  @override
+  String get activityNewItem => 'Jauns';
 }

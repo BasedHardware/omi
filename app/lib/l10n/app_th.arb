@@ -4121,5 +4121,7 @@
     "onTheWayTitle": "กำลังมา",
     "onTheWayAlmostReady": "ใกล้เสร็จแล้ว",
     "activityEmpty": "ยังไม่มีกิจกรรม",
-    "activityNewSemantics": "กิจกรรม, รายการใหม่"
+    "activityNewSemantics": "กิจกรรม, รายการใหม่",
+    "activityLoadFailed": "โหลดกิจกรรมทั้งหมดของคุณไม่ได้",
+    "activityNewItem": "ใหม่"
 }

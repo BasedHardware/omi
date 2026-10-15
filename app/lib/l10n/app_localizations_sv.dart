@@ -13424,4 +13424,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Aktivitet, nya objekt';
+
+  @override
+  String get activityLoadFailed => 'Kunde inte läsa in all din aktivitet';
+
+  @override
+  String get activityNewItem => 'Ny';
 }

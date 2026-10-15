@@ -13404,4 +13404,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Activity, new items';
+
+  @override
+  String get activityLoadFailed => 'Couldn\'t load all of your activity';
+
+  @override
+  String get activityNewItem => 'New';
 }

@@ -13474,4 +13474,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Activitate, elemente noi';
+
+  @override
+  String get activityLoadFailed => 'Nu am putut încărca toată activitatea ta';
+
+  @override
+  String get activityNewItem => 'Nou';
 }

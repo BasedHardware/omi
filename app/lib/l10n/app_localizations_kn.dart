@@ -13458,4 +13458,10 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'ಚಟುವಟಿಕೆ, ಹೊಸ ಐಟಂಗಳು';
+
+  @override
+  String get activityLoadFailed => 'ನಿಮ್ಮ ಎಲ್ಲಾ ಚಟುವಟಿಕೆಯನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ';
+
+  @override
+  String get activityNewItem => 'ಹೊಸದು';
 }

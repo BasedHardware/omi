@@ -13417,4 +13417,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Hoạt động, mục mới';
+
+  @override
+  String get activityLoadFailed => 'Không thể tải toàn bộ hoạt động của bạn';
+
+  @override
+  String get activityNewItem => 'Mới';
 }

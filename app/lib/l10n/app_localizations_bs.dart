@@ -13449,4 +13449,10 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Aktivnost, nove stavke';
+
+  @override
+  String get activityLoadFailed => 'Nismo mogli učitati svu vašu aktivnost';
+
+  @override
+  String get activityNewItem => 'Novo';
 }

@@ -4121,5 +4121,7 @@
     "onTheWayTitle": "Dalam perjalanan",
     "onTheWayAlmostReady": "Hampir siap",
     "activityEmpty": "Belum ada aktiviti",
-    "activityNewSemantics": "Aktiviti, item baharu"
+    "activityNewSemantics": "Aktiviti, item baharu",
+    "activityLoadFailed": "Tidak dapat memuatkan semua aktiviti anda",
+    "activityNewItem": "Baharu"
 }

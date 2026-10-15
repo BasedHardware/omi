@@ -4121,5 +4121,7 @@
     "onTheWayTitle": "У дорозі",
     "onTheWayAlmostReady": "Майже готово",
     "activityEmpty": "Поки немає активності",
-    "activityNewSemantics": "Активність, нові елементи"
+    "activityNewSemantics": "Активність, нові елементи",
+    "activityLoadFailed": "Не вдалося завантажити всю активність",
+    "activityNewItem": "Нове"
 }

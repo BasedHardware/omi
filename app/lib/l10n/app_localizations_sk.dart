@@ -13415,4 +13415,10 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Aktivita, nové položky';
+
+  @override
+  String get activityLoadFailed => 'Nepodarilo sa načítať celú vašu aktivitu';
+
+  @override
+  String get activityNewItem => 'Nové';
 }

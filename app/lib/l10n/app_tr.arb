@@ -4156,5 +4156,7 @@
     "onTheWayTitle": "Yolda",
     "onTheWayAlmostReady": "Neredeyse hazır",
     "activityEmpty": "Henüz etkinlik yok",
-    "activityNewSemantics": "Etkinlik, yeni öğeler"
+    "activityNewSemantics": "Etkinlik, yeni öğeler",
+    "activityLoadFailed": "Etkinliğinizin tamamı yüklenemedi",
+    "activityNewItem": "Yeni"
 }

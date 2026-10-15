@@ -4121,5 +4121,7 @@
     "onTheWayTitle": "Na cestě",
     "onTheWayAlmostReady": "Téměř hotovo",
     "activityEmpty": "Zatím žádná aktivita",
-    "activityNewSemantics": "Aktivita, nové položky"
+    "activityNewSemantics": "Aktivita, nové položky",
+    "activityLoadFailed": "Nepodařilo se načíst celou vaši aktivitu",
+    "activityNewItem": "Nové"
 }

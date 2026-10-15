@@ -13237,4 +13237,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get activityNewSemantics => '활동, 새 항목';
+
+  @override
+  String get activityLoadFailed => '활동을 모두 불러오지 못했습니다';
+
+  @override
+  String get activityNewItem => '새 항목';
 }

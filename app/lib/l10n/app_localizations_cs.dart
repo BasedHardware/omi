@@ -13421,4 +13421,10 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Aktivita, nové položky';
+
+  @override
+  String get activityLoadFailed => 'Nepodařilo se načíst celou vaši aktivitu';
+
+  @override
+  String get activityNewItem => 'Nové';
 }

@@ -13212,4 +13212,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get activityNewSemantics => '活动，有新内容';
+
+  @override
+  String get activityLoadFailed => '无法加载全部活动';
+
+  @override
+  String get activityNewItem => '新';
 }

@@ -13511,4 +13511,10 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'செயல்பாடு, புதிய உருப்படிகள்';
+
+  @override
+  String get activityLoadFailed => 'உங்கள் எல்லா செயல்பாடுகளையும் ஏற்ற முடியவில்லை';
+
+  @override
+  String get activityNewItem => 'புதியது';
 }

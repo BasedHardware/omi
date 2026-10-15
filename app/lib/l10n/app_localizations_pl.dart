@@ -13458,4 +13458,10 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Aktywność, nowe elementy';
+
+  @override
+  String get activityLoadFailed => 'Nie udało się wczytać całej aktywności';
+
+  @override
+  String get activityNewItem => 'Nowe';
 }

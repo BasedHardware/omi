@@ -4121,5 +4121,7 @@
     "onTheWayTitle": "Pakeliui",
     "onTheWayAlmostReady": "Beveik paruošta",
     "activityEmpty": "Veiklos dar nėra",
-    "activityNewSemantics": "Veikla, nauji elementai"
+    "activityNewSemantics": "Veikla, nauji elementai",
+    "activityLoadFailed": "Nepavyko įkelti visos jūsų veiklos",
+    "activityNewItem": "Nauja"
 }

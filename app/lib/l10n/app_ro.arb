@@ -4121,5 +4121,7 @@
     "onTheWayTitle": "Pe drum",
     "onTheWayAlmostReady": "Aproape gata",
     "activityEmpty": "Nicio activitate încă",
-    "activityNewSemantics": "Activitate, elemente noi"
+    "activityNewSemantics": "Activitate, elemente noi",
+    "activityLoadFailed": "Nu am putut încărca toată activitatea ta",
+    "activityNewItem": "Nou"
 }

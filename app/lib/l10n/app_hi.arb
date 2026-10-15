@@ -4121,5 +4121,7 @@
     "onTheWayTitle": "रास्ते में",
     "onTheWayAlmostReady": "लगभग तैयार",
     "activityEmpty": "अभी तक कोई गतिविधि नहीं",
-    "activityNewSemantics": "गतिविधि, नए आइटम"
+    "activityNewSemantics": "गतिविधि, नए आइटम",
+    "activityLoadFailed": "आपकी पूरी गतिविधि लोड नहीं हो सकी",
+    "activityNewItem": "नया"
 }

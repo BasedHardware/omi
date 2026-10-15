@@ -16156,5 +16156,13 @@
     "activityNewSemantics": "Activity, new items",
     "@activityNewSemantics": {
         "description": "Screen reader label for the Activity bell when it has new items"
+    },
+    "activityLoadFailed": "Couldn't load all of your activity",
+    "@activityLoadFailed": {
+        "description": "Activity page: one or more sources failed to load"
+    },
+    "activityNewItem": "New",
+    "@activityNewItem": {
+        "description": "Screen reader suffix for an Activity row added since the last visit"
     }
 }

@@ -11547,5 +11547,7 @@
     "onTheWayTitle": "در راه",
     "onTheWayAlmostReady": "تقریباً آماده",
     "activityEmpty": "هنوز فعالیتی نیست",
-    "activityNewSemantics": "فعالیت، موارد جدید"
+    "activityNewSemantics": "فعالیت، موارد جدید",
+    "activityLoadFailed": "بارگیری همه فعالیت‌های شما ممکن نشد",
+    "activityNewItem": "جدید"
 }

@@ -11547,5 +11547,7 @@
     "onTheWayTitle": "בדרך",
     "onTheWayAlmostReady": "כמעט מוכן",
     "activityEmpty": "אין פעילות עדיין",
-    "activityNewSemantics": "פעילות, פריטים חדשים"
+    "activityNewSemantics": "פעילות, פריטים חדשים",
+    "activityLoadFailed": "לא ניתן היה לטעון את כל הפעילות שלך",
+    "activityNewItem": "חדש"
 }

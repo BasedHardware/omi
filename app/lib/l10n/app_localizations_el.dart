@@ -13503,4 +13503,10 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Δραστηριότητα, νέα στοιχεία';
+
+  @override
+  String get activityLoadFailed => 'Δεν ήταν δυνατή η φόρτωση όλης της δραστηριότητάς σας';
+
+  @override
+  String get activityNewItem => 'Νέο';
 }

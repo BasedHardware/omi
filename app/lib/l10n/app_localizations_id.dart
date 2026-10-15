@@ -13429,4 +13429,10 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Aktivitas, item baru';
+
+  @override
+  String get activityLoadFailed => 'Tidak dapat memuat semua aktivitas Anda';
+
+  @override
+  String get activityNewItem => 'Baru';
 }

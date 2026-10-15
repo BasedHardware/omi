@@ -4121,5 +4121,7 @@
     "onTheWayTitle": "Unterwegs",
     "onTheWayAlmostReady": "Fast fertig",
     "activityEmpty": "Noch keine Aktivität",
-    "activityNewSemantics": "Aktivität, neue Einträge"
+    "activityNewSemantics": "Aktivität, neue Einträge",
+    "activityLoadFailed": "Nicht alle Aktivitäten konnten geladen werden",
+    "activityNewItem": "Neu"
 }

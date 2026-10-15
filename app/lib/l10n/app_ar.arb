@@ -4121,5 +4121,7 @@
     "onTheWayTitle": "في الطريق",
     "onTheWayAlmostReady": "على وشك الجاهزية",
     "activityEmpty": "لا يوجد نشاط بعد",
-    "activityNewSemantics": "النشاط، عناصر جديدة"
+    "activityNewSemantics": "النشاط، عناصر جديدة",
+    "activityLoadFailed": "تعذّر تحميل كل نشاطك",
+    "activityNewItem": "جديد"
 }

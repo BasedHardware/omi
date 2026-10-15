@@ -13471,4 +13471,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Tevékenység, új elemek';
+
+  @override
+  String get activityLoadFailed => 'Nem sikerült betölteni az összes tevékenységet';
+
+  @override
+  String get activityNewItem => 'Új';
 }

@@ -13471,4 +13471,10 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'కార్యాచరణ, కొత్త అంశాలు';
+
+  @override
+  String get activityLoadFailed => 'మీ మొత్తం కార్యాచరణను లోడ్ చేయలేకపోయాం';
+
+  @override
+  String get activityNewItem => 'కొత్తది';
 }

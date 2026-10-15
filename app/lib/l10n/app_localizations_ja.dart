@@ -13231,4 +13231,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'アクティビティ、新着あり';
+
+  @override
+  String get activityLoadFailed => 'アクティビティの一部を読み込めませんでした';
+
+  @override
+  String get activityNewItem => '新着';
 }

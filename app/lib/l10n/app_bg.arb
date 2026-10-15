@@ -4121,5 +4121,7 @@
     "onTheWayTitle": "На път",
     "onTheWayAlmostReady": "Почти готово",
     "activityEmpty": "Все още няма активност",
-    "activityNewSemantics": "Активност, нови елементи"
+    "activityNewSemantics": "Активност, нови елементи",
+    "activityLoadFailed": "Не можахме да заредим цялата ви активност",
+    "activityNewItem": "Ново"
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/users.dart';
@@ -15,6 +17,11 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
+
+final _recapDeletions = StreamController<String>.broadcast();
+
+/// A recap was deleted outside Home's row (from Activity): every mounted row drops its card.
+void announceRecapDeleted(String summaryId) => _recapDeletions.add(summaryId);
 
 /// Loads recent daily recaps. Injectable so tests and the visual audit need no network.
 typedef RecentRecapsLoader = Future<({List<DailySummary> items, bool ok})> Function();
@@ -40,10 +47,21 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> {
   List<DailySummary> _recaps = [];
   bool _loading = true;
 
+  StreamSubscription<String>? _deletions;
+
   @override
   void initState() {
     super.initState();
+    _deletions = _recapDeletions.stream.listen((id) {
+      if (mounted) setState(() => _recaps.removeWhere((s) => s.id == id));
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => refresh());
+  }
+
+  @override
+  void dispose() {
+    _deletions?.cancel();
+    super.dispose();
   }
 
   /// Reloads the row (pull-to-refresh on Home). A failed read keeps the cards already shown.

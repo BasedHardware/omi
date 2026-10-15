@@ -13414,4 +13414,10 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'فعالیت، موارد جدید';
+
+  @override
+  String get activityLoadFailed => 'بارگیری همه فعالیت‌های شما ممکن نشد';
+
+  @override
+  String get activityNewItem => 'جدید';
 }

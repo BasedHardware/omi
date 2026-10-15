@@ -13421,4 +13421,10 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Aktivitet, nye elementer';
+
+  @override
+  String get activityLoadFailed => 'Kunne ikke laste inn all aktiviteten din';
+
+  @override
+  String get activityNewItem => 'Ny';
 }

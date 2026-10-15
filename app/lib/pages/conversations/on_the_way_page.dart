@@ -50,7 +50,13 @@ class OnTheWayPage extends StatelessWidget {
 
         final attentionCount = groupRecordingBlocks(SyncPendingWork.attention(p)).length;
         final Widget body;
-        if (almostReady.isEmpty && syncing.isEmpty) {
+        // A sync can be mid-run with no recording listed yet (WAL-less processing), and refused
+        // recordings are not pending: neither is "all synced".
+        final serverBusy = SyncPendingWork.hasServerJobs(p);
+        if (almostReady.isEmpty && serverBusy) {
+          almostReady.add(_PendingItem.status(label: SyncPendingWork.stageLabel(p, l), step: 2));
+        }
+        if (almostReady.isEmpty && syncing.isEmpty && attentionCount == 0) {
           body = OmiEmptyState(icon: Icons.check_circle_outline, title: l.allRecordingsSynced);
         } else {
           body = ListView(
@@ -124,7 +130,12 @@ class _PendingItem {
       : start = DateTime.fromMillisecondsSinceEpoch(block.startSeconds * 1000),
         seconds = block.seconds;
 
-  final DateTime start;
+  /// A stage with no recording to name yet: only the label shows.
+  const _PendingItem.status({required this.label, required this.step})
+      : start = null,
+        seconds = 0;
+
+  final DateTime? start;
   final int seconds;
   final String label;
 
@@ -169,7 +180,11 @@ class _Group extends StatelessWidget {
           for (var i = 0; i < items.length; i++) ...[
             if (i > 0) Divider(height: 1, thickness: 1, indent: OmiSpacing.md, color: OmiColors.surface2),
             Semantics(
-              label: '${dates.time(items[i].start)}, ${OmiDuration.compact(items[i].seconds, l)}, ${items[i].label}',
+              label: [
+                if (items[i].start != null) dates.time(items[i].start!),
+                if (items[i].seconds > 0) OmiDuration.compact(items[i].seconds, l),
+                items[i].label,
+              ].join(', '),
               excludeSemantics: true,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 14),
@@ -179,14 +194,17 @@ class _Group extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            items[i].seconds > 0
-                                ? '${dates.time(items[i].start)} · ${OmiDuration.compact(items[i].seconds, l)}'
-                                : dates.time(items[i].start),
-                            style: OmiType.body,
-                          ),
-                          const SizedBox(height: 3),
-                          Text(items[i].label, style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
+                          if (items[i].start != null) ...[
+                            Text(
+                              items[i].seconds > 0
+                                  ? '${dates.time(items[i].start!)} · ${OmiDuration.compact(items[i].seconds, l)}'
+                                  : dates.time(items[i].start!),
+                              style: OmiType.body,
+                            ),
+                            const SizedBox(height: 3),
+                            Text(items[i].label, style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
+                          ] else
+                            Text(items[i].label, style: OmiType.body),
                         ],
                       ),
                     ),

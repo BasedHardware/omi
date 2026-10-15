@@ -13424,4 +13424,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Toiminta, uusia kohteita';
+
+  @override
+  String get activityLoadFailed => 'Kaikkea toimintaa ei voitu ladata';
+
+  @override
+  String get activityNewItem => 'Uusi';
 }

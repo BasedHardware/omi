@@ -13449,4 +13449,10 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Активність, нові елементи';
+
+  @override
+  String get activityLoadFailed => 'Не вдалося завантажити всю активність';
+
+  @override
+  String get activityNewItem => 'Нове';
 }

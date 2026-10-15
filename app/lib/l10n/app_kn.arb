@@ -11547,5 +11547,7 @@
     "onTheWayTitle": "ದಾರಿಯಲ್ಲಿದೆ",
     "onTheWayAlmostReady": "ಬಹುತೇಕ ಸಿದ್ಧ",
     "activityEmpty": "ಇನ್ನೂ ಯಾವುದೇ ಚಟುವಟಿಕೆ ಇಲ್ಲ",
-    "activityNewSemantics": "ಚಟುವಟಿಕೆ, ಹೊಸ ಐಟಂಗಳು"
+    "activityNewSemantics": "ಚಟುವಟಿಕೆ, ಹೊಸ ಐಟಂಗಳು",
+    "activityLoadFailed": "ನಿಮ್ಮ ಎಲ್ಲಾ ಚಟುವಟಿಕೆಯನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
+    "activityNewItem": "ಹೊಸದು"
 }

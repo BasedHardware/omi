@@ -13450,4 +13450,10 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Aktiviti, item baharu';
+
+  @override
+  String get activityLoadFailed => 'Tidak dapat memuatkan semua aktiviti anda';
+
+  @override
+  String get activityNewItem => 'Baharu';
 }

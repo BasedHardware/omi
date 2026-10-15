@@ -11547,5 +11547,7 @@
     "onTheWayTitle": "మార్గంలో ఉంది",
     "onTheWayAlmostReady": "దాదాపు సిద్ధం",
     "activityEmpty": "ఇంకా కార్యాచరణ లేదు",
-    "activityNewSemantics": "కార్యాచరణ, కొత్త అంశాలు"
+    "activityNewSemantics": "కార్యాచరణ, కొత్త అంశాలు",
+    "activityLoadFailed": "మీ మొత్తం కార్యాచరణను లోడ్ చేయలేకపోయాం",
+    "activityNewItem": "కొత్తది"
 }

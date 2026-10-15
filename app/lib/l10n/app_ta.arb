@@ -11547,5 +11547,7 @@
     "onTheWayTitle": "வழியில்",
     "onTheWayAlmostReady": "கிட்டத்தட்ட தயார்",
     "activityEmpty": "இதுவரை எந்தச் செயல்பாடும் இல்லை",
-    "activityNewSemantics": "செயல்பாடு, புதிய உருப்படிகள்"
+    "activityNewSemantics": "செயல்பாடு, புதிய உருப்படிகள்",
+    "activityLoadFailed": "உங்கள் எல்லா செயல்பாடுகளையும் ஏற்ற முடியவில்லை",
+    "activityNewItem": "புதியது"
 }

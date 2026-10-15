@@ -13488,4 +13488,10 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Activitat, elements nous';
+
+  @override
+  String get activityLoadFailed => 'No s\'ha pogut carregar tota la teva activitat';
+
+  @override
+  String get activityNewItem => 'Nou';
 }

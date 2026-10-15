@@ -13433,4 +13433,10 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'سرگرمی، نئے آئٹمز';
+
+  @override
+  String get activityLoadFailed => 'آپ کی تمام سرگرمی لوڈ نہیں ہو سکی';
+
+  @override
+  String get activityNewItem => 'نیا';
 }

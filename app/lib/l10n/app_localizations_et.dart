@@ -13413,4 +13413,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Tegevus, uued üksused';
+
+  @override
+  String get activityLoadFailed => 'Kogu tegevust ei õnnestunud laadida';
+
+  @override
+  String get activityNewItem => 'Uus';
 }

@@ -4217,5 +4217,7 @@
     "onTheWayTitle": "Úton",
     "onTheWayAlmostReady": "Majdnem kész",
     "activityEmpty": "Még nincs tevékenység",
-    "activityNewSemantics": "Tevékenység, új elemek"
+    "activityNewSemantics": "Tevékenység, új elemek",
+    "activityLoadFailed": "Nem sikerült betölteni az összes tevékenységet",
+    "activityNewItem": "Új"
 }

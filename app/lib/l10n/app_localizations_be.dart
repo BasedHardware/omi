@@ -13454,4 +13454,10 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Актыўнасць, новыя элементы';
+
+  @override
+  String get activityLoadFailed => 'Не ўдалося загрузіць усю вашу актыўнасць';
+
+  @override
+  String get activityNewItem => 'Новае';
 }

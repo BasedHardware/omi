@@ -4121,5 +4121,7 @@
     "onTheWayTitle": "準備中",
     "onTheWayAlmostReady": "まもなく完了",
     "activityEmpty": "アクティビティはまだありません",
-    "activityNewSemantics": "アクティビティ、新着あり"
+    "activityNewSemantics": "アクティビティ、新着あり",
+    "activityLoadFailed": "アクティビティの一部を読み込めませんでした",
+    "activityNewItem": "新着"
 }

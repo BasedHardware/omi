@@ -13406,4 +13406,10 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Aktivitet, nye elementer';
+
+  @override
+  String get activityLoadFailed => 'Kunne ikke indlæse al din aktivitet';
+
+  @override
+  String get activityNewItem => 'Ny';
 }

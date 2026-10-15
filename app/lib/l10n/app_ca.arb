@@ -4121,5 +4121,7 @@
     "onTheWayTitle": "En camí",
     "onTheWayAlmostReady": "Gairebé a punt",
     "activityEmpty": "Encara no hi ha activitat",
-    "activityNewSemantics": "Activitat, elements nous"
+    "activityNewSemantics": "Activitat, elements nous",
+    "activityLoadFailed": "No s'ha pogut carregar tota la teva activitat",
+    "activityNewItem": "Nou"
 }

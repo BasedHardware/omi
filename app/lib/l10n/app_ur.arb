@@ -11547,5 +11547,7 @@
     "onTheWayTitle": "راستے میں",
     "onTheWayAlmostReady": "تقریباً تیار",
     "activityEmpty": "ابھی تک کوئی سرگرمی نہیں",
-    "activityNewSemantics": "سرگرمی، نئے آئٹمز"
+    "activityNewSemantics": "سرگرمی، نئے آئٹمز",
+    "activityLoadFailed": "آپ کی تمام سرگرمی لوڈ نہیں ہو سکی",
+    "activityNewItem": "نیا"
 }

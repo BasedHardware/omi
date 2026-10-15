@@ -13353,4 +13353,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'กิจกรรม, รายการใหม่';
+
+  @override
+  String get activityLoadFailed => 'โหลดกิจกรรมทั้งหมดของคุณไม่ได้';
+
+  @override
+  String get activityNewItem => 'ใหม่';
 }

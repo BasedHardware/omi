@@ -1004,9 +1004,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const Padding(
-            padding: EdgeInsets.only(left: (kMinTapTarget - kHeaderCircleDiameter) / 2),
-            child: BatteryInfoWidget(),
+          // The pill gives way first, so the four trailing targets fit narrow screens and large text.
+          const Flexible(
+            child: Padding(
+              padding: EdgeInsets.only(left: (kMinTapTarget - kHeaderCircleDiameter) / 2),
+              child: BatteryInfoWidget(),
+            ),
           ),
           Row(
             children: [

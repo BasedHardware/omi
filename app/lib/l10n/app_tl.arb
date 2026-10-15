@@ -11547,5 +11547,7 @@
     "onTheWayTitle": "Paparating",
     "onTheWayAlmostReady": "Halos handa na",
     "activityEmpty": "Wala pang aktibidad",
-    "activityNewSemantics": "Aktibidad, mga bagong item"
+    "activityNewSemantics": "Aktibidad, mga bagong item",
+    "activityLoadFailed": "Hindi ma-load ang lahat ng iyong aktibidad",
+    "activityNewItem": "Bago"
 }

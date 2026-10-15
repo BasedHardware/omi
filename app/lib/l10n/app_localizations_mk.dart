@@ -13480,4 +13480,10 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Активност, нови ставки';
+
+  @override
+  String get activityLoadFailed => 'Не можевме да ја вчитаме целата ваша активност';
+
+  @override
+  String get activityNewItem => 'Ново';
 }

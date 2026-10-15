@@ -4121,5 +4121,7 @@
     "onTheWayTitle": "Teel",
     "onTheWayAlmostReady": "Peaaegu valmis",
     "activityEmpty": "Tegevusi veel pole",
-    "activityNewSemantics": "Tegevus, uued üksused"
+    "activityNewSemantics": "Tegevus, uued üksused",
+    "activityLoadFailed": "Kogu tegevust ei õnnestunud laadida",
+    "activityNewItem": "Uus"
 }

@@ -194,9 +194,11 @@ class HomeFrame extends StatelessWidget {
         backgroundColor: Theme.of(context).colorScheme.surface,
         titleSpacing: NavigationToolbar.kMiddleSpacing - (kMinTapTarget - kHeaderCircleDiameter) / 2,
         title: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          const Padding(
-            padding: EdgeInsets.only(left: (kMinTapTarget - kHeaderCircleDiameter) / 2),
-            child: BatteryInfoWidget(),
+          const Flexible(
+            child: Padding(
+              padding: EdgeInsets.only(left: (kMinTapTarget - kHeaderCircleDiameter) / 2),
+              child: BatteryInfoWidget(),
+            ),
           ),
           Row(children: [
             HeaderCircleButton(

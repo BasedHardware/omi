@@ -13416,4 +13416,10 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'কার্যকলাপ, নতুন আইটেম';
+
+  @override
+  String get activityLoadFailed => 'আপনার সব কার্যকলাপ লোড করা যায়নি';
+
+  @override
+  String get activityNewItem => 'নতুন';
 }

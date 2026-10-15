@@ -11547,5 +11547,7 @@
     "onTheWayTitle": "У дарозе",
     "onTheWayAlmostReady": "Амаль гатова",
     "activityEmpty": "Пакуль няма актыўнасці",
-    "activityNewSemantics": "Актыўнасць, новыя элементы"
+    "activityNewSemantics": "Актыўнасць, новыя элементы",
+    "activityLoadFailed": "Не ўдалося загрузіць усю вашу актыўнасць",
+    "activityNewItem": "Новае"
 }

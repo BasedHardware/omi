@@ -11547,5 +11547,7 @@
     "onTheWayTitle": "मार्गावर",
     "onTheWayAlmostReady": "जवळजवळ तयार",
     "activityEmpty": "अद्याप कोणतीही क्रिया नाही",
-    "activityNewSemantics": "क्रिया, नवीन आयटम"
+    "activityNewSemantics": "क्रिया, नवीन आयटम",
+    "activityLoadFailed": "तुमची सर्व क्रिया लोड करता आली नाही",
+    "activityNewItem": "नवीन"
 }

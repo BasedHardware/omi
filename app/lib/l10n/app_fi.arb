@@ -4121,5 +4121,7 @@
     "onTheWayTitle": "Tulossa",
     "onTheWayAlmostReady": "Melkein valmis",
     "activityEmpty": "Ei vielä toimintaa",
-    "activityNewSemantics": "Toiminta, uusia kohteita"
+    "activityNewSemantics": "Toiminta, uusia kohteita",
+    "activityLoadFailed": "Kaikkea toimintaa ei voitu ladata",
+    "activityNewItem": "Uusi"
 }

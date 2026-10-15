@@ -13465,4 +13465,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Активность, новые элементы';
+
+  @override
+  String get activityLoadFailed => 'Не удалось загрузить всю активность';
+
+  @override
+  String get activityNewItem => 'Новое';
 }

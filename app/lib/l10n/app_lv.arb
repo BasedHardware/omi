@@ -4121,5 +4121,7 @@
     "onTheWayTitle": "Ceļā",
     "onTheWayAlmostReady": "Gandrīz gatavs",
     "activityEmpty": "Vēl nav aktivitātes",
-    "activityNewSemantics": "Aktivitāte, jauni vienumi"
+    "activityNewSemantics": "Aktivitāte, jauni vienumi",
+    "activityLoadFailed": "Neizdevās ielādēt visu jūsu aktivitāti",
+    "activityNewItem": "Jauns"
 }

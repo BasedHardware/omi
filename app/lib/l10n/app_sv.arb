@@ -4121,5 +4121,7 @@
     "onTheWayTitle": "På väg",
     "onTheWayAlmostReady": "Nästan klart",
     "activityEmpty": "Ingen aktivitet än",
-    "activityNewSemantics": "Aktivitet, nya objekt"
+    "activityNewSemantics": "Aktivitet, nya objekt",
+    "activityLoadFailed": "Kunde inte läsa in all din aktivitet",
+    "activityNewItem": "Ny"
 }

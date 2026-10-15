@@ -11547,5 +11547,7 @@
     "onTheWayTitle": "Na putu",
     "onTheWayAlmostReady": "Skoro spremno",
     "activityEmpty": "Još nema aktivnosti",
-    "activityNewSemantics": "Aktivnost, nove stavke"
+    "activityNewSemantics": "Aktivnost, nove stavke",
+    "activityLoadFailed": "Nismo mogli učitati svu vašu aktivnost",
+    "activityNewItem": "Novo"
 }

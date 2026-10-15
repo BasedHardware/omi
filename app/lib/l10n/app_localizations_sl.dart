@@ -13450,4 +13450,10 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Dejavnost, novi elementi';
+
+  @override
+  String get activityLoadFailed => 'Ni bilo mogoče naložiti vse vaše dejavnosti';
+
+  @override
+  String get activityNewItem => 'Novo';
 }

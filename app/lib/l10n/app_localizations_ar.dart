@@ -13346,4 +13346,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'النشاط، عناصر جديدة';
+
+  @override
+  String get activityLoadFailed => 'تعذّر تحميل كل نشاطك';
+
+  @override
+  String get activityNewItem => 'جديد';
 }

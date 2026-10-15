@@ -13400,4 +13400,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'गतिविधि, नए आइटम';
+
+  @override
+  String get activityLoadFailed => 'आपकी पूरी गतिविधि लोड नहीं हो सकी';
+
+  @override
+  String get activityNewItem => 'नया';
 }

@@ -13518,4 +13518,10 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Aktivität, neue Einträge';
+
+  @override
+  String get activityLoadFailed => 'Nicht alle Aktivitäten konnten geladen werden';
+
+  @override
+  String get activityNewItem => 'Neu';
 }

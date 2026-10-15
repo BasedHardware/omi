@@ -352,6 +352,18 @@ void main() {
       expect(find.text('Offline Sync unavailable'), findsOneWidget);
     });
 
+    testWidgets('refused recordings alone are never reported as all synced', (tester) async {
+      await _pumpPage(tester, _FakeSync(wals: [_wal('too-old', 3, WalStatus.outsideRecoveryWindow)]));
+      expect(find.text('All recordings are synced'), findsNothing);
+      expect(find.text('1 recording need attention'), findsOneWidget);
+    });
+
+    testWidgets('a sync with no recording listed yet still reads as in progress', (tester) async {
+      await _pumpPage(tester, _FakeSync(fetching: true));
+      expect(find.text('All recordings are synced'), findsNothing);
+      expect(find.text('Transcribing…'), findsOneWidget);
+    });
+
     testWidgets('says so when everything has landed', (tester) async {
       await _pumpPage(tester, _FakeSync(wals: [_wal('done', 15, WalStatus.synced)]));
       expect(find.text('All recordings are synced'), findsOneWidget);

@@ -11547,5 +11547,7 @@
     "onTheWayTitle": "আসছে",
     "onTheWayAlmostReady": "প্রায় প্রস্তুত",
     "activityEmpty": "এখনও কোনো কার্যকলাপ নেই",
-    "activityNewSemantics": "কার্যকলাপ, নতুন আইটেম"
+    "activityNewSemantics": "কার্যকলাপ, নতুন আইটেম",
+    "activityLoadFailed": "আপনার সব কার্যকলাপ লোড করা যায়নি",
+    "activityNewItem": "নতুন"
 }

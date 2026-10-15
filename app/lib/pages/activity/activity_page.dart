@@ -54,6 +54,9 @@ class _ActivityPageState extends State<ActivityPage> {
   /// The last visit before this one: items newer than it get a dot.
   late final int _previousVisitMs;
 
+  /// Each source's last good rows, so a refresh where one source fails keeps that source's rows.
+  List<DailySummary> _recaps = const [];
+  List<ReviewChange> _changes = const [];
   List<_ActivityItem> _items = const [];
   bool _loading = true;
   bool _failed = false;
@@ -89,21 +92,44 @@ class _ActivityPageState extends State<ActivityPage> {
     if (!mounted) return;
     final recaps = results[0] as ({List<DailySummary> items, bool ok});
     final changes = results[1] as ApiResult<ReviewChangesPage>;
-    final items = <_ActivityItem>[
-      if (recaps.ok) ...recaps.items.map(_RecapItem.new),
-      if (changes case ApiSuccess(:final data)) ...data.changes.map(_ChangeItem.new),
-    ]..sort((a, b) => b.at.compareTo(a.at));
-    if (recaps.ok) _seen.observe(recaps.items.map((r) => r.createdAt));
-    _seen.markSeen();
-    // Review changes answer 404 for accounts outside the Review cohort: absent, not failed.
+    if (recaps.ok) _recaps = recaps.items;
+    switch (changes) {
+      case ApiSuccess(:final data):
+        _changes = data.changes;
+      // Review changes answer 404 for accounts outside the Review cohort: absent, not failed.
+      case ApiFailure(:final problem) when problem.kind == ApiProblemKind.notFound:
+        _changes = const [];
+      case ApiFailure():
+        break;
+    }
     final changesFailed = changes is ApiFailure<ReviewChangesPage> && changes.problem.kind != ApiProblemKind.notFound;
     final anyFailed = !recaps.ok || changesFailed;
+    if (recaps.ok) _seen.observe(recaps.items.map((r) => r.createdAt));
+    _seen.markSeen();
     setState(() {
       _loading = false;
-      _failed = anyFailed && items.isEmpty;
-      _partial = anyFailed && items.isNotEmpty;
-      _hasChanges = changes is ApiSuccess<ReviewChangesPage> && changes.data.changes.isNotEmpty;
-      _items = items;
+      _rebuildItems();
+      _failed = anyFailed && _items.isEmpty;
+      _partial = anyFailed && _items.isNotEmpty;
+    });
+  }
+
+  void _rebuildItems() {
+    _hasChanges = _changes.isNotEmpty;
+    _items = <_ActivityItem>[..._recaps.map(_RecapItem.new), ..._changes.map(_ChangeItem.new)]
+      ..sort((a, b) => b.at.compareTo(a.at));
+  }
+
+  /// The detail page pops `{deleted: true, summaryId}` when the recap is deleted there: drop it here
+  /// and from Home's recap row instead of leaving a ghost.
+  Future<void> _openRecap(DailySummary summary) async {
+    final result = await routeToPage(context, DailySummaryDetailPage(summaryId: summary.id, summary: summary));
+    if (!mounted || result is! Map || result['deleted'] != true) return;
+    final deletedId = result['summaryId'] as String? ?? summary.id;
+    announceRecapDeleted(deletedId);
+    setState(() {
+      _recaps = _recaps.where((r) => r.id != deletedId).toList();
+      _rebuildItems();
     });
   }
 
@@ -117,7 +143,7 @@ class _ActivityPageState extends State<ActivityPage> {
     if (_loading) {
       body = const OmiLoadingState();
     } else if (_failed) {
-      body = OmiErrorState(message: l.reviewChangesLoadFailed, onRetry: _refresh);
+      body = OmiErrorState(message: l.activityLoadFailed, onRetry: _refresh);
     } else if (_items.isEmpty) {
       body = OmiEmptyState(
         icon: Icons.notifications_none,
@@ -145,8 +171,8 @@ class _ActivityPageState extends State<ActivityPage> {
                 child: Row(
                   children: [
                     Expanded(
-                      child: Text(l.reviewChangesLoadFailed,
-                          style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+                      child:
+                          Text(l.activityLoadFailed, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
                     ),
                     OmiButton.tertiary(
                         key: const Key('activity_retry'),
@@ -170,8 +196,7 @@ class _ActivityPageState extends State<ActivityPage> {
                           title: summary.headline,
                           subtitle: '${l.recap} · ${dates.time(item.at)}',
                           isNew: _isNew(item),
-                          onTap: () =>
-                              routeToPage(context, DailySummaryDetailPage(summaryId: summary.id, summary: summary)),
+                          onTap: () => _openRecap(summary),
                         ),
                       _ChangeItem(:final change) => _ActivityRow(
                           key: ValueKey('activity_change_${change.changeId}'),
@@ -272,7 +297,7 @@ class _ActivityRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: '$title, $subtitle',
+      label: isNew ? '$title, $subtitle, ${context.l10n.activityNewItem}' : '$title, $subtitle',
       onTap: onTap,
       excludeSemantics: true,
       child: InkWell(

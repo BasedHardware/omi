@@ -13455,4 +13455,10 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Activiteit, nieuwe items';
+
+  @override
+  String get activityLoadFailed => 'Niet al je activiteit kon worden geladen';
+
+  @override
+  String get activityNewItem => 'Nieuw';
 }

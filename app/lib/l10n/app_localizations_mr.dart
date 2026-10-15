@@ -13425,4 +13425,10 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'क्रिया, नवीन आयटम';
+
+  @override
+  String get activityLoadFailed => 'तुमची सर्व क्रिया लोड करता आली नाही';
+
+  @override
+  String get activityNewItem => 'नवीन';
 }

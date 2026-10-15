@@ -4121,5 +4121,7 @@
     "onTheWayTitle": "处理中",
     "onTheWayAlmostReady": "即将完成",
     "activityEmpty": "暂无活动",
-    "activityNewSemantics": "活动，有新内容"
+    "activityNewSemantics": "活动，有新内容",
+    "activityLoadFailed": "无法加载全部活动",
+    "activityNewItem": "新"
 }

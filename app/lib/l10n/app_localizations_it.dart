@@ -13490,4 +13490,10 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Attività, nuovi elementi';
+
+  @override
+  String get activityLoadFailed => 'Impossibile caricare tutta la tua attività';
+
+  @override
+  String get activityNewItem => 'Nuovo';
 }

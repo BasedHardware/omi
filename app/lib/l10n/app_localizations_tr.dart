@@ -13432,4 +13432,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Etkinlik, yeni öğeler';
+
+  @override
+  String get activityLoadFailed => 'Etkinliğinizin tamamı yüklenemedi';
+
+  @override
+  String get activityNewItem => 'Yeni';
 }

@@ -144,8 +144,32 @@ void main() {
       await tester.pumpAndSettle();
       final node = tester.getSemantics(find.byKey(const ValueKey('activity_recap_new')));
       expect(node.label, startsWith('Recap new, '));
+      expect(node.label, endsWith(', New'));
+      expect(tester.getSemantics(find.byKey(const ValueKey('activity_recap_old'))).label, isNot(endsWith(', New')));
       expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
       handle.dispose();
+    });
+
+    testWidgets('a refresh where one source fails keeps that source\'s rows', (tester) async {
+      final (seen, _) = _seen(yesterday.millisecondsSinceEpoch);
+      var recapsOk = true;
+      await tester.pumpWidget(_app(ActivityPage(
+        seen: seen,
+        probeDreamReport: () async => false,
+        loadRecaps: () async => (items: recapsOk ? [_recap('kept', anHourAgo)] : <DailySummary>[], ok: recapsOk),
+        loadChanges: ({cursor}) async => ApiSuccess(ReviewChangesPage(changes: [
+          ReviewChange(
+              changeId: 'c1', kind: ReviewChangeKind.rename, title: 'Renamed a person', createdAt: DateTime.now()),
+        ])),
+      )));
+      await tester.pumpAndSettle();
+      expect(find.text('Recap kept'), findsOneWidget);
+
+      recapsOk = false;
+      await tester.drag(find.byType(ListView), const Offset(0, 300));
+      await tester.pumpAndSettle();
+      expect(find.text('Recap kept'), findsOneWidget);
+      expect(find.text("Couldn't load all of your activity"), findsOneWidget);
     });
 
     testWidgets('says so when there is nothing yet', (tester) async {

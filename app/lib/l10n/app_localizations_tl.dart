@@ -13524,4 +13524,10 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Aktibidad, mga bagong item';
+
+  @override
+  String get activityLoadFailed => 'Hindi ma-load ang lahat ng iyong aktibidad';
+
+  @override
+  String get activityNewItem => 'Bago';
 }

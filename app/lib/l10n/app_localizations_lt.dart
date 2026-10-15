@@ -13443,4 +13443,10 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get activityNewSemantics => 'Veikla, nauji elementai';
+
+  @override
+  String get activityLoadFailed => 'Nepavyko įkelti visos jūsų veiklos';
+
+  @override
+  String get activityNewItem => 'Nauja';
 }

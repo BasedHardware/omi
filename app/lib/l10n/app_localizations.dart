@@ -23918,6 +23918,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Activity, new items'**
   String get activityNewSemantics;
+
+  /// Activity page: one or more sources failed to load
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load all of your activity'**
+  String get activityLoadFailed;
+
+  /// Screen reader suffix for an Activity row added since the last visit
+  ///
+  /// In en, this message translates to:
+  /// **'New'**
+  String get activityNewItem;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
