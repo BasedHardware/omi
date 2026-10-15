@@ -325,7 +325,7 @@ def _validated_job_id(job_id: str) -> str:
     error (400) here, rather than a 500 from the db-layer validator — and it
     never reaches ``document()``."""
     try:
-        return import_jobs_db._validate_job_id(job_id)
+        return import_jobs_db.validate_job_id(job_id)
     except ValueError:
         raise HTTPException(status_code=400, detail='invalid job_id')
 
