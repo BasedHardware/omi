@@ -12439,6 +12439,15 @@ class AppLocalizationsKn extends AppLocalizations {
   String get reviewRecentChanges => 'ಇತ್ತೀಚಿನ ಬದಲಾವಣೆಗಳು';
 
   @override
+  String get reviewChangeAfter => 'ನಂತರ';
+
+  @override
+  String get reviewChangeBefore => 'ಮೊದಲು';
+
+  @override
+  String get reviewChangeRemoved => 'ಸಕ್ರಿಯ ಪಟ್ಟಿಯಿಂದ ತೆಗೆದುಹಾಕಲಾಗಿದೆ';
+
+  @override
   String get reviewChangesIntro => 'ಕಳೆದ 30 ದಿನಗಳಲ್ಲಿ Omi ತಾನೇ ಬದಲಾಯಿಸಿದ್ದು. ತಪ್ಪಾಗಿ ಕಂಡದ್ದನ್ನು ರದ್ದುಗೊಳಿಸಿ.';
 
   @override

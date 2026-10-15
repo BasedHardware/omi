@@ -12312,6 +12312,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get reviewRecentChanges => 'שינויים אחרונים';
 
   @override
+  String get reviewChangeAfter => 'אחרי';
+
+  @override
+  String get reviewChangeBefore => 'לפני';
+
+  @override
+  String get reviewChangeRemoved => 'הוסר מהרשימה הפעילה';
+
+  @override
   String get reviewChangesIntro => 'מה ש-Omi שינה בעצמו ב-30 הימים האחרונים. בטל כל דבר שנראה שגוי.';
 
   @override

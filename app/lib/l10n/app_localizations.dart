@@ -22185,6 +22185,24 @@ abstract class AppLocalizations {
   /// **'Recent Changes'**
   String get reviewRecentChanges;
 
+  /// Label for the resulting value in an applied Review change
+  ///
+  /// In en, this message translates to:
+  /// **'After'**
+  String get reviewChangeAfter;
+
+  /// Label for the original value in an applied Review change
+  ///
+  /// In en, this message translates to:
+  /// **'Before'**
+  String get reviewChangeBefore;
+
+  /// Reversible retirement or dismissal in an applied change; Undo restores the item
+  ///
+  /// In en, this message translates to:
+  /// **'Removed from the active list'**
+  String get reviewChangeRemoved;
+
   /// Intro line on Recent Changes
   ///
   /// In en, this message translates to:

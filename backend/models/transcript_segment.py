@@ -101,6 +101,9 @@ class SpeakerIdentityStatus(str, Enum):
 class TranscriptSegment(BaseModel):
     id: Optional[str] = None
     text: str
+    original_text: Optional[str] = Field(
+        default=None, description='Immutable captured text when text includes active corrections.'
+    )
     speaker: Optional[str] = 'SPEAKER_00'
     speaker_id: Optional[int] = None
     is_user: bool
@@ -170,6 +173,8 @@ class TranscriptSegment(BaseModel):
         # the return type inferred so Pydantic retains the public field schema.
         # Omit absent internal markers to keep ordinary v1 payloads unchanged.
         data = handler(self)
+        if self.original_text is None:
+            data.pop('original_text', None)
         data['speaker_label_source'] = project_source(data)
         for key in ('audio_alignment', 'audio_capture_run', 'voice_candidates'):
             value = getattr(self, key)

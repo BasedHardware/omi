@@ -6,7 +6,6 @@ admission and reclamation share one transaction, fenced by the current run_id.
 
 import os
 import math
-import random
 from hashlib import sha256
 
 from datetime import datetime, timedelta, timezone
@@ -16,14 +15,12 @@ from typing import Any
 from google.cloud import firestore
 
 from config.dream_agent import (
-    backfill_share,
     Caps,
     canary_eligible,
     canary_uid,
     eligible,
     may_be_eligible,
     mode,
-    FULL_DRAIN_SECONDS,
     DRAIN_TIMEOUT_SECONDS,
     LEASE_RECLAIM_MARGIN_SECONDS,
 )
@@ -51,6 +48,17 @@ def state_ref(database, uid):
 def spend_ref(database, uid, day):
     """Per-user UTC-day accounting, shared only by that user's passes and hosts."""
     return state_ref(database, uid).collection('spend').document(day)
+
+
+def global_spend_ref(database, uid, day, *, shards=64, shard=None):
+    slot = int(sha256(uid.encode()).hexdigest(), 16) % shards if shard is None else shard
+    return database.collection('dream_global_spend').document(day + '-' + str(slot))
+
+
+def lease_global_ref(database, uid, lease):
+    if 'global_shard' not in lease:
+        return database.collection('dream_global_spend').document(lease['day'])
+    return global_spend_ref(database, uid, lease['day'], shard=lease['global_shard'])
 
 
 def lease_spend_ref(database, uid, lease):
@@ -88,6 +96,11 @@ def mark_dirty(uid, refs, *, canary=False, firestore_client=None):
     plan = (user.get('subscription') or {}).get('plan', user.get('plan', ''))
     weight = 2 if plan in PAID_PLAN_IDS else 1
     refs = list(dict.fromkeys(refs))
+    priority_state = state.get().to_dict() or {}
+    from database.dream_scheduler import due_time
+
+    now = datetime.now(timezone.utc)
+    priority_due = min(now, due_time({**priority_state, 'score': priority_state.get('score', 0) + weight}, now))
     for start in range(0, len(refs), WRITE_CHUNK):
         batch = database.batch()
         for collection, key in refs[start : start + WRITE_CHUNK]:
@@ -107,6 +120,7 @@ def mark_dirty(uid, refs, *, canary=False, firestore_client=None):
         # score before this product write has finished queuing all its refs.
         if start + WRITE_CHUNK >= len(refs):
             batch.set(state, {'score': firestore.Increment(weight)}, merge=True)
+            batch.set(database.collection('dream_due').document(uid), {'due_at': priority_due})
         batch.commit()
         trim_dirty(uid, firestore_client=database)
     return True
@@ -176,52 +190,45 @@ def acquire(
     spend = spend_ref(database, uid, day)
     owner = database.collection('users').document(uid)
     run_id = str(uuid4())
-    draw = (rng or random.SystemRandom()).random()
+    global_spend = global_spend_ref(database, uid, day, shards=caps.global_spend_shards)
 
-    def admit(tx, data, budget, user):
+    def admit(tx, data, budget, user, global_budget):
         passes = int(data.get('passes', 0)) if data.get('day') == day else 0
         manual_runs = int(data.get('manual_runs', 0)) if data.get('day') == day else 0
-        if trigger == 'manual':
-            if data.get('lease'):
-                raise AdmissionDenied('dream_run_in_progress')
-            if data.get('score', 0) <= 0 or dirty_count(uid, transaction=tx, firestore_client=database) == 0:
-                return None, {}
-            if manual_runs >= caps.manual_runs:
-                raise AdmissionDenied('dream_manual_limit')
-        # Old drained states predate last_pass_at; their watermark seeds cleanup.
-        last_pass = data.get('last_attempt_at') or data.get('last_pass_at') or data.get('watermark') or EPOCH
-        cleanup_due = (
-            not canary
-            and trigger == 'schedule'
-            and backfill_share() > 0
-            and bool(data)
-            and isinstance(last_pass, datetime)
-            and now - last_pass >= timedelta(hours=1)
-        )
+        if trigger == 'manual' and data.get('lease'):
+            raise AdmissionDenied('dream_run_in_progress')
+        if trigger == 'manual' and manual_runs >= caps.manual_runs:
+            raise AdmissionDenied('dream_manual_limit')
+        last_pass = data.get('last_attempt_at') or data.get('last_pass_at') or EPOCH
+        interval = timedelta(hours=6 if data.get('size_bucket') == 'heavy' else 24)
+        hunt_due = not canary and (not isinstance(last_pass, datetime) or now - last_pass >= interval)
+        has_dirty = dirty_count(uid, transaction=tx, firestore_client=database) > 0
+        tomorrow = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        if trigger != 'manual' and passes >= caps.passes:
+            return None, {'next_due_at': tomorrow}
+        if data.get('lease'):
+            started = data['lease'].get('started_at') or now
+            return None, {'next_due_at': started + timedelta(seconds=1741)}
         if (
             mode() == 'off'
-            or (not canary and mode() == 'on' and os.getenv('REVIEW_SURFACE_MODE', 'off') != 'on')
+            or (not canary and os.getenv('REVIEW_SURFACE_MODE', 'off') != 'on')
             or not (canary_eligible(uid, user) if canary else eligible(uid, user))
             or data.get('lease')
-            or (data.get('score', 0) <= 0 and not cleanup_due)
+            or (not has_dirty and not hunt_due and trigger != 'manual')
             or (trigger != 'manual' and passes >= caps.passes)
+            or (trigger == 'manual' and manual_runs >= caps.manual_runs)
             or caps.tokens < 1024
             or caps.edits < 1
             or caps.max_usd_per_token <= 0
             or float(budget.get('reserved_usd', 0)) + caps.reservation_usd > caps.daily_usd
+            or float(global_budget.get('reserved_usd', 0)) + caps.reservation_usd
+            > caps.global_daily_usd / caps.global_spend_shards
         ):
             if trigger == 'manual':
                 raise AdmissionDenied('dream_budget_unavailable')
-            return None, {}
-        has_dirty = dirty_count(uid, transaction=tx, firestore_client=database) > 0
-        cleanup_selected = not canary and trigger == 'schedule' and draw < backfill_share()
-        if not has_dirty:
-            if not cleanup_due:
-                return None, {}
-            # One attempt per hour even when the backfill coin declines. No lease,
-            # spend reservation or run-history document for this idle no-op.
-            if not cleanup_selected:
-                return None, {'last_attempt_at': now}
+            from database.dream_scheduler import due_time
+
+            return None, {'next_due_at': max(now + timedelta(minutes=5), due_time(data, now))}
         lease = {
             'run_id': run_id,
             'day': day,
@@ -234,11 +241,15 @@ def acquire(
             'max_usd_per_token': caps.max_usd_per_token,
             'spend_scope': 'user',
             'score': data.get('score', 0),
-            'cleanup_cursor': data.get('cleanup_cursor', {}),
-            'cleanup_selected': cleanup_selected,
+            'global_spend_scope': True,
+            'global_shard': int(sha256(uid.encode()).hexdigest(), 16) % caps.global_spend_shards,
+            'global_shard_cap': caps.global_daily_usd / caps.global_spend_shards,
+            'daily_cap': caps.daily_usd,
+            'passes_per_day': caps.passes,
+            'hunt': not has_dirty,
             'canary': canary,
             'mode': 'shadow' if canary else mode(),
-            'context_mode': caps.context_mode,
+            'size_bucket': data.get('size_bucket', 'light'),
             'trigger': trigger,
             'started_at': now,
         }
@@ -254,33 +265,48 @@ def acquire(
     def claim(tx):
         data = state.get(transaction=tx).to_dict() or {}
         budget = spend.get(transaction=tx).to_dict() or {}
+        global_budget = global_spend.get(transaction=tx).to_dict() or {}
         user = owner.get(transaction=tx).to_dict() or {}
         abandoned = data.get('lease') or {}
         started = abandoned.get('started_at')
         if isinstance(started, datetime) and started.tzinfo is None:
             started = started.replace(tzinfo=timezone.utc)
-        # Pre-context-mode leases may have been full; use the longer fence.
-        context = abandoned.get('context_mode', 'full')
-        context = 'bounded' if context == 'bounded' else 'full'
-        duration = (FULL_DRAIN_SECONDS if context == 'full' else DRAIN_TIMEOUT_SECONDS) + LEASE_RECLAIM_MARGIN_SECONDS
+        duration = DRAIN_TIMEOUT_SECONDS + LEASE_RECLAIM_MARGIN_SECONDS
+        bucket = abandoned.get('size_bucket', 'light')
+        bucket = bucket if bucket in {'empty', 'light', 'medium', 'heavy'} else 'light'
         age_s = (now - started).total_seconds() if isinstance(started, datetime) else 0
         reclaimed = None
         old_spend = None
         old_budget = {}
+        old_global_spend = None
+        old_global_budget = {}
         if abandoned and age_s > duration:
             old_spend = lease_spend_ref(database, uid, abandoned)
             old_budget = old_spend.get(transaction=tx).to_dict() or {}
             reservation = float(abandoned['reservation_usd'])
             previous_charge = float(abandoned.get('budget_charge_usd', reservation))
             old_budget['reserved_usd'] = float(old_budget.get('reserved_usd', 0)) + reservation - previous_charge
+            if abandoned.get('global_spend_scope'):
+                old_global_spend = lease_global_ref(database, uid, abandoned)
+                old_global_budget = old_global_spend.get(transaction=tx).to_dict() or {}
+                old_global_budget['reserved_usd'] = (
+                    float(old_global_budget.get('reserved_usd', 0)) + reservation - previous_charge
+                )
+                if old_global_spend.path == global_spend.path:
+                    global_budget = old_global_budget
             if old_spend.path == spend.path:
                 budget = old_budget
-            data = {**data, 'lease': None, 'abandoned_passes': int(data.get('abandoned_passes', 0)) + 1}
-            reclaimed = (int(age_s), context)
+            data = {
+                **data,
+                'lease': None,
+                'last_attempt_at': data.get('last_pass_at') or EPOCH,
+                'abandoned_passes': int(data.get('abandoned_passes', 0)) + 1,
+            }
+            reclaimed = (int(age_s), bucket)
         queued_count = dirty_count(uid, transaction=tx, firestore_client=database) if reclaimed else None
         denial = None
         try:
-            lease, patch = admit(tx, data, budget, user)
+            lease, patch = admit(tx, data, budget, user, global_budget)
         except AdmissionDenied as exc:
             # A denial must not roll back reclamation (including manual caps).
             lease, patch, denial = None, {}, exc.reason
@@ -290,7 +316,7 @@ def acquire(
                 'status': 'failed',
                 'reason': 'abandoned',
                 'usage_unknown': True,
-                'context_mode': context,
+                'size_bucket': bucket,
                 'abandoned': 1,
                 'tokens': 0,
                 'records_queued_after': queued_count,
@@ -314,16 +340,24 @@ def acquire(
             )
             if old_spend.path != spend.path or lease is None:
                 tx.set(old_spend, old_budget)
+            if old_global_spend and (old_global_spend.path != global_spend.path or lease is None):
+                tx.set(old_global_spend, old_global_budget)
         if lease:
             tx.set(state, {**data, **patch})
             tx.set(spend, {**budget, 'reserved_usd': float(budget.get('reserved_usd', 0)) + caps.reservation_usd})
+            tx.set(
+                global_spend,
+                {**global_budget, 'reserved_usd': float(global_budget.get('reserved_usd', 0)) + caps.reservation_usd},
+            )
         elif reclaimed or patch:
             tx.set(state, {**data, **patch})
+        if patch.get('next_due_at'):
+            tx.set(database.collection('dream_due').document(uid), {'due_at': patch['next_due_at']})
         return lease, reclaimed, denial
 
     lease, reclaimed, denial = claim(database.transaction())
     if reclaimed and reclaim_sink is not None:
-        reclaim_sink.update(age_s=reclaimed[0], context_mode=reclaimed[1])
+        reclaim_sink.update(age_s=reclaimed[0], size_bucket=reclaimed[1])
     if denial:
         raise AdmissionDenied(denial)
     return lease
@@ -359,6 +393,7 @@ def finish(
     # Leases admitted before this change still belong to the old shared ledger.
     # Never debit a new user ledger for a reservation it did not acquire.
     spend = lease_spend_ref(database, uid, lease)
+    global_spend = lease_global_ref(database, uid, lease) if lease.get('global_spend_scope') else None
     report['dirty_dropped'] = max(0, lease['dirty_dropped'] - lease['dirty_dropped_reported'])
     failure_eligible = count_failure and not success and release and not refund
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
@@ -374,9 +409,10 @@ def finish(
         if current_lease.get('run_id') != lease['run_id']:
             raise RuntimeError('dream_lease_lost')
         budget = spend.get(transaction=tx).to_dict() or {}
+        global_budget = global_spend.get(transaction=tx).to_dict() or {} if global_spend else {}
         reservation = float(current_lease['reservation_usd'])
         previous_charge = float(current_lease.get('budget_charge_usd', reservation))
-        tokens = report.get('tokens')
+        tokens = report.get('accounted_tokens', report.get('tokens'))
         rate = current_lease.get('max_usd_per_token')
         known = report.get('usage_unknown') is not True and (
             report.get('usage_unknown') is False or report.get('usage_complete') is True
@@ -518,7 +554,11 @@ def finish(
             # frontier, which must remain behind older unread references.
             'watermark': watermark,
             'dirty_dropped_reported': lease['dirty_dropped'],
-            'score': (max(0, data['score'] - lease['score']) if acknowledged and queued_after == 0 else data['score']),
+            'score': (
+                max(0, data.get('score', 0) - lease['score'])
+                if acknowledged and queued_after == 0
+                else data.get('score', 0)
+            ),
         }
         if zero_refund and not current_lease.get('admission_refunded'):
             # A midnight completion must not decrement the new day's allowance.
@@ -530,6 +570,15 @@ def finish(
         tx.set(
             spend, {**budget, 'reserved_usd': max(0, float(budget.get('reserved_usd', 0)) - previous_charge) + charge}
         )
+        if global_spend:
+            tx.set(
+                global_spend,
+                {
+                    **global_budget,
+                    'reserved_usd': max(0, float(global_budget.get('reserved_usd', 0)) - previous_charge) + charge,
+                },
+            )
+        patch['size_bucket'] = report.get('size_bucket', data.get('size_bucket', 'light'))
         if poisoned:
             patch['poisoned'] = int(data.get('poisoned', 0)) + len(poisoned)
         for ref in sorted(deferred if release else ())[:8]:
@@ -548,6 +597,16 @@ def finish(
                         merge=True,
                     )
         tx.update(state, patch)
+        from database.dream_scheduler import due_time
+
+        next_due = due_time({**data, **patch}, now)
+        if data.get('day') == now.date().isoformat() and data.get('passes', 0) >= current_lease.get(
+            'passes_per_day', 2
+        ):
+            next_due = deferred_until
+        if not release:
+            next_due = now + timedelta(seconds=1740)
+        tx.set(database.collection('dream_due').document(uid), {'due_at': next_due})
         return settled
 
     report.update(complete(database.transaction()))
@@ -594,7 +653,7 @@ def demoted_types(uid, caps, *, firestore_client=None):
     counts = {}
     for snapshot in rows:
         data = _review_store().decode_doc(uid, snapshot.to_dict()) or {}
-        if not data.get('edit_key', '').startswith('dream:') or data.get('phase', 'applied') != 'applied':
+        if not data.get('edit_key', '').startswith(('dream:', 'agent:')) or data.get('phase', 'applied') != 'applied':
             continue
         kind = data['edit_key'].split(':')[1]
         total, undone = counts.get(kind, (0, 0))

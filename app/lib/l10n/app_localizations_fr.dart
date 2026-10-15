@@ -12501,6 +12501,15 @@ class AppLocalizationsFr extends AppLocalizations {
   String get reviewRecentChanges => 'Modifications récentes';
 
   @override
+  String get reviewChangeAfter => 'Après';
+
+  @override
+  String get reviewChangeBefore => 'Avant';
+
+  @override
+  String get reviewChangeRemoved => 'Retiré de la liste active';
+
+  @override
   String get reviewChangesIntro =>
       'Ce qu’Omi a modifié de lui-même ces 30 derniers jours. Annulez tout ce qui semble incorrect.';
 

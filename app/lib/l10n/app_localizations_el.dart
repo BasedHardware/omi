@@ -12482,6 +12482,15 @@ class AppLocalizationsEl extends AppLocalizations {
   String get reviewRecentChanges => 'Πρόσφατες αλλαγές';
 
   @override
+  String get reviewChangeAfter => 'Μετά';
+
+  @override
+  String get reviewChangeBefore => 'Πριν';
+
+  @override
+  String get reviewChangeRemoved => 'Αφαιρέθηκε από την ενεργή λίστα';
+
+  @override
   String get reviewChangesIntro => 'Τι άλλαξε το Omi μόνο του τις τελευταίες 30 ημέρες. Αναιρέστε ό,τι φαίνεται λάθος.';
 
   @override

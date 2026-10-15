@@ -12429,6 +12429,15 @@ class AppLocalizationsBs extends AppLocalizations {
   String get reviewRecentChanges => 'Nedavne promjene';
 
   @override
+  String get reviewChangeAfter => 'Poslije';
+
+  @override
+  String get reviewChangeBefore => 'Prije';
+
+  @override
+  String get reviewChangeRemoved => 'Uklonjeno s aktivne liste';
+
+  @override
   String get reviewChangesIntro =>
       'Šta je Omi sam promijenio u posljednjih 30 dana. Poništite sve što izgleda pogrešno.';
 

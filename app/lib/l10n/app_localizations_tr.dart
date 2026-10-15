@@ -12413,6 +12413,15 @@ class AppLocalizationsTr extends AppLocalizations {
   String get reviewRecentChanges => 'Son değişiklikler';
 
   @override
+  String get reviewChangeAfter => 'Sonra';
+
+  @override
+  String get reviewChangeBefore => 'Önce';
+
+  @override
+  String get reviewChangeRemoved => 'Etkin listeden kaldırıldı';
+
+  @override
   String get reviewChangesIntro =>
       'Omi’nin son 30 günde kendi kendine yaptığı değişiklikler. Yanlış görünen her şeyi geri alın.';
 

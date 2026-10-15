@@ -1333,9 +1333,6 @@ environment_shared:
           MEMORY_CANONICAL_MAINTENANCE_ENABLED:
             category: memory_rollout
             value: 'true'
-          MEMORY_CANONICAL_MAINTENANCE_FLEX:
-            category: memory_rollout
-            value: 'true'
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
@@ -1354,9 +1351,6 @@ environment_shared:
             category: rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
-            category: memory_rollout
-          MEMORY_CANONICAL_CONSOLIDATION_ENABLED:
-            value: 'true'
             category: memory_rollout
           OMI_BACKGROUND_FLEX_CAPABLE:
             value: 'true'

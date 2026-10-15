@@ -12428,6 +12428,15 @@ class AppLocalizationsMs extends AppLocalizations {
   String get reviewRecentChanges => 'Perubahan Terkini';
 
   @override
+  String get reviewChangeAfter => 'Selepas';
+
+  @override
+  String get reviewChangeBefore => 'Sebelum';
+
+  @override
+  String get reviewChangeRemoved => 'Dikeluarkan daripada senarai aktif';
+
+  @override
   String get reviewChangesIntro =>
       'Apa yang Omi ubah sendiri dalam 30 hari lepas. Buat asal apa-apa yang nampak salah.';
 

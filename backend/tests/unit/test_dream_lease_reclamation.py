@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from config.dream_agent import Caps, FULL_DRAIN_SECONDS, DRAIN_TIMEOUT_SECONDS, LEASE_RECLAIM_MARGIN_SECONDS
+from config.dream_agent import Caps, DRAIN_TIMEOUT_SECONDS, LEASE_RECLAIM_MARGIN_SECONDS
 from database import dream_store
 from tests.support.dream_firestore import DreamFirestore
 
@@ -26,7 +26,8 @@ def db(monkeypatch):
         'last_changed_at': NOW,
         'failed_passes': 2,
     }
-    monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
+    monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
+    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
     monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', UID)
     monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '0')
     monkeypatch.setattr(dream_store.firestore, 'transactional', lambda fn: fn)
@@ -35,7 +36,7 @@ def db(monkeypatch):
 
 
 def caps(context='bounded', **kw):
-    return Caps(context_mode=context, passes=24, daily_usd=250, **kw)
+    return Caps(tokens=24000, passes=24, daily_usd=250, global_daily_usd=1000, **kw)
 
 
 def acquire(db, at=NOW, context='bounded', **kw):
@@ -43,19 +44,24 @@ def acquire(db, at=NOW, context='bounded', **kw):
 
 
 def deadline(context):
-    return (FULL_DRAIN_SECONDS if context == 'full' else DRAIN_TIMEOUT_SECONDS) + LEASE_RECLAIM_MARGIN_SECONDS
+    return DRAIN_TIMEOUT_SECONDS + LEASE_RECLAIM_MARGIN_SECONDS
 
 
 @pytest.mark.parametrize('context', ['bounded', 'full'])
 @pytest.mark.parametrize('offset', [-1, 0, 1])
 def test_only_strictly_older_leases_are_reclaimed(db, context, offset):
     old = acquire(db, context=context)
-    assert old['context_mode'] == context
     before = deepcopy(db.rows)
     new = acquire(db, NOW + timedelta(seconds=deadline(context) + offset), context=context)
     if offset <= 0:
-        assert new is None and db.rows == before
-        assert not db.transactions[-1].has_written
+        assert new is None
+        state = ('dream_users', UID)
+        assert db.rows[state]['lease'] == before[state]['lease']
+        assert db.rows[DIRTY] == before[DIRTY]
+        for path, row in before.items():
+            if path != state:
+                assert db.rows[path] == row
+        assert db.rows[('dream_due', UID)]['due_at'] == old['started_at'] + timedelta(seconds=1741)
     else:
         assert new['run_id'] != old['run_id']
         assert db.rows[('dream_users', UID)]['lease'] == new
@@ -68,23 +74,17 @@ def test_only_strictly_older_leases_are_reclaimed(db, context, offset):
             ('users', UID, 'dream_runs', old['run_id']),
             ('dream_users', UID),
             ('dream_users', UID, 'spend', old['day']),
+            ('dream_global_spend', old['day'] + '-' + str(old['global_shard'])),
         }
         assert not any('dirty' in path or 'reviews' in path for path in paths)
 
 
-def test_saved_context_not_new_caps_controls_the_abandonment_fence(db):
-    old = acquire(db, context='full')
-    assert acquire(db, NOW + timedelta(seconds=deadline('bounded') + 1), context='bounded') is None
-    assert db.rows[('dream_users', UID)]['lease'] == old
-    assert acquire(db, NOW + timedelta(seconds=deadline('full') + 1), context='bounded') is not None
-
-
-def test_legacy_context_uses_conservative_full_fence(db):
+def test_legacy_short_context_cannot_shorten_the_v2_reclaim_fence(db):
     old = acquire(db)
-    db.rows[('dream_users', UID)]['lease'].pop('context_mode')
-    assert acquire(db, NOW + timedelta(seconds=deadline('bounded') + 1)) is None
-    new = acquire(db, NOW + timedelta(seconds=deadline('full') + 1))
-    assert new['run_id'] != old['run_id']
+    db.rows[('dream_users', UID)]['lease']['context_mode'] = 'bounded'
+    assert acquire(db, NOW + timedelta(seconds=301)) is None
+    assert db.rows[('dream_users', UID)]['lease']['run_id'] == old['run_id']
+    assert acquire(db, NOW + timedelta(seconds=1741)) is not None
 
 
 @pytest.mark.parametrize('scope', ['user', 'legacy'])
@@ -120,7 +120,7 @@ def test_unknown_usage_restores_full_reservation_only_on_original_day_ledger(db,
         'status': 'failed',
         'reason': 'abandoned',
         'usage_unknown': True,
-        'context_mode': 'bounded',
+        'size_bucket': 'light',
         'abandoned': 1,
         'tokens': 0,
         'records_queued_after': 1,
@@ -169,9 +169,11 @@ def test_reclamation_commits_even_when_new_admission_is_denied(db, trigger, reas
 def test_reclamation_recharges_same_day_before_applying_daily_cap(db):
     old = acquire(db)
     db.rows[('dream_users', UID)]['lease']['budget_charge_usd'] = 0
-    db.rows[('dream_users', UID, 'spend', old['day'])]['reserved_usd'] = 249.7
+    db.rows[('dream_users', UID, 'spend', old['day'])]['reserved_usd'] = 250 - caps().reservation_usd * 1.5
     assert acquire(db, NOW + timedelta(seconds=deadline('bounded') + 1)) is None
-    assert db.rows[('dream_users', UID, 'spend', old['day'])]['reserved_usd'] == pytest.approx(249.94)
+    assert db.rows[('dream_users', UID, 'spend', old['day'])]['reserved_usd'] == pytest.approx(
+        250 - caps().reservation_usd * 0.5
+    )
     assert db.rows[('dream_users', UID)]['lease'] is None
 
 
@@ -180,9 +182,10 @@ def test_idle_reclamation_preserves_watermark_and_score(db):
     del db.rows[DIRTY]
     db.rows[('dream_users', UID)]['score'] = 0
     before = deepcopy(db.rows[('dream_users', UID)])
-    assert acquire(db, NOW + timedelta(seconds=deadline('bounded') + 1)) is None
+    replacement = acquire(db, NOW + timedelta(seconds=deadline('bounded') + 1))
+    assert replacement and replacement['hunt']
     state = db.rows[('dream_users', UID)]
-    assert state['lease'] is None and state['score'] == 0
+    assert state['lease']['run_id'] == replacement['run_id'] and state['score'] == 0
     assert state.get('watermark') == before.get('watermark')
     assert old['run_id'] in {path[-1] for path in db.rows if 'dream_runs' in path}
 
@@ -191,7 +194,7 @@ def test_reclaim_details_return_only_for_the_committed_claim(db):
     acquire(db)
     reclaimed = {}
     acquire(db, NOW + timedelta(seconds=deadline('bounded') + 1), reclaim_sink=reclaimed)
-    assert reclaimed == {'age_s': 301, 'context_mode': 'bounded'}
+    assert reclaimed == {'age_s': 1741, 'size_bucket': 'light'}
     next_reclaimed = {}
     assert acquire(db, NOW + timedelta(seconds=deadline('bounded') + 2), reclaim_sink=next_reclaimed) is None
     assert next_reclaimed == {}
@@ -203,8 +206,8 @@ def test_reclaim_details_return_even_when_manual_admission_is_denied(db):
     state['manual_runs'] = caps().manual_runs
     reclaimed = {}
     with pytest.raises(dream_store.AdmissionDenied):
-        acquire(db, NOW + timedelta(seconds=301), trigger='manual', reclaim_sink=reclaimed)
-    assert reclaimed == {'age_s': 301, 'context_mode': 'bounded'}
+        acquire(db, NOW + timedelta(seconds=1741), trigger='manual', reclaim_sink=reclaimed)
+    assert reclaimed == {'age_s': 1741, 'size_bucket': 'light'}
     assert db.rows[('dream_users', UID)]['lease'] is None
 
 
@@ -221,5 +224,5 @@ def test_failed_commit_does_not_publish_reclaim_details(db, monkeypatch):
 
     monkeypatch.setattr(dream_store.firestore, 'transactional', fail_commit)
     with pytest.raises(RuntimeError, match='synthetic commit failure'):
-        acquire(db, NOW + timedelta(seconds=301), reclaim_sink=reclaimed)
+        acquire(db, NOW + timedelta(seconds=1741), reclaim_sink=reclaimed)
     assert reclaimed == {}

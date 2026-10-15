@@ -12226,6 +12226,15 @@ class AppLocalizationsKo extends AppLocalizations {
   String get reviewRecentChanges => '최근 변경 사항';
 
   @override
+  String get reviewChangeAfter => '변경 후';
+
+  @override
+  String get reviewChangeBefore => '변경 전';
+
+  @override
+  String get reviewChangeRemoved => '활성 목록에서 제거됨';
+
+  @override
   String get reviewChangesIntro => '지난 30일 동안 Omi가 자동으로 바꾼 내용이에요. 잘못된 것은 되돌리세요.';
 
   @override
