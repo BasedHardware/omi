@@ -25,13 +25,28 @@ class _FakeWatchRecorderHostAPI extends Fake implements WatchRecorderHostAPI {
 
   @override
   Future<bool> isWatchSessionSupported() async => true;
+
+  @override
+  Future<bool> isWatchPaired() async => true;
+
+  @override
+  Future<bool> isWatchReachable() async => true;
+}
+
+/// A transport that has completed [WatchTransport.connect]: disconnect is a no-op until then.
+Future<WatchTransport> _connected(_FakeWatchRecorderHostAPI api) async {
+  final transport = WatchTransport(hostAPI: api);
+  await transport.connect();
+  return transport;
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('WatchTransport disconnect and dispose recording termination', () {
     test('disconnect calls stopRecording to turn off watch microphone', () async {
       final fakeApi = _FakeWatchRecorderHostAPI();
-      final transport = WatchTransport(hostAPI: fakeApi);
+      final transport = await _connected(fakeApi);
 
       await transport.disconnect();
 
@@ -49,8 +64,8 @@ void main() {
 
     test('AppleWatchDeviceConnection.disconnect delegates to transport and stops recording', () async {
       final fakeApi = _FakeWatchRecorderHostAPI();
-      final transport = WatchTransport(hostAPI: fakeApi);
-      final device = BtDevice(id: 'apple-watch', name: 'Apple Watch', type: DeviceType.appleWatch);
+      final transport = await _connected(fakeApi);
+      final device = BtDevice(id: 'apple-watch', name: 'Apple Watch', type: DeviceType.appleWatch, rssi: 0);
       final connection = AppleWatchDeviceConnection(device, transport);
 
       await connection.disconnect();
@@ -60,7 +75,7 @@ void main() {
 
     test('disconnect and dispose handle stopRecording errors gracefully (best effort)', () async {
       final fakeApi = _FakeWatchRecorderHostAPI()..shouldThrowOnStop = true;
-      final transport = WatchTransport(hostAPI: fakeApi);
+      final transport = await _connected(fakeApi);
 
       // Must not rethrow or crash caller
       await transport.disconnect();

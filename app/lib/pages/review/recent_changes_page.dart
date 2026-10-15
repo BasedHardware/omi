@@ -112,16 +112,20 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
           lastHeader = header;
           rows.add(_DayHeader(label: header));
         }
-        rows.add(_ChangeRow(
-          change: change,
-          busy: _busy.contains(change.changeId),
-          onToggle: () => _setUndone(change, !change.undone),
-        ));
+        rows.add(
+          _ChangeRow(
+            change: change,
+            busy: _busy.contains(change.changeId),
+            onToggle: () => _setUndone(change, !change.undone),
+          ),
+        );
       }
       if (_cursor != null) {
-        rows.add(Center(
-          child: OmiButton.tertiary(label: l10n.reviewShowMore, isLoading: _loadingMore, onPressed: _more),
-        ));
+        rows.add(
+          Center(
+            child: OmiButton.tertiary(label: l10n.reviewShowMore, isLoading: _loadingMore, onPressed: _more),
+          ),
+        );
       }
       body = RefreshIndicator(
         onRefresh: _refresh,
@@ -153,23 +157,27 @@ class _DayHeader extends StatelessWidget {
         header: true,
         child: Text(
           label.toUpperCase(),
-          style: OmiType.footnote
-              .copyWith(fontWeight: FontWeight.w600, color: OmiColors.textSecondary, letterSpacing: 0.4),
+          style: OmiType.footnote.copyWith(
+            fontWeight: FontWeight.w600,
+            color: OmiColors.textSecondary,
+            letterSpacing: 0.4,
+          ),
         ),
       ),
     );
   }
 }
 
-IconData _changeIcon(ReviewChangeKind kind) => switch (kind) {
-      ReviewChangeKind.rename => Icons.spellcheck,
-      ReviewChangeKind.mergeMemories => Icons.call_merge,
-      ReviewChangeKind.updatePerson => Icons.person_outline,
-      ReviewChangeKind.labelSpeaker => Icons.record_voice_over_outlined,
-      ReviewChangeKind.titleConversation => Icons.edit_outlined,
-      ReviewChangeKind.closeTask => Icons.task_alt,
-      ReviewChangeKind.other => Icons.auto_fix_high_outlined,
-    };
+/// The glyph a change of [kind] wears wherever Omi's own changes are listed.
+IconData reviewChangeIcon(ReviewChangeKind kind) => switch (kind) {
+  ReviewChangeKind.rename => Icons.spellcheck,
+  ReviewChangeKind.mergeMemories => Icons.call_merge,
+  ReviewChangeKind.updatePerson => Icons.person_outline,
+  ReviewChangeKind.labelSpeaker => Icons.record_voice_over_outlined,
+  ReviewChangeKind.titleConversation => Icons.edit_outlined,
+  ReviewChangeKind.closeTask => Icons.task_alt,
+  ReviewChangeKind.other => Icons.auto_fix_high_outlined,
+};
 
 class _ChangeRow extends StatelessWidget {
   const _ChangeRow({required this.change, required this.busy, required this.onToggle});
@@ -193,51 +201,63 @@ class _ChangeRow extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(undone ? Icons.undo : _changeIcon(change.kind), size: 18, color: OmiColors.textSecondary),
+              Icon(undone ? Icons.undo : reviewChangeIcon(change.kind), size: 18, color: OmiColors.textSecondary),
               const SizedBox(width: OmiSpacing.sm),
               Expanded(
-                  child: Text(change.title,
-                      style: undone
-                          ? OmiType.subhead
-                              .copyWith(color: OmiColors.textSecondary, decoration: TextDecoration.lineThrough)
-                          : OmiType.subhead.copyWith(fontWeight: FontWeight.w600))),
+                child: Text(
+                  change.title,
+                  style: undone
+                      ? OmiType.subhead.copyWith(color: OmiColors.textSecondary, decoration: TextDecoration.lineThrough)
+                      : OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
             ],
           ),
           if (undone)
             Padding(
-                padding: const EdgeInsets.only(top: OmiSpacing.xxs),
-                child: Text(l10n.reviewChangeUndone, style: OmiType.footnote)),
+              padding: const EdgeInsets.only(top: OmiSpacing.xxs),
+              child: Text(l10n.reviewChangeUndone, style: OmiType.footnote),
+            ),
           if (change.before != null && change.before!.isNotEmpty)
             _ChangeValue(label: l10n.reviewChangeBefore, value: change.before!, fieldKey: 'before'),
           if (change.after != null)
             _ChangeValue(
-                label: l10n.reviewChangeAfter,
-                value: change.after!.isEmpty ? l10n.reviewChangeRemoved : change.after!,
-                fieldKey: 'after'),
+              label: l10n.reviewChangeAfter,
+              value: change.after!.isEmpty ? l10n.reviewChangeRemoved : change.after!,
+              fieldKey: 'after',
+            ),
           if (change.refs.any((ref) => ref.label.isNotEmpty))
             Padding(
-                padding: const EdgeInsets.only(top: OmiSpacing.xs),
-                child: Text(change.refs.map((ref) => ref.label).where((label) => label.isNotEmpty).toSet().join(' · '),
-                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary))),
+              padding: const EdgeInsets.only(top: OmiSpacing.xs),
+              child: Text(
+                change.refs.map((ref) => ref.label).where((label) => label.isNotEmpty).toSet().join(' · '),
+                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+              ),
+            ),
           if (change.context != null)
             Padding(
-                padding: const EdgeInsets.only(top: OmiSpacing.sm),
-                child: ReviewSpellingContext(context: change.context!)),
+              padding: const EdgeInsets.only(top: OmiSpacing.sm),
+              child: ReviewSpellingContext(context: change.context!),
+            ),
           if (change.context == null && change.snippet != null)
             Padding(
-                padding: const EdgeInsets.only(top: OmiSpacing.xs),
-                child: Text(change.snippet!, style: OmiType.footnote)),
+              padding: const EdgeInsets.only(top: OmiSpacing.xs),
+              child: Text(change.snippet!, style: OmiType.footnote),
+            ),
           if (change.reason != null)
             Padding(
-                padding: const EdgeInsets.only(top: OmiSpacing.xs),
-                child: Text(change.reason!, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary))),
+              padding: const EdgeInsets.only(top: OmiSpacing.xs),
+              child: Text(change.reason!, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+            ),
           Align(
-              alignment: Alignment.centerRight,
-              child: OmiButton.tertiary(
-                  key: ValueKey('review_change_toggle_${change.changeId}'),
-                  label: undone ? l10n.redo : l10n.undo,
-                  isLoading: busy,
-                  onPressed: busy ? null : onToggle)),
+            alignment: Alignment.centerRight,
+            child: OmiButton.tertiary(
+              key: ValueKey('review_change_toggle_${change.changeId}'),
+              label: undone ? l10n.redo : l10n.undo,
+              isLoading: busy,
+              onPressed: busy ? null : onToggle,
+            ),
+          ),
         ],
       ),
     );
@@ -252,13 +272,16 @@ class _ChangeValue extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        margin: const EdgeInsets.only(top: OmiSpacing.xs),
-        padding: const EdgeInsets.all(OmiSpacing.sm),
-        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text(label, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-          const SizedBox(height: OmiSpacing.xxs),
-          Text(value, key: ValueKey('review_change_$fieldKey'), style: OmiType.subhead),
-        ]),
-      );
+    margin: const EdgeInsets.only(top: OmiSpacing.xs),
+    padding: const EdgeInsets.all(OmiSpacing.sm),
+    decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(label, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+        const SizedBox(height: OmiSpacing.xxs),
+        Text(value, key: ValueKey('review_change_$fieldKey'), style: OmiType.subhead),
+      ],
+    ),
+  );
 }
