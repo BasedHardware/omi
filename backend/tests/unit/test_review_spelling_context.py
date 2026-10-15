@@ -178,11 +178,10 @@ def test_already_computed_context_needs_no_read_and_missing_conversation_is_opti
     assert enrich_spelling(item(), {}, load_conversation=lambda _: None).spelling.context is None
 
 
-@pytest.mark.parametrize('full', [False, True])
-def test_server_context_does_not_enter_the_model_output_schema(full):
-    from models.dream_agent import Plan, FullPlan
+def test_server_context_does_not_enter_the_model_output_schema():
+    from models.agent_tools import Ask
 
-    schema = (FullPlan if full else Plan).model_json_schema()
+    schema = Ask.model_json_schema()
     assert 'SpellingContext' not in schema.get('$defs', {})
     assert 'context' not in schema['$defs']['SpellingQuestionPayload']['properties']
 

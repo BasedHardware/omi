@@ -30,6 +30,7 @@ class GeneratedTranscriptSegment {
   final double end;
   final String? id;
   final bool isUser;
+  final String? originalText;
   final String? personId;
   final String? speaker;
   final int? speakerId;
@@ -44,6 +45,7 @@ class GeneratedTranscriptSegment {
     required this.end,
     this.id,
     required this.isUser,
+    this.originalText,
     this.personId,
     this.speaker = "SPEAKER_00",
     this.speakerId,
@@ -60,6 +62,7 @@ class GeneratedTranscriptSegment {
       end: _required(_readFieldValue<double>(_readField(json, const ["end"]), "end", _readDouble, requiredField: true, nullable: false), "end"),
       id: _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: false, nullable: true),
       isUser: _required(_readFieldValue<bool>(_readField(json, const ["is_user"]), "is_user", _readBool, requiredField: true, nullable: false), "is_user"),
+      originalText: _readFieldValue<String>(_readField(json, const ["original_text"]), "original_text", _readString, requiredField: false, nullable: true),
       personId: _readFieldValue<String>(_readField(json, const ["person_id"]), "person_id", _readString, requiredField: false, nullable: true),
       speaker: _readFieldValue<String>(_readField(json, const ["speaker"]), "speaker", _readString, requiredField: false, nullable: true, defaultValue: "SPEAKER_00"),
       speakerId: _readFieldValue<int>(_readField(json, const ["speaker_id"]), "speaker_id", _readInt, requiredField: false, nullable: true),
@@ -77,6 +80,7 @@ class GeneratedTranscriptSegment {
       'end': end,
       'id': id,
       'is_user': isUser,
+      'original_text': originalText,
       'person_id': personId,
       'speaker': speaker,
       'speaker_id': speakerId,

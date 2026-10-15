@@ -672,3 +672,26 @@ def test_lifecycle_observation_precedes_entitlement_effects(lane, monkeypatch):
     monkeypatch.setattr(payment, 'record_subscription_event', lambda **kw: lane.calls.append(('observation', ())))
     run(lane)
     assert [name for name, _ in lane.calls][:2] == ['observation', 'customer']
+
+
+@pytest.mark.parametrize('ledger_enabled', [False, True])
+@pytest.mark.parametrize('stored_plan', [PlanType.basic, PlanType.plus])
+def test_unresolved_checkout_preserves_cache_and_valid_stored_plan_effects(
+    lane, monkeypatch, ledger_enabled, stored_plan
+):
+    """#21372: retry admission must follow cache invalidation and valid-paid unlocks."""
+    lane.current = Subscription(plan=stored_plan, current_period_end=NOW + 100)
+    lane.stripe_obj = event(EVENTS[1], 'active')['data']['object']
+    lane.event = _checkout_event()
+    monkeypatch.setattr(payment, '_update_subscription_from_session', lambda uid, session: False)
+    monkeypatch.setattr(payment, 'webhook_ledger_enabled', lambda: ledger_enabled)
+    result = asyncio.run(payment._handle_stripe_event(lane.event))
+    expected = ['credits', 'trial_cache']
+    if stored_plan == PlanType.plus:
+        expected += ['conversations', 'memories', 'actions', 'fair_use']
+    assert _call_names(lane)[: len(expected)] == expected
+    assert 'write' not in _call_names(lane)
+    assert lane.current.plan == stored_plan
+    assert isinstance(result, payment.RetryableBillingSkip) == ledger_enabled
+    if ledger_enabled:
+        assert _call_names(lane) == expected

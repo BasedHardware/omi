@@ -12453,6 +12453,15 @@ class AppLocalizationsTe extends AppLocalizations {
   String get reviewRecentChanges => 'ఇటీవలి మార్పులు';
 
   @override
+  String get reviewChangeAfter => 'తర్వాత';
+
+  @override
+  String get reviewChangeBefore => 'ముందు';
+
+  @override
+  String get reviewChangeRemoved => 'సక్రియ జాబితా నుండి తీసివేయబడింది';
+
+  @override
   String get reviewChangesIntro => 'గత 30 రోజుల్లో Omi స్వయంగా మార్చినవి. తప్పుగా కనిపించిన వాటిని రద్దు చేయండి.';
 
   @override
@@ -13344,4 +13353,128 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get chatAppsWaitlistJoined => 'మీరు వెయిట్‌లిస్ట్‌లో ఉన్నారు. స్థలం దొరికినప్పుడు మీకు తెలియజేస్తాము.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'అంతా సిద్ధం, $name';
+  }
+
+  @override
+  String get onboardingActDemoSummary =>
+      'జూన్‌లో లిస్బన్‌కు వెళ్తున్న సామ్‌తో లంచ్. శుక్రవారం లోపు టీమ్‌కు డెక్ పంపాలి, ఇంటికి వెళ్తూ పాలు కొనాలి.';
+
+  @override
+  String get onboardingActDemoTask1 => 'శుక్రవారంలోగా టీమ్‌కి డెక్ పంపడం';
+
+  @override
+  String get onboardingActDemoTask2 => 'ఇంటికి వెళ్లేటప్పుడు పాలు తీసుకోవడం';
+
+  @override
+  String get onboardingActDemoTitle => 'సామ్‌తో లంచ్';
+
+  @override
+  String get onboardingActDictateBody => 'మీ శైలిలో చెప్పండి. మిగతాది Omi చూసుకుంటుంది.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'మాట్లాడండి చాలు. మీ Omi వింటోంది.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'ఇప్పుడే సామ్‌తో లంచ్ చేశా, తను జూన్‌లో లిస్బన్‌కి వెళ్తోంది! శుక్రవారంలోగా టీమ్‌కి డెక్ పంపాలని, ఇంటికి వెళ్లేటప్పుడు పాలు తీసుకోవాలని గుర్తు చేయి.';
+
+  @override
+  String get onboardingActDictateHint => 'అయ్యాక టిక్ నొక్కండి';
+
+  @override
+  String get onboardingActDictateTitle => 'మీ రోజు గురించి Omiకి చెప్పండి';
+
+  @override
+  String get onboardingActIntro => 'Omi ని ప్రయత్నిద్దాం.';
+
+  @override
+  String get onboardingActJustNow => 'ఇప్పుడే';
+
+  @override
+  String get onboardingActMicAllow => 'మైక్రోఫోన్‌ను అనుమతించండి';
+
+  @override
+  String get onboardingActMicBody => 'మీరు మాట్లాడినప్పుడు Omi వినడానికి.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'మీ Omi ఇంకా ఆడియో పంపడం లేదు. ప్రస్తుతానికి మీ ఫోన్ వాడండి.';
+
+  @override
+  String get onboardingActMicTitle => 'Omiకి మీ మైక్రోఫోన్ కావాలి';
+
+  @override
+  String get onboardingActNoAudioOmi => 'మీ Omi వినిపించడం లేదు. అది ఆన్‌లో ఉందో, దగ్గర్లో ఉందో చూడండి.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'ఇంకా మీ గొంతు వినిపించడం లేదు. కొంచెం గట్టిగా మాట్లాడి చూడండి.';
+
+  @override
+  String get onboardingActNotesLabel => 'మీ రోజు, సంక్షిప్తంగా';
+
+  @override
+  String get onboardingActPhoneMic => 'ఫోన్ మైక్రోఫోన్';
+
+  @override
+  String get onboardingActRateTitle => 'ఇప్పటివరకు Omi నచ్చిందా?';
+
+  @override
+  String get onboardingActRemembers => 'మీరు గుర్తుంచుకోనవసరం లేదు, Omi గుర్తుంచుకుంటుంది';
+
+  @override
+  String get onboardingActSavedToTasks => 'మీ పనుల్లో సేవ్ అయింది';
+
+  @override
+  String get onboardingActTasksLabel => 'Omi మీ పనులను గుర్తించింది';
+
+  @override
+  String get onboardingActWriting => 'సారాంశం తయారవుతోంది…';
+
+  @override
+  String get onboardingActYourWords => 'మీరు చెప్పింది ఇది';
+
+  @override
+  String get onboardingConnectOmi => 'Omiని కనెక్ట్ చేయండి';
+
+  @override
+  String get onboardingConnectTapToConnect => 'కనెక్ట్ చేయడానికి మీ Omi ని ట్యాప్ చేయండి.';
+
+  @override
+  String get onboardingNoOmiYet => 'ఇంకా మీ Omi లేదా?';
+
+  @override
+  String get onboardingOmiNotOrdered => 'ఇంకా ఆర్డర్ చేయలేదు';
+
+  @override
+  String get onboardingOmiOrdered => 'నేను ఆర్డర్ చేశాను';
+
+  @override
+  String get onboardingPermissionTapToFix => 'సరిచేయడానికి నొక్కండి';
+
+  @override
+  String get homePendingTitle => 'సంభాషణలు వస్తున్నాయి';
+
+  @override
+  String get homePendingCatchingUp => 'మునుపటి ఆడియో ప్రాసెస్ అవుతోంది';
+
+  @override
+  String get onTheWayTitle => 'మార్గంలో ఉంది';
+
+  @override
+  String get onTheWayAlmostReady => 'దాదాపు సిద్ధం';
+
+  @override
+  String get activityEmpty => 'ఇంకా కార్యాచరణ లేదు';
+
+  @override
+  String get activityNewSemantics => 'కార్యాచరణ, కొత్త అంశాలు';
+
+  @override
+  String get activityLoadFailed => 'మీ మొత్తం కార్యాచరణను లోడ్ చేయలేకపోయాం';
+
+  @override
+  String get activityNewItem => 'కొత్తది';
 }

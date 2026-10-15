@@ -249,3 +249,13 @@ def _reset_live_stt_fleet_health():
                 circuit.reset()
             streaming._family_circuits_identity.clear()
     yield
+
+
+@pytest.fixture(autouse=True)
+def isolated_dream_dynamic_control(monkeypatch):
+    """Unit tests inject flag state instead of reading remote operator config."""
+    from config import dream_control
+
+    monkeypatch.setattr(dream_control, '_until', float('inf'))
+    monkeypatch.setattr(dream_control, '_allowed', True)
+    monkeypatch.setattr(dream_control, '_refreshing', False)

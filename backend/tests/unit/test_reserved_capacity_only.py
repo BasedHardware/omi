@@ -33,7 +33,7 @@ from llm_gateway.gateway.resolver import is_lkg_eligible, resolve_chat_completio
 from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef
 from llm_gateway.main import app
 from llm_gateway.routers import dependencies
-from models.dream_agent import Plan
+from models.agent_tools import VerificationBatch as Plan
 from llm_gateway.routers.openai_compatible import _prepared_streaming_iterator, _stream_with_terminal_metrics
 from utils.llm import vertex_pt_routing as ptr
 from tests.support.vertex_contract import assert_local_references, assert_vertex_subset
@@ -432,23 +432,18 @@ async def test_reserved_schema_translation_runs_through_local_http_endpoint(monk
         seen.append(request)
         assert request.headers[ptr.REQUEST_TYPE_HEADER] == 'dedicated'
         schema = json.loads(request.content)['generationConfig']['responseJsonSchema']
-        assert schema['properties']['questions']['items'] == {'$ref': '#/$defs/DreamReviewItem'}
+        assert schema['properties']['decisions']['items'] == {'$ref': '#/$defs/Verification'}
         assert_vertex_subset(schema)
         assert_local_references(schema)
         original = Plan.model_json_schema()
-        question = schema['$defs']['DreamReviewItem']
-        assert {'source_ref', 'quote'} <= set(question['required'])
-        for field in ('source_ref', 'quote'):
-            assert question['properties'][field]['type'] == 'string'
-            assert question['properties'][field]['description'] == (
-                original['$defs']['DreamReviewItem']['properties'][field]['description']
-            )
-        for field in ('before', 'after', 'other'):
-            assert schema['$defs']['Edit']['properties'][field]['description'] == (
-                original['$defs']['Edit']['properties'][field]['description']
-            )
+        decision = schema['$defs']['Verification']
+        assert {'id', 'agree', 'reason'} <= set(decision['required'])
+        assert (
+            decision['properties']['reason']['description']
+            == original['$defs']['Verification']['properties']['reason']['description']
+        )
         return httpx.Response(
-            200, json={'candidates': [{'content': {'parts': [{'text': '{}'}]}, 'finishReason': 'STOP'}]}
+            200, json={'candidates': [{'content': {'parts': [{'text': '{"decisions":[]}'}]}, 'finishReason': 'STOP'}]}
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as upstream:
@@ -475,7 +470,7 @@ async def test_reserved_schema_translation_runs_through_local_http_endpoint(monk
             app.dependency_overrides.clear()
     assert response.status_code == 200
     assert response.json()['model'] == 'omi:auto:dream-reasoning'
-    assert Plan.model_validate_json(response.json()['choices'][0]['message']['content']) == Plan()
+    assert Plan.model_validate_json(response.json()['choices'][0]['message']['content']) == Plan(decisions=[])
     assert len(seen) == 1
 
 
@@ -558,3 +553,26 @@ async def test_invalid_request_after_first_stream_chunk_never_calls_luna(monkeyp
         assert not luna.calls
     finally:
         await vertex.aclose()
+
+
+@pytest.mark.parametrize('lane', ['omi:auto:dream-reasoning', 'omi:auto:dream-verify'])
+@pytest.mark.parametrize('failure', [FailureClass.RESERVED_CAPACITY_UNAVAILABLE, FailureClass.PROVIDER_429_OMI_PAID])
+def test_both_dream_lanes_keep_exact_luna_fallback_and_allow_reserved_recovery(lane, failure):
+    config = load_gateway_config()
+    route = config.route_artifacts[config.lanes[lane].active_route]
+    assert route.provider_options['reserved_capacity_only'] is True
+    assert route.fallbacks == [ProviderRef(provider='openai', model='gpt-6-luna')]
+    assert can_try_next_provider(route, route.primary, failure)
+    assert is_lkg_eligible(route, failure)
+
+
+def test_dream_route_derivation_refuses_a_future_gemini_fallback():
+    from llm_gateway.gateway.dream_lanes import dream_lane_items
+
+    config = load_gateway_config()
+    route = config.route_artifacts[config.lanes['omi:auto:dream-reasoning'].active_route]
+    lane = config.lanes['omi:auto:dream-reasoning']
+    changed = route.model_dump(mode='json')
+    changed['fallbacks'] = [{'provider': 'gemini', 'model': 'synthetic-payg'}]
+    _, routes = dream_lane_items([lane.model_dump(mode='json')], [changed])
+    assert all(r['primary'] == {'provider': 'openai', 'model': 'gpt-6-luna'} and not r['fallbacks'] for r in routes)

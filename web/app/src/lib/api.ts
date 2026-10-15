@@ -1932,6 +1932,8 @@ export async function getUserSubscription(): Promise<UserSubscription | null> {
       status: response.subscription?.status || 'active',
       // Unknown plans never infer paid capability.
       is_unlimited: planGrantsPaidCapability(plan),
+      transcription_seconds_used: response.transcription_seconds_used,
+      transcription_seconds_limit: response.transcription_seconds_limit,
       current_period_end: response.subscription?.current_period_end,
       stripe_subscription_id: response.subscription?.stripe_subscription_id,
       cancel_at_period_end: response.subscription?.cancel_at_period_end,

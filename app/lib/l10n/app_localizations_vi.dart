@@ -12400,6 +12400,15 @@ class AppLocalizationsVi extends AppLocalizations {
   String get reviewRecentChanges => 'Thay đổi gần đây';
 
   @override
+  String get reviewChangeAfter => 'Sau';
+
+  @override
+  String get reviewChangeBefore => 'Trước';
+
+  @override
+  String get reviewChangeRemoved => 'Đã xóa khỏi danh sách đang hoạt động';
+
+  @override
   String get reviewChangesIntro => 'Những gì Omi tự thay đổi trong 30 ngày qua. Hoàn tác bất cứ điều gì có vẻ sai.';
 
   @override
@@ -13290,4 +13299,128 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get chatAppsWaitlistJoined => 'Bạn đã có trong danh sách chờ. Chúng tôi sẽ báo khi có chỗ.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Mọi thứ đã sẵn sàng, $name';
+  }
+
+  @override
+  String get onboardingActDemoSummary =>
+      'Ăn trưa với Sam, người sẽ chuyển đến Lisbon vào tháng Sáu. Bạn muốn gửi bản trình bày cho nhóm trước thứ Sáu và mua sữa trên đường về.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Gửi slide cho nhóm trước thứ Sáu';
+
+  @override
+  String get onboardingActDemoTask2 => 'Mua sữa trên đường về nhà';
+
+  @override
+  String get onboardingActDemoTitle => 'Ăn trưa với Sam';
+
+  @override
+  String get onboardingActDictateBody => 'Cứ nói theo cách của bạn. Omi lo phần còn lại.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Cứ nói thôi. Omi đang lắng nghe.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Vừa ăn trưa với Sam, tháng Sáu cô ấy chuyển đến Lisbon! Nhắc mình gửi slide cho nhóm trước thứ Sáu, và mua sữa trên đường về nhà.';
+
+  @override
+  String get onboardingActDictateHint => 'Nhấn dấu tích khi bạn nói xong';
+
+  @override
+  String get onboardingActDictateTitle => 'Kể cho Omi nghe về ngày của bạn';
+
+  @override
+  String get onboardingActIntro => 'Cùng thử Omi nhé.';
+
+  @override
+  String get onboardingActJustNow => 'Vừa xong';
+
+  @override
+  String get onboardingActMicAllow => 'Cho phép micrô';
+
+  @override
+  String get onboardingActMicBody => 'Để Omi nghe được khi bạn nói.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi chưa gửi âm thanh. Tạm thời hãy dùng điện thoại.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi cần micrô của bạn';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Không nghe thấy Omi. Hãy kiểm tra xem nó đã bật và ở gần chưa.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Chưa nghe thấy bạn. Hãy thử nói to hơn một chút.';
+
+  @override
+  String get onboardingActNotesLabel => 'Ngày của bạn, tóm tắt';
+
+  @override
+  String get onboardingActPhoneMic => 'Micrô điện thoại';
+
+  @override
+  String get onboardingActRateTitle => 'Bạn thích Omi chứ?';
+
+  @override
+  String get onboardingActRemembers => 'Omi ghi nhớ để bạn không phải nhớ';
+
+  @override
+  String get onboardingActSavedToTasks => 'Đã lưu vào việc cần làm';
+
+  @override
+  String get onboardingActTasksLabel => 'Omi đã nắm được việc cần làm';
+
+  @override
+  String get onboardingActWriting => 'Đang tóm tắt…';
+
+  @override
+  String get onboardingActYourWords => 'Đây là những gì bạn nói';
+
+  @override
+  String get onboardingConnectOmi => 'Kết nối Omi';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Chạm vào Omi của bạn để kết nối.';
+
+  @override
+  String get onboardingNoOmiYet => 'Bạn chưa có Omi?';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Chưa đặt hàng';
+
+  @override
+  String get onboardingOmiOrdered => 'Tôi đã đặt hàng';
+
+  @override
+  String get onboardingPermissionTapToFix => 'Nhấn để khắc phục';
+
+  @override
+  String get homePendingTitle => 'Cuộc trò chuyện đang đến';
+
+  @override
+  String get homePendingCatchingUp => 'Đang xử lý âm thanh trước đó';
+
+  @override
+  String get onTheWayTitle => 'Đang đến';
+
+  @override
+  String get onTheWayAlmostReady => 'Sắp xong';
+
+  @override
+  String get activityEmpty => 'Chưa có hoạt động';
+
+  @override
+  String get activityNewSemantics => 'Hoạt động, mục mới';
+
+  @override
+  String get activityLoadFailed => 'Không thể tải toàn bộ hoạt động của bạn';
+
+  @override
+  String get activityNewItem => 'Mới';
 }

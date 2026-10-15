@@ -9,6 +9,7 @@ outcome is known. User-facing routes never write either authority document.
 
 from __future__ import annotations
 
+import logging
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timezone
@@ -19,6 +20,8 @@ from google.cloud.firestore_v1 import transactional
 
 from database.account_deletion_marker import account_deletion_firestore_client
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
+
+logger = logging.getLogger(__name__)
 
 LEGAL_HOLDS_COLLECTION = "legal_holds"
 LEGAL_HOLD_DELETION_GATES_COLLECTION = "legal_hold_deletion_gates"
@@ -49,6 +52,10 @@ class LegalHoldActive(RuntimeError):
 
 class DestructiveOperationInProgress(RuntimeError):
     """Another destructive operation owns the account gate."""
+
+
+class DestructiveGateTakeover(RuntimeError):
+    """The active holder lost its authority and must stop destructive work."""
 
 
 def _document(client: Any, path: str) -> Any:
@@ -108,8 +115,8 @@ def _validated_gate(snapshot: Any) -> dict[str, Any] | None:
     return payload
 
 
-def _gate_blocks(gate: dict[str, Any] | None, now: datetime) -> bool:
-    """True when a validated gate row represents a live destructive operation."""
+def _gate_blocks(gate: dict[str, Any] | None, now: datetime, *, kind: str | None = None) -> bool:
+    """Block live work of a different kind; untyped fences stay conservative."""
 
     if gate is None or gate["state"] != "running":
         return False
@@ -214,9 +221,12 @@ def _acquire_destructive_operation_transaction(
         if gate["uid"] == uid and gate["kind"] == kind and gate["token"] == token:
             return
         if _gate_blocks(gate, now):
+            # ANY fresh running gate blocks — including same-kind. A replacing
+            # token would let a peer's check-then-delete chunks run after a
+            # legal hold lands (the original holder keeps deleting post-takeover
+            # and post-hold). Same-kind overlap waits like every other kind;
+            # abandoned (stale) and obsolete-kind gates still allow takeover.
             raise DestructiveOperationInProgress("another destructive operation owns the account gate")
-        # Abandoned gate (holder crashed, or an obsolete writer-kind row):
-        # take it over rather than leaving the account permanently blocked.
     transaction.set(
         gate_ref,
         {
@@ -258,10 +268,18 @@ def _finish_destructive_operation_transaction(
 ) -> None:
     gate_ref = _document(client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}")
     gate = _validated_gate(gate_ref.get(transaction=transaction))
-    if gate is None or gate["uid"] != uid or gate["kind"] != kind or gate["token"] != token:
+    if gate is None or gate["uid"] != uid or gate["kind"] != kind:
         raise LegalHoldAuthorityUnavailable("destructive operation gate ownership changed")
+    if gate["token"] != token:
+        # A same-kind peer owns this row now: only the stale-takeover path can
+        # reach here, and the original holder must not exit reporting success
+        # (or record its outcome on the peer's row). Preserve the peer's row
+        # and fail the caller so it re-maps to the account-gate response.
+        logger.warning("destructive operation finish aborted after same-kind takeover")
+        raise DestructiveGateTakeover("destructive operation gate was taken over by a same-kind peer")
     if gate["state"] != "running":
         if gate["state"] == outcome:
+            logger.info("destructive operation finish already recorded")
             return
         raise LegalHoldAuthorityUnavailable("destructive operation gate is already terminal")
     transaction.set(gate_ref, {**gate, "state": outcome, "finished_at": now})
@@ -282,6 +300,42 @@ def finish_destructive_operation(
     _finish_destructive_operation_transaction(
         client.transaction(), client, uid, kind, token, outcome, now or datetime.now(timezone.utc)
     )
+
+
+def assert_destructive_gate_still_ours(
+    uid: str,
+    kind: str,
+    *,
+    token: str | None = None,
+    firestore_client: Any | None = None,
+) -> None:
+    """Re-read gate authority immediately before each destructive chunk.
+
+    A caller that does not currently hold the gate in this context (legacy
+    helpers, test seams, sync-bridge paths that never claimed it) has nothing
+    to revalidate: this check is a takeover abort signal, not an authority
+    grant, so absence of an active gate is a no-op rather than a failure.
+    Callers that require held authority assert it separately with
+    ``current_destructive_operation_token``.
+    """
+    if token is None:
+        active = _ACTIVE_GATE.get()
+        if active is None or active[0] != uid or active[1] != kind:
+            return
+        token = active[2]
+    if not uid or not kind.strip() or not token.strip():
+        raise LegalHoldAuthorityUnavailable("destructive operation identity is invalid")
+    try:
+        client = account_deletion_firestore_client(firestore_client=firestore_client)
+        gate = _validated_gate(_document(client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}").get())
+        if gate is None or gate["uid"] != uid:
+            raise LegalHoldAuthorityUnavailable("destructive operation gate is missing or mismatched")
+        if gate["kind"] != kind or gate["token"] != token or gate["state"] != "running":
+            raise DestructiveGateTakeover("destructive operation gate was taken over or finished")
+    except (DestructiveGateTakeover, LegalHoldAuthorityUnavailable):
+        raise
+    except Exception as exc:
+        raise LegalHoldAuthorityUnavailable("destructive operation gate authority unavailable") from exc
 
 
 def assert_destructive_operation_transaction(
@@ -410,11 +464,13 @@ __all__ = [
     "LEGAL_HOLD_SCHEMA_VERSION",
     "LEGAL_HOLD_DELETION_GATE_SCHEMA_VERSION",
     "DestructiveOperationInProgress",
+    "DestructiveGateTakeover",
     "LegalHoldActive",
     "LegalHoldAuthorityUnavailable",
     "acquire_destructive_operation",
     "assert_account_deletion_permitted",
     "assert_destructive_operation_transaction",
+    "assert_destructive_gate_still_ours",
     "assert_no_destructive_operation_transaction",
     "current_destructive_operation_token",
     "destructive_operation_gate",

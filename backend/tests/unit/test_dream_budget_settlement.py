@@ -27,7 +27,8 @@ def db(monkeypatch):
             'version': 'synthetic-version',
             'last_changed_at': NOW,
         }
-    monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
+    monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
+    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
     monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', UID + ',' + OTHER)
     monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '0')
     monkeypatch.setattr(dream_store.firestore, 'transactional', lambda fn: fn)
@@ -36,7 +37,9 @@ def db(monkeypatch):
 
 
 def caps():
-    return Caps(context_mode='full', tokens=432768, samples=3, passes=24, daily_usd=250, max_usd_per_token=RATE)
+    return Caps(
+        tokens=432768, passes=24, daily_usd=250, global_daily_usd=1000, global_spend_shards=1, max_usd_per_token=RATE
+    )
 
 
 def ledger(db, uid=UID, day=None):
@@ -51,7 +54,7 @@ def finish(db, lease, tokens=820000, **kwargs):
 
 def test_known_cost_and_lease_finish_share_one_transaction(db):
     lease = dream_store.acquire(UID, caps(), now=NOW, firestore_client=db)
-    assert ledger(db) == pytest.approx(25.96608)
+    assert ledger(db) == pytest.approx(caps().reservation_usd)
     report = finish(db, lease)
     assert ledger(db) == pytest.approx(8.2)
     assert report['cost_usd'] == report['budget_charge_usd'] == pytest.approx(8.2)
@@ -59,7 +62,12 @@ def test_known_cost_and_lease_finish_share_one_transaction(db):
     run_path = ('users', UID, 'dream_runs', lease['run_id'])
     assert db.rows[run_path]['cost_usd'] == pytest.approx(8.2)
     tx = db.transactions[-1]
-    assert {path for path, _ in tx.sets} == {run_path, ('dream_users', UID, 'spend', lease['day'])}
+    assert {path for path, _ in tx.sets} == {
+        run_path,
+        ('dream_users', UID, 'spend', lease['day']),
+        ('dream_global_spend', lease['day'] + '-0'),
+        ('dream_due', UID),
+    }
     assert ('dream_users', UID) in {path for path, _ in tx.updates}
     before = deepcopy(db.rows)
     with pytest.raises(RuntimeError, match='dream_lease_lost'):

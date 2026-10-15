@@ -12,13 +12,17 @@ import 'package:omi/utils/l10n_extensions.dart';
 ///   skip past it.)
 /// * First load shows a spinner; a failed main-frame load shows the reason and **Try Again**.
 class OmiWebPage extends StatefulWidget {
-  const OmiWebPage({super.key, required this.title, required this.url, this.userAgent});
+  const OmiWebPage({super.key, required this.title, required this.url, this.userAgent, this.showClose = false});
 
   final String title;
   final Uri url;
 
   /// Overrides the web view's user agent (some app home pages sniff it).
   final String? userAgent;
+
+  /// A Close (×) that dismisses the whole page, for a page presented as a sheet (the Omi store).
+  /// The default back button steps back through the web history first.
+  final bool showClose;
 
   @override
   State<OmiWebPage> createState() => _OmiWebPageState();
@@ -75,7 +79,8 @@ class _OmiWebPageState extends State<OmiWebPage> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: !_canGoBack || _failed,
+      // A sheet closes as a whole; a pushed page walks back through its web history first.
+      canPop: widget.showClose || !_canGoBack || _failed,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
         await _controller.goBack();
@@ -84,7 +89,14 @@ class _OmiWebPageState extends State<OmiWebPage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          leading: const OmiBackButton(),
+          leading: widget.showClose
+              ? OmiIconButton(
+                  key: const Key('omi_web_page_close'),
+                  icon: const Icon(Icons.close),
+                  label: context.l10n.close,
+                  onPressed: () => Navigator.of(context).pop(),
+                )
+              : const OmiBackButton(),
           title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
         body: Stack(

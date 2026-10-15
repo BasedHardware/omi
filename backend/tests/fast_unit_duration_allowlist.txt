@@ -408,3 +408,15 @@ tests/unit/test_live_speaker_collapse.py::test_controller_emits_metric_and_log_w
 
 tests/unit/test_client_telemetry.py::test_voice_actor_capacity_sharded_across_documents
 # 2,200-actor sharding capacity regression; volume is the property under test (~0.86s CPU)
+
+# Takeover-mapping route tests import the full routers.conversations module graph
+# under file isolation (pydantic/pydub/audioop chain). Measured 2.78s / 2.25s CPU
+# during pre-push (2026-10-14).
+tests/unit/test_account_gate_busy_http.py::test_conversation_delete_route_maps_takeover_to_409
+tests/unit/test_account_gate_busy_http.py::test_account_gate_cascade_purge_maps_fence_before_generic_failure[DestructiveGateTakeover]
+tests/unit/test_account_gate_busy_http.py
+# The file's tests pay the task sync module graph under file isolation; up to 0.39s CPU
+# during pre-push (2026-10-15, strict local fail limit 0.30s).
+tests/unit/test_task_sync_apple_async_boundary.py::test_single_apple_reminder_sync_offloads_batch_update_and_preserves_result
+tests/unit/test_task_sync_apple_async_boundary.py::test_batch_apple_reminder_sync_offloads_batch_update_and_preserves_per_item_results
+tests/unit/test_task_sync_apple_async_boundary.py::test_apple_reminder_sync_failure_hides_exception_text_in_single_and_batch_results
