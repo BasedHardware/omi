@@ -304,9 +304,9 @@ def remove_ignored_voice(
             ),
             None,
         )
-        marker = ignored.pop(marker_key, None)
-        if marker is None:
+        if marker_key is None:
             return False
+        marker = ignored.pop(marker_key)
         from database import conversations as conversations_db
 
         conversation_ref = (
