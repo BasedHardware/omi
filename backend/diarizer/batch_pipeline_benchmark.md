@@ -5,7 +5,7 @@ capacity. Dedicated pod `dev-omi-backend/batch-worker-b-1015` used the L4 freed 
 `gpu-requal-1015`; the other L4's speedups pod was untouched. Image:
 `gcr.io/based-hardware-dev/parakeet@sha256:09a340a0dea50005bfd2035471253a12e98ae505c74daddba8cb5d20f08983ff`.
 Python 3.12, Torch `2.10.0a0+b558c986e8.nv25.11`, FP32 model weights, CUDA graphs
-disabled. This differs from shipping Python 3.11 and is not an artifact release
+requested off once (effective post-timestamp state was not recorded). This differs from shipping Python 3.11 and is not an artifact release
 gate. Model ID `nvidia/parakeet-tdt-0.6b-v3`; model weight revision was not pinned.
 
 Public inputs: EN2002a, ES2004a, IS1009a, TS3003a AMI test headset mixes, each
@@ -89,3 +89,17 @@ logs and source staging: `/Volumes/Ephemeral/scratch/pr1-b-ami-20261015/`.
 `batch_pipeline_benchmark.py` reproduces the 1/8/32 and attention/context matrix;
 the paired control script adds separate 300s meetings and compacted inputs.
 No generated audio/transcript/cache/model output is committed to the product PR.
+
+## Graph-state qualification correction
+
+The later GPU speedups lane reproduced NeMo re-enabling graphs on the first
+`timestamps=True` call after a one-shot runtime disable. These older AMI receipts
+do not record actual post-inference graph state. Their throughput may include
+graph decoding and must not be labeled confirmed eager throughput or compared
+as an eager baseline. The token/WER counts remain the recorded outputs; the
+observed long-form deficit is still a bounded-window comparison, not proof of a
+specific attention kernel cause or an exact reproduction of the vendor-relative
+17% deficit. The benchmark now pins both timestamp and eager options in the
+decoding configuration and asserts actual state, matching the new model factory.
+No new GPU measurements are claimed by that code correction. The joint Python
+3.11/BF16-ASR/FP32-segmentation image still needs separate GPU qualification.

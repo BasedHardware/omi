@@ -23,7 +23,7 @@ except ImportError:
 
 from config.batch_pipeline_providers import ProviderConfig
 from diarizer.batch_pipeline import pack_windows, speech_windows
-from diarizer.batch_pipeline_models import ParakeetWords, decode_pcm16_wav
+from diarizer.batch_pipeline_models import ParakeetWords, decode_pcm16_wav, pin_parakeet_decoding
 from utils.batch_pipeline.contracts import Priority, WorkItem
 
 
@@ -61,9 +61,8 @@ def main():
     raw_spans = json.loads(Path(args.vad_json).read_text()) if args.vad_json else [(0, duration)]
     spans = [(s['start'], s['end']) if isinstance(s, dict) else tuple(s) for s in raw_spans]
     model = nemo_asr.models.ASRModel.from_pretrained(args.model).cuda().eval()
-    if hasattr(model, 'decoding') and hasattr(model.decoding, 'decoding'):
-        model.decoding.decoding.disable_cuda_graphs()
-    provider = ParakeetWords(model)
+    pin_parakeet_decoding(model)
+    provider = ParakeetWords(model, enforce_eager=True)
     rows = []
     report = {
         'audio_sha256': hashlib.sha256(body).hexdigest(),
@@ -73,6 +72,7 @@ def main():
         'device': torch.cuda.get_device_name(),
         'torch': torch.__version__,
         'model': args.model,
+        'cuda_graph_policy': 'persistently_disabled_and_asserted',
         'rows': rows,
         'scope': 'ASR only; whole conversation input, internal windows; no persistence',
     }

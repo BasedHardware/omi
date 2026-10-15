@@ -5,6 +5,8 @@ and loads unrelated embedding models. This chain is the sole model owner.
 """
 
 import io
+from copy import deepcopy
+from contextlib import nullcontext
 import wave
 import numpy as np
 
@@ -13,16 +15,54 @@ try:
 except ImportError:
     torch = None
 
+try:
+    from omegaconf import OmegaConf, open_dict  # type: ignore[reportMissingImports]  # Optional GPU runtime dependency
+except ImportError:
+    OmegaConf = None
+    open_dict = None
+
 from config.batch_pipeline_providers import provider_config
 from diarizer.batch_pipeline import PipelineWorker
 from utils.stt.diarization_turns import exclusive_from_activity, overlap_regions
 
 
+def pin_parakeet_decoding(model):
+    """Persist eager decoding across NeMo's first timestamp initialization.
+
+    A one-shot disable_cuda_graphs() is insufficient: transcribe(timestamps=True)
+    rebuilds decoding from cfg. Set both options before that reconstruction.
+    """
+    config = deepcopy(model.cfg.decoding)
+    # Some checkpoints use a structured DictConfig with initially absent fields.
+    # Unlock only the copied decoding config; leave the live model config alone
+    # until NeMo installs the complete strategy in one operation.
+    editing = (
+        open_dict(config)
+        if OmegaConf is not None and open_dict is not None and OmegaConf.is_config(config)
+        else nullcontext()
+    )
+    with editing:
+        config.compute_timestamps = True
+        config.greedy.use_cuda_graph_decoder = False
+    model.change_decoding_strategy(config, verbose=False)
+    model.decoding.decoding.disable_cuda_graphs()
+    assert_eager_decoding(model)
+
+
+def assert_eager_decoding(model):
+    computer = model.decoding.decoding.decoding_computer
+    if computer.allow_cuda_graphs is not False or computer.full_graph is not None:
+        raise RuntimeError('worker CUDA graph policy violated; restart required')
+
+
 class ParakeetWords:
-    def __init__(self, model):
+    def __init__(self, model, *, enforce_eager=False):
         self.model = model
+        self.enforce_eager = enforce_eager
 
     def transcribe_batch(self, samples):
+        if self.enforce_eager:
+            assert_eager_decoding(self.model)
         # NeMo accepts float32 16kHz arrays: no file write, read or second decode.
         hypotheses = self.model.transcribe(
             samples,
@@ -32,6 +72,8 @@ class ParakeetWords:
             num_workers=0,
             verbose=False,
         )
+        if self.enforce_eager:
+            assert_eager_decoding(self.model)
         result = []
         for hypothesis in hypotheses:
             entries = hypothesis.timestamp.get('word', [])
@@ -111,10 +153,11 @@ def create_local_worker(
         raise ValueError(
             'local model chain requires dedicated batch GPU; shared-live requires its existing GPU arbiter'
         )
+    pin_parakeet_decoding(parakeet_model)
     return PipelineWorker(
         decode=lambda item: decode_pcm16_wav(fetch_audio(item)),
         vad=PyannoteVAD(vad_model),
-        words_providers={'parakeet': ParakeetWords(parakeet_model)},
+        words_providers={'parakeet': ParakeetWords(parakeet_model, enforce_eager=True)},
         diarizers={'pyannote': PyannoteDiarizer(pyannote_model)},
         persist=persist_result,
         config=config,

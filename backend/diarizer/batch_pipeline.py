@@ -24,6 +24,7 @@ def _fatal_cuda(exc):
     # Same fatal states as parakeet.gpu_worker.classify_fatal_cuda_error; keep
     # the model-free chain independent of that service's torch/NeMo imports.
     markers = (
+        'worker cuda graph policy violated',
         'device-side assert',
         'cudaerrorassert',
         'illegal memory access',
