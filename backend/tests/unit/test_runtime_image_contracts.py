@@ -278,6 +278,25 @@ def test_dependency_probe_checks_dotted_module_when_namespace_exists(contracts_m
         exec(contracts_module._dependency_probe_code(('google.cloud.tasks_v2',)), {})
 
 
+def test_dependency_probe_reports_the_underlying_import_exception(contracts_module, monkeypatch):
+    """Image smoke must show why an installed distribution still fails to import."""
+
+    def raise_audio_metadata(name):
+        raise AttributeError("module 'torchaudio' has no attribute 'AudioMetaData'")
+
+    monkeypatch.setattr(importlib.util, 'find_spec', raise_audio_metadata)
+    monkeypatch.setattr(importlib, 'import_module', raise_audio_metadata)
+
+    with pytest.raises(
+        AssertionError,
+        match=(
+            "missing installed dependency modules: pyannote.audio.Pipeline; "
+            "pyannote.audio.Pipeline: AttributeError: module 'torchaudio' has no attribute 'AudioMetaData'"
+        ),
+    ):
+        exec(contracts_module._dependency_probe_code(('pyannote.audio.Pipeline',)), {})
+
+
 def test_image_smoke_is_network_isolated_and_uses_registered_entrypoint(contracts_module, monkeypatch):
     calls = []
 
