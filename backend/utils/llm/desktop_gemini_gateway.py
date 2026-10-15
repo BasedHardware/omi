@@ -34,7 +34,8 @@ DESKTOP_GATEWAY_TIMEOUT_SECONDS = 75.0
 # desktop-backend's Cloud Run request timeout is 300s. httpx's read timeout is
 # only the idle gap between chunks, so a trickled streamGenerateContent body
 # stays open until that platform kill. Stop early enough to write a terminal
-# error while the handler can still finish.
+# error while the handler can still finish. Anchor the clock to proxy admission
+# (`ProxyTelemetry.started`), not to the first SSE read.
 DESKTOP_STREAM_DEADLINE_SECONDS = 270.0
 # BYOK keeps its historical output ceiling; server-paid clamps lower in the proxy.
 _MAX_OUTPUT_TOKENS = 8192
@@ -48,10 +49,27 @@ _MAX_BATCH_EMBED_REQUESTS = 100
 _T = TypeVar('_T')
 
 
+def admission_deadline(telemetry: object) -> float:
+    """Absolute loop-time deadline anchored to desktop proxy admission.
+
+    ``ProxyTelemetry.started`` is monotonic time from when the route admits the
+    request, before metering and provider setup. Starting the 270s budget only
+    when the body iterator runs lets that setup consume the margin under Cloud
+    Run's 300s request timeout.
+    """
+    admitted = getattr(telemetry, 'started', None)
+    if isinstance(admitted, bool) or not isinstance(admitted, (int, float)):
+        admitted = asyncio.get_running_loop().time()
+    return admitted + DESKTOP_STREAM_DEADLINE_SECONDS
+
+
 async def await_before_deadline(awaitable: Awaitable[_T], deadline: float) -> _T:
     """Await one step, raising TimeoutError once ``deadline`` (loop time) has passed."""
     remaining = deadline - asyncio.get_running_loop().time()
     if remaining <= 0:
+        close = getattr(awaitable, 'close', None)
+        if close is not None:
+            close()
         raise TimeoutError
     return await asyncio.wait_for(awaitable, remaining)
 
@@ -582,6 +600,7 @@ async def gateway_desktop_chat_stream(
     request_id: str,
     product_lane: str,
     client_platform: str,
+    deadline: float | None = None,
 ) -> AsyncIterator[bytes]:
     """Stream a company-paid desktop streamGenerateContent request through the gateway."""
     payload = json.loads(body)
@@ -591,7 +610,10 @@ async def gateway_desktop_chat_stream(
             status_code=400, code='validation_rejected', message=f'Gemini model {model} has no gateway lane'
         )
     request = gemini_body_to_openai_chat(payload, lane_id=lane_id, stream=True)
-    deadline = asyncio.get_running_loop().time() + DESKTOP_STREAM_DEADLINE_SECONDS
+    if deadline is None:
+        deadline = asyncio.get_running_loop().time() + DESKTOP_STREAM_DEADLINE_SECONDS
+    if deadline <= asyncio.get_running_loop().time():
+        raise TimeoutError
     semaphore = get_llm_gateway_semaphore()
     await await_before_deadline(semaphore.acquire(), deadline)
     try:
@@ -910,11 +932,14 @@ async def proxy_company_paid_via_gateway(
                 headers=envelope.response_headers(telemetry),
             )
         if streaming:
+            deadline = admission_deadline(telemetry)
 
             async def stream_gateway():
                 observation = envelope.stream_observation_factory()
                 try:
-                    async for chunk in gateway_desktop_chat_stream(body, model=model, uid=uid, **attribution):
+                    async for chunk in gateway_desktop_chat_stream(
+                        body, model=model, uid=uid, deadline=deadline, **attribution
+                    ):
                         observation.observe(chunk)
                         yield chunk
                     if observation.has_error or not observation.has_terminal:
@@ -938,9 +963,16 @@ async def proxy_company_paid_via_gateway(
                         phase='gateway',
                     )
                     yield envelope.stream_error_event(code=error.code, phase='gateway', telemetry=telemetry)
-                except (httpx.TimeoutException, TimeoutError):
+                except httpx.TimeoutException:
                     telemetry.complete(outcome='provider_timeout', status_code=504, retryable=False, phase='gateway')
                     yield envelope.stream_error_event(code='provider_timeout', phase='gateway', telemetry=telemetry)
+                except TimeoutError:
+                    telemetry.complete(
+                        outcome='provider_deadline_exceeded', status_code=504, retryable=False, phase='gateway'
+                    )
+                    yield envelope.stream_error_event(
+                        code='provider_deadline_exceeded', phase='gateway', telemetry=telemetry
+                    )
                 except httpx.HTTPError:
                     telemetry.complete(
                         outcome='provider_transport_error', status_code=502, retryable=False, phase='gateway'

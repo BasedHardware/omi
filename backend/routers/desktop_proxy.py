@@ -823,8 +823,10 @@ async def _stream_provider(
     upstream: httpx.Response | None = None
     held = False
     attempt_model, capacity = model, route.headers.get(ptr.REQUEST_TYPE_HEADER, '')
-    deadline = asyncio.get_running_loop().time() + desktop_gemini_gateway.DESKTOP_STREAM_DEADLINE_SECONDS
+    deadline = desktop_gemini_gateway.admission_deadline(telemetry)
     try:
+        if deadline <= asyncio.get_running_loop().time():
+            raise TimeoutError
         # Each entry is one upstream attempt. Overflow attempts are appended
         # only after the reservation actually reports itself full, so the
         # ordinary path opens exactly one stream as before.
@@ -833,7 +835,8 @@ async def _stream_provider(
         ]
         while pending:
             attempt_route, attempt_body, attempt_model, capacity = pending.pop(0)
-            async with asyncio.timeout(min(_TOTAL_TIMEOUT_SECONDS, deadline - asyncio.get_running_loop().time())):
+            remaining = min(_TOTAL_TIMEOUT_SECONDS, deadline - asyncio.get_running_loop().time())
+            async with asyncio.timeout(max(0.0, remaining)):
                 context, upstream = await open_attempt(attempt_route, attempt_body)
                 held = True
             telemetry.phase = 'first_byte'
@@ -844,7 +847,7 @@ async def _stream_provider(
                 break
             # The body carries the difference between 'reservation full' and
             # ordinary rate limiting, and a streamed error body is not read yet.
-            await upstream.aread()
+            await desktop_gemini_gateway.await_before_deadline(upstream.aread(), deadline)
             # This dispatch is over; record it before recovery routing can fail.
             telemetry.record_attempt('error', _attempt_error_class(upstream.status_code, upstream.text))
             pending = []

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from types import SimpleNamespace
 from uuid import UUID
 
 import httpx
@@ -364,6 +365,91 @@ async def test_streaming_gateway_calls_stop_before_the_platform_request_timeout(
         await collect()
     assert asyncio.get_running_loop().time() - started < 1
     assert streams and streams[0].closed
+
+
+def _gateway_stream_envelope(events: list[str]):
+    def stream_error_event(*, code, phase, telemetry):
+        events.append(code)
+        return code.encode()
+
+    return SimpleNamespace(
+        stream_observation_factory=lambda: SimpleNamespace(
+            observe=lambda _chunk: None, has_error=False, has_terminal=True
+        ),
+        response_headers=lambda telemetry: {},
+        stream_error_event=stream_error_event,
+    )
+
+
+@pytest.mark.asyncio
+async def test_gateway_stream_deadline_starts_at_admission(monkeypatch):
+    class Client:
+        def stream(self, *args, **kwargs):
+            raise AssertionError('an expired admission deadline must not open a gateway stream')
+
+    monkeypatch.setattr(dgg, 'DESKTOP_STREAM_DEADLINE_SECONDS', 1.0)
+    monkeypatch.setattr(dgg, 'get_llm_gateway_semaphore', lambda: asyncio.Semaphore(1))
+    monkeypatch.setattr(dgg, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
+    monkeypatch.setattr(dgg, 'llm_gateway_headers', lambda **kwargs: {})
+    monkeypatch.setattr(dgg, 'get_llm_gateway_client', lambda: Client())
+    completed: dict = {}
+    telemetry = SimpleNamespace(
+        started=asyncio.get_running_loop().time() - 10,
+        complete=lambda **kwargs: completed.update(kwargs),
+        request_id='11111111-1111-1111-1111-111111111111',
+        lane='focus',
+        client_platform='macos',
+        phase='gateway',
+    )
+    events: list[str] = []
+    response = await dgg.proxy_company_paid_via_gateway(
+        None,
+        b'{"contents":[{"parts":[{"text":"hi"}]}]}',
+        model='gemini-2.5-flash',
+        action='streamGenerateContent',
+        streaming=True,
+        uid='synthetic-user',
+        telemetry=telemetry,
+        envelope=_gateway_stream_envelope(events),
+    )
+    started = asyncio.get_running_loop().time()
+    chunks = [chunk async for chunk in response.body_iterator]
+    assert asyncio.get_running_loop().time() - started < 0.05
+    assert events == ['provider_deadline_exceeded']
+    assert completed['outcome'] == 'provider_deadline_exceeded'
+    assert chunks == [b'provider_deadline_exceeded']
+
+
+@pytest.mark.asyncio
+async def test_gateway_stream_idle_timeout_stays_provider_timeout(monkeypatch):
+    async def idle(*_args, **_kwargs):
+        raise httpx.ReadTimeout('idle')
+        yield b''
+
+    monkeypatch.setattr(dgg, 'gateway_desktop_chat_stream', idle)
+    completed: dict = {}
+    telemetry = SimpleNamespace(
+        started=asyncio.get_running_loop().time(),
+        complete=lambda **kwargs: completed.update(kwargs),
+        request_id='11111111-1111-1111-1111-111111111111',
+        lane='focus',
+        client_platform='macos',
+        phase='gateway',
+    )
+    events: list[str] = []
+    response = await dgg.proxy_company_paid_via_gateway(
+        None,
+        b'{"contents":[{"parts":[{"text":"hi"}]}]}',
+        model='gemini-2.5-flash',
+        action='streamGenerateContent',
+        streaming=True,
+        uid='synthetic-user',
+        telemetry=telemetry,
+        envelope=_gateway_stream_envelope(events),
+    )
+    assert [chunk async for chunk in response.body_iterator] == [b'provider_timeout']
+    assert events == ['provider_timeout']
+    assert completed['outcome'] == 'provider_timeout'
 
 
 def test_lane_selection_covers_every_desktop_text_model():
