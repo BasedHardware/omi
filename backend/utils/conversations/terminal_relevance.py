@@ -72,7 +72,8 @@ def terminal_decision(
     prior = row.get('relevance_decision')
     source = getattr(row.get('source'), 'value', row.get('source'))
     discarded = bool(row.get('discarded'))
-    if valid_decision(prior) and (prior['verdict'] == 'discard') == discarded:
+    user_restore = bool(row.get('sync_relevance_user_kept')) or path == 'user_restore'
+    if valid_decision(prior) and not (prior['verdict'] == 'discard' and user_restore):
         return dict(prior)
     trigger = path
     if not discarded and isinstance(prior, Mapping) and prior.get('verdict') == 'keep':
@@ -82,10 +83,10 @@ def terminal_decision(
             # transcript/audio bytes. Repair missing fields without losing it.
             trigger = prior_trigger
     verdict, tier, reason = 'keep', 'policy', f'{path}_default'
-    if discarded:
-        verdict, reason = 'discard', 'already_discarded'
-    elif row.get('sync_relevance_user_kept'):
+    if user_restore:
         tier, reason = 'user', 'restored'
+    elif discarded:
+        verdict, reason = 'discard', 'already_discarded'
     elif isinstance(prior, Mapping) and prior.get('verdict') == 'keep':
         # Missing provenance is not permission to reverse prior positive evidence.
         tier, reason = 'policy', 'prior_keep'

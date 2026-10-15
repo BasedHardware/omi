@@ -153,6 +153,30 @@ class _LifecycleWriteVisitor(ast.NodeVisitor):
             writes_conversation_ref = (
                 receiver_name in self.conversation_refs or first_argument_name in self.conversation_refs
             )
+            # Storage allowlisting must not bypass the completed-row contract.
+            # Only the explicitly named finalization job reference is a job-only
+            # completion; an unknown/renamed ref fails closed for review.
+            job_only = (
+                self.relative_path == 'backend/database/conversation_finalization_jobs.py'
+                and first_argument_name == 'job_ref'
+            )
+            if self.relative_path in RAW_STORAGE_ALLOWLIST and not job_only:
+                for payload in [*node.args, *(kw.value for kw in node.keywords)]:
+                    if not isinstance(payload, ast.Dict):
+                        continue
+                    completed = any(
+                        isinstance(key, ast.Constant)
+                        and key.value == 'status'
+                        and (
+                            (isinstance(value, ast.Constant) and value.value == 'completed')
+                            or (isinstance(value, ast.Attribute) and value.attr == 'completed')
+                        )
+                        for key, value in zip(payload.keys, payload.values)
+                    )
+                    if completed and 'relevance_decision' not in _dict_keys(payload):
+                        self.errors.append(
+                            f'{self.relative_path}:{node.lineno}: completed conversation write requires relevance_decision'
+                        )
             # A transaction-level lifecycle write outside the storage primitive
             # is a second authority even when the pasted-back ref is named
             # simply ``ref``. Direct document writes are flagged when their

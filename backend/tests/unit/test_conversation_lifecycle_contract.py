@@ -644,3 +644,17 @@ def test_legacy_restore_records_user_verdict_without_restoring_tombstones(lifecy
         assert row['relevance_decision']['verdict'] == 'keep'
         assert row['relevance_decision']['decided_by'] == 'user'
         assert row['relevance_decision']['reason'] == 'restored'
+
+
+@pytest.mark.parametrize('cas', [False, True])
+@pytest.mark.parametrize('reason', ['filler_only', 'empty_transcript'])
+def test_merge_rollback_preserves_legacy_rule_discard_and_visibility(lifecycle_store, cas, reason):
+    prior = dict(verdict='discard', decided_by='rule', reason=reason, trigger='capture_end')
+    lifecycle_store.put_conversation('uid', 'rollback', status='merging', discarded=False, relevance_decision=prior)
+    assert lifecycle_service.transition(
+        'uid', 'rollback', ConversationStatus.completed, expected=ConversationStatus.merging if cas else None
+    )
+    row = lifecycle_store.conversation('uid', 'rollback')
+    assert row['status'] == 'completed'
+    assert row['relevance_decision'] == prior
+    assert not conversations_db.is_visible_conversation(row)

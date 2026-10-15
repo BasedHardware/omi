@@ -29,7 +29,7 @@ threshold, recovery feature flag, client, or deletion contract changes.
 | Immutable Limitless / transcript-file imports (`persist_imported_conversation`) | Create completed once; duplicate import no-op | No | Explicit `import_default` keep policy: deliberate user import remains kept. Create-if-absent still preserves user edits. |
 | Sync intake and subsequent append (`utils/sync/assignment.py`) | Completed rule discard or provisional keep; live target retains lifecycle; donor redirects hidden | Discard yes; keep/promotion could clear decision to None | Existing intake discard rules unchanged. Every keep/promotion now records `sync_intake_default` if no valid keep exists, before the transactional survivor write. Paid `SYNC_UPDATE` assessment follows over full transcript. |
 | Sync processing (`utils/sync/pipeline.py`) | Completed keep/discard or recovery terminal | Normal assessment yes | Lifecycle result boundary now supplies a decision if any minimum/bypass omits one; transcript-revision CAS still rejects stale processors. |
-| Explicit merge (`merge_conversations.py`) | New survivor processing → completed; source rollback to completed; donors hidden/deleted | Survivor yes (`policy/merge`); legacy source rollback not guaranteed | The status storage primitive in `database/conversation_status_transitions.py` and CAS completion transitions now fill missing decisions. Existing merge policy keeps and valid rule keeps survive. |
+| Explicit merge (`merge_conversations.py`) | New survivor processing → completed; source rollback to completed; donors hidden/deleted | Survivor yes (`policy/merge`); legacy source rollback not guaranteed | The status storage primitive in `database/conversation_status_transitions.py` and CAS completion transitions now fill missing decisions. Any valid prior keep or discard survives, even when the legacy discarded flag disagrees. Only an explicit user restore replaces a discard. |
 | Smart merge survivor / refresh | Existing survivor completed; refresh processing → completed; donors hidden | Normal survivor decision / `policy/smart_merge` yes | Existing relevance policy and refresh lease/revision fences remain. Generic completion boundary covers absent records. Donor tombstones are untouched. |
 | User discard / restore / deletion | Discard stays hidden; restore makes explicit user keep; deletion never recreated | Existing user-owned contract | Restore now adds user-decision metadata after the unchanged tombstone fence. No deletion/discard semantics change. New helper never turns an existing discard into keep, respects restores, and normal persistence still refuses missing/deleted rows. |
 | Finalization job completion/fanout bookkeeping, audio/segment/photo metadata updates | Do not independently create or terminalize a conversation row | Not a separate decision path | Job completion requires committed fanout; conversation completion is owned by processing. Metadata writes cannot set lifecycle fields through generic update. |
@@ -52,14 +52,20 @@ rule discards. A legacy child photo also protects even without a parent flag.
 Only a rule-level discard attempts calendar reads. Stored/direct calendar intent
 and accepted Google Calendar overlap protect it. Unknown windows or read/provider
 failures keep conservatively; they are not recorded as proven calendar overlaps.
+For dead-letter, provider evidence is resolved before entering the Firestore
+transaction, using the existing calendar helper with a ten-second async timeout
+and no new auth-refresh behavior. Errors/timeouts become uncertain evidence and
+still allow an atomic completed keep. Negative evidence is reused only for the
+same recording window; current inline calendar intent still protects the row.
 All photo transaction reads occur before writes. No paid relevance model runs in
 these failure terminals. Existing provider/normal relevance thresholds are unchanged.
 
 The mandatory decision is part of the base terminal update, while title and retry
 markers remain optional under the size guard. The former status-only overflow
 escape is removed. A truly full document receives only `status=failed`, which
-shrinks the original processing/in-progress state and is excluded by the default
-list's status filter. This is a deliberate deviation from the former keep-at-all-
+shrinks the original processing/in-progress state and is excluded both by the default
+list's status filter and by the shared `is_visible_conversation` predicate, including
+status-unfiltered readers and readers requesting discarded rows. This is a deliberate deviation from the former keep-at-all-
 costs terminal behavior, necessary to avoid a visible undecided row without
 removing captured data. It does not set discarded or deleted.
 
@@ -98,3 +104,32 @@ rollback, and orphan completion all legitimately have no durable job status.
 This audit traces those writers, but does not attribute the supplied 08:27Z account
 example to one writer without live provenance. The borderline Jev keep at 0.78
 against 0.8 remains unchanged.
+
+
+## Round 2 review corrections
+
+The completion primitive now preserves any valid verdict regardless of the stored
+`discarded` flag. Explicit `sync_relevance_user_kept` or `user_restore` is required
+to replace a prior discard. Both CAS and unconditional merging-to-completed tests
+seed legacy `filler_only` / `empty_transcript` decisions with `discarded=false`
+and assert the verdict survives and the shared reader continues to hide the row.
+
+The total-decision tests pin assessment by terminal path and inventory production
+call sites; policy stamps cannot silently enable transcript assessment. The
+existing lifecycle tripwire now rejects a literal completed conversation update
+in an allowlisted storage file unless that same payload has `relevance_decision`.
+Variable payloads retain behavioral contract coverage rather than claiming full
+static data-flow analysis. Job-only completion writes remain separate.
+
+Calendar provider calls are outside the dead-letter transaction. The public
+wrapper test injects a provider timeout, asserts probe-before-transaction order,
+and verifies status, flag, and keep decision in the same conversation write.
+The size-ceiling choice is reader exclusion for `status=failed`, including
+status-unfiltered readers; content and tombstones remain untouched.
+
+Round 2 targeted verification covered 31 unit files (1,303 cases), including all
+relevance suites and terminal/dead-letter, lifecycle, sync visibility, recovery,
+and fixture contracts. Failing fixture expectations were corrected and their
+files rerun successfully. Backend `test-preflight.sh` passed 17 checks with nine
+optional environment/service warnings. The async-blocker scan and lifecycle
+write guard passed. No live provider or deployed-product acceptance is claimed.

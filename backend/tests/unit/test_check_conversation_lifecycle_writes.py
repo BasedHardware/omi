@@ -124,3 +124,21 @@ def test_stuck_noise_storage_is_callable_only_through_lifecycle():
     raw = "ref = user.collection('conversations').document(cid)\ntransaction.update(ref, {'status': 'completed'})\n"
     assert violations(raw, 'backend/database/stuck_backfill.py') == []
     assert violations(raw, 'backend/database/other_backfill.py')
+def test_allowlisted_literal_completed_write_requires_atomic_decision():
+    for path in ('backend/database/conversations.py', 'backend/database/conversation_finalization_jobs.py'):
+        assert any(
+            'requires relevance_decision' in e
+            for e in violations("transaction.update(conversation_ref, {'status': 'completed'})", path)
+        )
+        assert (
+            violations(
+                "transaction.update(conversation_ref, {'status': 'completed', 'relevance_decision': decision})", path
+            )
+            == []
+        )
+        if path.endswith('conversation_finalization_jobs.py'):
+            assert violations("transaction.update(job_ref, {'status': 'completed'})", path) == []
+        assert any(
+            'requires relevance_decision' in e
+            for e in violations("transaction.update(ref, {'status': 'completed'})", path)
+        )

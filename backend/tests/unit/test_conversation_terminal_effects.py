@@ -111,6 +111,7 @@ def test_real_rule_calculation_stages_visibility_observers(monkeypatch, text, di
             'dead_letter',
             SimpleNamespace(id='c'),
             object(),
+            calendar_probe=lambda _: False,
         )
         assert events == []
         state['committed'] = True

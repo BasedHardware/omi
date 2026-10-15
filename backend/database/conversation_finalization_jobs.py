@@ -24,6 +24,7 @@ from database.account_deletion_policy import account_deletion_blocks_access, nor
 from database._client import document_id_from_seed, get_firestore_client
 from database.conversation_terminal_title import (
     dead_letter_conversation_updates,
+    prepare_calendar_probe,
     recover_deferred_processing_failure_txn,
     kept_row_terminal_update,
     user_time_zone,
@@ -1301,6 +1302,7 @@ def _mark_finalization_dead_letter_txn(
     projection_collection: Any | None = None,
     failure_code: str = 'final_attempt_failed',
     time_zone_for_uid: Callable[[str], str | None] | None = None,
+    calendar_probe: Callable[[Mapping[str, Any]], bool | None] | None = None,
 ) -> bool:
     snapshot = job_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
@@ -1343,7 +1345,7 @@ def _mark_finalization_dead_letter_txn(
         # Computed before the first write: it may read the photos child
         # collection inside this transaction.
         conversation_updates = dead_letter_conversation_updates(
-            uid, conversation, conversation_ref, transaction, failure_code, time_zone_for_uid
+            uid, conversation, conversation_ref, transaction, failure_code, time_zone_for_uid, calendar_probe
         )
     if conversation_updates is not None and isinstance(uid, str) and isinstance(conversation, Mapping):
         from database.processing_attention import create_in_transaction
@@ -1384,6 +1386,14 @@ def mark_finalization_dead_letter(
     firestore_client: Any = None,
 ) -> bool:
     client = _client(firestore_client)
+    # Provider IO must not consume the Firestore transaction's deadline/retries.
+    job_snapshot = _job_ref(client, job_id).get()
+    job = job_snapshot.to_dict() or {} if job_snapshot.exists else {}
+    calendar_probe = None
+    if _is_current_lease(job, dispatch_generation, lease_epoch) and job.get('uid') and job.get('conversation_id'):
+        row_snapshot = _conversation_ref(client, job['uid'], job['conversation_id']).get()
+        if row_snapshot.exists:
+            calendar_probe = prepare_calendar_probe(job['uid'], row_snapshot.to_dict() or {})
     transactional = firestore.transactional(_mark_finalization_dead_letter_txn)
     return transactional(
         client.transaction(),
@@ -1396,6 +1406,7 @@ def mark_finalization_dead_letter(
         client.collection(FINALIZATION_PROJECTION_COLLECTION),
         failure_code,
         lambda uid: user_time_zone(client, uid),
+        calendar_probe,
     )
 
 

@@ -2857,6 +2857,7 @@ _add(
             'failure_code': 'processing_failed',
             'time_zone_for_uid': None,
         },
+        neutrals={'calendar_probe': (None, 'precomputed evidence; photo query runs before calendar policy')},
     )
 )
 _add(
@@ -2895,6 +2896,7 @@ _add(
             'conversation_ref': ref_document(f'users/{UID}/conversations/conv-1'),
             'transaction': ref_transaction(),
         },
+        neutrals={'calendar_probe': (None, 'precomputed evidence; photo query runs before calendar policy')},
     )
 )
 

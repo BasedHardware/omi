@@ -140,6 +140,7 @@ def dead_letter_conversation_updates(
     transaction: Any,
     failure_code: str,
     time_zone_for_uid: Callable[[str], str | None] | None,
+    calendar_probe: Callable[[Mapping[str, Any]], bool | None] | None = None,
 ) -> dict[str, Any]:
     """Close a still-bound row with relevance and an optional deterministic title.
 
@@ -178,8 +179,62 @@ def dead_letter_conversation_updates(
         'dead_letter',
         conversation_ref,
         transaction,
+        calendar_probe=calendar_probe,
     )
     return fit_document_limit(conversation, conversation_ref, base, extras)
+
+
+def prepare_calendar_probe(uid: str, conversation: Mapping[str, Any]) -> Callable[[Mapping[str, Any]], bool | None]:
+    """Resolve provider evidence before entering a retryable transaction.
+
+    Changed windows cannot reuse negative evidence from the preliminary read.
+    Current inline calendar context always protects the transactional snapshot.
+    """
+    needed = False
+
+    def needs_calendar() -> None:
+        nonlocal needed
+        needed = True
+
+    texts, decoded = transcript_texts(uid, conversation)
+    terminal_decision(
+        conversation,
+        path='dead_letter',
+        texts=texts,
+        decoded=decoded,
+        assess=True,
+        calendar_retains=needs_calendar,
+    )
+    if not needed:
+        # A changed transactional transcript may need evidence we did not fetch.
+        return lambda _: None
+    window = (conversation.get('started_at'), conversation.get('finished_at'))
+    try:
+        retains = calendar_retains(uid, conversation)
+    except Exception:
+        from utils.observability.fallback import record_fallback
+
+        record_fallback(
+            component='conversation_relevance',
+            from_mode='none',
+            to_mode='deterministic',
+            reason='other',
+            outcome='degraded',
+        )
+        retains = None
+
+    def probe(current: Mapping[str, Any]) -> bool | None:
+        if (
+            current.get('calendar_event')
+            or current.get('calendar_meeting_context')
+            or (current.get('external_data') or {}).get('calendar_meeting_context')
+        ):
+            return True
+        if window != (current.get('started_at'), current.get('finished_at')):
+            return None
+        return retains
+
+    return probe
 
 
 def with_terminal_relevance(
@@ -191,6 +246,8 @@ def with_terminal_relevance(
     path: str,
     conversation_ref: Any,
     transaction: Any,
+    *,
+    calendar_probe: Callable[[Mapping[str, Any]], bool | None] | None = None,
 ) -> dict[str, Any]:
     decision = terminal_decision(
         conversation,
@@ -198,7 +255,11 @@ def with_terminal_relevance(
         texts=texts,
         decoded=decoded,
         assess=True,
-        calendar_retains=lambda: calendar_retains(uid, conversation),
+        calendar_retains=lambda: (
+            calendar_probe(conversation)
+            if calendar_probe is not None
+            else calendar_retains(uid, conversation) if path != 'dead_letter' else None
+        ),
         photos_retain=lambda: _has_described_photo(
             conversation, conversation_ref, transaction, accept_undescribed=True
         ),

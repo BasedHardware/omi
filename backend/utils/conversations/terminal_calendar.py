@@ -6,7 +6,7 @@ import asyncio
 
 
 def calendar_retains(uid: str, row: Mapping[str, Any]) -> bool | None:
-    # Local imports keep transaction-only harnesses and normal keep terminals cheap.
+    # Called before the terminal transaction; provider failure remains uncertain.
     from database import calendar_meetings, users
     from utils.conversations.calendar_linking import get_google_calendar_events, select_overlapping_calendar_event
     from utils.conversations.meeting_context import MEETING_SEARCH_TOLERANCE_MINUTES, select_overlapping_meeting
@@ -34,11 +34,14 @@ def calendar_retains(uid: str, row: Mapping[str, Any]) -> bool | None:
     if not token:
         return None
     events = asyncio.run(
-        get_google_calendar_events(
-            access_token=token,
-            time_min=start - timedelta(minutes=30),
-            time_max=end + timedelta(minutes=30),
-            max_results=20,
+        asyncio.wait_for(
+            get_google_calendar_events(
+                access_token=token,
+                time_min=start - timedelta(minutes=30),
+                time_max=end + timedelta(minutes=30),
+                max_results=20,
+            ),
+            timeout=10.0,
         )
     )
     if select_overlapping_calendar_event(events, start, end, require_accepted=True) is not None:

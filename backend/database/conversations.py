@@ -781,7 +781,10 @@ def is_visible_conversation(conversation: Optional[Mapping[str, Any]], *, includ
     """Whether a stored conversation may be put in front of a user or downstream job."""
     if not conversation:
         return False
-    if is_soft_deleted(conversation):
+    if (
+        is_soft_deleted(conversation)
+        or getattr(conversation.get('status'), 'value', conversation.get('status')) == 'failed'
+    ):
         return False
     if not include_discarded:
         # Dream duplicate captures are folded out of product reads, but the

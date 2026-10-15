@@ -9,7 +9,13 @@ from utils.conversations.terminal_relevance import terminal_decision, valid_deci
 from database import conversation_terminal_title as terminal
 
 
-@pytest.mark.parametrize('path', sorted(TERMINAL_PATHS))
+@pytest.mark.parametrize(
+    'path,assess',
+    sorted(
+        (path, path in {'dead_letter', 'byok_abandoned', 'orphan_terminal', 'oversized_terminal'})
+        for path in TERMINAL_PATHS
+    ),
+)
 @pytest.mark.parametrize(
     'text,verdict,tier',
     [
@@ -19,12 +25,13 @@ from database import conversation_terminal_title as terminal
         ('', 'discard', 'rule'),
     ],
 )
-def test_all_paths_have_total_rules_or_named_policy(path, text, verdict, tier):
+def test_all_paths_have_total_rules_or_named_policy(path, assess, text, verdict, tier):
     decision = terminal_decision(
-        {'source': 'omi'}, path=path, texts=[text], decoded=True, assess=True, calendar_retains=lambda: False
+        {'source': 'omi'}, path=path, texts=[text], decoded=True, assess=assess, calendar_retains=lambda: False
     )
     assert valid_decision(decision)
-    assert (decision['verdict'], decision['decided_by']) == (verdict, tier)
+    expected = (verdict, tier) if assess else ('keep', 'user' if path == 'user_restore' else 'policy')
+    assert (decision['verdict'], decision['decided_by']) == expected
     assert decision['trigger'] == path
 
 
@@ -145,7 +152,9 @@ def test_huh_completed_dead_letter_empty_decision_snapshot(monkeypatch, text, ve
     monkeypatch.setattr(terminal, 'calendar_retains', lambda *_: False)
     monkeypatch.setattr(terminal, '_has_described_photo', lambda *_, **__: False)
     ref = SimpleNamespace(path='users/u/conversations/c')
-    patch = terminal.dead_letter_conversation_updates('u', row, ref, object(), 'processing_failed', None)
+    patch = terminal.dead_letter_conversation_updates(
+        'u', row, ref, object(), 'processing_failed', None, lambda _: False
+    )
     assert patch['relevance_decision']['verdict'] == verdict
     assert patch['relevance_decision']['decided_by'] == tier
     assert patch['discarded'] == (verdict == 'discard')
@@ -260,3 +269,73 @@ def test_incomplete_recovery_keep_retains_capture_preservation_provenance(restor
     assert valid_decision(decision)
     assert decision['trigger'] == 'server_recovery'
     assert decision['verdict'] == 'keep'
+
+
+@pytest.mark.parametrize('verdict', ['keep', 'discard'])
+@pytest.mark.parametrize('discarded', [False, True])
+def test_valid_prior_verdict_survives_flag_mismatch(verdict, discarded):
+    prior = dict(verdict=verdict, decided_by='rule', reason='filler_only', trigger='capture_end')
+    assert terminal_decision({'relevance_decision': prior, 'discarded': discarded}, path='lifecycle_terminal') == prior
+
+
+@pytest.mark.parametrize('signal', ['sync_relevance_user_kept', 'user_restore'])
+def test_only_explicit_restore_replaces_valid_discard(signal):
+    prior = dict(verdict='discard', decided_by='rule', reason='filler_only', trigger='capture_end')
+    row = {
+        'relevance_decision': prior,
+        'discarded': False,
+        'sync_relevance_user_kept': signal == 'sync_relevance_user_kept',
+    }
+    decision = terminal_decision(row, path='user_restore' if signal == 'user_restore' else 'lifecycle_terminal')
+    assert decision['verdict'] == 'keep'
+    assert decision['decided_by'] == 'user'
+
+
+def test_stamp_never_enables_assessment(monkeypatch):
+    from utils.conversations import terminal_relevance
+
+    calls = []
+    original = terminal_relevance.terminal_decision
+
+    def spy(row, **kwargs):
+        calls.append(kwargs.get('assess', False))
+        return original(row, **kwargs)
+
+    monkeypatch.setattr(terminal_relevance, 'terminal_decision', spy)
+    for path in TERMINAL_PATHS:
+        terminal_relevance.stamp_terminal_decision({'source': 'omi', 'transcript_segments': []}, path=path)
+    assert calls == [False] * len(TERMINAL_PATHS)
+
+
+def test_production_terminal_assessment_call_sites_are_pinned():
+    import ast
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    expected = {
+        'database/conversations.py': 2,
+        'database/conversation_status_transitions.py': 1,
+        'database/conversation_terminal_title.py': 1,
+        'utils/task_intelligence/chat_first_fixture_capture.py': 1,
+        'utils/conversations/lifecycle.py': 3,
+        'utils/sync/assignment.py': 1,
+    }
+    observed = {}
+    for folder in ('database', 'utils'):
+        for file in (root / folder).rglob('*.py'):
+            if file.name == 'terminal_relevance.py':
+                continue
+            for call in ast.walk(ast.parse(file.read_text())):
+                if not isinstance(call, ast.Call) or not isinstance(call.func, ast.Name):
+                    continue
+                if call.func.id == 'stamp_terminal_decision':
+                    relative = str(file.relative_to(root))
+                    observed[relative] = observed.get(relative, 0) + 1
+                    assert 'assess' not in {kw.arg for kw in call.keywords}
+                elif call.func.id == 'terminal_decision':
+                    assert str(file.relative_to(root)) == 'database/conversation_terminal_title.py'
+                    assert any(
+                        kw.arg == 'assess' and isinstance(kw.value, ast.Constant) and kw.value.value is True
+                        for kw in call.keywords
+                    )
+    assert observed == expected

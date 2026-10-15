@@ -150,6 +150,7 @@ def _dead_letter(conversation: _Ref, failure_code: str = 'final_attempt_failed',
         None,
         failure_code,
         zone_for,
+        terminal_title.prepare_calendar_probe(_UID, conversation.data),
     )
     conversation_writes = [patch for ref, patch in transaction.updates if ref is conversation]
     assert len(conversation_writes) == 1
@@ -594,3 +595,65 @@ def test_malformed_falsey_transcript_is_never_inferred_empty(monkeypatch, raw):
     patch = _dead_letter(_conversation({'transcript_segments': raw}))
     assert patch['discarded'] is False
     assert patch['relevance_decision']['reason'] == 'dead_letter_default'
+
+
+@pytest.mark.parametrize('include_discarded', [False, True])
+def test_failed_terminal_is_hidden_even_for_status_unfiltered_reader(include_discarded):
+    assert not conversations_db.is_visible_conversation(
+        {'status': 'failed', 'discarded': False}, include_discarded=include_discarded
+    )
+
+
+def test_calendar_timeout_still_commits_atomic_terminal_keep(monkeypatch):
+    def timeout(*_):
+        raise TimeoutError('provider timeout')
+
+    monkeypatch.setattr(terminal_title, 'calendar_retains', timeout)
+    patch = _dead_letter(_conversation({'transcript_segments': _segments('Huh?')}))
+    assert patch['status'] == 'completed'
+    assert patch['discarded'] is False
+    assert patch['relevance_decision']['verdict'] == 'keep'
+
+
+def test_calendar_probe_does_not_reuse_negative_evidence_after_window_change(monkeypatch):
+    monkeypatch.setattr(terminal_title, 'calendar_retains', lambda *_: False)
+    row = _conversation().data
+    probe = terminal_title.prepare_calendar_probe(_UID, row)
+    assert probe(row) is False
+    assert probe({**row, 'finished_at': _NOW}) is None
+
+
+def test_public_dead_letter_fetches_calendar_before_transaction_and_timeout_keeps(monkeypatch):
+    from unittest.mock import Mock
+
+    conversation = _conversation({'transcript_segments': _segments('Huh?')})
+    job = _job()
+    transaction = _Transaction()
+    events = []
+    client = Mock()
+    client.transaction.return_value = transaction
+    monkeypatch.setattr(jobs, '_job_ref', lambda *_: job)
+    monkeypatch.setattr(jobs, '_conversation_ref', lambda *_: conversation)
+    monkeypatch.setattr(jobs, '_record_projection_delta', lambda *_a, **_kw: None)
+    monkeypatch.setattr(jobs, 'user_time_zone', lambda *_: None)
+
+    def timeout(*_):
+        events.append('provider')
+        raise TimeoutError('provider deadline')
+
+    monkeypatch.setattr(terminal_title, 'calendar_retains', timeout)
+
+    def transactional(fn):
+        def run(*args):
+            events.append('transaction')
+            return fn(*args)
+
+        return run
+
+    monkeypatch.setattr(jobs.firestore, 'transactional', transactional)
+    assert jobs.mark_finalization_dead_letter('job-1', 3, 1, 5, firestore_client=client)
+    assert events == ['provider', 'transaction']
+    patch = next(patch for ref, patch in transaction.updates if ref is conversation)
+    assert patch['status'] == 'completed'
+    assert patch['discarded'] is False
+    assert patch['relevance_decision']['verdict'] == 'keep'
