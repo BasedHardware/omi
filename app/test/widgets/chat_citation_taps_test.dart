@@ -12,7 +12,6 @@ import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/jump_to_latest_button.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/widgets/components/chat_evidence_card.dart';
 
 void main() {
   ServerMessage messageWithMemories({int memoryCount = 3, ChatEvidenceReferenceEnvelope? evidence}) {
@@ -111,11 +110,48 @@ void main() {
 
     expect(find.byKey(const ValueKey('chat-citation-list')), findsOneWidget);
     expect(find.byKey(const ValueKey('chat-evidence-reference-list')), findsNothing);
-    expect(find.byType(ChatEvidenceReferenceCard), findsNothing);
     for (var index = 0; index < 5; index++) {
       expect(find.byKey(ValueKey('chat-citation-convo-$index')), findsOneWidget);
       expect(find.textContaining('Conversation $index'), findsOneWidget);
     }
+  });
+
+  testWidgets('evidence without memories renders only the answer in AIMessage', (tester) async {
+    final message = ServerMessage.fromJson({
+      'id': 'ai-evidence-only',
+      'created_at': '2026-08-23T12:00:00Z',
+      'text': 'The answer remains available.',
+      'sender': 'ai',
+      'type': 'text',
+      'evidence': {
+        'schema_version': 1,
+        'references': [
+          for (final kind in ChatEvidenceReferenceKind.values)
+            {
+              'id': kind.wireValue,
+              'kind': kind.wireValue,
+              'state': 'available',
+              'conversation_id': 'convo-0',
+              'segment_id': 'segment-0',
+              'frame_id': 'frame-0',
+              'request_id': 'request-0',
+              'title': 'Evidence title',
+              'summary': 'Evidence snippet',
+            },
+        ],
+      },
+    });
+
+    await pumpCitations(tester, message: message);
+
+    expect(message.memories, isEmpty);
+    expect(message.evidenceEnvelope!.references, hasLength(ChatEvidenceReferenceKind.values.length));
+    expect(find.text('The answer remains available.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('chat-evidence-reference-list')), findsNothing);
+    expect(find.byWidgetPredicate((widget) => widget.key.toString().contains('chat-evidence-')), findsNothing);
+    expect(find.byKey(const ValueKey('chat-citation-list')), findsNothing);
+    expect(find.text('Evidence title'), findsNothing);
+    expect(find.text('Evidence snippet'), findsNothing);
   });
 
   testWidgets('citation tap fetches by id on a local miss and surfaces failure', (tester) async {

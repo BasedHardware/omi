@@ -1704,17 +1704,17 @@ class ConversationProvider extends ChangeNotifier {
             groupedConversations.removeWhere((_, group) => group.isEmpty);
           } else {
             final deleted = memoriesToDelete[conversationId];
-            if (deleted != null) await _restoreSiriAfterOptimisticDelete(deleted);
+            if (deleted != null) await _restoreDeletedConversation(deleted);
           }
           _clearDeleteTombstone(conversationId);
           notifyListeners();
         },
         onError: (Object _, StackTrace __) async {
-          // Match the prior behavior on a failed request: release the local
-          // tombstone, but do not rebase the server cursor.
+          // Same as a refused DELETE: the conversation still exists, so put its
+          // row back, but do not rebase the server cursor.
           if (generation != _sessionGeneration) return;
           final deleted = memoriesToDelete[conversationId];
-          if (deleted != null) await _restoreSiriAfterOptimisticDelete(deleted);
+          if (deleted != null) await _restoreDeletedConversation(deleted);
           _clearDeleteTombstone(conversationId);
           notifyListeners();
         },
@@ -1724,11 +1724,9 @@ class ConversationProvider extends ChangeNotifier {
 
   void _clearDeleteTombstone(String conversationId) => memoriesToDelete.remove(conversationId);
 
-  /// Restores a conversation whose delete is still pending. Does nothing once the DELETE was sent.
-  Future<void> undoDeletedConversation(ServerConversation conversation) async {
-    final timer = _pendingDeleteTimers.remove(conversation.id);
-    if (timer == null) return;
-    timer.cancel();
+  /// Puts a row hidden by [deleteConversationLocally] back in the list and in Siri: on Undo, and when
+  /// the server refuses or fails the DELETE, since the conversation then still exists.
+  Future<void> _restoreDeletedConversation(ServerConversation conversation) async {
     memoriesToDelete.remove(conversation.id);
     if (!conversations.any((e) => e.id == conversation.id)) {
       conversations.add(conversation);
@@ -1736,6 +1734,14 @@ class ConversationProvider extends ChangeNotifier {
     }
     groupConversationsByDate();
     await _restoreSiriAfterOptimisticDelete(conversation);
+  }
+
+  /// Restores a conversation whose delete is still pending. Does nothing once the DELETE was sent.
+  Future<void> undoDeletedConversation(ServerConversation conversation) async {
+    final timer = _pendingDeleteTimers.remove(conversation.id);
+    if (timer == null) return;
+    timer.cancel();
+    await _restoreDeletedConversation(conversation);
   }
 
   @override
