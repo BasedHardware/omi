@@ -13,6 +13,7 @@ import os
 from datetime import date, datetime
 from enum import Enum
 from functools import lru_cache
+from importlib.metadata import version as distribution_version
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,7 @@ SKIPPED = Counter(
     'conversation_llm_input_dedupe_skipped_total', 'Successful conversation feature input reused', ['feature']
 )
 NOTES_HASH = 'notes_llm_input_hash'
+NOTES_OUTPUT_HASH = 'notes_llm_output_hash'
 L1_HASH = 'l1_llm_input_hash'
 
 
@@ -76,7 +78,8 @@ def implementation_digest(feature: str) -> str:
         '../models/conversation.py',
         '../models/memories.py',
     ]
-    return hashlib.sha256(b''.join((root / path).read_bytes() for path in paths)).hexdigest()
+    dependencies = '|'.join(f'{name}:{distribution_version(name)}' for name in ('pydantic', 'langchain-core')).encode()
+    return hashlib.sha256(b''.join((root / path).read_bytes() for path in paths) + dependencies).hexdigest()
 
 
 def fingerprint(feature: str, inputs: Any) -> str:
@@ -108,15 +111,55 @@ def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, 
         },
     )
     row = _stored(uid, conversation) if getattr(conversation, 'id', None) else {}
-    if row.get(NOTES_HASH) == digest and row.get('structured') and not row.get('discarded'):
-        from models.conversation import Structured
+    from models.conversation import Structured
 
-        output = Structured.model_validate(row['structured'])
+    saved = None
+    if row.get(NOTES_HASH) == digest and row.get(NOTES_OUTPUT_HASH) and not row.get('discarded'):
+        from pydantic import ValidationError
+
+        try:
+            candidate = Structured.model_validate(row.get('structured'))
+            if row[NOTES_OUTPUT_HASH] == output_fingerprint(candidate):
+                saved = candidate
+        except ValidationError:
+            pass  # An unusable optional checkpoint is an ordinary cache miss.
+    if saved is not None:
+        output = saved
         SKIPPED.labels(feature='notes').inc()
     else:
         output = generate(prefix, uid=uid, **kwargs)
     hashes[NOTES_HASH] = digest
+    hashes[NOTES_OUTPUT_HASH] = output_fingerprint(output)
     return output
+
+
+def output_fingerprint(output: Any) -> str:
+    return hashlib.sha256(
+        json.dumps(canonical(output), sort_keys=True, ensure_ascii=False, allow_nan=False).encode()
+    ).hexdigest()
+
+
+def invalidate_l1(uid: str, conversation: Any) -> bool:
+    """A flag-off successful replacement must not leave an older hash trusted.
+
+    Metadata only: no memory/transcript/output mutation. The update-time fence
+    preserves a newer checkpoint if a peer completed while this read was in flight.
+    """
+    from google.api_core.exceptions import FailedPrecondition, NotFound
+    from google.cloud import firestore
+    from database._client import get_firestore_client
+
+    client = get_firestore_client()
+    ref = client.collection('users').document(uid).collection('conversations').document(conversation.id)
+    snapshot = ref.get()
+    row = snapshot.to_dict() if snapshot.exists else None
+    if not row or not row.get(L1_HASH):
+        return False
+    try:
+        ref.update({L1_HASH: None}, option=firestore.LastUpdateOption(snapshot.update_time))
+    except (FailedPrecondition, NotFound):
+        return False
+    return True
 
 
 def l1_input(uid: str, conversation: Any, inputs: Any) -> tuple[str | None, bool]:
@@ -131,7 +174,7 @@ def l1_input(uid: str, conversation: Any, inputs: Any) -> tuple[str | None, bool
 
 def l1_succeeded(uid: str, conversation: Any, digest: str | None) -> bool:
     if digest is None:
-        return False
+        return invalidate_l1(uid, conversation)
     from google.cloud import firestore
     from database._client import get_firestore_client
 

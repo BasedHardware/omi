@@ -70,7 +70,7 @@ def test_l1_only_reuses_successful_exact_hash(enabled, monkeypatch):
         assert changed != digest and not matched
 
 
-def test_disabled_dedupe_preserves_calls_without_storage_or_hashing(monkeypatch):
+def test_disabled_dedupe_preserves_calls_and_invalidates_only_metadata(monkeypatch):
     monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'false')
     read = Mock(side_effect=AssertionError('must not read'))
     monkeypatch.setattr(dedupe, '_stored', read)
@@ -80,7 +80,10 @@ def test_disabled_dedupe_preserves_calls_without_storage_or_hashing(monkeypatch)
     assert dedupe.notes('u', conversation, 'prefix', generate, {}) == 'same'
     generate.assert_called_once_with('prefix', uid='u')
     assert dedupe.l1_input('u', conversation, object()) == (None, False)
+    invalidation = Mock(return_value=False)
+    monkeypatch.setattr(dedupe, 'invalidate_l1', invalidation)
     assert not dedupe.l1_succeeded('u', conversation, None)
+    invalidation.assert_called_once_with('u', conversation)
     read.assert_not_called()
 
 
@@ -181,3 +184,26 @@ def test_l1_failed_extraction_or_replacement_never_stamps(enabled, memory_stack,
     with pytest.raises(RuntimeError):
         pc._extract_memories_canonical('u', conversation, db_client=Mock())
     stamp.assert_not_called()
+
+
+def test_notes_checkpoint_does_not_describe_a_replaced_output(enabled, monkeypatch):
+    from models.conversation import Structured
+
+    generate = Mock(return_value=Structured(title='Original successful notes'))
+    hashes = {}
+    dedupe.notes('u', enabled, {'context': 'original transcript'}, generate, hashes)
+    # Another writer or a flag-off pass replaces the structure without an
+    # accompanying fingerprint update. Input A must not reuse output B.
+    row = {**hashes, 'structured': Structured(title='A different output').model_dump()}
+    monkeypatch.setattr(dedupe, '_stored', lambda *_: row)
+    dedupe.notes('u', enabled, {'context': 'original transcript'}, generate, {})
+    assert generate.call_count == 2
+
+
+def test_invalid_checkpoint_output_is_a_cache_miss(enabled, monkeypatch):
+    hashes = {}
+    generate = Mock(return_value='valid generated output')
+    dedupe.notes('u', enabled, 'input', generate, hashes)
+    monkeypatch.setattr(dedupe, '_stored', lambda *_: {**hashes, 'structured': 'invalid stored shape'})
+    assert dedupe.notes('u', enabled, 'input', generate, {}) == 'valid generated output'
+    assert generate.call_count == 2

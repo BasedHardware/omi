@@ -186,3 +186,16 @@ def test_loopback_worker_http_runs_current_transcript_once(store, monkeypatch):
         thread.join(timeout=10)
         listener.close()
         transcript.delete()
+
+
+def test_flag_off_success_invalidates_an_older_l1_checkpoint(store, monkeypatch):
+    client, uid, _ = store
+    conversation = SimpleNamespace(id='l1-rollback', sync_content_revision=1)
+    ref = client.collection('users').document(uid).collection('conversations').document(conversation.id)
+    try:
+        ref.set({'sync_content_revision': 1, dedupe.L1_HASH: 'input-a'})
+        monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'false')
+        assert dedupe.l1_succeeded(uid, conversation, None)
+        assert not ref.get().to_dict().get(dedupe.L1_HASH)
+    finally:
+        ref.delete()
