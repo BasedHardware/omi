@@ -225,12 +225,13 @@ def inventory(root: Path = ROOT) -> dict[str, dict[str, int]]:
     registry = json.loads((root / 'backend/runtime_images.json').read_text())
     bindings: dict[str, str] = registry['logging_chart_images']
     by_name = {c.name: c for c in contracts}
-    sources: dict[Path, dict[str, int]] = {}
+    sources: dict[str, dict[str, int]] = {}
 
-    def inspect(dockerfile: Path, context: Path, workdir: PurePosixPath, target: str) -> None:
+    def inspect(dockerfile: Path, context: Path, workdir: PurePosixPath, target: str, binding: str) -> None:
         source = source_path(dockerfile, context, workdir, target)
-        sources[source] = source_violations(source.read_text())
-        if not sources[source].get('missing_setup'):
+        key = f'{source.relative_to(root).as_posix()}::{binding}'
+        sources[key] = source_violations(source.read_text())
+        if not sources[key].get('missing_setup'):
             shared = copied_source(dockerfile, context, workdir, workdir / 'omi_logging.py')
             if shared != root / 'backend/omi_logging.py':
                 raise ValueError(f'{dockerfile}: shared omi_logging.py missing or shadowed')
@@ -243,19 +244,25 @@ def inventory(root: Path = ROOT) -> dict[str, dict[str, int]]:
         workdir, target = docker_launch(dockerfile)
         targets = set(contract.entrypoints if contract else ()) | {target}
         for target in targets:
-            inspect(dockerfile, context, workdir, target)
+            inspect(dockerfile, context, workdir, target, f'docker:{dockerfile.relative_to(root)}:{target}')
     # Helm overrides add application entrypoints independently of Docker CMD.
     for chart in (root / 'backend/charts').iterdir():
         if chart.name in ('deepgram-self-hosted', 'monitoring') or not chart.is_dir():
             continue
         for path in sorted(set(chart.rglob('*.yaml')) | set(chart.rglob('*.yml'))):
-            for target in helm_targets(path.read_text()):
+            for position, target in enumerate(helm_targets(path.read_text())):
                 if chart.name not in bindings or bindings[chart.name] not in by_name:
                     raise ValueError(f'{path}: Python launcher has no registered chart/image binding')
                 contract = by_name[bindings[chart.name]]
                 workdir, _ = docker_launch(contract.dockerfile)
-                inspect(contract.dockerfile, contract.build_context, workdir, target)
-    return {p.relative_to(root).as_posix(): v for p, v in sorted(sources.items())}
+                inspect(
+                    contract.dockerfile,
+                    contract.build_context,
+                    workdir,
+                    target,
+                    f'helm:{path.relative_to(root)}:{position}:{contract.name}:{target}',
+                )
+    return dict(sorted(sources.items()))
 
 
 def helm_targets(text: str) -> Iterator[str]:

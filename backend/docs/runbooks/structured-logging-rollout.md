@@ -81,11 +81,19 @@ not complete rates or billed-byte measurements. Roll back the affected image if
 signal is lost; retain widened filters through the rollback window.
 
 Diarizer adoption explicitly keeps general access logs: the live Gateway backend
-has logging disabled while its separate Ingress backend enables it. Historical
-request metrics also name a now-missing backend, so service-wide LB coverage is
-not proven. Recheck the active route and matching backend before suppressing it.
+has logging disabled while its separate Ingress backend enables it. Request metrics use the service network-endpoint-group name, which differs
+from the Compute backend-service name. Recheck the active route and matching backend before suppressing it.
 
 For diarizer, dispatch `gcp_diarizer.yml` from protected `main` with
 `environment=prod` and `branch=<full merged source SHA>`. The existing branch
 input controls checkout and the image tag comes from that checkout. Roll back
 through the same workflow using the recorded previous source SHA.
+
+NLLB records the currently serving immutable digest in the deployment annotation
+`omi.me/previous-image-digest` before each normal workflow rollout. To recover,
+dispatch the same `gcp_nllb_translation.yml` workflow with `environment=prod` and
+`rollback_digest=<recorded sha256 digest>`. This uses protected-main tooling,
+validates the receipt and registry artifact, and replays the existing image without
+rebuilding historical sources that predate the runtime-image registry. Rollback
+remains available when the new image fails readiness. Normal releases still build
+and smoke the image; both paths wait for rollout and strict deployment status.

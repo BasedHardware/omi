@@ -78,7 +78,7 @@ def test_real_fleet_inventory_matches_pending_and_includes_non_docker_overrides(
         'backend/utils/messaging/maintenance.py',
         'backend/scripts/finops/cloudrun_entry.py',
     ):
-        assert path in actual
+        assert any(key.split('::')[0] == path for key in actual)
 
 
 def test_helm_inline_block_and_shell_overrides():
@@ -243,3 +243,26 @@ def test_adjacent_shell_separators_cannot_hide_unknown_command(separator):
 def test_unresolved_helm_args_override_fails_closed(source):
     with pytest.raises(ValueError):
         list(guard.helm_targets(source))
+
+
+def test_new_binding_cannot_inherit_pending_source_exception(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    source = tmp_path / 'backend/service'
+    source.mkdir(parents=True)
+    (source / 'main.py').write_text('')
+    docker = source / 'Dockerfile'
+    docker.write_text('FROM python\nWORKDIR /app\nCOPY backend/service/main.py ./main.py\nCMD ["python", "main.py"]')
+    (tmp_path / 'backend/charts').mkdir()
+    (tmp_path / 'backend/runtime_images.json').write_text(json.dumps({'logging_chart_images': {}}))
+    contract = SimpleNamespace(
+        name='test', source_root=source, dockerfile=docker, build_context=tmp_path, entrypoints=('main',)
+    )
+    monkeypatch.setattr(guard, 'load_contracts', lambda: [contract])
+    monkeypatch.setattr(guard, 'ROOT', tmp_path)
+    pending = guard.inventory(tmp_path)
+    (source / 'Dockerfile.new').write_text(docker.read_text())
+    actual = guard.inventory(tmp_path)
+    assert len(actual) == len(pending) + 1
+    assert guard.check_pending(actual, pending, pending)
+    assert guard.check_pending(actual, actual, pending)
