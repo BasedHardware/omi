@@ -6,5 +6,7 @@ metadata:
   name: grafana-private-embed
   namespace: prod-omi-monitoring
 spec:
+  # Isolated Infinity can wait420s; keep the external path above that budget.
+  timeoutSec: 480
   logging:
     enable: false
