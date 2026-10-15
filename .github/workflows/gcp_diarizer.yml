@@ -16,7 +16,7 @@ on:
           - development
           - prod
       branch:
-        description: 'Source ref (prod: main or a full merged commit SHA)'
+        description: 'Branch to deploy from'
         required: true
         default: 'main'
       release_version:
