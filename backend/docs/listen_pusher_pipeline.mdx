@@ -4816,3 +4816,7 @@ labels are added. Optional final-pass logs now include `lane` and
 `duration_seconds`, covering decoding, embedding triage, diarization and naming
 inside the adapter. These times exclude the preceding WAV download and are
 not whole-job latency. See [drain qualification](runbooks/sync-legacy-fresh-drain.md).
+
+### Historical sync queue retirement
+
+Backfill ownership and expired-head retirement are defined in [the two-lane runbook](runbooks/sync-two-lane.md#expired-head-retirement-train-1). Under `SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM`, Redis-absent unbound waiting work is retired transactionally before dispatch, with a bounded loop and a per-job run lock. Dispatching owners are reconciled under the same guard; running/bound work remains protected. Retirement emits `sync_backfill_expired_retired` and never counts as completed transcription or deletes client audio. Flutter/macOS retain queued WAL audio for completion or 404-triggered re-upload.

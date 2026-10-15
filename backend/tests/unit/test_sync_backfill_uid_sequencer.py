@@ -10,6 +10,7 @@ import pytest
 import fakeredis
 from google.cloud import firestore
 
+from database import sync_jobs
 from database import sync_backfill_sequencer as registry
 from database.sync_jobs import is_sync_job_stale
 from utils.sync import uid_sequencer
@@ -34,6 +35,8 @@ class _Ref:
         self.id = path[-1]
 
     def get(self, transaction=None):
+        if transaction is not None:
+            assert not transaction.wrote, "read after transaction write"
         return _Snapshot(self.path, self.client.docs.get(self.path))
 
     def collection(self, name):
@@ -63,6 +66,8 @@ class _Query:
         return _Query(self.client, self.path, self.field, self.maximum, self.order, count, self.equals)
 
     def stream(self, transaction=None):
+        if transaction is not None:
+            assert not transaction.wrote, "query after transaction write"
         rows = [(path, value) for path, value in self.client.docs.items() if path[:-1] == self.path]
         if self.field:
             rows = [(path, value) for path, value in rows if value.get(self.field) <= self.maximum]
@@ -82,14 +87,18 @@ class _Collection(_Query):
 class _Transaction:
     def __init__(self, client):
         self.client = client
+        self.wrote = False
 
     def set(self, ref, data, merge=False):
+        self.wrote = True
         self.client.write(ref.path, data, merge=merge)
 
     def update(self, ref, data):
+        self.wrote = True
         self.client.write(ref.path, data, merge=True)
 
     def delete(self, ref):
+        self.wrote = True
         self.client.docs.pop(ref.path, None)
 
 
@@ -344,7 +353,7 @@ def test_pending_sweep_rotates_heavy_uid_and_reaches_light_uid(db, monkeypatch):
         _register('heavy', f'a-{index:03d}', index, db=db)
     _register('light', 'z-light', 0, db=db)
     calls = []
-    monkeypatch.setattr(uid_sequencer, 'kick', lambda uid: calls.append(uid) or False)
+    monkeypatch.setattr(uid_sequencer, 'kick', lambda uid, **_kwargs: calls.append(uid) or False)
     monkeypatch.setattr(registry, 'due_owners', lambda **_kwargs: [])
     monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: None)
     monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
@@ -390,3 +399,130 @@ def test_named_wake_task_is_scheduled_for_cutover_deadline(monkeypatch):
     cloud_tasks.enqueue_named_task('sync', 'https://backend-sync.example/wake', 'wake', {'uid': 'u'}, schedule_at=12345)
     task = fake.create_task.call_args.kwargs['task']
     assert task.schedule_time.timestamp() == 12345
+
+
+@pytest.fixture
+def retirement(db, monkeypatch):
+    monkeypatch.setenv('SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM', 'true')
+    monkeypatch.setattr(uid_sequencer, 'sync_job_key_exists', lambda job_id: job_id == 'live')
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda job_id: 'retirement-token')
+    monkeypatch.setattr(uid_sequencer, 'release_job_run_lock', MagicMock())
+    return db
+
+
+def test_expired_head_is_retired_then_live_job_claimed(retirement, monkeypatch, caplog):
+    _register('a', 'expired', 0, db=retirement)
+    _register('a', 'live', 1, db=retirement)
+    with caplog.at_level('INFO'):
+        claim = uid_sequencer._claim_next('a')
+    assert claim['job_id'] == 'live'
+    assert (registry.PENDING_COLLECTION, 'expired') not in retirement.docs
+    assert 'event=sync_backfill_expired_retired' in caplog.text
+    uid_sequencer.release_job_run_lock.assert_called_once_with('expired', 'retirement-token')
+
+
+def test_redis_failure_never_retires_or_claims(retirement, monkeypatch):
+    _register('a', 'expired', 0, db=retirement)
+    before = copy.deepcopy(retirement.docs)
+    monkeypatch.setattr(uid_sequencer, 'sync_job_key_exists', MagicMock(side_effect=ConnectionError))
+    with pytest.raises(ConnectionError):
+        uid_sequencer._claim_next('a')
+    assert retirement.docs == before
+
+
+def test_present_key_and_held_run_lock_never_retire(retirement, monkeypatch):
+    for job_id in ('live', 'locked'):
+        _register(job_id, job_id, 0, db=retirement)
+        monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda job: None)
+        assert uid_sequencer._claim_next(job_id)['job_id'] == job_id
+        assert registry.get_owner(job_id)['active_job_id'] == job_id
+    uid_sequencer.release_job_run_lock.assert_not_called()
+
+
+def test_redis_recheck_failure_releases_lock_and_preserves_pending(retirement, monkeypatch):
+    _register('a', 'expired', 0, db=retirement)
+    before = copy.deepcopy(retirement.docs)
+    monkeypatch.setattr(uid_sequencer, 'sync_job_key_exists', MagicMock(side_effect=[False, ConnectionError()]))
+    with pytest.raises(ConnectionError):
+        uid_sequencer._claim_next('a')
+    assert retirement.docs == before
+    uid_sequencer.release_job_run_lock.assert_called_once()
+
+
+def test_reappearing_job_is_not_retired(retirement, monkeypatch):
+    _register('a', 'expired', 0, db=retirement)
+    monkeypatch.setattr(uid_sequencer, 'sync_job_key_exists', MagicMock(side_effect=[False, True]))
+    assert uid_sequencer._claim_next('a')['job_id'] == 'expired'
+    assert registry.get_owner('a')['active_job_id'] == 'expired'
+
+
+def test_retirement_loop_is_bounded_and_never_dispatches_expired_51st(retirement):
+    for index in range(51):
+        _register('a', f'old-{index:03}', index, db=retirement)
+    assert uid_sequencer._claim_next('a') is None
+    assert len(retirement.docs) == 1
+    assert registry.pending_head('a')['job_id'] == 'old-050'
+    assert registry.get_owner('a') == {}
+
+
+@pytest.mark.parametrize(
+    'claim,retired,released',
+    [
+        ({'status': 'processing', 'job_id': 'old'}, True, True),
+        ({'status': 'processing', 'job_id': 'new'}, True, False),
+        ({'status': 'completed', 'job_id': 'old'}, False, False),
+        ({'status': 'processing', 'job_id': 'old', 'ledger_run_token': 'bound'}, False, False),
+        ({'status': 'processing', 'job_id': 'old', 'ledger_run_epoch': 2}, False, False),
+    ],
+)
+def test_retirement_only_releases_exact_unbound_claim(db, claim, retired, released):
+    _register('a', 'old', 0, db=db)
+    db.docs[(registry.PENDING_COLLECTION, 'old')]['payload']['content_id'] = 'content'
+    path = ('users', 'a', 'sync_content_ledger', 'content')
+    db.docs[path] = {**claim, 'partial_result': {'checkpoint': 'preserve'}}
+    before = copy.deepcopy(db.docs[path])
+    assert registry.retire_expired('a', 'old', firestore_client=db, now=NOW) is retired
+    if released:
+        assert db.docs[path]['status'] == 'retryable'
+        assert 'job_id' not in db.docs[path]
+        assert db.docs[path]['partial_result'] == before['partial_result']
+    else:
+        assert db.docs[path] == before
+    assert ((registry.PENDING_COLLECTION, 'old') not in db.docs) is retired
+
+
+def test_flag_off_keeps_claim_identity_and_skips_redis(db, monkeypatch):
+    monkeypatch.setenv('SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM', 'false')
+    _register('a', 'old', 0, db=db)
+    monkeypatch.setattr(uid_sequencer, 'sync_job_key_exists', MagicMock(side_effect=AssertionError('Redis read')))
+    claim = uid_sequencer._claim_next('a')
+    assert claim['job_id'] == 'old' and claim['epoch'] == 1
+    assert registry.get_owner('a')['active_state'] == 'dispatching'
+
+
+def test_sweep_retires_missing_dispatching_owner_before_deadline(retirement, monkeypatch):
+    _register('a', 'expired', 0, db=retirement)
+    _register('a', 'live', 1, db=retirement)
+    registry.claim_next('a', now=NOW)
+    dispatched = []
+    monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
+    assert uid_sequencer.reconcile_uid('a', registry.get_owner('a'), now=NOW) == 'expired_retired'
+    assert dispatched[0]['job_id'] == 'live'
+
+
+def test_retirement_preserves_running_owner_and_stale_epoch(db):
+    _register('a', 'old', 0, db=db)
+    claim = registry.claim_next('a', now=NOW)
+    assert not registry.retire_expired('a', 'old', epoch=claim['epoch'] + 1)
+    assert registry.begin_job('a', 'old', claim['epoch'], now=NOW)
+    assert not registry.retire_expired('a', 'old', epoch=claim['epoch'])
+    assert registry.get_owner('a')['active_state'] == 'running'
+
+
+def test_raw_job_existence_does_not_parse_corrupt_json(monkeypatch):
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(sync_jobs, 'r', redis)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    redis.set('sync_job:corrupt', b'{not-json')
+    assert sync_jobs.sync_job_key_exists('corrupt')
+    assert not sync_jobs.sync_job_key_exists('missing')

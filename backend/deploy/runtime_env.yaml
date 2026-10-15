@@ -914,6 +914,7 @@ environments:
               provisional: true
               value: 'on'
               category: rollout
+            SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {value: 'false', category: rollout}
             USE_VERTEX_AI:
               value: 'true'
             STT_PRERECORDED_MODEL:
@@ -1129,6 +1130,7 @@ environments:
               provisional: true
               value: 'on'
               category: rollout
+            SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {value: 'false', category: rollout}
             USE_VERTEX_AI:
               value: 'true'
             STT_PRERECORDED_MODEL:
@@ -2801,6 +2803,7 @@ environments:
               provisional: true
               value: 'on'
               category: rollout
+            SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {value: 'true', category: rollout}
             USE_VERTEX_AI:
               value: 'true'
             STT_PRERECORDED_MODEL:
@@ -3063,6 +3066,7 @@ environments:
               provisional: true
               value: 'on'
               category: rollout
+            SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {value: 'true', category: rollout}
             USE_VERTEX_AI:
               value: 'true'
             STT_PRERECORDED_MODEL:

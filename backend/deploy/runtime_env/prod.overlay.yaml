@@ -777,6 +777,9 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
+            value: 'true'
+            category: rollout
           <<: *batch_cohort
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
@@ -957,6 +960,9 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
+            value: 'true'
+            category: rollout
           <<: *batch_cohort
           OMI_SHAPED_AGENT_MODE:
             value: 'on'

@@ -2041,8 +2041,9 @@ _add(
         covered_by=(
             'database.sync_backfill_sequencer.claim_next',
             'database.sync_backfill_sequencer.has_pending',
+            'database.sync_backfill_sequencer.pending_head',
         ),
-        reason='transactional claim probe observed inside both listed consumers',
+        reason='oldest-pending probe observed inside the listed claim, inspection and presence consumers',
     )
 )
 _add(
@@ -2083,6 +2084,7 @@ _add(
         patchers=_SYNC_PROD,
     )
 )
+_add(DriverEntry('database.sync_backfill_sequencer.pending_head', base={'uid': UID}, patchers=_SYNC_PROD))
 _add(DriverEntry('database.sync_backfill_sequencer.has_pending', base={'uid': UID}, patchers=_SYNC_PROD))
 _add(
     DriverEntry(
