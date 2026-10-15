@@ -109,6 +109,7 @@ _SYS_MODULE_NAMES = [
     "database.action_items",
     "database.notifications",
     "utils",
+    "utils.model_text",
     "utils.notifications",
     "utils.byok",
     "utils.llm",
@@ -277,6 +278,7 @@ _stub_package("utils.retrieval.tools")
 _stub_package("utils.messaging")
 _stub_package("utils.llm")
 _stub_package("utils.conversations")
+_load_module_from_file("utils.model_text", BACKEND_DIR / "utils" / "model_text.py")
 
 # Stub utils.conversations.render (action_item_tools imports resolve_display_tz, format_local_time)
 _render_stub = _stub_module("utils.conversations.render")

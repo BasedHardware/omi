@@ -3,7 +3,15 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+import pytest
+
 import utils.retrieval.tool_services.memories as memory_services
+from database import notifications
+
+
+@pytest.fixture(autouse=True)
+def _fixed_timezone(monkeypatch):
+    monkeypatch.setattr(notifications, "get_user_time_zone", lambda _uid: "UTC")
 
 
 def test_tools_rest_get_memories_text_uses_universal_service_for_arbitrary_uid(monkeypatch):
@@ -101,7 +109,6 @@ def test_tools_rest_search_memories_text_uses_universal_service_and_preserves_fo
             return [SimpleNamespace(memory=memory, score=0.91)]
 
     monkeypatch.setattr(memory_services, "MemoryService", _UniversalService)
-    monkeypatch.setattr(memory_services.notification_db, "get_user_time_zone", lambda _uid: "UTC")
 
     result = memory_services.search_memories_text(uid="uid-arbitrary-account", query="coffee", limit=100)
 
@@ -119,7 +126,6 @@ def test_tools_rest_search_memories_text_preserves_empty_result(monkeypatch):
             return []
 
     monkeypatch.setattr(memory_services, "MemoryService", _UniversalService)
-    monkeypatch.setattr(memory_services.notification_db, "get_user_time_zone", lambda _uid: "UTC")
     assert (
         memory_services.search_memories_text(uid="uid-arbitrary-account", query="coffee")
         == "No memories found matching 'coffee'."

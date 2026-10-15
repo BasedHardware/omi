@@ -479,12 +479,8 @@ def get_current_datetime_block(uid: str, tz: Optional[str] = None, location: Opt
     """
     if tz is None:
         tz = get_user_timezone(uid)
-    try:
-        current_datetime_user = datetime.now(ZoneInfo(tz))
-    except Exception:
-        current_datetime_user = datetime.now(timezone.utc)
-        tz = "UTC"
-    clock = DisplayClock.from_name(tz)
+    clock = DisplayClock.from_name(tz)  # falls back to labelled UTC for a missing or invalid zone
+    current_datetime_user, tz = datetime.now(clock.tz), clock.name
     current_datetime_str = format_instant(current_datetime_user, clock)
     current_datetime_iso = current_datetime_user.isoformat()  # self-describing: ISO-8601 with offset
     location_line = f"Current city-level location: {escape(location, quote=False)}\n" if location else ""
@@ -1213,9 +1209,8 @@ def retrieve_metadata_fields_from_transcript(
             context_parts.append(f"Conversation Transcript:\n```\n{transcript.strip()}\n```")
 
     if photos:
-        photo_descriptions = ConversationPhoto.photos_as_string(
-            photos, include_timestamps=True, clock=DisplayClock.from_name(tz)
-        )
+        clock = DisplayClock.from_name(tz)
+        photo_descriptions = ConversationPhoto.photos_as_string(photos, include_timestamps=True, clock=clock)
         if photo_descriptions != 'None':
             context_parts.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
 

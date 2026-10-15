@@ -115,10 +115,12 @@ async def test_gmail_tool_exercises_async_interface_and_refreshes_once(gmail_mod
     monkeypatch.setattr(gmail_module, "get_gmail_messages", fake_get_gmail_messages)
     monkeypatch.setattr(gmail_module, "refresh_google_token", fake_refresh)
 
-    result = await gmail_module.get_gmail_messages_tool.coroutine(query="subject:async", config={})
+    result = await gmail_module.get_gmail_messages_tool.coroutine(
+        query="subject:async", config={"configurable": {"user_timezone": "UTC"}}
+    )
 
     assert calls == ["old-token", "new-token"]
-    assert "Gmail Messages (1 found)" in result
+    assert "Gmail Messages (1 found, Gmail search order)" in result
     assert "Async" in result
 
 

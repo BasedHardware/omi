@@ -3,8 +3,9 @@
 An ad-hoc ``strftime``/``isoformat`` in a chat or MCP tool is how an unlabelled UTC wall clock
 reached the model and turned a 2:18 PM event into "7:18 a.m." (see ``utils/model_text.py``).
 
-A line is exempt when it carries ``# not-model-facing: <reason>``: API request parameters,
-client payloads, log lines. ``BASELINE`` holds the pre-existing calls per file; it may only go
+A line is exempt when it carries ``# not-model-facing: <reason>`` (API request parameters,
+client payloads, log lines) or ``# self-describing: <reason>`` (model-facing, but the value
+already carries its zone, e.g. an ISO-8601 string with an offset). ``BASELINE`` holds the pre-existing calls per file; it may only go
 down. When you remove calls, lower the number in the same change.
 """
 
@@ -24,27 +25,10 @@ MODEL_FACING_GLOBS = (
 )
 
 _CALL = re.compile(r'\.(strftime|isoformat)\(')
-_EXEMPT = '# not-model-facing:'
+_EXEMPT = ('# not-model-facing:', '# self-describing:')
 
 BASELINE = {
     'routers/tools.py': 3,
-    'utils/conversations/render.py': 6,
-    'utils/conversations/transcript_chunks.py': 1,
-    'utils/llm/chat.py': 4,
-    'utils/retrieval/tool_services/action_items.py': 10,
-    'utils/retrieval/tool_services/conversations.py': 3,
-    'utils/retrieval/tool_services/memories.py': 4,
-    'utils/retrieval/tools/action_item_tools.py': 17,
-    'utils/retrieval/tools/apple_health_tools.py': 6,
-    'utils/retrieval/tools/calendar_tools.py': 28,
-    'utils/retrieval/tools/conversation_jit.py': 1,
-    'utils/retrieval/tools/conversation_tools.py': 7,
-    'utils/retrieval/tools/edit_tools.py': 1,
-    'utils/retrieval/tools/entity_timeline_tools.py': 2,
-    'utils/retrieval/tools/gmail_tools.py': 1,
-    'utils/retrieval/tools/knowledge_ledger_tools.py': 1,
-    'utils/retrieval/tools/memory_tools.py': 6,
-    'utils/retrieval/tools/screen_activity_tools.py': 1,
 }
 
 
@@ -56,7 +40,7 @@ def _counts():
             n = sum(
                 1
                 for line in path.read_text(encoding='utf-8').splitlines()
-                if _CALL.search(line) and _EXEMPT not in line
+                if _CALL.search(line) and not any(marker in line for marker in _EXEMPT)
             )
             if n:
                 counts[rel] = n
