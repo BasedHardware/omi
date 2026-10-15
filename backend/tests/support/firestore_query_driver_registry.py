@@ -127,9 +127,9 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
-    'database.batch_pipeline_store.FirestoreStore.oldest': '46202441b59dfb6a878bb1571be4c04b094a30110b8dc2af6351c96a86d14e6a',
-    'database.batch_pipeline_store.FirestoreStore.due': 'a122cbb68303e136d2721efaab34739a66fcc882634b9448a63d8320ad4a87e7',
-    'database.batch_pipeline_store.FirestoreTransaction.first_pending': '97a1fed292df7a57f6fc815cdacb16d6cc0b661c06fd047b9c1a43b34cdd3312',
+    'database.batch_pipeline_store.FirestoreStore.oldest': 'ce672d79f4c8c453f5096d0ff9a6a074277caff55c0ae5cb80900698125f0327',
+    'database.batch_pipeline_store.FirestoreStore.due': '6082abc15cee6736e23fa3554fbaa74ce65f751082a884e67416eda0757bc5ea',
+    'database.batch_pipeline_store.FirestoreTransaction.first_pending': '48a4a9544add4433487df790e5884203eec835b9f8b16ed977c4743b88b596ea',
     'database.dream_scheduler.discover': 'c0e27c29293523fa0ddf6095c56b0502810590259e28ce80c43e0ac4bc826789',
     'database.proactivity_producers.mentor_history_query': '716c4f332e0ff0cf6fda3bcea41f479ce3bb7eb2956c8bfe37c61e0baabbfdb3',
     'database.proactivity_producers.recent_mentor_query': 'dc28a1084121daa40a430764d1c638ec4fe090e66dff499e0bec152444035dee',

@@ -163,3 +163,9 @@ lead must obtain READY receipts before serving the new queries. No backlog
 migration, production writes, deploy, chart change or real-user acceptance is
 part of A's implementation receipt. Integrate and qualify the serving pump,
 content-ledger/conversation projection and deletion paths before enabling intake.
+
+Strict priority is a **compute admission** guarantee. Within one owner, an
+unfinished earlier backfill item still blocks publication of later fresh results.
+Fresh publication latency therefore needs a separately ratified bounded merge
+window/stream policy if it must overtake that owner's backlog; this PR does not
+silently weaken capture ordering to make that claim.
