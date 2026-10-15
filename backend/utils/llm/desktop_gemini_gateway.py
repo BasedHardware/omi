@@ -11,11 +11,14 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncIterator, Awaitable, Mapping
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any, TypeVar
 from uuid import UUID, NAMESPACE_URL, uuid5
 
 from fastapi import HTTPException
+from fastapi.responses import StreamingResponse
+from starlette.types import Receive, Scope, Send
 
 import httpx
 
@@ -37,6 +40,9 @@ DESKTOP_GATEWAY_TIMEOUT_SECONDS = 75.0
 # error while the handler can still finish. Anchor the clock to proxy admission
 # (`ProxyTelemetry.started`), not to the first SSE read.
 DESKTOP_STREAM_DEADLINE_SECONDS = 270.0
+# Releasing the upstream stream after a send-path deadline hit still does
+# network I/O; bound that teardown so it cannot itself reach Cloud Run's kill.
+STREAM_CLOSE_GRACE_SECONDS = 5.0
 # BYOK keeps its historical output ceiling; server-paid clamps lower in the proxy.
 _MAX_OUTPUT_TOKENS = 8192
 _DEFAULT_THINKING_BUDGET = 1024
@@ -82,6 +88,53 @@ async def iter_before_deadline(source: AsyncIterator[_T], deadline: float) -> As
             yield await await_before_deadline(anext(iterator), deadline)
         except StopAsyncIteration:
             return
+
+
+class StreamSendDeadlineExceeded(Exception):
+    """A downstream ASGI send hit the admission-anchored stream deadline.
+
+    Deliberately not a ``TimeoutError``: that subclasses ``OSError``, which
+    Starlette's streaming response reclassifies as ``ClientDisconnect`` before
+    this side can record the terminal event.
+    """
+
+
+class DeadlineStreamingResponse(StreamingResponse):
+    """``StreamingResponse`` whose downstream ASGI sends also stop at the deadline.
+
+    ``iter_before_deadline`` arms the wall clock only while awaiting the next
+    upstream chunk. A slow-but-connected desktop client blocks the ASGI send
+    while the body generator stays suspended at its yield, so that clock never
+    fires and the provider connection survives until Cloud Run's 300s request
+    kill. Bounding every send by the remaining budget ends the request on the
+    same admission-anchored wall clock, records the terminal event, and closes
+    the body iterator so the upstream stream and provider slot are released.
+    """
+
+    def __init__(self, content: Any, *, deadline: float, telemetry: Any, **kwargs: Any) -> None:
+        super().__init__(content, **kwargs)
+        self._deadline = deadline
+        self._telemetry = telemetry
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        async def send_before_deadline(message: Any) -> None:
+            try:
+                await await_before_deadline(send(message), self._deadline)
+            except TimeoutError as exc:
+                raise StreamSendDeadlineExceeded from exc
+
+        try:
+            await super().__call__(scope, receive, send_before_deadline)
+        except StreamSendDeadlineExceeded:
+            # The response is already mid-flight to a client that stopped
+            # reading, so the terminal evidence is the telemetry event plus the
+            # connection close this re-raise produces.
+            self._telemetry.complete(outcome='provider_deadline_exceeded', status_code=504, retryable=False)
+            aclose = getattr(self.body_iterator, 'aclose', None)
+            if aclose is not None:
+                with suppress(Exception):
+                    await asyncio.wait_for(aclose(), STREAM_CLOSE_GRACE_SECONDS)
+            raise
 
 
 class DesktopGeminiGatewayError(Exception):
@@ -904,7 +957,7 @@ async def proxy_company_paid_via_gateway(
     envelope: ProxyEnvelope,
 ):
     """Company-paid hop through the LLM gateway; the desktop proxy stays the BFF."""
-    from fastapi.responses import Response, StreamingResponse
+    from fastapi.responses import Response
 
     telemetry.provider = 'llm_gateway'
     telemetry.credential_source = 'omi_gateway'
@@ -936,10 +989,9 @@ async def proxy_company_paid_via_gateway(
 
             async def stream_gateway():
                 observation = envelope.stream_observation_factory()
+                source = gateway_desktop_chat_stream(body, model=model, uid=uid, deadline=deadline, **attribution)
                 try:
-                    async for chunk in gateway_desktop_chat_stream(
-                        body, model=model, uid=uid, deadline=deadline, **attribution
-                    ):
+                    async for chunk in source:
                         observation.observe(chunk)
                         yield chunk
                     if observation.has_error or not observation.has_terminal:
@@ -980,9 +1032,19 @@ async def proxy_company_paid_via_gateway(
                     yield envelope.stream_error_event(
                         code='provider_transport_error', phase='gateway', telemetry=telemetry
                     )
+                finally:
+                    # A send-path deadline hit closes this generator mid-yield;
+                    # cascade so the gateway hop releases its upstream stream
+                    # and semaphore deterministically instead of at GC.
+                    source_aclose = getattr(source, 'aclose', None)
+                    if source_aclose is not None:
+                        with suppress(Exception):
+                            await source_aclose()
 
-            return StreamingResponse(
+            return DeadlineStreamingResponse(
                 stream_gateway(),
+                deadline=deadline,
+                telemetry=telemetry,
                 media_type='text/event-stream',
                 headers=envelope.response_headers(telemetry),
             )

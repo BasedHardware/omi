@@ -1593,6 +1593,87 @@ async def test_streaming_error_body_stops_at_the_wall_clock(monkeypatch):
     assert event["outcome"] == "provider_deadline_exceeded"
 
 
+@pytest.mark.asyncio
+async def test_stream_deadline_ends_slow_downstream_sends(monkeypatch):
+    class UpstreamResponse:
+        status_code = 200
+
+        async def aiter_bytes(self):
+            while True:
+                await asyncio.sleep(0.01)
+                yield b'data: {"candidates":[{"content":{"parts":[{"text":"x"}}]}}\n\n'
+
+    class StreamContext:
+        def __init__(self):
+            self.closed = False
+
+        async def __aenter__(self):
+            return UpstreamResponse()
+
+        async def __aexit__(self, *_args):
+            self.closed = True
+
+    opened: list[StreamContext] = []
+
+    class Client:
+        def stream(self, *args, **kwargs):
+            context = StreamContext()
+            opened.append(context)
+            return context
+
+    async def meter(_uid, path, _model, _action):
+        return path
+
+    async def route(_path, _model, _action, _query):
+        return desktop_proxy.UpstreamRoute("https://provider.invalid", {}, {}, "vertex_ai", "adc", "us-central1")
+
+    async def await_upstream(_request, awaitable):
+        return await awaitable
+
+    _set_gemini_byok(monkeypatch, 'user-key')
+    monkeypatch.setattr(desktop_proxy.desktop_gemini_gateway, "DESKTOP_STREAM_DEADLINE_SECONDS", 0.1)
+    monkeypatch.setattr(desktop_proxy, "_meter_server_request", meter)
+    monkeypatch.setattr(desktop_proxy, "_upstream", route)
+    monkeypatch.setattr(desktop_proxy, "_cancel_on_disconnect", await_upstream)
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_stream_client", lambda: Client())
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_semaphore", lambda: asyncio.Semaphore(1))
+    output = io.StringIO()
+    monkeypatch.setattr(desktop_proxy.sys, "stdout", output)
+
+    response = await desktop_proxy._proxy(
+        make_request(workload="interactive"), "models/gemini-2.5-flash:streamGenerateContent", True, "user"
+    )
+    assert isinstance(response, desktop_proxy.desktop_gemini_gateway.DeadlineStreamingResponse)
+
+    # A slow-but-connected desktop client: the start message and first body
+    # chunk drain, then the client stops reading while staying connected.
+    delivered: list[dict] = []
+    never = asyncio.Event()
+
+    async def send(message):
+        delivered.append(message)
+        bodies = [item for item in delivered if item["type"] == "http.response.body"]
+        if len(bodies) > 1:
+            await never.wait()
+
+    async def receive():
+        await never.wait()
+
+    # The upstream keeps producing, so iter_before_deadline never fires here;
+    # only a deadline on the send path itself can end this request.
+    with pytest.raises(desktop_proxy.desktop_gemini_gateway.StreamSendDeadlineExceeded):
+        await response({"type": "http", "asgi": {"spec_version": "2.4"}}, receive, send)
+
+    assert delivered[0]["type"] == "http.response.start"
+    assert any(item["type"] == "http.response.body" and item["body"] for item in delivered)
+    event = json.loads(output.getvalue())
+    assert event["outcome"] == "provider_deadline_exceeded"
+    assert event["phase"] == "body"
+    # The send-path teardown must close the upstream provider stream instead of
+    # leaving it for GC while Cloud Run's request timeout keeps ticking.
+    assert opened and opened[0].closed
+
+
 @pytest.fixture(autouse=True)
 def _reset_pt_promotion_state(monkeypatch):
     """Observed capacity and learned reachability are module state; never leak

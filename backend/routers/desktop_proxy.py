@@ -1204,7 +1204,7 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
             if route.provider == 'vertex_ai' and action == 'embedContent':
                 body = _vertex_embedding_request(body)
             if streaming:
-                return StreamingResponse(
+                return desktop_gemini_gateway.DeadlineStreamingResponse(
                     _stream_provider(
                         request,
                         route,
@@ -1214,6 +1214,8 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
                         action=action,
                         query=dict(request.query_params),
                     ),
+                    deadline=desktop_gemini_gateway.admission_deadline(telemetry),
+                    telemetry=telemetry,
                     media_type='text/event-stream',
                     headers=_response_headers(telemetry),
                 )

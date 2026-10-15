@@ -452,6 +452,67 @@ async def test_gateway_stream_idle_timeout_stays_provider_timeout(monkeypatch):
     assert completed['outcome'] == 'provider_timeout'
 
 
+@pytest.mark.asyncio
+async def test_gateway_stream_deadline_ends_slow_downstream_sends(monkeypatch):
+    source_closed = {'closed': False}
+
+    async def fast_source(*_args, **_kwargs):
+        try:
+            while True:
+                yield b'data: {"candidates":[{"content":{"parts":[{"text":"x"}}]}}\n\n'
+                await asyncio.sleep(0)
+        finally:
+            source_closed['closed'] = True
+
+    monkeypatch.setattr(dgg, 'DESKTOP_STREAM_DEADLINE_SECONDS', 0.1)
+    monkeypatch.setattr(dgg, 'gateway_desktop_chat_stream', fast_source)
+    completed: dict = {}
+    telemetry = SimpleNamespace(
+        started=asyncio.get_running_loop().time(),
+        complete=lambda **kwargs: completed.update(kwargs),
+        request_id='11111111-1111-1111-1111-111111111111',
+        lane='focus',
+        client_platform='macos',
+        phase='gateway',
+    )
+    events: list[str] = []
+    response = await dgg.proxy_company_paid_via_gateway(
+        None,
+        b'{"contents":[{"parts":[{"text":"hi"}]}]}',
+        model='gemini-2.5-flash',
+        action='streamGenerateContent',
+        streaming=True,
+        uid='synthetic-user',
+        telemetry=telemetry,
+        envelope=_gateway_stream_envelope(events),
+    )
+    assert isinstance(response, dgg.DeadlineStreamingResponse)
+
+    # The gateway keeps producing, so only a deadline on the response-send
+    # path can end this request once the client stops reading mid-body.
+    delivered: list[dict] = []
+    never = asyncio.Event()
+
+    async def send(message):
+        delivered.append(message)
+        bodies = [item for item in delivered if item['type'] == 'http.response.body']
+        if len(bodies) > 1:
+            await never.wait()
+
+    async def receive():
+        await never.wait()
+
+    with pytest.raises(dgg.StreamSendDeadlineExceeded):
+        await response({'type': 'http', 'asgi': {'spec_version': '2.4'}}, receive, send)
+
+    assert delivered[0]['type'] == 'http.response.start'
+    assert any(item['type'] == 'http.response.body' and item['body'] for item in delivered)
+    assert completed['outcome'] == 'provider_deadline_exceeded'
+    # The send-path teardown must close the gateway hop (releasing its upstream
+    # stream and semaphore) instead of leaving it for GC.
+    assert source_closed['closed'] is True
+
+
 def test_lane_selection_covers_every_desktop_text_model():
     assert dgg.desktop_gateway_text_lane('gemini-2.5-flash') == 'omi:auto:desktop-vertex-flash'
     assert dgg.desktop_gateway_text_lane('gemini-2.5-pro') == 'omi:auto:desktop-vertex-pro'
