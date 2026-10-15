@@ -77,6 +77,9 @@
   .fine { padding-top:10px; text-align:center; font-size:12px; font-weight:500; color:var(--text3); }
   .hidden { display:none !important; }
 </style>
+<script>window.omiTrack = function () {}; // replaced by track.js; the page works without it</script>
+<script>window.OMI_PAYWALL_VERSION = 'steps';</script>
+<script src="/track.js"></script>
 </head>
 <body>
   <button class="close" id="free" type="button" aria-label="Use Free Plan">
@@ -216,26 +219,39 @@
   }
 
   // Slide indicators follow the swipe.
-  var slides = $('slides');
+  var slides = $('slides'), seenSlides = { 0: true };
   slides.addEventListener('scroll', function () {
     var i = Math.round(slides.scrollLeft / slides.clientWidth);
+    if (!seenSlides[i]) { seenSlides[i] = true; omiTrack('Web Paywall Slide Viewed', { slide: i + 1 }); }
     Array.prototype.forEach.call($('indicators').children, function (dot, j) { dot.classList.toggle('on', j === i); });
   }, { passive: true });
 
   ['yearly', 'monthly'].forEach(function (id) {
-    $(id).addEventListener('click', function () { selected = this.dataset.interval; render(); });
+    $(id).addEventListener('click', function () {
+      selected = this.dataset.interval; render();
+      omiTrack('Web Paywall Plan Selected', { interval: selected });
+    });
   });
   $('cta').addEventListener('click', function () {
-    if (step < 2) { step++; render(); return; }
+    if (step < 2) { step++; render(); omiTrack('Web Paywall Step Viewed', { step: step + 1 }); return; }
     this.disabled = true;
+    omiTrack('Web Paywall Checkout Tapped', { interval: selected });
     send({ type: 'checkout', interval: selected });
   });
-  $('free').addEventListener('click', function () { send({ type: 'free' }); });
+  $('free').addEventListener('click', function () {
+    omiTrack('Web Paywall Dismissed', { step: step + 1 });
+    send({ type: 'free' });
+  });
   window.OmiPaywallHost = {
-    onCheckout: function () { $('cta').disabled = false; },
+    onCheckout: function (outcome) {
+      omiTrack('Web Paywall Checkout Result', { interval: selected, outcome: outcome });
+      $('cta').disabled = false;
+    },
     onRestore: function () {}
   };
   render();
+  omiTrack('Web Paywall Viewed', { has_prices: !noPlans });
+  omiTrack('Web Paywall Step Viewed', { step: 1 });
   send({ type: 'ready' });
 })();
 </script>

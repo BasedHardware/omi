@@ -44,6 +44,9 @@
   .caption { padding-top:12px; text-align:center; font-size:12px; font-weight:500; color:var(--text3); }
   .hidden { display:none !important; }
 </style>
+<script>window.omiTrack = function () {}; // replaced by track.js; the page works without it</script>
+<script>window.OMI_PAYWALL_VERSION = 'benefits';</script>
+<script src="/track.js"></script>
 </head>
 <body>
   <button class="close" id="free" type="button" aria-label="Use Free Plan">
@@ -121,18 +124,29 @@
     });
   }
   ['yearly', 'monthly'].forEach(function (id) {
-    $(id).addEventListener('click', function () { selected = this.dataset.interval; render(); });
+    $(id).addEventListener('click', function () {
+      selected = this.dataset.interval; render();
+      omiTrack('Web Paywall Plan Selected', { interval: selected });
+    });
   });
   $('cta').addEventListener('click', function () {
     this.disabled = true;
+    omiTrack('Web Paywall Checkout Tapped', { interval: selected });
     send({ type: 'checkout', interval: selected });
   });
-  $('free').addEventListener('click', function () { send({ type: 'free' }); });
+  $('free').addEventListener('click', function () {
+    omiTrack('Web Paywall Dismissed', {});
+    send({ type: 'free' });
+  });
   window.OmiPaywallHost = {
-    onCheckout: function () { $('cta').disabled = false; },
+    onCheckout: function (outcome) {
+      omiTrack('Web Paywall Checkout Result', { interval: selected, outcome: outcome });
+      $('cta').disabled = false;
+    },
     onRestore: function () {}
   };
   render();
+  omiTrack('Web Paywall Viewed', { has_prices: year != null || month != null });
   send({ type: 'ready' });
 })();
 </script>
