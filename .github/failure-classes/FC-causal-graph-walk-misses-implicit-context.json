@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-causal-graph-walk-misses-implicit-context",
+  "violated_contract": "A predicate that inspects a raised exception to classify it — retryable contention, expected failure, retryable status — must walk the error's full causal graph, not only the direct `__cause__`. An `except:`-block re-raise without `from` places the real cause on `__context__`, and exception groups carry members under `.exceptions`; a cause-only walk treats those wrapped forms as unrelated errors, so a retryable SDK abort fails fast instead of retrying, or an expected class propagates unhandled.",
+  "canonical_prevention": "Classify raised exceptions through a shared traversal that visits `__cause__`, `__context__`, and exception-group members with a visited-id guard against cycles, matching both the target type and its documented status-code forms.",
+  "canonical_prevention_artifact": [
+    "backend/database/firestore_transaction_retry.py",
+    "backend/tests/unit/test_firestore_transaction_retry.py"
+  ],
+  "evidence_prs": [21636],
+  "scope_hints": ["backend/**"],
+  "status": "open"
+}
