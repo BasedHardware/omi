@@ -18,6 +18,7 @@ from scripts.runtime_env_capability_contracts import (
     validate_conversation_finalization_capabilities,
     validate_free_tier_deploy_contract,
     validate_speaker_embedding_hosts,
+    validate_voice_transcription_storage,
 )  # noqa: E402
 from scripts.runtime_env_memory_contract import validate_retired_memory_manifest  # noqa: E402
 from scripts.runtime_env_jev_contract import validate_jev_uid_allowlist  # noqa: E402
@@ -590,13 +591,7 @@ def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list
     gke = _as_config_dict(env_config.get('gke')) or {}
     for service, raw_service in gke.items():
         service_config = _as_config_dict(raw_service) or {}
-        surfaces.append(
-            (
-                f'{env}/gke/{service}',
-                _as_config_dict(service_config.get('env')) or {},
-                {},
-            )
-        )
+        surfaces.append((f'{env}/gke/{service}', _as_config_dict(service_config.get('env')) or {}, {}))
 
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
     cloud_run_services = _as_config_dict(cloud_run.get('services')) or {}
@@ -823,6 +818,7 @@ def validate_runtime_env(
             )
     errors.extend(validate_conversation_finalization_capabilities(env, env_config))
     errors.extend(validate_speaker_embedding_hosts(env, env_config))
+    errors.extend(validate_voice_transcription_storage(env, env_config))
     errors.extend(validate_free_tier_deploy_contract(env, env_config))
     errors.extend(_validate_stt_serving_model_policy(env, env_config))
     errors.extend(validate_parakeet_admission_contract(env, env_config))

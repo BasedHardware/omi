@@ -375,15 +375,12 @@ def with_belief_model_env(payload: str) -> str:
     )
 
 
-def with_screen_frame_egress_env(payload: str) -> str:
-    """Meeting-note screenshot egress is provisioned on the dev Cloud Run `backend` only.
-
-    The adjudication and read routes run there; the gate in
-    utils/screen_frames/availability.py needs the flag, the bucket, and the signer.
-    """
+def with_backend_storage_env(payload: str) -> str:
+    """Dev backend snapshots carry screenshot egress and voice staging bindings."""
     return re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
-        r'\1\n        {"name": "SCREEN_FRAME_EGRESS_ENABLED", "value": "true"},'
+        r'\1\n        {"name": "BUCKET_TEMPORAL_SYNC_LOCAL", "value": "syncing-local-development"},'
+        r'\n        {"name": "SCREEN_FRAME_EGRESS_ENABLED", "value": "true"},'
         r'\n        {"name": "BUCKET_SCREEN_FRAMES", "value": "based-hardware-dev-screen-frames"},'
         r'\n        {"name": "SCREEN_FRAME_SIGNING_SECRET", "valueFrom": {"secretKeyRef": {"name": "SCREEN_FRAME_SIGNING_SECRET", "key": "latest"}}},',
         payload,
@@ -407,7 +404,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(payload)
     payload = with_audio_timeline_span_env(payload)
     payload = with_capture_evidence_env(payload)
-    payload = with_screen_frame_egress_env(payload)
+    payload = with_backend_storage_env(payload)
     payload = with_firestore_read_ledger_env(payload).replace(
         '"FIRESTORE_READ_LEDGER", "value": "1"},',
         '"FIRESTORE_READ_LEDGER", "value": "1"},\n        {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},',
@@ -2327,6 +2324,7 @@ def test_provisional_prod_endpoint_requires_presence_but_not_exact_value(tmp_pat
     "backend": {
         "env": [
           {"name": "OMI_LLM_GATEWAY_URL", "value": "http://stable-private-endpoint"},
+          {"name": "BUCKET_TEMPORAL_SYNC_LOCAL", "value": "syncing-local"},
           {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omi.me"},
           {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}},
           {"name": "STT_PRERECORDED_MODEL", "valueFrom": {"secretKeyRef": {"name": "STT_PRERECORDED_MODEL"}}},

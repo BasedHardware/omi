@@ -15,6 +15,7 @@ if str(ROOT / 'backend') not in sys.path:
     sys.path.insert(0, str(ROOT / 'backend'))
 
 from config.free_tier_rollout import validate_free_tier_deploy_value  # noqa: E402
+from scripts.runtime_env_compat import normalize_runtime_manifest  # noqa: E402
 
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
 ConfigDict = dict[str, Any]
@@ -221,7 +222,7 @@ def _load_yaml(path: Path) -> ConfigDict:
         loaded = yaml.safe_load(handle)
     if not isinstance(loaded, dict):
         raise ValueError(f'{path} must contain a YAML mapping')
-    return cast(ConfigDict, loaded)
+    return normalize_runtime_manifest(cast(ConfigDict, loaded))
 
 
 def _render_env_entries(env_entries: ConfigDict) -> list[ConfigDict]:
