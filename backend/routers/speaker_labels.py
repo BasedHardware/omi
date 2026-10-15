@@ -21,7 +21,7 @@ router = APIRouter()
 def _valid_document_id(value: str) -> bool:
     # Preserve opaque legacy IDs. Only exclude invalid Firestore addresses;
     # arbitrary charset/128-char bounds narrow the released v1 contract.
-    reserved = value.startswith('__') and value.endswith('__') and re.fullmatch(r'__id[0-9]+__', value) is None
+    reserved = re.fullmatch(r'__.*__', value) is not None and re.fullmatch(r'__id[0-9]+__', value) is None
     try:
         return (
             not reserved

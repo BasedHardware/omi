@@ -235,7 +235,7 @@ def test_generated_dart_wire_models_cover_contract():
 
 
 def test_reject_route_preserves_legacy_opaque_path_values(client):
-    for opaque in ('a%5Cb', 'a%20b', 'x' * 200, '__id123__'):
+    for opaque in ('a%5Cb', 'a%20b', 'x' * 200, '__id123__', '__', '___'):
         response = client.post(f'/v1/conversations/{opaque}/speakers/3/reject', json={'kind': 'not_me'})
         assert response.status_code == 404  # Owned lookup, rather than a narrowed path schema.
     for speaker in ('-1', '2000000'):
@@ -300,12 +300,12 @@ def test_voice_matches_preserves_legacy_opaque_ids(client, monkeypatch):
         raise LookupError('missing')
 
     monkeypatch.setattr(speaker_labels_router, 'find_person_voice_matches', missing)
-    for value in ('a%20b', 'a%5Cb', 'x' * 200, '__id123__'):
+    for value in ('a%20b', 'a%5Cb', 'x' * 200, '__id123__', '__', '___'):
         assert client.get(f'/v1/users/people/{value}/voice-matches').status_code == 404
-    assert seen == ['a b', 'a\\b', 'x' * 200, '__id123__']
+    assert seen == ['a b', 'a\\b', 'x' * 200, '__id123__', '__', '___']
     for invalid in ('..', 'a%2Fb', 'x' * 1501, '__reserved__'):
         assert client.get(f'/v1/users/people/{invalid}/voice-matches').status_code in (404, 422)
-    assert len(seen) == 4
+    assert len(seen) == 6
 
 
 def test_voice_matches_unexpected_error_returns_sanitized_500(client, monkeypatch):
