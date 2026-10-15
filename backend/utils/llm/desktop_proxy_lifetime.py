@@ -239,9 +239,9 @@ class DeadlinedStreamingResponse(StreamingResponse):
             nonlocal started
             if asyncio.get_running_loop().time() >= telemetry.request_deadline:
                 raise ResponseDeadline
+            await send(message)
             if message['type'] == 'http.response.start':
                 started = True
-            await send(message)
 
         async def expired_response():
             telemetry.complete(outcome='provider_timeout', status_code=504, retryable=False, phase='body')
@@ -335,7 +335,6 @@ class DesktopProxyDeadlineMiddleware:
             if asyncio.get_running_loop().time() >= telemetry.request_deadline:
                 raise ResponseDeadline
             if message['type'] == 'http.response.start':
-                started = True
                 status = message['status']
                 headers = dict(message.get('headers', []))
                 is_sse = b'text/event-stream' in headers.get(b'content-type', b'')
@@ -344,6 +343,8 @@ class DesktopProxyDeadlineMiddleware:
                 await send(message)
             except* OSError as errors:
                 raise ClientDisconnect from errors
+            if message['type'] == 'http.response.start':
+                started = True
             if message['type'] == 'http.response.body' and not message.get('more_body', False):
                 finished = True
 
@@ -371,6 +372,9 @@ class DesktopProxyDeadlineMiddleware:
             phase = telemetry.phase
             outcome = _deadline_outcome(phase)
             override = dict(outcome=outcome, status_code=504, retryable=False, phase=phase)
+            # Classify an outstanding attempt before cancellation reaches the
+            # route. A known provider result remains immutable via complete().
+            telemetry.complete(**override)
             stopped = await _drain(task)
             if not started or stopped:
                 async with asyncio.timeout(CANCEL_GRACE_SECONDS):

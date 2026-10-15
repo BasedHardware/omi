@@ -734,3 +734,91 @@ async def test_retained_straggler_cannot_suppress_typed_deadline(monkeypatch, ca
         release.set()
         await asyncio.wait_for(completed.wait(), timeout=3.0)
     assert sum(m['type'] == 'http.response.start' for m in messages) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('outer', [False, True])
+async def test_unsent_headers_do_not_suppress_typed_timeout(monkeypatch, capsys, outer):
+    from utils.llm.desktop_gemini_telemetry import ProxyTelemetry, get_proxy_telemetry
+
+    monkeypatch.setattr(lifetime, 'REQUEST_TIMEOUT_SECONDS', 0.2)
+    monkeypatch.setattr(lifetime, 'CANCEL_GRACE_SECONDS', 0.02)
+    messages = []
+    starts = 0
+
+    async def send(message):
+        nonlocal starts
+        if message['type'] == 'http.response.start':
+            starts += 1
+            if starts == 1:
+                await asyncio.Event().wait()
+        messages.append(message)
+
+    scope = {
+        'type': 'http',
+        'asgi': {'spec_version': '2.4'},
+        'method': 'POST',
+        'path': '/v1/proxy/gemini/models/gemini-2.5-flash:generateContent',
+        'headers': [],
+    }
+    if outer:
+
+        async def app(scope, receive, send):
+            get_proxy_telemetry(Request(scope, receive), streaming=False).phase = 'gateway'
+            await Response(b'provider response')(scope, receive, send)
+
+        owner = lifetime.DesktopProxyDeadlineMiddleware(app)
+    else:
+
+        async def chunks():
+            yield b'data: {}\n\n'
+
+        state = ProxyTelemetry(Request(scope), streaming=True)
+        state.phase = 'body'
+        state.request_deadline = asyncio.get_running_loop().time() + 0.2
+        owner = lifetime.DeadlinedStreamingResponse(StreamingResponse(chunks()), state)
+    await owner(scope, body_then_wait(), send)
+    assert [m['status'] for m in messages if m['type'] == 'http.response.start'] == [504]
+    assert dict(messages[0]['headers'])[b'x-omi-retryable'] == b'false'
+    assert [e['outcome'] for e in terminals(capsys)] == ['provider_timeout']
+
+
+@pytest.mark.asyncio
+async def test_outer_deadline_settles_attempt_before_route_cancellation(monkeypatch, capsys):
+    from utils.llm import desktop_gemini_telemetry as tm
+    from utils.llm.managed_spend_ledger import build_managed_attempt_event
+
+    monkeypatch.setattr(lifetime, 'REQUEST_TIMEOUT_SECONDS', 0.2)
+    monkeypatch.setattr(lifetime, 'CANCEL_GRACE_SECONDS', 0.02)
+    attempts = []
+    monkeypatch.setattr(tm, 'schedule_managed_attempt', attempts.append)
+
+    async def app(scope, receive, send):
+        state = tm.get_proxy_telemetry(Request(scope, receive), streaming=False)
+        state.uid = 'synthetic-user'
+        state.phase = 'connect'
+        state.note_dispatch(tm.UpstreamRoute('https://provider.invalid', {}, {}, 'ai_studio', 'server', 'us'))
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            state.complete(outcome='client_cancelled', status_code=499, retryable=False, phase='client_disconnect')
+            raise
+
+    messages = []
+
+    async def send(message):
+        messages.append(message)
+
+    scope = {
+        'type': 'http',
+        'method': 'POST',
+        'path': '/v1/proxy/gemini/models/gemini-2.5-flash:generateContent',
+        'headers': [],
+    }
+    await lifetime.DesktopProxyDeadlineMiddleware(app)(scope, body_then_wait(), send)
+    assert len(attempts) == 1
+    row = build_managed_attempt_event(attempts[0]).as_dict()
+    assert row['outcome'] == 'error'
+    assert row['error_class'] == 'provider_timeout'
+    assert [e['outcome'] for e in terminals(capsys)] == ['provider_timeout']
+    assert messages[0]['status'] == 504
