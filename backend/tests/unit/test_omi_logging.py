@@ -186,3 +186,74 @@ def test_module_import_does_not_depend_on_vendor_utils(tmp_path):
         text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_cloud_text_rollback_preserves_error_stream(monkeypatch):
+    monkeypatch.setenv('KUBERNETES_SERVICE_HOST', 'cluster')
+    monkeypatch.setenv('OMI_LOG_FORMAT', 'text')
+    out, err = io.StringIO(), io.StringIO()
+    logs.configure_logging('diarizer', stdout=out, stderr=err)
+    logging.info('normal')
+    logging.error('failure')
+    assert 'normal' in out.getvalue() and 'failure' not in out.getvalue()
+    assert 'failure' in err.getvalue() and 'normal' not in err.getvalue()
+
+
+def test_requested_level_constrains_named_loggers():
+    output = io.StringIO()
+    logs.configure_logging('test', level=logging.ERROR, stdout=output)
+    logging.getLogger('uvicorn.error').info('info')
+    logging.getLogger('nemo_logger').info('info')
+    logging.getLogger('httpx').warning('warning')
+    assert not output.getvalue()
+    logging.getLogger('uvicorn.error').error('failure')
+    assert 'failure' in output.getvalue()
+
+
+def test_project_id_alone_does_not_disable_access(monkeypatch):
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'local-project')
+    output = io.StringIO()
+    logs.configure_logging('diarizer', stdout=output)
+    logging.getLogger('uvicorn.access').info('%s %s %s %s %s', 'client', 'POST', '/request', '1.1', 200)
+    assert json.loads(output.getvalue())['logger'] == 'uvicorn.access'
+
+
+def test_outer_server_exception_log_retains_trace_without_leaking(monkeypatch):
+    monkeypatch.setenv('OMI_LOG_FORMAT', 'json')
+    output = io.StringIO()
+    logs.configure_logging('test', project='test-project', stdout=output)
+    failure = ValueError('controlled')
+
+    async def app(scope, receive, send):
+        raise failure
+
+    async def run():
+        middleware = logs.TraceContextMiddleware(app)
+        for headers in [[(b'x-cloud-trace-context', b'a' * 32 + b'/42;o=1')], []]:
+            try:
+                await middleware({'type': 'http', 'headers': headers}, None, None)
+            except ValueError:
+                logging.getLogger('uvicorn.error').exception('Exception in ASGI application')
+        logging.info('outside')
+
+    asyncio.run(run())
+    entries = list(map(json.loads, output.getvalue().splitlines()))
+    assert entries[0]['logging.googleapis.com/trace'].endswith('/' + 'a' * 32)
+    assert entries[0]['logging.googleapis.com/spanId'] == '000000000000002a'
+    assert all('logging.googleapis.com/trace' not in entry for entry in entries[1:])
+
+
+def test_exception_metadata_failure_does_not_replace_original():
+    class ImmutableError(Exception):
+        def __setattr__(self, name, value):
+            raise AttributeError('immutable')
+
+    failure = ImmutableError('original')
+
+    async def app(scope, receive, send):
+        raise failure
+
+    with pytest.raises(ImmutableError) as caught:
+        asyncio.run(logs.TraceContextMiddleware(app)({'type': 'http'}, None, None))
+    assert caught.value is failure
+    assert logs._TRACE.get() is None

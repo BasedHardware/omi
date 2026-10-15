@@ -15,13 +15,18 @@ or W3C trace IDs through request handling. Set the project explicitly or through
 are omitted if no project is known. Set `OMI_ENV_STAGE` or pass `environment`.
 
 GCP runtime markers select one-line JSON on stdout. `OMI_LOG_FORMAT=json|text`
-overrides detection. Exceptions include the traceback in `message` and Error
+overrides detection. Cloud text rollback retains the legacy stdout/stderr severity
+split; JSON is required for precise WARNING severity on GKE. Exceptions include
+the traceback in `message` and Error
 Reporting type/service fields. Local output defaults to readable text. Preserve
 message strings while migrating so downstream filters retain their meaning.
+Unhandled exceptions retain their validated trace IDs for the outer Uvicorn log
+after request context resets. The requested level also constrains named loggers.
 Cloud Run uses platform request logs. GKE suppresses successful health/metrics
 probes and uses LB logs for diarizer, nllb, parakeet, pusher and vad. Keep general
 access records for listen, llm-gateway and diarizer-batch until actual route
-coverage is proven. Exceptions and ERROR records are never suppressed.
+coverage is proven. A local project ID alone does not suppress general access
+records. Exceptions and ERROR records are never suppressed by noise filters.
 
 ## Consumer admission
 

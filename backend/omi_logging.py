@@ -58,6 +58,14 @@ class TraceContextMiddleware:
         token = _TRACE.set(trace_context(dict(scope.get('headers', ()))))
         try:
             return await self.app(scope, receive, send)
+        except BaseException as error:
+            # Uvicorn logs after this middleware unwinds. Carry only validated IDs
+            # on the exception so its outer log keeps the originating trace.
+            try:
+                setattr(error, '_omi_logging_trace', _TRACE.get())
+            except Exception:
+                pass  # Never replace the original failure if a custom exception rejects attributes.
+            raise
         finally:
             _TRACE.reset(token)
 
@@ -86,11 +94,18 @@ class JsonFormatter(logging.Formatter):
             payload['@type'] = 'type.googleapis.com/google.devtools.clouderrorreporting.v1beta1.ReportedErrorEvent'
             payload['serviceContext'] = {'service': self.service}
         trace = _TRACE.get()
+        if trace is None and record.exc_info:
+            trace = getattr(record.exc_info[1], '_omi_logging_trace', None)
         if trace and self.project:
             payload['logging.googleapis.com/trace'] = f'projects/{self.project}/traces/{trace[0]}'
             payload['logging.googleapis.com/spanId'] = trace[1]
             payload['logging.googleapis.com/trace_sampled'] = trace[2]
         return json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
+
+
+class BelowWarningFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.levelno < logging.WARNING
 
 
 class AccessFilter(logging.Filter):
@@ -125,8 +140,9 @@ def configure_logging(
     level: int = logging.INFO,
     access_policy: str | None = None,
     stdout: TextIO | None = None,
+    stderr: TextIO | None = None,
 ) -> None:
-    """Own one stdout handler. Repeated setup replaces policy without duplication.
+    """Own stdout JSON logging; cloud text rollback uses legacy split streams.
 
     access_policy is ``keep`` or ``platform``; omitted selects known LB coverage.
     Configure again after vendor imports if they replace their own handlers.
@@ -138,7 +154,8 @@ def configure_logging(
     if mode not in ('', 'json', 'text'):
         raise ValueError('OMI_LOG_FORMAT must be json or text')
     cloud_run = bool(os.getenv('K_SERVICE') or os.getenv('CLOUD_RUN_JOB'))
-    on_gcp = cloud_run or bool(os.getenv('KUBERNETES_SERVICE_HOST') or os.getenv('GOOGLE_CLOUD_PROJECT'))
+    on_kubernetes = bool(os.getenv('KUBERNETES_SERVICE_HOST'))
+    on_gcp = cloud_run or on_kubernetes or bool(os.getenv('GOOGLE_CLOUD_PROJECT'))
     structured = mode == 'json' or (not mode and on_gcp)
     environment = environment or os.getenv('OMI_ENV_STAGE') or os.getenv('ENVIRONMENT') or 'unknown'
     project = project or os.getenv('GOOGLE_CLOUD_PROJECT') or os.getenv('GCP_PROJECT') or os.getenv('GCLOUD_PROJECT')
@@ -148,8 +165,16 @@ def configure_logging(
         if structured
         else logging.Formatter('%(levelname)s %(name)s: %(message)s')
     )
+    handler.setLevel(level)
+    handlers = [handler]
+    if on_gcp and not structured:
+        handler.addFilter(BelowWarningFilter())
+        errors = logging.StreamHandler(stderr if stderr is not None else sys.stderr)
+        errors.setLevel(max(level, logging.WARNING))
+        errors.setFormatter(handler.formatter)
+        handlers.append(errors)
     root = logging.getLogger()
-    root.handlers[:] = [handler]
+    root.handlers[:] = handlers
     root.setLevel(level)
     for name, threshold in LOGGER_LEVELS.items():
         logger = logging.getLogger(name)
@@ -160,7 +185,9 @@ def configure_logging(
     access = logging.getLogger('uvicorn.access')
     access.filters.clear()
     off = (
-        cloud_run or access_policy == 'platform' or (access_policy is None and on_gcp and service in LB_LOGGED_SERVICES)
+        cloud_run
+        or access_policy == 'platform'
+        or (access_policy is None and on_kubernetes and service in LB_LOGGED_SERVICES)
     )
     access.addFilter(AccessFilter(off))
     nemo = logging.getLogger('nemo_logger')
