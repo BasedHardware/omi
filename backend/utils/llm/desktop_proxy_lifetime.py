@@ -199,7 +199,13 @@ async def _finish_stream(task: asyncio.Task | None, iterator) -> None:
     # Retain closure until the active read/send has stopped. Never race aclose
     # against an anext that ignored cancellation; the response owner still ends
     # promptly while its retained cleanup owns the straggler.
-    cleanup = asyncio.create_task(_close_stream_after(task, iterator), name='desktop-gemini-stream-close')
+    async def drain_and_close():
+        if task is not None:
+            await _drain(task)
+        await _close_stream_after(task, iterator)
+
+    # Schedule both stages before the first cancellable await by the owner.
+    cleanup = asyncio.create_task(drain_and_close(), name='desktop-gemini-stream-close')
     _retain_cleanup(cleanup)
     with anyio.CancelScope(shield=True):
         await asyncio.wait((cleanup,), timeout=CANCEL_GRACE_SECONDS)
@@ -242,7 +248,7 @@ class DeadlinedStreamingResponse(StreamingResponse):
             await send(
                 {
                     'type': 'http.response.body',
-                    'body': ('data: ' + json.dumps(event, separators=(',', ':')) + '\n\n').encode(),
+                    'body': ('\n\ndata: ' + json.dumps(event, separators=(',', ':')) + '\n\n').encode(),
                     'more_body': False,
                 }
             )
@@ -263,6 +269,9 @@ class DeadlinedStreamingResponse(StreamingResponse):
             if done:
                 try:
                     await task
+                    telemetry.complete(
+                        outcome='client_cancelled', status_code=499, retryable=False, phase='client_disconnect'
+                    )
                     return
                 except* ResponseDeadline:
                     pass
@@ -271,8 +280,10 @@ class DeadlinedStreamingResponse(StreamingResponse):
                 # Headers may be committed. The final error send is bounded too.
                 async with asyncio.timeout(CANCEL_GRACE_SECONDS):
                     await expired_response()
+        except (asyncio.CancelledError, ClientDisconnect):
+            telemetry.complete(outcome='client_cancelled', status_code=499, retryable=False, phase='client_disconnect')
+            raise
         except TimeoutError:
             pass
         finally:
-            await _drain(task)
             await _finish_stream(task, self.body_iterator)

@@ -483,3 +483,86 @@ async def test_repeated_cancellation_cannot_interrupt_owned_cleanup(monkeypatch)
     # The retained drain also retrieves exceptions from abandoned tasks.
     await asyncio.sleep(0)
     assert not lifetime._cleanup_tasks
+
+
+@pytest.mark.asyncio
+async def test_stream_cancel_before_iteration_emits_terminal(lifetime_app, monkeypatch, capsys):
+    entered = asyncio.Event()
+    app = lifetime_app
+    app.user_middleware.clear()
+
+    async def provider(*args, **kwargs):
+        async def chunks():
+            yield b'data: {}\n\n'
+
+        return StreamingResponse(chunks())
+
+    monkeypatch.setattr(desktop_proxy, '_proxy_via_gateway', provider)
+
+    async def send(message):
+        if message['type'] == 'http.response.start':
+            entered.set()
+            await asyncio.Event().wait()
+
+    scope = {
+        'type': 'http',
+        'asgi': {'version': '3.0', 'spec_version': '2.4'},
+        'method': 'POST',
+        'path': '/v1/proxy/gemini/models/gemini-2.5-flash:generateContent',
+        'query_string': b'',
+        'headers': [],
+    }
+    task = asyncio.create_task(app(scope, body_then_wait(), send))
+    await entered.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert [e['outcome'] for e in terminals(capsys)] == ['client_cancelled']
+
+
+@pytest.mark.asyncio
+async def test_stream_double_cancel_closes_suspended_iterator(monkeypatch):
+    from utils.llm.desktop_gemini_telemetry import ProxyTelemetry
+
+    entered, closed = asyncio.Event(), asyncio.Event()
+
+    async def chunks():
+        try:
+            yield b'data: {}\n\n'
+        finally:
+            closed.set()
+
+    telemetry = ProxyTelemetry(Request({'type': 'http', 'headers': []}), streaming=True)
+    telemetry.request_deadline = asyncio.get_running_loop().time() + 10
+    response = lifetime.DeadlinedStreamingResponse(StreamingResponse(chunks()), telemetry)
+
+    async def send(message):
+        if message['type'] == 'http.response.body':
+            entered.set()
+            await asyncio.Event().wait()
+
+    task = asyncio.create_task(response({'type': 'http', 'asgi': {'spec_version': '2.4'}}, body_then_wait(), send))
+    await entered.wait()
+    task.cancel()
+    await asyncio.sleep(0)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    await asyncio.wait_for(closed.wait(), timeout=0.3)
+
+
+@pytest.mark.asyncio
+async def test_stream_timeout_starts_a_new_sse_frame(lifetime_app, monkeypatch, capsys):
+    async def provider(*args, **kwargs):
+        async def chunks():
+            yield b'data: {"partial"'
+            await asyncio.Event().wait()
+
+        return StreamingResponse(chunks())
+
+    monkeypatch.setattr(desktop_proxy, '_proxy_via_gateway', provider)
+    messages = await call_asgi(lifetime_app, body_then_wait())
+    wire = b''.join(m.get('body', b'') for m in messages)
+    frames = wire.split(b'\n\n')
+    assert json.loads(frames[-2].removeprefix(b'data: '))['error'] == 'provider_timeout'
+    assert [e['outcome'] for e in terminals(capsys)] == ['provider_timeout']
