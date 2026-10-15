@@ -63,20 +63,33 @@ setattr(sys.modules["google.cloud"], "firestore_v1", _fs_v1)
 
 _models_conv = _mod("models.conversation")
 _models_conv.AppResult = MagicMock()
+
+
 class Conversation:
     def __init__(self, **kwargs):
         self._data = dict(kwargs)
+
     def model_dump(self):
         return dict(self._data)
+
+
 _models_conv.Conversation = Conversation
 
 _models_enums = _mod("models.conversation_enums")
+
+
 class CategoryEnum:
     other = "other"
+
+
 class ConversationSource:
     limitless = "limitless"
+
+
 class ConversationStatus:
     completed = "completed"
+
+
 _models_enums.CategoryEnum = CategoryEnum
 _models_enums.ConversationSource = ConversationSource
 _models_enums.ConversationStatus = ConversationStatus
@@ -85,11 +98,15 @@ _models_struct = _mod("models.structured")
 _models_struct.Structured = MagicMock()
 
 _models_ij = _mod("models.import_job")
+
+
 class ImportJobStatus:
     processing = MagicMock(value="processing")
     completed = MagicMock(value="completed")
     failed = MagicMock(value="failed")
     cancelled = MagicMock(value="cancelled")
+
+
 _models_ij.ImportJobStatus = ImportJobStatus
 _models_ij.ImportJob = MagicMock()
 _models_ij.ImportSourceType = MagicMock()
@@ -152,11 +169,7 @@ class TestLimitlessMacOSXMetadata(unittest.TestCase):
 
     def test_process_limitless_import_skips_macosx_metadata(self):
         fn = "2025-10-08_07h00m25s_Morning-Standup.md"
-        valid_md = (
-            "# Morning Standup\n\n"
-            "## Summary\n\n"
-            "> [1](#startMs=1000&endMs=5000): Good morning everyone.\n"
-        )
+        valid_md = "# Morning Standup\n\n" "## Summary\n\n" "> [1](#startMs=1000&endMs=5000): Good morning everyone.\n"
         files = {
             f"lifelogs/{fn}": valid_md.encode("utf-8"),
             f"__MACOSX/lifelogs/._" + fn: b"\x00\x05\x16\x07AppleDoubleBinaryBytes",
@@ -170,11 +183,13 @@ class TestLimitlessMacOSXMetadata(unittest.TestCase):
                 zf.writestr(path, data)
 
         saved_docs = {}
+
         def mock_persist(uid, data):
             saved_docs[data["id"]] = data
             return True
 
         job_updates = []
+
         def mock_update(job_id, fields):
             job_updates.append(fields)
 

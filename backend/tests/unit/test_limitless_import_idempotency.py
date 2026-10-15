@@ -472,4 +472,3 @@ def test_limitless_import_ignores_macosx_metadata_and_appledouble(tmp_path, stor
     completed_updates = [u for u in job_updates if u.get('status') == 'completed']
     assert len(completed_updates) == 1
     assert completed_updates[0].get('error') is None
-
