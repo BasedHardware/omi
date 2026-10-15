@@ -11,8 +11,9 @@ import logging
 import os
 import re
 import sys
+from typing import Any, Awaitable, Callable, Mapping, TextIO
 
-_TRACE = contextvars.ContextVar('omi_log_trace', default=None)
+_TRACE: contextvars.ContextVar[tuple[str, str, bool] | None] = contextvars.ContextVar('omi_log_trace', default=None)
 LOGGER_LEVELS = {
     'httpx': logging.WARNING,
     'httpcore': logging.WARNING,
@@ -32,7 +33,7 @@ NEMO_REPEATS = (
 )
 
 
-def trace_context(headers):
+def trace_context(headers: Mapping[bytes, bytes]) -> tuple[str, str, bool] | None:
     """Parse validated IDs only; never retain request URLs or other headers."""
     cloud = headers.get(b'x-cloud-trace-context', b'').decode('ascii', errors='ignore')
     match = re.fullmatch(r'([0-9a-fA-F]{32})/(\d{1,20})(?:;o=([01]))?', cloud)
@@ -48,10 +49,10 @@ def trace_context(headers):
 class TraceContextMiddleware:
     """Keep trace context scoped to one HTTP/WebSocket ASGI invocation."""
 
-    def __init__(self, app):
+    def __init__(self, app: Callable[..., Awaitable[Any]]) -> None:
         self.app = app
 
-    async def __call__(self, scope, receive, send):
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> Any:
         if scope['type'] not in ('http', 'websocket'):
             return await self.app(scope, receive, send)
         token = _TRACE.set(trace_context(dict(scope.get('headers', ()))))
@@ -62,17 +63,17 @@ class TraceContextMiddleware:
 
 
 class JsonFormatter(logging.Formatter):
-    def __init__(self, service, environment, project):
+    def __init__(self, service: str, environment: str, project: str | None) -> None:
         super().__init__()
         self.service, self.environment, self.project = service, environment, project
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         message = record.getMessage()
         if record.exc_info:
             message += '\n' + self.formatException(record.exc_info)
         if record.stack_info:
             message += '\n' + self.formatStack(record.stack_info)
-        payload = {
+        payload: dict[str, Any] = {
             'severity': {logging.WARNING: 'WARNING', logging.CRITICAL: 'CRITICAL'}.get(
                 record.levelno, record.levelname
             ),
@@ -93,11 +94,11 @@ class JsonFormatter(logging.Formatter):
 
 
 class AccessFilter(logging.Filter):
-    def __init__(self, off):
+    def __init__(self, off: bool) -> None:
         super().__init__()
         self.off = off
 
-    def filter(self, record):
+    def filter(self, record: logging.LogRecord) -> bool:
         if record.name != 'uvicorn.access' or record.exc_info or record.levelno >= logging.ERROR:
             return True
         if self.off:
@@ -110,13 +111,21 @@ class AccessFilter(logging.Filter):
 
 
 class NeMoFilter(logging.Filter):
-    def filter(self, record):
+    def filter(self, record: logging.LogRecord) -> bool:
         if record.levelno >= logging.ERROR or record.exc_info:
             return True
         return not any(marker in record.getMessage() for marker in NEMO_REPEATS)
 
 
-def configure_logging(service, *, environment=None, project=None, level=logging.INFO, access_policy=None, stdout=None):
+def configure_logging(
+    service: str,
+    *,
+    environment: str | None = None,
+    project: str | None = None,
+    level: int = logging.INFO,
+    access_policy: str | None = None,
+    stdout: TextIO | None = None,
+) -> None:
     """Own one stdout handler. Repeated setup replaces policy without duplication.
 
     access_policy is ``keep`` or ``platform``; omitted selects known LB coverage.
