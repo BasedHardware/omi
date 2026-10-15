@@ -203,15 +203,96 @@ class AndroidChecks(unittest.TestCase):
         client.edits().commit.assert_called_once_with(packageName="com.friend.ios", editId="edit-id")
         self.assertFalse(client.edits().bundles.upload.called)
 
-    def test_draft_status_is_the_only_alternative_to_completed(self):
+    def test_staged_and_halted_are_the_alternatives_to_completed(self):
         client = Mock()
         promote.submit_android(client, "edit-id", "1.2.3", "23", "New line", status="draft")
         body = client.edits().tracks().update.call_args.kwargs["body"]
         self.assertEqual(body["releases"][0]["status"], "draft")
         self.assertEqual(body["releases"][0]["versionCodes"], ["23"])
         client.edits().commit.assert_called_once()
+        # staged rollout: inProgress WITH a fraction is legal; without one it is not
+        promote.submit_android(Mock(), "edit-id", "1.2.3", "23", "New line", status="inProgress", user_fraction=0.05)
         with self.assertRaises(promote.PromotionError):
             promote.submit_android(Mock(), "edit-id", "1.2.3", "23", "New line", status="inProgress")
+        with self.assertRaises(promote.PromotionError):
+            promote.submit_android(Mock(), "edit-id", "1.2.3", "23", "New line", status="reclaimed")
+        with self.assertRaises(promote.PromotionError):
+            promote.submit_android(Mock(), "edit-id", "1.2.3", "23", "New line", status="completed", user_fraction=0.05)
+
+    def test_extra_codes_are_retained_and_must_be_unique(self):
+        client = Mock()
+        promote.submit_android(
+            client, "edit-id", "1.2.3", "23", "New line", status="inProgress", user_fraction=0.25, extra_codes=("22",)
+        )
+        body = client.edits().tracks().update.call_args.kwargs["body"]
+        self.assertEqual(body["releases"][0]["versionCodes"], ["23", "22"])
+        client.edits().commit.assert_called_once()
+        with self.assertRaisesRegex(promote.PromotionError, "unique"):
+            promote.submit_android(
+                Mock(), "edit-id", "1.2.3", "23", "New line", status="inProgress", user_fraction=0.25, extra_codes=("23",)
+            )
+
+    def test_advancing_a_base_release_preserves_its_metadata(self):
+        client = Mock()
+        staged = {
+            "name": "1.2.3 (23)",
+            "versionCodes": ["23"],
+            "status": "inProgress",
+            "userFraction": 0.05,
+            "countryTargeting": {"countries": ["US", "CA"]},
+            "inAppUpdatePriority": 3,
+            "releaseNotes": [
+                {"language": "en-US", "text": "Shipped"},
+                {"language": "de-DE", "text": "Ausgeliefert"},
+            ],
+        }
+        promote.submit_android(
+            client, "edit-id", "1.2.3", "23", "ignored when notes exist", status="inProgress", user_fraction=0.25,
+            base_release=staged,
+        )
+        release = client.edits().tracks().update.call_args.kwargs["body"]["releases"][0]
+        self.assertEqual(release["countryTargeting"], {"countries": ["US", "CA"]})
+        self.assertEqual(release["inAppUpdatePriority"], 3)
+        self.assertEqual(
+            release["releaseNotes"],
+            [{"language": "en-US", "text": "Shipped"}, {"language": "de-DE", "text": "Ausgeliefert"}],
+        )
+        self.assertEqual(release["userFraction"], 0.25)
+        self.assertEqual(release["versionCodes"], ["23"])
+        self.assertEqual(release["name"], "1.2.3")
+        client.edits().commit.assert_called_once()
+
+    def test_advancing_a_base_release_without_notes_uses_derived_notes(self):
+        client = Mock()
+        staged = {"name": "1.2.3 (23)", "versionCodes": ["23"], "status": "inProgress", "userFraction": 0.05}
+        promote.submit_android(
+            client, "edit-id", "1.2.3", "23", "Derived line", status="completed", base_release=staged
+        )
+        release = client.edits().tracks().update.call_args.kwargs["body"]["releases"][0]
+        self.assertEqual(release["releaseNotes"], [{"language": "en-US", "text": "Derived line"}])
+        self.assertNotIn("userFraction", release)
+        client.edits().commit.assert_called_once()
+
+    def test_completion_drops_country_targeting_but_a_hop_keeps_it(self):
+        client = Mock()
+        staged = {
+            "name": "1.2.3 (23)",
+            "versionCodes": ["23"],
+            "status": "inProgress",
+            "userFraction": 0.05,
+            "countryTargeting": {"countries": ["US"]},
+        }
+        # Google permits countryTargeting only on inProgress releases: a
+        # mid-ladder hop keeps it, the completing PUT must drop it.
+        promote.submit_android(
+            client, "edit-id", "1.2.3", "23", "n", status="inProgress", user_fraction=0.25, base_release=dict(staged)
+        )
+        hop = client.edits().tracks().update.call_args.kwargs["body"]["releases"][0]
+        self.assertEqual(hop["countryTargeting"], {"countries": ["US"]})
+        promote.submit_android(client, "edit-id", "1.2.3", "23", "n", status="completed", base_release=dict(staged))
+        done = client.edits().tracks().update.call_args.kwargs["body"]["releases"][0]
+        self.assertNotIn("countryTargeting", done)
+        self.assertNotIn("userFraction", done)
 
 
 if __name__ == "__main__":

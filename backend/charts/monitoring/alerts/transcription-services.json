@@ -116,7 +116,7 @@
     ],
     "updated": "2026-06-20T02:27:38Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -260,7 +260,7 @@
     ],
     "updated": "2026-06-20T02:27:37Z",
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "3m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -405,7 +405,7 @@
     ],
     "updated": "2026-06-23T01:20:17Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -554,7 +554,7 @@
     ],
     "updated": "2026-06-20T02:27:38Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -710,7 +710,7 @@
     ],
     "updated": "2026-06-20T02:27:39Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -1299,7 +1299,7 @@
     ],
     "updated": "2026-09-20T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -1422,7 +1422,7 @@
     ],
     "updated": "2026-09-26T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -1545,7 +1545,7 @@
     ],
     "updated": "2026-10-14T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {

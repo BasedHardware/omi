@@ -2207,13 +2207,13 @@
       "budget_p50_minutes": 5,
       "display_name": "dispatch",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Register the daily mobile train workflow that landed on main without an inventory row.",
+      "rationale": "Register the daily mobile train workflow that landed on main without an inventory row. 2026-10-14: optional pin_ios/pin_android dispatch inputs carry the gate's audited candidate identifiers; dispatch-only, no extra runs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -4888,7 +4888,7 @@
     "mobile_daily_train.yml": {
       "name": "Mobile daily train",
       "owner": "CI maintainers",
-      "rationale": "Daily mobile train dispatch is owned by the operator-side release gate (audits candidates against the live baseline, dispatches only on a green verdict; see .github/agent-docs/mobile-release-process.md). The fixed 14:00 UTC schedule was removed 2026-10-14 so an ungated train can no longer fire on a bad candidate; manual workflow_dispatch (dry_run) remains.",
+      "rationale": "Daily mobile train dispatch is owned by the operator-side release gate (audits candidates against the live baseline, dispatches only on a green verdict; see .github/agent-docs/mobile-release-process.md). The fixed 14:00 UTC schedule was removed 2026-10-14 so an ungated train can no longer fire on a bad candidate; manual workflow_dispatch (dry_run) remains. 2026-10-14: optional pin_ios/pin_android dispatch inputs carry the gate's audited candidate identifiers; they add no runs (same single gated dispatch per day).",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4896,6 +4896,16 @@
               "default": "false",
               "description": "Read store state and print the plan without submitting or drafting",
               "type": "boolean"
+            },
+            "pin_android": {
+              "default": "",
+              "description": "Audited Android candidate (X.Y.Z/build, or none = audited no-candidate) from the operator release gate; empty = no pin",
+              "type": "string"
+            },
+            "pin_ios": {
+              "default": "",
+              "description": "Audited iOS candidate (X.Y.Z/build, or none = audited no-candidate) from the operator release gate; empty = no pin",
+              "type": "string"
             }
           }
         }

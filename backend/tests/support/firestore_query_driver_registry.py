@@ -2048,8 +2048,9 @@ _add(
         covered_by=(
             'database.sync_backfill_sequencer.claim_next',
             'database.sync_backfill_sequencer.has_pending',
+            'database.sync_backfill_sequencer.pending_head',
         ),
-        reason='transactional claim probe observed inside both listed consumers',
+        reason='oldest-pending probe observed inside the listed claim, inspection and presence consumers',
     )
 )
 _add(
@@ -2070,7 +2071,7 @@ _add(
     DriverEntry(
         'database.sync_backfill_sequencer.claim_next',
         base={'uid': UID},
-        domains={'now': [None, T0]},
+        domains={'now': [None, T0], 'expected_job_id': [None, 'expected-job']},
         patchers=_SYNC_PROD,
     )
 )
@@ -2090,6 +2091,7 @@ _add(
         patchers=_SYNC_PROD,
     )
 )
+_add(DriverEntry('database.sync_backfill_sequencer.pending_head', base={'uid': UID}, patchers=_SYNC_PROD))
 _add(DriverEntry('database.sync_backfill_sequencer.has_pending', base={'uid': UID}, patchers=_SYNC_PROD))
 _add(
     DriverEntry(
@@ -2848,5 +2850,14 @@ _add(
         'database.chat_context_reads.get_recent_activity',
         base={'uid': UID},
         domains={'since': ['', T0.isoformat()], 'exclude_session': [None, 'session']},
+    )
+)
+
+
+_add(
+    DriverEntry(
+        'utils.sync.reprocess.sweep',
+        neutrals={'now': (T0.timestamp(), 'operand clock only'), 'limit': _LIMIT},
+        patchers=(_stub('utils.sync.reprocess._mutate', None), _stub('utils.sync.reprocess.owns_runtime', True)),
     )
 )

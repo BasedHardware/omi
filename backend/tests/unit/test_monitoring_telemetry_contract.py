@@ -276,8 +276,24 @@ def test_alert_rules_use_declared_receiver_and_instatus_components():
     for rule in _alert_rules():
         receiver = (rule.get('notification_settings') or {}).get('receiver')
         assert receiver == default_receiver, f"{rule.get('uid')}: unexpected receiver {receiver!r}"
-        component = (rule.get('labels') or {}).get(label_key)
-        assert component in allowed, f"{rule.get('uid')}: unexpected {label_key}={component!r}"
+        labels = rule.get('labels') or {}
+        component = labels.get(label_key)
+        canary_sources = {
+            'omi-datasource-prometheus': 'prometheus',
+            'omi-datasource-cloud-monitoring': 'beuxmaq8oxhq8e',
+        }
+        if rule.get('uid') in canary_sources:
+            # A datasource outage is monitoring infrastructure, not evidence of
+            # an Omi product outage. These two explicit canaries reach Telegram
+            # via the root receiver and must not update a product Instatus page.
+            source = canary_sources[rule['uid']]
+            assert labels['impact'] == 'infrastructure'
+            assert labels['component'] == 'monitoring'
+            assert labels['datasource_uid'] == source
+            assert rule['data'][0]['datasourceUid'] == source
+            assert component is None
+        else:
+            assert component in allowed, f"{rule.get('uid')}: unexpected {label_key}={component!r}"
 
 
 def test_scrape_health_no_data_semantics_match_inventory():

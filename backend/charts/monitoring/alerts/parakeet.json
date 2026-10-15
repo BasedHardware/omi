@@ -116,7 +116,7 @@
     ],
     "updated": "2026-06-20T02:27:44Z",
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "3m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -257,7 +257,7 @@
     ],
     "updated": "2026-06-20T08:36:19Z",
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -401,7 +401,7 @@
     ],
     "updated": "2026-06-20T02:28:35Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "0s",
     "keep_firing_for": "0s",
     "annotations": {
@@ -544,7 +544,7 @@
     ],
     "updated": "2026-06-20T02:27:44Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -687,7 +687,7 @@
     ],
     "updated": "2026-07-20T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -831,7 +831,7 @@
     ],
     "updated": "2026-07-20T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -933,7 +933,7 @@
     ],
     "updated": "2026-07-23T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -1033,7 +1033,7 @@
     ],
     "updated": "2026-07-23T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "0s",
     "keep_firing_for": "0s",
     "annotations": {
@@ -1133,7 +1133,7 @@
     ],
     "updated": "2026-07-23T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "1m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -1232,7 +1232,7 @@
     ],
     "updated": "2026-07-23T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {

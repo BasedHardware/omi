@@ -1817,6 +1817,16 @@ async def _maintain_uid_sequencer_lease(
 @router.post('/v2/sync-backfill-sequencer/sweep', include_in_schema=False)
 async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     outcomes = await run_blocking(db_executor, uid_sequencer.sweep)
+    from utils.sync import reprocess
+
+    if reprocess.owns_runtime():
+        try:
+            repair = await run_blocking(db_executor, reprocess.sweep)
+        except Exception as error:
+            logger.error('event=sync_reprocess action=sweep outcome=error exception_type=%s', type(error).__name__)
+            repair = {'repaired': 0, 'error': 1}
+        outcomes['reprocess_repaired'] = repair['repaired']
+        outcomes['reprocess_repair_errors'] = repair['error']
     return JSONResponse(status_code=500 if outcomes.get('error') else 200, content={'outcomes': outcomes})
 
 

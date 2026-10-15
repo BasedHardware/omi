@@ -1623,7 +1623,19 @@ def _reprocess_merged_conversations(
     per conversation: a replaced/reopened conversation must not block siblings in the
     same batch.
     """
+    from config.sync_reprocess import coalesce_enabled
+
+    coalescing = coalesce_enabled() and not user_selected
     merged = response.pop('_merged', {})
+    if coalescing:
+        # Partial-result IDs survive a crash after append/checkpoint but before
+        # this outbox mark, even when lineage enrichment recovery is disabled.
+        # Re-enroll that durable debt; exact-input dedupe handles completed
+        # replays without depending on a transient per-attempt _merged map.
+        recovered = set(response.get('new_memories') or []) | set(response.get('updated_memories') or [])
+        recovered -= set(response.get(_RESPONSE_FENCED_CONVERSATION_IDS) or [])
+        for conversation_id in recovered:
+            merged.setdefault(conversation_id, _LINEAGE_RETRY_LANGUAGE)
     if user_selected:
         # Rule-discard intake does not enroll enrichment. Process Now is an
         # explicit keep choice, so include those retained rows too. Apply it
@@ -1636,7 +1648,12 @@ def _reprocess_merged_conversations(
         try:
             if user_selected and not lifecycle_service.restore_discarded(uid, conversation_id):
                 raise SyncConversationPersistenceFenced('selected recording no longer exists')
-            _reprocess_conversation_after_update(uid, conversation_id, language)
+            if coalescing:
+                from utils.sync.reprocess import mark
+
+                mark(uid, conversation_id, language)
+            else:
+                _reprocess_conversation_after_update(uid, conversation_id, language)
         except SyncConversationPersistenceFenced:
             fenced_ids.add(conversation_id)
             response.setdefault(_RESPONSE_FENCED_CONVERSATION_IDS, set()).add(conversation_id)
@@ -1646,7 +1663,7 @@ def _reprocess_merged_conversations(
                 on_fenced()
             logger.info('event=sync_conversation_reprocess outcome=fenced conversation_id=%s', conversation_id)
         except Exception as e:
-            if user_selected or is_destructive_operation_in_progress(e):
+            if coalescing or user_selected or is_destructive_operation_in_progress(e):
                 raise
             logger.error(f'sync: failed to reprocess merged conversation {conversation_id}: {e}')
     # A task-mode worker whose every conversation was superseded by a newer
