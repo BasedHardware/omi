@@ -9,11 +9,13 @@ C5: ``VoiceMatch``/``VoiceMatchesResponse`` + GET voice-matches route — cached
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from urllib.parse import quote
 
 import pytest
 from fastapi import FastAPI
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
@@ -397,8 +399,10 @@ def test_voice_matches_unexpected_error_returns_sanitized_500(client, monkeypatc
 
 
 @pytest.mark.parametrize('failure,status', [(LookupError, 404), (ValueError, 409), (RuntimeError, 500)])
-def test_reject_logs_mask_opaque_ids_and_echoed_exception_payload(client, monkeypatch, caplog, failure, status):
-    document_id = '私の記録\nperson.name@example.com'
+@pytest.mark.parametrize('document_id', ['私の記録\nperson.name@example.com', 'private@local'])
+def test_reject_logs_mask_opaque_ids_and_echoed_exception_payload(
+    client, monkeypatch, caplog, failure, status, document_id
+):
     seen = []
 
     def fail(uid, conversation_id, **kwargs):
@@ -415,17 +419,17 @@ def test_reject_logs_mask_opaque_ids_and_echoed_exception_payload(client, monkey
     records = [record for record in caplog.records if record.name == speaker_labels_router.logger.name]
     assert len(records) == 1
     message = records[0].getMessage()
-    assert 'conv=*** p***e@example.com speaker=3' in message
+    assert re.search(r'conv_hash=[0-9a-f]{12} speaker=3', message)
     assert 'person.name' not in message
+    assert 'private@local' not in message
     assert document_id not in message
     assert records[0].exc_info is None
-    if status == 500:
-        assert failure.__name__ in message
-        assert 'in fail' in message
+    assert failure.__name__ in message
+    assert 'in fail' in message
 
 
-def test_voice_matches_logs_mask_opaque_ids_and_echoed_exception_payload(client, monkeypatch, caplog):
-    document_id = '私の記録\nperson.name@example.com'
+@pytest.mark.parametrize('document_id', ['私の記録\nperson.name@example.com', 'private@local'])
+def test_voice_matches_logs_mask_opaque_ids_and_echoed_exception_payload(client, monkeypatch, caplog, document_id):
     seen = []
 
     async def fail(uid, person_id):
@@ -440,8 +444,9 @@ def test_voice_matches_logs_mask_opaque_ids_and_echoed_exception_payload(client,
     records = [record for record in caplog.records if record.name == speaker_labels_router.logger.name]
     assert len(records) == 1
     message = records[0].getMessage()
-    assert 'person=*** p***e@example.com uid=' in message
+    assert re.search(r'person_hash=[0-9a-f]{12} uid=', message)
     assert 'person.name' not in message
+    assert 'private@local' not in message
     assert document_id not in message
     assert 'RuntimeError' in message
     assert 'in fail' in message
@@ -453,8 +458,14 @@ def test_document_id_guard_rejects_invalid_utf8_and_storage_shapes(bad):
     assert not speaker_labels_router._valid_document_id(bad)
 
 
-def test_route_openapi_retains_released_unconstrained_path_types(client):
-    paths = client.app.openapi()['paths']
+def test_route_openapi_retains_released_unconstrained_path_types():
+    app = FastAPI()
+    # Exercise the actual endpoint signatures without rendering the unrelated,
+    # expansive Conversation response schema for this path-parameter contract.
+    for route in speaker_labels_router.router.routes:
+        if isinstance(route, APIRoute):
+            app.add_api_route(route.path, route.endpoint, methods=sorted(route.methods), response_model=None)
+    paths = app.openapi()['paths']
     cases = [
         (
             '/v1/conversations/{conversation_id}/speakers/{speaker_id}/reject',
