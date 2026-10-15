@@ -3,12 +3,14 @@ import copy
 import hashlib
 import json
 import logging
+import os
 import uuid
 import zlib
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any, Callable, Tuple
 from database import chat_edits
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.dream_dirty import after_write
 from google.api_core.exceptions import AlreadyExists, Conflict, NotFound
 from google.cloud import firestore
@@ -3854,9 +3856,16 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
         attempted['canonical'] = planned[0]['id']
         return planned
 
-    result = run_with_size_limit_backstop(
-        lambda full_ids: run_transactional(client, assign, full_ids=full_ids), lambda: attempted.get('canonical')
-    )
+    def run_assignment(full_ids):
+        if os.getenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'false').strip().lower() != 'true':
+            return run_transactional(client, assign, full_ids=full_ids)
+        return run_with_transaction_contention_retry(
+            client.transaction,
+            lambda transaction: run_transactional(client, assign, full_ids=full_ids, initial_transaction=transaction),
+            operation_name='sync_assignment',
+        )
+
+    result = run_with_size_limit_backstop(run_assignment, lambda: attempted.get('canonical'))
     invalidate_people_stats_cache(uid)
     conversation = result[0]
     for donor_id in conversation.get('sync_merged_from') or []:
