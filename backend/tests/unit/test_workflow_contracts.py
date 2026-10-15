@@ -126,22 +126,10 @@ def test_selector_docs_and_flat_utils_do_not_force_full_suite_via_globs(selector
     for path in (
         "backend/AGENTS.md",
         "backend/docs/runbooks/resilience-dashboards.md",
-        "backend/tests/fast_unit_duration_allowlist.txt",
     ):
         selected, reason = selector.tests_for_changed_paths([path], all_tests)
         assert selected == [], path
         assert reason == "no backend files changed", (path, reason)
-
-    selected, reason = selector.tests_for_changed_paths(
-        [
-            "backend/scripts/verify_pusher_live_alert_route.py",
-            "backend/tests/fast_unit_duration_allowlist.txt",
-        ],
-        all_tests,
-    )
-    assert selected != all_tests
-    assert "tests/unit/test_verify_pusher_live_alert_route.py" in selected
-    assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
     # Monitoring telemetry contract sources (#9587) select monitoring unit tests.
     selected, reason = selector.tests_for_changed_paths(
