@@ -12,6 +12,7 @@ import 'package:omi/models/sync_state.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 
