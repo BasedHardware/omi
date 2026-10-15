@@ -354,21 +354,30 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   @override
   Widget build(BuildContext context) {
     final motion = OmiMotion.of(context);
-    return Column(
-      children: [
-        AnimatedSwitcher(duration: motion.quick, child: _buildHeader(context)),
-        const SizedBox(height: OmiSpacing.xs),
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            child:
-                _isSearching && _searchQuery.trim().isNotEmpty ? _buildSearchResults(context) : _buildSettings(context),
+    // The framework's drag handle sits in a 48 pt band whose lower half is empty; the header rises
+    // into it so the title sits close under the handle instead of a gap above Settings.
+    return Transform.translate(
+      offset: const Offset(0, -_headerLift),
+      child: Column(
+        children: [
+          AnimatedSwitcher(duration: motion.quick, child: _buildHeader(context)),
+          const SizedBox(height: OmiSpacing.xs),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              child: _isSearching && _searchQuery.trim().isNotEmpty
+                  ? _buildSearchResults(context)
+                  : _buildSettings(context),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
+
+  /// How far the header rises into the drag handle's empty band.
+  static const double _headerLift = 16;
 }
 
 /// The signed-in person's initial in a 32 pt circle (an avatar fits a settings row's leading slot);
