@@ -211,6 +211,35 @@ class TestSendMap:
         assert translated and translated[0]['_capture_start_sample'] == 32160
         assert translated[0]['_capture_end_sample'] == 48160
 
+    def test_outside_attribution_rounds_decimal_timestamps_too(self):
+        """The *second* conversion site (outside-send attribution) must round.
+
+        ``translate`` converts the segment timestamps to samples twice: once for
+        placement and once, in the ``outside_accepted_sends`` branch, to build
+        the refusal subreason. Rounding only the first left the reported
+        geometry of the refusal truncated by one sample. Here ``start`` is
+        0.999975 s (15999.6 samples) and ``end`` 5.0000375 s (80000.6 samples):
+        truncated they look like 15999..80000 (inside the interior hole);
+        rounded they are 16000..80001, where 80001 is past the last accepted
+        send. The emitted subreason must reflect the rounded geometry.
+        """
+        timeline = CaptureTimeline(sample_rate=RATE)
+        reasons: List[str] = []
+        translator = ProviderEpochTranslator(timeline, RATE, project_times=False, on_outside=reasons.append)
+        translator.send_map.add_accepted(0, 0, RATE)
+        translator.send_map.add_accepted(64000, 64000, RATE)
+        start, end = 0.999975, 5.0000375
+        # The float products that make truncation wrong.
+        assert int(start * RATE) == 15999 and round(start * RATE) == 16000
+        assert int(end * RATE) == 80000 and round(end * RATE) == 80001
+        # Truncated endpoints would be attributed to the interior hole; rounded
+        # ones are past the last accepted send.
+        assert translator.send_map.outside_reason(int(start * RATE), int(end * RATE)) == 'interior_hole'
+        assert translator.send_map.outside_reason(round(start * RATE), round(end * RATE)) == 'after_last_send'
+        translated = translator.translate([{'start': start, 'end': end, 'text': 'x'}])
+        assert translated and translated[0]['_capture_window_reason'] == 'translator_outside_accepted_sends'
+        assert reasons[-1] == 'after_last_send'
+
     def test_clock_only_mode_keeps_provider_times_and_unmapped_segments(self):
         """project_times=False (flag-off sessions): persistence stays legacy.
 
