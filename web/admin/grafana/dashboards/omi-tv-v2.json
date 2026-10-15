@@ -4,7 +4,7 @@
   "schemaVersion": 39,
   "version": 1,
   "timezone": "utc",
-  "refresh": "15m",
+  "refresh": "30s",
   "editable": true,
   "tags": [
     "omi-tv",

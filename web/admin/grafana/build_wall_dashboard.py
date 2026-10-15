@@ -77,7 +77,7 @@ def build_wall_board():
                    "targets":[{"refId":"A","datasource":DS,"type":"json","source":"url","format":"table","parser":"backend","url":URL,"url_options":{"method":"GET"},"root_selector":"metrics",
                                "columns":[{"selector":f,"text":f,"type":"number" if f in {"numerator", "denominator"} else "string"} for f in ['id','status','reason','numerator','denominator','windowStart','windowEnd','dataThrough','sourceRefreshedAt','definitionVersion']]}],
                    "options":{"showHeader":True}})
-    return {"uid":"omi-tv-v2","title":"Omi TV v2 · Direction A","schemaVersion":39,"version":1,"timezone":"utc","refresh":"15m","editable":True,
+    return {"uid":"omi-tv-v2","title":"Omi TV v2 · Direction A","schemaVersion":39,"version":1,"timezone":"utc","refresh":"30s","editable":True,
             "tags":["omi-tv","v2"],"time":{"from":"now-180d","to":"now/d"},"templating":{"list":[]},"annotations":{"list":[]},"panels":panels,
             "description":"Five story columns. Native Canvas cards include label, scope, value, delta, platform split, complete-period trend and human coverage copy. Diagnostics below the wall. Legacy boards are unchanged.","links":[]}
 
