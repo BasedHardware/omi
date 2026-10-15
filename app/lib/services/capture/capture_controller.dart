@@ -223,6 +223,14 @@ class CaptureController extends ChangeNotifier
 
   IWalService get _wal => _walServiceOverride ?? ServiceManager.instance().wal;
 
+  /// Audio taps for a caller that needs the sound itself (onboarding's dictation enrolls the voice
+  /// and meters the level): phone-mic PCM16 16 kHz mono, and the pendant's encoded packets.
+  void Function(List<int> pcm)? phoneMicAudioTap;
+  void Function(List<int> packet)? deviceAudioTap;
+
+  /// Set by a first-run step that explains a short capture itself: holds the generic notice.
+  bool suppressShortCaptureNotice = false;
+
   /// The conversation-capture recorder. Resolves an injected override first so
   /// deterministic scenarios can drive the real pipeline through the production
   /// decision path, then falls back to the shared service manager.
@@ -496,6 +504,7 @@ class CaptureController extends ChangeNotifier
     await _phoneMic.start(
       onByteReceived: (bytes) {
         if (!_admitsCapture(revision)) return;
+        phoneMicAudioTap?.call(bytes);
         _recordingTelemetry.observeAudio(bytes.length);
         if (bytes.isNotEmpty) _livenessWatchdog.observeFrame(_now());
         final frames = _activeSource?.processBytes(bytes) ?? [];
@@ -1381,7 +1390,6 @@ class CaptureController extends ChangeNotifier
       return;
     }
 
-    // Handle phone mic recording
     if (recordingState == RecordingState.record || (_phoneMicPaused && !_phoneMicBatchActive)) {
       await _socket?.stop(reason: 'transcription settings changed');
       await _initiateWebsocket(
@@ -1593,7 +1601,6 @@ class CaptureController extends ChangeNotifier
     Logger.debug('is ws null: ${_socket == null}');
     Logger.debug('Initiating WebSocket with: codec=$codec, sampleRate=$sampleRate, channels=$channels, isPcm=$isPcm');
 
-    // Get language and custom STT config
     String language = _preferences.hasSetPrimaryLanguage ? _preferences.userPrimaryLanguage : "multi";
     final customSttConfig = _preferences.customSttConfig;
     final sessionToken = _sessionOwner?.token;
@@ -2007,7 +2014,6 @@ class CaptureController extends ChangeNotifier
         if (!_starOngoingConversation) {
           markConversationForStarring();
           PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
-          // Haptic feedback to confirm
           HapticFeedback.mediumImpact();
         } else {
           // Toggle off if already marked
@@ -2050,7 +2056,6 @@ class CaptureController extends ChangeNotifier
         _startVoiceCommandTimeout(deviceId);
         _playSpeakerHaptic(deviceId, 1);
       } else {
-        // End on second tap
         debugPrint("Ending voice question session (toggle mode)");
         _endVoiceCommandSession(deviceId);
       }
@@ -2089,8 +2094,8 @@ class CaptureController extends ChangeNotifier
         if (_captureControllerDisposed || !_admitsCapture(revision) || _recordingDevice?.id != deviceId) return;
         final snapshot = List<int>.from(value);
         if (snapshot.isEmpty || snapshot.length < 3) return;
+        deviceAudioTap?.call(snapshot);
 
-        // Track bytes received from BLE
         _metrics.addBleBytes(snapshot.length);
         _recordingTelemetry.observeAudio(snapshot.length);
 
@@ -2100,7 +2105,6 @@ class CaptureController extends ChangeNotifier
         // buffering can share these owned bytes without another full copy.
         final blePayload = source is BleDeviceSource && frames.length == 1 ? frames.single.payload : null;
 
-        // Command button triggered
         bool voiceCommandSupported = _recordingDevice != null
             ? (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass)
             : false;
@@ -2157,7 +2161,6 @@ class CaptureController extends ChangeNotifier
           }
         }
 
-        // Send WS
         if (_socket?.state == SocketServiceState.connected) {
           final socketPayload = blePayload ?? source?.getSocketPayload(snapshot) ?? snapshot;
           if (positionedFrame?.captureRoot != null && positionedFrame!.payload.length == socketPayload.length) {
@@ -2171,7 +2174,6 @@ class CaptureController extends ChangeNotifier
             _wedgeMonitor.onSocketBytesSent(wedgeSession.handle, socketPayload.length);
           }
 
-          // Track bytes sent to websocket
           _metrics.addSocketBytes(socketPayload.length);
           _recordingTelemetry.observeSent(socketPayload.length);
 
@@ -2346,7 +2348,6 @@ class CaptureController extends ChangeNotifier
           })
         : null;
 
-    // Create audio source for BLE device
     final pd = await device.getDeviceInfo(connection);
     if (_deviceIdentityStale(deviceRevision)) return;
     final deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
@@ -2815,21 +2816,19 @@ class CaptureController extends ChangeNotifier
       return const CaptureStageFailure('permission_denied');
     }
 
-    // prepare
     await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
 
-    // Initialize WAL for phone mic recording
     _activeSource = PhoneMicSource();
     _phoneMicWalActive = true;
     await _wal.getSyncs().phone.onAudioCodecChanged(BleAudioCodec.pcm16);
     _wal.getSyncs().phone.setDeviceInfo('phone-mic', 'Phone Microphone');
     setIsWalSupported(true);
 
-    // record
     try {
       await _phoneMic.start(
         onByteReceived: (bytes) {
           if (!_admitsCapture(revision)) return;
+          phoneMicAudioTap?.call(bytes);
           _recordingTelemetry.observeAudio(bytes.length);
           if (bytes.isNotEmpty) _livenessWatchdog.observeFrame(_now());
           // Process through AudioSource for frame splitting and sync key generation
@@ -4040,7 +4039,7 @@ class CaptureController extends ChangeNotifier
         transcriptObserved: resolved?.transcriptObserved ?? false,
         reason: reason,
       );
-      if (!showCopy) return;
+      if (!showCopy || suppressShortCaptureNotice) return;
       final ctx = globalNavigatorKey.currentContext;
       if (ctx != null) {
         AppSnackbar.showSnackbar(

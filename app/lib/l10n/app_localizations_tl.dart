@@ -13397,4 +13397,104 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get chatAppsWaitlistJoined => 'Nasa waitlist ka na. Sasabihan ka namin kapag may puwesto na.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Handa ka na, $name';
+  }
+
+  @override
+  String get onboardingActDemoSummary =>
+      'Tanghalian kasama si Sam, na lilipat sa Lisbon sa Hunyo. Gusto mong ipadala ang deck sa team bago mag-Biyernes at bumili ng gatas pauwi.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Ipadala ang deck sa team bago mag-Biyernes';
+
+  @override
+  String get onboardingActDemoTask2 => 'Bumili ng gatas pauwi';
+
+  @override
+  String get onboardingActDemoTitle => 'Lunch kasama si Sam';
+
+  @override
+  String get onboardingActDictateBody => 'Sabihin mo sa sarili mong paraan. Ang Omi na ang bahala.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Magsalita ka lang. Nakikinig ang Omi mo.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Kakatapos ko lang mag-lunch kasama si Sam, lilipat na siya sa Lisbon sa Hunyo! Ipaalala mo sa akin na ipadala ang deck sa team bago mag-Biyernes, at bumili ng gatas pauwi.';
+
+  @override
+  String get onboardingActDictateHint => 'I-tap ang check kapag tapos ka na';
+
+  @override
+  String get onboardingActDictateTitle => 'Ikuwento sa Omi ang araw mo';
+
+  @override
+  String get onboardingActIntro => 'Subukan natin ang Omi.';
+
+  @override
+  String get onboardingActJustNow => 'Ngayon lang';
+
+  @override
+  String get onboardingActMicAllow => 'Payagan ang Mikropono';
+
+  @override
+  String get onboardingActMicBody => 'Para marinig ka ng Omi kapag kinakausap mo ito.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Hindi pa nagpapadala ng audio ang Omi mo. Gamitin muna ang iyong phone.';
+
+  @override
+  String get onboardingActMicTitle => 'Kailangan ng Omi ang mikropono mo';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Hindi marinig ang Omi mo. Siguraduhing naka-on ito at malapit.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Hindi ka pa marinig. Subukang magsalita nang medyo malakas.';
+
+  @override
+  String get onboardingActNotesLabel => 'Ang araw mo, buod';
+
+  @override
+  String get onboardingActPhoneMic => 'Mikropono ng phone';
+
+  @override
+  String get onboardingActRateTitle => 'Gusto mo ba ang Omi sa ngayon?';
+
+  @override
+  String get onboardingActRemembers => 'Tinatandaan ng Omi para hindi mo na kailangan';
+
+  @override
+  String get onboardingActSavedToTasks => 'Na-save sa mga gawain mo';
+
+  @override
+  String get onboardingActTasksLabel => 'Nahuli ng Omi ang mga gagawin mo';
+
+  @override
+  String get onboardingActWriting => 'Binubuod…';
+
+  @override
+  String get onboardingActYourWords => 'Ito ang sinabi mo';
+
+  @override
+  String get onboardingConnectOmi => 'Ikonekta ang Omi';
+
+  @override
+  String get onboardingConnectTapToConnect => 'I-tap ang iyong Omi para kumonekta.';
+
+  @override
+  String get onboardingNoOmiYet => 'Wala ka pang Omi?';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Hindi pa naka-order';
+
+  @override
+  String get onboardingOmiOrdered => 'Na-order ko na';
+
+  @override
+  String get onboardingPermissionTapToFix => 'I-tap para ayusin';
 }

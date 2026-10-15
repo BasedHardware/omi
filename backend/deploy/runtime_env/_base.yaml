@@ -168,6 +168,12 @@ environment_shared:
         PARAKEET_WINDOW_DIARIZATION:
           value: 'false'
           category: rollout
+        PARAKEET_WINDOW_DEADLINE_CUT_ENABLED:
+          value: 'false'
+          category: rollout
+        PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS:
+          value: '1.2'
+          category: reliability
         PARAKEET_WINDOW_PACE_SECONDS:
           value: '6'
           category: rollout

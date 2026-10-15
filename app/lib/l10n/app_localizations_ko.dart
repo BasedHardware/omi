@@ -13111,4 +13111,103 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get chatAppsWaitlistJoined => '대기자 명단에 등록되었습니다. 자리가 나면 알려 드릴게요.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return '$name님, 준비가 끝났어요';
+  }
+
+  @override
+  String get onboardingActDemoSummary => '6월에 리스본으로 이사하는 샘과 점심. 금요일까지 팀에 자료를 보내고, 집에 가는 길에 우유를 사야 해요.';
+
+  @override
+  String get onboardingActDemoTask1 => '금요일까지 팀에 발표 자료 보내기';
+
+  @override
+  String get onboardingActDemoTask2 => '집에 가는 길에 우유 사기';
+
+  @override
+  String get onboardingActDemoTitle => '샘과 점심';
+
+  @override
+  String get onboardingActDictateBody => '편하게 말하세요. 나머지는 Omi가 할게요.';
+
+  @override
+  String get onboardingActDictateBodyOmi => '그냥 말하세요. Omi가 듣고 있어요.';
+
+  @override
+  String get onboardingActDictateExample =>
+      '방금 샘이랑 점심 먹었어. 6월에 리스본으로 이사 간대! 금요일까지 팀에 발표 자료 보내는 거랑, 집에 가는 길에 우유 사는 거 알려 줘.';
+
+  @override
+  String get onboardingActDictateHint => '다 말했으면 체크를 누르세요';
+
+  @override
+  String get onboardingActDictateTitle => 'Omi에게 오늘 하루를 말해 보세요';
+
+  @override
+  String get onboardingActIntro => 'Omi를 써 볼까요?';
+
+  @override
+  String get onboardingActJustNow => '방금';
+
+  @override
+  String get onboardingActMicAllow => '마이크 허용';
+
+  @override
+  String get onboardingActMicBody => '말할 때 Omi가 들을 수 있도록요.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi가 아직 오디오를 보내지 않아요. 지금은 휴대폰을 사용하세요.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi에 마이크 권한이 필요해요';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Omi 소리가 들리지 않아요. 켜져 있고 가까이 있는지 확인하세요.';
+
+  @override
+  String get onboardingActNoAudioPhone => '아직 목소리가 들리지 않아요. 조금 더 크게 말해 보세요.';
+
+  @override
+  String get onboardingActNotesLabel => '오늘 하루 요약';
+
+  @override
+  String get onboardingActPhoneMic => '휴대폰 마이크';
+
+  @override
+  String get onboardingActRateTitle => 'Omi 마음에 드시나요?';
+
+  @override
+  String get onboardingActRemembers => '기억은 Omi가 대신해요';
+
+  @override
+  String get onboardingActSavedToTasks => '할 일에 저장됨';
+
+  @override
+  String get onboardingActTasksLabel => 'Omi가 할 일을 찾았어요';
+
+  @override
+  String get onboardingActWriting => '요약하는 중…';
+
+  @override
+  String get onboardingActYourWords => '이렇게 말했어요';
+
+  @override
+  String get onboardingConnectOmi => 'Omi 연결';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Omi를 탭해서 연결하세요.';
+
+  @override
+  String get onboardingNoOmiYet => '아직 Omi가 없으신가요?';
+
+  @override
+  String get onboardingOmiNotOrdered => '아직 주문하지 않았어요';
+
+  @override
+  String get onboardingOmiOrdered => '주문했어요';
+
+  @override
+  String get onboardingPermissionTapToFix => '탭하여 해결';
 }
