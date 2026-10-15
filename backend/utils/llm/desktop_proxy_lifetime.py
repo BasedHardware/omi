@@ -123,7 +123,7 @@ def _deadline_outcome(phase: str) -> str:
 
 
 def deadline_response(telemetry: Any, *, outcome: str, status: int = 504) -> JSONResponse:
-    telemetry.complete(outcome=outcome, status_code=status, retryable=False, phase=telemetry.phase)
+    telemetry.fail_request(outcome=outcome, status_code=status, retryable=False, phase=telemetry.phase)
     return JSONResponse(
         status_code=status,
         headers={
@@ -231,20 +231,23 @@ class DeadlinedStreamingResponse(StreamingResponse):
     async def __call__(self, scope, receive, send) -> None:
         telemetry = self.telemetry
         started = False
+        finished = False
 
         class ResponseDeadline(Exception):
             pass
 
         async def guarded_send(message):
-            nonlocal started
+            nonlocal started, finished
             if asyncio.get_running_loop().time() >= telemetry.request_deadline:
                 raise ResponseDeadline
             await send(message)
             if message['type'] == 'http.response.start':
                 started = True
+            if message['type'] == 'http.response.body' and not message.get('more_body', False):
+                finished = True
 
         async def expired_response():
-            telemetry.complete(outcome='provider_timeout', status_code=504, retryable=False, phase='body')
+            telemetry.fail_request(outcome='provider_timeout', status_code=504, retryable=False, phase='body')
             if not started:
                 await deadline_response(telemetry, outcome='provider_timeout')(scope, receive, send)
                 return
@@ -278,19 +281,24 @@ class DeadlinedStreamingResponse(StreamingResponse):
             if done:
                 try:
                     await task
-                    telemetry.complete(
-                        outcome='client_cancelled', status_code=499, retryable=False, phase='client_disconnect'
-                    )
+                    if not finished:
+                        telemetry.fail_request(outcome='client_cancelled', status_code=499, phase='client_disconnect')
+                    else:
+                        telemetry.complete(
+                            outcome='success', status_code=self.status_code, retryable=False, phase='body'
+                        )
                     return
                 except* ResponseDeadline:
                     pass
-            telemetry.complete(outcome='provider_timeout', status_code=504, retryable=False, phase='body')
+            telemetry.fail_request(outcome='provider_timeout', status_code=504, retryable=False, phase='body')
             if await _drain(task):
                 # Headers may be committed. The final error send is bounded too.
                 async with asyncio.timeout(CANCEL_GRACE_SECONDS):
                     await expired_response()
         except (asyncio.CancelledError, ClientDisconnect):
-            telemetry.complete(outcome='client_cancelled', status_code=499, retryable=False, phase='client_disconnect')
+            telemetry.fail_request(
+                outcome='client_cancelled', status_code=499, retryable=False, phase='client_disconnect'
+            )
             raise
         except TimeoutError:
             pass
@@ -374,7 +382,7 @@ class DesktopProxyDeadlineMiddleware:
             override = dict(outcome=outcome, status_code=504, retryable=False, phase=phase)
             # Classify an outstanding attempt before cancellation reaches the
             # route. A known provider result remains immutable via complete().
-            telemetry.complete(**override)
+            telemetry.fail_request(**override)
             stopped = await _drain(task)
             if not started or stopped:
                 async with asyncio.timeout(CANCEL_GRACE_SECONDS):

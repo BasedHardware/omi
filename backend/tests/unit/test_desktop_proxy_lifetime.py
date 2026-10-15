@@ -822,3 +822,55 @@ async def test_outer_deadline_settles_attempt_before_route_cancellation(monkeypa
     assert row['error_class'] == 'provider_timeout'
     assert [e['outcome'] for e in terminals(capsys)] == ['provider_timeout']
     assert messages[0]['status'] == 504
+
+
+@pytest.mark.asyncio
+async def test_simultaneous_success_and_disconnect_preserves_provider_not_request(monkeypatch, capsys):
+    from utils.llm import desktop_gemini_telemetry as tm
+    from utils.llm.managed_spend_ledger import build_managed_attempt_event
+
+    monkeypatch.setattr(lifetime, 'REQUEST_TIMEOUT_SECONDS', 2.0)
+    attempts = []
+    monkeypatch.setattr(tm, 'schedule_managed_attempt', attempts.append)
+    provider_done = asyncio.Event()
+    sent = False
+    messages = []
+
+    async def receive():
+        nonlocal sent
+        if not sent:
+            sent = True
+            return {'type': 'http.request', 'body': b'{}', 'more_body': False}
+        await provider_done.wait()
+        return {'type': 'http.disconnect'}
+
+    async def app(scope, receive, send):
+        request = Request(scope, receive)
+        state = tm.get_proxy_telemetry(request, streaming=False)
+        state.uid = 'synthetic-user'
+
+        async def handler(request):
+            state.phase = 'body'
+            state.note_dispatch(tm.UpstreamRoute('https://provider.invalid', {}, {}, 'ai_studio', 'server', 'us'))
+            state.complete(outcome='success', status_code=200, retryable=False, upstream_status=200, phase='body')
+            provider_done.set()
+            return Response(b'success')
+
+        response = await lifetime.run_request(request, handler, state)
+        await response(scope, receive, send)
+
+    async def send(message):
+        messages.append(message)
+
+    scope = {
+        'type': 'http',
+        'method': 'POST',
+        'path': '/v1/proxy/gemini/models/gemini-2.5-flash:generateContent',
+        'headers': [],
+    }
+    await lifetime.DesktopProxyDeadlineMiddleware(app)(scope, receive, send)
+    assert messages[0]['status'] == 499
+    assert len(attempts) == 1
+    assert build_managed_attempt_event(attempts[0]).as_dict()['outcome'] == 'success'
+    events = terminals(capsys)
+    assert [(e['outcome'], e['status_code'], e['upstream_status']) for e in events] == [('client_cancelled', 499, 200)]

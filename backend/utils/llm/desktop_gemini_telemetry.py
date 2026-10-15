@@ -203,6 +203,13 @@ class ProxyTelemetry:
             return
         self._emit_terminal(**values)
 
+    def fail_request(self, *, outcome: str, status_code: int, phase: str, retryable: bool = False) -> None:
+        """Override deferred delivery disposition without rewriting a known provider result."""
+        values: dict[str, Any] = dict(outcome=outcome, status_code=status_code, retryable=retryable, phase=phase)
+        self.complete(**values)
+        if self.defer_terminal:
+            self.pending_terminal = {**(self.pending_terminal or {}), **values}
+
     def flush_terminal(self, **override: Any) -> None:
         values = {**(self.pending_terminal or {}), **override} if override else self.pending_terminal
         self.pending_terminal = None
