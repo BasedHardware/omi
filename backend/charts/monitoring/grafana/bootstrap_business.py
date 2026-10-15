@@ -27,7 +27,7 @@ class Bootstrap(Grafana):
         self.basic = base64.b64encode(f"{username}:{password}".encode()).decode()
         self.org_id = None
 
-    def call(self, method, path, body=None):
+    def call(self, method, path, body=None, *, timeout=30):
         headers = {"Authorization": f"Basic {self.basic}", "Content-Type": "application/json"}
         if self.org_id:
             headers["X-Grafana-Org-Id"] = str(self.org_id)
@@ -37,7 +37,7 @@ class Bootstrap(Grafana):
             method=method,
             data=None if body is None else json.dumps(body).encode(),
         )
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             return json.load(response)
 
 
