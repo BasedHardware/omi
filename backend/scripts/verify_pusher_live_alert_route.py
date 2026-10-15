@@ -576,6 +576,9 @@ def validate_live_route(
     if str(datasource.get("status", "")).upper() != "OK":
         errors.append("live Prometheus datasource health is not OK")
     serving = serving_up_by_job(up_query, deletion_query, ksm_presence_query)
+    # Every required target already up does not need a deletion timestamp.
+    # kube-state-metrics darkness fails this gate only when a down target would
+    # otherwise be excused; that down target stays in min(up) and is reported.
     if any(serving.by_job.get(job) != "1" for job in REQUIRED_JOBS):
         observed = ", ".join(f"{job}={serving.by_job.get(job, 'absent')}" for job in sorted(REQUIRED_JOBS))
         detail = ""
