@@ -49,9 +49,8 @@ class OnTheWayPage extends StatelessWidget {
         // least advanced part. A live capture's uploaded audio carries the id of the conversation
         // already listed as processing, so it is not repeated.
         final pending = [
-          for (final w in SyncPendingWork.uploaded(p))
+          for (final w in [...SyncPendingWork.uploaded(p), ...SyncPendingWork.syncing(p)])
             if (w.conversationId == null || !processingIds.contains(w.conversationId)) w,
-          ...SyncPendingWork.syncing(p),
         ]..sort((a, b) => b.timerStart.compareTo(a.timerStart));
         for (final block in groupRecordingBlocks(pending)) {
           if (block.wals.every((w) => w.status == WalStatus.uploaded)) {

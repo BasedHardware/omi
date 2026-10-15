@@ -12,16 +12,12 @@ import 'package:omi/pages/home/widgets/home_for_you.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/services/proactivity/proactivity_outbox.dart';
+import 'package:omi/services/recap_events.dart';
 import 'package:omi/services/proactivity/proactivity_push.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
-
-final _recapDeletions = StreamController<String>.broadcast();
-
-/// A recap was deleted outside Home's row (from Activity): every mounted row drops its card.
-void announceRecapDeleted(String summaryId) => _recapDeletions.add(summaryId);
 
 /// Loads recent daily recaps. Injectable so tests and the visual audit need no network.
 typedef RecentRecapsLoader = Future<({List<DailySummary> items, bool ok})> Function();
@@ -48,6 +44,7 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> with WidgetsBindingObs
   bool _loading = true;
 
   StreamSubscription<String>? _deletions;
+  StreamSubscription<void>? _arrivals;
   DateTime? _lastRefresh;
 
   /// A recap made while the app was in the background shows (and lights the Activity bell) on return.
@@ -63,9 +60,8 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> with WidgetsBindingObs
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _deletions = _recapDeletions.stream.listen((id) {
-      if (mounted) setState(() => _recaps.removeWhere((s) => s.id == id));
-    });
+    _deletions = recapDeletions.listen(_dropRecap);
+    _arrivals = recapArrivals.listen((_) => refresh());
     WidgetsBinding.instance.addPostFrameCallback((_) => refresh());
   }
 
@@ -73,6 +69,7 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> with WidgetsBindingObs
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _deletions?.cancel();
+    _arrivals?.cancel();
     super.dispose();
   }
 
@@ -145,6 +142,13 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> with WidgetsBindingObs
     );
   }
 
+  /// A deleted recap leaves the row and the bell: the latest remaining recap is what counts.
+  void _dropRecap(String id) {
+    if (!mounted) return;
+    setState(() => _recaps.removeWhere((s) => s.id == id));
+    ActivitySeen.instance.observe(_recaps.map((r) => r.createdAt));
+  }
+
   void _openAll() => routeToPage(context, const DailyRecapsPage());
 
   Widget _card(BuildContext context, DailySummary summary) {
@@ -159,7 +163,7 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> with WidgetsBindingObs
         if (!mounted) return;
         if (result is Map && result['deleted'] == true) {
           final deletedId = result['summaryId'] as String?;
-          if (deletedId != null) setState(() => _recaps.removeWhere((s) => s.id == deletedId));
+          if (deletedId != null) _dropRecap(deletedId);
         }
       },
     );

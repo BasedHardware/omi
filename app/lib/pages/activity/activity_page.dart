@@ -10,6 +10,7 @@ import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/pages/review/recent_changes_page.dart';
 import 'package:omi/pages/review/review_page.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
+import 'package:omi/services/recap_events.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -91,7 +92,12 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
     super.dispose();
   }
 
+  /// Only the newest refresh may land: an older, slower one must not revert rows or move the seen
+  /// watermark backward.
+  int _generation = 0;
+
   Future<void> _refresh() async {
+    final generation = ++_generation;
     setState(() {
       _loading = _items.isEmpty;
       _failed = false;
@@ -101,7 +107,7 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
       (widget.loadRecaps ?? _loadActivityRecaps)(),
       (widget.loadChanges ?? review_api.getReviewChanges)(),
     ]);
-    if (!mounted) return;
+    if (!mounted || generation != _generation) return;
     final recaps = results[0] as ({List<DailySummary> items, bool ok});
     final changes = results[1] as ApiResult<ReviewChangesPage>;
     if (recaps.ok) _recaps = recaps.items;
@@ -153,6 +159,7 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
       _recaps = _recaps.where((r) => r.id != deletedId).toList();
       _rebuildItems();
     });
+    _seen.observe(_recaps.map((r) => r.createdAt));
   }
 
   bool _isNew(_ActivityItem item) =>
@@ -189,20 +196,8 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
           children: [
             if (_partial)
               Padding(
-                padding: const EdgeInsets.only(top: OmiSpacing.xs),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child:
-                          Text(l.activityLoadFailed, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
-                    ),
-                    OmiButton.tertiary(
-                        key: const Key('activity_retry'),
-                        label: l.retry,
-                        size: OmiButtonSize.compact,
-                        onPressed: _refresh),
-                  ],
-                ),
+                padding: const EdgeInsets.only(bottom: OmiSpacing.xs),
+                child: OmiPartialNotice(message: l.activityLoadFailed, onRetry: _refresh),
               ),
             for (final (header, items) in groups) ...[
               _DayHeader(label: header),

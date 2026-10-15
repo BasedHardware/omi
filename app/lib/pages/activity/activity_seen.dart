@@ -8,18 +8,44 @@ import 'package:omi/backend/preferences.dart';
 /// (memories, people, tasks) are listed in Activity but never light it, so the
 /// bell does not turn into a chore. Activity is not a to-do list: opening or
 /// leaving it marks everything seen, with no per-item read state.
+///
+/// The watermark belongs to the signed-in account: switching accounts neither carries one user's
+/// seen time nor their lit dot into the next.
 class ActivitySeen {
-  ActivitySeen({int Function()? read, void Function(int)? write})
-      : _read = read ?? (() => SharedPreferencesUtil().getInt(_key)),
-        _write = write ?? ((value) => SharedPreferencesUtil().saveInt(_key, value));
+  ActivitySeen({int Function()? read, void Function(int)? write, String Function()? owner})
+      : _owner = owner ?? (() => SharedPreferencesUtil().uid),
+        _readOverride = read,
+        _writeOverride = write;
 
   static ActivitySeen instance = ActivitySeen();
 
   static const _key = 'activityDelightSeenAtMs';
 
-  final int Function() _read;
-  final void Function(int) _write;
+  final String Function() _owner;
+  final int Function()? _readOverride;
+  final void Function(int)? _writeOverride;
+  String? _ownerSeen;
   int _latestDelightMs = 0;
+
+  String get _scopedKey => '$_key:${_owner()}';
+  int _read() => _readOverride?.call() ?? SharedPreferencesUtil().getInt(_scopedKey);
+  void _write(int value) {
+    final write = _writeOverride;
+    if (write != null) {
+      write(value);
+    } else {
+      SharedPreferencesUtil().saveInt(_scopedKey, value);
+    }
+  }
+
+  /// A different account signed in: forget the previous one's in-memory state.
+  void _syncOwner() {
+    final owner = _owner();
+    if (owner == _ownerSeen) return;
+    _ownerSeen = owner;
+    _latestDelightMs = 0;
+    hasNew.value = false;
+  }
 
   /// True while a delight item is newer than the last visit to Activity.
   final ValueNotifier<bool> hasNew = ValueNotifier(false);
@@ -28,7 +54,12 @@ class ActivitySeen {
   int get seenAtMs => _read();
 
   /// Reported by every surface after a successful load of delight items, even an empty one.
+  ///
+  /// [delights] is the full current set, not a delta: a deleted recap drops out of it, so the bell
+  /// goes dark when the only unseen recap is gone.
   void observe(Iterable<DateTime> delights, {DateTime? now}) {
+    _syncOwner();
+    _latestDelightMs = 0;
     for (final at in delights) {
       final ms = at.millisecondsSinceEpoch;
       if (ms > _latestDelightMs) _latestDelightMs = ms;
@@ -48,6 +79,7 @@ class ActivitySeen {
   /// Activity showed everything up to [through] (default now). A recap seen elsewhere after that,
   /// say by Home refreshing behind an open Activity, keeps the bell lit.
   void markSeen({DateTime? through}) {
+    _syncOwner();
     final ms = (through ?? DateTime.now()).millisecondsSinceEpoch;
     _write(ms);
     hasNew.value = _latestDelightMs > ms;

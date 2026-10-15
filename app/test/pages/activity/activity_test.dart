@@ -77,6 +77,27 @@ void main() {
     expect(seen.hasNew.value, isTrue);
   });
 
+  test('deleting the only unseen recap turns the bell off', () {
+    final (seen, _) = _seen(yesterday.millisecondsSinceEpoch);
+    seen.observe([anHourAgo, yesterday]);
+    expect(seen.hasNew.value, isTrue);
+    seen.observe([yesterday]);
+    expect(seen.hasNew.value, isFalse);
+  });
+
+  test('a different signed-in account starts from its own watermark, never the last one\'s dot', () {
+    final stores = <String, int>{'a': yesterday.millisecondsSinceEpoch, 'b': 0};
+    var owner = 'a';
+    final seen = ActivitySeen(owner: () => owner, read: () => stores[owner] ?? 0, write: (v) => stores[owner] = v);
+    seen.observe([anHourAgo]);
+    expect(seen.hasNew.value, isTrue);
+
+    owner = 'b';
+    seen.observe([yesterday]);
+    expect(seen.hasNew.value, isFalse, reason: 'first load for account b is its baseline');
+    expect(stores['a'], yesterday.millisecondsSinceEpoch);
+  });
+
   group('ActivityBellButton', () {
     testWidgets('is always there, with a dot only when something is new', (tester) async {
       final (seen, _) = _seen(yesterday.millisecondsSinceEpoch);
@@ -142,7 +163,7 @@ void main() {
       await tester.pumpWidget(_app(page(seen, changesOk: false, failure: ApiProblemKind.server)));
       await tester.pumpAndSettle();
       expect(find.text('Recap new'), findsOneWidget);
-      expect(find.byKey(const Key('activity_retry')), findsOneWidget);
+      expect(find.byKey(const ValueKey('search_partial_retry')), findsOneWidget);
     });
 
     testWidgets('rows stay activatable for screen readers', (tester) async {

@@ -394,6 +394,25 @@ void main() {
       expect(find.text('Transcribing…'), findsNothing);
     });
 
+    testWidgets('a live capture still processing is not repeated as its not-yet-uploaded audio', (tester) async {
+      final now = DateTime.now();
+      final conversations = ConversationProvider(
+          conversationListFetcher: () async => (items: <ServerConversation>[], ok: true), isSignedIn: () => true)
+        ..processingConversations = [
+          ServerConversation(
+              id: 'conv-2',
+              createdAt: now,
+              startedAt: now,
+              structured: Structured('', ''),
+              status: ConversationStatus.processing),
+        ];
+      final safety = _wal('safety', 4, WalStatus.miss)..conversationId = 'conv-2';
+      await _pumpPage(tester, _FakeSync(wals: [safety]),
+          extras: [ChangeNotifierProvider<ConversationProvider>.value(value: conversations)]);
+      expect(find.text('Processing'), findsOneWidget);
+      expect(find.text('SYNCING'), findsNothing);
+    });
+
     testWidgets('one recording straddling an upload batch is listed once, by its least advanced part', (tester) async {
       final done =
           Wal(timerStart: 1000, codec: BleAudioCodec.opus, seconds: 300, status: WalStatus.uploaded, device: 'pendant');
