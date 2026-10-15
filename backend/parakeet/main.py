@@ -435,6 +435,7 @@ async def stream_transcribe(
 
     session: Optional[StreamSession] = None
     active_gauge_owned = False
+    finalize_requested = False
     t0 = time.monotonic()
     try:
         session = StreamSession(sample_rate=sample_rate, vad_threshold=vad_threshold, hangover_s=hangover_s)
@@ -464,6 +465,7 @@ async def stream_transcribe(
                     await websocket.send_json(seg)
             elif "text" in msg:
                 if msg["text"] == "finalize":
+                    finalize_requested = True
                     break
     except WebSocketDisconnect:
         pass
@@ -482,6 +484,11 @@ async def stream_transcribe(
                         await websocket.send_json(seg)
                     except Exception:
                         break
+                else:
+                    # Finish only after every tail segment was delivered. A
+                    # handler return alone can drop TCP without a close frame.
+                    if finalize_requested:
+                        await websocket.close(code=1000)
         except Exception as e:
             logger.error(f"v3/stream flush error: {e}")
         finally:
