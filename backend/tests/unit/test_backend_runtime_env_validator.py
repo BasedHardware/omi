@@ -409,6 +409,14 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_capture_evidence_env(payload)
     payload = with_screen_frame_egress_env(payload)
     payload = with_firestore_read_ledger_env(payload)
+    # Keep unrelated dev drift fixtures complete for the explicit retirement flag.
+    payload = re.sub(
+        r'("backend-sync":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n        {"name": "SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM", "value": "false"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
     # Carry the dev finalization worker's explicit dark shadow bindings.
     payload = re.sub(
         r'("backend-sync":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',

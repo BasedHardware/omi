@@ -4,6 +4,7 @@ import os
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 from uuid import uuid4
+from unittest.mock import MagicMock
 
 import pytest
 from google.auth.credentials import AnonymousCredentials
@@ -11,6 +12,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.document import DocumentReference
 
 from database import sync_backfill_sequencer as registry
+from utils.sync import uid_sequencer
 
 
 @pytest.fixture
@@ -96,3 +98,40 @@ def test_claim_candidate_identity_fence_uses_the_transactional_head(state):
     assert not client.collection(registry.COLLECTION).document(uid).get().exists
     assert client.collection(registry.PENDING_COLLECTION).document(jid).get().exists
     assert registry.claim_next(uid, expected_job_id=jid, firestore_client=client)['job_id'] == jid
+
+
+@pytest.mark.parametrize('binding', [{'ledger_run_token': 'live'}, {'status': 'completed'}])
+def test_claim_path_preserves_refused_head_and_ledger(state, monkeypatch, binding):
+    client, uid, jid, ledger = state
+    monkeypatch.setattr(registry, 'get_firestore_client', lambda: client)
+    monkeypatch.setenv('SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM', 'true')
+    monkeypatch.setattr(uid_sequencer, 'sync_job_key_exists', lambda job: False)
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda job: 'token')
+    monkeypatch.setattr(uid_sequencer, 'release_job_run_lock', lambda *args: None)
+    ledger.update(binding)
+    before = ledger.get().to_dict()
+    assert uid_sequencer._claim_next(uid) is None
+    assert registry.get_owner(uid) == {}
+    assert client.collection(registry.PENDING_COLLECTION).document(jid).get().exists
+    assert ledger.get().to_dict() == before
+
+
+def test_bounded_claim_schedules_wake_for_live_successor(state, monkeypatch):
+    client, uid, jid, ledger = state
+    live = uuid4().hex
+    registry.register_job(uid, live, {'uid': uid, 'job_id': live}, None, firestore_client=client)
+    monkeypatch.setattr(registry, 'get_firestore_client', lambda: client)
+    monkeypatch.setenv('SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM', 'true')
+    monkeypatch.setattr(uid_sequencer, 'sync_job_key_exists', lambda job: job == live)
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda job: 'token')
+    monkeypatch.setattr(uid_sequencer, 'release_job_run_lock', lambda *args: None)
+    monkeypatch.setattr(uid_sequencer.backfill_cutover, 'quiet_remaining', lambda uid: (0, None))
+    monkeypatch.setattr(uid_sequencer.backfill_cutover, 'direct_remaining_for_uid', lambda uid: (0, None))
+    monkeypatch.setattr(uid_sequencer.backfill_cutover, 'claim_wake', lambda *args: True)
+    wake = MagicMock()
+    monkeypatch.setattr(uid_sequencer, '_enqueue_wake', wake)
+    assert not uid_sequencer.kick(uid, retire_limit=1)
+    wake.assert_called_once()
+    assert registry.pending_head(uid)['job_id'] == live
+    assert registry.get_owner(uid) == {}
+    assert uid_sequencer._claim_next(uid)['job_id'] == live

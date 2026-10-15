@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
@@ -34,8 +35,15 @@ EXPIRED_RETIRED = Counter(
 
 class _RetirementOutcome(Enum):
     RETIRED = 'retired'
-    KEEP = 'keep'
+    KEY_PRESENT = 'key_present'
+    REFUSED = 'refused'
     LOCK_HELD = 'lock_held'
+
+
+@dataclass
+class _ClaimProgress:
+    retired: int = 0
+    needs_wake: bool = False
 
 
 def retire_expired_enabled() -> bool:
@@ -44,14 +52,13 @@ def retire_expired_enabled() -> bool:
 
 def _retire_expired(uid: str, job_id: str, *, epoch: int | None = None) -> _RetirementOutcome:
     # Malformed job JSON must never count as absence. Redis errors propagate.
-    if sync_job_key_exists(job_id):
-        return _RetirementOutcome.KEEP
+    sync_job_key_exists(job_id)
     token = try_acquire_job_run_lock(job_id)
     if token is None:
         return _RetirementOutcome.LOCK_HELD
     try:
         if sync_job_key_exists(job_id):
-            return _RetirementOutcome.KEEP
+            return _RetirementOutcome.KEY_PRESENT
         retired = registry.retire_expired(uid, job_id, epoch=epoch)
     finally:
         release_job_run_lock(job_id, token)
@@ -73,25 +80,31 @@ def _retire_expired(uid: str, job_id: str, *, epoch: int | None = None) -> _Reti
                 }
             },
         )
-    return _RetirementOutcome.RETIRED if retired else _RetirementOutcome.KEEP
+    return _RetirementOutcome.RETIRED if retired else _RetirementOutcome.REFUSED
 
 
-def _claim_next(uid: str, *, retire_limit: int = MAX_EXPIRED_RETIREMENTS) -> dict[str, Any] | None:
+def _claim_next(
+    uid: str, *, retire_limit: int = MAX_EXPIRED_RETIREMENTS, progress: _ClaimProgress | None = None
+) -> dict[str, Any] | None:
+    progress = progress if progress is not None else _ClaimProgress()
     if retire_expired_enabled():
         for _ in range(min(MAX_EXPIRED_RETIREMENTS, max(0, retire_limit))):
             head = registry.pending_head(uid)
             if head is None:
                 return None
             outcome = _retire_expired(uid, head['job_id'])
-            if outcome is _RetirementOutcome.LOCK_HELD:
-                # Another retirement/worker owns this head. Never promote it
-                # into a Cloud Task while that owner is checking its absence.
-                return None
-            if outcome is not _RetirementOutcome.RETIRED:
-                return registry.claim_next(uid, expected_job_id=head['job_id'])
-        else:
-            # Leave the next head durable for the bounded periodic sweep.
+            if outcome is _RetirementOutcome.RETIRED:
+                progress.retired += 1
+                continue
+            if outcome is _RetirementOutcome.KEY_PRESENT:
+                claim = registry.claim_next(uid, expected_job_id=head['job_id'])
+                progress.needs_wake = claim is None
+                return claim
+            # A refused transaction or another lock holder must not be
+            # bypassed by reserving the protected head or scheduling a wake.
             return None
+        progress.needs_wake = True
+        return None
     return registry.claim_next(uid)
 
 
@@ -134,7 +147,7 @@ def _enqueue_wake(uid: str, uid_hash: str, deadline: int) -> None:
     enqueue_sync_uid_wake(uid, uid_hash, deadline)
 
 
-def kick(uid: str, *, retire_limit: int = MAX_EXPIRED_RETIREMENTS) -> bool:
+def kick(uid: str, *, retire_limit: int = MAX_EXPIRED_RETIREMENTS, progress: _ClaimProgress | None = None) -> bool:
     """Select one pending job and enqueue it; a persisted reservation survives uncertainty."""
     if not registry.production_stage():
         return False
@@ -162,8 +175,19 @@ def kick(uid: str, *, retire_limit: int = MAX_EXPIRED_RETIREMENTS) -> bool:
                 remaining,
             )
         return False
-    claim = _claim_next(uid, retire_limit=retire_limit)
+    progress = progress if progress is not None else _ClaimProgress()
+    claim = _claim_next(uid, retire_limit=retire_limit, progress=progress)
     if claim is None:
+        if progress.needs_wake and registry.pending_head(uid) is not None:
+            # Stable future bucket deduplicates concurrent kicks. A wake that
+            # itself exhausts the budget schedules the following bucket.
+            deadline = (int(time.time()) // 5 + 1) * 5
+            if backfill_cutover.claim_wake(uid, deadline):
+                try:
+                    _enqueue_wake(uid, backfill_cutover.uid_hash(uid), deadline)
+                except Exception:
+                    backfill_cutover.release_wake(uid, deadline)
+                    raise
         return False
     try:
         _dispatch(claim)
@@ -177,7 +201,12 @@ def kick(uid: str, *, retire_limit: int = MAX_EXPIRED_RETIREMENTS) -> bool:
 
 
 def reconcile_uid(
-    uid: str, owner: dict[str, Any], *, now: datetime | None = None, retire_limit: int = MAX_EXPIRED_RETIREMENTS
+    uid: str,
+    owner: dict[str, Any],
+    *,
+    now: datetime | None = None,
+    retire_limit: int = MAX_EXPIRED_RETIREMENTS,
+    progress: _ClaimProgress | None = None,
 ) -> str:
     if not registry.production_stage():
         return 'disabled'
@@ -202,7 +231,7 @@ def reconcile_uid(
     job_id = owner.get('active_job_id')
     if not isinstance(job_id, str) or not job_id:
         if waiting:
-            return 'dispatched' if kick(uid, retire_limit=retire_limit) else 'raced'
+            return 'dispatched' if kick(uid, retire_limit=retire_limit, progress=progress) else 'raced'
         return 'empty'
 
     epoch = owner.get('active_epoch')
@@ -215,13 +244,14 @@ def reconcile_uid(
         registry.defer_owner(uid, registry.HEARTBEAT_SECONDS, now=current)
         return 'invalid'
     state = owner.get('active_state')
-    if (
-        retire_expired_enabled()
-        and state == 'dispatching'
-        and _retire_expired(uid, job_id, epoch=epoch) is _RetirementOutcome.RETIRED
-    ):
-        kick(uid, retire_limit=retire_limit)
-        return 'expired_retired'
+    if retire_expired_enabled() and state == 'dispatching':
+        retirement = _retire_expired(uid, job_id, epoch=epoch)
+        if retirement is _RetirementOutcome.RETIRED:
+            kick(uid, retire_limit=retire_limit, progress=progress)
+            return 'expired_retired'
+        if retirement in (_RetirementOutcome.REFUSED, _RetirementOutcome.LOCK_HELD):
+            registry.defer_owner(uid, registry.HEARTBEAT_SECONDS, now=current)
+            return retirement.value
     deadline = owner.get('dispatch_retry_at') if state == 'dispatching' else owner.get('lease_expires_at')
     if not isinstance(deadline, datetime) or deadline > current:
         registry.defer_owner(uid, registry.HEARTBEAT_SECONDS, now=current)
@@ -268,10 +298,12 @@ def sweep(*, limit: int = 100) -> dict[str, int]:
         return {'disabled': 1}
     now = datetime.now(timezone.utc)
     outcomes: dict[str, int] = {}
+    pending_retired = 0
     owners = registry.due_owners(limit=limit, now=now)
     for owner in owners:
+        progress = _ClaimProgress()
         try:
-            outcome = reconcile_uid(owner['uid'], owner, now=now, retire_limit=1)
+            outcome = reconcile_uid(owner['uid'], owner, now=now, retire_limit=1, progress=progress)
         except Exception as error:
             outcome = 'error'
             logger.error(
@@ -280,10 +312,12 @@ def sweep(*, limit: int = 100) -> dict[str, int]:
                 backfill_cutover.uid_hash(owner['uid']),
                 type(error).__name__,
             )
+        pending_retired += progress.retired
         outcomes[outcome] = outcomes.get(outcome, 0) + 1
     pending = registry.due_pending(limit=limit, now=now)
     seen_uids: set[str] = set()
     for job in pending:
+        progress = _ClaimProgress()
         try:
             registry.defer_pending(job['id'], now=now)
             if job['uid'] in seen_uids:
@@ -299,7 +333,7 @@ def sweep(*, limit: int = 100) -> dict[str, int]:
                     sample['depth'],
                     sample['age_seconds'],
                 )
-            if kick(job['uid'], retire_limit=1):
+            if kick(job['uid'], retire_limit=1, progress=progress):
                 outcomes['pending_dispatched'] = outcomes.get('pending_dispatched', 0) + 1
         except Exception as error:
             outcomes['error'] = outcomes.get('error', 0) + 1
@@ -309,6 +343,11 @@ def sweep(*, limit: int = 100) -> dict[str, int]:
                 backfill_cutover.uid_hash(job['uid']),
                 type(error).__name__,
             )
+
+        finally:
+            pending_retired += progress.retired
+    if pending_retired:
+        outcomes['expired_retired'] = outcomes.get('expired_retired', 0) + pending_retired
     logger.info(
         'event=sync_uid_sequencer action=sweep_summary outcome=done '
         'scanned=%d pending_scanned=%d queued_depth=%d active_leases=%d dispatched=%d lease_expired=%d '
