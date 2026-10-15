@@ -175,12 +175,7 @@ def load_live_stt_import_rules(*, production: bool = True) -> dict[str, dict[str
             raise AlertRouteError(f"committed import alert {uid} is missing")
         rules[uid] = committed[uid]
     if not production:
-        # No verified development sentinel exists. Retain error pages instead
-        # of depending on production datasource IDs or mutating canonical rules.
-        rules = copy.deepcopy(rules)
-        for rule in rules.values():
-            if rule.get("execErrState") == "KeepLast":
-                rule["execErrState"] = "Error"
+        rules = _development_rules(rules)
     for uid in canary_uids:
         canary = rules[uid]
         if (
@@ -238,6 +233,16 @@ def _run_live_stt_import(grafana_url: str, token: str) -> list[str]:
         _write_rule(grafana_url, uid, rule, token, exists=uid in live)
         print(f"UPSERTED live-STT alert {uid}")
     return []
+
+
+def _development_rules(rules: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    # No verified development sentinel exists. Development keeps error pages
+    # instead of KeepLast, on a detached copy so canonical rules never change.
+    rules = copy.deepcopy(rules)
+    for rule in rules.values():
+        if rule.get("execErrState") == "KeepLast":
+            rule["execErrState"] = "Error"
+    return rules
 
 
 def _committed_rules() -> dict[str, dict[str, Any]]:
@@ -430,8 +435,11 @@ def validate_live_route(
     contact_points: Any,
     *,
     phase: str,
+    production: bool = True,
 ) -> list[str]:
     expected_rules = _committed_rules()
+    if not production:
+        expected_rules = _development_rules(expected_rules)
     errors: list[str] = []
     receivers: set[str] = set()
     for uid, expected in expected_rules.items():
@@ -515,6 +523,7 @@ def _run_pusher_gate(grafana_url: str, token: str, phase: str, attempts: int) ->
             _request_json(grafana_url, metric_query_path, token),
             _request_json(grafana_url, "/api/v1/provisioning/contact-points", token),
             phase=phase,
+            production=grafana_url == "https://monitor.omi.me",
         )
         if not failures or attempt + 1 == attempts:
             break
