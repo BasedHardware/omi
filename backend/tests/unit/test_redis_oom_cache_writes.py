@@ -26,7 +26,6 @@ CACHE_WRITES = [
     (redis_db.cache_signed_url, ('blob', 'https://example.test/signed')),
     (redis_db.set_user_data_protection_level, ('uid', 'standard')),
     (redis_db.set_speech_profile_duration, ('uid', 12.5)),
-    (redis_db.set_app_review_cache, ('app', 'uid', {'score': 5})),
 ]
 
 

@@ -6,7 +6,6 @@ from typing import Any, Callable, Dict, List, Optional, TypeVar, Union, cast
 from datetime import datetime, timedelta, timezone
 
 import redis
-from redis.exceptions import RedisError
 import logging
 
 from database import api_key_cache
@@ -321,14 +320,11 @@ return 1
 
 
 def set_app_review_cache(app_id: str, uid: str, data: Dict[str, Any]) -> None:
+    # Strict by design: this is the read model for app reviews (incremental
+    # GET+merge+SET, no TTL, nothing rebuilds it from Firestore), so a skipped
+    # write would permanently drop a review. Fail-open requires a rebuild path.
     key = f'plugins:{app_id}:reviews'
-    try:
-        _SET_APP_REVIEW_CACHE_LUA(keys=[key], args=[uid, _serialize_cache_value(data)])
-    except RedisError as exc:
-        reason = _cache_write_fail_open_reason(exc)
-        if reason is None:
-            raise
-        _record_cache_write_skipped(key, reason)
+    _SET_APP_REVIEW_CACHE_LUA(keys=[key], args=[uid, _serialize_cache_value(data)])
 
 
 def get_specific_user_review(app_id: str, uid: str) -> Dict[str, Any]:

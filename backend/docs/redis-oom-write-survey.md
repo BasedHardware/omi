@@ -8,7 +8,7 @@ incident was Redis noeviction saturation on 2026-10-15; TTL expiry restored writ
 
 | Base file / lines | Write surface | Treatment |
 | --- | --- | --- |
-| `database/redis_db.py:170-178` | Generic cache SET, with and without TTL | Already catches all exceptions via decorator; reuse `_cache_set_fail_open` to add bounded logging and fallback telemetry. Preserve absent/zero TTL behavior. |
+| `database/redis_db.py:170-178` | Generic cache SET | Already catches all exceptions via decorator; reuse `_cache_set_fail_open` to add bounded logging and fallback telemetry. The follow-up commit makes `ttl` required (no immortal branch remains). |
 | `database/redis_db.py:193-194` | App-by-ID SET | Use existing helper; preserve 600-second TTL. |
 | `database/redis_db.py:241-242` | App usage count SET | Use existing helper; preserve 900-second TTL. |
 | `database/redis_db.py:259-260` | App money-made amount SET | Use existing helper; preserve 900-second TTL. |
@@ -56,8 +56,20 @@ Only static reasons and cache namespaces are logged, never payloads or full keys
 
 `utils/fair_use.py` was also checked: speech/LLM accounting Lua and pipeline
 writes, enforcement-cache SETEX/DELETE, and restriction markers retain their
-existing error policies, including `raise_on_error` accounting. No rate-limit or
-fair-use files change.
+existing error policies, including `raise_on_error` accounting. No rate-limit
+files change. A follow-up commit adds bounded stale-history pruning to the
+idempotent speech path (retention windows and admission semantics unchanged);
+see `tests/unit/test_fair_use_idempotent_pruning.py`.
+
+## Explicitly NOT covered (strict by design)
+
+- `set_app_review_cache` (`database/redis_db.py`): reviewed during this change and
+  reverted to strict. It is the read model for app reviews — an incremental
+  GET+merge+SET with no TTL, written after the Firestore write with nothing
+  rebuilding it from Firestore — so a skipped merge would permanently drop a
+  review from the API. Fail-open there needs a rebuild path first.
+- Daily-summary / visibility mappings / user preference writes: semantic review
+  pending; behavior unchanged.
 
 ## Regression coverage
 
