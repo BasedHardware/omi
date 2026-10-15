@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 import traceback
@@ -37,6 +38,7 @@ def _redact_phone(number: str) -> str:
 
 
 router = APIRouter(route_class=MultipartMaxPartSizeRoute)
+logger = logging.getLogger(__name__)
 
 
 def _say(response: VoiceResponse, message: str) -> None:
@@ -144,10 +146,10 @@ def verify_phone_number(
                     status_code=409,
                     detail="A verification call is already in progress for this number. Please answer the call and enter the code.",
                 )
-        traceback.print_exc()
+        logger.error(f"Twilio caller ID verification error for user {uid} ({_redact_phone(phone_number)}): {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to start verification.")
     except Exception as e:
-        traceback.print_exc()
+        logger.error(f"Unexpected error starting phone verification for user {uid} ({_redact_phone(phone_number)}): {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to start verification.")
 
 
@@ -239,7 +241,7 @@ def get_phone_token(uid: str = Depends(auth.get_current_user_uid)):
         token_data = generate_access_token(uid)
         return TokenResponse(**token_data)
     except Exception as e:
-        traceback.print_exc()
+        logger.error(f"Failed to generate phone token for user {uid}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to generate token.")
 
 

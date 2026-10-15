@@ -50,16 +50,18 @@ def test_integrations_oauth_state_redis_error_sanitized(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_imports_file_write_filesystem_error_sanitized(monkeypatch):
-    """Verify filesystem disk errors and internal OS paths in import_limitless_data do not leak in HTTP 500."""
+    """Verify filesystem disk errors and internal OS paths in import_limitless_data do not leak in HTTP 500 or persisted job error."""
     fake_job = MagicMock()
     fake_job.id = "job-998877"
+    mock_update_job = MagicMock()
     monkeypatch.setattr(imp_routes, "create_import_job", MagicMock(return_value=fake_job))
-    monkeypatch.setattr(imp_routes.import_jobs_db, "update_import_job", MagicMock())
+    monkeypatch.setattr(imp_routes.import_jobs_db, "update_import_job", mock_update_job)
 
     async def mock_run_blocking(executor, func, *args, **kwargs):
         if func == imp_routes.create_import_job:
             return fake_job
         if func == imp_routes.import_jobs_db.update_import_job:
+            mock_update_job(*args, **kwargs)
             return None
         # Simulate disk write permission error
         raise PermissionError("[Errno 13] Permission denied: '/var/data/uploads/app_user_9921/secret_export.zip'")
@@ -77,10 +79,18 @@ async def test_imports_file_write_filesystem_error_sanitized(monkeypatch):
     assert exc_info.value.detail == "Failed to save uploaded file."
     assert "/var/data/uploads" not in exc_info.value.detail
     assert "app_user_9921" not in exc_info.value.detail
+    # Verify persisted job error in database is also sanitized
+    mock_update_job.assert_called_once_with(
+        fake_job.id,
+        {'status': imp_routes.ImportJobStatus.failed.value, 'error': "Failed to save uploaded file."},
+    )
 
 
 def test_phone_calls_verification_twilio_error_sanitized(monkeypatch):
     """Verify Twilio API error strings and credentials in verify_phone_number are masked."""
+    monkeypatch.setattr(phone_routes, "check_call_access", MagicMock())
+    monkeypatch.setattr(phone_routes.phone_calls_db, "get_phone_number_by_number", MagicMock(return_value=None))
+    monkeypatch.setattr(phone_routes.phone_calls_db, "set_pending_verification", MagicMock())
     monkeypatch.setattr(
         phone_routes,
         "start_caller_id_verification",
