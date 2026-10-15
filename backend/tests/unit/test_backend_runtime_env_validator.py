@@ -3219,6 +3219,23 @@ _JEV_PROCESS_CONVERSATION_HOSTS = {
 _JEV_LIVE_RELEVANCE_HOSTS = _JEV_PROCESS_CONVERSATION_HOSTS | {'cloud_run/backend-sync-backfill'}
 
 
+def test_batch_pipeline_namespace_is_absent_from_backend_sync_runtime_env(monkeypatch):
+    key = 'BATCH_PIPELINE_NAMESPACE'
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    for environment in ('dev', 'prod'):
+        config = validator._get_env_config(manifest, environment)
+        overlay = validator._load_yaml(ROOT / f'deploy/runtime_env/{environment}.overlay.yaml')['overlay']
+        for source in (config, overlay):
+            sync_env = source['cloud_run']['services']['backend-sync']['env']
+            assert key not in sync_env
+            assert all(key not in env for _, env in _manifest_env_blocks(source))
+        with monkeypatch.context() as patch:
+            state = render_cloud_run_state(config, patch)
+        rendered_env = state['services']['backend-sync']['env']
+        assert all(entry['name'] != key for entry in rendered_env), environment
+
+
 def test_transcription_shadow_dev_scope_matches_generated_manifest_and_charts():
     controls = {
         'TRANSCRIPTION_SHADOW_ENABLED': 'true',

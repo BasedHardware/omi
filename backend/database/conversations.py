@@ -3,14 +3,12 @@ import copy
 import hashlib
 import json
 import logging
-import os
 import uuid
 import zlib
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any, Callable, Tuple
 from database import chat_edits
-from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.dream_dirty import after_write
 from google.api_core.exceptions import AlreadyExists, Conflict, NotFound
 from google.cloud import firestore
@@ -43,6 +41,7 @@ from utils.manual_speaker_assignments import (
     remap_absorbed_receipt,
 )
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
+from database.sync_assignment import encode_sync_assignment_plan, run_sync_assignment
 from .audio_timeline import group_chunks_by_coverage
 from .capture_groups import CAPTURE_GROUP_FIELD, leave_capture_group, transcript_fingerprint
 from .firestore_index_registry import (
@@ -3781,7 +3780,17 @@ def store_conversation_photos(
 
 
 @set_data_protection_level(data_arg_name='incoming')
-def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, target_id=None, firestore_client=None):
+def assign_sync_conversation(
+    uid: str,
+    incoming: dict,
+    *,
+    candidate_id=None,
+    target_id=None,
+    firestore_client=None,
+    before_assign: Callable[[Any], None] | None = None,
+    validate_plan: Callable[[Any, dict], None] | None = None,
+    after_assign: Callable[[Any, tuple], None] | None = None,
+):
     """Atomically choose, create or append a sync conversation across workers."""
     from utils.sync.assignment import assign_in_transaction, run_with_size_limit_backstop
 
@@ -3812,34 +3821,17 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
     @firestore.transactional
     def assign(transaction, full_ids=frozenset()):
         score_snapshots.clear()
+        # Optional batch projection hooks share the exact legacy transaction.
+        # Guards/plan validation may only read; after_assign may only write.
+        if before_assign is not None:
+            before_assign(transaction)
 
         def encode(payload):
-            current = score_snapshots.get(payload.get('id'))
-            if current and current.get('has_transcript_corrections'):
-                from utils.agent_capabilities.transcripts import load_entries, preserves_correction_anchors
-                from utils.sync.assignment_errors import SyncAssignmentConflict
-
-                captured = decode_transcript_segments_verified(
-                    uid, current.get('transcript_segments') or [], bool(current.get('transcript_segments_compressed'))
-                )
-                corrections = load_entries(uid, payload['id'], firestore_client=client, transaction=transaction)
-                if not preserves_correction_anchors(captured, payload.get('transcript_segments') or [], corrections):
-                    raise SyncAssignmentConflict('sync append changed corrected speech', subtype='other')
-            encoded = _prepare_conversation_for_write(
-                payload,
-                uid,
-                payload.get('data_protection_level') or 'enhanced',
-                preserve_transcript_identity=bool(current and current.get('has_transcript_corrections')),
+            if validate_plan is not None:
+                validate_plan(transaction, payload)
+            return encode_sync_assignment_plan(
+                uid, client, transaction, payload, score_snapshots.get(payload.get('id'))
             )
-            guard_match_score_size(encoded, current)
-            if (
-                current
-                and match_scores.FIELD in current
-                and match_scores.FIELD not in encoded
-                and current.get('data_protection_level') != payload.get('data_protection_level')
-            ):
-                encoded[match_scores.FIELD] = firestore.DELETE_FIELD
-            return encoded
 
         planned = assign_in_transaction(
             transaction,
@@ -3854,18 +3846,13 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
         )
         # The commit runs after this returns; remember which row it would grow.
         attempted['canonical'] = planned[0]['id']
+        if after_assign is not None:
+            after_assign(transaction, planned)
         return planned
 
-    def run_assignment(full_ids):
-        if os.getenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'false').strip().lower() != 'true':
-            return run_transactional(client, assign, full_ids=full_ids)
-        return run_with_transaction_contention_retry(
-            client.transaction,
-            lambda transaction: run_transactional(client, assign, full_ids=full_ids, initial_transaction=transaction),
-            operation_name='sync_assignment',
-        )
-
-    result = run_with_size_limit_backstop(run_assignment, lambda: attempted.get('canonical'))
+    result = run_with_size_limit_backstop(
+        lambda full_ids: run_sync_assignment(client, assign, full_ids), lambda: attempted.get('canonical')
+    )
     invalidate_people_stats_cache(uid)
     conversation = result[0]
     for donor_id in conversation.get('sync_merged_from') or []:
