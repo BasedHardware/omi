@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/conversation_api_contract.dart';
@@ -10,6 +12,10 @@ import 'package:omi/ui/ui.dart';
 import '../support/typed_conversation_screen.dart';
 
 void main() {
+  // These cover the redesigned Home (home-redesign test arm).
+  setUp(() => HomeRedesign.setForTesting(true));
+  tearDown(HomeRedesign.resetForTesting);
+
   for (final brightness in Brightness.values) {
     testWidgets('Home keeps its text-only empty title and layout after loading in $brightness', (tester) async {
       final semantics = tester.ensureSemantics();

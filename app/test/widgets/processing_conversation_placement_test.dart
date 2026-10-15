@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:omi/pages/home/legacy/legacy_home.dart';
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -43,6 +46,10 @@ ServerConversation completed(String id, {DateTime? createdAt, DateTime? startedA
     );
 
 void main() {
+  // These cover the redesigned Home (home-redesign test arm).
+  setUp(() => HomeRedesign.setForTesting(true));
+  tearDown(HomeRedesign.resetForTesting);
+
   setUp(() => VisibilityDetectorController.instance.updateInterval = Duration.zero);
 
   testWidgets('Process Now rows under the Today header, above the same-day conversations', (tester) async {
@@ -62,6 +69,18 @@ void main() {
     expect(tester.widget<DateListItem>(header).date, conversationLocalDayKey(DateTime.now()));
     expect(tester.getBottomLeft(header).dy, lessThanOrEqualTo(tester.getTopLeft(processing).dy));
     expect(tester.getBottomLeft(processing).dy, lessThanOrEqualTo(tester.getTopLeft(item).dy));
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets("today's Home (home-redesign control) keeps today's processing row", (tester) async {
+    HomeRedesign.setForTesting(false);
+    final provider = ConversationProvider(isSignedIn: () => false);
+    addTearDown(provider.dispose);
+    await pumpPage(tester, provider);
+    provider.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
+    await tester.pump();
+    expect(find.byType(LegacyProcessingConversationWidget), findsOneWidget);
+    expect(find.byType(ProcessingConversationWidget), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

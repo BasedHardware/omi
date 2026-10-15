@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -33,6 +35,10 @@ class _NoConnectivity extends ConnectivityPlatform {
 // "Teach Omi your voice" shows only without a voice profile; closing it hides it for good and
 // points to Settings > Voice Profile.
 void main() {
+  // These cover the redesigned Home (home-redesign test arm).
+  setUp(() => HomeRedesign.setForTesting(true));
+  tearDown(HomeRedesign.resetForTesting);
+
   setUpAll(() async {
     ConnectivityPlatform.instance = _NoConnectivity();
     try {

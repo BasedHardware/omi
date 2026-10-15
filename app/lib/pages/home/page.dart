@@ -375,6 +375,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       // Reload convos
       if (mounted) {
+        // home-redesign: an arm PostHog assigned since launch is saved now (applied next launch).
+        HomeRedesign.start();
         unawaited(queuePaywallReask(context));
         Provider.of<ConversationProvider>(context, listen: false).refreshConversations();
         final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
@@ -441,8 +443,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     SharedPreferencesUtil().onboardingCompleted = true;
     // home-redesign experiment: this account's saved arm now, the flag read in the background, and
     // the exposure once Home is on screen.
-    HomeRedesign.loadSaved();
-    unawaited(HomeRedesign.refresh());
+    HomeRedesign.start();
     WidgetsBinding.instance.addPostFrameCallback((_) => HomeRedesign.markHomeShown());
     if (!SharedPreferencesUtil().permissionsCompleted) {
       SharedPreferencesUtil().permissionsCompleted = true;

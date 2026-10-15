@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/l10n/app_localizations.dart';
@@ -23,6 +25,10 @@ class _Routes extends NavigatorObserver {
 }
 
 void main() {
+  // These cover the redesigned Home (home-redesign test arm).
+  setUp(() => HomeRedesign.setForTesting(true));
+  tearDown(HomeRedesign.resetForTesting);
+
   testWidgets('short waiting memory fits its status and action at 200% text', (tester) async {
     final provider = MemoriesProvider();
     final usage = UsageProvider();

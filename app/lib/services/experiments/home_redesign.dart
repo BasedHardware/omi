@@ -58,7 +58,7 @@ abstract final class HomeRedesign {
     Future<String?> Function(String key)? readVariant,
     String? Function()? identity,
     String? uid,
-    Duration identityWait = const Duration(seconds: 10),
+    Duration identityWait = Duration.zero,
   }) async {
     if (_debugArm != null) return;
     final whoAmI = identity ?? () => AnalyticsManager().settledDistinctId;
@@ -83,6 +83,29 @@ abstract final class HomeRedesign {
     }
   }
 
+  static VoidCallback? _identityListener;
+
+  /// Startup: the saved arm now, then the flag once the analytics identity settles (right after
+  /// sign-in it is still the anonymous id, where a per-account rollout never matches). Listens for
+  /// the identity instead of polling, so nothing keeps running.
+  static void start() {
+    loadSaved();
+    if (AnalyticsManager().settledDistinctId != null) {
+      refresh();
+      return;
+    }
+    if (_identityListener != null) return;
+    void onIdentity() {
+      if (AnalyticsManager().settledDistinctId == null) return;
+      AnalyticsManager.identityChanges.removeListener(_identityListener!);
+      _identityListener = null;
+      refresh();
+    }
+
+    _identityListener = onIdentity;
+    AnalyticsManager.identityChanges.addListener(onIdentity);
+  }
+
   /// Home is on screen: from now on the arm stays put this session, and the reader is exposed for the
   /// arm they actually see (only once PostHog has assigned one).
   static void markHomeShown({bool Function(String key, String variant)? record}) {
@@ -102,6 +125,8 @@ abstract final class HomeRedesign {
 
   @visibleForTesting
   static void resetForTesting() {
+    if (_identityListener != null) AnalyticsManager.identityChanges.removeListener(_identityListener!);
+    _identityListener = null;
     _on.value = false;
     _homeShown = false;
     _loadedFor = null;

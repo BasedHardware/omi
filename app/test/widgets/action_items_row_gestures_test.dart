@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:omi/services/experiments/home_redesign.dart';
+
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/action_items/widgets/task_row_parts.dart';
 import 'package:omi/env/env.dart';
@@ -34,6 +36,10 @@ Future<ActionItemsResponse?> _items({
 
 /// Swipes mean the same thing on every task row (hub #4) and deletes offer Undo (hub #3, D5).
 void main() {
+  // These cover the redesigned Home (home-redesign test arm).
+  setUp(() => HomeRedesign.setForTesting(true));
+  tearDown(HomeRedesign.resetForTesting);
+
   setUp(() {
     PlatformManager.initializeForLocalHarness();
     // Indent/sort persistence is not injectable; point it at a dead loopback port (the test

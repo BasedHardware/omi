@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -31,6 +33,10 @@ class _Usage extends UsageProvider {
 }
 
 void main() {
+  // These cover the redesigned Home (home-redesign test arm).
+  setUp(() => HomeRedesign.setForTesting(true));
+  tearDown(HomeRedesign.resetForTesting);
+
   late ConversationProvider conversations;
   late UsageProvider usage;
 
@@ -157,6 +163,19 @@ void main() {
     // The locked_content paywall (or its plans-sheet fallback) opens in place; no page push.
     expect(routes.pushed.last, isA<OmiSheetRoute>());
     // Check navigation without building the network-backed plans sheet.
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets("today's Home (home-redesign control): View Usage, and the action opens the Usage page",
+      (tester) async {
+    HomeRedesign.setForTesting(false);
+    final routes = _Routes();
+    await pumpRow(tester, observer: routes);
+    expect(find.text('View Usage'), findsOneWidget);
+    expect(find.text(_upgrade), findsNothing);
+    await tester.tap(find.byKey(const Key('locked_preview_action')));
+    expect(routes.pushed, hasLength(2));
+    expect(routes.pushed.last, isNot(isA<OmiSheetRoute>()));
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

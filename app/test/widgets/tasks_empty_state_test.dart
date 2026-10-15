@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/action_items_api_contract.dart';
 import 'package:omi/backend/http/api_presentation.dart';
@@ -12,6 +14,10 @@ import '../support/typed_action_items_screen.dart';
 import '../support/typed_conversation_screen.dart';
 
 void main() {
+  // These cover the redesigned Home (home-redesign test arm).
+  setUp(() => HomeRedesign.setForTesting(true));
+  tearDown(HomeRedesign.resetForTesting);
+
   for (final brightness in Brightness.values) {
     testWidgets('empty Tasks keeps conversation guidance and aligns with Home in $brightness', (tester) async {
       final previousPalette = OmiColors.active;

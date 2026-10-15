@@ -334,7 +334,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   /// falls back lands on that same native step.
   Future<void> _enterSteps() async {
     // Decide this account's Home (home-redesign experiment) while onboarding runs, before Home shows.
-    unawaited(HomeRedesign.refresh());
+    HomeRedesign.start();
     final arm = await OnboardingVariantGate.resolve();
     if (!mounted) return;
     PlatformManager.instance.analytics.track('Onboarding Variant Shown', properties: {

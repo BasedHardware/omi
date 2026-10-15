@@ -2,6 +2,8 @@
 // button always means "record with this phone", and the header chip shows the battery only.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -195,6 +197,10 @@ class _Connectivity extends ChangeNotifier implements ConnectivityProvider {
 }
 
 void main() {
+  // These cover the redesigned Home (home-redesign test arm).
+  setUp(() => HomeRedesign.setForTesting(true));
+  tearDown(HomeRedesign.resetForTesting);
+
   final en = lookupAppLocalizations(const Locale('en'));
 
   setUp(() async {
