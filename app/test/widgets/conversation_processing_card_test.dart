@@ -23,27 +23,46 @@ import 'package:omi/services/wals/wal.dart';
 /// timestamp — which read as stuck.
 
 class _FakeSync extends ChangeNotifier implements SyncProvider {
-  _FakeSync({this.wals = const [], this.syncing = false, this.fetching = false, this.progress = 0.0});
+  _FakeSync(
+      {this.wals = const [],
+      this.syncing = false,
+      this.fetching = false,
+      this.fetchingWithUploadPhase = false,
+      this.progress = 0.0});
 
   final List<Wal> wals;
   final bool syncing;
   final bool fetching;
+
+  /// Models the real upload→fetch transition, which retains the uploading
+  /// phase instead of moving to idle.
+  final bool fetchingWithUploadPhase;
   final double progress;
   bool rateLimited = false;
   RateLimitReason? reason;
 
   @override
-  SyncState get syncState => switch ((syncing, fetching)) {
-        (true, _) => SyncState(status: SyncStatus.syncing, phase: SyncPhase.downloadingFromDevice, progress: progress),
-        (_, true) => const SyncState(status: SyncStatus.fetchingConversations),
+  SyncState get syncState => switch ((syncing, fetching, fetchingWithUploadPhase)) {
+        (true, _, _) =>
+          SyncState(status: SyncStatus.syncing, phase: SyncPhase.downloadingFromDevice, progress: progress),
+        (_, true, _) => const SyncState(status: SyncStatus.fetchingConversations),
+        (_, _, true) => const SyncState(status: SyncStatus.fetchingConversations, phase: SyncPhase.uploadingToCloud),
         _ => const SyncState(),
       };
   @override
   bool get isSyncing => syncing;
   @override
   List<Wal> get allWals => wals;
+
+  /// The real provider returns a memoized newest-first sort; mirror that
+  /// contract, because grouping correctness depends on the order.
   @override
-  List<Wal> get displaySortedWals => wals;
+  List<Wal> get displaySortedWals {
+    final list = List<Wal>.from(wals);
+    list.sort((a, b) => b.timerStart.compareTo(a.timerStart));
+    return list;
+  }
+
   @override
   List<Wal> get missingWals => wals.where((w) => w.status == WalStatus.miss).toList();
   @override
@@ -230,6 +249,21 @@ void main() {
       expect(find.text('Processing on Omi…'), findsOneWidget);
     });
 
+    testWidgets('shows server processing when the fetch keeps the uploading phase', (tester) async {
+      // The real transition to the fetch retains the uploading phase, so
+      // phase alone cannot tell "still uploading" from "already fetching".
+      final sync = _FakeSync(
+        wals: [_wal('processing', 40, WalStatus.uploaded)],
+        fetchingWithUploadPhase: true,
+      );
+
+      await _pump(tester, sync, multiFile: true);
+
+      expect(find.byKey(const Key('conversation_processing_card')), findsOneWidget);
+      expect(find.text('Turning 40m into conversations'), findsOneWidget);
+      expect(find.text('Syncing 40m of audio'), findsNothing);
+    });
+
     testWidgets('reads a backend-busy cooldown as itself, not pending work', (tester) async {
       final sync = _FakeSync(wals: [_wal('waiting', 45, WalStatus.miss)])
         ..rateLimited = true
@@ -276,6 +310,24 @@ void main() {
 
       // 45m, not 1h 15m: the local-only recording is not waiting on a sync.
       expect(find.text('45m ready to sync'), findsOneWidget);
+    });
+
+    testWidgets('counts fragments of one recording as one, whatever order they arrive', (tester) async {
+      SharedPreferencesUtil().autoSyncOfflineRecordings = false;
+      // allWals preserves storage-source order (here oldest-first); grouping
+      // must not read contiguous fragments as separate recordings. Fragments
+      // without a known length take the count title, which shows the grouping.
+      final sync = _FakeSync(wals: [
+        _wal('frag-a', 0, WalStatus.miss)..timerStart = 1000,
+        _wal('frag-b', 0, WalStatus.miss)..timerStart = 1060,
+        _wal('frag-c', 0, WalStatus.miss)..timerStart = 1120,
+      ]);
+
+      await _pump(tester, sync, multiFile: true);
+
+      expect(find.byKey(const Key('conversation_processing_card')), findsOneWidget);
+      // Three contiguous fragments are one recording, not three.
+      expect(find.text('1 recording ready to sync'), findsOneWidget);
     });
 
     testWidgets('tapping opens the Offline Sync page the device settings open', (tester) async {

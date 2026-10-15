@@ -81,11 +81,19 @@ class _ConversationProcessingCardState extends State<ConversationProcessingCard>
   /// join a cloud drain — neither automatically nor on a manual sync — so they
   /// must not hold a card that can never clear.
   bool _shouldShow(SyncProvider p) {
-    if (p.uploadedWals.isNotEmpty || p.syncState.isProcessing) return true;
+    if (_hasServerJobs(p)) return true;
     return p.allWals.any(
       (w) => w.status == WalStatus.miss && !w.onDeviceOnly && _isForwardMoving(w.syncDisplayState),
     );
   }
+
+  /// Whether the server still owes conversations for uploaded recordings.
+  /// Checks run allocation-free on purpose: every SyncProvider notify
+  /// rebuilds this card, and `uploadedWals` would materialize a list each
+  /// time — an O(wal-index) cost paid exactly while a sync streams progress.
+  static bool _hasUploadedJobs(SyncProvider p) => p.allWals.any((w) => w.status == WalStatus.uploaded);
+
+  static bool _hasServerJobs(SyncProvider p) => _hasUploadedJobs(p) || p.syncState.isProcessing;
 
   @override
   Widget build(BuildContext context) {
@@ -97,6 +105,11 @@ class _ConversationProcessingCardState extends State<ConversationProcessingCard>
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
           child: Semantics(
             button: true,
+            // The status copy transitions on its own — ready, downloading,
+            // uploading, processing — so screen readers hear the change
+            // without re-focusing the card (ux-contract: live status changes
+            // are announced).
+            liveRegion: true,
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () {
@@ -153,7 +166,7 @@ class _ConversationProcessingCardState extends State<ConversationProcessingCard>
     // Home drop to ready copy during the fetch while the settings page
     // still said processing.
     final bool isActive = s.isProcessing;
-    final bool spinner = (isActive || p.uploadedWals.isNotEmpty) && !p.isRateLimited;
+    final bool spinner = (isActive || _hasUploadedJobs(p)) && !p.isRateLimited;
 
     String title;
     String? subtitle;
@@ -161,7 +174,11 @@ class _ConversationProcessingCardState extends State<ConversationProcessingCard>
     SyncStep? barStep;
     double? barFraction;
 
-    if (isActive && step != null && step.step != SyncStep.transcribe) {
+    // The fetch keeps the phase it followed (uploading), so step-of-phase
+    // alone would keep drawing "Syncing/Uploading" while conversations are
+    // already being fetched; the server-processing branch owns that window.
+    final bool fetching = s.isFetchingConversations;
+    if (isActive && !fetching && step != null && step.step != SyncStep.transcribe) {
       // A sync is moving audio right now; mirror the settings page's card.
       final run = _runTracker.runSeconds ?? 0;
       title = run > 0 ? l.syncCardSyncingAmount(dur(run)) : l.syncCardSyncingTitle;
@@ -194,7 +211,7 @@ class _ConversationProcessingCardState extends State<ConversationProcessingCard>
     } else if (p.isRateLimited) {
       title = syncCooldownTitle(p.rateLimitReason, l);
       titleColor = OmiColors.warning;
-    } else if (isActive || p.uploadedWals.isNotEmpty) {
+    } else if (isActive || _hasUploadedJobs(p)) {
       // Uploads finished; the server is turning them into conversations.
       final job = p.offlineServerProcessingSeconds;
       title = job.totalSeconds > 0 ? l.syncCardTranscribingAmount(dur(job.totalSeconds)) : l.syncCardProcessing;
@@ -206,7 +223,11 @@ class _ConversationProcessingCardState extends State<ConversationProcessingCard>
     } else {
       // Nothing in flight. Recordings the server refused read before the ones
       // merely waiting, as on the Offline Sync page; the page owns the detail.
-      final attentionWals = p.allWals.where((w) => _needsAttention(w.syncDisplayState)).toList();
+      // `allWals` preserves storage-source order, but grouping joins
+      // fragments newest-first — read the memoized sorted view or one
+      // recording would count as many.
+      final wals = p.displaySortedWals;
+      final attentionWals = wals.where((w) => _needsAttention(w.syncDisplayState)).toList();
       if (attentionWals.isNotEmpty) {
         title = l.syncCardNeedsAttention(
           groupRecordingBlocks(attentionWals).length,
@@ -215,8 +236,7 @@ class _ConversationProcessingCardState extends State<ConversationProcessingCard>
       } else {
         // Local-only recordings never sync, so they are not "ready to sync"
         // either; counting them would overstate the amount forever.
-        final readyWals =
-            p.allWals.where((w) => w.status == WalStatus.miss && !w.onDeviceOnly && walIsSyncable(w)).toList();
+        final readyWals = wals.where((w) => w.status == WalStatus.miss && !w.onDeviceOnly && walIsSyncable(w)).toList();
         final seconds = walSeconds(readyWals);
         title = seconds > 0
             ? l.syncCardReadyAmount(dur(seconds))
