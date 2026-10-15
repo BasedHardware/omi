@@ -45,6 +45,9 @@ then calls `stage_audio(item, wav)` before atomic enqueue. Replace the seed
 `persist_result(item, payload)` encrypts words, turns and provenance, then returns
 an immutable generation-pinned URI. C calls `load_result(original_item, uri)`.
 The original admitted WorkItem is required; payload identity is never trusted.
+The encrypted payload includes `speech_seconds`, the sample-rounded union of
+original unpadded VAD spans (silence zero). C validates it against `audio_seconds`
+for content-idempotent accounting; ASR padding or word clocks are not speech usage.
 
 Both standard and enhanced accounts receive per-owner AES-256-GCM encryption
 for temporary artifacts. E2EE, unknown protection, missing pinned generation,

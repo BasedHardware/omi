@@ -87,6 +87,19 @@ def validate_words(words, duration):
     return result
 
 
+def vad_speech_seconds(spans, total_samples):
+    """Sample-rounded union of unpadded VAD spans, never ASR/word duration."""
+    merged = []
+    for start, end in sorted(spans):
+        left = max(0, min(total_samples, round(start * SAMPLE_RATE)))
+        right = max(left, min(total_samples, round(end * SAMPLE_RATE)))
+        if merged and left <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(right, merged[-1][1]))
+        elif right > left:
+            merged.append((left, right))
+    return sum(right - left for left, right in merged) / SAMPLE_RATE
+
+
 def speech_windows(item, samples, spans, config):
     """Pad VAD edges and keep context across forced cuts; emit each midpoint once."""
     duration = len(samples) / SAMPLE_RATE
@@ -203,7 +216,14 @@ class PipelineWorker:
                     raise ValueError('decoded duration differs from admitted capture')
                 spans = list(self.vad(samples))
                 clips = list(speech_windows(item, samples, spans, self.config))
-                state = {'item': item, 'samples': samples, 'words': [], 'silence': not clips, 'reused': False}
+                state = {
+                    'item': item,
+                    'samples': samples,
+                    'words': [],
+                    'silence': not clips,
+                    'reused': False,
+                    'speech_seconds': vad_speech_seconds(spans, len(samples)),
+                }
                 states[item.segment_id] = state
                 if not clips:
                     self.counts['silence'] += 1
@@ -283,6 +303,7 @@ class PipelineWorker:
                     'words_provider': 'live_record' if state['reused'] else self.config.words,
                     'diarizer': self.config.diarizer,
                     'audio_seconds': duration,
+                    'speech_seconds': state['speech_seconds'],
                 }
                 uri = self.persist(item, payload)
                 results.append(WorkResult(item.segment_id, uri, 'silence' if state['silence'] else 'success'))

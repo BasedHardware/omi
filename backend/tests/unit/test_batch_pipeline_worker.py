@@ -76,6 +76,7 @@ def test_vad_silence_skips_models_but_persists_result():
     assert worker.process_batch([item()])[0].outcome == 'silence'
     assert not words.calls and not diarized
     assert saved['a']['words'] == []
+    assert saved['a']['speech_seconds'] == 0
 
 
 def test_failure_is_not_silence_and_siblings_survive():
@@ -290,3 +291,11 @@ def test_pool_defaults_and_unsafe_config(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_UNIT_SECONDS', '3600')
     with pytest.raises(ValueError):
         provider_config()
+
+
+def test_speech_seconds_uses_unpadded_vad_union_in_original_samples():
+    worker, _, saved, _, _, failures = setup_worker(vad=lambda _: [(0.1, 0.6), (0.4, 1.1), (0.3, 0.5), (1.8, 2.0)])
+    assert worker.process_batch([item()])
+    assert saved['a']['speech_seconds'] == pytest.approx(1.2)
+    assert saved['a']['audio_seconds'] == 2
+    assert not failures
