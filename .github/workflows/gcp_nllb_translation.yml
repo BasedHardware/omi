@@ -111,10 +111,14 @@ jobs:
           set -euo pipefail
           kubectl -n ${{ vars.ENV }}-omi-backend get deployment ${{ vars.ENV }}-omi-${{ env.SERVICE }} --ignore-not-found -o json > /tmp/nllb-deployment.json
           kubectl -n ${{ vars.ENV }}-omi-backend get pods -l app.kubernetes.io/instance=${{ vars.ENV }}-omi-${{ env.SERVICE }} -o json > /tmp/nllb-pods.json
+          candidate_digest=''
+          if [[ -z "$ROLLBACK_DIGEST" ]]; then
+            candidate_digest=$(gcloud container images describe "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$SOURCE_TAG" --format='value(image_summary.digest)')
+          fi
           python3 backend/scripts/nllb_release_image.py \
             --deployment /tmp/nllb-deployment.json --pods /tmp/nllb-pods.json \
             --repository gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} \
-            --tag "$SOURCE_TAG" --rollback-digest "$ROLLBACK_DIGEST" --output /tmp/nllb-release-values.json
+            --tag "$SOURCE_TAG" --rollback-digest "$ROLLBACK_DIGEST" --candidate-digest "$candidate_digest" --output /tmp/nllb-release-values.json
           if [[ -n "$ROLLBACK_DIGEST" ]]; then
             actual=$(gcloud container images describe "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}@$ROLLBACK_DIGEST" --format='value(image_summary.digest)')
             [[ "$actual" == "$ROLLBACK_DIGEST" ]]

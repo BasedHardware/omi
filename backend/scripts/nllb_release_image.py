@@ -11,8 +11,15 @@ DIGEST = re.compile(r'sha256:[0-9a-f]{64}')
 
 
 def release_values(
-    deployment: dict[str, Any], pods: dict[str, Any], repository: str, tag: str, rollback: str = ''
+    deployment: dict[str, Any],
+    pods: dict[str, Any],
+    repository: str,
+    tag: str,
+    rollback: str = '',
+    candidate_digest: str = '',
 ) -> dict[str, Any]:
+    if not rollback and not DIGEST.fullmatch(candidate_digest):
+        raise ValueError('normal release requires the built candidate digest')
     if rollback and not DIGEST.fullmatch(rollback):
         raise ValueError('rollback must be a complete sha256 digest')
     if not re.fullmatch(r'[0-9a-f]{7,40}', tag):
@@ -20,7 +27,7 @@ def release_values(
     if not deployment:
         if rollback:
             raise ValueError('rollback requires a previous deployment receipt')
-        return {'image': {'tag': tag, 'digest': ''}}
+        return {'image': {'tag': tag, 'digest': candidate_digest}}
     template = deployment['spec']['template']
     previous = template['metadata'].get('annotations', {}).get(PREVIOUS_DIGEST)
     if rollback and rollback != previous:
@@ -54,12 +61,13 @@ def release_values(
         container = next(
             c for c in pod.get('status', {}).get('containerStatuses', []) if c['name'] == 'nllb-translation'
         )
+        pod_image = next(c['image'] for c in pod['spec']['containers'] if c['name'] == 'nllb-translation')
         image_id = container.get('imageID', '').removeprefix('docker-pullable://')
         prefix = repository + '@'
         digest = image_id.removeprefix(prefix)
         if (
             not container.get('ready')
-            or container.get('image') != expected
+            or pod_image != expected
             or not image_id.startswith(prefix)
             or not DIGEST.fullmatch(digest)
         ):
@@ -67,10 +75,14 @@ def release_values(
         digests.add(digest)
     if serving != desired or len(digests) != 1:
         raise ValueError('serving pods must agree on one immutable image')
-    return {
-        'image': {'tag': tag, 'digest': rollback},
-        'podAnnotations': {PREVIOUS_DIGEST: digests.pop()},
-    }
+    current = digests.pop()
+    # A retry of an already-serving artifact must not erase its rollback receipt.
+    prior = (
+        previous
+        if current == candidate_digest and isinstance(previous, str) and DIGEST.fullmatch(previous)
+        else current
+    )
+    return {'image': {'tag': tag, 'digest': candidate_digest}, 'podAnnotations': {PREVIOUS_DIGEST: prior}}
 
 
 def main() -> None:
@@ -78,10 +90,16 @@ def main() -> None:
     for name in ('deployment', 'pods', 'repository', 'tag', 'output'):
         parser.add_argument('--' + name, required=True)
     parser.add_argument('--rollback-digest', default='')
+    parser.add_argument('--candidate-digest', default='')
     args = parser.parse_args()
     deployment = json.loads(Path(args.deployment).read_text() or '{}')
     values = release_values(
-        deployment, json.loads(Path(args.pods).read_text()), args.repository, args.tag, args.rollback_digest
+        deployment,
+        json.loads(Path(args.pods).read_text()),
+        args.repository,
+        args.tag,
+        args.rollback_digest,
+        args.candidate_digest,
     )
     Path(args.output).write_text(json.dumps(values) + '\n')
 

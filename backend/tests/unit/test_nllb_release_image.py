@@ -10,6 +10,7 @@ from scripts.nllb_release_image import PREVIOUS_DIGEST, release_values
 REPOSITORY = 'gcr.io/example/nllb-translation'
 OLD = 'sha256:' + 'a' * 64
 NEW = 'sha256:' + 'b' * 64
+NEXT = 'sha256:' + 'c' * 64
 TAG = '1234567'
 
 
@@ -31,6 +32,7 @@ def serving():
         'items': [
             {
                 'metadata': {'labels': {'app': 'nllb'}},
+                'spec': {'containers': [{'name': 'nllb-translation', 'image': image}]},
                 'status': {
                     'containerStatuses': [
                         {
@@ -49,8 +51,8 @@ def serving():
 
 def test_normal_deploy_records_observed_image_not_source_tag():
     deployment, pods = serving()
-    result = release_values(deployment, pods, REPOSITORY, TAG)
-    assert result == {'image': {'tag': TAG, 'digest': ''}, 'podAnnotations': {PREVIOUS_DIGEST: NEW}}
+    result = release_values(deployment, pods, REPOSITORY, TAG, candidate_digest=NEXT)
+    assert result == {'image': {'tag': TAG, 'digest': NEXT}, 'podAnnotations': {PREVIOUS_DIGEST: NEW}}
 
 
 def test_rollback_uses_recorded_digest_even_if_current_rollout_never_became_ready():
@@ -86,11 +88,13 @@ def test_normal_deploy_requires_one_ready_observed_image(fault):
     else:
         deployment['status']['observedGeneration'] = 2
     with pytest.raises(ValueError):
-        release_values(deployment, pods, REPOSITORY, TAG)
+        release_values(deployment, pods, REPOSITORY, TAG, candidate_digest=NEXT)
 
 
 def test_first_deployment_has_no_rollback_target():
-    assert release_values({}, {'items': []}, REPOSITORY, TAG) == {'image': {'tag': TAG, 'digest': ''}}
+    assert release_values({}, {'items': []}, REPOSITORY, TAG, candidate_digest=NEXT) == {
+        'image': {'tag': TAG, 'digest': NEXT}
+    }
     with pytest.raises(ValueError):
         release_values({}, {'items': []}, REPOSITORY, TAG, OLD)
 
@@ -107,3 +111,22 @@ def test_workflow_rollback_skips_rebuild_but_retains_receipt_and_rollout_gates()
     assert '-f /tmp/nllb-release-values.json' in source
     assert 'rollout status' in source
     assert 'runtime_image_contracts.py smoke' in source
+
+
+def test_retry_preserves_original_rollback_receipt_for_same_candidate():
+    deployment, pods = serving()
+    result = release_values(deployment, pods, REPOSITORY, TAG, candidate_digest=NEW)
+    assert result['podAnnotations'][PREVIOUS_DIGEST] == OLD
+    assert result['image']['digest'] == NEW
+
+
+def test_status_image_alias_does_not_hide_immutable_image_identity():
+    deployment, pods = serving()
+    pods['items'][0]['status']['containerStatuses'][0]['image'] = NEW
+    assert release_values(deployment, pods, REPOSITORY, TAG, candidate_digest=NEXT)['image']['digest'] == NEXT
+
+
+def test_normal_release_rejects_missing_candidate_digest():
+    deployment, pods = serving()
+    with pytest.raises(ValueError, match='candidate digest'):
+        release_values(deployment, pods, REPOSITORY, TAG)

@@ -90,7 +90,8 @@ input controls checkout and the image tag comes from that checkout. Roll back
 through the same workflow using the recorded previous source SHA.
 
 NLLB records the currently serving immutable digest in the deployment annotation
-`omi.me/previous-image-digest` before each normal workflow rollout. To recover,
+`omi.me/previous-image-digest` before each normal workflow rollout. Normal releases deploy the resolved candidate
+digest; retries of an already-serving candidate retain the original rollback receipt. To recover,
 dispatch the same `gcp_nllb_translation.yml` workflow with `environment=prod` and
 `rollback_digest=<recorded sha256 digest>`. This uses protected-main tooling,
 validates the receipt and registry artifact, and replays the existing image without
