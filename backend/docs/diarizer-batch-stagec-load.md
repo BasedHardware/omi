@@ -63,9 +63,11 @@ Log filters (Cloud Run services backend-sync and backend-sync-backfill only):
 
 ```text
 timestamp >= "2026-10-14T16:00:00Z" AND timestamp < "2026-10-14T17:00:00Z"
-textPayload =~ "(parakeet|modulate|deepgram)_prerecorded_from_bytes bytes_len="
+(textPayload =~ "(parakeet|modulate|deepgram)_prerecorded_from_bytes bytes_len=" OR
+ jsonPayload.message =~ "(parakeet|modulate|deepgram)_prerecorded_from_bytes bytes_len=")
 # Aggregate bytes_len, sample_rate and retry attempt; discard every row.
-textPayload : "event=sync_transcription_segment outcome=success"
+(textPayload : "event=sync_transcription_segment outcome=success" OR
+ jsonPayload.message : "event=sync_transcription_segment outcome=success")
 # Count timestamps only. Both reads finished below their 50,000/20,000 row limits.
 ```
 

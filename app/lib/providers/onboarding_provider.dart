@@ -470,6 +470,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
             adapterOff: false,
           ),
         );
+        _armInstructionsTimer(epoch, scanStarted: false);
         onShowDialog();
         return;
       }
@@ -486,6 +487,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         updateLocationPermission(locationGranted);
         if (!locationGranted) {
           _emitPairingBlocked(DevicePairingBlockedReason.locationPermissionMissing);
+          _armInstructionsTimer(epoch, scanStarted: false);
           onShowLocationDialog?.call();
           return;
         }
@@ -496,20 +498,29 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       if (_isDisposed || epoch != _scanEpoch) return;
       _emitPairingBlocked(_pairingBlockForAdapter(BluetoothReadiness.instance.state),
           adapterState: BluetoothReadiness.instance.state);
+      _armInstructionsTimer(epoch, scanStarted: false);
       return;
     }
     if (_isDisposed || epoch != _scanEpoch) return;
 
+    _armInstructionsTimer(epoch, scanStarted: true);
+
+    await deviceProvider?.initiateConnection("Onboarding");
+  }
+
+  /// Arms the delayed "No Omi Found" help (Scan Again, pairing guide, Contact Support). A blocked
+  /// search arms it too, so the help never depends on discovery having started; only a scan that
+  /// actually ran reports Device Scan Empty (a blocked one already reported Device Pairing Blocked).
+  void _armInstructionsTimer(int epoch, {required bool scanStarted}) {
+    _didNotMakeItTimer?.cancel();
     _didNotMakeItTimer = Timer(const Duration(seconds: deviceScanEmptyAfterSeconds), () {
       if (_isDisposed || epoch != _scanEpoch) return;
-      if (shouldReportEmptyDeviceScan(deviceCount: deviceList.length)) {
+      if (scanStarted && shouldReportEmptyDeviceScan(deviceCount: deviceList.length)) {
         PlatformManager.instance.analytics.deviceScanEmpty(afterSeconds: deviceScanEmptyAfterSeconds);
       }
       enableInstructions = true;
       notifyListeners();
     });
-
-    await deviceProvider?.initiateConnection("Onboarding");
   }
 
   void _recordOnboardingPermission({
