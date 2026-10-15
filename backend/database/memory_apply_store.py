@@ -8,6 +8,7 @@ from enum import Enum
 from functools import wraps
 import hashlib
 import hmac
+import logging
 import os
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, TypeVar, TypedDict, cast
 
@@ -23,6 +24,9 @@ except ImportError:  # pragma: no cover - local unit tests mock Firestore.
 from database._client import data_plane_db as db
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.legal_holds import (
+    DestructiveGateTakeover,
+    LegalHoldAuthorityUnavailable,
+    assert_destructive_gate_still_ours,
     assert_destructive_operation_transaction,
     assert_no_destructive_operation_transaction,
     destructive_operation_gate,
@@ -72,6 +76,8 @@ from models.product_memory import (
 )
 from models.memory_state_head import trusted_memory_state_head_fields
 from utils.memory.memory_use import MemoryUseConflict, build_memory_use_patch
+
+logger = logging.getLogger(__name__)
 
 
 class MemoryFirestoreApplyError(Exception):
@@ -3316,6 +3322,10 @@ def cleanup_expired_memory_deletion_receipts(
         rows = list(query.stream())
     except Exception:
         return 0
+    if not rows:
+        return 0
+    deleted = 0
+    takeover_aborted = False
     try:
         # Legal hold and retention cleanup share the same account-wide
         # linearization gate. A hold that wins first preserves every receipt;
@@ -3326,7 +3336,7 @@ def cleanup_expired_memory_deletion_receipts(
             firestore_client=db_client,
         ):
             deleted = 0
-            for row in rows:
+            for index, row in enumerate(rows):
                 try:
                     payload = row.to_dict()
                     if not isinstance(payload, dict):
@@ -3343,6 +3353,7 @@ def cleanup_expired_memory_deletion_receipts(
                         and expires_at.utcoffset() is not None
                         and expires_at <= cutoff
                     ):
+                        assert_destructive_gate_still_ours(uid, "retention_cleanup", firestore_client=db_client)
                         row.reference.delete()
                         deleted += 1
                         continue
@@ -3392,11 +3403,27 @@ def cleanup_expired_memory_deletion_receipts(
                             break
                     if not items_match:
                         continue
+                    assert_destructive_gate_still_ours(uid, "retention_cleanup", firestore_client=db_client)
                     row.reference.delete()
                     deleted += 1
+                except DestructiveGateTakeover:
+                    logger.info(
+                        "receipt cleanup stopped after takeover deleted=%d skipped-after-takeover=%d",
+                        deleted,
+                        len(rows) - index,
+                    )
+                    takeover_aborted = True
+                    return deleted
+                except LegalHoldAuthorityUnavailable:
+                    return deleted
                 except Exception:
                     continue
             return deleted
+    except DestructiveGateTakeover:
+        # A same-kind takeover aborted this sweep's gate exit. Deletes that
+        # already ran under valid authority stand: recover the mid-loop count
+        # rather than reporting total failure for work that genuinely happened.
+        return deleted if takeover_aborted else 0
     except Exception:
         # Active/malformed/unavailable legal-hold authority fails closed.
         return 0

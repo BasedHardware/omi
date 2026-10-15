@@ -124,6 +124,7 @@ def store():
         def permitted_cleanup_gate(*_args, **_kwargs):
             yield "retention-cleanup-token"
 
+        module.assert_destructive_gate_still_ours = MagicMock()
         module.destructive_operation_gate = permitted_cleanup_gate
         yield module
 
@@ -3149,3 +3150,87 @@ def test_memory_use_commit_replay_conflict_and_receipt_failure_are_atomic(store,
             db_client=strict,
         )
     assert strict.rows == before_failed_commit
+
+
+def test_deletion_receipt_cleanup_empty_query_never_acquires_gate(store, monkeypatch):
+    gate = MagicMock(side_effect=AssertionError("empty sweep must not acquire gate"))
+    monkeypatch.setattr(store, "destructive_operation_gate", gate)
+    assert store.cleanup_expired_memory_deletion_receipts("u1", db_client=_db_with()) == 0
+    gate.assert_not_called()
+
+
+@pytest.mark.parametrize("place_hold", [False, True])
+def test_receipt_sweep_stops_after_peer_takeover_preserving_next_receipt(store, monkeypatch, place_hold, caplog):
+    from database import legal_holds
+
+    now = datetime.now(timezone.utc)
+    db = _db_with()
+    authority = StrictFirestore()
+
+    class HoldTransaction(StrictFirestoreTransaction):
+        def set(self, ref, payload, merge=False):
+            # Legal hold placement merges one row; retain strict read ordering.
+            if merge:
+                payload = {**(ref.get(transaction=self).to_dict() or {}), **payload}
+            super().set(ref, payload)
+
+    monkeypatch.setattr(authority, "transaction", lambda: HoldTransaction(authority))
+    monkeypatch.setattr(legal_holds, "account_deletion_firestore_client", lambda **kwargs: authority)
+    paths = [f"users/u1/memory_deletion_receipts/receipt-{i}" for i in range(2)]
+    for i, path in enumerate(paths):
+        db.docs[path] = {
+            "schema_version": "memory_deletion_receipt.v2",
+            "uid": "u1",
+            "receipt_id": f"receipt-{i}",
+            "privacy_epoch_commit_id": "privacy-commit",
+            "expires_at": now,
+        }
+
+    def _unwrap(fn):
+        return getattr(fn, "to_wrap", fn)
+
+    monkeypatch.setattr(
+        legal_holds,
+        "_acquire_destructive_operation_transaction",
+        _unwrap(legal_holds._acquire_destructive_operation_transaction),
+    )
+    monkeypatch.setattr(
+        legal_holds,
+        "_finish_destructive_operation_transaction",
+        _unwrap(legal_holds._finish_destructive_operation_transaction),
+    )
+    monkeypatch.setattr(
+        legal_holds, "_place_legal_hold_transaction", _unwrap(legal_holds._place_legal_hold_transaction)
+    )
+    monkeypatch.setattr(store, "destructive_operation_gate", legal_holds.destructive_operation_gate)
+    monkeypatch.setattr(store, "assert_destructive_gate_still_ours", legal_holds.assert_destructive_gate_still_ours)
+    original_delete = _FakeDocumentRef.delete
+
+    def rotate_after_delete(ref):
+        original_delete(ref)
+        if ref.path == paths[0]:
+            # Simulate a peer acquiring AFTER this holder's gate went stale, then
+            # completing — the only way a same-kind rotation can occur now that
+            # fresh same-kind acquires block instead of replacing.
+            from datetime import timedelta as _td
+
+            future = datetime.now(timezone.utc) + timedelta(seconds=legal_holds.GATE_STALE_AFTER_SECONDS + 1)
+            legal_holds.acquire_destructive_operation(
+                "u1", kind="retention_cleanup", token="peer", firestore_client=db, now=future
+            )
+            legal_holds.finish_destructive_operation(
+                "u1", kind="retention_cleanup", token="peer", outcome="completed", firestore_client=db, now=future
+            )
+            if place_hold:
+                legal_holds.place_legal_hold("u1", issuer="admin", firestore_client=db)
+
+    monkeypatch.setattr(_FakeDocumentRef, "delete", rotate_after_delete)
+    with caplog.at_level("INFO"):
+        assert store.cleanup_expired_memory_deletion_receipts("u1", db_client=db, now=now) == 1
+    assert paths[0] not in db.docs
+    assert paths[1] in db.docs
+    assert "deleted=1 skipped-after-takeover=1" in caplog.text
+    if place_hold:
+        assert authority.rows[("legal_holds", "u1")]["active"] is True
+        assert store.cleanup_expired_memory_deletion_receipts("u1", db_client=db, now=now) == 0
+        assert paths[1] in db.docs

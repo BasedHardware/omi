@@ -408,3 +408,10 @@ tests/unit/test_live_speaker_collapse.py::test_controller_emits_metric_and_log_w
 
 tests/unit/test_client_telemetry.py::test_voice_actor_capacity_sharded_across_documents
 # 2,200-actor sharding capacity regression; volume is the property under test (~0.86s CPU)
+
+# Takeover-mapping route tests import the full routers.conversations module graph
+# under file isolation (pydantic/pydub/audioop chain). Measured 2.78s / 2.25s CPU
+# during pre-push (2026-10-14).
+tests/unit/test_account_gate_busy_http.py::test_conversation_delete_route_maps_takeover_to_409
+tests/unit/test_account_gate_busy_http.py::test_account_gate_cascade_purge_maps_fence_before_generic_failure[DestructiveGateTakeover]
+tests/unit/test_account_gate_busy_http.py
