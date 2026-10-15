@@ -976,9 +976,6 @@ def update_action_item(
     """
     # Prepare data
     update_data = _prepare_action_item_for_write(update_data, partial=True)
-    # Clear sync_requested when item is successfully exported to Apple Reminders
-    if update_data.get('exported') is True and update_data.get('export_platform') == 'apple_reminders':
-        update_data['sync_requested'] = False
 
     user_ref = db.collection('users').document(uid)
     action_item_ref = user_ref.collection(action_items_collection).document(action_item_id)
@@ -1007,7 +1004,7 @@ def update_action_item(
             payload = dict(update_data)
             # A settled export must leave the capped pending-sync query. Keep
             # this single-item path aligned with batch_sync_update_action_items.
-            if payload.get('exported') is True:
+            if payload.get('exported') is True and payload.get('export_platform') == 'apple_reminders':
                 payload['sync_requested'] = False
             # Same preserve as the plain update path below: a re-completion
             # keeps the stored completed_at instead of re-stamping.
@@ -1041,7 +1038,7 @@ def update_action_item(
     existing_data = typed_doc(existing)
     # A settled export must leave the capped pending-sync query. Keep this
     # single-item path aligned with batch_sync_update_action_items.
-    if update_data.get('exported') is True:
+    if update_data.get('exported') is True and update_data.get('export_platform') == 'apple_reminders':
         update_data['sync_requested'] = False
     if update_data.get('completed') is True and existing_data.get('completed') is True:
         update_data['completed_at'] = existing_data.get('completed_at')
