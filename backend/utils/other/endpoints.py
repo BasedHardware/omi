@@ -232,7 +232,7 @@ def get_current_user_uid(
 
     # The content-free fleet sink must reject hot callers without customer-store
     # registration/recovery writes; security fences above and BYOK still apply.
-    if isinstance(request, Request) and request.url.path == '/v1/telemetry/fleet':
+    if getattr(getattr(request, 'url', None), 'path', None) == '/v1/telemetry/fleet':
         validate_byok_request(uid)
         return uid
 

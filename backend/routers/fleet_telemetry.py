@@ -3,6 +3,7 @@
 import asyncio
 import json
 from functools import lru_cache
+from typing import NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from redis.exceptions import RedisError
@@ -17,7 +18,7 @@ from utils.other.endpoints import get_current_user_uid
 router = APIRouter()
 
 
-def deny(reason, status=422, headers=None):
+def deny(reason: str, status: int = 422, headers: dict[str, str] | None = None) -> NoReturn:
     reject(reason)
     raise HTTPException(status_code=status, detail={'code': reason}, headers=headers)
 

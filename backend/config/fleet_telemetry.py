@@ -5,6 +5,7 @@ import re
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 from jsonschema import Draft202012Validator
 
@@ -27,13 +28,13 @@ REASONS = (
 
 
 class FleetValidationError(ValueError):
-    def __init__(self, reason):
+    def __init__(self, reason: str):
         self.reason = reason
         super().__init__(reason)
 
 
 @lru_cache(maxsize=1)
-def registry():
+def registry() -> dict[str, Any]:
     return json.loads((ROOT / 'fleet_registry.json').read_text())
 
 
@@ -48,7 +49,7 @@ def validator():
     return Draft202012Validator(schema)
 
 
-def max_series():
+def max_series() -> int:
     """Includes counter _created series and histogram bucket/count; excludes target replication."""
     spec = registry()
     axes = len(spec['platforms']) * len(spec['build_channels'])
@@ -59,25 +60,25 @@ def max_series():
     return events + histograms + uploads + 2 * len(REASONS)
 
 
-def validate_summary(payload, *, now=None):
+def validate_summary(payload: Any, *, now: datetime | None = None) -> tuple[dict[str, Any], bool]:
     spec = registry()
     if not isinstance(payload, dict):
         raise FleetValidationError('invalid_schema')
     counters, histograms = payload.get('counters'), payload.get('histograms')
-    if isinstance(counters, list):
-        for item in counters[:101]:
-            if not isinstance(item, dict) or not isinstance(item.get('event'), str):
-                raise FleetValidationError('invalid_schema')
-            if item['event'] not in spec['events']:
-                raise FleetValidationError('unknown_event')
-            if item.get('outcome') not in spec['events'][item['event']]:
-                raise FleetValidationError('unknown_outcome')
-    if isinstance(histograms, list):
-        for item in histograms[:7]:
-            if not isinstance(item, dict) or not isinstance(item.get('name'), str):
-                raise FleetValidationError('invalid_schema')
-            if item['name'] not in spec['histograms']:
-                raise FleetValidationError('unknown_histogram')
+    if not isinstance(counters, list) or not isinstance(histograms, list):
+        raise FleetValidationError('invalid_schema')
+    for item in counters[:101]:
+        if not isinstance(item, dict) or not isinstance(item.get('event'), str):
+            raise FleetValidationError('invalid_schema')
+        if item['event'] not in spec['events']:
+            raise FleetValidationError('unknown_event')
+        if item.get('outcome') not in spec['events'][item['event']]:
+            raise FleetValidationError('unknown_outcome')
+    for item in histograms[:7]:
+        if not isinstance(item, dict) or not isinstance(item.get('name'), str):
+            raise FleetValidationError('invalid_schema')
+        if item['name'] not in spec['histograms']:
+            raise FleetValidationError('unknown_histogram')
     if not validator().is_valid(payload):
         raise FleetValidationError('invalid_schema')
     pattern = r'[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:[Zz]|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])'

@@ -1,9 +1,12 @@
 """Bounded fleet counters and cumulative histogram deltas (no invented sums)."""
 
+from collections.abc import Iterable
 from threading import Lock
+from typing import Any
 
 from prometheus_client import REGISTRY, Counter
-from prometheus_client.core import HistogramMetricFamily
+from prometheus_client.core import HistogramMetricFamily, Metric
+from prometheus_client.registry import Collector
 
 from config.fleet_telemetry import REASONS, registry
 
@@ -18,26 +21,26 @@ UPLOADS = Counter(
 )
 
 
-class FleetHistograms:
-    def __init__(self):
+class FleetHistograms(Collector):
+    def __init__(self) -> None:
         self._lock = Lock()
-        self._counts = {}
+        self._counts: dict[tuple[str, str, str], list[int]] = {}
 
-    def describe(self):
+    def describe(self) -> Iterable[Metric]:
         # Avoid schema/file IO when the global registry registers the collector.
         return []
 
-    def add(self, name, platform, channel, buckets):
+    def add(self, name: str, platform: str, channel: str, buckets: list[dict[str, Any]]) -> None:
         with self._lock:
             key = (name, platform, channel)
             current = self._counts.setdefault(key, [0] * len(buckets))
             for index, bucket in enumerate(buckets):
                 current[index] += bucket['count']
 
-    def collect(self):
+    def collect(self) -> Iterable[Metric]:
         with self._lock:
             snapshot = {key: list(value) for key, value in self._counts.items()}
-        families = {}
+        families: dict[str, HistogramMetricFamily] = {}
         for (name, platform, channel), counts in snapshot.items():
             family = families.setdefault(
                 name,
@@ -48,7 +51,7 @@ class FleetHistograms:
                 ),
             )
             edges = registry()['histograms'][name]['buckets']
-            family.add_metric([platform, channel], [[str(edge), count] for edge, count in zip(edges, counts)], None)
+            family.add_metric([platform, channel], [(str(edge), count) for edge, count in zip(edges, counts)], None)
             family.add_sample(family.name + '_count', {'platform': platform, 'build_channel': channel}, counts[-1])
         yield from families.values()
 
