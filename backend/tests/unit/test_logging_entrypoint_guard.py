@@ -192,3 +192,32 @@ def test_stage_copy_cannot_hide_overwritten_shared_module(tmp_path):
     )
     with pytest.raises(ValueError, match='overwrite'):
         guard.copied_source(docker, tmp_path, PurePosixPath('/app'), PurePosixPath('/app/omi_logging.py'))
+
+
+def test_docker_shell_form_and_multiline_are_rejected(tmp_path):
+    docker = tmp_path / 'Dockerfile'
+    docker.write_text('FROM python\nCMD python first.py && python second.py')
+    with pytest.raises(ValueError, match='shell-form'):
+        guard.docker_launch(docker)
+    with pytest.raises(ValueError, match='compound'):
+        guard.launch_target(['sh', '-c', 'python first.py\npython second.py'])
+
+
+def test_mixed_helm_shell_rejects_unknown_application():
+    with pytest.raises(ValueError, match='unsupported Helm'):
+        list(guard.helm_targets('command: [sh, -c, "uvicorn main:app & /app/start.sh"]'))
+
+
+def test_directory_copy_merges_contents(tmp_path):
+    for name in ('first', 'second'):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / 'main.py').write_text(name)
+    docker = tmp_path / 'Dockerfile'
+    docker.write_text('FROM python\nWORKDIR /app\nCOPY first/ second/ /app/\nCMD ["python", "main.py"]')
+    workdir, target = guard.docker_launch(docker)
+    assert guard.source_path(docker, tmp_path, workdir, target) == tmp_path / 'second/main.py'
+
+
+def test_attribute_assignment_does_not_rebind_logging_module():
+    source = 'import logging\nlogging.raiseExceptions = False\nlogging.basicConfig(force=True)'
+    assert guard.source_violations(source)['basicConfig'] == 1

@@ -47,6 +47,8 @@ def launch_target(argv: list[str]) -> str:
     if executable in ('sh', 'bash') and args[:1] == ['-c']:
         lexer = shlex.shlex(args[1], posix=True, punctuation_chars=';&|')
         lexer.whitespace_split = True
+        if '\n' in args[1]:
+            raise ValueError('compound Docker shell launch is unsupported')
         tokens = list(lexer)
         if any(token in (';', '&&', '||', '&', '|') for token in tokens):
             raise ValueError('compound Docker shell launch is unsupported')
@@ -77,7 +79,9 @@ def docker_launch(path: Path) -> tuple[PurePosixPath, str]:
         if op.upper() == 'WORKDIR':
             workdir = workdir / value
         if op.upper() in ('CMD', 'ENTRYPOINT'):
-            commands[op.upper()] = json.loads(value) if value.startswith('[') else shlex.split(value)
+            if not value.startswith('['):
+                raise ValueError(f'{path}: shell-form Docker launch is unsupported; use exec form')
+            commands[op.upper()] = json.loads(value)
     argv = commands.get('ENTRYPOINT', []) + commands.get('CMD', [])
     if not argv:
         raise ValueError(f'{path}: missing explicit launcher')
@@ -110,8 +114,6 @@ def copied_source(dockerfile: Path, context: Path, workdir: PurePosixPath, runti
             for source in matches:
                 target = destination
                 if source.is_dir():
-                    if len(patterns) > 1 or len(matches) > 1:
-                        target /= source.name
                     if runtime_path.is_relative_to(target):
                         candidate = source / runtime_path.relative_to(target)
                         if candidate.is_file():
@@ -182,7 +184,7 @@ def source_violations(source: str) -> dict[str, int]:
                 resolved = '<local>'
             for target in node.targets:
                 for name in ast.walk(target):
-                    if isinstance(name, ast.Name):
+                    if isinstance(name, ast.Name) and isinstance(name.ctx, ast.Store):
                         self.aliases[name.id] = resolved
 
         def visit_Call(self, node: ast.Call) -> None:
@@ -302,26 +304,19 @@ def helm_targets(text: str) -> Iterator[str]:
         argv = cast(list[str], argv)
         if not argv:
             continue
-        shell: list[str] = []
         if PurePosixPath(argv[0]).name in ('sh', 'bash'):
-            lexer = shlex.shlex(argv[-1], posix=True, punctuation_chars=';&|')
+            lexer = shlex.shlex(argv[-1], posix=True, punctuation_chars=';&|\n')
+            lexer.whitespace = ' \t\r'
             lexer.whitespace_split = True
-            shell = list(lexer)
-            candidates = [
-                shell[n:]
-                for n, value in enumerate(shell)
-                if PurePosixPath(value).name in ('python', 'python3', 'uvicorn')
-            ]
+            candidates: list[list[str]] = [[]]
+            for token in lexer:
+                if token in (';', '&&', '||', '&', '|', '\n'):
+                    candidates.append([])
+                else:
+                    candidates[-1].append(token)
+            candidates = [c[1:] if c[:1] == ['exec'] else c for c in candidates if c]
         else:
             candidates = [argv]
-        if not candidates and not probe:
-            plain = shell[1:] if shell[:1] == ['exec'] else shell
-            if (
-                not plain
-                or PurePosixPath(plain[0]).name not in ('kubectl', 'curl', 'wget', 'sleep')
-                or any(t in (';', '&&', '||', '|', '&') for t in plain)
-            ):
-                raise ValueError('unsupported Helm shell launcher')
         for candidate in candidates:
             if PurePosixPath(candidate[0]).name in ('python', 'python3', 'uvicorn'):
                 if candidate[1:2] == ['-c'] and probe:
