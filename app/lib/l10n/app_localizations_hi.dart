@@ -12411,6 +12411,59 @@ class AppLocalizationsHi extends AppLocalizations {
   String get reviewNoChangesBody => 'जब Omi आपके नोट्स व्यवस्थित करेगा, बदलाव यहाँ दिखेंगे।';
 
   @override
+  String get reviewChangesSectionTerms => 'नाम और शब्द';
+
+  @override
+  String get reviewChangesSectionTitles => 'शीर्षक और सारांश';
+
+  @override
+  String get reviewChangesSectionOther => 'अन्य बदलाव';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count बातचीत',
+      one: '1 बातचीत',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count जगहें',
+      one: '1 जगह',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'सभी $count दिखाएँ';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'सभी पूर्ववत करें';
+
+  @override
+  String get reviewChangeSeeEvidence => 'सबूत देखें';
+
+  @override
+  String get reviewChangeViewConversation => 'बातचीत देखें';
+
+  @override
+  String get reviewChangeViewTask => 'कार्य देखें';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'पूर्ववत नहीं हो सके: $failed/$total। फिर से कोशिश करें।';
+  }
+
+  @override
   String get reviewShowMore => 'और दिखाएँ';
 
   @override

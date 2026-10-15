@@ -96,12 +96,51 @@ rate_cards:
     long_context_output_micro_usd_per_million: 18000000
     long_context_cache_write_micro_usd_per_million: 5000000
 
-  - rate_card_id: vertex.gemini-2.5-flash.2026-07-17
+  # Global-endpoint standard pay-as-you-go list prices, per 1M tokens, from
+  # https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing
+  # checked 2026-10-15. The us multi-region price is unverified.
+  # Cache creation bills at the standard input rate, with no write premium.
+  # Explicit cache storage is $1 per million token-hours for these three models.
+  # gemini-3.8-flash introductory rates apply through 2026-12-31; the dated
+  # card replaces them on 2027-01-01.
+  - rate_card_id: vertex.gemini-2.5-flash.2026-10-15
     provider: gemini
     model: gemini-2.5-flash
-    input_micro_usd_per_million: 150000
-    cached_input_micro_usd_per_million: 37500
-    output_micro_usd_per_million: 3500000
+    input_micro_usd_per_million: 540000
+    cached_input_micro_usd_per_million: 54000
+    output_micro_usd_per_million: 4500000
+    cache_write_micro_usd_per_million: 540000
+    cache_storage_micro_usd_per_million_token_hours: 1000000
+
+  - rate_card_id: vertex.gemini-3.1-flash-lite.2026-10-15
+    provider: gemini
+    model: gemini-3.1-flash-lite
+    input_micro_usd_per_million: 250000
+    cached_input_micro_usd_per_million: 25000
+    output_micro_usd_per_million: 1500000
+    audio_input_micro_usd_per_million: 500000
+    cache_write_micro_usd_per_million: 250000
+    cache_storage_micro_usd_per_million_token_hours: 1000000
+
+  - rate_card_id: vertex.gemini-3.8-flash.intro.2026-10-15
+    provider: gemini
+    model: gemini-3.8-flash
+    effective_from: 2026-10-15
+    input_micro_usd_per_million: 750000
+    cached_input_micro_usd_per_million: 75000
+    output_micro_usd_per_million: 3750000
+    cache_write_micro_usd_per_million: 750000
+    cache_storage_micro_usd_per_million_token_hours: 1000000
+
+  - rate_card_id: vertex.gemini-3.8-flash.2027-01-01
+    provider: gemini
+    model: gemini-3.8-flash
+    effective_from: 2027-01-01
+    input_micro_usd_per_million: 1500000
+    cached_input_micro_usd_per_million: 150000
+    output_micro_usd_per_million: 7500000
+    cache_write_micro_usd_per_million: 1500000
+    cache_storage_micro_usd_per_million_token_hours: 1000000
 
   # Anthropic's Claude Sonnet 5 introductory rate, valid through 2026-08-31.
   # Its cache-write rates are the corresponding 5-minute (1.25x) and one-hour

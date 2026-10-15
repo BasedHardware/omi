@@ -19,6 +19,7 @@ from pydantic import BaseModel
 
 from models.transcript_segment import SpeakerIdentityStatus
 from utils import dream_vocabulary  # noqa: F401 - retain shared keyterms before legacy database stubs
+from utils.observability import speaker_identification  # noqa: F401 - retain telemetry across legacy sanitizer stubs
 
 
 def _read_text(path):

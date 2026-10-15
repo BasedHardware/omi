@@ -2250,8 +2250,8 @@ review and `omi_sync_speaker_reviewed_segments_total{outcome="confirmed|correcte
 count it. Retries see cleared provenance, and locked/deleted or failed writes emit
 nothing. Manual receipt overlays also clear stale automatic provenance. Legacy and
 text-only labels have unknown origin and are excluded. Metrics contain no IDs;
-review logs may contain user, conversation and segment IDs but no transcript or
-person name. This is a **segment-weighted, self-selected correction proxy**, not a
+review logs contain the user UID and bounded conversation/segment digests.
+This is a **segment-weighted, self-selected correction proxy**, not a
 false-accept rate: unreviewed labels have unknown correctness, crash-after-commit
 can lose events, and clients that replace metadata can reduce coverage. See
 [sync speaker evidence](sync_speaker_evidence.md) for the measured baseline and
@@ -2374,9 +2374,9 @@ Pacing is server-owned: `POST /shown` starts a 20 h cooldown, three unanswered
 sets in a row (`POST /dismiss`) back off to 7 days, and an empty scan is cached
 for 2 h so repeated app opens do not rescan 30 conversations.
 
-Answers apply through the same `assign_conversation_speaker` transaction as the
-transcript tag sheet, and `POST /v1/conversations/{id}/speakers/{speaker_id}/reject`
-writes that same ledger (optionally per `segment_ids` of that speaker).
+Answers and the transcript tag sheet share `assign_conversation_speaker`; `POST /v1/conversations/{id}/speakers/{speaker_id}/reject`
+writes that same ledger (optionally per `segment_ids`). These routes preserve plain
+string/integer IDs; only invalid Firestore document shapes fail before storage.
 `someone_else` with a `person_id`/`name` labels that person on paid naming
 cards. Their negative answers write `rejection: {kind, person_id}` on the receipt decision —
 `not_person` earns `AUTO_CORRECTED` once per conversation, `not_a_person`

@@ -41,7 +41,7 @@ async def test_vertex_provider_uses_native_generate_content_and_normalizes_respo
             json={
                 'responseId': 'vertex-response-id',
                 'modelVersion': 'gemini-2.5-flash-001',
-                'trafficType': 'ON_DEMAND',
+                'trafficType': 'PROVISIONED_THROUGHPUT',
                 'candidates': [
                     {
                         'content': {'parts': [{'text': 'A concise title'}]},

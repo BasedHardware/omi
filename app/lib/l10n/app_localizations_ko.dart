@@ -12253,6 +12253,59 @@ class AppLocalizationsKo extends AppLocalizations {
   String get reviewNoChangesBody => 'Omi가 노트를 정리하면 변경 사항이 여기에 표시돼요.';
 
   @override
+  String get reviewChangesSectionTerms => '이름 및 용어';
+
+  @override
+  String get reviewChangesSectionTitles => '제목 및 요약';
+
+  @override
+  String get reviewChangesSectionOther => '기타 변경 사항';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '대화 $count개',
+      one: '대화 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count곳',
+      one: '1곳',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return '$count개 모두 보기';
+  }
+
+  @override
+  String get reviewChangeUndoAll => '모두 실행 취소';
+
+  @override
+  String get reviewChangeSeeEvidence => '근거 보기';
+
+  @override
+  String get reviewChangeViewConversation => '대화 보기';
+
+  @override
+  String get reviewChangeViewTask => '할 일 보기';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return '실행 취소하지 못함: $failed/$total개. 다시 시도하세요.';
+  }
+
+  @override
   String get reviewShowMore => '더 보기';
 
   @override

@@ -392,19 +392,6 @@ def with_screen_frame_egress_env(payload: str) -> str:
     )
 
 
-def with_dev_batch_pipeline_namespace(payload: str) -> str:
-    return re.sub(
-        r'("backend-sync":\s*\{.*?"env":\s*\[)',
-        lambda match: match.group(1)
-        + '\n'
-        + json.dumps({'name': 'BATCH_PIPELINE_NAMESPACE', 'value': 'batch_pipeline_dev'})
-        + ',',
-        payload,
-        count=1,
-        flags=re.DOTALL,
-    )
-
-
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_account_cutover_enforcement(payload)
     payload = with_sync_ledger_fence_mode(payload)
@@ -548,7 +535,24 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         payload,
         flags=re.DOTALL,
     )
-    return with_dev_batch_pipeline_namespace(with_backend_integration_events_secret(payload))
+    # Dev keeps Dream disabled, but these processing hosts declare its bindings.
+    # Derive fixtures from the manifest, including the empty dev allowlist.
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    services = manifest['environments']['dev']['cloud_run']['services']
+    for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        bindings = services[service]['env']
+        entries = ',\n'.join(
+            '        ' + json.dumps({'name': name, 'value': bindings[name]['value']})
+            for name in ('DREAM_AGENT_ELIGIBILITY', 'DREAM_AGENT_UID_ALLOWLIST', 'DREAM_ON_DEMAND_ENABLED')
+        )
+        payload = re.sub(
+            rf'("{service}":\s*\{{.*?"env":\s*\[)',
+            lambda match: match.group(1) + '\n' + entries + ',',
+            payload,
+            count=1,
+            flags=re.DOTALL,
+        )
+    return with_backend_integration_events_secret(payload)
 
 
 def validate_cloud_run_workflows_only(validator, *, env: str, manifest_path: Path, workflow_root: Path | None = None):
@@ -3217,33 +3221,21 @@ _JEV_PROCESS_CONVERSATION_HOSTS = {
 _JEV_LIVE_RELEVANCE_HOSTS = _JEV_PROCESS_CONVERSATION_HOSTS | {'cloud_run/backend-sync-backfill'}
 
 
-def test_batch_pipeline_namespace_is_dev_backend_sync_only(monkeypatch):
+def test_batch_pipeline_namespace_is_absent_from_backend_sync_runtime_env(monkeypatch):
     key = 'BATCH_PIPELINE_NAMESPACE'
-    expected = {'value': 'batch_pipeline_dev'}
     validator = load_validator()
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
-    dev = validator._get_env_config(manifest, 'dev')
-    prod = validator._get_env_config(manifest, 'prod')
-    dev_overlay = validator._load_yaml(ROOT / 'deploy/runtime_env/dev.overlay.yaml')['overlay']
-    prod_overlay = validator._load_yaml(ROOT / 'deploy/runtime_env/prod.overlay.yaml')['overlay']
-
-    for source in (dev, dev_overlay):
-        sync_env = source['cloud_run']['services']['backend-sync']['env']
-        assert sync_env[key] == expected
-        assert {scope for scope, env in _manifest_env_blocks(source) if key in env} == {'cloud_run/backend-sync'}
-
-    for source in (prod, prod_overlay):
-        assert all(key not in env for _, env in _manifest_env_blocks(source))
-
-    for environment, config, expected_value in (
-        ('dev', dev, 'batch_pipeline_dev'),
-        ('prod', prod, None),
-    ):
+    for environment in ('dev', 'prod'):
+        config = validator._get_env_config(manifest, environment)
+        overlay = validator._load_yaml(ROOT / f'deploy/runtime_env/{environment}.overlay.yaml')['overlay']
+        for source in (config, overlay):
+            sync_env = source['cloud_run']['services']['backend-sync']['env']
+            assert key not in sync_env
+            assert all(key not in env for _, env in _manifest_env_blocks(source))
         with monkeypatch.context() as patch:
             state = render_cloud_run_state(config, patch)
         rendered_env = state['services']['backend-sync']['env']
-        actual_value = next((entry.get('value') for entry in rendered_env if entry.get('name') == key), None)
-        assert actual_value == expected_value, environment
+        assert all(entry['name'] != key for entry in rendered_env), environment
 
 
 def test_transcription_shadow_dev_scope_matches_generated_manifest_and_charts():

@@ -1,4 +1,9 @@
-"""Transactional minute headroom and per-turn receipts under the owner lease."""
+"""Transactional minute headroom and per-turn receipts under the owner lease.
+
+Minute shards remain the local tokens-per-minute backstop. Dollar headroom is
+the per-user daily cap, and only moves when an attempt has a real rate-card
+price. Unpriced attempts do not post a zero charge.
+"""
 
 from datetime import datetime, timezone
 from hashlib import sha256
@@ -21,7 +26,11 @@ def headroom_quota(tokens_per_minute, shard):
     return base + int(shard < extra)
 
 
-def reserve(uid, run_id, tokens, caps, *, now=None, firestore_client=None):
+def _held_usd(lease):
+    return float(lease.get('budget_charge_usd', lease.get('reservation_usd', 0)))
+
+
+def reserve(uid, run_id, tokens, caps, *, cost_micro_usd=None, now=None, firestore_client=None):
     if not enabled() or type(tokens) is not int or tokens <= 0:
         raise ValueError('dream_disabled_or_budget')
     database = dream_store.client(firestore_client)
@@ -58,20 +67,23 @@ def reserve(uid, run_id, tokens, caps, *, now=None, firestore_client=None):
             raise ValueError('dream_minute_headroom')
         lease = data['lease']
         spend = dream_store.spend_ref(database, uid, lease['day'])
-        global_spend = dream_store.lease_global_ref(database, uid, lease)
         budget = spend.get(transaction=tx).to_dict() or {}
-        global_budget = global_spend.get(transaction=tx).to_dict() or {}
-        observed = sum(row['accounted_tokens'] for row in lease.get('turn_receipts', []))
-        required = (observed + tokens) * lease['max_usd_per_token']
-        previous = lease.get('budget_charge_usd', lease['reservation_usd'])
-        held = max(previous, required)
-        increase = held - previous
-        if budget.get('reserved_usd', 0) + increase > caps.daily_usd or global_budget.get(
-            'reserved_usd', 0
-        ) + increase > lease.get('global_shard_cap', caps.global_daily_usd):
-            raise ValueError('dream_daily_budget')
-        tx.set(spend, {**budget, 'reserved_usd': budget.get('reserved_usd', 0) + increase})
-        tx.set(global_spend, {**global_budget, 'reserved_usd': global_budget.get('reserved_usd', 0) + increase})
+        previous = _held_usd(lease)
+        held = previous
+        increase = 0.0
+        if type(cost_micro_usd) is int and cost_micro_usd >= 0:
+            settled = sum(
+                int(row.get('cost_micro_usd') or 0)
+                for row in lease.get('turn_receipts') or []
+                if row.get('cost_status') == 'priced'
+            )
+            required = (settled + cost_micro_usd) / 1000000
+            held = max(previous, required)
+            increase = held - previous
+            if float(budget.get('reserved_usd', 0)) + increase > caps.daily_usd:
+                raise ValueError('dream_daily_budget')
+        if increase:
+            tx.set(spend, {**budget, 'reserved_usd': float(budget.get('reserved_usd', 0)) + increase})
         tx.update(
             state,
             {
@@ -104,13 +116,22 @@ def settle(uid, run_id, turn, *, firestore_client=None):
         charge = turn.tokens if turn.accounted_tokens is None else turn.accounted_tokens
         if charge < turn.tokens or charge < 0:
             raise ValueError('dream_invalid_usage')
-        receipt = {'tokens': turn.tokens, 'accounted_tokens': charge, 'cached_tokens': turn.cached_tokens}
-        rows = [*(lease.get('turn_receipts') or []), receipt]
+        status = getattr(turn, 'cost_status', None) or 'unpriced'
+        micro = getattr(turn, 'cost_micro_usd', None)
+        row = {
+            'tokens': turn.tokens,
+            'accounted_tokens': charge,
+            'cached_tokens': turn.cached_tokens,
+            'cost_status': status,
+        }
+        if status == 'priced' and type(micro) is int and micro >= 0:
+            row['cost_micro_usd'] = micro
+        else:
+            status = 'unpriced'
+            row['cost_status'] = 'unpriced'
+        rows = [*(lease.get('turn_receipts') or []), row]
         if len(rows) > 128:
             raise ValueError('dream_turn_cap')
-        rate = lease['max_usd_per_token']
-        global_spend = dream_store.lease_global_ref(database, uid, lease)
-        global_budget = global_spend.get(transaction=tx).to_dict() or {}
         hold = lease.get('minute_hold') or {}
         capacities = []
         held_shards = list((hold.get('shards') or {}).items())
@@ -126,32 +147,33 @@ def settle(uid, run_id, turn, *, firestore_client=None):
                 capacities.append((ref, {**capacity, 'tokens': max(0, capacity.get('tokens', 0) - held + actual)}))
         for ref, capacity in capacities:
             tx.set(ref, capacity)
-        actual = sum(row['accounted_tokens'] for row in rows) * rate
-        previous = lease.get('budget_charge_usd', lease['reservation_usd'])
+        previous = _held_usd(lease)
+        priced = bool(rows) and all(item.get('cost_status') == 'priced' for item in rows)
+        if priced and type(micro) is int:
+            actual_usd = sum(int(item['cost_micro_usd']) for item in rows) / 1000000
+            observed_add = micro / 1000000
+        else:
+            actual_usd = previous
+            observed_add = 0
         tx.update(
             state,
             {
                 'lease': {
                     **lease,
                     'turn_receipts': rows,
-                    'budget_charge_usd': actual,
-                    'reservation_usd': actual,
+                    'budget_charge_usd': actual_usd,
+                    'reservation_usd': actual_usd,
                     'minute_hold': None,
+                    'cost_status': 'priced' if priced else 'unpriced',
                 }
             },
         )
         tx.set(
-            global_spend,
-            {**global_budget, 'reserved_usd': max(0, global_budget.get('reserved_usd', 0) - previous + actual)},
-        )
-        # Reserved maximum remains held until finish, including unknown billed
-        # failures. Observed spend is settled every turn in the admission day.
-        tx.set(
             spend,
             {
                 **budget,
-                'observed_usd': budget.get('observed_usd', 0) + turn.tokens * rate,
-                'reserved_usd': max(0, budget.get('reserved_usd', 0) - previous + actual),
+                'observed_usd': float(budget.get('observed_usd', 0)) + observed_add,
+                'reserved_usd': max(0, float(budget.get('reserved_usd', 0)) - previous + actual_usd),
             },
         )
 
