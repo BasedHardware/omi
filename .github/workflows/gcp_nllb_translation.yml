@@ -126,7 +126,7 @@ jobs:
 
       - name: Deploy NLLB Translation to GKE cluster using Helm
         run: |
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-${{ env.SERVICE }} ./backend/charts/${{ env.SERVICE }} -f ./backend/charts/${{ env.SERVICE }}/${{ vars.ENV }}_omi_${{ env.SERVICE_UNDERSCORE }}_values.yaml -f /tmp/nllb-release-values.json
+          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-${{ env.SERVICE }} ./backend/charts/${{ env.SERVICE }} -f ./backend/charts/${{ env.SERVICE }}/${{ vars.ENV }}_omi_${{ env.SERVICE_UNDERSCORE }}_values.yaml -f /tmp/nllb-release-values.json --set-string "image.tag=${{ steps.vars.outputs.short_sha }}"
 
       - name: Verify rollout
         run: |

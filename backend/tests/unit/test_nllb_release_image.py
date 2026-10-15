@@ -109,6 +109,7 @@ def test_workflow_rollback_skips_rebuild_but_retains_receipt_and_rollout_gates()
     )
     assert 'gcloud container images describe' in source
     assert '-f /tmp/nllb-release-values.json' in source
+    assert '--set-string "image.tag=${{ steps.vars.outputs.short_sha }}"' in source
     assert 'rollout status' in source
     assert 'runtime_image_contracts.py smoke' in source
 
