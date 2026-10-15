@@ -140,6 +140,7 @@ def test_archive_original_opus_and_silence_before_decode(monkeypatch, tmp_path, 
     bucket = Bucket()
     monkeypatch.setattr(storage, '_get_storage_client', lambda: SimpleNamespace(bucket=lambda name: bucket))
     monkeypatch.setattr(storage.users_db, 'get_data_protection_level', lambda uid: protection)
+    monkeypatch.setattr(storage.users_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
     monkeypatch.setattr(storage.encryption, 'encrypt_audio_chunk', lambda data, uid: b'encrypted:' + data)
     storage.archive_mobile_batch_raw_files('owner', [str(audio)])
     storage.archive_mobile_batch_raw_files('owner', [str(audio)])
@@ -167,6 +168,7 @@ def test_archive_failure_propagates_for_retry(monkeypatch, tmp_path):
         storage, '_get_storage_client', lambda: SimpleNamespace(bucket=lambda name: SimpleNamespace(blob=Broken))
     )
     monkeypatch.setattr(storage.users_db, 'get_data_protection_level', lambda uid: 'standard')
+    monkeypatch.setattr(storage.users_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
     with pytest.raises(OSError):
         storage.archive_mobile_batch_raw_files('owner', [str(audio)])
 
@@ -178,7 +180,7 @@ async def test_upload_acceptance_requires_archive_before_receipt_or_dispatch(arc
     try:
         calls = []
 
-        def archive(uid, paths):
+        def archive(uid, paths, metadata=None):
             calls.append(('archive', uid, list(paths)))
             if archive_fails:
                 raise OSError('archive unavailable')

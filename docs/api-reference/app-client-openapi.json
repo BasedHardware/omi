@@ -80144,6 +80144,38 @@
           },
           {
             "in": "header",
+            "name": "X-Omi-Firmware-Version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Firmware-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Device-Model",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Device-Model"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Omi-Conversation-Geolocation",
             "required": false,
             "schema": {

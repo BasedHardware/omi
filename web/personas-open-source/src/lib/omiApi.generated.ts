@@ -21591,7 +21591,7 @@ export async function create_sync_capture_manifest_v2_sync_capture_manifest_post
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function sync_local_files_v2_v2_sync_local_files_post(query: { conversation_id?: string, recording_session_id?: string | null, audio_start_seconds?: number | null, audio_end_seconds?: number | null }, header: { X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string, X_Request_ID?: string | null, X_Cloud_Trace_Context?: string | null, X_Omi_Sync_Capture_Manifest?: string | null, X_Omi_Conversation_Geolocation?: string | null, authorization?: string }, body: FormData, init?: OmiApiClientInit): Promise<void> {
+export async function sync_local_files_v2_v2_sync_local_files_post(query: { conversation_id?: string, recording_session_id?: string | null, audio_start_seconds?: number | null, audio_end_seconds?: number | null }, header: { X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string, X_Request_ID?: string | null, X_Cloud_Trace_Context?: string | null, X_Omi_Sync_Capture_Manifest?: string | null, X_Omi_Firmware_Version?: string | null, X_Omi_Device_Model?: string | null, X_Omi_Conversation_Geolocation?: string | null, authorization?: string }, body: FormData, init?: OmiApiClientInit): Promise<void> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/sync-local-files`;
   const _params = query ? Object.entries(query)
@@ -21609,6 +21609,8 @@ export async function sync_local_files_v2_v2_sync_local_files_post(query: { conv
       ...(header.X_Request_ID !== undefined ? { "X-Request-ID": String(header.X_Request_ID) } : {}),
       ...(header.X_Cloud_Trace_Context !== undefined ? { "X-Cloud-Trace-Context": String(header.X_Cloud_Trace_Context) } : {}),
       ...(header.X_Omi_Sync_Capture_Manifest !== undefined ? { "X-Omi-Sync-Capture-Manifest": String(header.X_Omi_Sync_Capture_Manifest) } : {}),
+      ...(header.X_Omi_Firmware_Version !== undefined ? { "X-Omi-Firmware-Version": String(header.X_Omi_Firmware_Version) } : {}),
+      ...(header.X_Omi_Device_Model !== undefined ? { "X-Omi-Device-Model": String(header.X_Omi_Device_Model) } : {}),
       ...(header.X_Omi_Conversation_Geolocation !== undefined ? { "X-Omi-Conversation-Geolocation": String(header.X_Omi_Conversation_Geolocation) } : {}),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
     },
