@@ -49932,6 +49932,7 @@
             "name": "conversation_id",
             "required": true,
             "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,128}$",
               "title": "Conversation Id",
               "type": "string"
             }
@@ -49941,6 +49942,8 @@
             "name": "speaker_id",
             "required": true,
             "schema": {
+              "maximum": 1000000,
+              "minimum": 0,
               "title": "Speaker Id",
               "type": "integer"
             }
@@ -74579,6 +74582,7 @@
             "name": "person_id",
             "required": true,
             "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,128}$",
               "title": "Person Id",
               "type": "string"
             }
