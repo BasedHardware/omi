@@ -289,6 +289,19 @@ def _job_cancelled(job_id: str) -> bool:
     return bool(current and current.get('status') == ImportJobStatus.cancelled.value)
 
 
+def is_lifelog_path(name: str) -> bool:
+    """A real lifelog entry inside the ZIP.
+
+    Finder's "Compress" adds a `__MACOSX/` tree and `._*` AppleDouble
+    siblings whose paths *also* contain `lifelogs/` and end in `.md` — but
+    they hold resource-fork bytes, not UTF-8 text, so without this filter
+    every one counts as a failed file (issue #21707).
+    """
+    if '__MACOSX/' in name or name.split('/')[-1].startswith('._'):
+        return False
+    return ('lifelogs/' in name or name.startswith('lifelogs')) and name.endswith('.md')
+
+
 def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code: str = 'en') -> None:
     """
     Background worker to process a Limitless ZIP export using LIGHT IMPORT mode.
@@ -325,11 +338,7 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
 
             # Find all lifelog markdown files
             # Handle both "lifelogs/..." and "something/lifelogs/..." structures
-            lifelog_files = [
-                name
-                for name in all_files
-                if ('lifelogs/' in name or name.startswith('lifelogs')) and name.endswith('.md')
-            ]
+            lifelog_files = [name for name in all_files if is_lifelog_path(name)]
 
             logger.info(f"[Limitless Import] Found {len(lifelog_files)} lifelog files")
             if lifelog_files:
