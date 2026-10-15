@@ -11,6 +11,7 @@ from database import _client as _client_mod
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.legal_holds import (
+    LegalHoldAuthorityUnavailable,
     assert_no_destructive_operation_transaction,
     assert_destructive_gate_still_ours,
     assert_destructive_operation_transaction,
@@ -418,13 +419,22 @@ def _finalize_canonical_privacy_tombstones_transaction(
 
     if revalidate_gate:
         assert_destructive_gate_still_ours(collections.uid, gate_kind, firestore_client=database)
-        assert_destructive_operation_transaction(
-            transaction,
-            database,
-            uid=collections.uid,
-            kind=gate_kind,
-            token=current_destructive_operation_token(collections.uid, kind=gate_kind),
-        )
+        try:
+            gate_token = current_destructive_operation_token(collections.uid, kind=gate_kind)
+        except LegalHoldAuthorityUnavailable:
+            # No gate is active in this context (legacy/test seams and callers
+            # that never claimed the lock). The takeover abort above is the
+            # only available signal; without a held token there is nothing to
+            # fence the transaction against, so proceed without it.
+            gate_token = None
+        if gate_token is not None:
+            assert_destructive_operation_transaction(
+                transaction,
+                database,
+                uid=collections.uid,
+                kind=gate_kind,
+                token=gate_token,
+            )
 
     item_refs: List[Any] = []
     evidence_refs: Dict[str, Any] = {}

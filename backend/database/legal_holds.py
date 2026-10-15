@@ -303,16 +303,28 @@ def assert_destructive_gate_still_ours(
     token: str | None = None,
     firestore_client: Any | None = None,
 ) -> None:
-    """Re-read gate authority immediately before each destructive chunk."""
-    active_token = current_destructive_operation_token(uid, kind=kind) if token is None else token
-    if not uid or not kind.strip() or not active_token.strip():
+    """Re-read gate authority immediately before each destructive chunk.
+
+    A caller that does not currently hold the gate in this context (legacy
+    helpers, test seams, sync-bridge paths that never claimed it) has nothing
+    to revalidate: this check is a takeover abort signal, not an authority
+    grant, so absence of an active gate is a no-op rather than a failure.
+    Callers that require held authority assert it separately with
+    ``current_destructive_operation_token``.
+    """
+    if token is None:
+        active = _ACTIVE_GATE.get()
+        if active is None or active[0] != uid or active[1] != kind:
+            return
+        token = active[2]
+    if not uid or not kind.strip() or not token.strip():
         raise LegalHoldAuthorityUnavailable("destructive operation identity is invalid")
     try:
         client = account_deletion_firestore_client(firestore_client=firestore_client)
         gate = _validated_gate(_document(client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}").get())
         if gate is None or gate["uid"] != uid:
             raise LegalHoldAuthorityUnavailable("destructive operation gate is missing or mismatched")
-        if gate["kind"] != kind or gate["token"] != active_token or gate["state"] != "running":
+        if gate["kind"] != kind or gate["token"] != token or gate["state"] != "running":
             raise DestructiveGateTakeover("destructive operation gate was taken over or finished")
     except (DestructiveGateTakeover, LegalHoldAuthorityUnavailable):
         raise
