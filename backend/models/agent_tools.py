@@ -3,10 +3,11 @@
 from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from models.dream_edit import Strict, Term
 from models.agent_edit import HarnessEdit
+from models.agent_refs import canonical_collection
 from models.review import SamePersonItem, SpellingQuestionPayload
 from models.dream_edit import QUESTION_VALUE_DESCRIPTION
 
@@ -31,6 +32,13 @@ class Search(Strict):
     )
     cursor: str | None = Field(default=None, max_length=128, description='Opaque continuation returned by search.')
     limit: int = Field(default=8, ge=1, le=20)
+
+    @field_validator('collections', mode='before')
+    @classmethod
+    def normalize_collections(cls, value):
+        if not isinstance(value, list):
+            return value
+        return [canonical_collection(item) if isinstance(item, str) else item for item in value]
 
     @model_validator(mode='after')
     def time_bounds(self):

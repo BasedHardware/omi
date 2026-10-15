@@ -24,6 +24,26 @@ READ_COLLECTIONS = {
     'candidates',
 }
 
+# Snippet and visibility fields only. Transcript bytes stay out of search hydration
+# unless a speaker filter needs person ids or the capture has no title to show.
+_CONVERSATION_PREVIEW_FIELDS = (
+    'id',
+    'created_at',
+    'status',
+    'discarded',
+    'deleted',
+    'dream_duplicate_of',
+    'is_locked',
+    'structured.title',
+    'structured.overview',
+    'user_title',
+    'starred',
+    'folder_user_set',
+    'has_photos',
+    'sync_relevance_user_kept',
+    'relevance_decision',
+)
+
 
 class AgentTranscriptReadError(RuntimeError):
     """A stored speech blob cannot be verified; never mistake it for empty speech."""
@@ -37,6 +57,17 @@ def unavailable_is_transient(error=None):
     if type(error) is ValueError and str(error) == 'Invalid dream read reference':
         return False
     return True
+
+
+def search_hydration_unavailable(error):
+    """A missing, hidden, or locked row is skipped during search hydration.
+
+    HTTP 423 is the locked-conversation response from `read_record`. A direct
+    read records that lock as transient so settlement can retry it.
+    """
+    if isinstance(error, HTTPException) and error.status_code == 423:
+        return True
+    return not unavailable_is_transient(error)
 
 
 def read_record(uid, ref, *, control_cache=None, diagnostics=None):
@@ -70,19 +101,7 @@ def read_record(uid, ref, *, control_cache=None, diagnostics=None):
         row.setdefault('id', key)
         return row
     if collection in {'memories', 'memory_items'}:
-        canonical = read_canonical_memory_item(uid, key)
-        if canonical and not filter_canonical_default_visible_items(
-            [canonical],
-            policy=MemoryAccessPolicy.for_omi_chat(archive_capability=False),
-            now=datetime.now(timezone.utc),
-        ):
-            return None
-        row = memory_item_to_memorydb(canonical) if canonical else MemoryService().fetch(uid, key)
-        if row.user_review is False or row.visibility != 'private' or row.invalid_at is not None:
-            return None
-        if row.is_locked:
-            raise HTTPException(423, 'Dream record locked')
-        return row.model_dump(mode='python')
+        return _read_memory_record(uid, key)
     if collection in {'action_items', 'candidates'}:
         if 'generation' not in control_cache:
             control_cache['generation'] = get_task_workflow_control(uid).account_generation
@@ -101,6 +120,56 @@ def read_record(uid, ref, *, control_cache=None, diagnostics=None):
     if collection in {'knowledge_nodes', 'workstreams'}:
         return resolve_entity(uid, key)
     return None
+
+
+def _read_memory_record(uid, key):
+    """Owner-visible memory, or None when the row is gone or not visible.
+
+    A 404 means the item is missing or not an active visible item (superseded,
+    hidden, tombstoned, archived, invalid). A 402 is the paid-plan lock. Those
+    are permanent. A store fault such as 503 stays an exception so the session
+    can retry it instead of acknowledging the dirty id as consumed.
+    """
+    try:
+        canonical = read_canonical_memory_item(uid, key)
+        if canonical and not filter_canonical_default_visible_items(
+            [canonical],
+            policy=MemoryAccessPolicy.for_omi_chat(archive_capability=False),
+            now=datetime.now(timezone.utc),
+        ):
+            return None
+        row = memory_item_to_memorydb(canonical) if canonical else MemoryService().fetch(uid, key)
+    except HTTPException as exc:
+        if not unavailable_is_transient(exc):
+            return None
+        raise
+    if row.user_review is False or row.visibility != 'private' or row.invalid_at is not None:
+        return None
+    if row.is_locked:
+        return None
+    return row.model_dump(mode='python')
+
+
+def preview_record(uid, ref, *, need_speakers=False):
+    """Bounded search hydration. Full records stay on `read_record`."""
+    collection, separator, key = ref.partition('/')
+    if not need_speakers and separator and key and '/' not in key and collection == 'conversations':
+        raw = conversations.get_conversation_raw_snapshot(uid, key, field_paths=list(_CONVERSATION_PREVIEW_FIELDS))
+        if not raw or not conversations.is_visible_conversation(raw) or raw.get('is_locked'):
+            return None
+        stored = raw.get('structured')
+        structured = stored if isinstance(stored, dict) else {}
+        title = structured.get('title') or ''
+        overview = structured.get('overview') or ''
+        user_title = raw.get('user_title') or ''
+        if title or overview or user_title:
+            return {
+                'id': key,
+                'created_at': raw.get('created_at'),
+                'user_title': user_title or None,
+                'structured': {'title': title, 'overview': overview},
+            }
+    return read_record(uid, ref)
 
 
 def read_entity_record(uid, entity_id):
