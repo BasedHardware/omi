@@ -26696,6 +26696,17 @@
             "title": "Created At",
             "type": "string"
           },
+          "diff": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewChangeDiff"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional before/after excerpt with surrounding context. Released clients ignore it. Never a whole transcript."
+          },
           "edit_kind": {
             "anyOf": [
               {
@@ -26767,6 +26778,134 @@
           "created_at"
         ],
         "title": "ReviewChange",
+        "type": "object"
+      },
+      "ReviewChangeDiff": {
+        "description": "Bounded before/after excerpt. Released clients ignore this object.\n\n``group_key`` is stable for the same term change across conversations so a\nclient can group by change, by conversation, or by term.",
+        "properties": {
+          "after": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
+          "context_after": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context After"
+          },
+          "context_before": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Before"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "group_key": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Key"
+          },
+          "occurrences": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurrences"
+          },
+          "source_started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Started At"
+          },
+          "source_title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Title"
+          },
+          "target_label": {
+            "anyOf": [
+              {
+                "maxLength": 180,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Label"
+          }
+        },
+        "title": "ReviewChangeDiff",
         "type": "object"
       },
       "ReviewChangesResponse": {

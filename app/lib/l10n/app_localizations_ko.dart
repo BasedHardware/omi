@@ -12253,6 +12253,59 @@ class AppLocalizationsKo extends AppLocalizations {
   String get reviewNoChangesBody => 'Omi가 노트를 정리하면 변경 사항이 여기에 표시돼요.';
 
   @override
+  String get reviewChangesSectionTerms => '이름 및 용어';
+
+  @override
+  String get reviewChangesSectionTitles => '제목 및 요약';
+
+  @override
+  String get reviewChangesSectionOther => '기타 변경 사항';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '대화 $count개',
+      one: '대화 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count곳',
+      one: '1곳',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return '$count개 모두 보기';
+  }
+
+  @override
+  String get reviewChangeUndoAll => '모두 실행 취소';
+
+  @override
+  String get reviewChangeSeeEvidence => '근거 보기';
+
+  @override
+  String get reviewChangeViewConversation => '대화 보기';
+
+  @override
+  String get reviewChangeViewTask => '할 일 보기';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return '실행 취소하지 못함: $failed/$total개. 다시 시도하세요.';
+  }
+
+  @override
   String get reviewShowMore => '더 보기';
 
   @override
@@ -13219,4 +13272,28 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => '탭하여 해결';
+
+  @override
+  String get homePendingTitle => '대화 준비 중';
+
+  @override
+  String get homePendingCatchingUp => '이전 오디오 처리 중';
+
+  @override
+  String get onTheWayTitle => '준비 중';
+
+  @override
+  String get onTheWayAlmostReady => '거의 완료';
+
+  @override
+  String get activityEmpty => '아직 활동이 없습니다';
+
+  @override
+  String get activityNewSemantics => '활동, 새 항목';
+
+  @override
+  String get activityLoadFailed => '활동을 모두 불러오지 못했습니다';
+
+  @override
+  String get activityNewItem => '새 항목';
 }

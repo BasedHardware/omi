@@ -3171,7 +3171,8 @@ async def test_known_unregistered_backfill_cleans_up_and_returns_retryable_503()
 
 
 @pytest.mark.asyncio
-async def test_old_backfill_task_migrates_on_flag_on_and_runs_direct_when_off():
+@pytest.mark.parametrize('idle_owner', [{}, {'epoch': 3, 'reconcile_at': 0}])
+async def test_old_backfill_task_migrates_on_flag_on_and_runs_direct_when_off(idle_owner):
     module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
     payload = {
         'uid': 'test-uid',
@@ -3184,7 +3185,7 @@ async def test_old_backfill_task_migrates_on_flag_on_and_runs_direct_when_off():
     request.json = AsyncMock(return_value=payload)
     module.get_sync_job = MagicMock(return_value={'status': 'queued'})
     module.uid_sequencer.enabled.return_value = True
-    module.sync_backfill_sequencer.get_owner = MagicMock(return_value={})
+    module.sync_backfill_sequencer.get_owner = MagicMock(return_value=idle_owner)
     module.sync_backfill_sequencer.has_pending = MagicMock(return_value=False)
     module.sync_backfill_sequencer.register_job = MagicMock(return_value=True)
     module.uid_sequencer.kick = MagicMock(return_value=True)
@@ -3205,7 +3206,7 @@ async def test_old_backfill_task_migrates_on_flag_on_and_runs_direct_when_off():
         assert migrated_during_rollback.status_code == 200
         assert module.sync_backfill_sequencer.register_job.call_count == 2
         module._run_sync_job_body.assert_awaited_once()
-        module.sync_backfill_sequencer.get_owner.return_value = {}
+        module.sync_backfill_sequencer.get_owner.return_value = idle_owner
         module.sync_backfill_sequencer.has_pending.return_value = True
         migrated_from_pending = await module.run_sync_job(request, task_retry_count=0)
         assert migrated_from_pending.status_code == 200

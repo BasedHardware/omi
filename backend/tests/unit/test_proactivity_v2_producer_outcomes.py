@@ -116,7 +116,10 @@ def test_canonical_mentor_human_persistence_observes_after_commit(monkeypatch):
 
 def test_canonical_task_completion_observation_is_post_commit(monkeypatch):
     saved, events = {}, []
-    document = SimpleNamespace(get=lambda: SimpleNamespace(exists=True), update=lambda values: saved.update(values))
+    document = SimpleNamespace(
+        get=lambda: SimpleNamespace(exists=True, to_dict=lambda: {'completed': False}),
+        update=lambda values: saved.update(values),
+    )
     owner = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda task_id: document))
     monkeypatch.setattr(
         tasks, 'db', SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda uid: owner))

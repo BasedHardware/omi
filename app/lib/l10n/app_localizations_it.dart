@@ -12496,6 +12496,59 @@ class AppLocalizationsIt extends AppLocalizations {
   String get reviewNoChangesBody => 'Quando Omi riordina i tuoi appunti, le modifiche compaiono qui.';
 
   @override
+  String get reviewChangesSectionTerms => 'Nomi e termini';
+
+  @override
+  String get reviewChangesSectionTitles => 'Titoli e riepiloghi';
+
+  @override
+  String get reviewChangesSectionOther => 'Altre modifiche';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversazioni',
+      one: '1 conversazione',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count punti',
+      one: '1 punto',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Mostra tutti ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Annulla tutto';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Vedi le prove';
+
+  @override
+  String get reviewChangeViewConversation => 'Vedi conversazione';
+
+  @override
+  String get reviewChangeViewTask => 'Vedi attività';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Impossibile annullare $failed su $total. Riprova.';
+  }
+
+  @override
   String get reviewShowMore => 'Mostra altro';
 
   @override
@@ -13472,4 +13525,28 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Tocca per risolvere';
+
+  @override
+  String get homePendingTitle => 'Conversazioni in arrivo';
+
+  @override
+  String get homePendingCatchingUp => 'Recupero dell\'audio precedente';
+
+  @override
+  String get onTheWayTitle => 'In arrivo';
+
+  @override
+  String get onTheWayAlmostReady => 'Quasi pronto';
+
+  @override
+  String get activityEmpty => 'Ancora nessuna attività';
+
+  @override
+  String get activityNewSemantics => 'Attività, nuovi elementi';
+
+  @override
+  String get activityLoadFailed => 'Impossibile caricare tutta la tua attività';
+
+  @override
+  String get activityNewItem => 'Nuovo';
 }

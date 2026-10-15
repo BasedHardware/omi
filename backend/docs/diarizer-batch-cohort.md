@@ -1,6 +1,6 @@
 # Shared Gateway batch cohort ramp
 
-Lead owns merges, deployments and ramp decisions. The checked-in production binding selects complete stage C: 1% authoritative including sync/backfill, plus David. Stage D (5%) remains prepared in the stage JSON; expansion requires explicitly selecting that complete stage in the shared overlay and pusher chart.
+Lead owns merges, deployments and ramp decisions. The checked-in production binding selects complete stage D: 5% authoritative including sync/backfill, plus David. The next planned stage is E (25%) after at least 3 hours of clean data at D. For a D regression, roll back to complete C: 1% with the previous budgets.
 Deployment and further long-audio qualification remain lead-owned.
 The reserved prod Gateway is `172.16.160.20`; reservation is not serving readiness.
 Follow [Gateway installation and route probes](../charts/internal-gateway/README.md)
@@ -24,12 +24,12 @@ TRANSCRIPTION_SHADOW_UID_ALLOWLIST=vi7SA9ckQCe4ccobWNxlbdcNdC23
 
 Combine those constants with the following exact values (all strings):
 
-| Stage | FINAL_PASS_PERCENT | SHADOW_PERCENT | FINAL_PASS_AUTHORITATIVE | FINAL_PASS_SYNC_ENABLED | SHADOW_DAILY_AUDIO_HOURS |
-| --- | ---: | ---: | --- | --- | ---: |
-| A David shadow / sync legacy | 0 | 0 | false | false | 1 |
-| B David authoritative including sync | 0 | 0 | true | true | 1 |
-| C 1% authoritative + David | 1 | 1 | true | true | 80 |
-| D 5% authoritative + David | 5 | 5 | true | true | 400 |
+| Stage | FINAL_PASS_PERCENT | SHADOW_PERCENT | FINAL_PASS_AUTHORITATIVE | FINAL_PASS_SYNC_ENABLED | SHADOW_DAILY_AUDIO_HOURS | SYNC_HOURLY_AUDIO_HOURS | SYNC_HOURLY_REQUESTS |
+| --- | ---: | ---: | --- | --- | ---: | ---: | ---: |
+| A David shadow / sync legacy | 0 | 0 | false | false | 1 | 10 | 1,000 |
+| B David authoritative including sync | 0 | 0 | true | true | 1 | 10 | 1,000 |
+| C 1% authoritative + David | 1 | 1 | true | true | 80 | 10 | 1,000 |
+| D 5% authoritative + David | 5 | 5 | true | true | 400 | 50 | 5,000 |
 
 Column names abbreviate the `TRANSCRIPTION_` prefix. Edit only the single
 `<<: &batch_cohort {...}` line in `deploy/runtime_env/prod.overlay.yaml`; the three
@@ -40,15 +40,17 @@ gate accepts only a complete reviewed stage; mixed percentages or scope drift fa
 Redeploy pusher, backend, backend-sync and backend-sync-backfill through their
 owning workflows. Verify the effective values agree on all four before starting
 the observation window. Integration, dev and backend-listen remain excluded.
-Rollback restores the complete B mapping on all four hosts, including backfill:
-both percentages 0, daily shadow budget 1 h, authoritative=true and sync=true.
-Complete A additionally sets authoritative=false and sync=false; retaining C
-percentages or its daily budget is neither complete A nor complete B.
+For a D regression, restore complete C on all four hosts, including backfill:
+both percentages 1, daily shadow budget 80 h, sync caps 10 audio-h/1,000 requests,
+authoritative=true and sync=true. Keep David's allowlists and every other value.
+Complete B is the broader David-only rollback: both percentages 0, daily shadow
+budget 1 h, with sync caps 10/1,000 and authoritative=true/sync=true. Complete A
+additionally sets authoritative=false and sync=false.
 
-Never exceed 5% in this plan. Wait at least 12 hours of data at D before proposing
-any expansion; hold each earlier stage until all gates below have enough samples.
-An empty series is not a passing gate. Lead records sample counts, baseline,
-p95 values and acceptance decision before advancing.
+The selected production configuration is D (5%). Once D is deployed, advance to
+planned stage E (25%) only after at least 3 hours of clean D data and review of
+every gate below. An empty series is not a passing gate. Lead records sample
+counts, baseline, p95 values and the acceptance decision before advancing.
 
 ## Why David starts at B
 
@@ -68,7 +70,7 @@ David approved authoritative stage B. Lead-supplied hand labels measured pyannot
 names except its explicit removal list, which contains no cohort names. No action
 allowlist change is needed. A renderer/clone regression test covers every binding.
 
-## Gates at every stage A, B, C and D
+## Gates at every stage A, B, C, D and later ramps
 
 - Failure rate: `omi_transcription_final_pass_total` outcomes `failed:service`,
   `failed:timeout`, `failed:sync_audio`; compare failures / all attempts with the
@@ -107,22 +109,28 @@ assignments, clocks, translations and source references on the actual sync outpu
 ## Capacity and limits
 
 [Stage C aggregate measurements and provisional capacity model](diarizer-batch-stagec-load.md)
-qualify the combined sync/pusher planning assumptions and document the remaining
-long-audio measurement gap.
+qualify the combined sync/pusher planning assumptions. The measured long-audio
+T4 RTF is about 0.042, or roughly 24 audio-hours per GPU-hour. At the D sync cap
+of 50 audio-hours per wall-clock hour, steady inference needs about 2.1 T4
+GPU-hours per hour, or 3 nodes at 70% planning utilization. The production batch
+HPA and T4 pool each have a maximum of 18. This covers the steady capacity
+arithmetic, not burst capacity or a p95 latency bound.
 
 The daily cap is already configurable through `TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS`
 and reserved atomically in shared Redis across shadow workers before provider work. It
 charges **all** selected stored audio, even single-speaker triage skips. At the
 planning load of 6,300 audio-h/day, C selects ~63 h and D ~315 h; 80/400 h provide
-headroom. At D, ~140 multi-speaker audio-h/day × supplied T4 RTF 0.06 is **8.4 GPU-h/day**
-(~35% average occupancy). These are planning assumptions, not a T4 load-test receipt.
-At the same ~45% multi-speaker share, spending the entire 400 h cap is ~10.8 GPU-h.
+headroom. At D, ~142 multi-speaker audio-h/day × measured T4 RTF 0.042 is about
+**6.0 GPU-h/day**. At the same ~45% multi-speaker share, spending the entire
+400 h cap is about **7.6 GPU-h/day**. These are planning assumptions, not a T4
+load-test receipt.
 Bursts, extra ASR work and retries still require queue/latency gates.
 **Sync has an independent admission cap.** Each process admits one final pass without
-waiting. Shared Redis atomically reserves at most 10 WAV audio-hours and 1,000 attempts
-per UTC hour across backend, sync and backfill. The stage data binds
-`TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS=10` and
-`TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS=1000` on all four hosts.
+waiting. Shared Redis atomically reserves at most 50 WAV audio-hours and 5,000 attempts
+per UTC hour across backend, sync and backfill at D. Stage C used 10 audio-hours and
+1,000 attempts; the stage data binds D's
+`TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS=50` and
+`TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS=5000` on all four hosts.
 The reservation uses the shared bounded Redis factory with 0.5s connect/read
 timeouts and closes the client even on timeout. Each retry is charged again; reservations are never refunded. Invalid config,
 Redis failure and exhaustion skip before embedding/GPU calls, emit
@@ -134,18 +142,19 @@ Outcome and speaker-failure logs include `uid_hash=sha256("sync-final-pass:" + u
 (full hex), with no UID metric labels. The hash is stable for scoped verification;
 no transcript, audio, or stored record read is needed to count outcomes.
 
- Backfill has its own global speech allowance
+Backfill has its own global speech allowance
 (`SYNC_BACKFILL_GLOBAL_DAILY_HOURS`, default 555), not a diarization-specific cap.
-The 8.4 GPU-h estimate above covers the original shadow planning load, not combined
-shadow plus fresh/backfill sync work. B stays David-only; do not advance C/D until
-combined GPU demand, queueing, sync volume and latency are qualified.
+The shadow GPU-h estimate above covers the shadow planning load, not combined
+shadow plus fresh/backfill sync work. Stage D retains David's allowlist; hold at D
+until combined GPU demand, queueing, sync volume and latency are clean for at least
+3 hours before considering E.
 
 The worker and batch API both cap individual calls at **7,200 seconds** (about
 230.4 MB PCM16). Keep this bounded limit: longer conversations do not receive
 whole-conversation diarization and retain legacy attribution (`failed:too_long`
 in v2 metadata). It does not prevent a percentage ramp among eligible calls;
 report the excluded duration share rather than claiming coverage of longer audio.
-At RTF .06 a two-hour call needs ~432s inference, inside the worker's default
+At RTF .042 a two-hour call needs ~302s inference, inside the worker's default
 600s deadline and Gateway's 900s timeout, but decoding, ASR and queuing consume
 that same worker budget. Hold the ramp if long-call timeouts rise; do not silently
 raise limits. Stored-audio opt-in remains required for the shadow worker; sync
@@ -163,8 +172,9 @@ it does not depend on that process-local shadow task.
    health and synthetic PCM probes from GKE and Cloud Run per the Gateway runbook.
 2. Deploy complete B to backend, backend-sync, backend-sync-backfill and pusher;
    confirm David's actual backfill jobs log `event=sync_final_pass` and inspect output.
-3. Hold B for acceptance, then advance C/D only after the gates and combined-load
-   qualification. Redeploy all four for each data edit.
+3. Hold B for acceptance, then advance through C and D only after the gates and
+   combined-load qualification. Consider E (25%) only after at least 3 clean
+   hours at D. Redeploy all four for each data edit.
 
 ### Rollback
 
@@ -172,45 +182,47 @@ An immediate incident stop sets `TRANSCRIPTION_SHADOW_KILL_SWITCH=true` and
 `TRANSCRIPTION_FINAL_PASS_DIARIZER=legacy` on all hosts; restore reviewed data
 after recovery. Disable callers before removing batch capacity.
 
-The first operational rollback move needs no merge: send each Cloud Run service's
-traffic back to its recorded previous ready B revision and roll prod pusher back
-to its previous successful B Helm revision. Use the pre-C deployment receipts;
-verify these revisions contain complete B before selecting them. Each service has
-its own previous revision. The lead/operator runs the following templates with
+For a D regression, the first operational rollback move needs no merge: send each
+Cloud Run service's traffic back to its recorded previous ready C revision and
+roll prod pusher back to its previous successful C Helm revision. Use the pre-D
+deployment receipts; verify these revisions contain complete C before selecting
+them. Each service has its own previous revision. The lead/operator runs the following templates with
 production project, region and revision placeholders replaced:
 
 ```bash
 gcloud run services update-traffic backend --to-revisions=<previous-ready-backend-revision>=100 --project=<prod-project> --region=<region>
 gcloud run services update-traffic backend-sync --to-revisions=<previous-ready-sync-revision>=100 --project=<prod-project> --region=<region>
 gcloud run services update-traffic backend-sync-backfill --to-revisions=<previous-ready-backfill-revision>=100 --project=<prod-project> --region=<region>
-helm -n prod-omi-backend rollback prod-omi-pusher <previous-successful-B-helm-revision> --wait --timeout=160m
+helm -n prod-omi-backend rollback prod-omi-pusher <previous-successful-C-helm-revision> --wait --timeout=160m
 ```
 
 Verify 100% traffic on the selected ready Cloud Run revisions and the restored
 pusher rollout. In-flight work may finish on the old instances. The configuration
-revert follows this operational rollback so a later deploy cannot re-enable C:
+revert follows this operational rollback so a later deploy cannot re-enable D:
 
-1. Restore **complete B** in the `&batch_cohort` anchor of
+1. Restore **complete C** in the `&batch_cohort` anchor of
    `backend/deploy/runtime_env/prod.overlay.yaml` and in
    `backend/charts/pusher/prod_omi_pusher_values.yaml`: set
-   `TRANSCRIPTION_FINAL_PASS_PERCENT=0`, `TRANSCRIPTION_SHADOW_PERCENT=0` and
-   `TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS=1`; keep
+   `TRANSCRIPTION_FINAL_PASS_PERCENT=1`, `TRANSCRIPTION_SHADOW_PERCENT=1` and
+   `TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS=80`; keep
    `TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE=true` and
-   `TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED=true`. Keep David's allowlists and the
-   hourly sync caps (10 audio-h / 1,000 attempts) unchanged. Recompose with
+   `TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED=true`. Keep David's allowlists and set
+   the previous hourly sync caps to 10 audio-h / 1,000 attempts. Recompose with
    `backend/.venv/bin/python backend/deploy/compose_runtime_env.py`, review/merge
    the revert, then redeploy backend, backend-sync and backend-sync-backfill via
    `gcp_backend.yml` (`environment=prod`, `deploy_targets=cloud-run-only`), and
    pusher via `gcp_backend_pusher.yml` (`environment=prod`, `service=pusher`,
    qualified immutable digest). Both deployment paths are required. Verify the
-   complete B values agree across all four hosts. This restores David-only
-   authoritative final passes, including sync.
-2. If legacy sync and no live promotion are required, select **complete A**
+   complete C values agree across all four hosts.
+2. To roll back further to David-only, select **complete B**: both percentages 0,
+   daily shadow budget 1, sync caps 10/1,000, authoritative=true and sync=true.
+   Recompose and redeploy all four through the same workflows.
+3. If legacy sync and no live promotion are required, select **complete A**
    instead: both percentages 0 and daily shadow budget 1, **plus**
    `TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE=false` and
    `TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED=false` in both sources. Recompose and
    redeploy all four through the same workflows. This retains David-only shadow;
-   changing only the two flags while leaving C's percentages/budget is insufficient.
+   changing only the two flags while leaving D's percentages/budget is insufficient.
 
 Existing promoted records are not rewritten by rollback. Keep Gateway and
 embedding routes for the independent caller migration.

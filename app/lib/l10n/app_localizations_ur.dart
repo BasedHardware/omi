@@ -12442,6 +12442,59 @@ class AppLocalizationsUr extends AppLocalizations {
   String get reviewNoChangesBody => 'جب Omi آپ کے نوٹس ترتیب دے گا تو تبدیلیاں یہاں نظر آئیں گی۔';
 
   @override
+  String get reviewChangesSectionTerms => 'نام اور اصطلاحات';
+
+  @override
+  String get reviewChangesSectionTitles => 'عنوانات اور خلاصے';
+
+  @override
+  String get reviewChangesSectionOther => 'دیگر تبدیلیاں';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count گفتگوئیں',
+      one: '1 گفتگو',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count جگہیں',
+      one: '1 جگہ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'تمام $count دکھائیں';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'سب کالعدم کریں';
+
+  @override
+  String get reviewChangeSeeEvidence => 'ثبوت دیکھیں';
+
+  @override
+  String get reviewChangeViewConversation => 'گفتگو دیکھیں';
+
+  @override
+  String get reviewChangeViewTask => 'کام دیکھیں';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'کالعدم نہیں ہو سکے: $failed/$total۔ دوبارہ کوشش کریں۔';
+  }
+
+  @override
   String get reviewShowMore => 'مزید دکھائیں';
 
   @override
@@ -13415,4 +13468,28 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'ٹھیک کرنے کے لیے ٹیپ کریں';
+
+  @override
+  String get homePendingTitle => 'گفتگوئیں آ رہی ہیں';
+
+  @override
+  String get homePendingCatchingUp => 'پچھلی آڈیو پر کارروائی ہو رہی ہے';
+
+  @override
+  String get onTheWayTitle => 'راستے میں';
+
+  @override
+  String get onTheWayAlmostReady => 'تقریباً تیار';
+
+  @override
+  String get activityEmpty => 'ابھی تک کوئی سرگرمی نہیں';
+
+  @override
+  String get activityNewSemantics => 'سرگرمی، نئے آئٹمز';
+
+  @override
+  String get activityLoadFailed => 'آپ کی تمام سرگرمی لوڈ نہیں ہو سکی';
+
+  @override
+  String get activityNewItem => 'نیا';
 }

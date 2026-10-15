@@ -12425,6 +12425,59 @@ class AppLocalizationsFa extends AppLocalizations {
   String get reviewNoChangesBody => 'وقتی Omi یادداشت‌های شما را مرتب کند، تغییرات اینجا نمایش داده می‌شود.';
 
   @override
+  String get reviewChangesSectionTerms => 'نام‌ها و اصطلاحات';
+
+  @override
+  String get reviewChangesSectionTitles => 'عنوان‌ها و خلاصه‌ها';
+
+  @override
+  String get reviewChangesSectionOther => 'تغییرات دیگر';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count گفتگو',
+      one: '۱ گفتگو',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count مورد',
+      one: '۱ مورد',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'نمایش همه ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'لغو همه';
+
+  @override
+  String get reviewChangeSeeEvidence => 'مشاهده شواهد';
+
+  @override
+  String get reviewChangeViewConversation => 'مشاهده گفتگو';
+
+  @override
+  String get reviewChangeViewTask => 'مشاهده کار';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'لغو $failed از $total ممکن نشد. دوباره امتحان کنید.';
+  }
+
+  @override
   String get reviewShowMore => 'نمایش بیشتر';
 
   @override
@@ -13396,4 +13449,28 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'برای رفع ضربه بزنید';
+
+  @override
+  String get homePendingTitle => 'گفتگوها در راه است';
+
+  @override
+  String get homePendingCatchingUp => 'در حال پردازش صدای قبلی';
+
+  @override
+  String get onTheWayTitle => 'در راه';
+
+  @override
+  String get onTheWayAlmostReady => 'تقریباً آماده';
+
+  @override
+  String get activityEmpty => 'هنوز فعالیتی نیست';
+
+  @override
+  String get activityNewSemantics => 'فعالیت، موارد جدید';
+
+  @override
+  String get activityLoadFailed => 'بارگیری همه فعالیت‌های شما ممکن نشد';
+
+  @override
+  String get activityNewItem => 'جدید';
 }

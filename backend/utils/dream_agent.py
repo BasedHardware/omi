@@ -6,19 +6,47 @@ from dataclasses import replace
 from functools import partial
 from typing import Any
 
-from config.dream_agent import Caps, auto_apply_kinds, enabled, concurrency, PASS_TIMEOUT_SECONDS, DRAIN_TIMEOUT_SECONDS
+from config.dream_agent import (
+    Caps,
+    admission_for,
+    auto_apply_kinds,
+    concurrency,
+    enabled,
+    on_demand_enabled,
+    PASS_TIMEOUT_SECONDS,
+    DRAIN_TIMEOUT_SECONDS,
+)
 from database import dream_scheduler, dream_store, dream_turns, review_store
 from database.dream_dirty import dream_writing
 from models.agent_tools import HarnessQuestion
 from models.agent_edit import HarnessEdit
 from utils.agent_capabilities import tools as dream_tools
+from utils.agent_capabilities import verifiers
 from utils import dream_review_policy, dream_capacity, dream_harness_transport, dream_seed, dream_verify
+from utils.dream_cost import conservative_attempt_micro, verification_reserve_tokens
 from utils.agent_capabilities.search import OwnerSearch
 from utils.agent_capabilities.session import Session
 from utils.dream_instructions import INSTRUCTIONS
 from utils.dream_metrics import record_pass, error_code, record_reclaimed
 from database.dream_effect_fence import ACTIVE_RUN
 from utils.executors import db_executor, run_blocking
+
+
+def _cheap_turn(staged, invoke):
+    """Bind one named cheap lane. Unset, VERIFY_LANE, or disagreeing lanes stay a no-op."""
+    lanes = []
+    for item in staged:
+        policy = verifiers.policy_for(verifiers.item_kind(item))
+        for step in policy.steps:
+            if step.strategy != 'cheap_model':
+                continue
+            lane = step.lane
+            if not lane or lane == dream_harness_transport.VERIFY_LANE or lane in lanes:
+                continue
+            lanes.append(lane)
+    if len(lanes) != 1:
+        return None
+    return partial(invoke, lanes[0])
 
 
 async def run_session(
@@ -46,6 +74,8 @@ async def run_session(
         'uncached_tokens': 0,
         'usage_unknown': False,
         'usage_complete': False,
+        'cost_status': 'priced',
+        'cost_micro_usd': 0,
         'size_bucket': limits.bucket,
         'mode': 'on',
         'proposed': {'edits': [], 'questions': [], 'vocabulary': []},
@@ -84,8 +114,18 @@ async def run_session(
             report['uncached_tokens'] += max(
                 0, result.prompt_tokens - result.cached_tokens - result.cache_unreported_tokens
             )
+        status = getattr(result, 'cost_status', None)
+        micro = getattr(result, 'cost_micro_usd', None)
+        if status == 'priced' and type(micro) is int and report.get('cost_status') != 'unpriced':
+            report['cost_micro_usd'] = report.get('cost_micro_usd', 0) + micro
+            report['cost_status'] = 'priced'
+        else:
+            report['cost_status'] = 'unpriced'
+            report.pop('cost_micro_usd', None)
         if lease is not None:
             await run_blocking(db_executor, dream_turns.settle, uid, lease['run_id'], result)
+
+    main_history = {'prompt_tokens': None, 'messages': 0}
 
     async def invoke(lane, mount, messages):
         await active()
@@ -93,23 +133,45 @@ async def run_session(
         mount = replace(mount, budget=replace(mount.budget, tokens=min(mount.budget.tokens or 0, remaining)))
         if mount.budget.tokens is None or mount.budget.tokens < 1024:
             raise ValueError('dream_input_token_budget')
-        ceiling = dream_harness_transport.input_bytes(messages, mount)
         completion = (
             limits.verifier_completion_tokens
             if lane == dream_harness_transport.VERIFY_LANE
             else limits.completion_tokens
         )
-        reserve = min(mount.budget.tokens, 2 * (ceiling + completion))
+        prior = main_history['prompt_tokens'] if lane == dream_harness_transport.MAIN_LANE else None
+        prior_count = main_history['messages'] if lane == dream_harness_transport.MAIN_LANE else 0
+        if type(prior_count) is not int:
+            prior_count = 0
+        estimate, completion_room = dream_harness_transport.attempt_room(
+            messages,
+            mount,
+            prior_prompt_tokens=prior,
+            prior_message_count=prior_count,
+            completion_limit=completion,
+        )
+        reserve = estimate + completion_room
+        micro, price_status = conservative_attempt_micro('gemini', 'gemini-3.8-flash', estimate, completion_room)
         if lease is not None:
-            await run_blocking(db_executor, dream_turns.reserve, uid, lease['run_id'], reserve, caps)
+            await run_blocking(
+                db_executor,
+                dream_turns.reserve,
+                uid,
+                lease['run_id'],
+                reserve,
+                caps,
+                cost_micro_usd=micro if price_status == 'priced' else None,
+            )
         report['model_lanes'].append(lane)
         sink = {}
         try:
             if turn is not None:
                 result = await turn(uid, lane, mount, messages)
                 await usage(result)
+                if lane == dream_harness_transport.MAIN_LANE and result.prompt_tokens:
+                    main_history['prompt_tokens'] = result.prompt_tokens
+                    main_history['messages'] = len(messages)
                 return result
-            return await dream_harness_transport.model_turn(
+            result = await dream_harness_transport.model_turn(
                 uid,
                 lane,
                 mount,
@@ -121,7 +183,13 @@ async def run_session(
                 ),
                 on_usage=usage,
                 usage_sink=sink,
+                prior_prompt_tokens=prior,
+                prior_message_count=prior_count,
             )
+            if lane == dream_harness_transport.MAIN_LANE and result.prompt_tokens:
+                main_history['prompt_tokens'] = result.prompt_tokens
+                main_history['messages'] = len(messages)
+            return result
         finally:
             if lane == dream_harness_transport.VERIFY_LANE and sink.get('transport_complete'):
                 report['verifier_transport_responses'] = report.get('verifier_transport_responses', 0) + 1
@@ -155,14 +223,24 @@ async def run_session(
             await active()
             staged = list(session.staged.values())
             verification_telemetry = {}
+            # batches() sizes its evidence byte ceiling as tokens // 8, capped at
+            # 24000. A reserve that only pays for the two model calls would shrink
+            # that ceiling and drop evidence. Keep the ceiling open; the reserve
+            # is still what the two calls need, and it is not held in the main loop.
+            verify_need = max(
+                verification_reserve_tokens(staged, completion_tokens=limits.verifier_completion_tokens),
+                8 * 24000,
+            )
+            verify_budget = min(verify_need, max(0, limits.tokens - report['accounted_tokens']))
             support, calls = await dream_verify.verify(
                 staged,
                 partial(invoke, dream_harness_transport.VERIFY_LANE),
-                tokens=min(limits.verification_tokens, max(0, limits.tokens - report['accounted_tokens'])),
+                tokens=verify_budget,
                 deadline_seconds=max(0, deadline - asyncio.get_running_loop().time() - min(60, timeout_seconds / 10)),
                 verifier_seconds=limits.verifier_seconds,
                 completion_tokens=limits.verifier_completion_tokens,
                 telemetry=verification_telemetry,
+                cheap_turn=_cheap_turn(staged, invoke),
             )
             report['verifier_calls'] = calls
             report['verifier_transport_responses'] = max(
@@ -199,7 +277,11 @@ async def run_session(
                             'policy': 'auto' if decision == 'agree' and auto_allowed else 'suggest',
                         }
                     )
-                    if decision in {'disagree', 'unverified'}:
+                    default_policy = verifiers.is_default_policy(verifiers.policy_for(verifiers.item_kind(item)))
+                    # The default two-verifier path records unverified and does not
+                    # enqueue it. A non-default chain's unverified result uses the
+                    # same offer path as a split. Disagreement is never offered.
+                    if decision == 'disagree' or (decision == 'unverified' and default_policy):
                         report['outcomes'].append(
                             {'key': item.key, 'kind': item.kind, 'status': 'verifier_' + decision}
                         )
@@ -226,6 +308,8 @@ async def run_session(
                         report['outcomes'].append({'key': item.key, 'kind': item.kind, 'status': status})
                     elif item.value > 2:
                         offered.append((item, sum(vote is True for vote in support[item.id])))
+                    elif decision == 'unverified':
+                        report['outcomes'].append({'key': item.key, 'kind': item.kind, 'status': 'verifier_unverified'})
                 # Actual enqueue shares Review's daily proposal/answer attention
                 # ledger. Failed/suppressed offers cannot consume an apply slot.
                 offered.sort(key=lambda pair: (pair[0].value, pair[1]), reverse=True)
@@ -272,8 +356,8 @@ async def run_session(
         records_read=len(session.records),
         read_bytes=session.read_bytes,
         usage_complete=not report['usage_unknown'],
-        cost_usd=report['tokens'] * caps.max_usd_per_token,
-        cost_usd_upper_bound=report['accounted_tokens'] * caps.max_usd_per_token,
+        cost_status=report.get('cost_status', 'unpriced'),
+        cost_usd=(report['cost_micro_usd'] / 1000000 if report.get('cost_status') == 'priced' else None),
     )
     return report, session
 
@@ -298,7 +382,14 @@ async def run_pass(
     caps = caps or Caps.from_env()
     if bootstrap_tools is not None and not canary:
         raise ValueError('dream_bootstrap_requires_synthetic_canary')
-    slot = await dream_capacity.claim(concurrency(), slot_seconds=timeout_seconds + 120) if not dry_run else None
+    mode, allowlisted = admission_for(uid)
+    slot = (
+        await dream_capacity.claim(
+            concurrency(), slot_seconds=timeout_seconds + 120, mode=mode, owner_allowlisted=allowlisted
+        )
+        if not dry_run
+        else None
+    )
     if not dry_run and slot is None:
         report = {'status': 'waiting', 'reason': 'reserved_capacity'}
         record_pass(report)
@@ -367,7 +458,7 @@ async def run_pass(
             progress['report'] = report
         if lease is not None:
             report.update(
-                run_id=lease['run_id'], trigger=trigger, mode=lease['mode'], cost_usd_reserved=caps.reservation_usd
+                run_id=lease['run_id'], trigger=trigger, mode=lease['mode'], cost_status=report.get('cost_status')
             )
             consumed = [item for item in dirty if item['collection'] + '/' + item['id'] in session.records]
             unavailable = [
@@ -410,7 +501,8 @@ async def drain(*, limit=5000):
     results = []
     try:
         async with asyncio.timeout(DRAIN_TIMEOUT_SECONDS):
-            if await dream_capacity.available_model() is None:
+            reserved_open = await dream_capacity.available_model(mode='reserved') is not None
+            if not reserved_open and not on_demand_enabled():
                 report = {'status': 'waiting', 'reason': 'reserved_capacity'}
                 record_pass(report)
                 return [report]

@@ -12478,6 +12478,59 @@ class AppLocalizationsHu extends AppLocalizations {
   String get reviewNoChangesBody => 'Amikor az Omi rendezi a jegyzeteidet, a módosítások itt jelennek meg.';
 
   @override
+  String get reviewChangesSectionTerms => 'Nevek és kifejezések';
+
+  @override
+  String get reviewChangesSectionTitles => 'Címek és összefoglalók';
+
+  @override
+  String get reviewChangesSectionOther => 'Egyéb módosítások';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count beszélgetés',
+      one: '1 beszélgetés',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count helyen',
+      one: '1 helyen',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Mind a(z) $count megjelenítése';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Összes visszavonása';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Bizonyíték megtekintése';
+
+  @override
+  String get reviewChangeViewConversation => 'Beszélgetés megtekintése';
+
+  @override
+  String get reviewChangeViewTask => 'Feladat megtekintése';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Nem sikerült visszavonni: $failed/$total. Próbáld újra.';
+  }
+
+  @override
   String get reviewShowMore => 'Továbbiak';
 
   @override
@@ -13453,4 +13506,28 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Koppints a javításhoz';
+
+  @override
+  String get homePendingTitle => 'Beszélgetések úton';
+
+  @override
+  String get homePendingCatchingUp => 'Korábbi hang feldolgozása';
+
+  @override
+  String get onTheWayTitle => 'Úton';
+
+  @override
+  String get onTheWayAlmostReady => 'Majdnem kész';
+
+  @override
+  String get activityEmpty => 'Még nincs tevékenység';
+
+  @override
+  String get activityNewSemantics => 'Tevékenység, új elemek';
+
+  @override
+  String get activityLoadFailed => 'Nem sikerült betölteni az összes tevékenységet';
+
+  @override
+  String get activityNewItem => 'Új';
 }

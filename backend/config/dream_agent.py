@@ -32,8 +32,33 @@ def eligibility():
     return value if value in {'all', 'paid', 'allowlist'} else 'invalid'
 
 
-def _allowlisted(uid):
+def allowlisted(uid):
     return uid in {item.strip() for item in os.getenv('DREAM_AGENT_UID_ALLOWLIST', '').split(',') if item.strip()}
+
+
+def _allowlisted(uid):
+    return allowlisted(uid)
+
+
+def on_demand_enabled():
+    return os.getenv('DREAM_ON_DEMAND_ENABLED', '').strip().lower() in {'1', 'true', 'yes'}
+
+
+def admission_for(uid):
+    """Gateway admission the backend asserts. Never taken from user input.
+
+    On-demand is only for an allowlisted owner while ``DREAM_ON_DEMAND_ENABLED``
+    is true. Every other owner, and allowlisted owners with the flag off, use
+    reserved capacity.
+    """
+    listed = allowlisted(uid)
+    if listed and on_demand_enabled():
+        return 'on_demand', True
+    return 'reserved', False
+
+
+def dream_journal_key(edit_key):
+    return isinstance(edit_key, str) and (edit_key.startswith('agent:') or edit_key.startswith('dream:'))
 
 
 def may_be_eligible(uid):
@@ -89,15 +114,12 @@ def number(key: str, default: float) -> float:
 
 @dataclass(frozen=True)
 class Caps:
-    tokens: int = 256000
+    tokens: int = 1000000
     passes: int = 2
     edits: int = 25
     daily_usd: float = 10.0
-    global_daily_usd: float = 15000.0
-    global_spend_shards: int = 64
     expected_tokens: int = 12000
     tokens_per_minute: int = 2000000
-    max_usd_per_token: float = 0.00001
     undo_rate: float = 0.2
     undo_min_samples: int = 10
     anonymous_k: int = 20
@@ -107,23 +129,17 @@ class Caps:
     @classmethod
     def from_env(cls):
         return cls(
-            tokens=int(number('DREAM_AGENT_TOKENS_PER_PASS', 256000)),
+            tokens=int(number('DREAM_AGENT_TOKENS_PER_PASS', 1000000)),
             passes=int(number('DREAM_AGENT_PASSES_PER_DAY', 2)),
             edits=int(number('DREAM_AGENT_EDITS_PER_PASS', 25)),
             daily_usd=number('DREAM_AGENT_DAILY_USD', 10),
-            global_daily_usd=number('DREAM_AGENT_GLOBAL_DAILY_USD', 15000),
             expected_tokens=int(number('DREAM_AGENT_EXPECTED_TOKENS', 12000)),
             tokens_per_minute=int(number('DREAM_AGENT_TOKENS_PER_MINUTE', 2000000)),
-            max_usd_per_token=number('DREAM_AGENT_MAX_USD_PER_TOKEN', 0.00001),
             undo_rate=number('DREAM_AGENT_UNDO_RATE', 0.2),
             undo_min_samples=int(number('DREAM_AGENT_UNDO_MIN_SAMPLES', 10)),
             anonymous_k=max(2, int(number('DREAM_AGENT_FEEDBACK_K', 20))),
             manual_runs=int(number('DREAM_AGENT_MANUAL_RUNS_PER_DAY', 3)),
         )
-
-    @property
-    def reservation_usd(self):
-        return min(self.tokens, self.expected_tokens) * self.max_usd_per_token
 
 
 def concurrency():
