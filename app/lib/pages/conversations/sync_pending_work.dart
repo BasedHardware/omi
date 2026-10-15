@@ -92,14 +92,14 @@ abstract final class SyncPendingWork {
   /// SyncProvider notify, which streams progress during a sync.
   static bool isLargeBacklog(SyncProvider p) {
     var seconds = 0;
-    Set<String>? moved;
     for (final w in p.allWals) {
-      if (w.status == WalStatus.uploaded) {
-        seconds += w.seconds > 0 ? w.seconds : 0;
-      } else if (isPendingWal(w)) {
-        if (walIsOnDevice(w) && (moved ??= movedIds(p)).contains(w.id)) continue;
-        seconds += w.seconds > 0 ? w.seconds : 0;
-      }
+      if (w.status != WalStatus.uploaded) continue;
+      seconds += w.seconds > 0 ? w.seconds : 0;
+      if (seconds >= largeSyncBacklogSeconds) return true;
+    }
+    // Same set On the Way lists: a device drain's copied pieces are not counted on top of their source.
+    for (final w in syncing(p)) {
+      seconds += w.seconds > 0 ? w.seconds : 0;
       if (seconds >= largeSyncBacklogSeconds) return true;
     }
     return false;

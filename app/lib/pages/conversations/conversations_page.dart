@@ -17,6 +17,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
+import 'package:omi/providers/review_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/utils/logger.dart';
@@ -585,6 +586,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               convoProvider.getInitialConversations(),
               Provider.of<LocalRecordingsProvider>(context, listen: false).refresh(),
               if (_recapsKey.currentState != null) _recapsKey.currentState!.refresh(),
+              // Review's entry hides when caught up; a pull is how a hidden one comes back.
+              if (Provider.of<ReviewProvider?>(context, listen: false) case final review?
+                  when review.availability != ReviewAvailability.off)
+                review.load(),
             ]);
           },
           color: OmiColors.onAccent,

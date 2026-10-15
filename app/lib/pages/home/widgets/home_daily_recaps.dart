@@ -88,10 +88,11 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> with WidgetsBindingObs
     setState(() => _loading = _recaps.isEmpty);
     final result = await widget.load();
     if (!mounted || generation != _generation) return;
+    final items = result.items.where((r) => !_deletedIds.contains(r.id)).toList();
     // A new recap is the delight that lights Home's Activity bell.
-    if (result.ok) ActivitySeen.instance.observe(result.items.map((r) => r.createdAt));
+    if (result.ok) ActivitySeen.instance.observe(items.map((r) => r.createdAt));
     setState(() {
-      if (result.ok) _recaps = result.items;
+      if (result.ok) _recaps = items;
       _loading = false;
     });
   }
@@ -146,9 +147,13 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> with WidgetsBindingObs
     );
   }
 
+  /// Recaps deleted while this row is mounted: a refresh already in flight may still return them.
+  final Set<String> _deletedIds = {};
+
   /// A deleted recap leaves the row and the bell: the latest remaining recap is what counts.
   void _dropRecap(String id) {
     if (!mounted) return;
+    _deletedIds.add(id);
     setState(() => _recaps.removeWhere((s) => s.id == id));
     ActivitySeen.instance.observe(_recaps.map((r) => r.createdAt));
   }

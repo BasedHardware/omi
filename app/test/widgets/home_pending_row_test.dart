@@ -360,6 +360,25 @@ void main() {
       expect(SyncPendingWork.syncing(_FakeSync(wals: [source, piece(1000)])).single.storage, WalStorage.sdcard);
     });
 
+    test('a device drain counts its audio once toward catching up', () {
+      final source = Wal(
+          timerStart: 1000,
+          codec: BleAudioCodec.opus,
+          seconds: 20 * 60,
+          status: WalStatus.miss,
+          storage: WalStorage.sdcard,
+          device: 'pendant');
+      final copied = Wal(
+          timerStart: 1000,
+          codec: BleAudioCodec.opus,
+          seconds: 15 * 60,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+          originalStorage: WalStorage.sdcard,
+          device: 'pendant');
+      expect(SyncPendingWork.isLargeBacklog(_FakeSync(wals: [source, copied])), isFalse);
+    });
+
     testWidgets('keeps refused recordings one tap away, on the Sync Details row', (tester) async {
       await _pumpPage(tester,
           _FakeSync(wals: [_wal('ready', 5, WalStatus.miss), _wal('too-old', 3, WalStatus.outsideRecoveryWindow)]));

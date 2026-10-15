@@ -231,5 +231,23 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('No activity yet'), findsOneWidget);
     });
+
+    testWidgets('an empty feed still pulls to refresh', (tester) async {
+      final (seen, _) = _seen(yesterday.millisecondsSinceEpoch);
+      var recaps = <DailySummary>[];
+      await tester.pumpWidget(_app(ActivityPage(
+        seen: seen,
+        probeDreamReport: () async => false,
+        loadRecaps: () async => (items: recaps, ok: true),
+        loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])),
+      )));
+      await tester.pumpAndSettle();
+      expect(find.text('No activity yet'), findsOneWidget);
+
+      recaps = [_recap('arrived', anHourAgo)];
+      await tester.drag(find.text('No activity yet'), const Offset(0, 300));
+      await tester.pumpAndSettle();
+      expect(find.text('Recap arrived'), findsOneWidget);
+    });
   });
 }

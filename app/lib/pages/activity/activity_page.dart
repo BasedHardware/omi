@@ -103,6 +103,9 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
   /// watermark backward.
   int _generation = 0;
 
+  /// Recaps deleted from this page: a refresh already in flight may still return them.
+  final Set<String> _deletedIds = {};
+
   Future<void> _refresh() async {
     final generation = ++_generation;
     setState(() {
@@ -115,7 +118,9 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
       (widget.loadChanges ?? review_api.getReviewChanges)(),
     ]);
     if (!mounted || generation != _generation) return;
-    final recaps = results[0] as ({List<DailySummary> items, bool ok});
+    final loaded = results[0] as ({List<DailySummary> items, bool ok});
+    // A refresh that started before a deletion may still return the deleted recap.
+    final recaps = (items: loaded.items.where((r) => !_deletedIds.contains(r.id)).toList(), ok: loaded.ok);
     final changes = results[1] as ApiResult<ReviewChangesPage>;
     if (recaps.ok) _recaps = recaps.items;
     switch (changes) {
@@ -162,6 +167,7 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
     final result = await routeToPage(context, DailySummaryDetailPage(summaryId: summary.id, summary: summary));
     if (!mounted || result is! Map || result['deleted'] != true) return;
     final deletedId = result['summaryId'] as String? ?? summary.id;
+    _deletedIds.add(deletedId);
     setState(() {
       _recaps = _recaps.where((r) => r.id != deletedId).toList();
       _rebuildItems();
@@ -181,10 +187,26 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
     } else if (_failed) {
       body = OmiErrorState(message: l.activityLoadFailed, onRetry: _refresh);
     } else if (_items.isEmpty) {
-      body = OmiEmptyState(
-        icon: Icons.notifications_none,
-        title: l.activityEmpty,
-        action: DreamReportLink(probe: widget.probeDreamReport),
+      // Still pullable: a recap that lands while the page is open is one pull away.
+      body = RefreshIndicator(
+        onRefresh: _refresh,
+        color: OmiColors.onAccent,
+        backgroundColor: OmiColors.accent,
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(
+                child: OmiEmptyState(
+                  icon: Icons.notifications_none,
+                  title: l.activityEmpty,
+                  action: DreamReportLink(probe: widget.probeDreamReport),
+                ),
+              ),
+            ),
+          ),
+        ),
       );
     } else {
       final dates = OmiDateFormat.of(context);

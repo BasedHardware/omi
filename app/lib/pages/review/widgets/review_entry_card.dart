@@ -22,10 +22,32 @@ class ReviewEntryCard extends StatefulWidget {
   State<ReviewEntryCard> createState() => _ReviewEntryCardState();
 }
 
-class _ReviewEntryCardState extends State<ReviewEntryCard> {
+class _ReviewEntryCardState extends State<ReviewEntryCard> with WidgetsBindingObserver {
+  /// The card hides when nothing is waiting, so it cannot be the only way new questions arrive:
+  /// coming back to the app looks again, at most this often.
+  static const _resumeRefreshInterval = Duration(minutes: 5);
+  DateTime _lastLoad = DateTime.now();
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    if (DateTime.now().difference(_lastLoad) < _resumeRefreshInterval) return;
+    final provider = context.read<ReviewProvider?>();
+    if (provider == null || provider.availability == ReviewAvailability.off) return;
+    _lastLoad = DateTime.now();
+    provider.load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final provider = context.read<ReviewProvider?>();
