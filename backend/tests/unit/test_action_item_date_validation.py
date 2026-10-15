@@ -466,7 +466,9 @@ del _SYS_MODULES_SNAPSHOT, _SYS_MODULE_NAMES
 
 
 def _make_config(uid="test-user-123"):
-    return {"configurable": {"user_id": uid}}
+    # Chat turns always carry the resolved zone; without it DisplayClock would import the real
+    # database.notifications after the stubs above are restored.
+    return {"configurable": {"user_id": uid, "user_timezone": "UTC"}}
 
 
 # ===========================================================================
