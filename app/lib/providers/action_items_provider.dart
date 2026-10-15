@@ -485,7 +485,12 @@ class ActionItemsProvider extends ChangeNotifier {
       if (response != null && generation == _sessionGeneration) {
         _loadedPageSetComplete =
             _loadedPageSetComplete && decodedPageIsComplete && !response.truncated && _pendingDeletionIds.isEmpty;
-        final filtered = response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
+        // An optimistic delete shortens the visible list before the server removes the row.
+        // Its length can therefore request an overlapping page; keep each server ID once.
+        final seenIds = _actionItems.map((item) => item.id).toSet();
+        final filtered = response.actionItems
+            .where((item) => !_pendingDeletionIds.contains(item.id) && seenIds.add(item.id))
+            .toList();
         _actionItems.addAll(filtered);
         _hasMore = response.hasMore;
         if (!_hasMore &&

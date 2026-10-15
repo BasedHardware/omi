@@ -618,6 +618,19 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
             check=False,
         )
 
+    def test_production_desktop_does_not_mount_unused_v2_redis(self) -> None:
+        for binding in (
+            "PROACTIVITY_REDIS_HOST=redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com",
+            "PROACTIVITY_REDIS_PORT=13151",
+            "PROACTIVITY_REDIS_PASSWORD=REDIS_DB_PASSWORD:latest",
+        ):
+            with self.subTest(binding=binding):
+                self.assertNotIn(binding, self.prod)
+                mutated = self.prod.replace("          secrets: |", f"            {binding}\n          secrets: |", 1)
+                self.assertNotEqual(mutated, self.prod)
+                errors = POLICY.validate_deploy_workflow(mutated, production=True)
+                self.assertTrue(any("PROACTIVITY_REDIS_" in error for error in errors), errors)
+
     def test_runtime_image_filter_selects_desktop_backend_container_on_two_container_revision(self) -> None:
         expected_image = (
             "gcr.io/based-hardware-dev/desktop-backend@sha256:"

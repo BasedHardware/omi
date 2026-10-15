@@ -8,6 +8,9 @@
 #define NETWORK_RING_BUF_SIZE 32   // number of frames * CODEC_OUTPUT_MAX_BYTES
 #define MINIMAL_PACKET_SIZE 100    // Less than that doesn't make sence to send anything at all
 
+// Legacy XIAO mic pin macros below are unused by CV1.
+// CV1 uses boards/omi/omi-pinctrl.dtsi (DIN P1.00, CLK P1.01) and
+// omi_nrf5340_cpuapp.dts (PDM_EN P1.04).
 // PIN definitions
 // https://github.com/Seeed-Studio/Adafruit_nRF52_Arduino/blob/5aa3573913449410fd60f76b75673c53855ff2ec/variants/Seeed_XIAO_nRF52840_Sense/variant.cpp#L34
 #define PDM_DIN_PIN NRF_GPIO_PIN_MAP(0, 16)

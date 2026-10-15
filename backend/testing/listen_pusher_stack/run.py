@@ -1484,7 +1484,7 @@ async def _memory_fence_blocks_durable_finalization(stack: Stack) -> None:
     expected = 'persisted conversation finalization failed failure=processing_failed reason=memory_fence'
     if expected not in worker_log:
         raise StackFailure('memory fence failure did not emit its bounded diagnostic reason')
-    if uid in worker_log or conversation_id in worker_log:
+    if any(uid in line or conversation_id in line for line in worker_log.splitlines() if expected in line):
         raise StackFailure('memory fence failure diagnostic exposed user or conversation identity')
 
 

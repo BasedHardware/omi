@@ -41,11 +41,20 @@ COPY --from=builder /opt/venv /opt/venv
 COPY .github/scripts/desktop_release_manifest.py /app/desktop_release_manifest_contract.py
 COPY backend/ .
 
+# Precompile first-party bytecode. site-packages is already compiled by
+# `uv pip sync --compile-bytecode`, but /app was not, so every cold instance
+# recompiled ~800 imported modules (~11 MB of source) before uvicorn could
+# bind. Timestamp-mode .pyc files stay valid for this immutable image; a
+# bind-mounted or edited source still invalidates and recompiles normally.
+# Kept in the same RUN as the chown so the .pyc files are not duplicated
+# across two layers.
+#
 # Run as a non-root user: a compromise of the app process (e.g. via a
 # dependency RCE) shouldn't hand the attacker root inside the container by
 # default. /app needs to stay writable — sync.py writes uploaded audio to a
 # relative `syncing/<uid>/` directory under the working dir at runtime.
-RUN groupadd --system --gid 10001 omi && \
+RUN python -m compileall -q -j 0 -x '(^|/)tests/' /app && \
+    groupadd --system --gid 10001 omi && \
     useradd --system --uid 10001 --gid omi --no-create-home omi && \
     chown -R omi:omi /app
 USER omi

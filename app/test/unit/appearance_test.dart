@@ -16,17 +16,22 @@ import 'package:omi/ui/omi_tokens.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('appearance preference defaults to System and round trips', () async {
+  test('the palette starts light before the appearance provider resolves', () {
+    // The app is light until someone picks Dark or System; the first frame must not flash dark.
+    expect(OmiColors.active, OmiPalette.light);
+  });
+
+  test('appearance preference defaults to Light and round trips', () async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     final prefs = SharedPreferencesUtil();
-    expect(AppearanceProvider.parse(prefs.appearanceMode), ThemeMode.system);
-
-    await prefs.setAppearanceMode('light');
     expect(AppearanceProvider.parse(prefs.appearanceMode), ThemeMode.light);
-    expect((await SharedPreferences.getInstance()).getString(SharedPreferencesUtil.appearanceModeKey), 'light');
-    await prefs.setAppearanceMode('unexpected');
+
+    await prefs.setAppearanceMode('system');
     expect(AppearanceProvider.parse(prefs.appearanceMode), ThemeMode.system);
+    expect((await SharedPreferences.getInstance()).getString(SharedPreferencesUtil.appearanceModeKey), 'system');
+    await prefs.setAppearanceMode('unexpected');
+    expect(AppearanceProvider.parse(prefs.appearanceMode), ThemeMode.light);
   });
 
   test('provider notifies on a change and persists its value', () async {
@@ -35,13 +40,34 @@ void main() {
     addTearDown(provider.dispose);
     var notifications = 0;
     provider.addListener(() => notifications++);
-    expect(provider.mode, ThemeMode.system);
+    expect(provider.mode, ThemeMode.light);
     await provider.setMode(ThemeMode.dark);
     expect(provider.mode, ThemeMode.dark);
     expect(stored, 'dark');
     expect(notifications, 1);
     await provider.setMode(ThemeMode.dark);
     expect(notifications, 1);
+  });
+
+  test('selecting the displayed default persists it without notifying', () async {
+    var stored = 'invalid';
+    var writes = 0;
+    final provider = AppearanceProvider(
+      read: () => stored,
+      write: (value) async {
+        stored = value;
+        writes++;
+      },
+    );
+    addTearDown(provider.dispose);
+    var notifications = 0;
+    provider.addListener(() => notifications++);
+
+    await provider.setMode(ThemeMode.light);
+
+    expect(stored, 'light');
+    expect(writes, 1);
+    expect(notifications, 0);
   });
 
   test('both themes use the corresponding palette', () {

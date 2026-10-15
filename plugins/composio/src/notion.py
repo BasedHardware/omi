@@ -16,6 +16,8 @@ from .db import store_notion_credentials, get_notion_credentials, store_memory
 from .omi_api import store_fact
 from .tools_auth import require_composio_tools_auth
 
+REQUEST_TIMEOUT = (5, 30)
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -150,6 +152,7 @@ async def extract_all_pages(access_token: str, uid: str):
                 "Content-Type": "application/json",
             },
             json={},  # Empty search to get all pages
+            timeout=REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         pages = response.json().get("results", [])
@@ -193,6 +196,7 @@ async def extract_all_pages(access_token: str, uid: str):
                             url,
                             params=params,
                             headers={"Authorization": f"Bearer {access_token}", "Notion-Version": "2022-06-28"},
+                            timeout=REQUEST_TIMEOUT,
                         )
                         blocks_response.raise_for_status()
                         blocks_data = blocks_response.json()
@@ -256,6 +260,7 @@ async def notion_callback(request: Request, background_tasks: BackgroundTasks, c
                 "Authorization": f"Basic {base64.b64encode(f'{NOTION_CLIENT_ID}:{NOTION_CLIENT_SECRET}'.encode()).decode()}"
             },
             json={"grant_type": "authorization_code", "code": code, "redirect_uri": NOTION_REDIRECT_URI},
+            timeout=REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         token_data = response.json()
@@ -311,6 +316,7 @@ async def search_notion(request: NotionSearchRequest):
                 "Notion-Version": "2022-06-28",
             },
             json=payload,
+            timeout=REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return response.json()
@@ -338,6 +344,7 @@ async def get_blocks(
         response = requests.get(
             f"https://api.notion.com/v1/blocks/{block_id}/children",
             headers={"Authorization": f"Bearer {access_token}", "Notion-Version": "2022-06-28"},
+            timeout=REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return response.json()
@@ -366,6 +373,7 @@ async def get_page(
         page_response = requests.get(
             f"https://api.notion.com/v1/pages/{page_id}",
             headers={"Authorization": f"Bearer {access_token}", "Notion-Version": "2022-06-28"},
+            timeout=REQUEST_TIMEOUT,
         )
         page_response.raise_for_status()
         page_data = page_response.json()
@@ -374,6 +382,7 @@ async def get_page(
         blocks_response = requests.get(
             f"https://api.notion.com/v1/blocks/{page_id}/children",
             headers={"Authorization": f"Bearer {access_token}", "Notion-Version": "2022-06-28"},
+            timeout=REQUEST_TIMEOUT,
         )
         blocks_response.raise_for_status()
         blocks_data = blocks_response.json()
@@ -402,6 +411,7 @@ async def extract_memories(uid: str, block_type: str = Form("page"), block_id: s
             blocks_response = requests.get(
                 f"https://api.notion.com/v1/blocks/{block_id}/children?page_size=100",
                 headers={"Authorization": f"Bearer {access_token}", "Notion-Version": "2022-06-28"},
+                timeout=REQUEST_TIMEOUT,
             )
             blocks_response.raise_for_status()
             blocks_data = blocks_response.json()

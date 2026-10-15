@@ -32,6 +32,8 @@ from db import (
 from models import ChatToolResponse
 from twitter_link_auth import require_signed_link, sign_uid
 
+REQUEST_TIMEOUT = (5, 30)
+
 load_dotenv()
 
 
@@ -128,7 +130,8 @@ def refresh_access_token(refresh_token: str) -> Optional[dict]:
                 "grant_type": "refresh_token",
                 "refresh_token": refresh_token
             },
-            auth=(TWITTER_CLIENT_ID, TWITTER_CLIENT_SECRET) if TWITTER_CLIENT_SECRET else None
+            auth=(TWITTER_CLIENT_ID, TWITTER_CLIENT_SECRET) if TWITTER_CLIENT_SECRET else None,
+            timeout=REQUEST_TIMEOUT,
         )
 
         if response.status_code == 200:
@@ -155,11 +158,11 @@ def twitter_api_request(uid: str, method: str, endpoint: str, params: dict = Non
 
     try:
         if method == "GET":
-            response = requests.get(url, headers=headers, params=params)
+            response = requests.get(url, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
         elif method == "POST":
-            response = requests.post(url, headers=headers, json=json_data)
+            response = requests.post(url, headers=headers, json=json_data, timeout=REQUEST_TIMEOUT)
         elif method == "DELETE":
-            response = requests.delete(url, headers=headers)
+            response = requests.delete(url, headers=headers, timeout=REQUEST_TIMEOUT)
         else:
             return None
 
@@ -1184,14 +1187,16 @@ async def twitter_callback(
             response = requests.post(
                 TWITTER_TOKEN_URL,
                 data=token_data,
-                auth=(TWITTER_CLIENT_ID, TWITTER_CLIENT_SECRET)
+                auth=(TWITTER_CLIENT_ID, TWITTER_CLIENT_SECRET),
+                timeout=REQUEST_TIMEOUT,
             )
         else:
             # Public client
             token_data["client_id"] = TWITTER_CLIENT_ID
             response = requests.post(
                 TWITTER_TOKEN_URL,
-                data=token_data
+                data=token_data,
+                timeout=REQUEST_TIMEOUT,
             )
 
         if response.status_code != 200:
@@ -1213,7 +1218,8 @@ async def twitter_callback(
         user_response = requests.get(
             f"{TWITTER_API_BASE}/users/me",
             headers=headers,
-            params={"user.fields": "username"}
+            params={"user.fields": "username"},
+            timeout=REQUEST_TIMEOUT,
         )
 
         username = ""

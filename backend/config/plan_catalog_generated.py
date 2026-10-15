@@ -25,14 +25,58 @@ WIRE_PLAN_ALIASES: Final[dict[str, PlanType]] = {
     'pro': PlanType.architect,
 }
 
-CATALOG_SHA256: Final = '67f5024782f1e55742395b4e32644a4a8e478282d37593dd8225e5fb00bda22d'
-CATALOG_REVISION: Final = 2
+CATALOG_SHA256: Final = '4782b15081e10eaa8ef165e8c8e22fd7989b17c2f72f4a1eeb994bb9f9686199'
+CATALOG_REVISION: Final = 7
 CATALOG_AUTHORITY: Final = {'plan_identity': 'catalog',
  'price_identity': 'repository_ledger',
  'price_amount': 'stripe_live',
  'stripe_role': 'price_amount_authority',
  'unknown_caller_policy': 'legacy_contract'}
 OPEN_PLAN_DECISIONS: Final = {}
+PROACTIVITY_V2_BUDGET: Final[dict[str, Any]] = {'fraction_basis_points': 1000,
+ 'days_per_month': 30,
+ 'monthly_reference_cents': {'basic': 0,
+                             'operator': 4900,
+                             'architect': 19900,
+                             'unlimited_v2': 2999,
+                             'unlimited': 2000,
+                             'plus': 2000}}
+ENTITLEMENT_VERSIONS: Final[dict[str, Any]] = {'legacy': {'budget': None},
+ 'ladder_v1': {'rate_card_version': 'v1',
+               'unit_usd_micros': 1000,
+               'monthly_budgets': {'basic': {'kind': 'rate_card_mix',
+                                             'speech_seconds': 18000,
+                                             'chat_messages': 30,
+                                             'chat_tier': 'standard'},
+                                   'plus': {'kind': 'units', 'value': 16360},
+                                   'operator': {'kind': 'units', 'value': 44090},
+                                   'architect': {'kind': 'units', 'value': 189463}}}}
+LADDER_V1_STRIPE_PRICES: Final[list[str]] = []
+RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS: Final[dict[str, Any]] = {'price_1RrxXL1F8wnoWYvwIddzR902': 'legacy',
+ 'price_1RrxXL1F8wnoWYvw3kDbWmjs': 'legacy',
+ 'price_1RtJPm1F8wnoWYvwhVJ38kLb': 'legacy',
+ 'price_1RtJQ71F8wnoWYvwKMPaGlGY': 'legacy',
+ 'price_1TNIHd1F8wnoWYvwkIrekcQZ': 'legacy',
+ 'price_1TNIHd1F8wnoWYvwlKywJ8TO': 'legacy',
+ 'price_1RrFym1F8wnoWYvwQgIFhRWD': 'legacy',
+ 'price_1RrG6k1F8wnoWYvwORsU26Mr': 'legacy',
+ 'price_1TLFXK1F8wnoWYvwG1TaUkZ3': 'legacy',
+ 'price_1TN7s21F8wnoWYvwG6JuEFm6': 'legacy',
+ 'price_1TN7sF1F8wnoWYvwd0QaLZNA': 'legacy',
+ 'price_1TAfBB1F8wnoWYvw8XBFM1dX': 'legacy',
+ 'price_1TLFac1F8wnoWYvwtPxZhtzE': 'legacy',
+ 'price_1TN7jS1F8wnoWYvwM5GqfxDw': 'legacy',
+ 'price_1TN7jo1F8wnoWYvw6Xu1zAtC': 'legacy',
+ 'price_1TMxVM1F8wnoWYvw9uaoYX7V': 'legacy',
+ 'price_1TMxVM1F8wnoWYvwNfXdF6LW': 'legacy',
+ 'price_1TuH6z1F8wnoWYvw7Siv61SX': 'legacy',
+ 'price_1TuHCw1F8wnoWYvwZvKu86sI': 'legacy',
+ 'price_1TuIa81F8wnoWYvw0iX0j5M8': 'legacy',
+ 'price_1TuIap1F8wnoWYvwHWq0EvNU': 'legacy',
+ 'price_1ULq501F8wnoWYvwwN56CHzO': 'legacy',
+ 'price_1ULq5e1F8wnoWYvwQT8XQ4Uw': 'legacy',
+ 'price_1ULq6b1F8wnoWYvwtchjjNqq': 'legacy',
+ 'price_1ULq7H1F8wnoWYvwC1poOtd5': 'legacy'}
 MEASUREMENT_CONTRACTS: Final = {'transcription': {'usage_status': 'complete',
                    'usage_source': 'backend/database/user_usage.py:hourly_usage.plan_usage.<plan_id>.transcription_seconds',
                    'cost_status': 'missing',
@@ -155,7 +199,7 @@ PLAN_CATALOG_DATA: Final[dict[str, dict[str, Any]]] = {'basic': {'id': 'basic',
                                        'accepted_env_vars': ['STRIPE_ARCHITECT_ANNUAL_PRICE_ID',
                                                              'STRIPE_PRO_ANNUAL_PRICE_ID']}]}},
  'operator': {'id': 'operator',
-              'display_name': 'Operator',
+              'display_name': 'Pro',
               'wire_aliases': [],
               'wire_fallback_plan': None,
               'lifecycle': 'current',
@@ -260,7 +304,7 @@ PLAN_DISPLAY_NAMES: Final[dict[PlanType, str]] = {
     PlanType.basic: 'Free',
     PlanType.unlimited: 'Neo',
     PlanType.architect: 'Architect',
-    PlanType.operator: 'Operator',
+    PlanType.operator: 'Pro',
     PlanType.plus: 'Plus',
     PlanType.unlimited_v2: 'Unlimited',
 }
@@ -279,6 +323,8 @@ RECOGNIZED_STRIPE_PRICE_PLAN_TYPES: Final[dict[str, PlanType]] = {
     'price_1RtJQ71F8wnoWYvwKMPaGlGY': PlanType.unlimited,
     'price_1TNIHd1F8wnoWYvwkIrekcQZ': PlanType.unlimited,
     'price_1TNIHd1F8wnoWYvwlKywJ8TO': PlanType.unlimited,
+    'price_1RrFym1F8wnoWYvwQgIFhRWD': PlanType.unlimited,
+    'price_1RrG6k1F8wnoWYvwORsU26Mr': PlanType.unlimited,
     'price_1TLFXK1F8wnoWYvwG1TaUkZ3': PlanType.architect,
     'price_1TN7s21F8wnoWYvwG6JuEFm6': PlanType.architect,
     'price_1TN7sF1F8wnoWYvwd0QaLZNA': PlanType.architect,
@@ -291,7 +337,11 @@ RECOGNIZED_STRIPE_PRICE_PLAN_TYPES: Final[dict[str, PlanType]] = {
     'price_1TuH6z1F8wnoWYvw7Siv61SX': PlanType.plus,
     'price_1TuHCw1F8wnoWYvwZvKu86sI': PlanType.plus,
     'price_1TuIa81F8wnoWYvw0iX0j5M8': PlanType.unlimited_v2,
-    'price_1TuIap1F8wnoWYvwHWq0EvNU': PlanType.unlimited_v2
+    'price_1TuIap1F8wnoWYvwHWq0EvNU': PlanType.unlimited_v2,
+    'price_1ULq501F8wnoWYvwwN56CHzO': PlanType.unlimited_v2,
+    'price_1ULq5e1F8wnoWYvwQT8XQ4Uw': PlanType.unlimited_v2,
+    'price_1ULq6b1F8wnoWYvwtchjjNqq': PlanType.plus,
+    'price_1ULq7H1F8wnoWYvwC1poOtd5': PlanType.plus
 }
 RECOGNIZED_STRIPE_PRICE_INTERVALS: Final[dict[str, str]] = {'price_1RrxXL1F8wnoWYvwIddzR902': 'month',
  'price_1RrxXL1F8wnoWYvw3kDbWmjs': 'year',
@@ -299,6 +349,8 @@ RECOGNIZED_STRIPE_PRICE_INTERVALS: Final[dict[str, str]] = {'price_1RrxXL1F8wnoW
  'price_1RtJQ71F8wnoWYvwKMPaGlGY': 'year',
  'price_1TNIHd1F8wnoWYvwkIrekcQZ': 'month',
  'price_1TNIHd1F8wnoWYvwlKywJ8TO': 'year',
+ 'price_1RrFym1F8wnoWYvwQgIFhRWD': 'month',
+ 'price_1RrG6k1F8wnoWYvwORsU26Mr': 'year',
  'price_1TLFXK1F8wnoWYvwG1TaUkZ3': 'month',
  'price_1TN7s21F8wnoWYvwG6JuEFm6': 'month',
  'price_1TN7sF1F8wnoWYvwd0QaLZNA': 'year',
@@ -311,7 +363,11 @@ RECOGNIZED_STRIPE_PRICE_INTERVALS: Final[dict[str, str]] = {'price_1RrxXL1F8wnoW
  'price_1TuH6z1F8wnoWYvw7Siv61SX': 'month',
  'price_1TuHCw1F8wnoWYvwZvKu86sI': 'year',
  'price_1TuIa81F8wnoWYvw0iX0j5M8': 'month',
- 'price_1TuIap1F8wnoWYvwHWq0EvNU': 'year'}
+ 'price_1TuIap1F8wnoWYvwHWq0EvNU': 'year',
+ 'price_1ULq501F8wnoWYvwwN56CHzO': 'month',
+ 'price_1ULq5e1F8wnoWYvwQT8XQ4Uw': 'year',
+ 'price_1ULq6b1F8wnoWYvwtchjjNqq': 'month',
+ 'price_1ULq7H1F8wnoWYvwC1poOtd5': 'year'}
 RECOGNIZED_STRIPE_PRODUCT_PLAN_TYPES: Final[dict[str, PlanType]] = {
     'prod_SmpevIU38nIEUO': PlanType.unlimited,
     'prod_UM0IIpZ4iOgfk5': PlanType.unlimited,
@@ -343,15 +399,9 @@ PRIMARY_BILLING_ENV_VARS: Final[dict[PlanType, dict[str, str]]] = {
     PlanType.plus: {'month': 'STRIPE_PLUS_MONTHLY_PRICE_ID', 'year': 'STRIPE_PLUS_ANNUAL_PRICE_ID'},
     PlanType.unlimited_v2: {'month': 'STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID', 'year': 'STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID'}
 }
-DESKTOP_PROFILE_DEFAULTS: Final[dict[str, dict[str, Any]]] = {'desktop_free': {'full_desktop': False,
-                  'cloud_screen_vectors': False,
-                  'proactivity_daily': {'proactive_extraction': 150, 'proactive_reasoning': 60}},
- 'desktop_full': {'full_desktop': True,
-                  'cloud_screen_vectors': True,
-                  'proactivity_daily': {'proactive_extraction': 1000, 'proactive_reasoning': 500}},
- 'desktop_architect': {'full_desktop': True,
-                       'cloud_screen_vectors': True,
-                       'proactivity_daily': {'proactive_extraction': 2000, 'proactive_reasoning': 1000}}}
+DESKTOP_PROFILE_DEFAULTS: Final[dict[str, dict[str, Any]]] = {'desktop_free': {'full_desktop': False, 'cloud_screen_vectors': False},
+ 'desktop_full': {'full_desktop': True, 'cloud_screen_vectors': True},
+ 'desktop_architect': {'full_desktop': True, 'cloud_screen_vectors': True}}
 FAIR_USE_PROFILE_LIMITS: Final[dict[str, dict[str, Any]]] = {'metered_transcription': {'speech_milliseconds': {'rolling_day': 7200000,
                                                    'rolling_three_days': 28800000,
                                                    'rolling_week': 36000000}},
@@ -367,6 +417,9 @@ PHONE_CALL_PROFILE_DEFAULTS: Final[dict[str, dict[str, Any]]] = {'free': {'month
 
 
 __all__ = [
+    'ENTITLEMENT_VERSIONS',
+    'LADDER_V1_STRIPE_PRICES',
+    'RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS',
     'BILLING_ENV_VAR_PLAN_TYPES',
     'CATALOG_AUTHORITY',
     'CATALOG_REVISION',

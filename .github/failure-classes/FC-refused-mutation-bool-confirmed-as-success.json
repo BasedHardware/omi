@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-refused-mutation-bool-confirmed-as-success",
+  "violated_contract": "A UI that confirms a mutation must branch on the outcome its API helper reports. replyToAppReview signals a refused or failed owner reply by returning false and never throws, but ReviewsListPage only awaited it inside try/catch, so a rejected reply closed the dialog, marked the review as replied locally and showed 'Reply sent successfully' while nothing was stored.",
+  "canonical_prevention": "Every caller of a bool-returning mutation helper treats false as the failure path: it keeps the user's input, shows the existing error feedback and leaves local state unchanged. A widget test drives the caller through a test seam that answers false and asserts no success feedback and no local update.",
+  "canonical_prevention_artifact": [
+    "app/test/pages/apps/reviews_list_page_reply_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/pages/apps/app_detail/"
+  ],
+  "status": "open"
+}

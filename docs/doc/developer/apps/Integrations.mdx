@@ -494,6 +494,44 @@ The top-level `created_at` is the webhook send timestamp in UTC, with an explici
 
 ## Testing Your Integration
 
+### Locally, with no device
+
+`omi-cli` ships the same requests Omi sends, so a receiver can be built and
+debugged before any hardware is involved.
+
+```bash
+pipx install omi-cli
+
+omi app events                  # what an app can receive
+omi app serve                   # a receiver on http://127.0.0.1:8787
+omi app send memory_created --to http://127.0.0.1:8787/webhook
+```
+
+`send` posts the sample body with the same query parameters, content type and
+`Idempotency-Key` header the backend uses, prints the status and your response,
+and exits non-zero when the response is not 2xx. With `--to` pointing at your
+own endpoint, the day summary no longer waits for the delivery hour and the
+real-time transcript no longer waits for someone to speak.
+
+For `realtime_transcript` it also reports whether your reply would reach the
+user, since Omi only shows a `message` longer than 5 characters, and only when
+you answer 200.
+
+Before submitting the app, check the URL you are submitting:
+
+```bash
+omi app verify --to https://your-app.example.com/webhook
+```
+
+`verify` posts every event and reports what Omi's delivery client would do with
+your endpoint, including the parts that are invisible from the outside: a
+private or loopback host is refused before any request is sent, a redirect is
+never followed, and a response slower than 30 seconds is a failed delivery.
+These are real deliveries, so use a staging URL if your app writes somewhere on
+receipt.
+
+### End to end, from the app
+
 <Steps>
   <Step title="Enable Developer Mode" icon="code">
     Open Omi app → Settings → Enable Developer Mode → Developer Settings

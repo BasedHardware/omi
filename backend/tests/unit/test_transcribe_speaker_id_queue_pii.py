@@ -6,7 +6,8 @@ import pytest
 
 from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
 from routers.listen.transcripts import TranscriptProcessor
-from routers.listen.speakers import MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS, SpeakerMatcher
+from routers.listen.speakers import SpeakerMatcher
+from routers.listen.speaker_audio import MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS
 
 
 @pytest.fixture
@@ -38,8 +39,8 @@ class _AudioRingBuffer:
     def get_time_range(self):
         return 0.0, 60.0
 
-    def extract(self, _start, _end):
-        return b'\x00\x00' * 32000
+    def extract(self, start, end):
+        return b'\x00\x00' * round((end - start) * 16000)
 
 
 @pytest.mark.anyio

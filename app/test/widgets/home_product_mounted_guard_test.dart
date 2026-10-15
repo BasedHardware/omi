@@ -6,6 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nested/nested.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
+import 'package:omi/providers/speaker_tag_prompts_provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/home/page.dart';
@@ -106,6 +109,12 @@ List<SingleChildWidget> _homeProviders() {
     ChangeNotifierProvider(create: (_) => MemoriesProvider()),
     ChangeNotifierProvider(create: (_) => PeopleProvider()),
     ChangeNotifierProvider(create: (_) => LocaleProvider()),
+    // Home embeds the conversation list; its speaker-tag card fetches through this seam, so no I/O.
+    ChangeNotifierProvider(
+      create: (_) => SpeakerTagPromptsProvider(
+        fetchPrompts: () async => const ApiSuccess(GeneratedSpeakerTagPromptsResponse()),
+      ),
+    ),
   ];
 }
 

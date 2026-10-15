@@ -1,6 +1,9 @@
 import { ActionItems as ActionItemsType } from '@/src/types/memory.types';
-import { avatarToneIndex, participantInitials } from '@/src/lib/shared-note.mjs';
-import moment from 'moment';
+import {
+  avatarToneIndex,
+  participantInitials,
+  actionItemFacts,
+} from '@/src/lib/shared-note.mjs';
 
 interface ActionsItemsProps {
   items: ActionItemsType[];
@@ -12,10 +15,7 @@ export default function ActionItems({ items }: ActionsItemsProps) {
       <h2 className="sn-h3">Action items</h2>
       <ul className="sn-actions">
         {items.map((item, index) => {
-          const owner = typeof item.owner_name === 'string' ? item.owner_name.trim() : '';
-          const context = typeof item.context === 'string' ? item.context.trim() : '';
-          const due = item.due_at ? moment(item.due_at) : null;
-          const dueLabel = due && due.isValid() ? due.format('MMM D, YYYY') : '';
+          const { owner, context, due } = actionItemFacts(item);
           return (
             <li
               key={index}
@@ -27,23 +27,25 @@ export default function ActionItems({ items }: ActionsItemsProps) {
               </span>
               <div className="sn-action-body">
                 <p className="sn-action-text">{item.description}</p>
-                {(owner || context || dueLabel) && (
-                  <div className="sn-action-meta">
-                    {owner && (
-                      <span className="sn-owner">
-                        <span
-                          className={`sn-avatar sn-avatar-${avatarToneIndex(owner)}`}
-                          aria-hidden="true"
-                        >
-                          {participantInitials(owner)}
-                        </span>
-                        {owner}
+                <div className="sn-action-meta">
+                  {owner && (
+                    <span className="sn-owner">
+                      <span
+                        className={`sn-avatar sn-avatar-${avatarToneIndex(owner)}`}
+                        aria-hidden="true"
+                      >
+                        {participantInitials(owner)}
                       </span>
-                    )}
-                    {context && <span className="sn-context">{context}</span>}
-                    {dueLabel && <span>Due {dueLabel}</span>}
-                  </div>
-                )}
+                      Owner: {owner}
+                    </span>
+                  )}
+                  {context && <span className="sn-context">{context}</span>}
+                  {due ? (
+                    <time dateTime={due.iso}>Due {due.label}</time>
+                  ) : (
+                    <span>Due Unknown</span>
+                  )}
+                </div>
               </div>
             </li>
           );

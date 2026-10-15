@@ -228,6 +228,7 @@ def _setup_payment_module(include_client: bool = True) -> Any:
     for mod_name in [
         "database._client",
         "database.redis_db",
+        "database.locked_content",
         "database.users",
         "database.conversations",
         "database.memories",
@@ -258,6 +259,9 @@ def _setup_payment_module(include_client: bool = True) -> Any:
     redis_mod = sys.modules["database.redis_db"]
     redis_mod.set_credits_invalidation_signal = MagicMock()
 
+    locked_content_mod = sys.modules["database.locked_content"]
+    locked_content_mod.has_recoverable_locked_content = MagicMock(return_value=False)
+
     fair_use_mod = sys.modules["utils.fair_use"]
     fair_use_mod.clear_fair_use_on_upgrade = MagicMock()
 
@@ -284,6 +288,12 @@ def _setup_payment_module(include_client: bool = True) -> Any:
     fallback_mod = types.ModuleType("utils.observability.fallback")
     fallback_mod.record_fallback = MagicMock()
     sys.modules["utils.observability.fallback"] = fallback_mod
+
+    # Preload the sibling so importing the ledger does not execute
+    # utils.observability against the incomplete fallback stub.
+    billing_ledger_mod = types.ModuleType("utils.observability.billing_ledger")
+    billing_ledger_mod.record_outcome = MagicMock()
+    sys.modules["utils.observability.billing_ledger"] = billing_ledger_mod
 
     subscription_events_mod = types.ModuleType("utils.observability.subscription_events")
     subscription_events_mod.record_subscription_event = MagicMock()

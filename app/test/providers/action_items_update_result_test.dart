@@ -16,8 +16,7 @@ Future<ActionItemsResponse?> _noItems({
 }) async =>
     const ActionItemsResponse(actionItems: [], hasMore: false);
 
-ActionItemWithMetadata _item() =>
-    const ActionItemWithMetadata(id: 'task-1', description: 'Buy milk', completed: false);
+ActionItemWithMetadata _item() => const ActionItemWithMetadata(id: 'task-1', description: 'Buy milk', completed: false);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

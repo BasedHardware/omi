@@ -1,4 +1,6 @@
 from datetime import datetime, timezone
+from copy import deepcopy
+from tests.support.transcript_correction_store import install_store, target_updates, read
 
 import database.conversations as conversations_db
 from models.conversation import Conversation, ConversationMutationResponse
@@ -359,56 +361,37 @@ def _segment_snapshot(segments, *, is_locked=False, exists=True):
 
 
 def test_segment_text_edit_reads_and_writes_inside_a_transaction(monkeypatch):
-    # Regression for #9392: the read-modify-write must be atomic so concurrent
-    # edits to different segments can't lose-update each other.
-    ref = _ConversationRef(_segment_snapshot([{'id': 's1', 'text': 'old'}, {'id': 's2', 'text': 'keep'}]))
-    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
-    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
-
-    result = conversations_db.update_conversation_segment_text('user-1', 'conv-1', 's1', 'new text')
-
-    assert result == 'ok'
-    # The write went through the transaction (recorded on the ref), and the edit
-    # landed while the untouched segment is preserved.
-    assert len(ref.update_calls) == 1
-    import json as _json
-    import zlib as _zlib
-
-    written = _json.loads(_zlib.decompress(ref.update_calls[0]['transcript_segments']).decode('utf-8'))
-    assert {s['id']: s['text'] for s in written} == {'s1': 'new text', 's2': 'keep'}
+    segments = [{'id': 's1', 'text': 'old'}, {'id': 's2', 'text': 'keep'}]
+    database = install_store(monkeypatch, 'user-1', 'conv-1', {'transcript_segments': segments})
+    original = deepcopy(database.rows[('users', 'user-1', 'conversations', 'conv-1')]['transcript_segments'])
+    assert conversations_db.update_conversation_segment_text('user-1', 'conv-1', 's1', 'new text') == 'ok'
+    assert len(database.transactions) == 1
+    assert len(target_updates(database, 'user-1', 'conv-1')) == 1
+    assert database.rows[('users', 'user-1', 'conversations', 'conv-1')]['transcript_segments'] == original
+    assert {s['id']: s['text'] for s in read(database, 'user-1', 'conv-1')['transcript_segments']} == {
+        's1': 'new text',
+        's2': 'keep',
+    }
 
 
 def test_segment_text_edit_missing_segment_does_not_write(monkeypatch):
-    ref = _ConversationRef(_segment_snapshot([{'id': 's1', 'text': 'old'}]))
-    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
-    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
-
-    result = conversations_db.update_conversation_segment_text('user-1', 'conv-1', 'missing', 'x')
-
-    assert result == 'segment_not_found'
-    assert ref.update_calls == []
+    database = install_store(monkeypatch, 'user-1', 'conv-1', {'transcript_segments': [{'id': 's1', 'text': 'old'}]})
+    assert conversations_db.update_conversation_segment_text('user-1', 'conv-1', 'missing', 'x') == 'segment_not_found'
+    assert not database.transactions
 
 
 def test_segment_text_edit_rejects_locked_conversation(monkeypatch):
-    ref = _ConversationRef(_segment_snapshot([{'id': 's1', 'text': 'old'}], is_locked=True))
-    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
-    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
-
-    result = conversations_db.update_conversation_segment_text('user-1', 'conv-1', 's1', 'x')
-
-    assert result == 'locked'
-    assert ref.update_calls == []
+    database = install_store(
+        monkeypatch, 'user-1', 'conv-1', {'is_locked': True, 'transcript_segments': [{'id': 's1', 'text': 'old'}]}
+    )
+    assert conversations_db.update_conversation_segment_text('user-1', 'conv-1', 's1', 'x') == 'locked'
+    assert not database.transactions
 
 
 def test_segment_text_edit_missing_conversation_returns_not_found(monkeypatch):
-    ref = _ConversationRef(_segment_snapshot([], exists=False))
-    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
-    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
-
-    result = conversations_db.update_conversation_segment_text('user-1', 'conv-1', 's1', 'x')
-
-    assert result == 'not_found'
-    assert ref.update_calls == []
+    database = install_store(monkeypatch, 'user-1', 'conv-1', None)
+    assert conversations_db.update_conversation_segment_text('user-1', 'conv-1', 's1', 'x') == 'not_found'
+    assert not database.transactions
 
 
 def test_processing_upsert_preserves_explicit_user_unfile_on_completed_conversation(monkeypatch):

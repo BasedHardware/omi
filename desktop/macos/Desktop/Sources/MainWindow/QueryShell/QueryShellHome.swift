@@ -567,6 +567,19 @@ struct QueryShellHome: View {
   }
 
   private func takePendingDraftIfAny() {
+    if let request = MainChatNavigationRequestStore.shared.consumeAutoSendRequest() {
+      searchText = HomeBridgeIntent.openChat.searchTextAfter(searchText)
+      Task { @MainActor in
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(request.authorization) else { return }
+        let answer = await chatProvider.sendMessage(request.question)
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(request.authorization) else { return }
+        if answer == nil && chatProvider.draftText.isEmpty {
+          chatProvider.draftText = request.question
+          claimCaret()
+        }
+      }
+      return
+    }
     guard let draft = MainChatNavigationRequestStore.shared.consumeDraft(existingDraft: chatProvider.draftText) else {
       return
     }

@@ -22,9 +22,11 @@ from google.auth import exceptions as google_auth_exceptions
 from models.conversation_enums import ConversationVisibility
 from routers import screen_frames as screen_frames_router
 from utils.screen_frames import enforcement
+from utils.screen_frames.environment import LEGACY_SCREEN_FRAMES_BUCKET
 
 UID = "user-1"
 CONVERSATION_ID = "conv-1"
+_URL_EXPIRES_AT = datetime(2030, 1, 1, tzinfo=timezone.utc)
 
 _GOOD = {
     "id": "good",
@@ -51,14 +53,16 @@ _PARTIAL_DOCS = {
 
 @pytest.fixture
 def stored_frames(monkeypatch):
+    # Stored docs below carry no storage_bucket: legacy docs, which belong to dev.
+    monkeypatch.setenv("BUCKET_SCREEN_FRAMES", LEGACY_SCREEN_FRAMES_BUCKET)
     frames = []
     db = enforcement.screen_frames_db
     monkeypatch.setattr(db, "get_conversation_screen_frames", lambda *_: list(frames))
-    monkeypatch.setattr(db, "get_conversation_screen_frames_revision", lambda *_: 2)
-    monkeypatch.setattr(db, "get_conversation_screen_frames_adjudicated_at", lambda *_: None)
-    monkeypatch.setattr(db, "get_conversation_screen_frames_selection_fingerprint", lambda *_: None)
-    monkeypatch.setattr(enforcement.storage, "get_screen_frame_signed_url", lambda *_: "https://signed/content")
-    monkeypatch.setattr(enforcement.storage, "get_screen_frame_thumbnail_signed_url", lambda *_: "https://signed/thumb")
+    monkeypatch.setattr(db, "get_conversation_screen_frames_revision", lambda *_, **__: 2)
+    monkeypatch.setattr(db, "get_conversation_screen_frames_adjudicated_at", lambda *_, **__: None)
+    monkeypatch.setattr(db, "get_conversation_screen_frames_selection_fingerprint", lambda *_, **__: None)
+    monkeypatch.setattr(enforcement.storage, "get_screen_frame_signed_url", lambda *_: ("https://signed/content", _URL_EXPIRES_AT))
+    monkeypatch.setattr(enforcement.storage, "get_screen_frame_thumbnail_signed_url", lambda *_: ("https://signed/thumb", _URL_EXPIRES_AT))
     return frames
 
 

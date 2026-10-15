@@ -31,8 +31,10 @@ from database.entity_timeline_sources import (
 )
 from models.product_memory import MemoryAccessPolicy, MemoryItem, MemoryItemStatus, MemoryKind, MemorySubjectScope
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
+from utils.messaging.memory_privacy import channel_private_filter_active, is_channel_private_memory
 from utils.memory.canonical_memory_adapter import memory_item_to_memorydb
 from utils.memory.ledger_history_policy import is_ledger_history_item
+from utils.retrieval.turn_refs import register_record_ref
 
 logger = logging.getLogger(__name__)
 
@@ -358,6 +360,8 @@ def _ledger_entries(
     for item in items:
         if item.kind != MemoryKind.fact or not _item_matches_entity(item, entity):
             continue
+        if channel_private_filter_active() and is_channel_private_memory(item):
+            continue
         occurred_at = _timeline_time(item)
         if not _in_range(occurred_at, start, end):
             continue
@@ -526,6 +530,8 @@ def build_entity_timeline(
         # evidence/source has been explicitly tombstoned or purged.
         if item.source_state.value != "active":
             continue
+        if channel_private_filter_active() and is_channel_private_memory(item):
+            continue
         if not _item_matches_entity(item, reference):
             continue
         occurred_at = _timeline_time(item)
@@ -575,11 +581,24 @@ def _parse_iso_date(value: Optional[str], label: str) -> Optional[datetime]:
     return parsed
 
 
-def format_entity_timeline(timeline: EntityTimeline) -> str:
+def _timeline_record_collection(entry: TimelineEntry) -> Optional[str]:
+    return {TimelineSource.ledger: 'memories', TimelineSource.conversations: 'conversations'}.get(entry.source)
+
+
+def format_entity_timeline(timeline: EntityTimeline, *, included_entries: Optional[List[TimelineEntry]] = None) -> str:
     """Render only bounded timeline facts and opaque/stable evidence refs."""
+    if included_entries is not None:
+        included_entries.clear()
+    person_ref = (
+        f'ref: people/{timeline.entity.identifier}'
+        if timeline.entity.kind == 'person' and timeline.aliases_resolved
+        else ''
+    )
 
     if not timeline.entries:
         lines = [f"No entity timeline entries found for {timeline.entity.key}."]
+        if person_ref:
+            lines.insert(0, person_ref)
         if timeline.truncated_sources:
             lines.append(
                 "[Source windows were partial: "
@@ -597,6 +616,8 @@ def format_entity_timeline(timeline: EntityTimeline) -> str:
         return "\n".join(lines)
     source_names = ", ".join(source.value for source in timeline.requested_sources)
     lines = [f"Entity timeline: {timeline.entity.key}", f"Sources: {source_names}", ""]
+    if person_ref:
+        lines.insert(1, person_ref)
     output_truncated = False
     truncation_notice = "[Timeline output is bounded; ask for a narrower entity or date range.]"
     postambles: List[str] = []
@@ -622,6 +643,9 @@ def format_entity_timeline(timeline: EntityTimeline) -> str:
             f"- {entry.occurred_at.isoformat()} [{entry.source.value}{status}] {entry.record_id}",
             f"  {entry.content}",
         ]
+        collection = _timeline_record_collection(entry)
+        if collection:
+            block.append(f'  ref: {collection}/{entry.record_id}')
         if entry.valid_to:
             block.append(f"  valid_to: {entry.valid_to.isoformat()}")
         if entry.evidence_refs:
@@ -635,6 +659,8 @@ def format_entity_timeline(timeline: EntityTimeline) -> str:
             output_truncated = True
             break
         lines.extend(block)
+        if included_entries is not None:
+            included_entries.append(entry)
     if timeline.truncated or output_truncated:
         lines.extend(["", truncation_notice])
     lines.extend(postambles)
@@ -827,7 +853,17 @@ def get_entity_timeline_tool(
         truncated_sources=tuple(truncated_sources),
         unavailable_sources=tuple(unavailable_sources),
     )
-    return format_entity_timeline(timeline)
+    included_entries: List[TimelineEntry] = []
+    result = format_entity_timeline(timeline, included_entries=included_entries)
+    cfg = config or _agent_config()
+    configurable = (cfg or {}).get('configurable') or {}
+    if reference.kind == 'person' and aliases.resolved:
+        register_record_ref(configurable, 'people', reference.identifier)
+    for entry in included_entries:
+        collection = _timeline_record_collection(entry)
+        if collection:
+            register_record_ref(configurable, collection, entry.record_id)
+    return result
 
 
 __all__ = [

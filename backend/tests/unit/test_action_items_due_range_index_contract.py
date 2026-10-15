@@ -73,7 +73,7 @@ def _declared_action_item_signatures():
     for index in firebase_index_manifest()['indexes']:
         if index['collectionGroup'] != 'action_items' or index['queryScope'] != 'COLLECTION':
             continue
-        fields = [(field['fieldPath'], field['order']) for field in index['fields']]
+        fields = [(field['fieldPath'], field.get('order') or field.get('arrayConfig')) for field in index['fields']]
         signatures.add((frozenset(fields[:-2]), fields[-2], fields[-1]))
     return signatures
 
@@ -184,7 +184,11 @@ def test_scores_weekly_count_composite_is_declared_ascending():
         ('__name__', 'ASCENDING'),
     )
     declared = {
-        (index['collectionGroup'], index['queryScope'], tuple((f['fieldPath'], f['order']) for f in index['fields']))
+        (
+            index['collectionGroup'],
+            index['queryScope'],
+            tuple((f['fieldPath'], f.get('order') or f.get('arrayConfig')) for f in index['fields']),
+        )
         for index in firebase_index_manifest()['indexes']
     }
     assert requirement.signature in declared

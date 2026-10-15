@@ -8,39 +8,24 @@ same frame as transcript segments.
 For audio-timeline v2 conversations the clip window must be *covered*: the
 union of validated ``chunk_spans`` must contain it (1 ms tolerance). A known
 uncovered window returns None — never a clip of the wrong audio. Legacy
-conversations keep the timestamp-based best-effort behavior.
+conversations use strict authoritative spans or main timing behavior for
+uncertain chunks/batches; text verification still guards original clock drift.
 """
 
-from datetime import datetime, timezone
 import io
 import wave
 from typing import Any, List, Mapping, Optional
 
 from database.audio_timeline import chunk_span_bounds
-from utils.audio_timeline import coverage_outcome, segment_wall_window
+from utils.audio_timeline import coverage_outcome
+from utils.conversations.audio_placement import capture_window, locate, provisional_window
 from utils.speaker_tag_prompts.coverage import prompt_window_covered
 from utils.metrics import OMI_AUDIO_TIMELINE_COVERAGE_TOTAL
 from utils.other.storage import download_audio_chunks_and_merge
+from utils.speaker_audio import legacy_speaker_clip_pcm
 
 CLIP_SAMPLE_RATE = 16000
 MAX_CLIP_REQUEST_SECONDS = 12.0
-
-
-def _started_at_seconds(conversation: Mapping[str, Any]) -> Optional[float]:
-    raw: Any = conversation.get('started_at') or conversation.get('created_at')
-    if isinstance(raw, str) and raw.strip():
-        try:
-            raw = datetime.fromisoformat(raw.strip().replace('Z', '+00:00'))
-        except ValueError:
-            pass
-    if isinstance(raw, datetime):
-        return (raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)).timestamp()
-    ts_fn: Any = getattr(raw, 'timestamp', None)
-    return (
-        float(ts_fn())
-        if ts_fn is not None
-        else (float(raw) if isinstance(raw, (int, float)) and not isinstance(raw, bool) else None)
-    )
 
 
 def _chunk_timestamps(conversation: Mapping[str, Any]) -> List[float]:
@@ -50,7 +35,7 @@ def _chunk_timestamps(conversation: Mapping[str, Any]) -> List[float]:
     return sorted(set(timestamps))
 
 
-def _v2_relevant_timestamps(conversation: Mapping[str, Any], abs_start: float, abs_end: float) -> List[float]:
+def v2_relevant_timestamps(conversation: Mapping[str, Any], abs_start: float, abs_end: float) -> List[float]:
     """Chunk timestamps whose validated span intersects the clip window."""
     relevant: List[float] = []
     for audio_file in conversation.get('audio_files') or []:
@@ -69,29 +54,46 @@ def _v2_relevant_timestamps(conversation: Mapping[str, Any], abs_start: float, a
 
 
 def conversation_clip_pcm(
-    uid: str, conversation: Mapping[str, Any], start: float, end: float, sample_rate: int = CLIP_SAMPLE_RATE
+    uid: str,
+    conversation: Mapping[str, Any],
+    start: float,
+    end: float,
+    sample_rate: int = CLIP_SAMPLE_RATE,
+    *,
+    caller: str = 'preview',
+    prefer_capture: bool = False,
 ) -> Optional[bytes]:
-    """PCM16 mono for ``[start, end)``, or None when no stored audio covers it."""
+    """PCM16 mono for ``[start, end)``, or None when no stored audio covers it.
+
+    ``prefer_capture`` cuts where the live receiver heard the window instead of at the
+    legacy origin; callers use it only as a retry and keep their transcript verification.
+    """
     if end <= start or end - start > MAX_CLIP_REQUEST_SECONDS:
         raise ValueError('Clip window must be positive and at most 12 seconds')
-    started_at = _started_at_seconds(conversation)
-    if started_at is None:
+    window = (
+        capture_window(conversation, start, end) if prefer_capture else provisional_window(conversation, start, end)
+    )
+    if window is None:
         return None
-    if not prompt_window_covered(conversation, start, end):
+    placement = locate(conversation, start, end)
+    if placement.reason in ('unplaced', 'invalid_window'):
+        return None
+    normalized = dict(conversation)
+    normalized['started_at'] = window[0] - start
+    if not prompt_window_covered(normalized, start, end):
         return None
     marker = conversation.get('audio_timeline')
     if isinstance(marker, Mapping) and marker.get('version') == 2:
-        window = segment_wall_window(conversation, start, end)
-        if window is None:
+        if placement.reason != 'v2' or placement.window is None:
             return None
-        outcome = coverage_outcome(conversation, start, end)
+        outcome = coverage_outcome(normalized, start, end)
         OMI_AUDIO_TIMELINE_COVERAGE_TOTAL.labels(mode='v2', outcome=outcome).inc()
         if outcome != 'covered':
             # Uncovered windows never yield audio: missing/pending/unsupported
             # storage is unavailable, not a claim of aligned audio.
             return None
-        abs_start, abs_end = window
-        relevant = _v2_relevant_timestamps(conversation, abs_start, abs_end)
+        abs_start, abs_end = placement.window
+        relevant = v2_relevant_timestamps(conversation, abs_start, abs_end)
         if not relevant:
             return None
         try:
@@ -114,23 +116,11 @@ def conversation_clip_pcm(
     timestamps = _chunk_timestamps(conversation)
     if not timestamps:
         return None
-    abs_start = started_at + start
-    abs_end = started_at + end
+    abs_start, abs_end = placement.window if placement.window is not None else window
 
-    first = max((i for i, ts in enumerate(timestamps) if ts <= abs_start), default=0)
-    relevant = [timestamp for timestamp in timestamps[first:] if timestamp <= abs_end]
-    if not relevant:
-        return None
-
-    try:
-        merged = download_audio_chunks_and_merge(
-            uid, conversation['id'], relevant, fill_gaps=True, sample_rate=sample_rate
-        )
-    except FileNotFoundError:
-        return None
-    buffer_start = min(relevant)
-    pcm = trim_pcm16(merged, sample_rate, abs_start - buffer_start, abs_end - buffer_start)
-    return pcm or None
+    return legacy_speaker_clip_pcm(
+        uid, conversation['id'], abs_start, abs_end, sample_rate, timestamps=timestamps, caller=caller
+    )
 
 
 def trim_pcm16(pcm: bytes, sample_rate: int, start: float, end: float) -> bytes:

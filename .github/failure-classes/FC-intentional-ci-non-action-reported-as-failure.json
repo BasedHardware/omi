@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-intentional-ci-non-action-reported-as-failure",
+  "violated_contract": "A CI job that intentionally defers heavy work or declines to act on a superseded source must report a neutral successful gate with an explicit notice, while preserving skipped check states and preventing stale work from publishing or deploying.",
+  "canonical_prevention": "For deferred aggregates, emit a clear notice and require every selected heavy job to be skipped before returning success. For superseded deploy runs, expose a step output, report the current main SHA, and gate every later step on that output. Keep malformed source, failed admission, and other safety failures hard-failing, and pin both contracts with deterministic workflow tests.",
+  "canonical_prevention_artifact": [
+    ".github/scripts/test_superseded_auto_deploys.py",
+    ".github/scripts/test_desktop_swift_ci_contract.py",
+    ".github/actions/ci-tier/test_resolve.py",
+    "backend/tests/unit/test_workflow_contracts.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    ".github/workflows/",
+    ".github/actions/",
+    ".github/scripts/test_superseded_auto_deploys.py",
+    "backend/tests/unit/test_workflow_contracts.py"
+  ],
+  "status": "open"
+}

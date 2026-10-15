@@ -1,9 +1,11 @@
 """Real VAD export and process_segment preserve speech extents; silence creates nothing."""
 
 import logging
+from copy import deepcopy
+from google.api_core.exceptions import InvalidArgument, ServiceUnavailable
 from pathlib import Path
 import threading
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 import uuid
 
 import fakeredis
@@ -13,7 +15,7 @@ import pytest
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cloud_tasks import _load_sync_jobs, _seed_fenced_job
-from tests.unit.test_sync_cross_job_assignment import intake, conversations
+from tests.unit.test_sync_cross_job_assignment import intake, conversations, chunk
 from tests.unit.test_sync_geolocation_enrichment import _build_pipeline_fakes
 from utils.sync import telemetry
 from utils.sync.capture import chunk_identity
@@ -29,6 +31,7 @@ def pipeline():
     fakes = _build_pipeline_fakes()
     lifecycle = AutoMockModule('utils.conversations.lifecycle')
     bridge = AutoMockModule('utils.sync.bridge')
+    final_pass = AutoMockModule('utils.conversations.final_pass_sync')
     bridge.finish_sync_bridges = lambda uid, cid: cid
     fakes.update(
         {
@@ -38,12 +41,15 @@ def pipeline():
             'utils.conversations.deterministic_minimum': deterministic_minimum,
             'utils.conversations.lifecycle': lifecycle,
             'utils.sync.bridge': bridge,
+            'utils.conversations.final_pass_sync': final_pass,
         }
     )
     with stub_modules(fakes):
         module = load_module_fresh(
             'utils.sync.pipeline', Path(__file__).resolve().parents[2] / 'utils/sync/pipeline.py'
         )
+        module.ingest_test_seam = lifecycle
+        module.final_pass_test_seam = final_pass
         module.real_bridge = real_bridge
         module.AudioSegment = AudioSegment
         module.get_timestamp_from_path = lambda path: float(Path(path).stem)
@@ -88,6 +94,30 @@ def test_vad_preserves_speech_origin_and_exports_nothing_for_silence(pipeline, t
     assert outcome['outcome'].value == 'success'
 
 
+def test_colliding_absolute_timestamps_from_distinct_sources_keep_both_segments(pipeline, tmp_path):
+    """Two sources can independently compute the same capture_start + vad_offset;
+    the second must not silently overwrite the first's exported audio (#20686)."""
+    module, store = pipeline
+    first = tmp_path / '1700000000.wav'
+    second = tmp_path / '1700000001.wav'
+    module.AudioSegment.silent(duration=4000).export(first, format='wav')
+    module.AudioSegment.silent(duration=4000).export(second, format='wav')
+
+    def vad_for(path, *a, **kw):
+        return [{'start': 1, 'end': 3}] if path == str(first) else [{'start': 0, 'end': 4}]
+
+    module.vad_is_empty = vad_for
+    paths = set()
+    module.retrieve_vad_segments(str(first), paths, [])
+    module.retrieve_vad_segments(str(second), paths, [])
+
+    assert len(paths) == 2
+    stems = sorted(Path(p).stem for p in paths)
+    assert stems == ['1700000001.0', 'dup1_1700000001.0']
+    durations = sorted(round(module.AudioSegment.from_wav(p).duration_seconds) for p in paths)
+    assert durations == [2, 4]
+
+
 @pytest.mark.parametrize('empty_words', [True, False])
 def test_empty_transcription_creates_nothing_and_cannot_bridge(pipeline, empty_words):
     module, store = pipeline
@@ -105,6 +135,63 @@ def test_empty_transcription_creates_nothing_and_cannot_bridge(pipeline, empty_w
     assert not store.rows and not errors
     assert response == {'new_memories': set(), 'updated_memories': set()}
     assert outcome['outcome'].value == 'expected_silence' and not outcome['retryable']
+
+
+@pytest.mark.parametrize('failed_read', [False, True])
+def test_sync_passes_real_dream_keyterms_to_stt_with_nonfatal_fallback(pipeline, monkeypatch, failed_read):
+    module, store = pipeline
+    dream_store = AutoMockModule('database.dream_store')
+    dream_store.vocabulary = MagicMock(
+        return_value=[{'spelling': 'Quorbi'}, {'spelling': 'Tala'}, {'spelling': 'x' * 51}],
+        side_effect=RuntimeError('synthetic unavailable') if failed_read else None,
+    )
+    with stub_modules({'database.dream_store': dream_store}):
+        helper = load_module_fresh(
+            'utils.dream_vocabulary', Path(__file__).resolve().parents[2] / 'utils/dream_vocabulary.py'
+        )
+        helper.run_blocking = AsyncMock(side_effect=lambda executor, fn, uid: fn(uid))
+        helper.record_fallback = MagicMock()
+        monkeypatch.setenv('DREAM_AGENT_VOCABULARY_STT', 'true')
+        monkeypatch.setattr(module, 'keyterms', helper.keyterms)
+        errors = []
+        assert module.process_segment(
+            '1700000000.wav',
+            'synthetic-owner',
+            {'new_memories': set(), 'updated_memories': set()},
+            threading.Lock(),
+            errors,
+            transcription_prefs={'vocabulary': ['Tala', 'Omi', 'Tala']},
+        )
+        assert errors == [] and len(conversations(store)) == 1
+        expected = ['Omi', 'Tala'] if failed_read else ['Omi', 'Tala', 'Quorbi']
+        assert module.prerecorded.call_args.kwargs['keywords'] == expected
+        dream_store.vocabulary.assert_called_once_with('synthetic-owner')
+        assert helper.record_fallback.call_count == int(failed_read)
+
+
+def test_sync_keyterm_cap_keeps_product_and_preferences_first(pipeline, monkeypatch):
+    module, _ = pipeline
+    dream_store = AutoMockModule('database.dream_store')
+    dream_store.vocabulary = MagicMock(return_value=[{'spelling': f'Learned {i}'} for i in range(150)])
+    with stub_modules({'database.dream_store': dream_store}):
+        helper = load_module_fresh(
+            'utils.dream_vocabulary', Path(__file__).resolve().parents[2] / 'utils/dream_vocabulary.py'
+        )
+        helper.run_blocking = AsyncMock(side_effect=lambda executor, fn, uid: fn(uid))
+        monkeypatch.setenv('DREAM_AGENT_VOCABULARY_STT', 'true')
+        monkeypatch.setattr(module, 'keyterms', helper.keyterms)
+        assert module.process_segment(
+            '1700000000.wav',
+            'synthetic-owner',
+            {'new_memories': set(), 'updated_memories': set()},
+            threading.Lock(),
+            [],
+            transcription_prefs={'vocabulary': ['Tala']},
+        )
+        keywords = module.prerecorded.call_args.kwargs['keywords']
+        assert len(keywords) == 100
+        assert keywords[:3] == ['Omi', 'Tala', 'Learned 0']
+        assert keywords[-1] == 'Learned 97'
 
 
 def test_empty_retry_recovers_through_original_path_once(pipeline):
@@ -236,6 +323,9 @@ def test_empty_retry_event_carries_bounded_correlation(pipeline, caplog, second_
         )
     retry_events = [r.getMessage() for r in caplog.records if 'sync_transcription_empty_retry' in r.getMessage()]
     expected = ['started', {'words': 'recovered', 'empty': 'still_empty'}.get(second_pass)]
+    if second_pass == 'words':
+        # A recovered segment must confirm persistence with durable_recovered.
+        expected.append('durable_recovered')
     if expected[1] is None:
         expected.pop()
         assert outcome['phase'] == 'provider_call' and outcome['exception_type'] == 'RuntimeError'
@@ -315,10 +405,28 @@ def test_bridge_finishes_once_at_process_segment_completion(pipeline, monkeypatc
     finish.assert_called_once_with('u', conversations(store)[0]['id'], audio_source_id=None)
 
 
+@pytest.mark.parametrize('flag', ['true', 'off'])
+def test_locked_segments_merge_and_an_identical_locked_retry_is_not_a_conflict(pipeline, monkeypatch, flag):
+    monkeypatch.setenv('SYNC_ASSIGNMENT_RECOVERY_ENABLED', flag)
+    module, store = pipeline
+    response = {'new_memories': set(), 'updated_memories': set()}
+    errors = []
+    # The last call repeats a segment whose assignment already committed.
+    for timestamp in (1000, 1060, 1060):
+        outcome = {}
+        module.process_segment(
+            f'{timestamp}.wav', 'u', response, threading.Lock(), errors, is_locked=True, deferred_outcome=outcome
+        )
+        assert outcome['outcome'].value == 'success'
+    assert errors == []
+    rows = conversations(store)
+    assert len(rows) == 1
+    assert rows[0]['is_locked'] is True and len(rows[0]['transcript_segments']) == 2
+
+
 @pytest.mark.parametrize('condition', ['anchor_deleted', 'lineage_deleted', 'user_managed', 'provenance', 'cycle'])
-def test_assignment_outcomes_through_process_segment(pipeline, condition):
-    from copy import deepcopy
-    from tests.unit.test_sync_cross_job_assignment import chunk
+def test_assignment_outcomes_through_process_segment(pipeline, condition, monkeypatch):
+    monkeypatch.setenv('SYNC_ASSIGNMENT_RECOVERY_ENABLED', 'off')
 
     module, store = pipeline
     cid = chunk_identity('u', 'omi', None, False, 1000)
@@ -350,8 +458,87 @@ def test_assignment_outcomes_through_process_segment(pipeline, condition):
     assert store.rows == before
     assert response == {'new_memories': set(), 'updated_memories': set()}
     if condition in ('provenance', 'cycle'):
-        assert errors == ['stt_upstream_error']
-        assert outcome['outcome'].value == 'upstream_error' and outcome['retryable']
+        assert errors == ['sync_persistence_failed']
+        assert outcome['outcome'].value == 'upstream_error' and not outcome['retryable']
+        assert outcome['failure_subtype'] == ('provenance_mismatch' if condition == 'provenance' else 'redirect_cycle')
     else:
         assert errors == []
         assert outcome['outcome'].value == 'success' and not outcome['retryable']
+
+
+@pytest.mark.parametrize(
+    'error,expected,kind,retryable',
+    [
+        (InvalidArgument('Document private-id exceeds the maximum allowed size'), 'document_size_limit', 'none', False),
+        (
+            InvalidArgument(
+                "Document 'projects/p/databases/(default)/documents/users/private-uid/conversations/private-id' "
+                'cannot be written because its size (1,048,601 bytes) exceeds the maximum allowed size'
+            ),
+            'document_size_limit',
+            'conversation',
+            False,
+        ),
+        (
+            InvalidArgument(
+                "Document 'projects/p/databases/(default)/documents/users/private-uid/sync_assignment/2026-10-03' "
+                'cannot be written because its size (1,048,601 bytes) exceeds the maximum allowed size'
+            ),
+            'document_size_limit',
+            'sync_day_index',
+            False,
+        ),
+        (InvalidArgument('private unexpected input'), 'invalid_argument_other', 'none', True),
+        (InvalidArgument('The transaction has expired private-id'), 'expired_transaction', 'none', True),
+        (ServiceUnavailable('private detail'), 'ServiceUnavailable', 'none', True),
+    ],
+)
+def test_persistence_errors_keep_audio_and_do_not_blame_stt(pipeline, caplog, error, expected, kind, retryable):
+    module, store = pipeline
+    module.ingest_test_seam.ingest_sync_conversation = MagicMock(side_effect=error)
+    module.get_prerecorded_service = lambda language: ('deepgram', None, 'nova-3')
+    errors, outcome = [], {}
+    response = {'new_memories': set(), 'updated_memories': set()}
+    assert (
+        module.process_segment('1000.wav', 'u', response, threading.Lock(), errors, deferred_outcome=outcome) is False
+    )
+    assert not store.rows and not response['new_memories']
+    assert errors == ['sync_persistence_failed']
+    assert outcome['provider'] == outcome['model'] == 'unknown'
+    assert outcome['retryable'] is retryable
+    assert ('repeat_failure_fingerprint' in outcome) is (not retryable)
+    event = next(r.message for r in caplog.records if 'event=sync_persistence_exception' in r.message)
+    assert f'firestore_error={expected}' in event
+    assert f'firestore_doc_kind={kind} ' in event
+    assert 'private' not in event and '2026-10-03' not in event
+    module.prerecorded.assert_called_once()
+
+
+@pytest.mark.parametrize('legacy_failure', [False, True])
+def test_sync_budget_refusal_retains_legacy_and_logs_only_uid_hash(pipeline, monkeypatch, caplog, legacy_failure):
+    import hashlib
+
+    module, store = pipeline
+    uid = 'synthetic-private-uid'
+    monkeypatch.setattr(module, 'sync_enabled_for', lambda _: True)
+    monkeypatch.setattr(module, '_download_audio_bytes', lambda _: b'synthetic')
+    monkeypatch.setattr(
+        module.final_pass_test_seam, 'run_sync_final_pass', lambda *a, **kw: (None, {'outcome': 'skipped_budget'})
+    )
+    legacy = MagicMock(side_effect=RuntimeError('synthetic') if legacy_failure else None)
+    monkeypatch.setattr(module, 'identify_speakers_for_segments', legacy)
+    response = {'new_memories': set(), 'updated_memories': set()}
+    with caplog.at_level(logging.INFO):
+        assert module.process_segment('1700000000.wav', uid, response, threading.Lock(), [])
+    legacy.assert_called_once()
+    assert conversations(store)[0]['transcript_segments'][0]['text'] == 'Keep the capture.'
+    events = [
+        r.message
+        for r in caplog.records
+        if 'event=sync_final_pass' in r.message or 'event=sync_speaker_id' in r.message
+    ]
+    assert len(events) == (2 if legacy_failure else 1)
+    digest = hashlib.sha256(('sync-final-pass:' + uid).encode()).hexdigest()
+    assert all(f'uid_hash={digest}' in event and uid not in event for event in events)
+    assert 'outcome=skipped_budget' in events[0]
+    assert 'lane=' in events[0] and 'duration_seconds=' in events[0]

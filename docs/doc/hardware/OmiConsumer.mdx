@@ -1,7 +1,7 @@
 ---
 title: "Omi"
 icon: "circle-dot"
-description: "The Omi Consumer Version 1 (CV1) is the latest hardware, built for everyday use. Powered by a dual-core nRF5340 SoC with Wi-Fi 6 and dual microphones for high-quality audio capture."
+description: "The Omi Consumer Version 1 (CV1) is the latest hardware, built for everyday use. Powered by a dual-core nRF5340 SoC with a Wi-Fi 6 chip (not enabled in current firmware) and dual microphones for high-quality audio capture."
 ---
 
 ## Overview
@@ -13,7 +13,7 @@ The Omi Consumer Version 1 (CV1) is the production-ready Omi hardware designed f
     Dual-core Bluetooth LE processor
   </Card>
   <Card title="Wi-Fi 6" icon="wifi">
-    nRF7002 chip for high-speed connectivity
+    nRF7002 chip; Wi-Fi is not enabled in current CV1 firmware
   </Card>
   <Card title="Dual Microphones" icon="microphone">
     T5838 top-port PDM mics for superior audio
@@ -30,7 +30,8 @@ The Omi Consumer Version 1 (CV1) is the production-ready Omi hardware designed f
 | Component | Specification |
 |-----------|---------------|
 | Processor | nRF5340 dual-core Bluetooth LE SoC |
-| Wireless | nRF7002 Wi-Fi 6 chip |
+| Wireless | Bluetooth LE; nRF7002 Wi-Fi 6 chip (not enabled in current firmware) |
+| Storage | 4 Gbit / 512 MB soldered SD NAND, raw audio ring |
 | Audio | Dual T5838 top-port PDM microphones |
 | Form Factor | Consumer-grade wearable |
 
@@ -64,9 +65,9 @@ The recommended way to update your device is through the Omi app's built-in OTA 
 
 <AccordionGroup>
   <Accordion title="Download Pre-built Firmware" icon="download">
-    Download a pre-built firmware version from the [Omi GitHub Releases](https://github.com/BasedHardware/omi/releases?q=release_firmware+OMI+CV1).
+    Download a pre-built firmware version from the [Omi GitHub Releases](https://github.com/BasedHardware/omi/releases?q=Omi_CV1_v).
 
-    Look for releases tagged with `OMI CV1` for consumer device compatibility.
+    Look for releases tagged with `Omi_CV1_v<version>` for consumer device compatibility.
   </Accordion>
   <Accordion title="Compile Firmware Yourself" icon="code">
     For advanced users who want to customize the firmware:
@@ -82,7 +83,7 @@ The recommended way to update your device is through the Omi app's built-in OTA 
 ## Open Source Hardware
 
 <Card title="Open Source Design Files" icon="code-branch" href="/doc/hardware/consumer">
-  Complete PCB schematics, Gerbers, Altium source, mechanical STEP files, BOM, and assembly guides — all MIT licensed
+  Complete PCB schematics, Gerbers, KiCad 9 source (the `altium/` folder name is historical), mechanical STEP files, BOM, and assembly guides — all MIT licensed
 </Card>
 
 ---
@@ -91,7 +92,7 @@ The recommended way to update your device is through the Omi app's built-in OTA 
 
 <CardGroup cols={2}>
   <Card title="DevKit 2" icon="microchip" href="/doc/hardware/DevKit2">
-    Developer version with 8GB storage
+    Developer version with offline storage
   </Card>
   <Card title="Omi Glass" icon="glasses" href="/doc/hardware/omiGlass">
     Glasses form factor variant

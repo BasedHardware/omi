@@ -85,7 +85,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Forget Device?'), findsOneWidget);
-    expect(find.textContaining("you'll have to pair it again"), findsOneWidget);
+    expect(find.text('Omi will stop connecting to this device.'), findsOneWidget);
     expect(find.text("Don't ask again"), findsNothing);
 
     await tester.tap(find.text('Cancel'));

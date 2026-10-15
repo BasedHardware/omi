@@ -150,6 +150,12 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('createStagedTaskFromExtraction — confidence gate (§5 step 1)', () => {
+  it('rejects an inferred next step at the stage sink with NO write and NO network', async () => {
+    await createStagedTaskFromExtraction({ ...task, captureKind: 'inferred_next_step' }, frame, 5, context)
+    expect(h.insertLocalStagedTask).not.toHaveBeenCalled()
+    expect(h.fetch).not.toHaveBeenCalled()
+  })
+
   it('drops a sub-threshold task with NO write and NO network', async () => {
     await createStagedTaskFromExtraction({ ...task, confidence: 0.74 }, frame, 5, context)
     expect(h.insertLocalStagedTask).not.toHaveBeenCalled()

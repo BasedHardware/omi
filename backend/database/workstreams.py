@@ -9,6 +9,7 @@ from google.cloud import firestore
 
 from google.cloud.firestore_v1 import FieldFilter
 import database.goals as goals_db
+from database.candidates import candidate_has_lapsed
 from database._client import get_firestore_client
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict, parse_snapshots
 from models.action_item import ActionItemResponse, TaskOwner, TaskPriority, TaskStatus
@@ -855,7 +856,6 @@ def resolve_workstream_candidate(
     workstream_ref = _workstream_ref(uid, workstream_id, firestore_client=client)
     task_ref = _task_ref(uid, task_id, firestore_client=client)
     transaction = client.transaction()
-    now = datetime.now(timezone.utc)
 
     @firestore.transactional
     def apply(write_transaction):
@@ -879,6 +879,9 @@ def resolve_workstream_candidate(
             )
         if stored_candidate.status != CandidateStatus.pending:
             raise WorkstreamConflictError(f'Candidate already {stored_candidate.status.value}')
+        now = datetime.now(timezone.utc)
+        if candidate_has_lapsed(stored_candidate, now=now):
+            raise WorkstreamConflictError('Candidate suggestion has expired')
         proposal = stored_candidate.workstream_proposal
         if proposal is None:
             raise WorkstreamConflictError('stored Candidate has no workstream proposal')

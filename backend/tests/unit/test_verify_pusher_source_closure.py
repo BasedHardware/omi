@@ -54,7 +54,7 @@ def test_source_closure_cli_output_includes_chart_dir() -> None:
         check=True,
         cwd=str(REPO),
     )
-    paths = set(result.stdout.strip().split())
+    paths = set(result.stdout.splitlines())
     assert "backend/charts/pusher" in paths
     # Must cover all Dockerfile COPY source dirs.
     for expected in [
@@ -91,6 +91,28 @@ def test_source_closure_excludes_builder_stage_copies() -> None:
     # Builder-stage copies must NOT be included.
     assert "/opt/venv" not in sources
     assert "backend/pusher/pylock.toml" not in sources
+
+
+def test_line_framed_workflow_consumer_detects_shared_source_drift(tmp_path) -> None:
+    import subprocess
+
+    source = tmp_path / "backend/utils/apps.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("version = 1\n", encoding="utf-8")
+    docs = tmp_path / "README.md"
+    docs.write_text("before\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(["git", "add", "backend/utils/apps.py", "README.md"], cwd=tmp_path, check=True)
+    # Bash read preserves one path per line, matching the workflow's mapfile.
+    gate = (
+        'paths=(); while IFS= read -r path; do paths+=("$path"); '
+        'done < <("$1" "$2"); git diff --quiet -- "${paths[@]}"'
+    )
+    command = ["bash", "-c", gate, "gate", sys.executable, str(SCRIPT)]
+    docs.write_text("after\n", encoding="utf-8")
+    assert subprocess.run(command, cwd=tmp_path, check=False).returncode == 0
+    source.write_text("version = 2\n", encoding="utf-8")
+    assert subprocess.run(command, cwd=tmp_path, check=False).returncode == 1
 
 
 def test_runtime_uses_a_non_root_user_with_writable_working_directories() -> None:

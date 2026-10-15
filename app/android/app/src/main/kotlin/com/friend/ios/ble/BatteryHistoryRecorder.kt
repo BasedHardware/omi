@@ -11,13 +11,31 @@ internal class BatteryHistoryRecorder(
     companion object {
         const val RETENTION_MS = 7L * 24 * 3600 * 1000
         const val MAX_POINTS = 2000
+        const val BACKFILL_MAX_AGE_MS = 15L * 60 * 1000
     }
 
     private data class Point(val level: Int, val timestamp: Long, val charging: Boolean?)
     private val baselines = mutableMapOf<String, Point?>()
 
     @Synchronized
-    fun record(key: String, level: Int, nowMs: Long, charging: Boolean? = null) {
+    fun retire() { baselines.clear() }
+
+    @Synchronized
+    fun backfillCharging(key: String, charging: Boolean, nowMs: Long = System.currentTimeMillis()) {
+        val history = history(key)
+        val latest = history.optJSONObject(history.length() - 1) ?: return
+        // Only tag a recent point: stamping the state observed now onto a
+        // hours-old sample would mislabel historical battery data.
+        if (nowMs - latest.optLong("ts", 0L) > BACKFILL_MAX_AGE_MS) return
+        val sample = point(latest) ?: return
+        if (!latest.isNull("charging")) return
+        latest.put("charging", charging)
+        write(key, history.toString())
+        baselines[key] = sample.copy(charging = charging)
+    }
+
+    @Synchronized
+    fun record(key: String, level: Int, nowMs: Long, charging: Boolean? = null, appBuild: String? = null, firmware: String? = null, identityEpoch: Long? = null) {
         var history: JSONArray? = null
         if (!baselines.containsKey(key)) {
             val loaded = history(key)
@@ -38,7 +56,8 @@ internal class BatteryHistoryRecorder(
             val sample = point(entry) ?: continue
             if (sample.timestamp >= cutoff) pruned.put(entry)
         }
-        pruned.put(JSONObject().put("ts", nowMs).put("level", level).put("charging", charging ?: JSONObject.NULL))
+        pruned.put(JSONObject().put("ts", nowMs).put("level", level).put("charging", charging ?: JSONObject.NULL)
+            .put("identity_epoch", identityEpoch ?: JSONObject.NULL).put("app_build", appBuild ?: JSONObject.NULL).put("firmware", firmware ?: JSONObject.NULL))
         while (pruned.length() > MAX_POINTS) pruned.remove(0)
         write(key, pruned.toString())
         // Advance only after the persistence call succeeds; retries keep the last submitted baseline.

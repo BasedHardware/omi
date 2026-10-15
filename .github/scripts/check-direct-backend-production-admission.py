@@ -18,6 +18,13 @@ HEAD_IDENTITY = "CHECKED_OUT_SHA=$(git rev-parse HEAD)"
 IMAGE_IDENTITY = 'IMAGE_TAG=$(git rev-parse --short=7 "$CHECKED_OUT_SHA")'
 DIAGNOSTIC = "ERROR: checked-out HEAD $CHECKED_OUT_SHA is not an ancestor of fresh origin/main"
 PERSISTED_IMAGE_IDENTITY = 'echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"'
+CONTROL_CHECKOUT = (
+    "uses: actions/checkout@v7\n"
+    "        with:\n"
+    "          ref: ${{ github.workflow_sha }}\n"
+    "          path: .github/firestore-workflow\n"
+    "          persist-credentials: false"
+)
 GATEWAY_WORKFLOW = Path(".github/workflows/gcp_llm_gateway.yml")
 GATEWAY_RELEASE_SHA_INPUT = (
     "      release_sha:\n"
@@ -131,7 +138,8 @@ def validate(root: Path) -> list[str]:
             errors.append(f"{relative} must diagnose a rejected checked-out source identity")
         if "${GITHUB_SHA::7}" in text:
             errors.append(f"{relative} must not label built source with GITHUB_SHA")
-        if text.count("uses: actions/checkout@v7") != 1:
+        source_checkouts = text.count("uses: actions/checkout@v7") - text.count(CONTROL_CHECKOUT)
+        if source_checkouts != 1:
             errors.append(f"{relative} must not check out a second source after production admission")
         if text.count(HEAD_IDENTITY) != 1:
             errors.append(f"{relative} must establish checked-out source identity exactly once")

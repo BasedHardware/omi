@@ -13,6 +13,20 @@ logger = logging.getLogger(__name__)
 
 _posthog_client: Optional[Any] = None
 _posthog_disabled = False
+_billing_client: Optional[Any] = None
+_billing_invalid_key_logged = False
+
+_BILLING_KEY_ENV_VARS = ('POSTHOG_BILLING_API_KEY', 'POSTHOG_PROJECT_API_KEY', 'POSTHOG_API_KEY')
+
+
+BILLING_EVENTS = frozenset(
+    {
+        'Billing Subscription Started',
+        'Billing Subscription Churned',
+        'Billing Subscription Cancellation Scheduled',
+        'Billing Subscription Plan Changed',
+    }
+)
 
 
 def emit_product_event(*, uid: str, event: str, properties: Mapping[str, Any]) -> None:
@@ -20,7 +34,7 @@ def emit_product_event(*, uid: str, event: str, properties: Mapping[str, Any]) -
 
     if not uid:
         return
-    client = _get_posthog_client()
+    client = _get_billing_client() if event in BILLING_EVENTS else _get_posthog_client()
     if client is None:
         record_fallback(
             component='other',
@@ -33,7 +47,14 @@ def emit_product_event(*, uid: str, event: str, properties: Mapping[str, Any]) -
     safe_properties = {key: value for key, value in properties.items() if value is not None}
     safe_properties['environment'] = os.getenv('OMI_ENV_STAGE') or os.getenv('ENVIRONMENT') or 'unknown'
     try:
-        client.capture(distinct_id=uid, event=event, properties=safe_properties)
+        capture_args: dict[str, Any] = dict(distinct_id=uid, event=event, properties=safe_properties)
+        if event in BILLING_EVENTS and properties.get('$insert_id'):
+            capture_args['uuid'] = properties['$insert_id']
+            if properties.get('occurred_at'):
+                from datetime import datetime
+
+                capture_args['timestamp'] = datetime.fromisoformat(properties['occurred_at'].replace('Z', '+00:00'))
+        client.capture(**capture_args)
     except Exception as error:
         logger.warning('product telemetry emit failed event=%s error_type=%s', event, type(error).__name__)
         record_fallback(
@@ -43,6 +64,50 @@ def emit_product_event(*, uid: str, event: str, properties: Mapping[str, Any]) -
             reason='other',
             outcome='degraded',
         )
+
+
+def _billing_project_key() -> Optional[str]:
+    """First public project token. Non-``phc_`` values are skipped and never logged."""
+    global _billing_invalid_key_logged
+    saw_invalid = False
+    for name in _BILLING_KEY_ENV_VARS:
+        raw = os.getenv(name)
+        key = raw.strip() if isinstance(raw, str) else ''
+        if not key:
+            continue
+        if key.startswith('phc_'):
+            return key
+        saw_invalid = True
+    if saw_invalid and not _billing_invalid_key_logged:
+        _billing_invalid_key_logged = True
+        logger.warning('billing telemetry disabled: invalid project key')
+    return None
+
+
+def _get_billing_client() -> Optional[Any]:
+    """Dedicated synchronous capture; the webhook runs this after its response.
+
+    Only this client reads ``POSTHOG_BILLING_API_KEY``. Other capture and rollout
+    clients keep their own keys. A placeholder such as ``disabled`` is ignored
+    so it cannot be sent. Other services may still use their shared project key.
+    """
+    global _billing_client
+    if _billing_client is not None:
+        return _billing_client
+    api_key = _billing_project_key()
+    if not api_key:
+        return None
+    try:
+        _billing_client = importlib.import_module('posthog').Posthog(
+            project_api_key=api_key,
+            host=os.getenv('POSTHOG_HOST', 'https://app.posthog.com'),
+            sync_mode=True,
+            timeout=2,
+            max_retries=0,
+        )
+    except Exception as error:
+        logger.warning('billing telemetry unavailable error_type=%s', type(error).__name__)
+    return _billing_client
 
 
 def _get_posthog_client() -> Optional[Any]:
@@ -70,6 +135,8 @@ def _get_posthog_client() -> Optional[Any]:
 
 
 def set_product_telemetry_client_for_tests(client: Optional[Any]) -> None:
-    global _posthog_client, _posthog_disabled
+    global _posthog_client, _posthog_disabled, _billing_client, _billing_invalid_key_logged
+    _billing_client = client
+    _billing_invalid_key_logged = False
     _posthog_client = client
     _posthog_disabled = client is None

@@ -47,7 +47,7 @@ void main() {
     expect(prefs.btDevice.id, isEmpty);
     expect(prefs.btDevices, isEmpty);
     expect(prefs.deviceIdHash, isEmpty);
-    expect(prefs.appearanceMode, 'system');
+    expect(prefs.appearanceMode, 'light'); // light is the default since 2026-09-29
     final stored = await SharedPreferences.getInstance();
     final journal = File('${directory.path}/boot_stages.json');
     final deadline = DateTime.now().add(const Duration(seconds: 2));

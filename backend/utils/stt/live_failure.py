@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Awaitable, Callable, Protocol
+import asyncio
+from typing import Any, Awaitable, Callable, Protocol, cast
+
+from starlette.websockets import WebSocketState
 
 from models.message_event import MessageServiceStatusEvent
 from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
@@ -15,7 +18,18 @@ from utils.stt.outcomes import (
     bounded_provider,
     failure_from_exception,
 )
-from utils.observability.fallback import record_fallback
+from utils.observability.fallback import (
+    FailureFallbackKwargs,
+    FirstTextDeadlineDiagnostics,
+    ReplayLagDiagnostics,
+    capacity_fallback_kwargs,
+    first_text_fallback_kwargs,
+    record_fallback,
+)
+from utils.stt.live_reason import LIVE_STT_FAILURE_REASONS, normalize_live_stt_reason
+from config.live_stt_recovery import recovery_enabled, session_recovery_enabled
+from utils.stt.recovery_state import current_recovery
+from utils.stt.live_outcome import LiveLegOutcome
 from utils.stt.stream_close import (
     ACCOUNT_REJECTION_REASONS,
     PROVIDER_AUTH_REJECTED,
@@ -34,26 +48,7 @@ LIVE_STT_FAILURE_CLOSE_REASON = 'transcription_service_unavailable'
 # forever (#12459, #12469).
 MAX_STT_FAILOVERS = 2
 
-_KNOWN_FAILURE_REASONS = frozenset(
-    {
-        'initialization_failed',
-        'connection_lost',
-        'send_failed',
-        'socket_unavailable',
-        # Typed in-stream provider rejections. Soniox answers typed error
-        # codes (utils.stt.soniox); Modulate/Velma answers free-text frames
-        # that the socket bounds to MODULATE_DEATH_SERVE_ERROR when the
-        # provider failed to serve the stream it had accepted
-        # (utils.stt.streaming.modulate_death_reason).
-        'modulate_serve_error',
-        *ACCOUNT_REJECTION_REASONS,
-        PROVIDER_RATE_LIMITED,
-        'soniox_idle_timeout',
-        'soniox_rotation',
-        'provider_5xx',
-        'soniox_invalid_hint',
-    }
-)
+_KNOWN_FAILURE_REASONS = LIVE_STT_FAILURE_REASONS
 _FAILURE_PHASE_BY_REASON = {
     'initialization_failed': 'initialization',
     'connection_lost': 'connection',
@@ -69,10 +64,17 @@ _FAILURE_PHASE_BY_REASON = {
     'soniox_idle_timeout': 'connection',
     'soniox_rotation': 'connection',
     'provider_5xx': 'connection',
+    'capacity_full': 'connection',
+    'first_text_deadline': 'connection',
+    'empty_streak': 'connection',
     # The config frame was rejected after the WebSocket upgrade succeeded:
     # the session died at session setup, before any audio flowed.
     'soniox_invalid_hint': 'initialization',
 }
+# Diagnostic reasons without a legacy phase are connection-scoped.
+for _reason in LIVE_STT_FAILURE_REASONS:
+    _FAILURE_PHASE_BY_REASON.setdefault(_reason, 'connection')
+
 _CIRCUIT_OPENING_REASONS = frozenset(
     {
         # 402 organization_balance_exhausted / organization_monthly_budget_exhausted:
@@ -106,17 +108,17 @@ _CIRCUIT_OPENING_REASONS = frozenset(
 # audio. ``initialization_failed`` happens at connect time, where the selection
 # helper's threshold logic already sees it, and ``socket_unavailable`` is local
 # state (no socket exists), not provider behavior.
+# Local VAD/input failures are not evidence against a provider circuit either.
 _SERVE_FAILURE_REASONS = frozenset({'connection_lost', 'send_failed'})
 
 
-def fallback_reason_for_typed_death(typed_reason: str | None) -> str:
-    """Map a bounded death reason onto ``record_fallback``'s closed reason set."""
-
-    if typed_reason == PROVIDER_BUDGET_EXHAUSTED:
+def fallback_metric_reason(reason: str | None) -> str:
+    """Keep established account labels while sharing bounded source causes."""
+    if reason == PROVIDER_BUDGET_EXHAUSTED:
         return 'quota'
-    if typed_reason == PROVIDER_AUTH_REJECTED:
+    if reason == PROVIDER_AUTH_REJECTED:
         return 'auth'
-    return 'other'
+    return normalize_live_stt_reason(reason)
 
 
 def _segments_have_transcript(segments: object) -> bool:
@@ -137,41 +139,126 @@ class PendingLiveFailover:
     """
 
     def __init__(
-        self, *, from_mode: str, to_mode: str, component: str = 'stt_live_session', reason: str = 'connection_lost'
+        self,
+        *,
+        from_mode: str,
+        to_mode: str,
+        component: str = 'stt_live_session',
+        reason: str,
+        capacity_subtype: str | None = None,
+        source_outcome: LiveLegOutcome | None = None,
     ) -> None:
-        self.component, self.reason = component, reason
+        self.component, self.reason = component, normalize_live_stt_reason(reason)
+        self.capacity_subtype = capacity_subtype
+        self.replay_lag_diagnostics: ReplayLagDiagnostics | None = None
+        self.first_text_diagnostics: FirstTextDeadlineDiagnostics | None = None
         self.from_mode = from_mode
         self.to_mode = to_mode
         self._settled = False
+        self._settlement_timer: asyncio.TimerHandle | None = None
+        self.source_outcome = source_outcome
+        pinned = getattr(source_outcome, 'recovery_enabled', None)
+        self.recovery_enabled = pinned if type(pinned) is bool else recovery_enabled()
+        if source_outcome is not None:
+            self.reason = source_outcome.claim(reason, connect=component == 'stt_selection')
+            if source_outcome.pending is None:
+                source_outcome.pending = self
+            if not source_outcome.settled:
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    pass  # Synchronous tests; serving owners run on the listen loop.
+                else:
+                    # Recovery still requires text. After 30s without proof,
+                    # report this hop as degraded, without touching its audio
+                    # or connection. Source availability cannot depend on a
+                    # silent successor eventually ending its session.
+                    self._settlement_timer = loop.call_later(30, self._settle_delayed_hop)
+
+    def _settle_delayed_hop(self) -> None:
+        self.note_failure(None, continuing=True)
+
+    def _mark_settled(self) -> None:
+        self._settled = True
+        if self._settlement_timer is not None:
+            self._settlement_timer.cancel()
+            self._settlement_timer = None
+
+    @classmethod
+    def from_socket(cls, source: object, from_mode: str, to_mode: str) -> 'PendingLiveFailover':
+        """Capture the source cause before a successor can change the hop."""
+        return cls(
+            from_mode=from_mode,
+            to_mode=to_mode,
+            reason=live_stt_terminal_reason(source, 'connection_lost'),
+            source_outcome=getattr(source, 'leg_outcome', None),
+        )
+
+    def _emit(self, **kwargs: Any) -> None:
+        if self.source_outcome is None:
+            record_fallback(**kwargs)
+        else:
+            self.source_outcome.settle(
+                emit_fallback=lambda: record_fallback(**kwargs),
+            )
 
     @property
     def settled(self) -> bool:
         return self._settled
+
+    def capture_window_failure_details(self, source: object) -> None:
+        """Carry the immutable pre-cancellation snapshot onto the hop outcome."""
+        self.capacity_subtype = getattr(source, 'capacity_subtype', None)
+        self.replay_lag_diagnostics = getattr(source, 'replay_lag_diagnostics', None)
+        self.first_text_diagnostics = getattr(source, 'first_text_diagnostics', None)
 
     def note_transcript(self, segments: object | None = None) -> None:
         if self._settled:
             return
         if segments is not None and not _segments_have_transcript(segments):
             return
-        self._settled = True
-        record_fallback(
+        self._mark_settled()
+        self._emit(
             component=self.component,
             from_mode=self.from_mode,
             to_mode=self.to_mode,
-            reason=self.reason,
+            reason=fallback_metric_reason(self.reason),
             outcome='recovered',
+            **first_text_fallback_kwargs(self.first_text_diagnostics),
+            **capacity_fallback_kwargs(self.capacity_subtype, self.replay_lag_diagnostics),
         )
 
-    def note_failure(self, typed_reason: str | None) -> None:
+    def note_failure(self, typed_reason: str | None, *, continuing: bool = False) -> None:
         if self._settled:
             return
-        self._settled = True
-        record_fallback(
+        self._mark_settled()
+        # A hop still unproven when its owner departs is degraded recovery,
+        # not evidence that we terminated an active client's transcription.
+        source = self.source_outcome
+        if (
+            self.recovery_enabled
+            and source is not None
+            and (
+                getattr(source, 'owner_closing', False)
+                or (source.client_has_left is not None and source.client_has_left())
+            )
+        ):
+            continuing = True
+        # The hop belongs to the source leg; a successor failure changes the
+        # outcome, never the source cause used to reconcile health evidence.
+        reason = fallback_metric_reason(self.reason)
+        details: FailureFallbackKwargs = {}
+        if reason == 'other':
+            details['failure_subtype'] = normalize_live_stt_reason(typed_reason)
+        self._emit(
             component=self.component,
             from_mode=self.from_mode,
             to_mode=self.to_mode,
-            reason=fallback_reason_for_typed_death(typed_reason),
-            outcome='exhausted',
+            reason=reason,
+            outcome='degraded' if continuing else 'exhausted',
+            **first_text_fallback_kwargs(self.first_text_diagnostics),
+            **capacity_fallback_kwargs(self.capacity_subtype, self.replay_lag_diagnostics),
+            **details,
         )
 
 
@@ -181,6 +268,23 @@ class LiveSTTSession(Protocol):
     stt_terminal_failure: bool
     live_transcription_attempt: Any
     client_live_transcription_attempt: Any
+
+
+def settle_terminal_socket(stt_socket: Any, provider: str | None, reason: str, *, departing: bool = False) -> None:
+    """Settle a managed serving leg when the owner has exhausted recovery."""
+    outcome = getattr(stt_socket, 'leg_outcome', None)
+    if outcome is None or outcome.settled or outcome.owner_closing and not outcome.claimed:
+        return
+    if outcome.pending is not None:
+        outcome.pending.note_failure(None, continuing=departing)
+        return
+    hop = PendingLiveFailover(
+        from_mode=provider or 'unknown',
+        to_mode='unavailable',
+        reason=live_stt_terminal_reason(stt_socket, reason),
+        source_outcome=outcome,
+    )
+    hop.note_failure(None, continuing=departing)
 
 
 class LiveSTTClientSocket(Protocol):
@@ -249,10 +353,6 @@ def live_stt_initialization_failure(error: BaseException, provider: str | None) 
     return failure
 
 
-def _bounded_reason(reason: str) -> str:
-    return reason if reason in _KNOWN_FAILURE_REASONS else 'connection_lost'
-
-
 def live_stt_socket_is_dead(stt_socket: Any) -> bool:
     """Treat a broken or unreadable provider death latch as terminal."""
 
@@ -273,11 +373,16 @@ def live_stt_terminal_reason(stt_socket: Any, fallback: str) -> str:
     a named provider rejection back to generic connection loss.
     """
 
+    # Managed legs latch exactly the cause used by their health observation.
     try:
+        normalized = getattr(stt_socket, 'normalized_death_reason', None)
+        if normalized is not None:
+            return normalize_live_stt_reason(normalized, fallback)
         typed = getattr(stt_socket, 'typed_death_reason', None)
+        raw = getattr(stt_socket, 'death_reason', None)
     except Exception:
-        return fallback
-    return typed if typed in _KNOWN_FAILURE_REASONS else fallback
+        return normalize_live_stt_reason(fallback)
+    return normalize_live_stt_reason(typed, raw, fallback)
 
 
 def note_typed_provider_death(stt_socket: Any, provider: str | None) -> bool:
@@ -302,10 +407,21 @@ def note_typed_provider_death(stt_socket: Any, provider: str | None) -> bool:
         return False
     if typed not in _CIRCUIT_OPENING_REASONS:
         return False
-    return _open_serving_provider_circuit(typed, provider)
+    endpoint: str | None = None
+    try:
+        endpoint = getattr(stt_socket, 'routing_endpoint', None)
+    except Exception:
+        endpoint = None
+    try:
+        target_death = getattr(stt_socket, 'record_target_death', None)
+        if callable(target_death) and target_death(typed):
+            return True
+    except Exception as error:
+        logger.warning('Unable to record target circuit after provider death error_type=%s', type(error).__name__)
+    return _open_serving_provider_circuit(typed, provider, endpoint=endpoint)
 
 
-def _open_serving_provider_circuit(bounded_reason: str, provider: str | None) -> bool:
+def _open_serving_provider_circuit(bounded_reason: str, provider: str | None, *, endpoint: str | None = None) -> bool:
     """Open the process-local selection circuit of the provider who died serving.
 
     Deliberately cheap and fail-open: the terminal close of the client session
@@ -321,6 +437,8 @@ def _open_serving_provider_circuit(bounded_reason: str, provider: str | None) ->
     try:
         from utils.stt.streaming import open_provider_selection_circuit
 
+        if endpoint:
+            return open_provider_selection_circuit(provider, reason=bounded_reason, endpoint=endpoint)
         return open_provider_selection_circuit(provider, reason=bounded_reason)
     except Exception as error:  # noqa: BLE001 — telemetry-adjacent bookkeeping must not fail the terminal path
         logger.warning(
@@ -351,7 +469,7 @@ async def terminate_live_stt_session(
 
     session.stt_terminal_failure = True
     session.close_code = LIVE_STT_FAILURE_CLOSE_CODE
-    bounded_reason = _bounded_reason(reason)
+    bounded_reason = normalize_live_stt_reason(reason)
     if bounded_reason in _SERVE_FAILURE_REASONS or bounded_reason in _CIRCUIT_OPENING_REASONS:
         # A provider that died while serving audio is terminal evidence for
         # this session, but selection only learns from connect-time outcomes:
@@ -453,8 +571,35 @@ async def send_live_stt_audio(
         OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL.labels(provider=bounded_provider(provider), stage='buffer').inc()
 
     async def _recoverable_failure(reason: str) -> None:
+        if session_recovery_enabled(getattr(session, 'receiver', None)):
+            # A synchronous enqueue can latch capacity_full before returning
+            # False. Preserve that local cause rather than benching a healthy
+            # provider as send_failed; OFF retains its original vocabulary.
+            reason = live_stt_terminal_reason(stt_socket, reason)
+        outcome = getattr(stt_socket, 'leg_outcome', None)
+        if outcome is not None and outcome.owner_closing:
+            # The final client-tail flush may still send valid audio, but its
+            # transport errors cannot launch recovery or bench a provider.
+            return
         if attempt_failover is not None and await attempt_failover():
             return
+        if outcome is not None and outcome.owner_closing:
+            return  # Client teardown can win while replacement admission awaits.
+        receiver = getattr(session, 'receiver', None)
+        if session_recovery_enabled(receiver):
+            shutdown = getattr(session, 'shutdown_event', None)
+            if not session.active or shutdown is not None and shutdown.is_set() is True:
+                return
+            controller = getattr(receiver, 'recovery', None) or current_recovery.get()
+            if controller is not None and controller.client_has_left() is True:
+                return  # The episode controller latched a departed client.
+            if (
+                getattr(websocket, 'client_state', None) == WebSocketState.DISCONNECTED
+                or getattr(websocket, 'application_state', None) == WebSocketState.DISCONNECTED
+            ):
+                return
+        if session.active and not session.stt_terminal_failure:
+            settle_terminal_socket(stt_socket, provider, reason)
         await terminate_live_stt_session(
             websocket,
             session,
@@ -479,10 +624,18 @@ async def send_live_stt_audio(
         await _recoverable_failure(live_stt_terminal_reason(stt_socket, 'connection_lost'))
         return False
 
+    receiver = getattr(attempt_failover, '__self__', None)
+    retry = getattr(receiver, '_idle_onset_retry', None)
     try:
-        accepted = (
-            stt_socket.send(audio, start_sample=start_sample) if start_sample is not None else stt_socket.send(audio)
-        )
+        if retry is not None:
+            admitted = getattr(stt_socket, 'send_admitted_audio', None)
+            accepted = admitted(*retry) if callable(admitted) else stt_socket.send(retry[0])
+        else:
+            accepted = (
+                stt_socket.send(audio, start_sample=start_sample)
+                if start_sample is not None
+                else stt_socket.send(audio)
+            )
     except TypeError:
         # A socket that predates the capture-position seam: send without it.
         try:
@@ -498,12 +651,33 @@ async def send_live_stt_audio(
         await _recoverable_failure('send_failed')
         return False
 
-    # Safe socket wrappers report send failures through the death latch instead
-    # of raising so every provider must be checked after the send as well.
-    if live_stt_socket_is_dead(stt_socket):
-        await _recoverable_failure('send_failed')
+    complete = (
+        getattr(stt_socket, 'complete_send', None) if getattr(stt_socket, 'idle_close_enabled', False) is True else None
+    )
+    try:
+        completed = await cast(Callable[[], Awaitable[bool]], complete)() if callable(complete) else True
+    except Exception:
+        completed = False
+    if not completed or live_stt_socket_is_dead(stt_socket):
+        take = getattr(stt_socket, 'take_unsent_packet', None)
+        if receiver is not None and callable(take):
+            packet = take()
+            if packet is not None:
+                receiver._idle_onset_retry = packet
+        await _recoverable_failure(
+            live_stt_terminal_reason(stt_socket, 'connection_lost') if not completed else 'send_failed'
+        )
         return False
 
+    # Safe socket wrappers report send failures through the death latch instead
+    # of raising so every provider must be checked after the send as well.
+    if getattr(stt_socket, 'idle_close_enabled', False) is True:
+        commit = getattr(stt_socket, 'commit_send', None)
+        if callable(commit):
+            commit()
+
+    if receiver is not None and retry is not None:
+        receiver._idle_onset_retry = None
     return True
 
 

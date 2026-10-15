@@ -1,4 +1,4 @@
-"""Wire models for speaker tag prompts ("Is this you?" / "Who is this?")."""
+"""Wire models for speaker tag prompts ("Was this you?" / "Who is this?")."""
 
 from datetime import datetime
 from enum import Enum
@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class SpeakerTagPromptKind(str, Enum):
-    # "Is this you?" — free for everyone; confirms or corrects the owner's voice.
+    # "Was this you?" — free for everyone; confirms or corrects the owner's voice.
     owner_check = 'owner_check'
     # "Is this <name>?" — an automatic match the user has not reviewed yet.
     confirm_person = 'confirm_person'
@@ -29,8 +29,9 @@ class SpeakerTagPromptAnswer(str, Enum):
     not_me = 'not_me'  # Not me
     person = 'person'  # An existing person (also "Yes" on confirm_person)
     new_person = 'new_person'  # A new name typed by the user
-    someone_else = 'someone_else'  # Someone I don't know / not them
+    someone_else = 'someone_else'  # Someone I don't know / not them (with person_id or name: who it is)
     skip = 'skip'  # Not sure
+    not_a_person = 'not_a_person'  # TV, podcast, music: stop asking about this voice
 
 
 class SpeakerTagPromptQualityOutcome(str, Enum):
@@ -52,6 +53,16 @@ class SpeakerTagPromptQualityOutcome(str, Enum):
     skipped = 'skipped'
 
 
+class SpeakerTagCandidate(BaseModel):
+    """A person the card offers for this voice, best first."""
+
+    person_id: str
+    name: str
+    # 3 close, 2 possible, 1 weak voice match; None when Omi has no voice comparison.
+    match_level: Optional[int] = Field(default=None, ge=1, le=3)
+    pinned: bool = False
+
+
 class SpeakerTagPrompt(BaseModel):
     id: str
     kind: SpeakerTagPromptKind
@@ -63,10 +74,16 @@ class SpeakerTagPrompt(BaseModel):
     segment_ids: List[str]
     clip_start: float = Field(description='Clip start, seconds from conversation start')
     clip_end: float = Field(description='Clip end, seconds from conversation start')
+    evidence_id: Optional[str] = None
+    receipt_generation: Optional[int] = None
+    speaker_id_scope: Optional[str] = None
+    audio_capture_run: Optional[int] = None
     excerpt: str = ''
     suggested_person_id: Optional[str] = None
     suggested_person_name: Optional[str] = None
     suggested_person_ids: List[str] = Field(default_factory=list)
+    # Ranked by voice match when available (pinned first within a level), else by recency.
+    candidates: List[SpeakerTagCandidate] = Field(default_factory=list)
 
 
 class SpeakerTagPromptsResponse(BaseModel):
@@ -83,6 +100,7 @@ class SpeakerTagPromptsResponse(BaseModel):
 class SpeakerTagPromptsShownRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
     prompt_ids: List[str] = Field(default_factory=list, max_length=10)
+    set_shown: bool = True
 
 
 class SpeakerTagPromptsShownResponse(BaseModel):
@@ -102,6 +120,13 @@ class SpeakerTagPromptAnswerRequest(BaseModel):
     name: Optional[str] = Field(default=None, min_length=2, max_length=40)
     suggested_person_id: Optional[str] = Field(default=None, max_length=128)
     first_time: bool = False
+    evidence_id: Optional[str] = Field(default=None, max_length=64)
+
+
+class SpeakerTagPromptSegmentIdentity(BaseModel):
+    id: str
+    is_user: bool
+    person_id: Optional[str] = None
 
 
 class SpeakerTagPromptAnswerResponse(BaseModel):
@@ -109,6 +134,22 @@ class SpeakerTagPromptAnswerResponse(BaseModel):
     person_id: Optional[str] = None
     quality_outcome: SpeakerTagPromptQualityOutcome
     voice_sample_queued: bool = False
+    conversation_id: Optional[str] = None
+    segment_identities: List[SpeakerTagPromptSegmentIdentity] = Field(default_factory=list)
+
+
+class IgnoredVoice(BaseModel):
+    """A voice the user marked Not a Person; Omi does not ask about it again."""
+
+    conversation_id: str
+    speaker_id: int
+    ignored_at: datetime
+    conversation_title: str = ''
+    conversation_started_at: Optional[datetime] = None
+
+
+class IgnoredVoicesResponse(BaseModel):
+    voices: List[IgnoredVoice] = Field(default_factory=list)
 
 
 class SpeakerTagPromptClip(BaseModel):

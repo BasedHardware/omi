@@ -101,11 +101,13 @@ def _install_dependency_stubs():
         def __init__(self, **values):
             annotations = {}
             defaults = {}
+            fields_meta = {}
             for cls in reversed(type(self).__mro__):
                 annotations.update(getattr(cls, "__annotations__", {}))
                 for name, member in getattr(cls, "__dict__", {}).items():
                     if isinstance(member, _FieldInfo):
                         defaults[name] = member.default
+                        fields_meta[name] = member.metadata
 
             resolved = {}
             for name in annotations:
@@ -127,11 +129,16 @@ def _install_dependency_stubs():
                                 resolved[field] = getattr(type(self), name)(resolved[field])
 
             for name, value in resolved.items():
+                meta = fields_meta.get(name, {})
+                if isinstance(value, int) and not isinstance(value, bool):
+                    if "ge" in meta and value < meta["ge"]:
+                        raise ValueError(f"{name} must be >= {meta['ge']}")
+                    if "le" in meta and value > meta["le"]:
+                        raise ValueError(f"{name} must be <= {meta['le']}")
                 setattr(self, name, value)
 
         def model_dump(self):
             return self.__dict__.copy()
-
     pydantic.BaseModel = BaseModel
     pydantic.Field = Field
     pydantic.field_validator = field_validator
@@ -191,6 +198,68 @@ class PublicHolidayRequestTests(unittest.TestCase):
     def test_non_string_country_code_is_rejected_cleanly(self):
         with self.assertRaises(ValueError):
             main.HolidayRequest(country_code=7, year=2026)
+
+
+class HolidayInputCoercionTests(unittest.IsolatedAsyncioTestCase):
+    def test_null_year_defaults_to_current_utc_year(self):
+        from datetime import datetime, timezone
+        expected = datetime.now(timezone.utc).year
+        req = main.HolidayRequest(country_code="US", year=None, limit=None)
+        self.assertEqual(req.year, expected)
+        self.assertEqual(req.limit, main.MAX_ITEMS)
+
+        lw = main.LongWeekendRequest(country_code="DE", year=None)
+        self.assertEqual(lw.year, expected)
+
+    def test_omitted_year_defaults_to_current_utc_year(self):
+        from datetime import datetime, timezone
+        expected = datetime.now(timezone.utc).year
+        req = main.HolidayRequest(country_code="US")
+        self.assertEqual(req.year, expected)
+        lw = main.LongWeekendRequest(country_code="US")
+        self.assertEqual(lw.year, expected)
+
+    def test_string_numeric_values_are_coerced(self):
+        req = main.HolidayRequest(country_code="US", year="2026", limit="10")
+        self.assertEqual(req.year, 2026)
+        self.assertEqual(req.limit, 10)
+
+        nh = main.NextHolidayRequest(country_code="US", limit="5")
+        self.assertEqual(nh.limit, 5)
+
+    def test_boolean_values_are_rejected_for_numeric_fields(self):
+        with self.assertRaises(ValueError):
+            main.HolidayRequest(country_code="US", year=True)
+        with self.assertRaises(ValueError):
+            main.HolidayRequest(country_code="US", year=2026, limit=True)
+        with self.assertRaises(ValueError):
+            main.NextHolidayRequest(country_code="US", limit=False)
+        with self.assertRaises(ValueError):
+            main.LongWeekendRequest(country_code="US", year=False)
+
+    def test_year_out_of_range_still_rejected_after_coercion(self):
+        with self.assertRaises(ValueError):
+            main.HolidayRequest(country_code="US", year="1969")
+        with self.assertRaises(ValueError):
+            main.HolidayRequest(country_code="US", year="2101")
+
+    async def test_list_supported_countries_skips_non_dict_and_null_entries(self):
+        payload = [
+            {"countryCode": "US", "name": "United States"},
+            "malformed",
+            None,
+            {"countryCode": None, "name": "NullCode"},
+            {"countryCode": "DE", "name": None},
+            {"countryCode": "  ", "name": "Whitespace"},
+            {"countryCode": "JP", "name": "Japan"},
+        ]
+        with patch.object(main, "_request_json", new=AsyncMock(return_value=payload)):
+            response = await main.list_supported_countries()
+        self.assertIsNone(response.error)
+        self.assertIn("US: United States", response.result)
+        self.assertIn("JP: Japan", response.result)
+        self.assertNotIn("None", response.result)
+        self.assertNotIn("malformed", response.result)
 
 
 class PublicHolidayFormattingTests(unittest.TestCase):

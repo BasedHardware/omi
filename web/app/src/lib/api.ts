@@ -1,8 +1,8 @@
 import { getIdToken } from './firebase';
+import { version as webAppVersion } from '../../package.json';
 import { getWebDeviceIdHash } from './clientDevice';
 import {
   invalidateCache,
-  invalidateCacheKey,
   invalidationPatterns,
   fetchWithCache,
   cacheKeys,
@@ -99,6 +99,8 @@ async function fetchWithAuthResponse<T>(
   }
   new Headers(options.headers).forEach((value, name) => headers.set(name, value));
   headers.set('X-App-Platform', 'web');
+  headers.set('X-App-Version', webAppVersion);
+  headers.set('X-Omi-Plan-Identity', '1');
   if (deviceIdHash) {
     headers.set('X-Device-Id-Hash', deviceIdHash);
   }
@@ -244,7 +246,9 @@ export async function toggleStarred(id: string, starred: boolean): Promise<void>
  * Delete a conversation
  */
 export async function deleteConversation(id: string): Promise<void> {
-  await fetchWithAuth(`/v1/conversations/${id}`, {
+  // The server default is still cascade=false (Q8). Mobile and macOS already
+  // send true, which is what removes memories extracted from the recording.
+  await fetchWithAuth(`/v1/conversations/${id}?cascade=true`, {
     method: 'DELETE',
   });
   invalidateCache(invalidationPatterns.conversations);
@@ -259,19 +263,15 @@ export async function deleteConversation(id: string): Promise<void> {
 
 /**
  * Get the approved screenshot set (banner + strip) for a conversation.
- * Uses the same fetch-with-cache idiom as `getConversation`; a short TTL
- * balances against the frame set's signed URLs expiring after 60 minutes.
+ * Deliberately uncached: every response carries signed URLs that expire
+ * after 60 minutes, and a cached GET that resolved after a delete would
+ * serve the deleted frames again on reopen. The set is small.
  */
 export async function getConversationScreenFrames(
   conversationId: string,
 ): Promise<ConversationScreenFrameSet> {
-  return fetchWithCache<ConversationScreenFrameSet>(
-    cacheKeys.screenFrames(conversationId),
-    () =>
-      fetchWithAuth<ConversationScreenFrameSet>(
-        `/v1/conversations/${conversationId}/screenshots`,
-      ),
-    { ttl: CACHE_TTL.SHORT },
+  return fetchWithAuth<ConversationScreenFrameSet>(
+    `/v1/conversations/${conversationId}/screenshots`,
   );
 }
 
@@ -289,7 +289,6 @@ export async function deleteScreenFrame(
     `/v1/conversations/${conversationId}/screenshots/${frameId}`,
     { method: 'DELETE' },
   );
-  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
   return result;
 }
 
@@ -301,7 +300,6 @@ export async function deleteAllScreenFrames(
     `/v1/conversations/${conversationId}/screenshots`,
     { method: 'DELETE' },
   );
-  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
   return result;
 }
 
@@ -318,7 +316,6 @@ export async function patchScreenFrameSharing(
     `/v1/conversations/${conversationId}/screenshot-sharing`,
     { method: 'PATCH', body: JSON.stringify(body) },
   );
-  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
   return result;
 }
 
@@ -427,6 +424,11 @@ export async function getActionItems(
     items: response.action_items || [],
     hasMore: response.has_more || false,
   };
+}
+
+/** One action item by id (404 when it is gone or not the caller's). */
+export async function getActionItem(id: string): Promise<ActionItem> {
+  return fetchWithAuth<ActionItem>(`/v1/action-items/${encodeURIComponent(id)}`);
 }
 
 /**
@@ -564,6 +566,44 @@ export async function getMemoriesPage(
  */
 export async function getMemories(params: GetMemoriesParams = {}): Promise<Memory[]> {
   return (await getMemoriesPage(params)).memories;
+}
+
+/**
+ * Find memories by id. The backend has no memory-by-id read, so this walks the
+ * owner-wide `all` view and stops once every id is found. `complete` is false
+ * when the walk stopped early (page cap, truncated read): an id missing then
+ * may still exist and must not be reported as deleted.
+ */
+export async function findMemoriesByIds(
+  ids: readonly string[],
+  options: { maxPages?: number; fetchPage?: typeof getMemoriesPage } = {},
+): Promise<{ found: Map<string, Memory>; complete: boolean }> {
+  const { maxPages = 20, fetchPage = getMemoriesPage } = options;
+  const wanted = new Set(ids);
+  const found = new Map<string, Memory>();
+  if (wanted.size === 0) return { found, complete: true };
+  const limit = 500;
+  let offset = 0;
+  let cursor: string | undefined;
+  const seenCursors = new Set<string>();
+  for (let page = 0; page < maxPages; page++) {
+    const result = await fetchPage({ limit, offset, cursor, view: 'all' });
+    for (const memory of result.memories) {
+      if (wanted.has(memory.id)) found.set(memory.id, memory);
+    }
+    if (found.size === wanted.size) return { found, complete: true };
+    if (result.truncated) return { found, complete: false };
+    if (result.nextCursor) {
+      if (seenCursors.has(result.nextCursor)) return { found, complete: false };
+      seenCursors.add(result.nextCursor);
+      cursor = result.nextCursor;
+    } else if (cursor || result.memories.length < limit) {
+      return { found, complete: true };
+    } else {
+      offset += result.memories.length;
+    }
+  }
+  return { found, complete: false };
 }
 
 /**
@@ -1879,9 +1919,6 @@ export async function getAllUsageData(): Promise<AllUsageData> {
   return { today, monthly, yearly, all_time };
 }
 
-/**
- * Get user subscription info
- */
 export async function getUserSubscription(): Promise<UserSubscription | null> {
   try {
     const response = await fetchWithAuth<UserSubscriptionResponse>(
@@ -1893,9 +1930,10 @@ export async function getUserSubscription(): Promise<UserSubscription | null> {
       plan: plan.raw ?? '',
       plan_identity: plan,
       status: response.subscription?.status || 'active',
-      // Unknown plans are deliberately excluded. A future wire value must not
-      // inherit paid capability merely because it is non-empty.
+      // Unknown plans never infer paid capability.
       is_unlimited: planGrantsPaidCapability(plan),
+      transcription_seconds_used: response.transcription_seconds_used,
+      transcription_seconds_limit: response.transcription_seconds_limit,
       current_period_end: response.subscription?.current_period_end,
       stripe_subscription_id: response.subscription?.stripe_subscription_id,
       cancel_at_period_end: response.subscription?.cancel_at_period_end,
@@ -2160,13 +2198,14 @@ import type {
   CustomerPortalResponse,
 } from '@/types/user';
 
-/**
- * Get user's developer API keys
- */
-export async function getDeveloperApiKeys(): Promise<DeveloperApiKey[]> {
+/** Get user's developer API keys; opt into errors for settings. */
+export async function getDeveloperApiKeys(
+  options: { throwOnError?: boolean } = {},
+): Promise<DeveloperApiKey[]> {
   try {
     return await fetchWithAuth<DeveloperApiKey[]>('/v1/dev/keys');
-  } catch {
+  } catch (error) {
+    if (options.throwOnError) throw error;
     return [];
   }
 }
@@ -2179,7 +2218,8 @@ export async function createDeveloperApiKey(
   scopes?: string[],
 ): Promise<DeveloperApiKey> {
   const body: { name: string; scopes?: string[] } = { name };
-  if (scopes && scopes.length > 0) {
+  if (scopes) {
+    if (scopes.length === 0) throw new Error('Select at least one permission');
     body.scopes = scopes;
   }
   return fetchWithAuth<DeveloperApiKey>('/v1/dev/keys', {
@@ -2188,9 +2228,7 @@ export async function createDeveloperApiKey(
   });
 }
 
-/**
- * Delete a developer API key
- */
+/** Delete a developer API key */
 export async function deleteDeveloperApiKey(keyId: string): Promise<void> {
   await fetchWithAuth(`/v1/dev/keys/${keyId}`, {
     method: 'DELETE',
@@ -2201,20 +2239,19 @@ export async function deleteDeveloperApiKey(keyId: string): Promise<void> {
 // MCP API Keys
 // ============================================================================
 
-/**
- * Get user's MCP API keys
- */
-export async function getMcpApiKeys(): Promise<McpApiKey[]> {
+/** Get user's MCP API keys; opt into errors for settings. */
+export async function getMcpApiKeys(
+  options: { throwOnError?: boolean } = {},
+): Promise<McpApiKey[]> {
   try {
     return await fetchWithAuth<McpApiKey[]>('/v1/mcp/keys');
-  } catch {
+  } catch (error) {
+    if (options.throwOnError) throw error;
     return [];
   }
 }
 
-/**
- * Create a new MCP API key
- */
+/** Create a new MCP API key */
 export async function createMcpApiKey(name: string): Promise<McpApiKey> {
   return fetchWithAuth<McpApiKey>('/v1/mcp/keys', {
     method: 'POST',

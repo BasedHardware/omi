@@ -2,7 +2,7 @@
 
 Pins: flag default off; the tier order (restore -> rules -> model -> calendar)
 is unchanged; Jev replaces conv_discard only when supplied; discard strictly
-above the threshold; any Jev failure keeps; the stored record and metric say
+above the threshold; Jev failures advance to cheaper arms; the stored record and metric say
 which tier decided. All transcripts are synthetic.
 """
 
@@ -22,6 +22,15 @@ from utils.llm.jev_client import JevAnswers
 
 AMBIGUOUS = ('Coming over there in a second.',)
 TRIGGER = ProcessingTrigger.CAPTURE_END
+
+
+@pytest.fixture(autouse=True)
+def isolated_relevance_circuits():
+    from utils.conversations.relevance_circuit import get_relevance_circuit
+
+    get_relevance_circuit.cache_clear()
+    yield
+    get_relevance_circuit.cache_clear()
 
 
 def _decide(*, jev=None, model=None, calendar=None, texts=AMBIGUOUS, user_kept=False):
@@ -80,11 +89,11 @@ def test_jev_at_or_below_threshold_keeps(p_discard):
     assert decision.as_record()['jev']['p_discard'] == p_discard
 
 
-def test_jev_failure_keeps_visibly():
+def test_jev_failure_uses_model_visibly():
     decision, model, _ = _decide(jev=lambda: None)
 
-    model.assert_not_called()
-    assert (decision.verdict, decision.decided_by, decision.reason) == ('keep', 'jev', 'jev_error')
+    model.assert_called_once()
+    assert (decision.verdict, decision.decided_by, decision.reason) == ('discard', 'model', 'jev_fallback_model')
 
 
 def test_calendar_overlap_still_overrides_a_jev_discard_and_keeps_the_probability():
@@ -188,3 +197,197 @@ def test_no_answer_is_none(monkeypatch):
     monkeypatch.setattr(relevance_jev, 'ask_jev', lambda *args, **kwargs: None)
 
     assert relevance_jev.jev_discard_probability('User: hello there') is None
+
+
+@pytest.fixture
+def oct14_shape():
+    """Synthetic replay of sparse backchannels; not private incident transcripts."""
+    return [
+        (['yeah, I think so.'] * 7, 'discard'),
+        (["okay, I don't know."] * 7, 'discard'),
+        (['uh, well, you know.'] * 7, 'discard'),
+        (['yeah.'] * 120, 'discard'),
+        (['yeah, I think so.'] * 7 + ['Buy milk.'], 'keep'),
+        (['Call mom before five.'], 'keep'),
+        (['Sarah.'], 'keep'),
+        (['Dentist at 3:30.'], 'keep'),
+        (['Yes.'], 'keep'),
+        (['明天下午三点开会。'], 'keep'),
+    ]
+
+
+def _failed_model(on_error, _neighbor):
+    on_error(RuntimeError('unavailable'))
+    return False
+
+
+def test_oct14_shape_benchmark(oct14_shape):
+    for texts, expected in oct14_shape:
+        decision, _, _ = _decide(jev=lambda: None, model=_failed_model, texts=texts)
+        assert decision.verdict == expected, texts
+        assert decision.decided_by == ('rule' if len(texts) == 120 else 'deterministic')
+        if len(texts) == 7 or expected == 'keep':
+            assert decision.reason in {'jev_fallback_deterministic', 'circuit_open'}
+
+
+@pytest.mark.parametrize('with_jev', [False, True])
+@pytest.mark.parametrize('raises', [False, True])
+def test_failed_model_advances_to_deterministic(with_jev, raises, monkeypatch):
+    from utils.conversations import relevance
+
+    transitions = MagicMock()
+    monkeypatch.setattr(relevance, 'record_fallback', transitions)
+
+    def model(on_error, adjacent):
+        if raises:
+            raise TimeoutError()
+        return _failed_model(on_error, adjacent)
+
+    decision, _, _ = _decide(jev=(lambda: None) if with_jev else None, model=model, texts=['yeah, I think so.'] * 7)
+    assert (decision.verdict, decision.decided_by, decision.reason) == (
+        'discard',
+        'deterministic',
+        'jev_fallback_deterministic' if with_jev else 'model_fallback_deterministic',
+    )
+    assert transitions.call_count == (2 if with_jev else 1)
+    assert transitions.call_args.kwargs == dict(
+        component='conversation_relevance',
+        from_mode='model',
+        to_mode='deterministic',
+        reason='timeout' if raises else 'transport_error',
+        outcome='degraded',
+    )
+
+
+@pytest.mark.parametrize('discard', [False, True])
+def test_model_fallback_preserves_counterfactual_and_transition(discard, monkeypatch):
+    from utils.conversations import relevance
+
+    transitions = MagicMock()
+    monkeypatch.setattr(relevance, 'record_fallback', transitions)
+    decision, _, _ = _decide(jev=lambda: None, model=MagicMock(return_value=discard))
+    assert decision.reason == 'jev_fallback_model'
+    assert decision.nano_verdict == ('discard' if discard else 'keep')
+    transitions.assert_called_once_with(
+        component='conversation_relevance',
+        from_mode='jev',
+        to_mode='model',
+        reason='unavailable',
+        outcome='degraded',
+    )
+
+
+@pytest.mark.parametrize('outcome', ['success', 'http_error', 'transport_error', 'timeout', 'unconfigured'])
+def test_primary_scorer_outcome_counter(outcome, monkeypatch):
+    counter = MagicMock()
+    monkeypatch.setattr(metrics, 'CONVERSATION_RELEVANCE_SCORER_TOTAL', counter)
+
+    def ask(*args, outcome_observer, **kwargs):
+        outcome_observer(outcome)
+        return JevAnswers(None, {'worth_keeping': {'noul': 0.75}}) if outcome == 'success' else None
+
+    monkeypatch.setattr(relevance_jev, 'ask_jev', ask)
+    result = relevance_jev.jev_discard_probability('User: buy milk', record_outcome=True)
+    assert result == (0.25 if outcome == 'success' else None)
+    counter.labels.assert_called_once_with(arm='jev', outcome=outcome)
+    counter.labels.return_value.inc.assert_called_once()
+
+
+@pytest.mark.parametrize('has_photos,trusted_wake_word', [(True, False), (False, True)])
+def test_unavailable_models_preserve_rule_skips(has_photos, trusted_wake_word):
+    decision = decide_relevance(
+        trigger=TRIGGER,
+        texts=['um'],
+        speech_seconds=0.1,
+        has_photos=has_photos,
+        trusted_wake_word=trusted_wake_word,
+        user_kept=False,
+        exempt=False,
+        model_discards=_failed_model,
+        calendar_retains=lambda: False,
+    )
+    assert decision.verdict == 'keep'
+    assert decision.reason == 'model_fallback_deterministic'
+
+
+def test_deterministic_fallback_preserves_calendar():
+    decision, _, calendar = _decide(
+        jev=lambda: None, model=_failed_model, texts=['yeah, I think so.'] * 7, calendar=MagicMock(return_value=True)
+    )
+    assert (decision.verdict, decision.reason) == ('keep', 'calendar_overlap')
+    calendar.assert_called_once()
+
+
+def test_withheld_models_keep_ambiguous_band_without_paid_calls(monkeypatch):
+    from utils.conversations import relevance
+
+    transitions = MagicMock()
+    monkeypatch.setattr(relevance, 'record_fallback', transitions)
+    jev = MagicMock()
+    decision = decide_relevance(
+        trigger=TRIGGER,
+        texts=['yeah, I think so.'] * 7,
+        speech_seconds=900,
+        has_photos=False,
+        trusted_wake_word=False,
+        user_kept=False,
+        exempt=False,
+        model_discards=None,
+        calendar_retains=lambda: False,
+        jev_discard_probability=jev,
+    )
+    assert (decision.verdict, decision.decided_by, decision.reason) == ('keep', 'policy', 'model_withheld')
+    assert not decision.model_tier_reached
+    jev.assert_not_called()
+    transitions.assert_not_called()
+
+
+def test_degraded_reasons_are_metric_labels(monkeypatch):
+    counter = MagicMock()
+    monkeypatch.setattr(metrics, 'CONVERSATION_RELEVANCE_DECISION_TOTAL', counter)
+    for arm, reason in [('model', 'jev_fallback_model'), ('deterministic', 'jev_fallback_deterministic')]:
+        metrics.record_conversation_relevance(trigger='capture_end', verdict='discard', decided_by=arm, reason=reason)
+        counter.labels.assert_called_with(trigger='capture_end', verdict='discard', decided_by=arm, reason=reason)
+
+
+def test_shared_transition_counter_emits_on_degraded_paths(monkeypatch):
+    from utils.observability import fallback
+
+    counter = MagicMock()
+    monkeypatch.setattr(fallback, 'OMI_FALLBACK_TOTAL', counter)
+    _decide(jev=lambda: None, model=_failed_model)
+    assert counter.labels.call_count == 2
+    counter.labels.assert_any_call(
+        component='conversation_relevance',
+        from_mode='jev',
+        to_mode='model',
+        reason='unavailable',
+        outcome='degraded',
+    )
+    counter.labels.assert_any_call(
+        component='conversation_relevance',
+        from_mode='model',
+        to_mode='deterministic',
+        reason='transport_error',
+        outcome='degraded',
+    )
+    assert counter.labels.return_value.inc.call_count == 2
+
+
+def test_chain_accepts_another_arm_without_changing_the_runner():
+    from utils.conversations.relevance import DecisionArm, _decision_chain
+
+    skipped = MagicMock()
+    answer = RelevanceDecision('keep', 'model', 'model_keep', TRIGGER)
+    assert (
+        _decision_chain(
+            [
+                DecisionArm('unavailable', lambda: False, skipped),
+                DecisionArm('no_answer', lambda: True, lambda: None),
+                DecisionArm('future_provider', lambda: True, lambda: answer),
+                DecisionArm('unused', lambda: True, skipped, paid=False),
+            ]
+        )
+        == answer
+    )
+    skipped.assert_not_called()
