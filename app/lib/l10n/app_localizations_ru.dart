@@ -13545,4 +13545,28 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Не удалось подвести итоги этого разговора';
+
+  @override
+  String get singlePress => 'Одинарное нажатие';
+
+  @override
+  String get singlePressAction => 'Действие одинарного нажатия';
+
+  @override
+  String get triplePress => 'Тройное нажатие';
+
+  @override
+  String get triplePressAction => 'Действие тройного нажатия';
+
+  @override
+  String get longPress => 'Долгое нажатие';
+
+  @override
+  String get turnOnOff => 'Включение / Выключение';
+
+  @override
+  String get askQuestion => 'Задать вопрос';
+
+  @override
+  String get longPressPowerWarning => 'Долгое нажатие включает/выключает устройство и не настраивается.';
 }

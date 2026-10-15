@@ -11562,5 +11562,13 @@
     "activityNewItem": "Bago",
     "activityNeedsAttention": "Kailangang tingnan",
     "activityRetryAll": "Subukan muli lahat",
-    "attentionSummaryFailed": "Hindi ma-summarize ang usapang ito"
+    "attentionSummaryFailed": "Hindi ma-summarize ang usapang ito",
+"singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "turnOnOff": "Turn On/Off",
+    "askQuestion": "Ask Question",
+    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized."
 }

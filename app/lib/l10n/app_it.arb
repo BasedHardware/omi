@@ -4139,5 +4139,13 @@
     "activityNewItem": "Nuovo",
     "activityNeedsAttention": "Richiede attenzione",
     "activityRetryAll": "Riprova tutto",
-    "attentionSummaryFailed": "Impossibile riassumere questa conversazione"
+    "attentionSummaryFailed": "Impossibile riassumere questa conversazione",
+"singlePress": "Pressione singola",
+    "singlePressAction": "Azione pressione singola",
+    "triplePress": "Pressione tripla",
+    "triplePressAction": "Azione pressione tripla",
+    "longPress": "Pressione prolungata",
+    "turnOnOff": "Accendi / Spegni",
+    "askQuestion": "Fai una domanda",
+    "longPressPowerWarning": "La pressione prolungata accende/spegne il dispositivo e non può essere personalizzata."
 }

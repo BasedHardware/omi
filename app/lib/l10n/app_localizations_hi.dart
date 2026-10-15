@@ -13480,4 +13480,28 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'इस बातचीत का सारांश नहीं बन सका';
+
+  @override
+  String get singlePress => 'एक बार दबाएं';
+
+  @override
+  String get singlePressAction => 'एक बार दबाने की क्रिया';
+
+  @override
+  String get triplePress => 'तीन बार दबाएं';
+
+  @override
+  String get triplePressAction => 'तीन बार दबाने की क्रिया';
+
+  @override
+  String get longPress => 'देर तक दबाएं';
+
+  @override
+  String get turnOnOff => 'चालू / बंद करें';
+
+  @override
+  String get askQuestion => 'प्रश्न पूछें';
+
+  @override
+  String get longPressPowerWarning => 'देर तक दबाने से डिवाइस चालू/बंद होता है और इसे कस्टमाइज़ नहीं किया जा सकता है।';
 }

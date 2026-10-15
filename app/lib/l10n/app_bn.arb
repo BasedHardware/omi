@@ -11562,5 +11562,13 @@
     "activityNewItem": "নতুন",
     "activityNeedsAttention": "মনোযোগ প্রয়োজন",
     "activityRetryAll": "সবগুলো আবার চেষ্টা করুন",
-    "attentionSummaryFailed": "এই কথোপকথনের সারাংশ তৈরি করা যায়নি"
+    "attentionSummaryFailed": "এই কথোপকথনের সারাংশ তৈরি করা যায়নি",
+"singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "turnOnOff": "Turn On/Off",
+    "askQuestion": "Ask Question",
+    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized."
 }

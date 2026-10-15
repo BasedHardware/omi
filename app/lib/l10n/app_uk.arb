@@ -4139,5 +4139,13 @@
     "activityNewItem": "Нове",
     "activityNeedsAttention": "Потребує уваги",
     "activityRetryAll": "Повторити все",
-    "attentionSummaryFailed": "Не вдалося підсумувати цю розмову"
+    "attentionSummaryFailed": "Не вдалося підсумувати цю розмову",
+"singlePress": "Одинарне натискання",
+    "singlePressAction": "Дія одинарного натискання",
+    "triplePress": "Потрійне натискання",
+    "triplePressAction": "Дія потрійного натискання",
+    "longPress": "Тривале натискання",
+    "turnOnOff": "Увімкнути/Вимкнути",
+    "askQuestion": "Поставити запитання",
+    "longPressPowerWarning": "Тривале натискання вмикає/вимикає пристрій і не налаштовується."
 }

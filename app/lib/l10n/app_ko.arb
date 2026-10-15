@@ -4139,5 +4139,13 @@
     "activityNewItem": "새 항목",
     "activityNeedsAttention": "확인 필요",
     "activityRetryAll": "모두 다시 시도",
-    "attentionSummaryFailed": "이 대화를 요약하지 못했습니다"
+    "attentionSummaryFailed": "이 대화를 요약하지 못했습니다",
+"singlePress": "싱글 탭",
+    "singlePressAction": "싱글 탭 동작",
+    "triplePress": "트리플 탭",
+    "triplePressAction": "트리플 탭 동작",
+    "longPress": "길게 누르기",
+    "turnOnOff": "전원 켜기/끄기",
+    "askQuestion": "질문하기",
+    "longPressPowerWarning": "길게 누르면 전원이 켜지거나 꺼지며 사용자 지정할 수 없습니다."
 }

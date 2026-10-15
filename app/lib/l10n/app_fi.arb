@@ -4139,5 +4139,13 @@
     "activityNewItem": "Uusi",
     "activityNeedsAttention": "Vaatii huomiota",
     "activityRetryAll": "Yritä kaikkia uudelleen",
-    "attentionSummaryFailed": "Tätä keskustelua ei voitu tiivistää"
+    "attentionSummaryFailed": "Tätä keskustelua ei voitu tiivistää",
+"singlePress": "Kertapainallus",
+    "singlePressAction": "Kertapainalluksen toiminto",
+    "triplePress": "Kolmoispainallus",
+    "triplePressAction": "Kolmoispainalluksen toiminto",
+    "longPress": "Pitkä painallus",
+    "turnOnOff": "Kytke päälle/pois",
+    "askQuestion": "Esitä kysymys",
+    "longPressPowerWarning": "Pitkä painallus kytkee laitteen päälle/pois, eikä sitä voi mukauttaa."
 }

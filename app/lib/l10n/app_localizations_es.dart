@@ -13539,4 +13539,28 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'No se pudo resumir esta conversación';
+
+  @override
+  String get singlePress => 'Pulsación simple';
+
+  @override
+  String get singlePressAction => 'Acción de pulsación simple';
+
+  @override
+  String get triplePress => 'Triple pulsación';
+
+  @override
+  String get triplePressAction => 'Acción de triple pulsación';
+
+  @override
+  String get longPress => 'Pulsación larga';
+
+  @override
+  String get turnOnOff => 'Encender / Apagar';
+
+  @override
+  String get askQuestion => 'Hacer pregunta';
+
+  @override
+  String get longPressPowerWarning => 'La pulsación larga enciende/apaga el dispositivo y no se puede personalizar.';
 }

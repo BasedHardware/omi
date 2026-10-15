@@ -11562,5 +11562,13 @@
     "activityNewItem": "Новае",
     "activityNeedsAttention": "Патрабуе ўвагі",
     "activityRetryAll": "Паўтарыць усё",
-    "attentionSummaryFailed": "Не ўдалося падсумаваць гэту размову"
+    "attentionSummaryFailed": "Не ўдалося падсумаваць гэту размову",
+"singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "turnOnOff": "Turn On/Off",
+    "askQuestion": "Ask Question",
+    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized."
 }

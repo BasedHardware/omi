@@ -4139,5 +4139,13 @@
     "activityNewItem": "Jauns",
     "activityNeedsAttention": "Nepieciešama uzmanība",
     "activityRetryAll": "Mēģināt visu vēlreiz",
-    "attentionSummaryFailed": "Šo sarunu neizdevās apkopot"
+    "attentionSummaryFailed": "Šo sarunu neizdevās apkopot",
+"singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "turnOnOff": "Turn On/Off",
+    "askQuestion": "Ask Question",
+    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized."
 }

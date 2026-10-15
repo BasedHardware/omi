@@ -4139,5 +4139,13 @@
     "activityNewItem": "Nou",
     "activityNeedsAttention": "Cal atenció",
     "activityRetryAll": "Torna-ho a provar tot",
-    "attentionSummaryFailed": "No s'ha pogut resumir aquesta conversa"
+    "attentionSummaryFailed": "No s'ha pogut resumir aquesta conversa",
+"singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "turnOnOff": "Turn On/Off",
+    "askQuestion": "Ask Question",
+    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized."
 }

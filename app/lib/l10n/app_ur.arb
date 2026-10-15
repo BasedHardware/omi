@@ -11562,5 +11562,13 @@
     "activityNewItem": "نیا",
     "activityNeedsAttention": "توجہ درکار ہے",
     "activityRetryAll": "سب دوبارہ کوشش کریں",
-    "attentionSummaryFailed": "اس گفتگو کا خلاصہ نہیں بن سکا"
+    "attentionSummaryFailed": "اس گفتگو کا خلاصہ نہیں بن سکا",
+"singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "turnOnOff": "Turn On/Off",
+    "askQuestion": "Ask Question",
+    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized."
 }

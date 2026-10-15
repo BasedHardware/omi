@@ -13583,4 +13583,29 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Δεν ήταν δυνατή η σύνοψη αυτής της συνομιλίας';
+
+  @override
+  String get singlePress => 'Μονό Πάτημα';
+
+  @override
+  String get singlePressAction => 'Ενέργεια Μονού Πατήματος';
+
+  @override
+  String get triplePress => 'Τριπλό Πάτημα';
+
+  @override
+  String get triplePressAction => 'Ενέργεια Τριπλού Πατήματος';
+
+  @override
+  String get longPress => 'Παρατεταμένο Πάτημα';
+
+  @override
+  String get turnOnOff => 'Ενεργοποίηση / Απενεργοποίηση';
+
+  @override
+  String get askQuestion => 'Υποβολή Ερώτησης';
+
+  @override
+  String get longPressPowerWarning =>
+      'Το παρατεταμένο πάτημα ενεργοποιεί/απενεργοποιεί τη συσκευή και δεν προσαρμόζεται.';
 }

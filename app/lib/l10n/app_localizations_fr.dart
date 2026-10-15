@@ -13605,4 +13605,28 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Impossible de résumer cette conversation';
+
+  @override
+  String get singlePress => 'Simple appui';
+
+  @override
+  String get singlePressAction => 'Action simple appui';
+
+  @override
+  String get triplePress => 'Triple appui';
+
+  @override
+  String get triplePressAction => 'Action triple appui';
+
+  @override
+  String get longPress => 'Appui long';
+
+  @override
+  String get turnOnOff => 'Allumer / Éteindre';
+
+  @override
+  String get askQuestion => 'Poser une question';
+
+  @override
+  String get longPressPowerWarning => 'L\'appui long allume/éteint l\'appareil et ne peut pas être personnalisé.';
 }

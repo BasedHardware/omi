@@ -4174,5 +4174,13 @@
     "activityNewItem": "Новое",
     "activityNeedsAttention": "Требует внимания",
     "activityRetryAll": "Повторить все",
-    "attentionSummaryFailed": "Не удалось подвести итоги этого разговора"
+    "attentionSummaryFailed": "Не удалось подвести итоги этого разговора",
+"singlePress": "Одинарное нажатие",
+    "singlePressAction": "Действие одинарного нажатия",
+    "triplePress": "Тройное нажатие",
+    "triplePressAction": "Действие тройного нажатия",
+    "longPress": "Долгое нажатие",
+    "turnOnOff": "Включение / Выключение",
+    "askQuestion": "Задать вопрос",
+    "longPressPowerWarning": "Долгое нажатие включает/выключает устройство и не настраивается."
 }

@@ -4139,5 +4139,13 @@
     "activityNewItem": "Ново",
     "activityNeedsAttention": "Изисква внимание",
     "activityRetryAll": "Опитай всички отново",
-    "attentionSummaryFailed": "Този разговор не можа да бъде обобщен"
+    "attentionSummaryFailed": "Този разговор не можа да бъде обобщен",
+"singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "turnOnOff": "Turn On/Off",
+    "askQuestion": "Ask Question",
+    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized."
 }

@@ -4139,5 +4139,13 @@
     "activityNewItem": "Nou",
     "activityNeedsAttention": "Necesită atenție",
     "activityRetryAll": "Reîncearcă tot",
-    "attentionSummaryFailed": "Conversația nu a putut fi rezumată"
+    "attentionSummaryFailed": "Conversația nu a putut fi rezumată",
+"singlePress": "Apăsare unică",
+    "singlePressAction": "Acțiune apăsare unică",
+    "triplePress": "Apăsare triplă",
+    "triplePressAction": "Acțiune apăsare triplă",
+    "longPress": "Apăsare lungă",
+    "turnOnOff": "Pornire / Oprire",
+    "askQuestion": "Pune o întrebare",
+    "longPressPowerWarning": "Apăsarea lungă pornește/oprește dispozitivul și nu poate fi personalizată."
 }

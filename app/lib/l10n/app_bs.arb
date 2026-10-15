@@ -11562,5 +11562,13 @@
     "activityNewItem": "Novo",
     "activityNeedsAttention": "Potrebna pažnja",
     "activityRetryAll": "Pokušaj sve ponovo",
-    "attentionSummaryFailed": "Ovaj razgovor nije bilo moguće sažeti"
+    "attentionSummaryFailed": "Ovaj razgovor nije bilo moguće sažeti",
+"singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "turnOnOff": "Turn On/Off",
+    "askQuestion": "Ask Question",
+    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized."
 }

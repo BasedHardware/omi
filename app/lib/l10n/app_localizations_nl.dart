@@ -13535,4 +13535,28 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Dit gesprek kon niet worden samengevat';
+
+  @override
+  String get singlePress => 'Enkele tik';
+
+  @override
+  String get singlePressAction => 'Enkele tik actie';
+
+  @override
+  String get triplePress => 'Drievoudige tik';
+
+  @override
+  String get triplePressAction => 'Drievoudige tik actie';
+
+  @override
+  String get longPress => 'Lang indrukken';
+
+  @override
+  String get turnOnOff => 'In-/uitschakelen';
+
+  @override
+  String get askQuestion => 'Vraag stellen';
+
+  @override
+  String get longPressPowerWarning => 'Lang indrukken schakelt het apparaat in/uit en kan niet worden aangepast.';
 }
