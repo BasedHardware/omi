@@ -37,8 +37,9 @@ def reject_speaker_label(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     # The request body's person_id flows into the same document() sink as the
-    # path param; reject an unsafe id before it can form a subcollection path.
-    if data.person_id is not None and not re.fullmatch(_DOC_ID_PATTERN, data.person_id.strip()):
+    # path param; validate the exact value passed downstream — a padded or
+    # separator-carrying id is rejected outright.
+    if data.person_id is not None and not re.fullmatch(_DOC_ID_PATTERN, data.person_id):
         raise HTTPException(status_code=400, detail='invalid person_id')
     try:
         raw, resolved, removed, _before = conversations_db.assign_conversation_speaker(
@@ -52,7 +53,10 @@ def reject_speaker_label(
             rejection={'kind': data.kind, 'person_id': data.person_id},
         )
     except LookupError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
+        # Same rule as the 409 below: log the real detail, return a static one —
+        # a future raise site must not be able to regress this reflection.
+        logger.warning('speaker label reject lookup miss conv=%s speaker=%s: %s', conversation_id, speaker_id, error)
+        raise HTTPException(status_code=404, detail='Conversation or speaker not found') from error
     except PermissionError as error:
         raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.') from error
     except ValueError as error:
