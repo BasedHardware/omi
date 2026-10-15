@@ -2,16 +2,16 @@
   "version": 1,
   "images": [
     {
-      "file": "001-mobile-ios-sign-in-pendant.png",
+      "file": "001-mobile-ios-sign-in-film.png",
       "platform": "mobile-ios",
-      "description": "Sign-in opens straight away with the Omi pendant (no Get started page); local test build shows one local sign-in button",
+      "description": "Sign-in over the launch film, no Get started page (local test build shows one local sign-in button where store builds show Apple/Google)",
       "captured_by": "agent",
       "source": "manual"
     },
     {
-      "file": "002-mobile-ios-data-privacy-pendant.png",
+      "file": "002-mobile-ios-data-privacy-film.png",
       "platform": "mobile-ios",
-      "description": "Data & Privacy: the Omi pendant, centred headline, Continue at the standard height",
+      "description": "Data & Privacy over the launch film",
       "captured_by": "agent",
       "source": "manual"
     },

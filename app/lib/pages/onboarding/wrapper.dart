@@ -24,6 +24,7 @@ import 'package:omi/pages/onboarding/primary_language/primary_language_widget.da
 import 'package:omi/pages/onboarding/complete_screen.dart';
 import 'package:omi/pages/onboarding/variants/yinka/yinka_onboarding_flow.dart';
 import 'package:omi/pages/onboarding/web_onboarding_page.dart';
+import 'package:omi/pages/onboarding/widgets/onboarding_hero_film.dart';
 import 'package:omi/pages/paywall/paywall_router.dart';
 import 'package:omi/services/experiments/onboarding_variant_gate.dart';
 import 'package:omi/services/experiments/paywall_experiment.dart';
@@ -569,27 +570,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     }
   }
 
-  /// Sign-in and the data & privacy consent: the Omi pendant at the top, on the same surface as the
-  /// rest of onboarding (no photo). The cord runs off the top edge, so the pendant hangs into view.
-  Widget _pendantHero() {
-    final media = MediaQuery.of(context);
-    return FadeTransition(
-      opacity: _backgroundFadeAnimation,
-      child: Align(
-        alignment: Alignment.topCenter,
-        child: ExcludeSemantics(
-          child: Assets.images.omiPendantGlow.image(
-            key: const Key('onboarding_pendant_hero'),
-            width: media.size.width,
-            height: media.size.height * 0.6,
-            fit: BoxFit.cover,
-            alignment: Alignment.topCenter,
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _background() {
     final media = MediaQuery.of(context);
     return FadeTransition(
@@ -737,9 +717,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           backgroundColor: OmiColors.surface0,
           body: Stack(
             children: [
-              // Sign-in and consent (before any onboarding arm): the Omi pendant on the plain surface.
+              // Sign-in and consent (before any onboarding arm): the launch film behind white type.
               if (index == kAuthPage || index == kAiConsentPage)
-                _pendantHero()
+                const OnboardingHeroFilm()
               else if (showBackground)
                 _background(),
               OnboardingStepLayout(

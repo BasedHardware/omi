@@ -249,10 +249,6 @@ class $AssetsImagesGen {
   AssetGenImage get omiWithoutRope =>
       const AssetGenImage('assets/images/omi-without-rope.webp');
 
-  /// File path: assets/images/omi_pendant_glow.png
-  AssetGenImage get omiPendantGlow =>
-      const AssetGenImage('assets/images/omi_pendant_glow.png');
-
   /// File path: assets/images/onboarding-bg-1.webp
   AssetGenImage get onboardingBg1 =>
       const AssetGenImage('assets/images/onboarding-bg-1.webp');
@@ -388,7 +384,6 @@ class $AssetsImagesGen {
         omiWithoutRopeGreenCharging,
         omiWithoutRopeTurnedOff,
         omiWithoutRope,
-        omiPendantGlow,
         onboardingBg1,
         onboardingBg2,
         onboardingBg3,
@@ -506,7 +501,17 @@ class $AssetsTestGen {
   List<String> get values => [ttsProgressiveProbe];
 }
 
-abstract final class Assets {
+class $AssetsVideosGen {
+  const $AssetsVideosGen();
+
+  /// File path: assets/videos/onboarding_launch_loop.mp4
+  String get onboardingLaunchLoop => 'assets/videos/onboarding_launch_loop.mp4';
+
+  /// List of all assets
+  List<String> get values => [onboardingLaunchLoop];
+}
+
+class Assets {
   static const $AssetsCompetitorLogosGen competitorLogos =
       $AssetsCompetitorLogosGen();
   static const $AssetsFontsGen fonts = $AssetsFontsGen();
@@ -515,6 +520,7 @@ abstract final class Assets {
       $AssetsIntegrationAppLogosGen();
   static const $AssetsModelsGen models = $AssetsModelsGen();
   static const $AssetsTestGen test = $AssetsTestGen();
+  static const $AssetsVideosGen videos = $AssetsVideosGen();
   static const String shorebird = 'shorebird.yaml';
 
   /// List of all assets
