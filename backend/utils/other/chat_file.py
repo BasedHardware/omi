@@ -3,7 +3,7 @@ import logging
 import mimetypes
 import re
 from pathlib import Path
-from typing import Any, Dict, List, NoReturn, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, NoReturn, Optional, Protocol, Tuple, Union, cast
 
 import openai
 from openai import AsyncOpenAI
@@ -179,7 +179,7 @@ def _record_gateway_file_chat_fallback(outcome: str) -> None:
     )
 
 
-class _StreamingCallbackProtocol:
+class _StreamingCallbackProtocol(Protocol):
     """Structural protocol for streaming callbacks (AsyncStreamingCallback in retrieval.agentic)."""
 
     def put_data_nowait(self, text: str) -> None: ...
@@ -231,6 +231,11 @@ class File:
         # Add an underscore before any capital letter that is preceded by a lowercase or digit
         string = re.sub(r"(?<=[a-z0-9])([A-Z])", r"_\1", string)
         return string.lower()
+
+
+def _requested_file_limit(file_ids: List[str]) -> int:
+    # Keep the recent-file default, but include a complete ten-photo channel album.
+    return min(10, max(9, len(file_ids)))
 
 
 class FileChatTool:
@@ -294,7 +299,7 @@ class FileChatTool:
 
     def process_chat_with_file(self, question: str, file_ids: List[str]) -> str:
         """Process chat with file attachments (non-streaming, agentic tool path)."""
-        files_data = chat_db.get_chat_files_desc(self.uid, files_id=file_ids, limit=9)
+        files_data = chat_db.get_chat_files_desc(self.uid, files_id=file_ids, limit=_requested_file_limit(file_ids))
         files = safe_file_chats(files_data)
         return self._ask_files(question, files)
 
@@ -311,7 +316,11 @@ class FileChatTool:
         assert callback is not None  # streaming path always supplies a callback
         try:
             files_data = await run_blocking(
-                db_executor, chat_db.get_chat_files_desc, self.uid, files_id=file_ids, limit=9
+                db_executor,
+                chat_db.get_chat_files_desc,
+                self.uid,
+                files_id=file_ids,
+                limit=_requested_file_limit(file_ids),
             )
             files = safe_file_chats(files_data)
         except Exception:
