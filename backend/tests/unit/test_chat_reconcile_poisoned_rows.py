@@ -18,7 +18,6 @@ import database.chat as chat_db
 from routers import chat_sessions as chat_sessions_router
 from utils.other import endpoints as auth
 
-
 UID = 'uid-reconcile'
 VALID = {
     'id': 'm1',
@@ -44,9 +43,7 @@ def test_poisoned_rows_are_dropped_not_500(client, monkeypatch):
         'not-a-dict',
         {'id': 'm3', 'created_at': 'garbage', 'sender': 'human', 'type': 'text', 'text': 'x' * 3},
     ]
-    monkeypatch.setattr(
-        chat_db, 'get_messages_reconcile_page', lambda *a, **k: (rows, 'cursor-2', True)
-    )
+    monkeypatch.setattr(chat_db, 'get_messages_reconcile_page', lambda *a, **k: (rows, 'cursor-2', True))
     response = client.get('/v2/desktop/messages/reconcile')
     assert response.status_code == 200
     body = response.json()
