@@ -311,10 +311,10 @@ class OmiBleManager private constructor(private val application: Application) {
     fun connectGatt(address: String, autoConnect: Boolean): BluetoothGatt? {
         val addr = address.uppercase()
         val adapter = bluetoothAdapter ?: return null
-        // Use getRemoteLeDevice with ADDRESS_TYPE_RANDOM to specify the correct address type.
+        // Prefer the scan-discovered BluetoothDevice (which preserves the air-observed address type
+        // for public peripherals like OMI Glass); fall back to getRemoteLeDevice with ADDRESS_TYPE_RANDOM on API 34+.
         val device = discoveredDevices[addr] ?: if (android.os.Build.VERSION.SDK_INT >= 34) {
-            val addressType = determineBleAddressType(addr)
-            adapter.getRemoteLeDevice(addr, addressType)
+            adapter.getRemoteLeDevice(addr, BluetoothDevice.ADDRESS_TYPE_RANDOM)
         } else {
             adapter.getRemoteDevice(addr)
         }
