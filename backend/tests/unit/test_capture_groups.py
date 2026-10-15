@@ -234,8 +234,11 @@ def test_delete_conversation_leaves_its_group_first(monkeypatch):
     fake_db = MagicMock()
     overlay_ref = MagicMock()
     owner = fake_db.collection.return_value.document.return_value
-    owner.collection.side_effect = lambda name: SimpleNamespace(
-        document=lambda key: fake_ref if name == 'conversations' else overlay_ref
+    captures, overlays = MagicMock(), MagicMock()
+    captures.document.return_value = fake_ref
+    overlays.document.return_value = overlay_ref
+    owner.collection.side_effect = lambda name: {'conversations': captures, 'transcript_corrections': overlays}.get(
+        name, MagicMock()
     )
     monkeypatch.setattr(conversations_db, 'db', fake_db)
     monkeypatch.setattr(conversations_db, '_delete_conversation_search_index', lambda *a: None)

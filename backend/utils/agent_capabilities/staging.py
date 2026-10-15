@@ -86,6 +86,11 @@ async def stage(
     source = {'records': scoped}
     # Current snapshots are checked at proposal time and fenced again at commit.
     fences = await run_blocking(db_executor, dream_tools.proposal_fences, uid, source)
+    if isinstance(operation, HarnessEdit) and operation.kind == 'merge_people':
+        for ref in (operation.target, operation.other):
+            node = fences.get('knowledge_nodes/' + records[base_ref(ref)]['entity_id'])
+            if node and node.get('redirect_entity_id'):
+                raise ValueError('agent_person_already_merged')
     if len(json.dumps({'source': source, 'fences': fences}, default=str, ensure_ascii=False).encode()) > 256000:
         raise ValueError('dream_proposal_byte_budget')
     await run_blocking(db_executor, dream_tools.revalidate_proposal, uid, source)

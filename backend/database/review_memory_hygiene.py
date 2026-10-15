@@ -149,6 +149,9 @@ def record_change(uid, change, edit, edit_key, *, expected_records=None):
     # other/after); the apply path must make the same decision on the same
     # normalized value or it will try to create a blank replacement tail.
     replacement_text = edit.after.strip() if edit.after else ''
+    merging = edit.kind == 'merge_memories'
+    if merging and (not other_id or other_id == target_id or not replacement_text):
+        raise store.ReviewConflict('A memory merge requires two facts and combined text')
     new_id = (
         'mem_' + deterministic_contract_id('dream-memory-supersede', {'uid': uid, 'key': edit_key})[:32]
         if replacement_text
@@ -181,15 +184,22 @@ def record_change(uid, change, edit, edit_key, *, expected_records=None):
             raise store.ReviewConflict('Memory has a newer edit')
         now = max(datetime.now(timezone.utc), target.updated_at, target.valid_from or target.captured_at)
         after = deepcopy(before)
+        other = None
         if other_id:
             other = fact(uid, other_id, before[other_id])
             if other.status != MemoryItemStatus.active or any(
                 getattr(target, field) != getattr(other, field)
-                for field in ('visibility', 'subject_scope', 'subject_entity_id', 'slot')
+                for field in ('visibility', 'subject_scope', 'subject_entity_id', 'slot', 'tier')
             ):
                 raise store.ReviewConflict('Replacement must be an active fact for the same subject and attribute')
-            if (other.valid_from or other.captured_at) <= (target.valid_from or target.captured_at):
+            if not merging and (other.valid_from or other.captured_at) <= (target.valid_from or target.captured_at):
                 raise store.ReviewConflict('Replacement fact must be newer')
+        predecessors = [target]
+        if merging:
+            if other is None:
+                raise store.ReviewConflict('Canonical merge sources missing')
+            predecessors.append(other)
+        inherited_evidence = list({ev.evidence_id: ev for source in predecessors for ev in source.evidence}.values())
         new_evidence: list = []
         if new_id:
             receipt = (
@@ -210,11 +220,11 @@ def record_change(uid, change, edit, edit_key, *, expected_records=None):
             replacement_fields = {
                 'memory_id': new_id,
                 'content': replacement_text,
-                'evidence': [*new_evidence, *target.evidence],
+                'evidence': [*new_evidence, *inherited_evidence],
                 'normalized_content_key': normalized_memory_content_key(replacement_text),
                 'content_hash': memory_content_hash(
                     content=replacement_text,
-                    evidence_ids=[ev.evidence_id for ev in [*new_evidence, *target.evidence]],
+                    evidence_ids=[ev.evidence_id for ev in [*new_evidence, *inherited_evidence]],
                 ),
                 'captured_at': now,
                 'updated_at': now,
@@ -246,7 +256,9 @@ def record_change(uid, change, edit, edit_key, *, expected_records=None):
                 'graph_plan_hash': None,
                 'source_commit_id': None,
                 'source_commit_sequence': None,
-                'sensitivity_labels': _replacement_sensitivity_labels(replacement_text, target.sensitivity_labels),
+                'sensitivity_labels': _replacement_sensitivity_labels(
+                    replacement_text, [label for source in predecessors for label in source.sensitivity_labels]
+                ),
             }
             if target.tier == MemoryLayer.short_term:
                 # A fresh tail earns a fresh short-term window from its own
@@ -264,8 +276,18 @@ def record_change(uid, change, edit, edit_key, *, expected_records=None):
             'updated_at': now,
             'version': target.version + 1,
             'item_revision': target.item_revision + 1,
-            'superseded_by': other_id or new_id,
+            'superseded_by': new_id if merging else other_id or new_id,
         }
+        if merging and other is not None:
+            after[other_id] = {
+                **before[other_id],
+                'status': 'superseded',
+                'valid_to': now,
+                'updated_at': now,
+                'version': other.version + 1,
+                'item_revision': other.item_revision + 1,
+                'superseded_by': new_id,
+            }
         # Commit only changed rows; existing newer facts stay byte-for-byte intact.
         changed = [fact(uid, key, row) for key, row in after.items() if row != before[key]]
         generation, committed = commit_items(
@@ -300,7 +322,8 @@ def record_change(uid, change, edit, edit_key, *, expected_records=None):
             'revision': 0,
         }
         data['memory_hygiene']['after_graphs'] = {
-            key: (None if key == target_id or key == new_id else graph) for key, graph in graphs.items()
+            key: (None if key in {target_id, new_id} or (merging and key == other_id) else graph)
+            for key, graph in graphs.items()
         }
         tx.set(ref, store.encode_doc(uid, data))
         return change

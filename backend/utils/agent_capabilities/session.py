@@ -61,7 +61,7 @@ def retry_identity(name, arguments):
     if not isinstance(value, dict):
         return json.dumps([name, 'invalid_shape'])
     return json.dumps(
-        [name, *(value.get(key) for key in ('kind', 'target', 'source_ref', 'before', 'after', 'other', 'spelling'))],
+        [name, *(value.get(key) for key in ('kind', 'target', 'source_ref', 'spelling'))],
         sort_keys=True,
     )
 

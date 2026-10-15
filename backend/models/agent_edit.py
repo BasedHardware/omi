@@ -82,6 +82,10 @@ class HarnessEdit(Strict):
         elif self.kind in {'merge_tasks', 'merge_conversations'}:
             if not self.other or self.other == self.target or self.after:
                 raise ValueError('A merge needs a distinct other ref and preserves its text')
+        elif self.kind == 'merge_memories':
+            if not self.other or self.other == self.target or not self.after.strip() or len(self.after) > 2000:
+                raise ValueError('A memory merge requires a distinct other ref and combined fact text')
+            Edit.model_validate(payload)
         elif self.kind in {'dismiss_person', 'retire_task'}:
             if self.other or self.after:
                 raise ValueError('Dismissal and retirement change status only')

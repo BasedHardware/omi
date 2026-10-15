@@ -112,7 +112,11 @@ def validate_cleanup(edit, records):
         if collection != 'conversations' or row.get('status') != 'completed' or row.get('language_user_set'):
             raise ValueError('dream_invalid_language_target')
         parts = edit.after.split('-')
-        if not 2 <= len(parts[0]) <= 3 or any(not part.isalpha() or not 2 <= len(part) <= 8 for part in parts):
+        if (
+            not 2 <= len(parts[0]) <= 3
+            or not parts[0].isalpha()
+            or any(not part.isascii() or not 2 <= len(part) <= 8 or not part.isalnum() for part in parts)
+        ):
             raise ValueError('dream_invalid_language_tag')
         if edit.before != (row.get('language') or '') or edit.before == edit.after:
             raise ValueError('dream_language_changed')

@@ -6,6 +6,9 @@ for existing clients and exposes original_text alongside corrected text.
 
 from copy import deepcopy
 from datetime import datetime, timezone
+import hashlib
+import json
+import zlib
 
 from database import review_store
 from models.agent_refs import cited_value
@@ -80,7 +83,41 @@ def project(uid, conversation, *, firestore_client=None):
         conversation['transcript_segments'], load_entries(uid, key, firestore_client=firestore_client)
     )
     conversation['transcript_segments'] = segments
+    filter_projected_translations(uid, conversation)
     return conversation
+
+
+def filter_projected_translations(uid, conversation):
+    from database.conversations import _reveal_json_value  # pyright: ignore[reportPrivateUsage]
+
+    try:
+        raw = conversation.get('translation_materializations')
+        metadata = _reveal_json_value(raw, uid, True) if raw is not None else {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+    except (ValueError, TypeError, json.JSONDecodeError, zlib.error):
+        metadata = {}
+    for index, segment in enumerate(conversation['transcript_segments']):
+        if 'translations' not in segment:
+            continue
+        key = segment.get('id') or legacy_conversation_segment_id(conversation['id'], index)
+        targets = metadata.get(key) or {}
+        if not isinstance(targets, dict):
+            targets = {}
+        source = hashlib.sha256(segment.get('text', '').encode()).hexdigest()
+        segment['translations'] = [
+            translation
+            for translation in segment.get('translations') or []
+            if (
+                (
+                    isinstance(targets.get(translation.get('lang')), dict)
+                    and targets[translation['lang']].get('source') == source
+                    and targets[translation['lang']].get('translation')
+                    == hashlib.sha256(translation.get('text', '').encode()).hexdigest()
+                )
+                or (translation.get('lang') not in targets and segment['text'] == segment['original_text'])
+            )
+        ]
 
 
 def load_entries(uid, conversation_id, *, firestore_client=None, transaction=None):

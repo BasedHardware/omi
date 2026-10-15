@@ -219,7 +219,7 @@ def validate_edit(edit, records, *, authority='dream'):
                 raise ValueError('dream_missing_duplicate')
             if any(
                 row.get(field) != other.get(field)
-                for field in ('visibility', 'subject_scope', 'subject_entity_id', 'slot')
+                for field in ('visibility', 'subject_scope', 'subject_entity_id', 'slot', 'memory_tier')
             ):
                 raise review_store.ReviewConflict('Duplicate facts must share visibility and subject')
     elif edit.kind in {'merge_people', 'entity_summary'}:
@@ -286,8 +286,13 @@ def apply_edit(uid, edit, records, *, expected_records=None, authority='user'):
     change = dream_change_view.edit_change(uid, edit, records, key)
     if isinstance(edit, HarnessEdit) and edit.kind in dream_cleanup_edits.KINDS:
         return dream_cleanup_edits.apply_cleanup(uid, edit, records, change, key, expected_records=expected_records)
-    if edit.kind in {'retire_memory', 'supersede_memory'}:
-        change.refs = [ChangeRef(type='memory', id=base_ref(edit.target).split('/', 1)[1], label=proposal_label(row))]
+    if edit.kind in {'retire_memory', 'supersede_memory'} or (
+        isinstance(edit, HarnessEdit) and edit.kind == 'merge_memories'
+    ):
+        change.refs = [
+            ChangeRef(type='memory', id=base_ref(ref).split('/', 1)[1], label=proposal_label(records[base_ref(ref)]))
+            for ref in (edit.target, *([edit.other] if edit.kind == 'merge_memories' else []))
+        ]
         review_memory_hygiene.record_change(uid, change, edit, key, expected_records=expected_records)
         return 'applied'
     if edit.kind == 'entity_summary':
@@ -605,7 +610,7 @@ def validate_canonical_proposal(uid, edit):
         raise review_store.ReviewConflict('Only active canonical facts may be proposed')
     if len(sources) == 2 and any(
         getattr(sources[0], field) != getattr(sources[1], field)
-        for field in ('visibility', 'subject_scope', 'subject_entity_id', 'slot')
+        for field in ('visibility', 'subject_scope', 'subject_entity_id', 'slot', 'tier')
     ):
         raise review_store.ReviewConflict('Duplicate facts must share visibility and subject')
 

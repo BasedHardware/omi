@@ -175,6 +175,70 @@ def test_apply_undo_redo_exactness(hygiene, operation):
     assert {row['payload']['action'] for row in events} == {'upsert', 'delete'}
 
 
+def test_verified_duplicate_merge_commits_both_facts_and_restores_exactly(hygiene):
+    db, _ = hygiene
+    keys = [('users', UID, 'memory_items', key) for key in ('old', 'new')]
+    before = [deepcopy(db.rows[key]) for key in keys]
+    operation = edit('merge_memories', other=NREF, after='Lives in the invented New Toytown.')
+    report = run(operation)
+    assert report['outcomes'][0]['status'] == 'applied', report
+    after = [deepcopy(db.rows[key]) for key in keys]
+    assert all(row['status'] == 'superseded' for row in after)
+    assert after[0]['superseded_by'] == after[1]['superseded_by']
+    assert after[0]['ledger_commit_id'] == after[1]['ledger_commit_id']
+    tail = db.rows[('users', UID, 'memory_items', after[0]['superseded_by'])]
+    assert tail['status'] == 'active' and tail['write_reason'] == 'daily_reconciliation'
+    journal = next(
+        review_store.decode_doc(UID, raw) for path, raw in db.rows.items() if path[2:3] == ('review_changes',)
+    )
+    assert journal['memory_hygiene']['before']['old'] == before[0]
+    assert journal['memory_hygiene']['before']['new'] == before[1]
+    change_id = journal['change']['change_id']
+    review_changes.set_undone(UID, change_id, True)
+    assert [sans_stamps(db.rows[key]) for key in keys] == [sans_stamps(row) for row in before]
+    assert db.rows[('users', UID, 'memory_items', tail['memory_id'])]['status'] == 'superseded'
+    review_changes.set_undone(UID, change_id, False)
+    assert [sans_stamps(db.rows[key]) for key in keys] == [sans_stamps(row) for row in after]
+
+
+def test_memory_merge_refuses_a_changed_second_source_without_partial_writes(hygiene):
+    db, sources = hygiene
+    records = sources()[0]
+    fences = dream_tools.proposal_fences(UID, {'records': records})
+    db.rows[('users', UID, 'memory_items', 'new')]['content'] = 'A later synthetic edit'
+    before = deepcopy(db.rows)
+    with pytest.raises(review_store.ReviewConflict):
+        dream_tools.apply_edit(
+            UID, edit('merge_memories', other=NREF, after='Synthetic combined fact'), records, expected_records=fences
+        )
+    assert db.rows == before
+
+
+@pytest.mark.parametrize(
+    'content,reason',
+    [
+        ('uh um invented extraction fragment', 'Synthetic extraction junk rather than low importance'),
+        ('Owner speaks Martian.', 'Another synthetic speaker said this about themselves'),
+    ],
+)
+def test_scripted_garbage_and_misattribution_replay_retires_with_exact_undo(hygiene, content, reason):
+    db, _ = hygiene
+    path = ('users', UID, 'memory_items', 'old')
+    db.rows[path] = memory('old', content)
+    if content == 'Owner speaks Martian.':
+        db.rows[('users', UID, 'conversations', 'one')]['transcript_segments'][0].update(
+            text='I am the invented other speaker. I speak Martian as an invented language.', is_user=False
+        )
+    before = deepcopy(db.rows[path])
+    report = run(edit(reason=reason))
+    assert report['outcomes'][0]['status'] == 'applied'
+    journal = next(
+        review_store.decode_doc(UID, row) for path, row in db.rows.items() if path[2:3] == ('review_changes',)
+    )
+    review_changes.set_undone(UID, journal['change']['change_id'], True)
+    assert sans_stamps(db.rows[path]) == sans_stamps(before)
+
+
 @pytest.mark.parametrize(
     'kw',
     [

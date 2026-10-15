@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import json
 import math
 import os
+import pytest
 from pathlib import Path
 
 from config.dream_session import SessionLimits
@@ -20,6 +21,136 @@ from utils import dream_agent, dream_seed
 from utils.agent_capabilities.evidence import EvidenceRecords
 from utils.dream_harness_transport import MAIN_LANE, input_bytes
 from utils.llm.shaped_agent import Turn
+
+
+@pytest.mark.parametrize(
+    'kind,fields',
+    [
+        ('dismiss_person', {}),
+        ('retire_task', {}),
+        ('merge_tasks', {'other': 'action_items/two'}),
+        ('merge_conversations', {'other': 'conversations/two'}),
+        ('set_language', {'before': 'xx', 'after': 'en'}),
+    ],
+)
+def test_scripted_cleanup_corpus_verifies_applies_and_undoes(runtime, kind, fields):
+    from tests.unit.test_dream_cleanup_edits import edit
+
+    operation = edit(kind, **fields)
+    if kind == 'retire_task':
+        operation = operation.model_copy(update={'reason': 'Another speaker\'s obligation was filed to the owner'})
+        runtime.rows[('users', UID, 'conversations', 'one')]['transcript_segments'][0].update(
+            text='I am the invented other speaker. I will draft the workshop outline for my own project, and this obligation belongs to me.',
+            is_user=False,
+        )
+    elif kind == 'merge_tasks':
+        runtime.rows[('users', UID, 'action_items', 'two')][
+            'description'
+        ] = 'Create the outline for the invented workshop.'
+    original = deepcopy(runtime.rows[('users', UID, *operation.target.split('/'))])
+
+    async def model(uid, lane, mount, messages):
+        if lane == MAIN_LANE:
+            return tool_turn(
+                [
+                    call('propose_edit', {'edit': operation.model_dump(mode='json')}),
+                    call('finish', {'summary': 'Synthetic cleanup'}, 2),
+                ]
+            )
+        batch = json.loads(messages[-1]['content'].split('\n', 1)[1])
+        return Turn(
+            tokens=10,
+            value=VerificationBatch(
+                decisions=[
+                    Verification(id=row['id'], agree=True, reason='Scripted synthetic evidence') for row in batch
+                ]
+            ),
+        )
+
+    report = asyncio.run(dream_agent.run_pass(UID, turn=model))
+    assert report['outcomes'][0]['status'] == 'applied', report
+    assert report['verifier_calls'] == 2
+    change = next(
+        review_store.decode_doc(UID, row)['change']
+        for path, row in runtime.rows.items()
+        if path[2:3] == ('review_changes',)
+    )
+    review_changes.set_undone(UID, change['change_id'], True)
+    assert runtime.rows[('users', UID, *operation.target.split('/'))] == original
+
+
+@pytest.mark.parametrize('kind', ['merge_people', 'vocabulary'])
+def test_scripted_split_person_and_vocabulary_corpus(runtime, kind):
+    from tests.unit.test_dream_cleanup_edits import person_merge_records, person_merge
+
+    if kind == 'merge_people':
+        person_merge_records(runtime)
+        tool = call('propose_edit', {'edit': person_merge().model_dump(mode='json')})
+    else:
+        tool = call(
+            'learn_term',
+            {'term': {'kind': 'project', 'spelling': 'Qorbi', 'aliases': [], 'evidence': ['conversations/one']}},
+        )
+
+    async def model(uid, lane, mount, messages):
+        if lane == MAIN_LANE:
+            return tool_turn([tool, call('finish', {'summary': 'Synthetic identity and vocabulary'}, 2)])
+        batch = json.loads(messages[-1]['content'].split('\n', 1)[1])
+        return Turn(
+            tokens=10,
+            value=VerificationBatch(
+                decisions=[
+                    Verification(id=row['id'], agree=True, reason='Scripted synthetic evidence') for row in batch
+                ]
+            ),
+        )
+
+    report = asyncio.run(dream_agent.run_pass(UID, turn=model))
+    assert report['outcomes'][0]['status'] == 'applied', report
+    change = next(
+        review_store.decode_doc(UID, row)['change']
+        for path, row in runtime.rows.items()
+        if path[2:3] == ('review_changes',)
+    )
+    review_changes.set_undone(UID, change['change_id'], True)
+    if kind == 'merge_people':
+        assert 'redirect_entity_id' not in runtime.rows[('users', UID, 'knowledge_nodes', 'person:right')]
+    else:
+        assert not review_store.decode_doc(UID, runtime.rows[('users', UID, 'dream_vocabulary', 'current')]).get(
+            'source'
+        )
+
+
+@pytest.mark.parametrize('size,bucket', [(8, 'light'), (40, 'medium'), (90, 'heavy')])
+def test_scripted_session_cost_by_bucket(runtime, monkeypatch, size, bucket):
+    from tests.unit.test_dream_harness_runtime import scripted
+
+    source = dream_seed.load
+
+    def seed(uid, caps):
+        data, records, dirty, _ = source(uid, caps)
+        return data, records, dirty, SessionLimits.for_size(size)
+
+    monkeypatch.setattr(dream_seed, 'load', seed)
+    model = scripted([True, True])
+
+    async def counted(uid, lane, mount, messages):
+        return measured(await model(uid, lane, mount, messages), mount, messages)
+
+    report = asyncio.run(dream_agent.run_pass(UID, turn=counted))
+    assert report['status'] == 'complete' and report['outcomes'][0]['status'] == 'applied', report
+    assert report['size_bucket'] == bucket and report['turns'] == 1 and report['verifier_calls'] == 2
+    assert report['accounted_tokens'] <= SessionLimits.for_size(size).tokens
+    destination = os.getenv('DREAM_SYNTHETIC_BUCKET_RECEIPTS')
+    if destination:
+        path = Path(destination)
+        data = json.loads(path.read_text()) if path.exists() else {}
+        data[bucket] = {
+            key: report[key]
+            for key in ('size_bucket', 'turns', 'verifier_calls', 'accounted_tokens', 'cost_usd_upper_bound')
+        }
+        path.write_text(json.dumps(data, indent=2) + '\n')
+
 
 NOW = datetime(2026, 10, 14, tzinfo=timezone.utc)
 

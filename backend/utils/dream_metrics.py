@@ -111,6 +111,7 @@ DREAM_VALUE_ERROR_CODES = (
     | frozenset(
         [
             'dream_argument_budget',
+            'agent_person_already_merged',
             'dream_capacity_wait',
             'dream_capture_speech_insufficient',
             'dream_capture_speech_mismatch',

@@ -323,7 +323,9 @@ def update_owner_recognition_diagnostics(uid: str, conversation_id: str, diagnos
     return run_transactional(client, persist)
 
 
-def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
+def _prepare_conversation_for_write(
+    data: Dict[str, Any], uid: str, level: str, *, preserve_transcript_identity: bool = False
+) -> Dict[str, Any]:
     data = copy.deepcopy(data)
     if owner_diagnostics.FIELD in data:
         try:
@@ -355,7 +357,8 @@ def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) 
         for segment in segments:
             segment.pop(match_scores.FIELD, None)
     if 'transcript_segments' in data and isinstance(data['transcript_segments'], list):
-        data['transcript_segments'] = canonicalize_transcript_segments_for_storage(data['transcript_segments'])
+        if not preserve_transcript_identity:
+            data['transcript_segments'] = canonicalize_transcript_segments_for_storage(data['transcript_segments'])
         from utils.conversations.speaker_grouping_storage import protect_segments
 
         protect_segments(data['transcript_segments'], uid)
@@ -744,6 +747,13 @@ def _reapply_current_manual_assignments(uid: str, write_data: dict, existing: di
     write_data.pop('manual_speaker_assignments', None)
     write_data.pop('manual_speaker_assignments_compressed', None)
     if 'transcript_segments' not in write_data:
+        return
+    if existing.get('has_transcript_corrections'):
+        # A reprocessor owns generated output, not captured speech or its legacy
+        # anchors. Keep the exact committed blob and encoding across snapshots.
+        for field in ('transcript_segments', 'transcript_segments_compressed', 'data_protection_level'):
+            if field in existing:
+                write_data[field] = existing[field]
         return
     level = existing.get('data_protection_level') or write_data.get('data_protection_level') or 'standard'
     receipt = decode_manual_speaker_assignments(
@@ -2124,7 +2134,9 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
                     current['manual_speaker_assignments'],
                     bool(current.get('manual_speaker_assignments_compressed')),
                 )
-            prepared = _prepare_conversation_for_write(payload, uid, target_level)
+            prepared = _prepare_conversation_for_write(
+                payload, uid, target_level, preserve_transcript_identity=bool(current.get('has_transcript_corrections'))
+            )
             guard_match_score_size(prepared, current, getattr(doc_snapshot.reference, 'path', None))
             if had_match_scores and match_scores.FIELD not in prepared:
                 # Failed re-encryption must not retain a standard blob after
@@ -3001,7 +3013,12 @@ def assign_conversation_speaker(
         extract_learning_receipt_markers(receipt, current)
         written = {'transcript_segments': segments, 'manual_speaker_assignments': receipt, **owner_updates}
         current.update(owner_updates)
-        payload = _prepare_conversation_for_write(written, uid, raw.get('data_protection_level', 'standard'))
+        payload = _prepare_conversation_for_write(
+            written,
+            uid,
+            raw.get('data_protection_level', 'standard'),
+            preserve_transcript_identity=bool(raw.get('has_transcript_corrections')),
+        )
         clear_client_processing(payload)
         guard_match_score_size(payload, raw, getattr(ref, 'path', None))
         transaction.update(ref, payload)
@@ -3247,7 +3264,9 @@ def update_conversation_segments(
             update_payload['started_at'] = started_at
         # With the marker already present, a stale started_at is ignored: the
         # origin was pinned with the marker and must not move.
-        prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
+        prepared_payload = _prepare_conversation_for_write(
+            update_payload, uid, doc_level, preserve_transcript_identity=bool(current.get('has_transcript_corrections'))
+        )
         if invalidate_client_processing:
             clear_client_processing(prepared_payload)
         elif any(current.get(field) is not None for field in PROJECTION_FAMILY_FIELDS):
@@ -3345,8 +3364,23 @@ def materialize_translation(
         segments = _decode_transcript_segments_strict(
             uid, current.get('transcript_segments', []), bool(current.get('transcript_segments_compressed'))
         )
-        selected = next((segment for segment in segments if segment.get('id') == segment_id), None)
-        if selected is None or selected.get('text') != source_text:
+        selected = next(
+            (
+                segment
+                for index, segment in enumerate(segments)
+                if (segment.get('id') or legacy_conversation_segment_id(conversation_id, index)) == segment_id
+            ),
+            None,
+        )
+        projected = segments
+        if current.get('has_transcript_corrections'):
+            from utils.agent_capabilities.transcripts import apply_entries, load_entries
+
+            projected = apply_entries(
+                segments, load_entries(uid, conversation_id, firestore_client=client, transaction=transaction)
+            )
+        visible = projected[segments.index(selected)] if selected is not None else None
+        if visible is None or visible.get('text') != source_text:
             return None
         raw_metadata = current.get('translation_materializations')
         try:
@@ -3385,14 +3419,23 @@ def materialize_translation(
         }
         metadata[segment_id] = by_target
         level = current.get('data_protection_level', 'standard')
-        payload = _prepare_conversation_for_write({'transcript_segments': segments}, uid, level)
+        payload = _prepare_conversation_for_write(
+            {'transcript_segments': segments},
+            uid,
+            level,
+            preserve_transcript_identity=bool(current.get('has_transcript_corrections')),
+        )
         payload['translation_materializations'] = _protect_json_value(metadata, uid, 'enhanced')
         payload['translation_materializations_compressed'] = True
         if reservation is not None and not reservation_is_current(reservation):
             return None
         guard_match_score_size(payload, current, getattr(doc_ref, 'path', None))
         transaction.update(doc_ref, payload)
-        return selected
+        return {
+            **selected,
+            'text': source_text,
+            **({'original_text': selected['text']} if current.get('has_transcript_corrections') else {}),
+        }
 
     return run_transactional(client, _write)
 
@@ -3675,7 +3718,7 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
 
     # Sort each provider's segments by start time, tolerating a legacy/partial doc missing 'start'
     # (a bare x['start'] would KeyError and 500 the whole transcripts response).
-    return {
+    results = {
         'deepgram': list(sorted([doc.to_dict() for doc in deepgram_ref.stream()], key=lambda x: x.get('start', 0))),
         'soniox': list(sorted([doc.to_dict() for doc in soniox_ref.stream()], key=lambda x: x.get('start', 0))),
         'speechmatics': list(
@@ -3685,6 +3728,12 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
         'prerecorded': list(
             sorted([doc.to_dict() for doc in prerecorded_ref.stream()], key=lambda x: x.get('start', 0))
         ),
+    }
+    # These are separate diagnostic provider records, with no primary-capture
+    # overlay anchors. Their identity projection still exposes captured text.
+    return {
+        provider: [{**segment, 'original_text': segment.get('text', '')} for segment in segments]
+        for provider, segments in results.items()
     }
 
 
@@ -3762,8 +3811,23 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
         score_snapshots.clear()
 
         def encode(payload):
-            encoded = _prepare_conversation_for_write(payload, uid, payload.get('data_protection_level') or 'enhanced')
             current = score_snapshots.get(payload.get('id'))
+            if current and current.get('has_transcript_corrections'):
+                from utils.agent_capabilities.transcripts import load_entries, preserves_correction_anchors
+                from utils.sync.assignment_errors import SyncAssignmentConflict
+
+                captured = decode_transcript_segments_verified(
+                    uid, current.get('transcript_segments') or [], bool(current.get('transcript_segments_compressed'))
+                )
+                corrections = load_entries(uid, payload['id'], firestore_client=client, transaction=transaction)
+                if not preserves_correction_anchors(captured, payload.get('transcript_segments') or [], corrections):
+                    raise SyncAssignmentConflict('sync append changed corrected speech', subtype='other')
+            encoded = _prepare_conversation_for_write(
+                payload,
+                uid,
+                payload.get('data_protection_level') or 'enhanced',
+                preserve_transcript_identity=bool(current and current.get('has_transcript_corrections')),
+            )
             guard_match_score_size(encoded, current)
             if (
                 current
@@ -3808,7 +3872,9 @@ def eligible_merge_target(conversation: Optional[dict]) -> bool:
     conversation". Discarded rows stay eligible; the merge path reprocesses
     and revives them.
     """
-    return bool(conversation) and not is_soft_deleted(conversation)
+    return (
+        bool(conversation) and not is_soft_deleted(conversation) and not conversation.get('has_transcript_corrections')
+    )
 
 
 def select_closest_conversation(conversations, start_timestamp: int, end_timestamp: int) -> Optional[dict]:
@@ -3919,7 +3985,12 @@ def promote_final_pass_if_current(
         )
         # Derived references/materializations outside structured have their own
         # contracts. Refuse promotion until those consumers support remapping.
-        if current.get('translation_materializations') or current.get('apps_results') or current.get('note_claims'):
+        if (
+            current.get('has_transcript_corrections')
+            or current.get('translation_materializations')
+            or current.get('apps_results')
+            or current.get('note_claims')
+        ):
             return False
         # The owning write boundary reapplies the current, remapped receipt.
         patch['transcript_segments'] = apply_manual_assignments(

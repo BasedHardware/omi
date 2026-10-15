@@ -96,6 +96,9 @@ the projected transcript in a transaction that reads the overlay. Undo marks
 entries inactive; dependent later corrections cannot be reversed underneath
 their input. Old in-place Dream receipts retain their existing reversal path;
 no historical rows or receipts are silently migrated.
+Alternative-provider diagnostic segments are separate records with an identity
+projection and `original_text`; primary-capture overlay anchors do not rewrite
+those alternative recognizer outputs.
 
 New receipts fence only their captured anchors, so unrelated speech appended to
 the capture does not block Undo. Capture writers preserve corrected anchors;

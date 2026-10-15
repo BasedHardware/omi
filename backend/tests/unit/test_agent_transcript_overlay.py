@@ -128,6 +128,59 @@ def test_reprocessing_storage_never_persists_projected_text(store, monkeypatch):
     assert transcripts.originals(seen()['transcript_segments']) == original
 
 
+def test_processor_preserves_exact_legacy_capture_and_its_projection(store, monkeypatch):
+    from database.conversations import _protect_json_value
+    from models.transcript_segment import legacy_conversation_segment_id
+
+    seen, _ = setup(store, monkeypatch)
+    path = ('users', UID, 'conversations', 'one')
+    captured = [{'text': 'Qorby plans a synthetic workshop.', 'start': 0, 'end': 5}]
+    store.rows[path]['transcript_segments'] = _protect_json_value(captured, UID, 'enhanced')
+    before = deepcopy(store.rows[path])
+    assert (
+        conversations.update_conversation_segment_text(
+            UID,
+            'one',
+            legacy_conversation_segment_id('one', 0),
+            'Qorbi plans a synthetic workshop.',
+            firestore_client=store,
+        )
+        == 'ok'
+    )
+    candidate = conversations.encode_conversation_for_write(UID, seen(), 'enhanced')
+    conversations._reapply_current_manual_assignments(UID, candidate, store.rows[path])
+    assert candidate['transcript_segments'] == before['transcript_segments']
+    assert candidate['transcript_segments_compressed'] == before['transcript_segments_compressed']
+    store.rows[path].update(candidate)
+    assert seen()['transcript_segments'][0]['text'].startswith('Qorbi')
+    assert (
+        conversations.decode_transcript_segments_verified(UID, store.rows[path]['transcript_segments'], True)
+        == captured
+    )
+
+
+def test_translation_binds_to_corrected_speech_and_undo_hides_stale_translation(store, monkeypatch):
+    seen, raw = setup(store, monkeypatch)
+    tools.apply_edit(UID, correction(), {'conversations/one': seen()}, authority='user')
+    corrected = seen()['transcript_segments'][0]['text']
+    materialized = conversations.materialize_translation(
+        UID, 'one', 'segment-one', corrected, 'xx', 'Synthetic translated corrected speech', firestore_client=store
+    )
+    assert materialized['text'] == corrected and materialized['original_text'].startswith('Qorby')
+    assert seen()['transcript_segments'][0]['translations'][0]['text'] == 'Synthetic translated corrected speech'
+    journal = next(
+        review_store.decode_doc(UID, row)['change']
+        for path, row in store.rows.items()
+        if path[2:3] == ('review_changes',)
+    )
+    review_changes.set_undone(UID, journal['change_id'], True)
+    assert not seen()['transcript_segments'][0]['translations']
+    captured = conversations.decode_transcript_segments_verified(
+        UID, store.rows[('users', UID, 'conversations', 'one')]['transcript_segments'], True
+    )
+    assert captured[0]['text'].startswith('Qorby')
+
+
 def test_shared_authority_requires_dream_verification_but_user_applies_with_undo(store, monkeypatch):
     seen, raw = setup(store, monkeypatch)
     item = asyncio.run(stage(UID, correction(), {'conversations/one': seen()}, authority='user'))
@@ -202,6 +255,48 @@ def test_original_replacement_blocks_overlay_undo(store, monkeypatch):
     )
     with pytest.raises(review_store.ReviewConflict, match='Original speech changed'):
         review_changes.set_undone(UID, entry['change_id'], True)
+
+
+def test_legacy_in_place_receipt_stays_undoable_after_dependent_overlay_is_undone(store, monkeypatch):
+    from datetime import datetime, timezone
+    from models.review import ReviewChange
+    from database.review_changes import AgentEdit
+
+    seen, _ = setup(store, monkeypatch)
+    path = ('users', UID, 'conversations', 'one')
+    speech = [{'id': 'segment-one', 'start': 0, 'end': 5, 'text': 'Qorby plans. Qorbix is the correct spelling.'}]
+    store.rows[path].update(
+        conversations.encode_conversation_for_write(UID, {'transcript_segments': speech}, 'enhanced')
+    )
+    original = deepcopy(store.rows[path]['transcript_segments'])
+    historical = deepcopy(speech)
+    historical[0]['text'] = historical[0]['text'].replace('Qorby', 'Qorbi')
+    encoded = conversations.encode_conversation_for_write(UID, {'transcript_segments': historical}, 'enhanced')
+    legacy = ReviewChange(
+        change_id='synthetic-old-receipt',
+        kind='rename',
+        title='Legacy correction',
+        created_at=datetime.now(timezone.utc),
+    )
+    review_changes.record_agent_change(
+        UID,
+        legacy,
+        [
+            AgentEdit(
+                collection='conversations',
+                document_id='one',
+                patch={'transcript_segments': encoded['transcript_segments']},
+            )
+        ],
+        edit_key='synthetic-legacy-key',
+    )
+    tools.apply_edit(UID, correction(before='Qorbi', after='Qorbix'), {'conversations/one': seen()}, authority='user')
+    overlay = review_store.decode_doc(UID, store.rows[('users', UID, 'transcript_corrections', 'one')])['source'][0]
+    with pytest.raises(review_store.ReviewConflict, match='dependent newer correction'):
+        review_changes.set_undone(UID, legacy.change_id, True)
+    review_changes.set_undone(UID, overlay['change_id'], True)
+    review_changes.set_undone(UID, legacy.change_id, True)
+    assert store.rows[path]['transcript_segments'] == original
 
 
 def test_manual_edit_keeps_capture_and_restores_projection_invalidations(store, monkeypatch):

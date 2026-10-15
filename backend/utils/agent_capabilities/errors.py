@@ -37,6 +37,7 @@ SCHEMA_MESSAGES = frozenset(
         'An edit requires a nonblank reason',
         'Only memory supersession may carry effective_from',
         'A merge needs a distinct other ref and preserves its text',
+        'A memory merge requires a distinct other ref and combined fact text',
         'Dismissal and retirement change status only',
         'Language requires a bounded tag, not a second record',
         'Retirement changes status only',

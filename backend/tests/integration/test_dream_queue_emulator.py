@@ -28,11 +28,118 @@ from models.dream_edit import Edit
 pytestmark = pytest.mark.integration
 
 
+def emulator_client():
+    assert os.environ.get('FIRESTORE_EMULATOR_HOST', '').startswith(('127.0.0.1:', 'localhost:'))
+    return firestore.Client(project='demo-dream-' + uuid4().hex[:16], credentials=AnonymousCredentials())
+
+
+def test_hidden_capture_union_and_query_immutability(monkeypatch):
+    from database.conversation_visibility_counts import count_hidden
+    from google.cloud.firestore_v1 import FieldFilter
+
+    assert os.environ.get('FIRESTORE_EMULATOR_HOST', '').startswith(('127.0.0.1:', 'localhost:'))
+    database = emulator_client()
+    collection = database.collection('users').document('synthetic-count-' + str(uuid4())).collection('conversations')
+    base = {'discarded': False, 'status': 'completed', 'source': 'omi'}
+    for key, extras in [
+        ('legacy', {}),
+        ('duplicate', {'dream_duplicate_of': 'legacy'}),
+        ('both', {'deleted': True, 'dream_duplicate_of': 'legacy'}),
+        ('deleted', {'deleted': True}),
+        ('empty', {'dream_duplicate_of': ''}),
+    ]:
+        collection.document(key).set({**base, **extras})
+    deleted = collection.where(filter=FieldFilter('deleted', '==', True))
+    duplicate = collection.where(filter=FieldFilter('dream_duplicate_of', '>', ''))
+    assert {doc.id for doc in deleted.stream()} == {'both', 'deleted'}
+    assert {doc.id for doc in duplicate.stream()} == {'both', 'duplicate'}
+    assert len(list(collection.stream())) == 5
+    assert count_hidden(collection, include_discarded=False, sources=['omi']) == 3
+    assert count_hidden(collection, include_discarded=True, sources=['omi']) == 2
+    assert count_hidden(collection, include_discarded=False, sources=['other']) == 0
+
+
+def test_atomic_harness_memory_merge_and_undo_on_real_sdk(monkeypatch):
+    from database import review_changes
+    from models.agent_edit import HarnessEdit
+    from models.memory_apply import MemoryControlState, WriterMode
+    from models.product_memory import MemoryItem
+    from utils.agent_capabilities import tools
+
+    assert os.environ.get('FIRESTORE_EMULATOR_HOST', '').startswith(('127.0.0.1:', 'localhost:'))
+    database = emulator_client()
+    uid = 'synthetic-memory-merge-' + str(uuid4())
+    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
+    monkeypatch.setenv('MEMORY_ENABLED', 'on')
+    monkeypatch.setattr(review_store, 'get_firestore_client', lambda: database)
+    monkeypatch.setattr(_client, '_firestore_client', database)
+    owner = database.collection('users').document(uid)
+    owner.set({})
+    owner.collection('memory_state').document('apply_control').set(
+        MemoryControlState(
+            uid=uid, writer_mode=WriterMode.ledger, head_commit_id='genesis', account_generation=0, source_generation=0
+        ).model_dump(mode='json')
+    )
+    now = datetime.now(timezone.utc)
+    records = {}
+    for key in ('one', 'two'):
+        row = MemoryItem(
+            memory_id=key,
+            uid=uid,
+            version=1,
+            ledger_commit_id='synthetic-prior',
+            ledger_sequence=1,
+            tier='long_term',
+            status='active',
+            processing_state='processed',
+            content='Lives in the invented Toytown.',
+            source_state='active',
+            sensitivity_labels=[],
+            visibility='private',
+            user_asserted=True,
+            captured_at=now,
+            updated_at=now,
+            valid_from=now,
+            ledger_schema_version='knowledge_ledger.v1',
+            kind='fact',
+            subject_scope='primary_user',
+            slot='location',
+            write_reason='agent_reusable_conclusion',
+            intent_backed=True,
+        ).model_dump(mode='python')
+        owner.collection('memory_items').document(key).set(row)
+        records['memory_items/' + key] = row
+    capture = {'id': 'evidence', 'status': 'completed', 'created_at': now}
+    owner.collection('conversations').document('evidence').set(capture)
+    records['conversations/evidence'] = capture
+    operation = HarnessEdit(
+        kind='merge_memories',
+        target='memory_items/one',
+        other='memory_items/two',
+        after='Lives in the invented Toytown.',
+        reason='Synthetic duplicate fact',
+        evidence=['memory_items/two', 'conversations/evidence'],
+    )
+    fences = tools.proposal_fences(uid, {'records': records})
+    assert tools.apply_edit(uid, operation, records, expected_records=fences) == 'applied'
+    after = [owner.collection('memory_items').document(key).get().to_dict() for key in ('one', 'two')]
+    assert after[0]['superseded_by'] == after[1]['superseded_by']
+    assert after[0]['ledger_commit_id'] == after[1]['ledger_commit_id']
+    journal = next(review_store.decode_doc(uid, doc.to_dict()) for doc in owner.collection('review_changes').stream())
+    review_changes.set_undone(uid, journal['change']['change_id'], True)
+    for key in ('one', 'two'):
+        restored = owner.collection('memory_items').document(key).get().to_dict()
+        original = records['memory_items/' + key]
+        assert {
+            field: value for field, value in restored.items() if field not in {'ledger_commit_id', 'ledger_sequence'}
+        } == {field: value for field, value in original.items() if field not in {'ledger_commit_id', 'ledger_sequence'}}
+
+
 def test_budget_settlement_user_isolation_and_duplicate_finish(monkeypatch):
     host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
     if not host.startswith(('127.0.0.1:', 'localhost:')):
         pytest.skip('local Firestore emulator required')
-    database = firestore.Client(project='demo-dream-coalesce', credentials=AnonymousCredentials())
+    database = emulator_client()
     uids = ['synthetic-budget-' + str(uuid4()) for _ in range(2)]
     monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
     monkeypatch.setenv('DREAM_AGENT_ELIGIBILITY', 'all')
@@ -74,7 +181,7 @@ def test_fragment_spelling_round_trip_and_undo_preserve_other_segments(monkeypat
     host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
     if not host.startswith(('127.0.0.1:', 'localhost:')):
         pytest.skip('local Firestore emulator required')
-    database = firestore.Client(project='demo-dream-coalesce', credentials=AnonymousCredentials())
+    database = emulator_client()
     monkeypatch.setattr(_client, '_firestore_client', database)
     monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
     uid = 'synthetic-fragment-' + str(uuid4())
@@ -135,7 +242,7 @@ def test_dirty_queue_transforms_queries_and_transaction_deletes(monkeypatch):
     host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
     if not host.startswith(('127.0.0.1:', 'localhost:')):
         pytest.skip('local Firestore emulator required')
-    database = firestore.Client(project='demo-dream-coalesce', credentials=AnonymousCredentials())
+    database = emulator_client()
     uid = 'synthetic-' + str(uuid4())
     monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
     monkeypatch.setenv('DREAM_AGENT_ELIGIBILITY', 'all')
@@ -193,7 +300,7 @@ def test_manual_admission_race_uses_shared_lease(monkeypatch):
     host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
     if not host.startswith(('127.0.0.1:', 'localhost:')):
         pytest.skip('local Firestore emulator required')
-    database = firestore.Client(project='demo-dream-coalesce', credentials=AnonymousCredentials())
+    database = emulator_client()
     uid = 'synthetic-' + str(uuid4())
     monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
     monkeypatch.setenv('DREAM_AGENT_ELIGIBILITY', 'all')
@@ -223,7 +330,7 @@ def test_poison_settlement_is_atomic_and_preserves_refreshed_version(monkeypatch
     host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
     if not host.startswith(('127.0.0.1:', 'localhost:')):
         pytest.skip('local Firestore emulator required')
-    database = firestore.Client(project='demo-dream-coalesce', credentials=AnonymousCredentials())
+    database = emulator_client()
     uid = 'synthetic-' + str(uuid4())
     monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
     monkeypatch.setenv('DREAM_AGENT_ELIGIBILITY', 'all')
@@ -265,7 +372,7 @@ def test_unavailable_settlement_fences_versions_and_expires_transients(monkeypat
     host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
     if not host.startswith(('127.0.0.1:', 'localhost:')):
         pytest.skip('local Firestore emulator required')
-    database = firestore.Client(project='demo-dream-coalesce', credentials=AnonymousCredentials())
+    database = emulator_client()
     uid = 'synthetic-' + str(uuid4())
     monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
     monkeypatch.setenv('DREAM_AGENT_ELIGIBILITY', 'all')
@@ -312,7 +419,7 @@ def test_stale_reclamation_contended_admission_and_late_finish(monkeypatch, lega
     host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
     if not host.startswith(('127.0.0.1:', 'localhost:')):
         pytest.skip('local Firestore emulator required')
-    database = firestore.Client(project='demo-dream-coalesce', credentials=AnonymousCredentials())
+    database = emulator_client()
     uid = 'synthetic-abandoned-' + str(uuid4())
     monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
     monkeypatch.setenv('DREAM_AGENT_ELIGIBILITY', 'all')
@@ -391,7 +498,7 @@ def test_manual_overlay_projection_boundaries_dependencies_and_atomic_invalidati
     host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
     if not host.startswith(('127.0.0.1:', 'localhost:')):
         pytest.skip('local Firestore emulator required')
-    database = firestore.Client(project='demo-dream-coalesce', credentials=AnonymousCredentials())
+    database = emulator_client()
     monkeypatch.setattr(_client, '_firestore_client', database)
     uid = 'synthetic-manual-overlay-' + str(uuid4())
     document = database.collection('users').document(uid).collection('conversations').document('synthetic')

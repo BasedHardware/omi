@@ -241,6 +241,13 @@ class SharedTranscriptSegment(BaseModel):
     start: float
     end: float
 
+    @model_serializer(mode='wrap')
+    def omit_absent_original(self, handler):
+        data = handler(self)
+        if self.original_text is None:
+            data.pop('original_text', None)
+        return data
+
 
 class SharedAppResult(BaseModel):
     model_config = {'extra': 'ignore'}

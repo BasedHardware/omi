@@ -223,6 +223,17 @@ def test_person_bootstrap_merge_undo_redo_and_visible_survivor(store):
     assert (store.rows[left], store.rows[right]) == after
 
 
+def test_already_merged_person_is_rejected_during_propose_with_actionable_feedback(store):
+    import asyncio
+    from utils.agent_capabilities.staging import stage
+
+    seen = person_merge_records(store)
+    operation = person_merge()
+    dream_tools.apply_edit(UID, operation, seen, expected_records=dream_tools.proposal_fences(UID, {'records': seen}))
+    with pytest.raises(ValueError, match='agent_person_already_merged'):
+        asyncio.run(stage(UID, operation, seen, authority='dream'))
+
+
 @pytest.mark.parametrize('race', ['node', 'missing_witness'])
 def test_person_bootstrap_cannot_bless_post_bootstrap_changes(store, monkeypatch, race):
     seen = person_merge_records(store)

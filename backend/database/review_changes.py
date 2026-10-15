@@ -352,6 +352,20 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
                 not exact and (current.get('deleted') or current.get('is_dismissed') or current.get('discarded'))
             ):
                 raise store.ReviewConflict('Edit target no longer available')
+            if (
+                edit['collection'] == 'conversations'
+                and 'transcript_segments' in edit[expected]
+                and current.get('has_transcript_corrections')
+            ):
+                overlay = (
+                    store.user(uid)
+                    .collection('transcript_corrections')
+                    .document(edit['document_id'])
+                    .get(transaction=tx)
+                    .to_dict()
+                )
+                if any(not row['undone'] for row in store.require_doc(uid, overlay)['source']):
+                    raise store.ReviewConflict('Transcript has a dependent newer correction')
             if any(read_field_state(current, key) != value for key, value in edit[expected].items()):
                 raise store.ReviewConflict('Target has a newer edit')
             if exact:

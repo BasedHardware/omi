@@ -96,6 +96,21 @@ def session(db, monkeypatch, *, limits=None, seed_records=True):
     )
 
 
+def test_missing_merge_field_can_be_repaired_and_counted_as_resubmission(store, monkeypatch):
+    active = session(store, monkeypatch)
+    operation = {
+        'kind': 'merge_tasks',
+        'target': 'action_items/one',
+        'reason': 'Synthetic duplicate obligation',
+        'evidence': ['conversations/one'],
+    }
+    first = asyncio.run(active.execute([call('propose_edit', {'edit': operation})]))
+    assert 'distinct other ref' in first[0]['content']
+    repaired = asyncio.run(active.execute([call('propose_edit', {'edit': {**operation, 'other': 'action_items/two'}})]))
+    assert '"status": "staged"' in repaired[0]['content']
+    assert active.counters['resubmits_succeeded'] == 1 and len(active.staged) == 1
+
+
 def test_missing_evidence_is_returned_and_successful_resubmission_is_counted_without_writes(store, monkeypatch):
     active = session(store, monkeypatch)
     edit = {'kind': 'dismiss_person', 'target': 'people/junk', 'reason': 'Synthetic junk detection'}

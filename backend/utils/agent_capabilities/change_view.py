@@ -37,6 +37,8 @@ def edit_change(uid, edit, records, key):
             ChangeRef(type='person', id=base_ref(ref).split('/', 1)[1], label=label(records[base_ref(ref)]))
             for ref in (edit.target, edit.other)
         ]
+    elif edit.kind == 'merge_memories':
+        before = label(row) + ' + ' + label(records[base_ref(edit.other)])
     source_ref = (
         edit.target
         if edit.target.startswith('conversations/')
