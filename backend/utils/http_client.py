@@ -389,6 +389,11 @@ def get_auth_semaphore() -> asyncio.Semaphore:
     return _get_semaphore('auth', 20)
 
 
+def get_messaging_media_semaphore() -> asyncio.Semaphore:
+    """Bound downloaded buffers and media preparation per serving event loop."""
+    return _get_semaphore('messaging_media', 8)
+
+
 def get_stt_semaphore() -> asyncio.Semaphore:
     return _get_semaphore('stt', 8)
 

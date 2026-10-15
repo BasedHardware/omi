@@ -1,6 +1,6 @@
 # Shared Gateway batch cohort ramp
 
-Lead owns merges, deployments and ramp decisions. The prepared binding is complete stage C, 1% plus David authoritative including sync/backfill.
+Lead owns merges, deployments and ramp decisions. The checked-in production binding remains complete stage B, David-only authoritative including sync/backfill. Stage C (1%) and D (5%) are prepared in the stage JSON; expansion requires explicitly selecting that complete stage in the shared overlay and pusher chart.
 This is preparation only; deployment and long-audio qualification remain lead-owned.
 The reserved prod Gateway is `172.16.160.20`; reservation is not serving readiness.
 Follow [Gateway installation and route probes](../charts/internal-gateway/README.md)

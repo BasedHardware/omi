@@ -13323,4 +13323,104 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get chatAppsWaitlistJoined => 'Anda dalam senarai menunggu. Kami akan maklumkan apabila ada tempat.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Semua sudah sedia, $name';
+  }
+
+  @override
+  String get onboardingActDemoSummary =>
+      'Makan tengah hari dengan Sam, yang berpindah ke Lisbon pada Jun. Anda mahu hantar dek kepada pasukan sebelum Jumaat dan beli susu dalam perjalanan pulang.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Hantar deck kepada pasukan sebelum Jumaat';
+
+  @override
+  String get onboardingActDemoTask2 => 'Beli susu dalam perjalanan pulang';
+
+  @override
+  String get onboardingActDemoTitle => 'Makan tengah hari dengan Sam';
+
+  @override
+  String get onboardingActDictateBody => 'Cakap dengan cara anda. Omi uruskan selebihnya.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Cakap sahaja. Omi anda sedang mendengar.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Baru makan tengah hari dengan Sam, dia akan pindah ke Lisbon bulan Jun! Ingatkan saya hantar deck kepada pasukan sebelum Jumaat, dan beli susu dalam perjalanan pulang.';
+
+  @override
+  String get onboardingActDictateHint => 'Ketik tanda semak apabila selesai';
+
+  @override
+  String get onboardingActDictateTitle => 'Ceritakan hari anda kepada Omi';
+
+  @override
+  String get onboardingActIntro => 'Jom cuba Omi.';
+
+  @override
+  String get onboardingActJustNow => 'Baru sahaja';
+
+  @override
+  String get onboardingActMicAllow => 'Benarkan Mikrofon';
+
+  @override
+  String get onboardingActMicBody => 'Supaya Omi dapat mendengar anda bercakap.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi anda belum menghantar audio. Gunakan telefon anda buat masa ini.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi perlukan mikrofon anda';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Omi anda tidak kedengaran. Pastikan ia dihidupkan dan dekat.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Suara anda belum kedengaran. Cuba bercakap lebih kuat sedikit.';
+
+  @override
+  String get onboardingActNotesLabel => 'Hari anda, diringkaskan';
+
+  @override
+  String get onboardingActPhoneMic => 'Mikrofon telefon';
+
+  @override
+  String get onboardingActRateTitle => 'Suka Omi setakat ini?';
+
+  @override
+  String get onboardingActRemembers => 'Omi ingat supaya anda tidak perlu';
+
+  @override
+  String get onboardingActSavedToTasks => 'Disimpan ke tugasan anda';
+
+  @override
+  String get onboardingActTasksLabel => 'Omi menangkap tugasan anda';
+
+  @override
+  String get onboardingActWriting => 'Meringkaskan…';
+
+  @override
+  String get onboardingActYourWords => 'Ini yang anda katakan';
+
+  @override
+  String get onboardingConnectOmi => 'Sambungkan Omi';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Ketik Omi anda untuk menyambung.';
+
+  @override
+  String get onboardingNoOmiYet => 'Belum ada Omi lagi?';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Belum memesan';
+
+  @override
+  String get onboardingOmiOrdered => 'Saya sudah memesannya';
+
+  @override
+  String get onboardingPermissionTapToFix => 'Ketik untuk membetulkan';
 }

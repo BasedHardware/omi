@@ -13382,4 +13382,106 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get chatAppsWaitlistJoined => 'நீங்கள் காத்திருப்புப் பட்டியலில் உள்ளீர்கள். இடம் கிடைத்ததும் தெரிவிப்போம்.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'எல்லாம் தயார், $name';
+  }
+
+  @override
+  String get onboardingActDemoSummary =>
+      'ஜூனில் லிஸ்பனுக்குச் செல்லும் சாமுடன் மதிய உணவு. வெள்ளிக்குள் குழுவுக்கு டெக் அனுப்பவும், வீட்டுக்குப் போகும் வழியில் பால் வாங்கவும் வேண்டும்.';
+
+  @override
+  String get onboardingActDemoTask1 => 'வெள்ளிக்குள் குழுவுக்கு டெக் அனுப்புவது';
+
+  @override
+  String get onboardingActDemoTask2 => 'வீட்டுக்குப் போகும் வழியில் பால் வாங்குவது';
+
+  @override
+  String get onboardingActDemoTitle => 'சாமுடன் மதிய உணவு';
+
+  @override
+  String get onboardingActDictateBody => 'உங்கள் பாணியில் சொல்லுங்கள். மீதியை Omi பார்த்துக்கொள்ளும்.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'பேசுங்கள் போதும். உங்கள் Omi கேட்டுக்கொண்டிருக்கிறது.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'இப்போதுதான் சாமுடன் மதிய உணவு சாப்பிட்டேன், அவள் ஜூனில் லிஸ்பனுக்குப் போகிறாள்! வெள்ளிக்குள் குழுவுக்கு டெக் அனுப்பவும், வீட்டுக்குப் போகும் வழியில் பால் வாங்கவும் நினைவூட்டு.';
+
+  @override
+  String get onboardingActDictateHint => 'முடிந்ததும் டிக்கைத் தட்டவும்';
+
+  @override
+  String get onboardingActDictateTitle => 'உங்கள் நாளைப் பற்றி Omi-யிடம் சொல்லுங்கள்';
+
+  @override
+  String get onboardingActIntro => 'Omi-ஐ முயற்சிப்போம்.';
+
+  @override
+  String get onboardingActJustNow => 'இப்போதுதான்';
+
+  @override
+  String get onboardingActMicAllow => 'மைக்ரோஃபோனை அனுமதி';
+
+  @override
+  String get onboardingActMicBody => 'நீங்கள் பேசும்போது Omi கேட்க.';
+
+  @override
+  String get onboardingActMicFallbackBody =>
+      'உங்கள் Omi இன்னும் ஒலியை அனுப்பவில்லை. இப்போதைக்கு உங்கள் போனைப் பயன்படுத்துங்கள்.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi-க்கு உங்கள் மைக்ரோஃபோன் தேவை';
+
+  @override
+  String get onboardingActNoAudioOmi =>
+      'உங்கள் Omi கேட்கவில்லை. அது இயக்கத்தில் உள்ளதா, அருகில் உள்ளதா எனப் பாருங்கள்.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'இன்னும் உங்கள் குரல் கேட்கவில்லை. சற்று சத்தமாகப் பேசிப் பாருங்கள்.';
+
+  @override
+  String get onboardingActNotesLabel => 'உங்கள் நாள், சுருக்கமாக';
+
+  @override
+  String get onboardingActPhoneMic => 'தொலைபேசி மைக்ரோஃபோன்';
+
+  @override
+  String get onboardingActRateTitle => 'இதுவரை Omi பிடித்திருக்கிறதா?';
+
+  @override
+  String get onboardingActRemembers => 'நீங்கள் நினைவில் வைக்க வேண்டியதில்லை, Omi வைத்துக்கொள்ளும்';
+
+  @override
+  String get onboardingActSavedToTasks => 'உங்கள் பணிகளில் சேமிக்கப்பட்டது';
+
+  @override
+  String get onboardingActTasksLabel => 'Omi உங்கள் வேலைகளைக் கண்டறிந்தது';
+
+  @override
+  String get onboardingActWriting => 'சுருக்கப்படுகிறது…';
+
+  @override
+  String get onboardingActYourWords => 'நீங்கள் சொன்னது இது';
+
+  @override
+  String get onboardingConnectOmi => 'Omi-ஐ இணைக்கவும்';
+
+  @override
+  String get onboardingConnectTapToConnect => 'இணைக்க உங்கள் Omi-ஐத் தட்டவும்.';
+
+  @override
+  String get onboardingNoOmiYet => 'இன்னும் உங்கள் Omi இல்லையா?';
+
+  @override
+  String get onboardingOmiNotOrdered => 'இன்னும் ஆர்டர் செய்யவில்லை';
+
+  @override
+  String get onboardingOmiOrdered => 'நான் ஆர்டர் செய்துவிட்டேன்';
+
+  @override
+  String get onboardingPermissionTapToFix => 'சரிசெய்ய தட்டவும்';
 }

@@ -32,6 +32,7 @@ class ChannelReplySink:
         self.sequence = 0
         self.last_draft = 0
         self.finished = False
+        self.delivered_ids = []
 
     def response(self, stream, *, media_type):
         return stream
@@ -57,6 +58,8 @@ class ChannelReplySink:
             send_sequence.reset(token)
         if not draft:
             self.sequence += 1
+            if provider_id:
+                self.delivered_ids.append(str(provider_id))
         return provider_id
 
     async def action(self, action, value):
