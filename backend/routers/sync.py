@@ -1822,9 +1822,13 @@ async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud
     from utils.sync import reprocess
 
     if reprocess.owns_runtime():
-        repair = await run_blocking(db_executor, reprocess.sweep)
+        try:
+            repair = await run_blocking(db_executor, reprocess.sweep)
+        except Exception as error:
+            logger.error('event=sync_reprocess action=sweep outcome=error exception_type=%s', type(error).__name__)
+            repair = {'repaired': 0, 'error': 1}
         outcomes['reprocess_repaired'] = repair['repaired']
-        outcomes['error'] = outcomes.get('error', 0) + repair['error']
+        outcomes['reprocess_repair_errors'] = repair['error']
     return JSONResponse(status_code=500 if outcomes.get('error') else 200, content={'outcomes': outcomes})
 
 

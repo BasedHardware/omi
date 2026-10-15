@@ -1607,6 +1607,7 @@ def _extract_memories_canonical(
                         'known_spellings': known_spellings,
                         'profile': external_kwargs,
                     },
+                    db_client=db_client,
                 )
                 if matched:
                     return ConversationMemoryExtractionResult(count=0, source=source, path=PATH_CANONICAL)
@@ -1681,6 +1682,7 @@ def _extract_memories_canonical(
                         else None
                     ),
                 },
+                db_client=db_client,
             )
             if matched:
                 return ConversationMemoryExtractionResult(count=0, source=source, path=PATH_CANONICAL)
@@ -1977,7 +1979,7 @@ def _extract_memories_canonical(
         conversation.id,
         replacement_payloads,
     )
-    llm_input_dedupe.l1_succeeded(uid, conversation, l1_digest)
+    llm_input_dedupe.l1_succeeded(uid, conversation, l1_digest, db_client=db_client)
     capture_regime = getattr(conversation.source, "value", conversation.source) or ConversationSource.unknown.value
     owner_evidence = OwnerAttributionEvidence.from_segments(conversation.transcript_segments)
     for memory_db_obj, _, _, _ in parsed_memories:

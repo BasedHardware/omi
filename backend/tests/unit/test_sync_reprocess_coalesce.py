@@ -231,3 +231,45 @@ def test_train1_runtime_flags_are_on_only_for_prod_sync_hosts(runtime_manifest):
         for name, service in environment['gke'].items():
             for switch in switches:
                 assert str(service.get('env', {}).get(switch, {}).get('value', 'false')).lower() != 'true'
+
+
+@pytest.fixture(scope='module')
+def sync_router():
+    import importlib
+    from testing.import_isolation import stub_modules
+
+    with stub_modules({}):
+        yield importlib.import_module('routers.sync')
+
+
+@pytest.mark.parametrize(
+    'sequencer_errors,repair_errors,repair_raises,status',
+    [
+        (0, 2, False, 200),
+        (0, 0, True, 200),
+        (1, 0, False, 500),
+    ],
+)
+def test_sweep_reports_repair_errors_without_failing_successful_retirement(
+    sync_router, monkeypatch, sequencer_errors, repair_errors, repair_raises, status
+):
+    import asyncio
+    import json
+
+    async def run(_executor, fn):
+        return fn()
+
+    monkeypatch.setattr(sync_router, 'run_blocking', run)
+    monkeypatch.setattr(sync_router.uid_sequencer, 'sweep', Mock(return_value={'error': sequencer_errors}))
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    repair = Mock(return_value={'repaired': 3, 'error': repair_errors})
+    if repair_raises:
+        repair.side_effect = RuntimeError('query failed')
+    monkeypatch.setattr(reprocess, 'sweep', repair)
+    response = asyncio.run(sync_router.sweep_sync_backfill_sequencer(0))
+    assert response.status_code == status
+    assert json.loads(response.body)['outcomes'] == {
+        'error': sequencer_errors,
+        'reprocess_repaired': 0 if repair_raises else 3,
+        'reprocess_repair_errors': 1 if repair_raises else repair_errors,
+    }

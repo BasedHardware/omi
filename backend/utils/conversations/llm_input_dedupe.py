@@ -63,6 +63,10 @@ def implementation_digest(feature: str) -> str:
         'conversations/process_conversation.py',
         'conversations/owner_jev.py',
         'llm/jev_client.py',
+        'llm/model_config.py',
+        'llm/model_constants.py',
+        'llm/clients.py',
+        'llm/providers.py',
         '../config/jev_decisions.py',
         'llm/conversation_prompt_context.py',
         'llm/memories.py',
@@ -91,10 +95,16 @@ def fingerprint(feature: str, inputs: Any) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False).encode()).hexdigest()
 
 
-def _stored(uid: str, conversation: Any) -> dict[str, Any]:
+def _stored(uid: str, conversation: Any, *, db_client: Any = None) -> dict[str, Any]:
     from database import conversations
 
-    row = conversations.get_conversation(uid, conversation.id)
+    # L1 already has an injected persistence client. Its checkpoint is metadata
+    # only, so use the raw read seam without resolving a second global client.
+    row = (
+        conversations.get_conversation_raw_snapshot(uid, conversation.id, firestore_client=db_client)
+        if db_client is not None
+        else conversations.get_conversation(uid, conversation.id)
+    )
     if not row or row.get('deleted'):
         return {}
     if row.get('sync_content_revision') != getattr(conversation, 'sync_content_revision', None):
@@ -143,7 +153,7 @@ def output_fingerprint(output: Any) -> str:
     ).hexdigest()
 
 
-def invalidate_l1(uid: str, conversation: Any) -> bool:
+def invalidate_l1(uid: str, conversation: Any, *, db_client: Any = None) -> bool:
     """A flag-off successful replacement must not leave an older hash trusted.
 
     Metadata only: no memory/transcript/output mutation. The update-time fence
@@ -153,7 +163,7 @@ def invalidate_l1(uid: str, conversation: Any) -> bool:
     from google.cloud import firestore
     from database._client import get_firestore_client
 
-    client = get_firestore_client()
+    client = db_client if db_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(conversation.id)
     snapshot = ref.get()
     row = snapshot.to_dict() if snapshot.exists else None
@@ -166,23 +176,23 @@ def invalidate_l1(uid: str, conversation: Any) -> bool:
     return True
 
 
-def l1_input(uid: str, conversation: Any, inputs: Any) -> tuple[str | None, bool]:
+def l1_input(uid: str, conversation: Any, inputs: Any, *, db_client: Any = None) -> tuple[str | None, bool]:
     if not dedupe_enabled():
         return None, False
     digest = fingerprint('l1', inputs)
-    matched = _stored(uid, conversation).get(L1_HASH) == digest
+    matched = _stored(uid, conversation, db_client=db_client).get(L1_HASH) == digest
     if matched:
         SKIPPED.labels(feature='l1').inc()
     return digest, matched
 
 
-def l1_succeeded(uid: str, conversation: Any, digest: str | None) -> bool:
+def l1_succeeded(uid: str, conversation: Any, digest: str | None, *, db_client: Any = None) -> bool:
     if digest is None:
-        return invalidate_l1(uid, conversation)
+        return invalidate_l1(uid, conversation, db_client=db_client)
     from google.cloud import firestore
     from database._client import get_firestore_client
 
-    client = get_firestore_client()
+    client = db_client if db_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(conversation.id)
 
     @firestore.transactional

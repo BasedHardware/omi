@@ -12,7 +12,7 @@ from utils.conversations import llm_input_dedupe as dedupe
 @pytest.fixture
 def enabled(monkeypatch):
     monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'true')
-    monkeypatch.setattr(dedupe, '_stored', lambda *a: {})
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **k: {})
     return SimpleNamespace(id='c', sync_content_revision=3)
 
 
@@ -32,7 +32,7 @@ def test_notes_unchanged_skips_changed_inputs_run(enabled, monkeypatch):
     prefix = {'context': 'FULL TRANSCRIPT\nWe will ship Friday.', 'known_spellings': 'Omi'}
     dedupe.notes('u', enabled, prefix, generate, hashes, **inputs)
     row = {**hashes, 'structured': generate.return_value.model_dump()}
-    monkeypatch.setattr(dedupe, '_stored', lambda *a: row)
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **k: row)
     output = dedupe.notes('u', enabled, prefix, generate, {}, **inputs)
     assert output.title == 'Saved title' and generate.call_count == 1
     for name, value in [
@@ -58,7 +58,7 @@ def test_l1_only_reuses_successful_exact_hash(enabled, monkeypatch):
     inputs = {'transcript': 'Remember Friday', 'language': 'en', 'date': '2026-10-01', 'context': {'owner': 'David'}}
     digest, matched = dedupe.l1_input('u', enabled, inputs)
     assert digest and not matched
-    monkeypatch.setattr(dedupe, '_stored', lambda *a: {dedupe.L1_HASH: digest})
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **k: {dedupe.L1_HASH: digest})
     assert dedupe.l1_input('u', enabled, inputs) == (digest, True)
     for name, value in [
         ('transcript', 'Remember Saturday'),
@@ -83,7 +83,7 @@ def test_disabled_dedupe_preserves_calls_and_invalidates_only_metadata(monkeypat
     invalidation = Mock(return_value=False)
     monkeypatch.setattr(dedupe, 'invalidate_l1', invalidation)
     assert not dedupe.l1_succeeded('u', conversation, None)
-    invalidation.assert_called_once_with('u', conversation)
+    invalidation.assert_called_once_with('u', conversation, db_client=None)
     read.assert_not_called()
 
 
@@ -148,10 +148,10 @@ def memory_stack(memory_module, monkeypatch):
 def test_l1_orchestration_only_stamps_after_replacement_and_skips_exact_retry(enabled, memory_stack, monkeypatch):
     pc, conversation, service = memory_stack
     row = {}
-    monkeypatch.setattr(dedupe, '_stored', lambda *_: row)
+    monkeypatch.setattr(dedupe, '_stored', lambda *_, **__: row)
     stamps = []
 
-    def succeeded(uid, conv, digest):
+    def succeeded(uid, conv, digest, **kwargs):
         service.replace_conversation_memories.assert_called()
         stamps.append(digest)
         row[dedupe.L1_HASH] = digest
@@ -195,7 +195,7 @@ def test_notes_checkpoint_does_not_describe_a_replaced_output(enabled, monkeypat
     # Another writer or a flag-off pass replaces the structure without an
     # accompanying fingerprint update. Input A must not reuse output B.
     row = {**hashes, 'structured': Structured(title='A different output').model_dump()}
-    monkeypatch.setattr(dedupe, '_stored', lambda *_: row)
+    monkeypatch.setattr(dedupe, '_stored', lambda *_, **__: row)
     dedupe.notes('u', enabled, {'context': 'original transcript'}, generate, {})
     assert generate.call_count == 2
 
@@ -213,11 +213,62 @@ def test_owner_adjudication_summary_is_part_of_l1_effective_input(enabled, memor
     pc, conversation, _ = memory_stack
     row = {}
     monkeypatch.setattr(pc, 'memory_owner_jev_flip_enabled', lambda: True)
-    monkeypatch.setattr(dedupe, '_stored', lambda *_: row)
-    monkeypatch.setattr(dedupe, 'l1_succeeded', lambda uid, conv, digest: row.update({dedupe.L1_HASH: digest}))
+    monkeypatch.setattr(dedupe, '_stored', lambda *_, **__: row)
+    monkeypatch.setattr(
+        dedupe, 'l1_succeeded', lambda uid, conv, digest, **kwargs: row.update({dedupe.L1_HASH: digest})
+    )
     extract = Mock(return_value=[])
     monkeypatch.setattr(pc, 'extract_canonical_l1_memory_candidates', extract)
     pc._extract_memories_canonical('u', conversation, db_client=Mock())
     conversation.structured.overview = 'Changed notes context for owner attribution'
     pc._extract_memories_canonical('u', conversation, db_client=Mock())
     assert extract.call_count == 2
+
+
+@pytest.mark.parametrize('enabled_flag', [False, True])
+def test_l1_checkpoint_uses_injected_client_even_when_disabled(memory_stack, monkeypatch, enabled_flag):
+    from database import _client
+    from google.cloud import firestore
+
+    _, conversation, _ = memory_stack
+    monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', str(enabled_flag).lower())
+    global_client = Mock(side_effect=AssertionError('must use injected client, never ADC'))
+    monkeypatch.setattr(_client, 'get_firestore_client', global_client)
+    monkeypatch.setattr(firestore, 'transactional', lambda commit: commit)
+    client = Mock()
+    ref = client.collection.return_value.document.return_value.collection.return_value.document.return_value
+    digest = dedupe.fingerprint('l1', {'text': 'same'}) if enabled_flag else None
+    ref.get.return_value.exists = True
+    ref.get.return_value.to_dict.return_value = {
+        'sync_content_revision': conversation.sync_content_revision,
+        dedupe.L1_HASH: digest or 'old-success',
+    }
+    assert dedupe.l1_input('u', conversation, {'text': 'same'}, db_client=client) == (digest, enabled_flag)
+    assert dedupe.l1_succeeded('u', conversation, digest, db_client=client)
+    if enabled_flag:
+        client.transaction.return_value.update.assert_called_once_with(ref, {dedupe.L1_HASH: digest})
+    else:
+        ref.update.assert_called_once()
+        assert ref.update.call_args.args == ({dedupe.L1_HASH: None},)
+    global_client.assert_not_called()
+
+
+@pytest.mark.parametrize('route_file', ['model_config.py', 'model_constants.py', 'clients.py', 'providers.py'])
+def test_route_module_changes_invalidate_both_feature_fingerprints(monkeypatch, route_file):
+    from pathlib import Path
+
+    original = Path.read_bytes
+    dedupe.implementation_digest.cache_clear()
+    before = {feature: dedupe.fingerprint(feature, 'same input') for feature in ('notes', 'l1')}
+
+    def changed_route(path):
+        contents = original(path)
+        return contents + b'\n# changed route' if path.name == route_file else contents
+
+    try:
+        monkeypatch.setattr(Path, 'read_bytes', changed_route)
+        dedupe.implementation_digest.cache_clear()
+        for feature, old in before.items():
+            assert dedupe.fingerprint(feature, 'same input') != old
+    finally:
+        dedupe.implementation_digest.cache_clear()
