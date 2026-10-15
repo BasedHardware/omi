@@ -160,3 +160,28 @@ async def test_enrichment_binding_is_validated_before_adapter_or_io(monkeypatch,
     monkeypatch.setattr(module, 'run_enrichment', adapter)
     assert (await module.enrichment_response(payload)).status_code == 400
     adapter.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_landed_reprocess_runtime_fence_precedes_adapter(monkeypatch):
+    from unittest.mock import Mock
+    from utils.sync import reprocess
+
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: False)
+    adapter = Mock(side_effect=AssertionError('foreign runtime reached data'))
+    monkeypatch.setattr(module, 'run_enrichment', adapter)
+    response = await module.enrichment_response({'kind': 'sync_reprocess', 'key': 'a' * 64, 'task_token': 'b' * 32})
+    assert response.status_code == 200 and b'foreign_runtime' in response.body
+    adapter.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('status,code', [('busy', 503), ('completed', 200)])
+async def test_landed_reprocess_busy_response_remains_retryable(monkeypatch, status, code):
+    from unittest.mock import Mock
+    from utils.sync import reprocess
+
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setattr(module, 'run_enrichment', Mock(return_value=status))
+    response = await module.enrichment_response({'kind': 'sync_reprocess', 'key': 'a' * 64, 'task_token': 'b' * 32})
+    assert response.status_code == code

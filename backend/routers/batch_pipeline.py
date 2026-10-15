@@ -144,11 +144,18 @@ async def authorize_compute(body: HeartbeatRequest):
 
 async def enrichment_response(payload: dict):
     document_id, token = payload.get('key'), payload.get('task_token')
-    if not isinstance(document_id, str) or not isinstance(token, str):
+    if set(payload) != {'kind', 'key', 'task_token'} or not all(
+        isinstance(value, str) and value for value in (document_id, token)
+    ):
         return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
+    assert isinstance(document_id, str) and isinstance(token, str)
+    from utils.sync import reprocess
+
+    if not reprocess.owns_runtime():
+        return JSONResponse(status_code=200, content={'status': 'foreign_runtime'})
     try:
         status = await run_blocking(sync_executor, run_enrichment, document_id, token)
-        return JSONResponse(status_code=200, content={'status': status})
+        return JSONResponse(status_code=503 if status == 'busy' else 200, content={'status': status})
     except (ValueError, TypeError):
         return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
     except Exception:
