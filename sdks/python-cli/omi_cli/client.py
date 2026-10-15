@@ -59,14 +59,26 @@ KNOWN_RATE_LIMIT_POLICIES = {
 class OmiClient:
     """Thin wrapper around :class:`httpx.Client`. One per CLI invocation."""
 
-    def __init__(self, profile: Profile, *, timeout: Optional[httpx.Timeout] = None, verbose: bool = False) -> None:
-        # Pre-flight: if this is an OAuth profile and the cached Firebase ID
-        # token is expired (or close to it), refresh before we build the bearer
-        # header so the very first request goes out with a fresh token.
+    def __init__(
+        self,
+        profile: Profile,
+        *,
+        timeout: Optional[httpx.Timeout] = None,
+        verbose: bool = False,
+        firebase_session: bool = False,
+    ) -> None:
+        # ``firebase_session`` authenticates with the signed-in user's Firebase ID
+        # token instead of the profile's API key: the user-identity routes
+        # (/v2/messages) accept only that token. Browser sign-in keeps the
+        # session beside the minted key on an ``api_key`` profile.
+        #
+        # Pre-flight: if the session's cached Firebase ID token is expired (or
+        # close to it), refresh before we build the bearer header so the very
+        # first request goes out with a fresh token.
         # ``omi_cli.auth.oauth`` is imported lazily because it pulls in
         # ``http.server`` / ``socketserver`` which we don't need for the more
         # common API-key path.
-        if profile.auth_method == "oauth":
+        if firebase_session or profile.auth_method == "oauth":
             from omi_cli.auth import oauth as oauth_auth  # local to avoid import cost on api_key path
 
             if oauth_auth.needs_refresh(profile):
@@ -79,7 +91,7 @@ class OmiClient:
         self._verbose = verbose
         self._http = httpx.Client(
             base_url=profile.api_base.rstrip("/"),
-            headers=self._build_headers(profile),
+            headers=self._build_headers(profile, firebase_session=firebase_session),
             timeout=timeout or DEFAULT_TIMEOUT,
             follow_redirects=False,
         )
@@ -257,14 +269,22 @@ class OmiClient:
         )
 
     @staticmethod
-    def _build_headers(profile: Profile) -> dict[str, str]:
+    def _build_headers(profile: Profile, *, firebase_session: bool = False) -> dict[str, str]:
         if not profile.is_authenticated():
             raise CliError(
                 message="Not authenticated",
                 detail="Run `omi auth login` and paste your dev API key. (See `omi auth login --help`.)",
                 exit_code=2,
             )
-        if profile.auth_method == "api_key":
+        if firebase_session:
+            if not profile.id_token:
+                raise CliError(
+                    message="Chat requires browser sign-in",
+                    detail="Run `omi auth login --browser`, then try again.",
+                    exit_code=2,
+                )
+            token = profile.id_token
+        elif profile.auth_method == "api_key":
             assert profile.api_key  # narrowed by is_authenticated
             token = profile.api_key
         else:
