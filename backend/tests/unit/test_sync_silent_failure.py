@@ -532,12 +532,14 @@ class TestSegmentDeduplication:
             'store_partial_merge_survivor_audio(' not in source
         ), "Chunk storage stays in pipeline; assignment returns survivors instead"
         pipeline_source = self._read_pipeline_source()
+        assert 'store_intake_audio(' in pipeline_source, "Sync must delegate retained audio to the shared policy"
         assert (
-            'store_partial_merge_survivor_audio(' in pipeline_source
-        ), "Partial dedupe must store sliced private-cloud audio for survivors"
+            'store_partial=store_partial_merge_survivor_audio' in pipeline_source
+        ), "The shared policy must retain the legacy partial-audio callback"
+        audio_source = _read_text(Path(__file__).parents[2] / 'utils/sync/merge_audio.py')
         assert (
-            'if private_cloud_sync_enabled and survivors:' in pipeline_source
-        ), "Chunk upload must be skipped when dedupe eliminated every segment"
+            'if private_cloud_sync_enabled and survivors:' in audio_source
+        ), "Shared chunk policy must skip upload when dedupe eliminated every segment"
 
     def test_dedupe_helper_uses_rounding(self):
         """Shared helper must round timestamps for reliable comparison."""
