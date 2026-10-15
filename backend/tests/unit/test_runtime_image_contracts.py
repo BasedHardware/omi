@@ -511,7 +511,8 @@ def test_parakeet_logging_module_avoids_nemo_utils_name():
     dockerfile = (BACKEND_DIR / 'parakeet' / 'Dockerfile').read_text(encoding='utf-8')
     main = (BACKEND_DIR / 'parakeet' / 'main.py').read_text(encoding='utf-8')
     assert 'COPY backend/utils/logging_config.py ./omi_logging_config.py' in dockerfile
-    assert 'from omi_logging_config import configure_split_stream_logging, quiet_repetitive_nemo_logs' in main
+    assert 'from omi_logging_config import' in main
+    assert 'configure_split_stream_logging' in main and 'quiet_repetitive_nemo_logs' in main
     assert 'from utils.logging_config import' not in main
     registry = json.loads((BACKEND_DIR / 'runtime_images.json').read_text(encoding='utf-8'))
     parakeet = next(item for item in registry['images'] if item['name'] == 'parakeet')

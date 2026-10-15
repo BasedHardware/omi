@@ -26,7 +26,10 @@ from batch_engine import BatchEngine, QueueFullError, QueueTimeoutError
 
 # Copied to /app/omi_logging_config.py. Importing utils.logging_config hits NeMo's
 # already-loaded top-level utils package and raises ModuleNotFoundError.
-from omi_logging_config import configure_split_stream_logging, quiet_repetitive_nemo_logs
+from omi_logging_config import (  # pyright: ignore[reportMissingImports]
+    configure_split_stream_logging,
+    quiet_repetitive_nemo_logs,
+)
 from transcribe import (
     transcribe_file,
     transcribe_file_v2,
