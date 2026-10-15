@@ -569,6 +569,10 @@ final class ConversationRepository {
     pendingMutations.removeValue(forKey: id)
     if removedVisibleRow, let count {
       self.count = max(0, count - 1)
+      // Every conversation below the deleted one shifts up a server
+      // slot — without this the next page starts one row too late and
+      // skips a conversation (issue #21596).
+      nextPageOffset = max(0, nextPageOffset - 1)
     }
     emit(.server)
   }
@@ -772,6 +776,9 @@ final class ConversationRepository {
       conversations.removeAll { $0.id == conversation.id }
       if removedVisibleRow, let count {
         self.count = max(0, count - 1)
+        // Same as remove(): a row leaving the viewed window shifts the
+        // paging window — keep nextPageOffset honest (issue #21596).
+        nextPageOffset = max(0, nextPageOffset - 1)
       }
       return
     }

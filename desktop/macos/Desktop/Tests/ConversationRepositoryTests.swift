@@ -101,6 +101,48 @@ final class ConversationRepositoryTests: XCTestCase {
     XCTAssertEqual(remote.listRequests.map(\.limit), [50, 50])
   }
 
+  /// Issue #21596 — deleting a visible row shifts every older
+  /// conversation up one server slot; loadMore must re-request offset
+  /// `pageSize - 1`, not `pageSize`, or the next conversation is skipped.
+  func testLoadMoreAfterDeleteDoesNotSkipASlot() async {
+    let firstPage = (0..<50).map { index in
+      makeConversation(id: "c-\(index)", title: "C \(index)", revision: 100 - Double(index))
+    }
+    let remote = FakeConversationRemote(listResult: .success(firstPage), countResult: .success(51))
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+
+    await repository.load(query: .all, includeCache: false)
+    repository.remove(id: "c-0")   // a row left the window
+
+    remote.listResult = .success([makeConversation(id: "c-50", title: "oldest", revision: 1)])
+    await repository.loadMore()
+
+    XCTAssertEqual(remote.listRequests.map(\.offset), [0, 49],
+                   "after a delete the next page must start one slot earlier")
+  }
+
+  func testLoadMoreAfterUnstarUnderStarredFilterDoesNotSkipASlot() async {
+    // The filter-mismatch branch of replaceVisible() drops the row —
+    // same offset drift as remove().
+    let page = (0..<50).map { index in
+      makeConversation(id: "s-\(index)", title: "S \(index)", starred: true, revision: 100 - Double(index))
+    }
+    let remote = FakeConversationRemote(listResult: .success(page), countResult: .success(51))
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    await repository.load(
+      query: ConversationListQuery(starredOnly: true, date: nil, folderId: nil),
+      includeCache: false)
+
+    // Unstar a loaded row — replace() routes through replaceVisible,
+    // which drops it from the starred window (matchesCurrentQuery fails).
+    repository.replace(makeConversation(id: "s-0", title: "S 0", starred: false, revision: 101))
+
+    remote.listResult = .success([makeConversation(id: "s-50", title: "oldest", revision: 1)])
+    await repository.loadMore()
+
+    XCTAssertEqual(remote.listRequests.map(\.offset), [0, 49])
+  }
+
   func testLoadMoreRemainsAvailableWhenServerCountFailsOverCachedCount() async {
     let firstPage = (0..<50).map { index in
       makeConversation(id: "conversation-\(index)", title: "Conversation \(index)", revision: 100 - Double(index))
