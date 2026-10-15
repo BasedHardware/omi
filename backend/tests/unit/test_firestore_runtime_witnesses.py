@@ -148,9 +148,37 @@ def _profiles(target: str):
     return DRIVERS[target].profiles
 
 
+def _run_review_sources(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    from database import task_intelligence_control
+    from utils import review
+    from utils.task_intelligence import chat_first_eligibility
+
+    monkeypatch.setattr(review.speakers, 'get_prompts', lambda *a: SimpleNamespace(prompts=[]))
+    monkeypatch.setattr(
+        chat_first_eligibility,
+        'resolve_task_intelligence_for_user',
+        lambda **k: SimpleNamespace(intelligence_product_enabled=True),
+    )
+    for generation in _CANDIDATE_GENERATIONS:
+        monkeypatch.setattr(
+            task_intelligence_control,
+            'get_task_workflow_control',
+            lambda *a: SimpleNamespace(account_generation=generation, workflow_mode='read'),
+        )
+        trial(capture, review._sources, 'u1')
+
+
 WITNESSES: dict[str, CallerWitness] = {
     witness.key: witness
     for witness in (
+        CallerWitness(
+            'utils/review.py:_sources:database.candidates.list_candidates',
+            'database.candidates.list_candidates',
+            'database.candidates.list_candidates',
+            ('candidate-list',),
+            1,
+            _run_review_sources,
+        ),
         CallerWitness(
             'routers/candidates.py:list_candidates:database.candidates.list_candidates',
             'database.candidates.list_candidates',

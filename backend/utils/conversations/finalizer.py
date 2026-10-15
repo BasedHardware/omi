@@ -23,28 +23,29 @@ from utils.app_integrations import trigger_external_integrations
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.location import async_resolve_geolocation
+from utils.conversations.episode_runtime import process_with_episode_budget
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.smart_merge import smart_merge_step
 from utils.conversations.smart_merge_policy import is_donor
 from utils.conversations.meeting_evidence_admission import await_meeting_evidence
-from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
+from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
 from utils.conversations.process_conversation import (
     DerivedEffectsDisposition,
     TERMINAL_NO_DERIVED_EFFECTS_FIELD,
     extract_memories,
     process_conversation,
+    save_structured_vector,
 )
 from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking
+from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
 from utils.jit_rollout import JITDecisionStage
-from utils.log_sanitizer import sanitize_pii
 from utils.llm.gateway_error_contract import GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
 from utils.observability.finalization import (
     classify_finalization_failure,
     finalization_diagnostic_id,
     record_finalization_failure,
 )
-from utils.task_intelligence.proactive_engine import persist_capture_arrival_intent
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retry
 from services.conversation_keyframes import ensure_conversation_keyframe_job, reconcile_conversation_keyframe_jobs
 from utils.retrieval.frame_request_authority import resolve_frame_request_authority
@@ -66,6 +67,32 @@ def _maybe_start_shadow(uid: str, conversation) -> None:
         maybe_start_shadow(uid, conversation)
     except Exception as error:
         logger.warning('event=transcription_shadow outcome=admission_failed exception_type=%s', type(error).__name__)
+
+
+def _save_summary_vector_fail_soft(uid: str, conversation) -> None:
+    """Provider errors are counted by the writer; never propagate to finalization."""
+    try:
+        if save_structured_vector(uid, conversation) is False:
+            # The writer counts a missing index as error. Keep that bounded outcome.
+            logger.warning('summary_vector outcome=error exception_type=IndexUnavailable')
+            record_fallback(
+                component='conversation_finalization',
+                from_mode='none',
+                to_mode='none',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
+    except Exception as error:
+        logger.warning('summary_vector outcome=error exception_type=%s', type(error).__name__)
+        record_fallback(
+            component='conversation_finalization',
+            from_mode='none',
+            to_mode='none',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
 
 
 class ConversationFinalizationError(RuntimeError):
@@ -207,6 +234,7 @@ async def finalize_persisted_conversation(
         if conversation.status != ConversationStatus.completed:
             conversation = await run_blocking(
                 postprocess_executor,
+                process_with_episode_budget,
                 process_conversation,
                 uid,
                 resolved_language,
@@ -275,6 +303,28 @@ async def finalize_persisted_conversation(
             await run_blocking(db_executor, link_duplicate_captures, uid, conversation)
         if fanout['status'] == 'completed':
             schedule_person_voice_learning_retry(uid, conversation_id)
+            # Re-finalization of a row whose fanout already completed (e.g.
+            # server_recovery picking up a row finalized elsewhere). The
+            # summary-vector emission below the claim branch is unreachable on
+            # this path, so run the same fail-soft freshness guard here; a
+            # summary-vector failure never fails finalization (#21111 gap).
+            try:
+                latest_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
+                latest = deserialize_conversation(latest_data) if latest_data else None
+                if (
+                    latest
+                    and latest_data is not None
+                    and not latest_data.get('deleted', False)
+                    and not getattr(latest, 'discarded', False)
+                    and getattr(latest, 'structured', None)
+                    and latest.structured == getattr(conversation, 'structured', None)
+                ):
+                    await run_blocking(postprocess_executor, _save_summary_vector_fail_soft, uid, latest)
+                else:
+                    OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_no_structured').inc()
+            except Exception as error:
+                OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
+                logger.warning('summary_vector outcome=error exception_type=%s', type(error).__name__)
             return ConversationFinalizationDisposition.completed
         if fanout['status'] == 'fenced':
             logger.info(
@@ -287,8 +337,9 @@ async def finalize_persisted_conversation(
             raise ConversationFinalizationError('fanout_lease_conflict')
 
         # Ownership is now proven.  Emit every derived side effect — calendar,
-        # usage/app, vector, action/goal, audio artifact/enqueue, webhook, and
-        # memory extraction — only behind the winning claim.  A processing
+        # usage/app, action/goal, audio artifact/enqueue, webhook, and
+        # memory extraction — only behind the winning claim. Summary indexing
+        # also runs here, independently of the intelligence bundle.  A processing
         # conversation hands the bundle back from process_conversation; an
         # already-completed replay re-extracts memories behind the proven claim
         # unless the durable terminal marker is set (free-tier minimum).
@@ -298,9 +349,45 @@ async def finalize_persisted_conversation(
         # (§1.7) and must still run so a free-tier desktop meeting wakes Chat.
         skip_derived_effects = derived_disposition[0] == DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
         stage = 'derived_effects'
+        # Completed-row replays have no coordinator bundle. Summary indexing is
+        # independent of JIT folder/apps receipts and terminal intelligence
+        # suppression, but must share the same winning fanout claim.
+        # Await inside a fail-soft boundary rather than detach a provider pipeline:
+        # the worker can exit after completion, so awaiting preserves write observability.
+        # A summary-vector failure never fails finalization, including terminal rows.
+        try:
+            latest_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
+            latest = deserialize_conversation(latest_data) if latest_data else None
+            if (
+                latest
+                and latest_data is not None
+                and not latest_data.get('deleted')
+                and not getattr(latest, 'discarded', False)
+                and getattr(latest, 'structured', None)
+            ):
+                # The claim does not return its document. Re-read after claim/merge;
+                # compare summary content as well as the durable merge revision so an
+                # older snapshot cannot overwrite a refresh that won during admission.
+                if latest.structured != conversation.structured or latest_data.get(
+                    'smart_merge'
+                ) != conversation_data.get('smart_merge'):
+                    OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_stale').inc()
+                else:
+                    await run_blocking(postprocess_executor, _save_summary_vector_fail_soft, uid, latest)
+        except Exception as error:
+            OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
+            logger.warning('summary_vector outcome=error exception_type=%s', type(error).__name__)
+            record_fallback(
+                component='conversation_finalization',
+                from_mode='none',
+                to_mode='none',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
         if skip_derived_effects:
             logger.info(
-                'persisted conversation finalization terminal with no derived effects uid=%s conversation=%s',
+                'persisted conversation finalization terminal with suppressed intelligence uid=%s conversation=%s',
                 uid,
                 conversation_id,
             )
@@ -321,14 +408,11 @@ async def finalize_persisted_conversation(
                 require_delivery=True,
                 last_delivery_attempt=final_attempt,
             )
-        # Publish the content-free capture-arrival intent before marking the
-        # durable fanout projection completed. Desktop waits on that projection
-        # before waking Chat; ordering the marker first closes the small window
-        # where a completed projection existed without a notes-ready intent.
+        # Record the meeting treatment verdict; automatic Chat intents are retired.
         stage = 'meeting_receipt'
         await run_blocking(
             db_executor,
-            record_and_persist_finalized_meeting_receipt,
+            record_finalized_meeting_receipt,
             uid,
             conversation,
             finalization_job_id=finalization_job_id,
@@ -358,22 +442,6 @@ async def finalize_persisted_conversation(
                         device_id=device_id,
                         account_generation=decision.account_generation,
                     )
-        stage = 'capture_arrival'
-        source = getattr(conversation, 'source', None)
-        source_value = getattr(source, 'value', source)
-        if source_value == 'omi' and not getattr(conversation, 'discarded', False):
-            try:
-                structured = getattr(conversation, 'structured', None)
-                summary = getattr(structured, 'title', '') or getattr(structured, 'overview', '') or ''
-                await run_blocking(
-                    db_executor, persist_capture_arrival_intent, uid, conversation_id=conversation_id, summary=summary
-                )
-            except Exception as error:
-                logger.warning(
-                    'chat-first capture arrival intent failed during finalization uid=%s error=%s',
-                    sanitize_pii(uid),
-                    type(error).__name__,
-                )
         stage = 'fanout_completion'
         fanout_completed = await run_blocking(
             db_executor,

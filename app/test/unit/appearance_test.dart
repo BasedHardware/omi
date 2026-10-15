@@ -49,6 +49,27 @@ void main() {
     expect(notifications, 1);
   });
 
+  test('selecting the displayed default persists it without notifying', () async {
+    var stored = 'invalid';
+    var writes = 0;
+    final provider = AppearanceProvider(
+      read: () => stored,
+      write: (value) async {
+        stored = value;
+        writes++;
+      },
+    );
+    addTearDown(provider.dispose);
+    var notifications = 0;
+    provider.addListener(() => notifications++);
+
+    await provider.setMode(ThemeMode.light);
+
+    expect(stored, 'light');
+    expect(writes, 1);
+    expect(notifications, 0);
+  });
+
   test('both themes use the corresponding palette', () {
     final light = buildOmiTheme(brightness: Brightness.light);
     final dark = buildOmiTheme(brightness: Brightness.dark);

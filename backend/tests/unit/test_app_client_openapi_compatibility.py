@@ -243,6 +243,48 @@ def test_removing_success_status_is_response_narrowing_and_compatible():
     assert checker.compare_specs(base, head) == []
 
 
+def test_recorded_released_status_restoration_is_allowed(monkeypatch):
+    """A recorded restoration lets a lost released status come back; nothing else.
+
+    The merge-base baseline can itself carry a spec-only regression (a status
+    removed from the spec while released clients still require it). The record
+    — and only the record — re-allows restoring exactly that (route, method,
+    status) triple.
+    """
+    checker = load_checker()
+    base = contract()
+    base['paths']['/v1/conversations/{conversation_id}'] = {
+        'delete': {'responses': {'200': {'content': {'application/json': {'schema': {'type': 'object'}}}}}}
+    }
+    head = copy.deepcopy(base)
+    head['paths']['/v1/conversations/{conversation_id}']['delete']['responses'] = {'204': {'description': 'No Content'}}
+
+    monkeypatch.setattr(checker_module, 'RELEASED_STATUS_RESTORES', frozenset())
+    assert any(
+        'responses.204: new success response status is not modeled' in item for item in messages(checker, base, head)
+    )
+
+    monkeypatch.setattr(
+        checker_module,
+        'RELEASED_STATUS_RESTORES',
+        frozenset({('/v1/conversations/{conversation_id}', 'delete', '204')}),
+    )
+    assert checker.compare_specs(base, head) == []
+
+
+def test_released_status_restoration_record_is_narrow():
+    """An unrecorded operation cannot borrow a restoration record's allowance."""
+    checker = load_checker()
+    base = contract()
+    head = copy.deepcopy(base)
+    head['paths']['/v1/goals']['post']['responses']['204'] = {'description': 'No Content'}
+
+    assert any(
+        'responses.204: new success response status is not modeled' in item for item in messages(checker, base, head)
+    )
+    assert ('/v1/conversations/{conversation_id}', 'delete', '204') in checker_module.RELEASED_STATUS_RESTORES
+
+
 def test_response_media_types_follow_response_direction():
     checker = load_checker()
     base = contract()
@@ -395,6 +437,63 @@ def test_changed_composed_schema_fails_conservatively_instead_of_being_ignored()
     assert any(
         'new response union branch has no compatible counterpart' in item for item in messages(checker, base, head)
     )
+
+
+def _storefront_contract(version: int, *, keep_display_name: bool) -> dict:
+    properties: dict = {'schema_version': {'type': 'integer', 'const': version}}
+    required = ['schema_version']
+    if keep_display_name:
+        properties['display_name'] = {'type': 'string'}
+        required.append('display_name')
+    return {
+        'openapi': '3.1.0',
+        'paths': {
+            '/v2/payments/plans': {
+                'get': {
+                    'parameters': [
+                        {'name': 'source', 'in': 'query', 'required': False, 'schema': {'type': 'string'}},
+                    ],
+                    'responses': {
+                        '200': {
+                            'content': {'application/json': {'schema': {'$ref': '#/components/schemas/Storefront'}}}
+                        }
+                    },
+                }
+            }
+        },
+        'components': {
+            'schemas': {
+                'Storefront': {'type': 'object', 'properties': properties, 'required': required},
+            }
+        },
+    }
+
+
+def test_unreleased_storefront_schema_v1_to_v2_skips_only_that_response_replacement():
+    """Schema 1 never shipped. The exception must not cover requests or later response breaks."""
+    checker = load_checker()
+    base = _storefront_contract(1, keep_display_name=True)
+    head = _storefront_contract(2, keep_display_name=False)
+
+    assert checker.compare_specs(base, head) == []
+
+    required_source = copy.deepcopy(head)
+    required_source['paths']['/v2/payments/plans']['get']['parameters'][0]['required'] = True
+    request_failures = messages(checker, base, required_source)
+    assert any('optional request parameter became required' in item for item in request_failures)
+
+    shipped = _storefront_contract(2, keep_display_name=True)
+    later = _storefront_contract(2, keep_display_name=False)
+    later_failures = messages(checker, shipped, later)
+    assert any('display_name' in item and 'removed' in item for item in later_failures)
+
+    other_base = copy.deepcopy(base)
+    other_head = copy.deepcopy(head)
+    other_base['paths']['/v1/other'] = copy.deepcopy(base['paths']['/v2/payments/plans'])
+    other_head['paths']['/v1/other'] = copy.deepcopy(head['paths']['/v2/payments/plans'])
+    other_failures = messages(checker, other_base, other_head)
+    assert any(item.startswith('paths./v1/other.') for item in other_failures)
+    assert not any(item.startswith('paths./v2/payments/plans.') for item in other_failures)
 
 
 def test_cli_reports_precise_breaking_paths(tmp_path, capsys):

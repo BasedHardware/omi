@@ -139,6 +139,7 @@ class FakeVectorIndex:
         include_values: bool = False,
         filter: dict[str, Any] | None = None,
         namespace: str = "",
+        _request_timeout: float | None = None,  # real Pinecone accepts this; chat search passes it
     ) -> dict[str, list[dict[str, Any]]]:
         query_text = getattr(vector, "text", "") or ""
         matches = []

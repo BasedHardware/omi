@@ -16,42 +16,21 @@ private func withConversationCacheScope<T>(
 /// Provides crash-safe persistence for transcription data during recording
 actor TranscriptionStorage {
   static let shared = TranscriptionStorage()
-
-  private var _dbQueue: DatabasePool?
-  private var _dbGeneration = -1
-  private var isInitialized = false
+  private let repository = RewindRepository(owner: "TranscriptionStorage")
 
   private init() {}
 
   /// Invalidate cached DB queue (called on user switch / sign-out)
-  func invalidateCache() {
-    _dbQueue = nil
-    isInitialized = false
+  func invalidateCache() async {
+    await repository.invalidate()
   }
 
   /// Ensure database is initialized before use
   private func ensureInitialized() async throws -> DatabasePool {
-    if let db = _dbQueue, await RewindDatabase.shared.poolGeneration() == _dbGeneration {
-      return db
-    }
-
-    // Initialize RewindDatabase which creates our tables via migrations
-    do {
-      try await RewindDatabase.shared.initialize()
-    } catch {
-      log("TranscriptionStorage: Database initialization failed: \(error.localizedDescription)")
-      throw error
-    }
-
-    let (queue, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
-    guard let db = queue else {
+    guard let databasePool = try await repository.databasePool() else {
       throw TranscriptionStorageError.databaseNotInitialized
     }
-
-    _dbQueue = db
-    _dbGeneration = generation
-    isInitialized = true
-    return db
+    return databasePool
   }
 
   // MARK: - Session Lifecycle
@@ -348,16 +327,21 @@ actor TranscriptionStorage {
   }
 
   /// Delete a session and its segments
-  func deleteSession(id: Int64) async throws {
+  func deleteSession(id: Int64, expectedGeneration: Int? = nil) async throws {
     let db = try await ensureInitialized()
 
-    let backendId = try await getSession(id: id)?.backendId
-
-    try await db.write { database in
+    if let expectedGeneration {
+      let snapshot = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+      guard snapshot.generation == expectedGeneration, snapshot.pool === db else { throw CancellationError() }
+    }
+    // Pin the pool across the write; an owner switch must never retarget this row ID.
+    let backendId = try await db.write { database in
+      let backendId = try TranscriptionSessionRecord.fetchOne(database, key: id)?.backendId
       try database.execute(
         sql: "DELETE FROM transcription_sessions WHERE id = ?",
         arguments: [id]
       )
+      return backendId
     }
 
     log("TranscriptionStorage: Deleted session \(id)")
@@ -413,20 +397,30 @@ actor TranscriptionStorage {
     SiriIndexHooks.conversationChanged(backendId)
   }
 
-  /// Soft-delete by backend conversation ID
+  /// Resolve only sessions with an exact server/client identity, including never-synced outbox rows.
   func deleteByBackendId(
     _ backendId: String,
     cacheScope: ConversationCacheWriteScope? = nil,
     cacheGeneration: Int? = nil
   ) async throws {
     let db = try await ensureInitialized()
-
+    let uid = RewindDatabase.currentUserId
     try await db.write { database in
       try withConversationCacheScope(cacheScope, generation: cacheGeneration) {
-        try database.execute(
-          sql: "UPDATE transcription_sessions SET deleted = 1, updatedAt = ? WHERE backendId = ?",
-          arguments: [Date(), backendId]
-        )
+        let candidates =
+          try TranscriptionSessionRecord
+          .filter(Column("backendId") == backendId || Column("backendId") == nil || Column("backendId") == "")
+          .fetchAll(database)
+        for session in candidates
+        where ConversationDeletionIdentity.matches(session, conversationID: backendId, uid: uid) {
+          guard let id = session.id else { continue }
+          try database.execute(
+            sql:
+              "UPDATE transcription_sessions SET deleted = 1, backendSynced = 1, backendId = ?, status = ?, updatedAt = ? WHERE id = ?",
+            arguments: [backendId, TranscriptionSessionStatus.completed.rawValue, Date(), id]
+          )
+          try database.execute(sql: "DELETE FROM transcription_segments WHERE sessionId = ?", arguments: [id])
+        }
       }
     }
     await SiriIndexHooks.conversationDeleted(backendId)
@@ -964,6 +958,7 @@ actor TranscriptionStorage {
           .filter(Column("backendId") == conversation.id)
           .fetchOne(database)
         {
+          if existingSession.deleted, let id = existingSession.id { return (id, false) }
           // Firestore update_time is the only server freshness authority.
           // Local cache-write time and recording timestamps are unrelated clocks.
           let incomingIsOlder: Bool
@@ -1027,6 +1022,9 @@ actor TranscriptionStorage {
 
     try await db.write { database in
       try withConversationCacheScope(cacheScope, generation: cacheGeneration) {
+        guard let session = try TranscriptionSessionRecord.fetchOne(database, key: sessionId), !session.deleted else {
+          return
+        }
         let existingSegments =
           try TranscriptionSegmentRecord
           .filter(Column("sessionId") == sessionId)

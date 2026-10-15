@@ -4,8 +4,6 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from google.auth.credentials import AnonymousCredentials
-from google.cloud.firestore_v1 import Client
 
 from database.firestore_index_registry import FIELD_INDEX_REQUIREMENTS
 from scripts import firestore_index_oracle as oracle
@@ -30,6 +28,7 @@ from tests.support.firestore_serving_query_inventory import (
     serving_function_body_digest,
 )
 from tests.support.firestore_shape_recorder import RecordingFirestore
+from tests.unit.fixtures.offline_firestore_sdk import OfflineFirestoreClient
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -54,7 +53,7 @@ def outside_caller_inventory():
 @pytest.fixture(scope='module')
 def outside_contract_artifacts(outside_results):
     manifest = exporter.load_manifest()
-    client = Client(project='shape-contract', credentials=AnonymousCredentials())
+    client = OfflineFirestoreClient(project='shape-contract')
     queries = {
         key: [
             oracle.build_query(oracle.hydrate_shape(shape.to_dict(), client, 'outside-contract'), client)
@@ -156,6 +155,17 @@ def test_outside_pins_are_literal_reviewed_function_fingerprints():
         key: entry.body_digest for key, entry in {**outside.COVERED_BY, **outside.SKIPS}.items() if entry.body_digest
     }
     assert all(serving_function_body_digest(key) == digest for key, digest in outside.BODY_DIGEST.items())
+
+
+def test_fingerprint_parse_reuse_cannot_hide_changed_source(tmp_path):
+    module = tmp_path / 'reader.py'
+    module.write_text('def read():\n    return 1\n')
+    before = serving_function_body_digest('reader.read', tmp_path)
+    assert serving_function_body_digest('reader.read', tmp_path) == before
+    module.write_text('def read():\n    return 2\n')
+    after = serving_function_body_digest('reader.read', tmp_path)
+    assert after != before
+    assert serving_function_body_digest('reader.read', tmp_path) == after
 
 
 @pytest.mark.parametrize('directory', ['routers', 'utils', 'services', 'jobs', 'new_serving_package'])

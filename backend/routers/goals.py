@@ -35,17 +35,10 @@ from models.goal import (
 from models.workstream import GoalDetailProjection
 import database.workstreams as workstreams_db
 from routers.canonical_task_access import require_canonical_task_user
-from utils.task_intelligence.proactive_engine import run_goal_changed_wake
 
 router = APIRouter()
 IdempotencyHeader = Annotated[str, Header(alias='Idempotency-Key', min_length=1, max_length=256)]
 AccountGenerationHeader = Annotated[int, Header(alias='X-Account-Generation', ge=0)]
-
-
-def _wake_goal_change(uid: str, goal_id: str, mutation_key: object) -> None:
-    """Notify proactive Chat-first after the route's goal write has committed."""
-
-    run_goal_changed_wake(uid, goal_id=goal_id, mutation_key=mutation_key)
 
 
 @router.get('/v1/goals', tags=['goals'], response_model=Optional[GoalResponse])
@@ -87,7 +80,6 @@ def create_goal(goal: GoalCreate, uid: str = Depends(auth.get_current_user_uid))
     except goals_db.GoalConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    _wake_goal_change(uid, created_goal['id'], created_goal.get('updated_at'))
     return normalize_goal_response(created_goal)
 
 
@@ -110,13 +102,14 @@ def create_canonical_goal(
     except goals_db.GoalStoreError as exc:
         _raise_goal_store_error(exc)
         raise AssertionError('unreachable')
-    _wake_goal_change(uid, created_goal['id'], created_goal.get('updated_at'))
     return normalize_goal_response(created_goal)
 
 
 def _raise_goal_store_error(exc: Exception) -> None:
     if isinstance(exc, goals_db.GoalNotFoundError):
         raise HTTPException(status_code=404, detail='Goal not found') from exc
+    if isinstance(exc, goals_db.GoalValidationError):
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if isinstance(exc, goals_db.GoalConflictError):
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     raise exc
@@ -142,7 +135,6 @@ def focus_goal(
     except goals_db.GoalStoreError as exc:
         _raise_goal_store_error(exc)
         raise AssertionError('unreachable')
-    _wake_goal_change(uid, goal_id, goal.get('updated_at'))
     return normalize_goal_response(goal)
 
 
@@ -160,7 +152,6 @@ def unfocus_goal(
             idempotency_key=idempotency_key,
             account_generation=account_generation,
         )
-        _wake_goal_change(uid, goal_id, goal.get('updated_at'))
         return normalize_goal_response(goal)
     except goals_db.GoalStoreError as exc:
         _raise_goal_store_error(exc)
@@ -187,7 +178,6 @@ def transition_goal_lifecycle(
     except goals_db.GoalStoreError as exc:
         _raise_goal_store_error(exc)
         raise AssertionError('unreachable')
-    _wake_goal_change(uid, goal_id, goal.get('updated_at'))
     return normalize_goal_response(goal)
 
 
@@ -215,7 +205,6 @@ def append_goal_progress_event(
             idempotency_key=idempotency_key,
             account_generation=account_generation,
         )
-        _wake_goal_change(uid, goal_id, event.sequence)
         return event
     except goals_db.GoalStoreError as exc:
         _raise_goal_store_error(exc)
@@ -239,12 +228,15 @@ def update_goal(goal_id: str, updates: GoalUpdate, uid: str = Depends(auth.get_c
     if not update_data:
         raise HTTPException(status_code=400, detail="No updates provided")
 
-    updated_goal = goals_db.update_goal(uid, goal_id, update_data)
+    try:
+        updated_goal = goals_db.update_goal(uid, goal_id, update_data)
+    except goals_db.GoalStoreError as exc:
+        _raise_goal_store_error(exc)
+        raise AssertionError('unreachable')
 
     if not updated_goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 
-    _wake_goal_change(uid, goal_id, updated_goal.get('updated_at'))
     return normalize_goal_response(updated_goal)
 
 
@@ -260,7 +252,6 @@ def update_goal_progress(
     if not updated_goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 
-    _wake_goal_change(uid, goal_id, updated_goal.get('updated_at'))
     return normalize_goal_response(updated_goal)
 
 
@@ -280,7 +271,6 @@ def delete_goal(goal_id: str, uid: str = Depends(auth.get_current_user_uid)) -> 
     if not success:
         raise HTTPException(status_code=404, detail="Goal not found")
 
-    _wake_goal_change(uid, goal_id, 'deleted')
     return {"success": True, "deleted_id": goal_id}
 
 

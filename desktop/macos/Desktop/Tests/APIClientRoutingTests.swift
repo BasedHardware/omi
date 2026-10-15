@@ -909,6 +909,43 @@ final class APIClientRoutingTests: XCTestCase {
       label: "getDailySummarySettings")
   }
 
+  func testUpdateDailySummaryDepthSendsAccountPreferenceAndAcceptsStatusResponse() async throws {
+    URLCapture.setResponse(statusCode: 200, body: Data(#"{"status":"ok","depth":"deep"}"#.utf8))
+    let client = await makeTestClient()
+
+    try await client.updateDailySummarySettings(depth: .deep)
+
+    let request = try XCTUnwrap(URLCapture.capturedRequests.first)
+    XCTAssertEqual(request.method, "PATCH")
+    XCTAssertTrue(request.url.path.contains("v1/users/daily-summary-settings"))
+    let body = try XCTUnwrap(request.body)
+    let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    XCTAssertEqual(payload["depth"] as? String, "deep")
+  }
+
+  func testUpdateDailySummaryDepthRejectsUnconfirmedOldBackendResponse() async throws {
+    URLCapture.setResponse(statusCode: 200, body: Data(#"{"status":"ok"}"#.utf8))
+    let client = await makeTestClient()
+
+    do {
+      try await client.updateDailySummarySettings(depth: .normal)
+      XCTFail("An older backend must not appear to save an ignored depth")
+    } catch DailySummaryDepthSaveError.notConfirmed {
+      // The picker can revert to its last saved value and tell the user.
+    }
+  }
+
+  func testDailySummarySettingsDefaultsMissingOrUnknownDepthToBrief() throws {
+    let legacy = try JSONDecoder().decode(
+      DailySummarySettings.self, from: Data(#"{"enabled":true,"hour":22}"#.utf8))
+    let unknown = try JSONDecoder().decode(
+      DailySummarySettings.self,
+      from: Data(#"{"enabled":true,"hour":22,"depth":"future-option"}"#.utf8))
+
+    XCTAssertEqual(legacy.depth, .brief)
+    XCTAssertEqual(unknown.depth, .brief)
+  }
+
   // -- Subscription/payments (GET → Python, was explicit pythonBackendURL, now default) --
 
   func testGetUserSubscriptionRoutesToPython() async {

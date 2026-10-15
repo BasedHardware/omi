@@ -99,6 +99,7 @@ dependencies:
   flutter_background_service: 5.1.0
   flutter_background_service_android: 6.3.0
   flutter_background_service_platform_interface: 5.1.2
+  onnxruntime_v2: 1.23.2+2
   opus_flutter: ^3.0.3
   opus_dart:
     git:
@@ -207,6 +208,7 @@ flutter:
   generate: true
   uses-material-design: true
   assets:
+    - assets/models/silero_vad.onnx
     - assets/images/stars.png
     - assets/images/herologo.png
     - assets/fonts/

@@ -3,7 +3,7 @@ import logging
 import mimetypes
 import re
 from pathlib import Path
-from typing import Any, Dict, List, NoReturn, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, NoReturn, Optional, Protocol, Tuple, Union, cast
 
 import openai
 from openai import AsyncOpenAI
@@ -67,7 +67,7 @@ def _unsupported_chat_file_error(file_path: Union[str, Path]) -> UnsupportedChat
     return UnsupportedChatFileError(f"Unsupported attachment: {label} not supported in chat.")
 
 
-def _safe_file_chats(files_data: List[Dict[str, Any]]) -> List[FileChat]:
+def safe_file_chats(files_data: List[Dict[str, Any]]) -> List[FileChat]:
     """Build FileChat objects from raw file docs, skipping (not raising on) a malformed one.
 
     A legacy or partial file document (missing openai_file_id, mime_type, created_at, ...) must not
@@ -102,6 +102,20 @@ def _openai_file_ids(files_data: List[Dict[str, Any]]) -> List[str]:
 
 
 _async_openai: AsyncOpenAI | None = None
+
+
+def download_owned_chat_file(uid: str, file_id: str, *, max_bytes: int) -> bytes:
+    """Resolve and bound bytes for a file owned by the current user."""
+    rows = chat_db.get_chat_files(uid, [file_id])
+    if len(rows) != 1:
+        raise PermissionError('Owned file unavailable')
+    data = bytearray()
+    with _get_sync_openai().files.with_streaming_response.content(rows[0]['openai_file_id']) as response:
+        for chunk in response.iter_bytes():
+            data.extend(chunk)
+            if len(data) > max_bytes:
+                raise ValueError('Owned file too large')
+    return bytes(data)
 
 
 def _get_async_openai() -> AsyncOpenAI:
@@ -165,7 +179,7 @@ def _record_gateway_file_chat_fallback(outcome: str) -> None:
     )
 
 
-class _StreamingCallbackProtocol:
+class _StreamingCallbackProtocol(Protocol):
     """Structural protocol for streaming callbacks (AsyncStreamingCallback in retrieval.agentic)."""
 
     def put_data_nowait(self, text: str) -> None: ...
@@ -217,6 +231,11 @@ class File:
         # Add an underscore before any capital letter that is preceded by a lowercase or digit
         string = re.sub(r"(?<=[a-z0-9])([A-Z])", r"_\1", string)
         return string.lower()
+
+
+def _requested_file_limit(file_ids: List[str]) -> int:
+    # Keep the recent-file default, but include a complete ten-photo channel album.
+    return min(10, max(9, len(file_ids)))
 
 
 class FileChatTool:
@@ -280,8 +299,8 @@ class FileChatTool:
 
     def process_chat_with_file(self, question: str, file_ids: List[str]) -> str:
         """Process chat with file attachments (non-streaming, agentic tool path)."""
-        files_data = chat_db.get_chat_files_desc(self.uid, files_id=file_ids, limit=9)
-        files = _safe_file_chats(files_data)
+        files_data = chat_db.get_chat_files_desc(self.uid, files_id=file_ids, limit=_requested_file_limit(file_ids))
+        files = safe_file_chats(files_data)
         return self._ask_files(question, files)
 
     async def process_chat_with_file_stream(
@@ -297,9 +316,13 @@ class FileChatTool:
         assert callback is not None  # streaming path always supplies a callback
         try:
             files_data = await run_blocking(
-                db_executor, chat_db.get_chat_files_desc, self.uid, files_id=file_ids, limit=9
+                db_executor,
+                chat_db.get_chat_files_desc,
+                self.uid,
+                files_id=file_ids,
+                limit=_requested_file_limit(file_ids),
             )
-            files = _safe_file_chats(files_data)
+            files = safe_file_chats(files_data)
         except Exception:
             callback.end_nowait()
             raise

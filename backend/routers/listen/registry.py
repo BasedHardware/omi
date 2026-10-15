@@ -16,7 +16,7 @@ import logging
 import threading
 from typing import Any, Dict, List, Set
 
-from models.message_event import ProactiveMessageEvent
+from models.message_event import MessageEvent, ProactiveMessageEvent, ProactivityV2Event
 
 logger = logging.getLogger(__name__)
 
@@ -73,12 +73,20 @@ async def proactive_message_dispatcher(client: Any = None) -> None:
                 uid = payload.get('uid')
                 if not uid:
                     continue
-                event = ProactiveMessageEvent(
-                    app_id=payload.get('app_id') or '',
-                    title=payload.get('title') or '',
-                    message=payload.get('message') or '',
-                    conversation_id=payload.get('conversation_id'),
-                )
+                event: MessageEvent
+                if payload.get('notification_type') == 'proactivity_v2':
+                    event = ProactivityV2Event(
+                        item_id=payload['item_id'],
+                        target_kind=payload['target_kind'],
+                        target_id=payload['target_id'],
+                    )
+                else:
+                    event = ProactiveMessageEvent(
+                        app_id=payload.get('app_id') or '',
+                        title=payload.get('title') or '',
+                        message=payload.get('message') or '',
+                        conversation_id=payload.get('conversation_id'),
+                    )
                 for session in _sessions_for(uid):
                     session.send_event(event)
             except asyncio.CancelledError:

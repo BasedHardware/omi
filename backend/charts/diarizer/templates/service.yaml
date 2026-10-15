@@ -1,8 +1,9 @@
 apiVersion: cloud.google.com/v1
 kind: BackendConfig
 metadata:
-  name: diarizer-backend-config
+  name: {{ .Values.backendConfig.name }}
 spec:
+  timeoutSec: {{ .Values.backendConfig.timeoutSeconds }}
   healthCheck:
     checkIntervalSec: 10
     timeoutSec: 5
@@ -18,7 +19,7 @@ metadata:
     {{- include "diarizer.labels" . | nindent 4 }}
   annotations:
     cloud.google.com/neg: '{"ingress": true}'
-    cloud.google.com/backend-config: '{"default": "diarizer-backend-config"}'  # Link to BackendConfig
+    cloud.google.com/backend-config: '{"default": {{ .Values.backendConfig.name | quote }}}'  # Link to BackendConfig
 spec:
   type: {{ .Values.service.type }}
   ports:

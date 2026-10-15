@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/gen/people_wire.g.dart';
 import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
@@ -41,6 +42,7 @@ GeneratedSpeakerTagPrompt _prompt(
       conversationStartedAt: DateTime.now().subtract(const Duration(hours: 3)),
       speakerId: 1,
       segmentIds: const ['s1'],
+      evidenceId: kind == 'owner_check' ? 'bound-evidence' : null,
       clipStart: 0,
       clipEnd: 8,
       excerpt: 'We should ship it on Friday',
@@ -67,28 +69,33 @@ Future<_Harness> _pumpCard(
   bool loadPeople = true,
   double textScale = 1,
   bool reduceMotion = false,
+  bool playOwner = true,
 }) async {
   final answers = <GeneratedSpeakerTagPromptAnswerRequest>[];
   final saves = <bool?>[];
   final provider = SpeakerTagPromptsProvider(
     fetchPrompts: () async => ApiSuccess(GeneratedSpeakerTagPromptsResponse(prompts: prompts, firstTime: firstTime)),
-    markShown: (_) async => ApiSuccess(firstTime),
+    markShown: (_, {bool setShown = true}) async => ApiSuccess(firstTime),
     dismiss: () async => const ApiSuccess<void>(null),
     submitAnswer: (request) async {
       answers.add(request);
-      return ApiSuccess(GeneratedSpeakerTagPromptAnswerResponse(
-        qualityOutcome: 'skipped',
-        personId: request.personId ?? (request.answer == 'new_person' ? 'p-new' : null),
-      ));
+      return ApiSuccess(
+        GeneratedSpeakerTagPromptAnswerResponse(
+          qualityOutcome: 'skipped',
+          personId: request.personId ?? (request.answer == 'new_person' ? 'p-new' : null),
+        ),
+      );
     },
     updateSettings: ({bool? speakerTagPromptsEnabled, bool? saveOtherVoiceProfiles, required String source}) async {
       saves.add(saveOtherVoiceProfiles);
       return ApiSuccess(GeneratedVoiceProfileSettings(saveOtherVoiceProfiles: saveOtherVoiceProfiles ?? true));
     },
+    loadClip: (_) async => ApiSuccess(Uint8List.fromList([1, 2, 3])),
+    playClip: (_, __) async => true,
     emit: (_) {},
     answeredHold: Duration.zero,
   );
-  final peopleProvider = PeopleProvider(loadPeople: () async => people);
+  final peopleProvider = PeopleProvider(loadPeople: () async => PeopleListResponse(people: people));
   if (loadPeople) await peopleProvider.setPeople();
   await tester.pumpWidget(
     MultiProvider(
@@ -100,8 +107,9 @@ Future<_Harness> _pumpCard(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context)
-              .copyWith(textScaler: TextScaler.linear(textScale), disableAnimations: reduceMotion),
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(textScale), disableAnimations: reduceMotion),
           child: child!,
         ),
         home: const Scaffold(body: SingleChildScrollView(child: SpeakerTagPromptCard())),
@@ -109,6 +117,10 @@ Future<_Harness> _pumpCard(
     ),
   );
   await tester.pumpAndSettle();
+  if (playOwner && provider.current?.kind == 'owner_check') {
+    await provider.togglePlay(provider.current!);
+    await tester.pumpAndSettle();
+  }
   return _Harness(provider, peopleProvider, answers, saves);
 }
 
@@ -128,11 +140,33 @@ Future<void> _tapKey(WidgetTester tester, String key) async {
   await tester.tap(finder);
 }
 
+/// No… / Someone Else…, then Not a Person in the picker.
+Future<void> _pickNotAPerson(WidgetTester tester) async {
+  await _tapKey(tester, 'speaker_tag_prompt_answer_someone_else');
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('speaker_picker_not_a_person')));
+}
+
 void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     VisibilityDetectorController.instance.updateInterval = Duration.zero;
+  });
+
+  testWidgets('owner Yes and No require playback while Skip stays available', (tester) async {
+    final h = await _pumpCard(tester, prompts: [_prompt('a', 'owner_check')], playOwner: false, firstTime: true);
+    await tester.tap(find.byKey(const Key('speaker_tag_prompt_answer_me')));
+    await tester.pumpAndSettle();
+    expect(h.provider.pending, isNull);
+    expect(h.answers, isEmpty);
+    expect(find.text('Your answer labels only the played excerpt.'), findsOneWidget);
+    expect(find.byKey(const Key('speaker_tag_prompt_save_voices')), findsNothing);
+    await h.provider.togglePlay(h.provider.current!);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('speaker_tag_prompt_answer_me')));
+    await _waitOutUndo(tester);
+    expect(h.answers.single.evidenceId, 'bound-evidence');
   });
 
   testWidgets('voice-card answers and play expose accessibility tap actions', (tester) async {
@@ -143,38 +177,45 @@ void main() {
       expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue, reason: key);
     }
     await tester.pumpWidget(const SizedBox.shrink());
-    await _pumpCard(tester, prompts: [
-      _prompt('b', 'identify', candidates: [
-        const GeneratedSpeakerTagCandidate(personId: 'p1', name: 'Maya', matchLevel: 2),
-      ])
-    ]);
+    await _pumpCard(
+      tester,
+      prompts: [
+        _prompt(
+          'b',
+          'identify',
+          candidates: [const GeneratedSpeakerTagCandidate(personId: 'p1', name: 'Maya', matchLevel: 2)],
+        ),
+      ],
+    );
     expect(
-        tester
-            .getSemantics(find.byKey(const Key('speaker_tag_prompt_candidate_p1')))
-            .getSemanticsData()
-            .hasAction(SemanticsAction.tap),
-        isTrue);
+      tester
+          .getSemantics(find.byKey(const Key('speaker_tag_prompt_candidate_p1')))
+          .getSemanticsData()
+          .hasAction(SemanticsAction.tap),
+      isTrue,
+    );
     handle.dispose();
   });
 
   testWidgets('voice-card controls support 200 percent text and Reduce Motion', (tester) async {
     await _pumpCard(tester, prompts: [_prompt('a', 'owner_check')], textScale: 2, reduceMotion: true);
     expect(tester.takeException(), isNull);
-    final chip = find.byKey(const Key('speaker_tag_prompt_answer_not_a_person'));
+    final chip = find.byKey(const Key('speaker_tag_prompt_answer_not_me'));
     expect(tester.getSize(chip).height, greaterThanOrEqualTo(44));
     for (final widget in tester.widgetList<AnimatedOpacity>(find.byType(AnimatedOpacity))) {
       expect(widget.duration, Duration.zero);
     }
   });
 
-  testWidgets('owner then confirm: answers send after their Undo window, then the card thanks the user',
-      (tester) async {
+  testWidgets('owner then confirm: answers send after their Undo window, then the card thanks the user', (
+    tester,
+  ) async {
     final h = await _pumpCard(
       tester,
       prompts: [_prompt('a', 'owner_check'), _prompt('b', 'confirm_person')],
       people: [_person('p1', 'Sam')],
     );
-    expect(find.text('Is this you?'), findsOneWidget);
+    expect(find.text('Was this you?'), findsOneWidget);
     expect(find.textContaining('We should ship it on Friday'), findsOneWidget);
     expect(find.textContaining('Coffee chat'), findsOneWidget);
     expect(find.byKey(const Key('speaker_tag_prompt_save_voices_switch')), findsNothing);
@@ -189,7 +230,12 @@ void main() {
     expect(h.answers.map((a) => a.answer), ['me']);
 
     expect(find.text('Is this Sam?'), findsOneWidget);
-    expect(find.text('Yes raises Sam\'s confidence.'), findsOneWidget);
+    // A yes/no question: Yes, No… (the picker) and Not Sure, with no footnote explaining Yes.
+    expect(find.text('Yes raises Sam\'s confidence.'), findsNothing);
+    expect(find.text('No…'), findsOneWidget);
+    expect(find.byKey(const Key('speaker_tag_prompt_answer_me')), findsNothing);
+    expect(find.byKey(const Key('speaker_tag_prompt_answer_not_a_person')), findsNothing);
+    expect(find.byKey(const Key('speaker_tag_prompt_answer_skip')), findsOneWidget);
     await _tapKey(tester, 'speaker_tag_prompt_answer_yes');
     await tester.pump();
     expect(find.text('Saved as Sam'), findsOneWidget);
@@ -205,7 +251,7 @@ void main() {
 
   testWidgets('Undo drops a staged answer and puts the question back', (tester) async {
     final h = await _pumpCard(tester, prompts: [_prompt('a', 'identify')]);
-    await _tapKey(tester, 'speaker_tag_prompt_answer_not_a_person');
+    await _pickNotAPerson(tester);
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('Marked as not a person'), findsOneWidget);
@@ -218,7 +264,7 @@ void main() {
 
   testWidgets('closing the card keeps Undo available without saving the answer', (tester) async {
     final h = await _pumpCard(tester, prompts: [_prompt('a', 'identify')]);
-    await _tapKey(tester, 'speaker_tag_prompt_answer_not_a_person');
+    await _pickNotAPerson(tester);
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     await h.provider.close();
@@ -242,11 +288,29 @@ void main() {
     expect(h.answers.single.answer, 'me');
   });
 
-  testWidgets('Not a Person commits the not_a_person answer', (tester) async {
+  testWidgets('No… then Not a Person commits the not_a_person answer', (tester) async {
     final h = await _pumpCard(tester, prompts: [_prompt('a', 'confirm_person')], people: [_person('p1', 'Sam')]);
-    await _tapKey(tester, 'speaker_tag_prompt_answer_not_a_person');
+    await _pickNotAPerson(tester);
     await _waitOutUndo(tester);
     expect(h.answers.single.answer, 'not_a_person');
+  });
+
+  testWidgets("No… then That's Me commits the me answer", (tester) async {
+    final h = await _pumpCard(tester, prompts: [_prompt('a', 'confirm_person')], people: [_person('p1', 'Sam')]);
+    await _tapKey(tester, 'speaker_tag_prompt_answer_someone_else');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('speaker_picker_me')));
+    await _waitOutUndo(tester);
+    expect(h.answers.single.answer, 'me');
+  });
+
+  testWidgets("the owner card keeps its own answers and its picker offers no That's Me", (tester) async {
+    await _pumpCard(tester, prompts: [_prompt('a', 'owner_check')]);
+    for (final key in ['me', 'not_me', 'skip']) {
+      expect(find.byKey(Key('speaker_tag_prompt_answer_$key')), findsOneWidget, reason: key);
+    }
+    expect(find.byKey(const Key('speaker_tag_prompt_answer_someone_else')), findsNothing);
+    expect(find.byKey(const Key('speaker_tag_prompt_answer_not_a_person')), findsNothing);
   });
 
   testWidgets('Not Sure skips at once, without Undo', (tester) async {
@@ -254,18 +318,23 @@ void main() {
     await _tapKey(tester, 'speaker_tag_prompt_answer_skip');
     await tester.pumpAndSettle();
     expect(h.answers.single.answer, 'skip');
-    expect(find.text('Is this you?'), findsOneWidget);
+    expect(find.text('Was this you?'), findsOneWidget);
   });
 
-  testWidgets('identify ranks server candidates by voice match, pinned first, and a pick sends that person',
-      (tester) async {
+  testWidgets('identify ranks server candidates by voice match, pinned first, and a pick sends that person', (
+    tester,
+  ) async {
     final h = await _pumpCard(
       tester,
       prompts: [
-        _prompt('a', 'identify', candidates: const [
-          GeneratedSpeakerTagCandidate(personId: 'p2', name: 'Jordan', matchLevel: 2, pinned: true),
-          GeneratedSpeakerTagCandidate(personId: 'p3', name: 'Alex', matchLevel: 1),
-        ]),
+        _prompt(
+          'a',
+          'identify',
+          candidates: const [
+            GeneratedSpeakerTagCandidate(personId: 'p2', name: 'Jordan', matchLevel: 2, pinned: true),
+            GeneratedSpeakerTagCandidate(personId: 'p3', name: 'Alex', matchLevel: 1),
+          ],
+        ),
       ],
       people: [_person('p2', 'Jordan', pinned: true), _person('p3', 'Alex')],
     );
@@ -285,7 +354,7 @@ void main() {
     final h = await _pumpCard(
       tester,
       prompts: [
-        _prompt('a', 'identify', suggestedPersonIds: ['p2'])
+        _prompt('a', 'identify', suggestedPersonIds: ['p2']),
       ],
       people: [_person('p2', 'Ana')],
       loadPeople: false,
@@ -365,7 +434,7 @@ void main() {
       fetchPrompts: () async => ApiSuccess(
         GeneratedSpeakerTagPromptsResponse(prompts: [_prompt('a', 'owner_check'), _prompt('b', 'confirm_person')]),
       ),
-      markShown: (_) async => const ApiSuccess(false),
+      markShown: (_, {bool setShown = true}) async => const ApiSuccess(false),
       loadClip: (item) async => item.id == 'a'
           ? const ApiFailure(ApiProblem(ApiProblemKind.notFound, statusCode: 404))
           : ApiSuccess(Uint8List.fromList([1])),
@@ -376,7 +445,8 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
-          ChangeNotifierProvider(create: (_) => PeopleProvider(loadPeople: () async => [])),
+          ChangeNotifierProvider(
+              create: (_) => PeopleProvider(loadPeople: () async => const PeopleListResponse(people: []))),
           ChangeNotifierProvider.value(value: provider),
         ],
         child: const MaterialApp(
@@ -387,7 +457,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Is this you?'), findsOneWidget);
+    expect(find.text('Was this you?'), findsOneWidget);
     await tester.tap(find.byKey(const Key('speaker_tag_prompt_play')));
     await tester.pumpAndSettle();
     expect(find.text('Is this Sam?'), findsOneWidget);

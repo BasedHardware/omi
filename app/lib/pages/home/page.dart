@@ -10,6 +10,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
 
+import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -18,12 +19,9 @@ import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/chat/page.dart';
-import 'package:omi/pages/conversations/auto_sync_page.dart';
-import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/action_items/widgets/task_selection_action_bar.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/pages/home/home_content.dart';
-import 'package:omi/pages/home/widgets/header_sync_button.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/pages/home/home_widgets_publisher.dart';
 import 'package:omi/pages/phone_calls/active_call_banner.dart';
@@ -34,6 +32,7 @@ import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/pages/conversations/day_conversations_page.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
@@ -62,6 +61,7 @@ import 'package:omi/widgets/freemium_switch_dialog.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:omi/widgets/home_bottom_bar.dart';
+import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 import 'package:omi/widgets/header_circle_button.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
 import 'package:omi/services/sockets/listen_client_state.dart';
@@ -163,6 +163,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     identityEpoch: () => AnalyticsManager.identityEpoch,
     enabled: () => AnalyticsManager.identityKnown && AnalyticsManager.trackingEnabled,
     emit: (eventName, properties) => PlatformManager.instance.analytics.track(eventName, properties: properties),
+    // PackageInfo build number, cached before UI start. Same source as the
+    // app_build super-property, readable before AnalyticsManager finishes init.
+    currentBuild: () => PlatformManager.instance.appBuild,
   );
 
   CaptureProvider? _captureProvider;
@@ -402,6 +405,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   void _onReceiveTaskData(dynamic data) async {
     if (data is! Map<String, dynamic>) return;
+    if (data['recordingSyncWake'] == true) {
+      await RecordingTransferCoordinator.instance.wake(WakeTrigger.periodic);
+      return;
+    }
     if (!(data.containsKey('latitude') && data.containsKey('longitude'))) return;
     await updateUserGeolocation(
       geolocation: Geolocation(
@@ -416,12 +423,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   void initState() {
-    unawaited(_backgroundResourceTelemetry.recoverInterrupted());
+    unawaited(
+      _backgroundResourceTelemetry.recoverInterrupted(
+        launchContext: classifyBackgroundInterruptLaunch(
+          processAlreadyObserved: BackgroundInterruptProcessLaunch.peek(),
+        ),
+      ),
+    );
     SharedPreferencesUtil().onboardingCompleted = true;
     if (!SharedPreferencesUtil().permissionsCompleted) {
       SharedPreferencesUtil().permissionsCompleted = true;
     }
-    updateUserOnboardingState(completed: true);
+    unawaited(OnboardingSyncRuntime.enqueue(completed: true));
 
     // A link the shell was opened with: select its tab now (parent), open its page after start-up.
     final initialLink = HomeDeepLink.parse(widget.navigateToRoute);
@@ -450,6 +463,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       }
       if (mounted) {
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
+      }
+      if (mounted && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        await context.read<CaptureProvider>().resumeAfterSilence();
       }
       if (mounted) {
         await Provider.of<CaptureProvider>(
@@ -483,15 +499,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   /// Opens a link inside this shell (notification taps, quick actions, app links): its tab first,
   /// then its page — never a second Home (nav #3, #18).
-  Future<void> _openRoute(String route, {bool Function()? canOpen}) async {
+  Future<bool> _openRoute(String route, {bool Function()? canOpen}) async {
     final link = HomeDeepLink.parse(route);
-    if (link == null || !mounted || (canOpen != null && !canOpen())) return;
+    if (link == null || !mounted || (canOpen != null && !canOpen())) return false;
     final tab = link.tabIndex;
     if (tab != null) {
       _ensurePageInitialized(tab);
       context.read<HomeProvider>().setIndex(tab);
     }
-    await openHomeDeepLink(context, link, openSettings: _openSettings, openSearch: _openSearch, canOpen: canOpen);
+    return openHomeDeepLink(context, link, openSettings: _openSettings, openSearch: _openSearch, canOpen: canOpen);
   }
 
   /// Opens the search overlay over the shell, optionally with a query already typed (a `/search`
@@ -633,6 +649,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         tasks: context.read<ActionItemsProvider>(),
         conversations: context.read<ConversationProvider>(),
         l10n: () => context.l10n,
+        dates: () => OmiDateFormat.of(context),
       )..start();
     });
   }
@@ -706,7 +723,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   Widget build(BuildContext context) {
-    return MyUpgradeAlert(
+    final content = MyUpgradeAlert(
       upgrader: _upgrader,
       dialogStyle: Platform.isIOS ? UpgradeDialogStyle.cupertino : UpgradeDialogStyle.material,
       child: Consumer<ConnectivityProvider>(
@@ -758,7 +775,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               child: Scaffold(
                 backgroundColor: OmiColors.surface0,
                 resizeToAvoidBottomInset: false,
-                appBar: _buildAppBar(context),
+                appBar: _buildAppBar(context, onHome),
                 body: GestureDetector(
                   onTap: () => primaryFocus?.unfocus(),
                   child: Stack(
@@ -778,6 +795,27 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               }
                             },
                           ),
+                          if (onHome)
+                            Selector<ConversationProvider, (DateTime?, DateTime?)>(
+                              selector: (_, provider) => (provider.selectedStartDate, provider.selectedEndDate),
+                              builder: (context, range, _) {
+                                final start = range.$1;
+                                if (start == null) return const SizedBox.shrink();
+                                final provider = context.read<ConversationProvider>();
+                                return Padding(
+                                  padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.xs),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: OmiDateFilterChip(
+                                      key: const ValueKey('home_date_filter'),
+                                      start: start,
+                                      end: range.$2,
+                                      onClear: () => unawaited(provider.clearDateFilter()),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
                           // Home shows an active call in its capture row; Tasks gets the slim bar.
                           if (!onHome) const ActiveCallTopBar(),
                           Expanded(
@@ -824,6 +862,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         ),
       ),
     );
+    // The widget tree constructed without throwing: Home built successfully.
+    // Marking here (not in initState, not in a post-frame callback) means a
+    // build exception skips the mark — Flutter catches rebuild errors and
+    // post-frame callbacks still fire after them, so neither of those proves
+    // success. A later Home then truthfully classifies as cold_start.
+    BackgroundInterruptProcessLaunch.mark();
+    return content;
   }
 
   /// Chat opens as a sheet that rises over Home (see chat_route.dart); the mic opens it listening.
@@ -929,7 +974,24 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     );
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context) {
+  Future<void> _openCalendar(BuildContext context) async {
+    final provider = context.read<ConversationProvider>();
+    await showConversationDateRangePicker(
+      context,
+      initialStartDate: provider.selectedStartDate,
+      initialEndDate: provider.selectedEndDate,
+      onSelected: (start, end) {
+        if (start.year == end.year && start.month == end.month && start.day == end.day) {
+          routeToPage(context, DayConversationsPage(date: start));
+        } else {
+          unawaited(provider.filterConversationsByDateRange(start, end));
+        }
+      },
+      onClear: provider.clearDateFilter,
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar(BuildContext context, bool onHome) {
     return AppBar(
       automaticallyImplyLeading: false,
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -947,17 +1009,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           ),
           Row(
             children: [
-              // Sync: whenever a device is paired or recordings wait; badge counts the backlog.
-              Consumer<DeviceProvider>(
-                builder: (context, deviceProvider, child) => HeaderSyncButton(
-                  hasPairedDevice: deviceProvider.pairedDevice != null,
+              if (onHome)
+                HeaderCircleButton(
+                  key: const ValueKey('home_calendar_button'),
+                  semanticLabel: context.l10n.filterByDate,
+                  icon: FaIcon(FontAwesomeIcons.calendar, size: 16, color: OmiColors.textSecondary),
                   onTap: () {
                     OmiHaptics.selection();
-                    final page = deviceProvider.supportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
-                    routeToPage(context, page);
+                    unawaited(_openCalendar(context));
                   },
                 ),
-              ),
               // Search: conversations, recaps, tasks and memories, from any page of the shell.
               HeaderCircleButton(
                 key: const ValueKey('home_search_button'),

@@ -119,6 +119,9 @@ def test_merge_renews_processing_lease_during_live_processing(monkeypatch):
     monkeypatch.setattr(merge.lifecycle_service, "create_processing_conversation", MagicMock(return_value=True))
     monkeypatch.setattr(merge, "is_audio_merge_dispatch_enabled", lambda: False)
     monkeypatch.setattr(merge, "_delete_conversation_and_related_data", MagicMock())
+    from database import review_overlay_merge
+
+    monkeypatch.setattr(review_overlay_merge, 'transfer', lambda *args, **kwargs: True)
 
     import utils.notifications as notif_mod
 

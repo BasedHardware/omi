@@ -22,7 +22,11 @@ from prometheus_client import Counter, Gauge, Histogram
 from prometheus_client import make_asgi_app  # type: ignore[reportUnknownVariableType]  # prometheus_client partially typed
 
 from gpu_worker import GPUWorker, AudioDurationExceededError
-from batch_engine import BatchEngine, QueueFullError
+from batch_engine import BatchEngine, QueueFullError, QueueTimeoutError
+
+# The image build overwrites omi_logging_config.py with backend/utils/logging_config.py.
+# Importing utils.logging_config in the NeMo process hits NeMo's utils package.
+from omi_logging_config import configure_split_stream_logging, quiet_repetitive_nemo_logs
 from transcribe import (
     transcribe_file,
     transcribe_file_v2,
@@ -33,11 +37,14 @@ from transcribe import (
 from stream_handler import StreamSession, warmup_rnnt_decoder
 from admission import StreamAdmissionController
 
-logging.basicConfig(level=logging.INFO)
-# httpx logs every outbound request at INFO; the per-segment diarizer embedding
-# calls (one per audio segment) flood the log pipeline with 200 OK noise. Keep
-# only warnings/errors (4xx/5xx, timeouts) from httpx. See issue #8080.
-logging.getLogger("httpx").setLevel(logging.WARNING)
+# INFO/DEBUG to stdout, WARNING+ to stderr. Also quiets httpx/httpcore.
+# The internal HTTP LB already logs every request (successes sampled, errors in
+# full), so Uvicorn's per-request access line is a duplicate.
+configure_split_stream_logging(level=logging.INFO)
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+# nemo_logger does not propagate. Drop only the per-batch timestamps INFO and
+# the two repetitive Lhotse dataloader warnings; other NeMo errors still emit.
+quiet_repetitive_nemo_logs()
 logger = logging.getLogger(__name__)
 
 _ASR_BUCKETS = (0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0)
@@ -105,6 +112,8 @@ start_time: float = 0
 _diarize_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="diarize")
 _io_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="file-io")
 _max_file_duration_sec = float(os.getenv("PARAKEET_MAX_FILE_DURATION", "0"))
+_LIVE_QUEUE_BUDGET_CAP_SECONDS = 8.0
+_TIMEOUT_HEADER = "X-Omi-STT-Timeout-Seconds"
 
 
 def _get_audio_duration_from_bytes(data: bytes) -> float:
@@ -204,12 +213,28 @@ def _remove_file(path: str) -> None:
 async def transcribe(request: Request, file: UploadFile = File(...)) -> JSONResponse | Dict[str, Any]:
     lane = 'live' if request.headers.get('X-Omi-STT-Surface') == 'live-window' else 'backfill'
     prerecorded = lane == 'backfill'
+    request_start = time.monotonic()
     if gpu_worker is not None and not gpu_worker.is_ready:
         LANE_REFUSALS.labels(lane=lane, reason='not_ready').inc()
         REQUESTS_TOTAL.labels(endpoint="v1_transcribe", status="error").inc()
         if prerecorded:
             PRERECORDED_REQUESTS.labels(status='error').inc()
         return JSONResponse(status_code=503, content={"detail": "Model loading, try again shortly"})
+    queue_deadline: Optional[float] = None
+    if lane == 'live':
+        budget = _LIVE_QUEUE_BUDGET_CAP_SECONDS
+        supplied_raw = request.headers.get(_TIMEOUT_HEADER)
+        if supplied_raw is not None:
+            try:
+                supplied = float(supplied_raw)
+            except ValueError:
+                supplied = float('nan')
+            if not math.isfinite(supplied) or supplied <= 0:
+                LANE_REFUSALS.labels(lane=lane, reason='invalid_timeout').inc()
+                REQUESTS_TOTAL.labels(endpoint="v1_transcribe", status="error").inc()
+                return JSONResponse(status_code=400, content={"detail": f"Invalid {_TIMEOUT_HEADER} budget"})
+            budget = min(budget, supplied)
+        queue_deadline = request_start + budget
     upload_id = str(uuid.uuid4())
     file_path = f"_temp/{upload_id}_{file.filename}"
     ACTIVE_BATCH.inc()
@@ -217,6 +242,9 @@ async def transcribe(request: Request, file: UploadFile = File(...)) -> JSONResp
     audio_dur = 0.0
     status = "success"
     loop = asyncio.get_running_loop()
+    file_written = False
+    submit_called = False
+    write_orphaned = False
     try:
         data = await file.read()
         audio_dur = _get_audio_duration_from_bytes(data)
@@ -229,12 +257,21 @@ async def transcribe(request: Request, file: UploadFile = File(...)) -> JSONResp
             )
         if audio_dur > 0 and math.isfinite(audio_dur):
             AUDIO_DURATION.observe(audio_dur)
-        await loop.run_in_executor(_io_pool, _write_file, file_path, data)
+        write_work = _io_pool.submit(_write_file, file_path, data)
+        try:
+            await asyncio.wrap_future(write_work)
+            file_written = True
+        except asyncio.CancelledError:
+            write_orphaned = True
+            write_work.add_done_callback(lambda _f, p=file_path: _remove_file(p))
+            raise
+        except Exception:
+            file_written = True
+            raise
 
         if batch_engine is not None:
-            PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
-            result = cast(Dict[str, Any], await batch_engine.submit(file_path, timestamps=True, owns_file=True, lane=lane))  # type: ignore[reportUnknownMemberType]  # batch_engine.submit partially typed
-            PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
+            submit_called = True
+            result = cast(Dict[str, Any], await batch_engine.submit(file_path, timestamps=True, owns_file=True, lane=lane, queue_deadline=queue_deadline))  # type: ignore[reportUnknownMemberType]  # batch_engine.submit partially typed
             return JSONResponse(content=_transcribe_from_gpu_result(result))
         else:
             result = await loop.run_in_executor(_diarize_pool, transcribe_file, file_path)
@@ -243,10 +280,21 @@ async def transcribe(request: Request, file: UploadFile = File(...)) -> JSONResp
         status = "error"
         LANE_REFUSALS.labels(lane=lane, reason='queue_full').inc()
         return JSONResponse(status_code=503, content={"detail": "Server overloaded — try again later"})
+    except QueueTimeoutError:
+        status = "error"
+        LANE_REFUSALS.labels(lane=lane, reason='queue_timeout').inc()
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Queued transcription request expired — try again", "error": "queue_timeout"},
+            headers={"X-Omi-STT-Error": "queue_timeout"},
+        )
     except AudioDurationExceededError as e:
         status = "rejected"
         LANE_REFUSALS.labels(lane=lane, reason='duration').inc()
         return JSONResponse(status_code=413, content={"detail": str(e)})
+    except asyncio.CancelledError:
+        status = "cancelled"
+        raise
     except Exception:
         status = "error"
         raise
@@ -259,7 +307,9 @@ async def transcribe(request: Request, file: UploadFile = File(...)) -> JSONResp
         if status == "success" and audio_dur > 0 and elapsed > 0:
             RTFX.set(audio_dur / elapsed)
         ACTIVE_BATCH.dec()
-        if batch_engine is None:
+        if batch_engine is not None:
+            PENDING_REQUESTS.set(batch_engine.pressure_snapshot()['pending_requests'])
+        if not submit_called and not write_orphaned and (file_written or batch_engine is None):
             await loop.run_in_executor(_io_pool, _remove_file, file_path)
 
 
@@ -389,6 +439,7 @@ async def stream_transcribe(
 
     session: Optional[StreamSession] = None
     active_gauge_owned = False
+    finalize_requested = False
     t0 = time.monotonic()
     try:
         session = StreamSession(sample_rate=sample_rate, vad_threshold=vad_threshold, hangover_s=hangover_s)
@@ -418,6 +469,7 @@ async def stream_transcribe(
                     await websocket.send_json(seg)
             elif "text" in msg:
                 if msg["text"] == "finalize":
+                    finalize_requested = True
                     break
     except WebSocketDisconnect:
         pass
@@ -436,6 +488,11 @@ async def stream_transcribe(
                         await websocket.send_json(seg)
                     except Exception:
                         break
+                else:
+                    # Finish only after every tail segment was delivered. A
+                    # handler return alone can drop TCP without a close frame.
+                    if finalize_requested:
+                        await websocket.close(code=1000)
         except Exception as e:
             logger.error(f"v3/stream flush error: {e}")
         finally:

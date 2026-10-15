@@ -92,6 +92,28 @@ def select_speaker_match(
     )
 
 
+# Calibration-only near-miss sweep on production vectors (five repeated,
+# conversation-disjoint two-fold splits) selected 0.70 in every fold. This band
+# changes evidence state only; acceptance remains strictly below 0.65.
+OWNER_NEAR_MISS_THRESHOLD = 0.70
+
+
+def owner_near_miss(decision: SpeakerMatchDecision) -> bool:
+    """A clear owner runner-up gap with insufficient distance evidence to accept.
+
+    Live callers keep this voice pending for fresh audio or finished-conversation
+    resolution. No identity is assigned, and existing evidence/model budgets stay
+    in force. Contention and ordinary margin rejections remain separate abstentions.
+    """
+    return (
+        not decision.accepted
+        and not decision.owner_contended
+        and decision.best_id == 'user'
+        and SPEAKER_MATCH_THRESHOLD <= decision.best_distance < OWNER_NEAR_MISS_THRESHOLD
+        and decision.runner_up_distance - decision.best_distance >= SPEAKER_MATCH_MARGIN
+    )
+
+
 SpeakerKey = TypeVar('SpeakerKey')
 
 

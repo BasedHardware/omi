@@ -585,6 +585,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/82/77/7b3966d0b9d1d31a3
 wheels = [{ url = "https://files.pythonhosted.org/packages/d2/23/408243171aa9aaba178d3e2559159c24c1171a641aa83b67bdd3394ead8e/idna-3.15-py3-none-any.whl", upload-time = 2026-05-12T22:45:55Z, size = 72340, hashes = { sha256 = "048adeaf8c2d788c40fee287673ccaa74c24ffd8dcf09ffa555a2fbb59f10ac8" } }]
 
 [[packages]]
+name = "imageio-ffmpeg"
+version = "0.6.0"
+sdist = { url = "https://files.pythonhosted.org/packages/44/bd/c3343c721f2a1b0c9fc71c1aebf1966a3b7f08c2eea8ed5437a2865611d6/imageio_ffmpeg-0.6.0.tar.gz", upload-time = 2025-01-16T21:34:32Z, size = 25210, hashes = { sha256 = "e2556bed8e005564a9f925bb7afa4002d82770d6b08825078b7697ab88ba1755" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/da/58/87ef68ac83f4c7690961bce288fd8e382bc5f1513860fc7f90a9c1c1c6bf/imageio_ffmpeg-0.6.0-py3-none-macosx_10_9_intel.macosx_10_9_x86_64.whl", upload-time = 2025-01-16T21:34:20Z, size = 24932969, hashes = { sha256 = "9d2baaf867088508d4a3458e61eeb30e945c4ad8016025545f66c4b5aaef0a61" } }]
+
+[[packages]]
 name = "iniconfig"
 version = "2.3.0"
 sdist = { url = "https://files.pythonhosted.org/packages/72/34/14ca021ce8e5dfedc35312d08ba8bf51fdd999c576889fc2c24cb97f4f10/iniconfig-2.3.0.tar.gz", upload-time = 2025-10-18T21:55:43Z, size = 20503, hashes = { sha256 = "c76315c77db068650d49c5b56314774a7804df16fee4402c1f19d6d15d8c4730" } }
@@ -973,6 +979,12 @@ name = "pillow"
 version = "12.3.0"
 sdist = { url = "https://files.pythonhosted.org/packages/1c/3d/bb7fca845737cf9d7dbde16ed1843984665ff2e0a518f5db43e77ec540b9/pillow-12.3.0.tar.gz", upload-time = 2026-07-01T11:56:38Z, size = 47025035, hashes = { sha256 = "3b8182a766685eaa002637e28b4ec8d6b18819a0c71f579bf0dbaa5830297cce" } }
 wheels = [{ url = "https://files.pythonhosted.org/packages/fb/c8/0a78b0e02d7ac54bc03e5321c9220da52f0c2ea83b21f7c40e7f3169c502/pillow-12.3.0-cp311-cp311-macosx_10_10_x86_64.whl", upload-time = 2026-07-01T11:53:47Z, size = 5392415, hashes = { sha256 = "00808c5e14ef63ac5161091d242999076604ff74b883423a11e5d7bbb38bf756" } }]
+
+[[packages]]
+name = "pillow-heif"
+version = "1.3.0"
+sdist = { url = "https://files.pythonhosted.org/packages/cd/58/2df4fc42840633e01c97b75965cb1bc6e14425973b92382391650e97e4b7/pillow_heif-1.3.0.tar.gz", upload-time = 2026-02-27T12:21:36Z, size = 17133211, hashes = { sha256 = "af8d2bda85e395677d5bb50d7bda3b5655c946cc95b913b5e7222fabacbb467f" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/48/b5/e7c726f347280de3c16f72fe22a2639032cc6f865934ad3a4326b465a9f5/pillow_heif-1.3.0-cp311-cp311-macosx_10_15_x86_64.whl", upload-time = 2026-02-27T12:20:33Z, size = 4667188, hashes = { sha256 = "68bea3b9396fdd6c711e66fc645df92bbe53d48892909192ce9a30e4c619878a" } }]
 
 [[packages]]
 name = "pinecone"
@@ -1567,9 +1579,9 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/81/c0/7461b49cd25aeec
 
 [[packages]]
 name = "urllib3"
-version = "2.7.0"
-sdist = { url = "https://files.pythonhosted.org/packages/53/0c/06f8b233b8fd13b9e5ee11424ef85419ba0d8ba0b3138bf360be2ff56953/urllib3-2.7.0.tar.gz", upload-time = 2026-05-07T16:13:18Z, size = 433602, hashes = { sha256 = "231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c" } }
-wheels = [{ url = "https://files.pythonhosted.org/packages/7f/3e/5db95bcf282c52709639744ca2a8b149baccf648e39c8cc87553df9eae0c/urllib3-2.7.0-py3-none-any.whl", upload-time = 2026-05-07T16:13:17Z, size = 131087, hashes = { sha256 = "9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897" } }]
+version = "2.8.0"
+sdist = { url = "https://files.pythonhosted.org/packages/e3/05/b17359e1cefb4f909b5e40b1b90a496d987258916dbbf88e842c729f510e/urllib3-2.8.0.tar.gz", upload-time = 2026-09-15T19:29:36Z, size = 458972, hashes = { sha256 = "63bf2ead4c879426ebf22ef2a781eeb4aa3b4ae798a0435506f8687fd5bb9b63" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/92/9d/c4e665119135114480843e7ab388fa94d8480650450e6f8e26b70d323a4c/urllib3-2.8.0-py3-none-any.whl", upload-time = 2026-09-15T19:29:34Z, size = 135717, hashes = { sha256 = "0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3" } }]
 
 [[packages]]
 name = "uuid-utils"

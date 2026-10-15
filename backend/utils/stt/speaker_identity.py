@@ -42,6 +42,7 @@ class SpeakerProviderEpoch:
         self._connection_scope = connection_scope or uuid.uuid4().hex
         self._provider: Optional[str] = None
         self._epoch = -1
+        self._provider_socket_epoch: Optional[int] = None
 
     def stamp(self, segments: Iterable[MutableMapping[str, Any]], provider: Optional[str]) -> None:
         """Scope each segment by the provider that actually served it.
@@ -56,8 +57,10 @@ class SpeakerProviderEpoch:
         fallback = provider or 'unknown'
         for segment in segments:
             provider_name = segment.get('stt_provider') or fallback
-            if provider_name != self._provider:
+            socket_epoch = segment.pop('_provider_socket_epoch', None)
+            if provider_name != self._provider or socket_epoch != self._provider_socket_epoch:
                 self._provider = provider_name
+                self._provider_socket_epoch = socket_epoch
                 self._epoch += 1
             segment['stt_provider'] = provider_name
             segment['speaker_id_scope'] = f'{self._connection_scope}:{self._epoch}'

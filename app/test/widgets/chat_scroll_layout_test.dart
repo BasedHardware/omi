@@ -1,9 +1,13 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/chat/chat_scroll_policy.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
@@ -11,28 +15,12 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 
 void main() {
-  ServerMessage messageWithMemories({int memoryCount = 5}) {
-    final createdAt = DateTime.parse('2026-08-23T12:00:00Z');
-    final memories = List<MessageConversation>.generate(
-      memoryCount,
-      (index) => MessageConversation(
-        'convo-$index',
-        createdAt,
-        MessageConversationStructured('Conversation $index', '🧠'),
-      ),
-    );
-    return ServerMessage(
-      'ai-1',
-      createdAt,
-      'You talked about shipping the citation fix. What is up.',
-      MessageSender.ai,
-      MessageType.text,
-      null,
-      false,
-      const [],
-      const [],
-      memories,
-    );
+  ServerMessage messageFromBackendCapture() {
+    final stream = jsonDecode(
+      File('../backend/tests/fixtures/chat_app_citations_pre_21240.sse.json').readAsStringSync(),
+    ) as String;
+    final done = stream.split('\n').firstWhere((line) => line.startsWith('done: '));
+    return parseMessageChunk(done, 'fixture-client')!.message!;
   }
 
   test(
@@ -102,7 +90,7 @@ void main() {
         isSignedIn: () => false,
       );
       addTearDown(conversationProvider.dispose);
-      final message = messageWithMemories();
+      final message = messageFromBackendCapture();
 
       await tester.pumpWidget(
         MultiProvider(
@@ -145,24 +133,25 @@ void main() {
       );
       await tester.pump();
 
-      final citation = find.byKey(const ValueKey('chat-citation-convo-0')).first;
+      final citation = find.byKey(const ValueKey('chat-citation-conversation-1')).first;
       expect(citation, findsOneWidget);
       final before = tester.getSize(citation);
       expect(before.height, greaterThanOrEqualTo(40));
-      expect(find.textContaining('Conversation 0'), findsWidgets);
-      expect(find.textContaining('What is up'), findsWidgets);
+      expect(find.textContaining('Conversation 1'), findsWidgets);
+      expect(find.textContaining('I can name them.'), findsWidgets);
+      expect(find.textContaining('[1][2]'), findsNothing);
 
       await tester.drag(find.byType(ListView), const Offset(0, -24));
       await tester.pump();
 
-      expect(find.byKey(const ValueKey('chat-citation-convo-0')), findsWidgets);
+      expect(find.byKey(const ValueKey('chat-citation-conversation-1')), findsWidgets);
       final after = tester.getSize(
-        find.byKey(const ValueKey('chat-citation-convo-0')).first,
+        find.byKey(const ValueKey('chat-citation-conversation-1')).first,
       );
       expect(after.height, greaterThanOrEqualTo(40));
       expect(after.height, closeTo(before.height, 1));
-      expect(find.textContaining('Conversation 0'), findsWidgets);
-      expect(find.textContaining('What is up'), findsWidgets);
+      expect(find.textContaining('Conversation 1'), findsWidgets);
+      expect(find.textContaining('I can name them.'), findsWidgets);
     },
   );
 }

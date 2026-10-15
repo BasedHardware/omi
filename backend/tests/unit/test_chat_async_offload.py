@@ -188,7 +188,7 @@ async def test_chat_router_passes_metadata_to_every_interactive_path():
 
     with patch.object(graph, '_current_prompt_metadata', AsyncMock(return_value=(metadata, 'UTC'))):
         persona = SimpleNamespace(id='persona1', is_a_persona=lambda: True)
-        with patch.object(graph, 'execute_persona_chat_stream', stream):
+        with patch.object(graph, 'execute_agentic_chat_stream', stream):
             assert [chunk async for chunk in graph.execute_chat_stream('uid1', [message], app=persona)] == [None]
         with patch.object(graph, 'execute_agentic_chat_stream', stream):
             assert [chunk async for chunk in graph.execute_chat_stream('uid1', [message], chat_session=session)] == [

@@ -166,6 +166,7 @@ def _ensure_process_conversation_importable():
 
     _PROCESS_CONVERSATION_MODULE = importlib.import_module("utils.conversations.process_conversation")
     _PROCESS_CONVERSATION_MODULE.should_skip_omi_paid_postprocessing = skip_helper
+    _PROCESS_CONVERSATION_MODULE.conversation_known_spellings = lambda *_: ''
     return _PROCESS_CONVERSATION_MODULE
 
 
@@ -253,7 +254,6 @@ class TestExtractionSeamFanOut:
             patch.object(pc, "_save_action_items", save_action_items),
             patch.object(pc.conversations_db, "upsert_conversation"),
             patch.object(pc, "submit_with_context", side_effect=_capture_submit),
-            patch.object(pc, "TRANSCRIPT_CHUNK_INDEXING_ENABLED", False),
         ):
             pc.process_conversation("uid-boundary", "en", conversation, trigger=pc.ProcessingTrigger.USER_REPROCESS)
 
@@ -320,6 +320,8 @@ class TestNoConversationAsMemory:
             patch.object(pc, "infer_subject_from_segments", return_value=(None, pc.SubjectAttribution.unknown)),
             patch.object(pc, "associate_canonical_evidence"),
             patch.object(pc, "record_usage"),
+            # Checkpoint persistence has its own tests; keep this extractor boundary hermetic.
+            patch("utils.conversations.llm_input_dedupe.l1_succeeded", return_value=False),
         ):
             pc._extract_memories_canonical("uid-extract", conversation, db_client=MagicMock())
 
@@ -374,6 +376,8 @@ class TestNoConversationAsMemory:
             patch.object(pc, "infer_subject_from_segments", return_value=(None, "unknown")),
             patch.object(pc, "associate_canonical_evidence"),
             patch.object(pc, "record_usage"),
+            # Checkpoint persistence has its own tests; keep this extractor boundary hermetic.
+            patch("utils.conversations.llm_input_dedupe.l1_succeeded", return_value=False),
         ):
             pc._extract_memories_canonical("uid-ext", conversation, db_client=MagicMock())
 
@@ -384,6 +388,7 @@ class TestNoConversationAsMemory:
             language="en",
             content_date="2026-06-01",
             strict=True,
+            known_spellings='',
         )
 
         text_arg = mock_text_extractor.call_args[0][1]

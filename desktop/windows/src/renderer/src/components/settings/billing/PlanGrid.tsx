@@ -11,6 +11,7 @@ import {
   canPurchasePlan,
   planAccent
 } from '../../../lib/billing'
+import { planDisplayName } from '../../../lib/billingPlans'
 import type { Subscription, SubscriptionPlan } from '../../../lib/omiApi.generated'
 
 /**
@@ -62,6 +63,7 @@ function PlanCard(props: {
   const { plan, sub, selected, onSelect, activePriceId, onBuy } = props
   const [promo, setPromo] = useState('')
   const [promoOpen, setPromoOpen] = useState(false)
+  const title = planDisplayName(plan.id)
   const purchasable = canPurchasePlan(plan, sub)
   const accent = planAccent(plan)
   const checkColor = accent === 'green' ? 'text-emerald-400' : 'text-white/55'
@@ -88,7 +90,7 @@ function PlanCard(props: {
           {planEyebrow(plan)}
         </div>
         <div className="flex items-baseline justify-between gap-2">
-          <span className="text-lg font-semibold text-text-primary">{plan.title}</span>
+          <span className="text-lg font-semibold text-text-primary">{title}</span>
           <span className="shrink-0 text-right text-xs text-white/45">
             {planStartingPrice(plan)}
             <span className="ml-1 text-white/30">starting</span>
@@ -154,7 +156,7 @@ function PlanCard(props: {
           onClick={() => onSelect(plan.id)}
           className="btn-ghost mt-auto w-full"
         >
-          Select {plan.title}
+          Select {title}
         </button>
       )}
     </div>

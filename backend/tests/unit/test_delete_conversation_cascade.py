@@ -84,6 +84,15 @@ class _FakeDocumentReference:
         self.exists = False
         self._store.deleted.append(self.path)
 
+    def create(self, data: dict) -> None:
+        # Real SDK semantics: succeed only when the document does not exist yet.
+        if self.exists:
+            from google.api_core.exceptions import AlreadyExists
+
+            raise AlreadyExists(f'{self.path} already exists')
+        self.data = data
+        self.exists = True
+
 
 class _FakeCollectionReference:
     def __init__(self, path: str, store: "_FakeFirestore"):
@@ -98,6 +107,13 @@ class _FakeCollectionReference:
 
     def limit(self, count: int) -> _FakeQuery:
         return _FakeQuery(self, count)
+
+    def where(self, *, filter):
+        assert filter.field_path == 'source_id' and filter.op_string == '=='
+        # This cascade fixture has no proactive items; the live query is covered
+        # by the proactivity emulator proof, including matching-item purges.
+        assert self.path.endswith('/proactivity_items') and not self.documents
+        return _FakeQuery(self)
 
     def stream(self):
         return _FakeQuery(self).stream()
@@ -168,7 +184,17 @@ def test_delete_conversation_without_children_still_deletes_the_document(store):
     conversations_db.delete_conversation('uid-1', 'conv-1')
 
     assert not conversation.exists
-    assert store.deleted == ['users/uid-1/conversations/conv-1']
+    assert store.deleted == ['users/uid-1/conversations/conv-1', 'users/uid-1/transcript_corrections/conv-1']
+
+
+def test_delete_conversation_purges_only_its_owner_scoped_correction_overlay(store):
+    user = store.collection('users').document('uid-1')
+    own = user.collection('transcript_corrections').document('conv-1')
+    other = user.collection('transcript_corrections').document('conv-2')
+    another_owner = store.collection('users').document('uid-2').collection('transcript_corrections').document('conv-1')
+    _seed_conversation(store)
+    conversations_db.delete_conversation('uid-1', 'conv-1')
+    assert not own.exists and other.exists and another_owner.exists
 
 
 def test_delete_capture_cascades_retained_bridge_sources(store, monkeypatch):
@@ -177,6 +203,9 @@ def test_delete_capture_cascades_retained_bridge_sources(store, monkeypatch):
     conversation = _seed_conversation(store)
     conversation.data['sync_merged_from'] = ['donor-a', 'donor-b']
     removed = []
+    # The donor intent write goes through its own module-level client; bind it
+    # to the same fake store so the purge stays hermetic.
+    monkeypatch.setattr(merge_conversations.conversation_tombstones, 'db', store)
     monkeypatch.setattr(
         merge_conversations, '_delete_conversation_and_related_data', lambda uid, cid, **kw: removed.append(cid)
     )
@@ -201,6 +230,9 @@ def test_failed_ancestor_purge_keeps_survivor_for_retry(store, monkeypatch):
     from utils.conversations import merge_conversations
 
     conversation = _seed_conversation(store)
+    # The donor intent write goes through its own module-level client; bind it
+    # to the same fake store so the purge stays hermetic.
+    monkeypatch.setattr(merge_conversations.conversation_tombstones, 'db', store)
     monkeypatch.setattr(conversations_db, 'get_conversation', lambda *a: {'sync_merged_from': ['donor']})
 
     def fail(*a, **kw):

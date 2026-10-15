@@ -35,6 +35,30 @@ class MessageConversation(BaseModel):
     structured: MessageConversationStructured
     created_at: datetime
 
+    @classmethod
+    def safe_build_many(cls, items, on_error=None) -> list['MessageConversation']:
+        """Build members without raising on a malformed item.
+
+        Chat callers hand in memory docs as dicts, partially-filled documents,
+        or live pydantic objects, and run this AFTER the chat message is already
+        persisted — a throw there orphans the persisted id while a fresh
+        in-memory id desyncs the client. Bad members skip; ``on_error(member,
+        exc)`` is invoked per skip so drops stay visible in logs.
+        """
+        out: list['MessageConversation'] = []
+        for m in items:
+            try:
+                if isinstance(m, cls):
+                    out.append(m)
+                elif isinstance(m, dict):
+                    out.append(cls.model_validate(m))
+                else:
+                    out.append(cls.model_validate(m.model_dump() if hasattr(m, 'model_dump') else vars(m)))
+            except Exception as exc:
+                if on_error is not None:
+                    on_error(m, exc)
+        return out
+
 
 # Chat Completions `file` content parts (purpose=user_data) accept these document
 # types. Images stay on the separate vision / image_url path and are not listed here.
@@ -489,6 +513,25 @@ class ChatEvidenceEnvelope(BaseModel):
         return self
 
 
+class EditReceiptBlock(BaseModel):
+    """Server-authored write receipt. IDs and URLs never encode item content."""
+
+    type: Literal['editReceipt'] = 'editReceipt'
+    id: str
+    receiptId: str
+    targetKind: Literal['conversation', 'memory', 'task', 'person']
+    action: Literal['created', 'updated', 'deleted', 'completed', 'uncompleted', 'renamed']
+    targetId: str
+    summary: str = Field(min_length=1, max_length=300)
+    undoable: bool = True
+    undoneAt: Optional[datetime] = None
+
+
+class UndoChatReceiptResponse(BaseModel):
+    status: Literal['undone', 'already_undone', 'unavailable']
+    block: EditReceiptBlock
+
+
 class Message(BaseModel):
     id: str
     text: str
@@ -716,6 +759,12 @@ class SendMessageRequest(BaseModel):
     context: Optional[PageContext] = None
     time_zone: Optional[str] = None
 
+    # Tools this client can execute on the device itself. Declared per request
+    # because it depends on the device in hand: an iPad with no messaging
+    # service, or a denied Contacts grant, advertises fewer than an iPhone.
+    # A tool the client did not declare is never offered to the model.
+    device_tools: Optional[List[str]] = None
+
     @field_validator("time_zone", mode="before")
     @classmethod
     def _validate_time_zone(cls, value: Any) -> Optional[str]:
@@ -731,6 +780,18 @@ class SendMessageRequest(BaseModel):
         except Exception as exc:
             raise ValueError("time_zone must be a valid IANA timezone") from exc
         return stripped
+
+
+class DeviceToolResultRequest(BaseModel):
+    """A client's result for one in-flight device tool call."""
+
+    result: Dict[str, Any]
+
+
+class DeviceToolResultResponse(BaseModel):
+    """Acknowledgement that a device tool result was handed over."""
+
+    status: str
 
 
 class GenerateReplyTurn(BaseModel):

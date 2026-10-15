@@ -8,6 +8,8 @@ This module provides functions for merging multiple conversations into one.
 
 """
 
+import config.speaker_match_scores as match_scores
+
 import copy
 import uuid
 from contextlib import nullcontext
@@ -16,6 +18,7 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import database.conversations as conversations_db
+from database import conversation_tombstones
 from database._client import db as firestore_db
 from database.vector_db import delete_vector
 from models.audio_file import AudioFile
@@ -28,6 +31,7 @@ from utils.memory.retraction_scope import (
     historical_source_conversation_ids,
     retraction_can_be_skipped,
 )
+from utils.stt.speaker_identity import ConversationSpeakerIdAllocator, OMI_SPEAKER_ID_SENTINEL
 from utils.conversations.datetime_utils import coerce_utc_datetime
 from utils.conversations.projection_payload import omit_null_processing_state
 from utils.conversations import lifecycle as lifecycle_service
@@ -319,6 +323,7 @@ def perform_merge_async(
             language=language,
             source=source,
             transcript_segments=merged_segments,
+            speaker_match_scores=match_scores.aggregate(sorted_convs),
             photos=merged_photos,
             audio_files=merged_audio_files,
             geolocation=geolocation,
@@ -372,6 +377,12 @@ def perform_merge_async(
             # If not reprocessing, just mark as completed
             lifecycle_service.complete(uid, new_conversation_id)
 
+        from database.review_overlay_merge import transfer
+
+        if transfer(uid, [c['id'] for c in sorted_convs], new_conversation_id, firestore_client=firestore_db):
+            # Undo receipts now name the merged record. Recovery must retain it.
+            failure_phase = MergeFailurePhase.SOURCE_DELETION_STARTED
+
         # 9. Delete ALL source conversations and their related data.
         # One history pass for the whole merge: the per-source scan would
         # otherwise repeat it for every source, and the heavy cohort reaches
@@ -393,6 +404,7 @@ def perform_merge_async(
                 conv["id"],
                 on_authoritative_retraction=mark_source_deletion_started,
                 historical_source_ids=historical_source_ids,
+                merged_into=new_conversation_id,
             )
 
         # Sources are now merged and deleted; preserve the user's manual
@@ -436,6 +448,47 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
     """
     merged = []
     cumulative_offset = 0.0
+    allocator = ConversationSpeakerIdAllocator()
+
+    def source_has_manual_tags(source) -> bool:
+        # A conversation carrying a manual speaker assignment (or a manual /
+        # carried label) keeps its numeric speaker_ids — never move a manual
+        # voice's authority while its receipt stays at the source.
+        return bool(
+            source.get('manual_speaker_assignments')
+            or any(
+                s.get('speaker_label_source') in ('manual', 'carried')
+                for s in (source.get('transcript_segments') or [])
+            )
+        )
+
+    # Reserve every manually-tagged id before any renumbering runs, so an
+    # untagged source's reallocated voices land ABOVE the tagged range — a
+    # renumbered voice can never collide with a manual voice's id.
+    for conv in conversations:
+        if source_has_manual_tags(conv):
+            allocator.hydrate_receipt(conv.get('manual_speaker_assignments'))
+            allocator.hydrate(conv.get('transcript_segments') or [])
+
+    def copy_segment(segment, source):
+        copied = copy.deepcopy(segment)
+        speaker_id = copied.get('speaker_id')
+        if (
+            isinstance(speaker_id, (int, str))
+            and str(speaker_id).isdigit()
+            and int(speaker_id) != OMI_SPEAKER_ID_SENTINEL
+        ):
+            if not copied.get('speaker_id_scope'):
+                # Unidentified legacy inputs cannot establish a new voice scope.
+                if source.get('id'):
+                    copied['speaker_id_scope'] = f"legacy-conversation:{source['id']}:{int(speaker_id)}"
+            # Renumber is per-source, not global: only an untagged source's
+            # voices are reallocated, so they can't collide with a manually
+            # tagged voice from another conversation.
+            if not source_has_manual_tags(source) and copied.get('speaker_id_scope'):
+                copied['speaker_id'] = int(speaker_id)
+                allocator.assign(copied)
+        return copied
 
     for i, conv in enumerate(conversations):
         # `.get(key, [])`/`.get(key, 0)` only fall back when the key is absent.
@@ -446,7 +499,7 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
 
         if i == 0:
             # First conversation - use segments as-is
-            merged.extend([copy.deepcopy(s) for s in segments])
+            merged.extend([copy_segment(s, conv) for s in segments])
             if segments:
                 cumulative_offset = max((s.get("end") or 0) for s in segments)
             elif conv.get("finished_at") and conv.get("started_at"):
@@ -461,10 +514,13 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
                 gap = max(0, (curr_started - prev_finished).total_seconds())
 
             offset = cumulative_offset + gap
+            origin = conversations[0].get("started_at")
+            if origin is not None and curr_started is not None:
+                offset = (curr_started - origin).total_seconds()
 
             # Adjust timestamps for this conversation's segments
             for seg in segments:
-                seg_copy = copy.deepcopy(seg)
+                seg_copy = copy_segment(seg, conv)
                 seg_copy["start"] = (seg.get("start") or 0) + offset
                 seg_copy["end"] = (seg.get("end") or 0) + offset
                 merged.append(seg_copy)
@@ -476,6 +532,9 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
                 duration = (conv["finished_at"] - conv["started_at"]).total_seconds()
                 cumulative_offset = offset + duration
 
+    # Origin-based offsets interleave overlapping sources; keep the transcript chronological
+    # (stable, so equal starts keep their source order).
+    merged.sort(key=lambda seg: seg.get("start") or 0)
     return merged
 
 
@@ -684,12 +743,27 @@ def copy_sync_bridge_audio(uid: str, source_id: str, target_id: str) -> None:
     _copy_audio_chunks_for_merge(uid, [{'id': source_id}], target_id, strict=True)
 
 
-def delete_conversation_with_sync_sources(uid: str, conversation_id: str) -> None:
+def delete_conversation_with_sync_sources(uid: str, conversation_id: str, *, merged_into: Optional[str] = None) -> None:
     """User/source deletion owns retained bridge artifacts, unlike raw DB deletion."""
     row = conversations_db.get_conversation(uid, conversation_id) or {}
     for source_id in row.get('sync_merged_from', []):
         if source_id != conversation_id:
-            _delete_conversation_and_related_data(uid, source_id, purge_sync_sources=False)
+            # The source row is destroyed below; without intent its from-segments
+            # session id would re-derive the same id on the next backlog retry and
+            # resurrect a merge donor the user deleted with the survivor. Best-effort:
+            # a tombstone write that cannot reach Firestore must not block the purge
+            # the user asked for (the caller's later from-segments retry re-checks the
+            # survivor's tombstone through the same module before recreating).
+            try:
+                conversation_tombstones.record_deletion(uid, source_id)
+            except Exception:
+                logger.exception('merge-source tombstone write failed uid=%s source=%s', uid, source_id)
+            _delete_conversation_and_related_data(
+                uid,
+                source_id,
+                purge_sync_sources=False,
+                merged_into=merged_into,
+            )
     conversations_db.delete_conversation(uid, conversation_id)
     record_survivor_deleted(uid, conversation_id, row)
 
@@ -714,6 +788,7 @@ def _delete_conversation_and_related_data(
     historical_source_ids: Optional[Set[str]] = None,
     retain_capture: bool = False,
     purge_sync_sources: bool = True,
+    merged_into: Optional[str] = None,
 ) -> None:
     """
     Delete a conversation and all its generated/related data.
@@ -798,8 +873,13 @@ def _delete_conversation_and_related_data(
 
     try:
         # Delete audio chunks from GCS
-        delete_conversation_audio_files(uid, conversation_id)
+        if merged_into:
+            delete_conversation_audio_files(uid, conversation_id, merged_into=merged_into)
+        else:
+            delete_conversation_audio_files(uid, conversation_id)
     except Exception as e:
+        if merged_into:
+            raise
         logger.error(f"Error deleting audio files for {conversation_id}: {e}")
 
     try:
@@ -812,10 +892,15 @@ def _delete_conversation_and_related_data(
         # Purge retained bridge sources only for a real source/user deletion.
         # Rollback of a newly created merge target still uses raw DB deletion.
         if purge_sync_sources:
-            delete_conversation_with_sync_sources(uid, conversation_id)
+            if merged_into:
+                delete_conversation_with_sync_sources(uid, conversation_id, merged_into=merged_into)
+            else:
+                delete_conversation_with_sync_sources(uid, conversation_id)
         else:
             conversations_db.delete_conversation(uid, conversation_id)
     except Exception as e:
+        if merged_into:
+            raise
         logger.error(f"Error deleting conversation {conversation_id}: {e}")
 
 

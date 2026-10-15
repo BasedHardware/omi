@@ -11,9 +11,7 @@ from urllib.parse import quote
 
 import pytest
 from google.api_core.exceptions import FailedPrecondition, InvalidArgument, PermissionDenied
-from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore_admin_v1
-from google.cloud.firestore_v1 import Client
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from scripts import firestore_index_oracle as oracle
@@ -21,6 +19,7 @@ from tests.support import firestore_index_rules as rules
 from tests.support.firestore_query_driver_registry import DRIVERS
 from tests.support.firestore_query_drivers import run_driver
 from tests.support.firestore_shape_recorder import QueryFilter, QueryShape, _encode_value
+from tests.unit.fixtures.offline_firestore_sdk import OfflineFirestoreClient
 
 NAMESPACE = "index-oracle-fixture"
 PROJECT = "based-hardware-dev"
@@ -78,10 +77,7 @@ def _field_index(fields, collection="conversations", scope="COLLECTION", state="
 
 
 def _field(name, config=None):
-    kwargs = {"name": name}
-    if config is not None:
-        kwargs["index_config"] = config
-    return firestore_admin_v1.Field(**kwargs)
+    return firestore_admin_v1.Field(name=name, **({"index_config": config} if config is not None else {}))
 
 
 def _index_config(indexes, uses_ancestor=False, ancestor=None, reverting=False):
@@ -505,7 +501,7 @@ def test_registry_cursor_driver_exports_snapshot_cursor(sdk_client, monkeypatch)
 
 
 def test_execute_query_real_sdk_query_propagates_iterator_failure_once(monkeypatch):
-    client = Client(project=PROJECT, database=DATABASE, credentials=AnonymousCredentials())
+    client = OfflineFirestoreClient(project=PROJECT, database=DATABASE)
     query = (
         client.collection("users/u/conversations")
         .where(filter=FieldFilter("discarded", "==", False))
@@ -770,7 +766,7 @@ def test_uncertain_error_or_mismatch_gives_no_resolution(observed):
 
 @pytest.fixture()
 def sdk_client():
-    return Client(project=PROJECT, database=DATABASE, credentials=AnonymousCredentials())
+    return OfflineFirestoreClient(project=PROJECT, database=DATABASE)
 
 
 def test_hydration_uses_synthetic_collection_path_and_group_keeps_id(sdk_client):
@@ -1377,6 +1373,8 @@ def _argv(tmp_path, export_path, extra=()):
 
 
 def _install_factories(monkeypatch, tracked, admin, query_outcome):
+    monkeypatch.delenv("FIRESTORE_EMULATOR_HOST", raising=False)
+
     def client_factory(**kwargs):
         tracked["client_project"] = kwargs.get("project")
         tracked["client_database"] = kwargs.get("database")
@@ -1675,6 +1673,7 @@ def test_main_refuses_numeric_alias_and_emulator_before_clients(tmp_path, monkey
 
 
 def test_main_allows_explicit_prod_flag_with_fake_factories(tmp_path, monkeypatch):
+    monkeypatch.delenv("FIRESTORE_EMULATOR_HOST", raising=False)
     tracked = {}
     default_name = "projects/based-hardware/databases/jit-qa/collectionGroups/__default__/fields/*"
 

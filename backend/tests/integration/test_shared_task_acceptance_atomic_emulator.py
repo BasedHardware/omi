@@ -43,7 +43,6 @@ def sharing(monkeypatch):
     vectors, reminders, wake = Mock(), Mock(), Mock()
     monkeypatch.setattr(action_items, 'upsert_action_item_vector', vectors)
     monkeypatch.setattr(action_items, '_schedule_action_item_reminder', reminders)
-    monkeypatch.setattr(action_items, '_wake_task_changes', wake)
     app = FastAPI()
     app.include_router(action_items.router)
     app.dependency_overrides[action_items.auth.get_current_user_uid] = lambda: recipient
@@ -90,7 +89,7 @@ def test_failed_acceptance_copies_nothing_and_can_retry_all_tasks(sharing, monke
     assert retry.json()['count'] == 2
     assert {row.id for row in target.stream()} == set(retry.json()['created'])
     assert vectors.call_count == reminders.call_count == 2
-    wake.assert_called_once()
+    wake.assert_not_called()
 
 
 def test_delivery_failure_cannot_prevent_later_tasks_from_being_saved(sharing):

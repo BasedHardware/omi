@@ -1,0 +1,8 @@
+{
+  "version": "0.12.440",
+  "date": "2026-10-04",
+  "changes": [
+    "Added relevant follow-up cards with source links and helpfulness feedback",
+    "Removed the legacy screen Advice timer and settings while keeping Focus suggestions and task and memory extraction"
+  ]
+}

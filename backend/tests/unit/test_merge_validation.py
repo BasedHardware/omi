@@ -44,6 +44,15 @@ def merge():
     conversations_stub = ModuleType("database.conversations")
     conversations_stub.get_conversation = MagicMock(return_value=None)
 
+    # merge_conversations now also imports the deletion-intent module at module
+    # scope; the pure validation surface never calls it, so a MagicMock client
+    # keeps the import graph hermetic.
+    tombstones_stub = ModuleType("database.conversation_tombstones")
+    tombstones_stub.db = MagicMock(name="tombstone-db")
+    tombstones_stub.COLLECTION = "deleted_conversations"
+    tombstones_stub.is_deleted = MagicMock(return_value=False)
+    tombstones_stub.record_deletion = MagicMock()
+
     vector_db_stub = ModuleType("database.vector_db")
     vector_db_stub.delete_vector = MagicMock()
 
@@ -117,6 +126,7 @@ def merge():
         "database": database_pkg,
         "database._client": client_stub,
         "database.conversations": conversations_stub,
+        "database.conversation_tombstones": tombstones_stub,
         "database.vector_db": vector_db_stub,
         "database.redis_db": redis_db_stub,
         "database.users": users_stub,
@@ -496,10 +506,10 @@ class TestMergeTranscriptSegments:
         assert len(merged) == 2
         assert merged[0]["start"] == 0.0
         assert merged[0]["end"] == 5.0
-        # Cumulative offset = 5.0 (max end of c1); gap = 60-30 = 30s.
-        # c2's seg starts at 0.0 → offset 35.0.
-        assert merged[1]["start"] == 35.0
-        assert merged[1]["end"] == 40.0
+        # Wall-clock offset = c2.started_at - c1.started_at = 60s.
+        # c2's seg starts at 0.0 → offset 60.0.
+        assert merged[1]["start"] == 60.0
+        assert merged[1]["end"] == 65.0
 
     def test_inputs_post_normalisation_string_origin_does_not_crash(self, merge):
         # Simulates the exact path perform_merge_async takes: it now calls
@@ -522,8 +532,8 @@ class TestMergeTranscriptSegments:
         normalized = merge._normalize_conversation_timestamps(raw)
         merged = merge._merge_transcript_segments(normalized)
         assert len(merged) == 2
-        assert merged[1]["start"] == 35.0
-        assert merged[1]["end"] == 40.0
+        assert merged[1]["start"] == 60.0
+        assert merged[1]["end"] == 65.0
 
     def test_first_conv_with_no_segments_uses_finished_minus_started(self, merge):
         # When the first conversation has no segments, cumulative_offset is

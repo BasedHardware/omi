@@ -34,7 +34,8 @@ Color get _infoIconColor => OmiColors.textSecondary;
 ///   "not undone", so its caller commits).
 /// * The surface stays neutral (the theme's snackbar colour); colour lives on the icon only, so
 ///   text keeps its contrast.
-/// * Floating, clear of the home shell's tab bar and chat bar via [bottomClearance].
+/// * Floating, clear of the home shell's tab bar and chat bar via [bottomClearance], and of a
+///   pushed page's pinned bottom action via [OmiFeedbackClearance].
 ///
 /// ```dart
 /// OmiFeedback.confirm(context, l10n.memoryUpdated);
@@ -46,14 +47,29 @@ abstract final class OmiFeedback {
   /// bar, and the chat bar on Home). The shell sets this in `initState` and clears it in `dispose`;
   /// it is ignored whenever another route is on top.
   static double Function(BuildContext context)? bottomClearance;
+  static int _infoOwners = 0;
+
+  /// A guided surface renders explanatory notices itself. The release is
+  /// idempotent so disposing that surface always restores normal info feedback.
+  static VoidCallback ownInfoFeedback() {
+    _infoOwners++;
+    var released = false;
+    return () {
+      if (released) return;
+      released = true;
+      _infoOwners--;
+    };
+  }
 
   /// Confirms something the reader just did. 1.5 s.
   static void confirm(BuildContext context, String message) =>
       _show(context, message, kind: OmiFeedbackKind.confirm, duration: OmiFeedbackTiming.confirm);
 
   /// Tells the reader something they did not directly cause. 4 s.
-  static void info(BuildContext context, String message) =>
-      _show(context, message, kind: OmiFeedbackKind.info, duration: OmiFeedbackTiming.info);
+  static void info(BuildContext context, String message) {
+    if (_infoOwners > 0) return;
+    _show(context, message, kind: OmiFeedbackKind.info, duration: OmiFeedbackTiming.info);
+  }
 
   /// Reports a failure. Stays 8 s with a close button, or until [onAction] ("Try Again").
   static void error(BuildContext context, String message, {String? actionLabel, VoidCallback? onAction}) => _show(
@@ -159,6 +175,8 @@ abstract final class OmiFeedback {
   }
 
   static double _extraBottom(BuildContext context) {
+    final local = context.getInheritedWidgetOfExactType<OmiFeedbackClearance>();
+    if (local != null) return local.bottom;
     final clearance = bottomClearance;
     if (clearance == null) return 0;
     final navigator = Navigator.maybeOf(context, rootNavigator: true);
@@ -182,4 +200,18 @@ abstract final class OmiFeedback {
         ),
     };
   }
+}
+
+/// Lifts toasts shown from inside [child] by [bottom] points, clear of a pinned bottom action the
+/// page draws over its content (the conversation page's Ask Omi bar). Takes precedence over
+/// [OmiFeedback.bottomClearance] for those toasts. A sheet shown from the page is not inside it; pass
+/// the page's context to [OmiFeedback] when such a toast lands on the page.
+class OmiFeedbackClearance extends InheritedWidget {
+  const OmiFeedbackClearance({super.key, required this.bottom, required super.child});
+
+  /// Extra space above the safe area.
+  final double bottom;
+
+  @override
+  bool updateShouldNotify(OmiFeedbackClearance oldWidget) => bottom != oldWidget.bottom;
 }

@@ -297,3 +297,45 @@ class AudioTranscoderFactory {
     }
   }
 }
+
+/// Source time, without decoding (which would mutate the Opus decoder).
+/// Opus TOC duration follows RFC 6716 section 3.1; padding is not audio time.
+extension AudioSourceClock on IAudioTranscoder {
+  double sourceSeconds(Uint8List frame) {
+    final transcoder = this;
+    if (transcoder is PcmToWavTranscoder) {
+      return frame.length / (transcoder.sampleRate * transcoder.channels * transcoder.bitsPerSample / 8);
+    }
+    if (transcoder is RawPcmTranscoder) return frame.length / (transcoder.sampleRate * transcoder.channels * 2);
+    if (transcoder is OpusToWavTranscoder ||
+        transcoder is OpusToRawPcmTranscoder ||
+        transcoder is OpusFramesToWavTranscoder) {
+      return opusPacketSeconds(frame);
+    }
+    // Pass-through WAV inputs include their own source clock.
+    if (frame.length >= 44 && frame[0] == 82 && frame[8] == 87) {
+      final bytes = ByteData.sublistView(frame);
+      final bytesPerSecond = bytes.getUint32(28, Endian.little);
+      if (bytesPerSecond > 0) return bytes.getUint32(40, Endian.little) / bytesPerSecond;
+    }
+    return 0; // Opaque formats have no duration contract.
+  }
+}
+
+double opusPacketSeconds(Uint8List packet) {
+  if (packet.isEmpty) return 0;
+  final toc = packet[0];
+  final frames = switch (toc & 3) {
+    0 => 1,
+    1 || 2 => 2,
+    _ => packet.length > 1 ? packet[1] & 63 : 0,
+  };
+  final size = (toc >> 3) & 3;
+  final milliseconds = toc & 128 != 0
+      ? 2.5 * (1 << size)
+      : toc & 96 == 96
+          ? (toc & 8 != 0 ? 20.0 : 10.0)
+          : (size == 3 ? 60.0 : 10.0 * (1 << size));
+  final duration = frames * milliseconds / 1000;
+  return duration <= 0.12 ? duration : 0;
+}

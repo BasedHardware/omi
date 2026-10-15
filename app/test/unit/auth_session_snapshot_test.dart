@@ -108,10 +108,7 @@ void main() {
       authService: service,
       sendStreaming: (request) async {
         sends++;
-        return http.StreamedResponse(
-          const Stream.empty(),
-          sends == 1 ? 401 : 200,
-        );
+        return http.StreamedResponse(const Stream.empty(), sends == 1 ? 401 : 200);
       },
     );
 

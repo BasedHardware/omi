@@ -199,6 +199,7 @@ async def create_anthropic_message(
             metric_context,
             outcome='error',
             error_class=_provider_status_error_class(response.status_code),
+            upstream_http_status=response.status_code,
             phase='before_output',
         )
         return JSONResponse(status_code=response.status_code, content=_response_json_or_error(response))
@@ -437,6 +438,7 @@ async def _streaming_anthropic_messages_response(
                     metric_context,
                     outcome='error',
                     error_class=_provider_status_error_class(response.status_code),
+                    upstream_http_status=response.status_code,
                     phase='before_output',
                     streaming=True,
                 )
@@ -608,6 +610,7 @@ def _observe_message_terminal(
     phase: str,
     streaming: bool = False,
     ttfb_seconds: float | None = None,
+    upstream_http_status: int | None = None,
 ) -> None:
     try:
         observe_route_result(
@@ -628,6 +631,7 @@ def _observe_message_terminal(
             streaming=streaming,
             phase=phase,
             ttfb_seconds=ttfb_seconds,
+            upstream_http_status=upstream_http_status,
         )
     except Exception:
         report_observation_failure(api_surface='anthropic_messages', request_id=context.request_id)

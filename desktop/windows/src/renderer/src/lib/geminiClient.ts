@@ -1,10 +1,14 @@
 import { auth } from './firebase'
+import type { GeminiLane, GeminiWorkload } from '../../../shared/geminiAttribution'
+import { geminiClientPlatform, geminiProxyFetch } from '../../../shared/geminiProxy'
 
 export type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } }
 
 export type GenerateArgs = {
   model: string
   parts: GeminiPart[]
+  lane: GeminiLane
+  workload: GeminiWorkload
   systemPrompt?: string
   responseSchema?: Record<string, unknown>
   thinkingBudget?: number
@@ -25,7 +29,6 @@ function sleep(ms: number): Promise<void> {
 export async function generate(args: GenerateArgs): Promise<string> {
   const model = args.model || DEFAULT_MODEL
   const base = import.meta.env.VITE_OMI_DESKTOP_API_BASE as string
-  const url = `${base}/v1/proxy/gemini/models/${model}:generateContent`
 
   const body: Record<string, unknown> = {
     contents: [{ role: 'user', parts: args.parts }]
@@ -44,12 +47,20 @@ export async function generate(args: GenerateArgs): Promise<string> {
   if (Object.keys(genConfig).length) body.generationConfig = genConfig
 
   const token = (await auth.currentUser?.getIdToken()) ?? ''
+  const platform = geminiClientPlatform(
+    (window as { electron?: { process?: { platform?: string } } }).electron?.process?.platform
+  )
 
   let lastError = ''
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    const res = await geminiProxyFetch(fetch, {
+      baseURL: base,
+      model,
+      action: 'generateContent',
+      token,
+      lane: args.lane,
+      workload: args.workload,
+      platform,
       body: JSON.stringify(body)
     })
     if (res.ok) {

@@ -73,27 +73,24 @@ Future<void> _pumpApp(WidgetTester tester) async {
   tester.view.physicalSize = const Size(1200, 2400);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(MaterialApp(
-    theme: ThemeData.dark(),
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    supportedLocales: AppLocalizations.supportedLocales,
-    home: Builder(
-      builder: (context) => Scaffold(
-        body: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextButton(
-                onPressed: () {},
-                child: const Text('export'),
-              ),
-            ],
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: ThemeData.dark(),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [TextButton(onPressed: () {}, child: const Text('export'))],
+            ),
           ),
         ),
       ),
     ),
-  ));
+  );
 }
 
 Future<void> _run(WidgetTester tester, _Harness harness) {

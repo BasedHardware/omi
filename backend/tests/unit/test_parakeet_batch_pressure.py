@@ -1,12 +1,14 @@
 """Real cached fleet refresh and admission policy, with synthetic metrics only."""
 
 import asyncio
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 import pytest_asyncio
+import yaml
 
 from utils.stt import batch_pressure as pressure_module
 from utils.stt.live_metrics import WINDOW_PRESSURE_REFRESH, WINDOW_PRESSURE_REFUSAL, WINDOW_PRESSURE_REPLICAS
@@ -485,3 +487,36 @@ async def test_invalid_pressure_configuration_stands_down(fleet, monkeypatch, na
         await fleet.pressure._refresh('synthetic.invalid', 2, client)
     assert not fleet.pressure.allows('synthetic.invalid', 2)
     assert fleet.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('pending,oldest', [(4, 0), (0, 0.75)])
+async def test_prod_admission_retains_conservative_boundaries_and_quorum(fleet, monkeypatch, pending, oldest):
+    root = Path(__file__).resolve().parents[3]
+    values = yaml.safe_load((root / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml').read_text())
+    env = {entry['name']: str(entry['value']) for entry in values['env'] if 'value' in entry}
+    for name, value in env.items():
+        if name.startswith('PARAKEET_BATCH_PRESSURE_'):
+            monkeypatch.setenv(name, value)
+    fleet.ips[:] = fleet.ips[:3]
+    host = env['PARAKEET_BATCH_PRESSURE_POOL_HOST']
+    minimum = int(env['PARAKEET_BATCH_PRESSURE_MIN_REPLICAS'])
+    assert minimum == 3
+    async with httpx.AsyncClient(transport=fleet.transport) as client:
+        for ip in fleet.ips:
+            fleet.payloads[ip] = {'live_pending_requests': 3, 'live_oldest_pending_seconds': 0.74}
+        await fleet.pressure._refresh(host, minimum, client)
+        assert fleet.pressure.allows(host, minimum)
+        for count in (1, 2):
+            fleet.payloads[fleet.ips[count - 1]] = {
+                'live_pending_requests': pending,
+                'live_oldest_pending_seconds': oldest,
+            }
+            await fleet.pressure._refresh(host, minimum, client)
+            assert fleet.pressure.allows(host, minimum) is (count == 1)
+        # Even an otherwise healthy fleet refuses below the production quorum.
+        fleet.payloads.clear()
+        fleet.failed.add(fleet.ips[-1])
+        fleet.clock[0] += 16
+        await fleet.pressure._refresh(host, minimum, client)
+        assert not fleet.pressure.allows(host, minimum)

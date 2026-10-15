@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:clock/clock.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -174,9 +175,11 @@ class SiriIntegration extends SiriEventsApi {
   /// the queue. Wait for that bind (signed in or explicitly signed out) first.
   void _drainLaunchTelemetry() {
     void drain() {
-      unawaited(_flushTelemetry().catchError((Object error) {
-        Logger.debug('Siri launch telemetry drain failed: $error');
-      }));
+      unawaited(
+        _flushTelemetry().catchError((Object error) {
+          Logger.debug('Siri launch telemetry drain failed: $error');
+        }),
+      );
     }
 
     if (AnalyticsManager.identityKnown) {
@@ -225,13 +228,13 @@ class SiriIntegration extends SiriEventsApi {
 
   Future<T> _nativeOperation<T>(Future<T> Function() operation, {bool indexWork = false}) {
     final result = _nativeTail.then((_) async {
-      if (indexWork && (_indexSuspendedUntil?.isAfter(DateTime.now()) ?? false)) {
+      if (indexWork && (_indexSuspendedUntil?.isAfter(clock.now()) ?? false)) {
         throw TimeoutException('Siri index is cooling down after a native timeout');
       }
       try {
         return await operation().timeout(_nativeTimeout);
       } on TimeoutException {
-        if (indexWork) _indexSuspendedUntil = DateTime.now().add(_indexCooldown);
+        if (indexWork) _indexSuspendedUntil = clock.now().add(_indexCooldown);
         rethrow;
       }
     });
@@ -321,7 +324,7 @@ class SiriIntegration extends SiriEventsApi {
 
   void _scheduleRemovalRetry(String uid, int generation) {
     if (_removalRetry != null || _uid != uid || _accountGeneration != generation) return;
-    final remaining = _indexSuspendedUntil?.difference(DateTime.now()) ?? Duration.zero;
+    final remaining = _indexSuspendedUntil?.difference(clock.now()) ?? Duration.zero;
     // A failed attempt owns one timer; its callback clears the slot before
     // queueing the next attempt, so prolonged outages cannot stack retries.
     final backoff = siriRemovalRetryDelay(_retryBase, _retryAttempt);
@@ -408,9 +411,10 @@ class SiriIntegration extends SiriEventsApi {
     final epoch = _nextEpoch();
     final now = DateTime.now();
     _fenceIneligible(
-        'memory',
-        frozen.where((row) => row.uid == _uid && !siriMemoryIsIndexable(row, now, owner: _uid)).map((row) => row.id),
-        epoch);
+      'memory',
+      frozen.where((row) => row.uid == _uid && !siriMemoryIsIndexable(row, now, owner: _uid)).map((row) => row.id),
+      epoch,
+    );
     if (restoreDeleted) _suppressedIds['memory']!.removeAll(frozen.map((row) => row.id));
     queueIndex((siri) async {
       if (restoreDeleted) siri._pendingRemovals['memory']!.removeAll(frozen.map((row) => row.id));
@@ -428,7 +432,10 @@ class SiriIntegration extends SiriEventsApi {
     final frozen = List<ActionItemWithMetadata>.of(rows);
     final epoch = _nextEpoch();
     _fenceIneligible(
-        'task', frozen.where((row) => !siriTaskIsIndexable(row, DateTime.now())).map((row) => row.id), epoch);
+      'task',
+      frozen.where((row) => !siriTaskIsIndexable(row, DateTime.now())).map((row) => row.id),
+      epoch,
+    );
     if (restoreDeleted) _suppressedIds['task']!.removeAll(frozen.map((row) => row.id));
     queueIndex((siri) async {
       if (restoreDeleted) siri._pendingRemovals['task']!.removeAll(frozen.map((row) => row.id));
@@ -461,15 +468,19 @@ class SiriIntegration extends SiriEventsApi {
     final epoch = _nextEpoch();
     if (!_repairRequired) _suppressedIds[type]?.addAll(frozen);
     _checkFenceBudget();
-    queueIndex((siri) => epoch < siri._minimumSourceEpoch
-        ? Future<void>.value()
-        : siri.deleteMany(type, frozen, expectedUid: expectedUid));
+    queueIndex(
+      (siri) => epoch < siri._minimumSourceEpoch
+          ? Future<void>.value()
+          : siri.deleteMany(type, frozen, expectedUid: expectedUid),
+    );
   }
 
   void queueRefreshAuthoritativeTasks({String? expectedUid}) {
-    unawaited(refreshAuthoritativeTasks(expectedUid: expectedUid).catchError((Object error) {
-      Logger.debug('Siri task refresh failed: $error');
-    }));
+    unawaited(
+      refreshAuthoritativeTasks(expectedUid: expectedUid).catchError((Object error) {
+        Logger.debug('Siri task refresh failed: $error');
+      }),
+    );
   }
 
   @visibleForTesting
@@ -500,8 +511,11 @@ class SiriIntegration extends SiriEventsApi {
     if (expectedUid != null && expectedUid != _uid) return;
     final frozenRows = List<ServerConversation>.of(rows);
     final epoch = _nextEpoch();
-    _fenceIneligible('conversation',
-        frozenRows.where((row) => !siriConversationIsIndexable(row, DateTime.now())).map((row) => row.id), epoch);
+    _fenceIneligible(
+      'conversation',
+      frozenRows.where((row) => !siriConversationIsIndexable(row, DateTime.now())).map((row) => row.id),
+      epoch,
+    );
     if (restoreDeleted) _suppressedIds['conversation']!.removeAll(frozenRows.map((row) => row.id));
     queueIndex((siri) async {
       if (restoreDeleted) siri._pendingRemovals['conversation']!.removeAll(frozenRows.map((row) => row.id));
@@ -760,7 +774,10 @@ class SiriIntegration extends SiriEventsApi {
     _pendingReconciles['conversation'] = _PendingSiriReconcile('conversation', () async {
       if (_currentOwner(uid, generation) && epoch >= _minimumSourceEpoch) {
         await _host.reconcileConversations(
-            uid, _conversationProjection(rows, epoch), coveredAfter?.millisecondsSinceEpoch);
+          uid,
+          _conversationProjection(rows, epoch),
+          coveredAfter?.millisecondsSinceEpoch,
+        );
       }
     });
     await _flushPendingWork(uid, generation);
@@ -918,8 +935,11 @@ class SiriIntegration extends SiriEventsApi {
 
   /// Only a completed unfiltered task traversal may call this. An active-only
   /// result cannot remove recent completed tasks from the native snapshot.
-  Future<void> reconcileTasks(List<ActionItemWithMetadata> rows,
-      {required bool includeCompleted, int? sourceEpoch}) async {
+  Future<void> reconcileTasks(
+    List<ActionItemWithMetadata> rows, {
+    required bool includeCompleted,
+    int? sourceEpoch,
+  }) async {
     final uid = _uid;
     final generation = _accountGeneration;
     if (!_isIOS || uid == null) return;
@@ -1103,12 +1123,14 @@ class SiriIntegration extends SiriEventsApi {
       if (row.kind == 'intent') {
         if (row.intent == 'askOmi') {
           final outcomes = siri_events.SiriAskOmiPerformedOutcome.values.where((value) => value.name == row.outcome);
-          const TypedEvents().emit(siri_events.SiriAskOmiPerformed(
-            platform: siri_events.SiriAskOmiPerformedPlatform.ios,
-            outcome: outcomes.isEmpty ? siri_events.SiriAskOmiPerformedOutcome.server : outcomes.first,
-            latencyMs: row.latencyMs,
-            invokedVia: siri_events.SiriAskOmiPerformedInvokedVia.unknown,
-          ));
+          const TypedEvents().emit(
+            siri_events.SiriAskOmiPerformed(
+              platform: siri_events.SiriAskOmiPerformedPlatform.ios,
+              outcome: outcomes.isEmpty ? siri_events.SiriAskOmiPerformedOutcome.server : outcomes.first,
+              latencyMs: row.latencyMs,
+              invokedVia: siri_events.SiriAskOmiPerformedInvokedVia.unknown,
+            ),
+          );
           continue;
         }
         final intents = siri_events.SiriIntentPerformedIntent.values.where((value) => value.name == row.intent);

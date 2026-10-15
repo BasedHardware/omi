@@ -30,6 +30,10 @@ mixin ChatHistoryState on ChangeNotifier {
   bool hasOlderMessages = false;
   bool loadingOlderMessages = false;
   ApiProblem? historyProblem;
+
+  @visibleForTesting
+  Future<List<ServerMessage>> Function({String? appId, bool dropdownSelected})? legacyMessagesLoader;
+
   int _historyEpoch = 0;
   int _messageOffset = 0;
   bool _historyDisposed = false;
@@ -41,6 +45,7 @@ mixin ChatHistoryState on ChangeNotifier {
   /// Clears only the local projection. A server session is allocated on the first send.
   bool startFreshChat() {
     if (!canSwitchChat) return false;
+    _clearPendingAppSwitchFence();
     _historyEpoch++;
     appProvider?.setSelectedChatAppId(null);
     chatSessionId = null;
@@ -57,9 +62,16 @@ mixin ChatHistoryState on ChangeNotifier {
     return true;
   }
 
+  void beginChatTurn() {
+    _historyEpoch++;
+    isLoadingMessages = false;
+    loadingOlderMessages = false;
+  }
+
   /// Commits a new selection after a successful read; epoch checks discard superseded results.
   Future<bool> openChatSession(ChatSessionSummary session) async {
     if (!canSwitchChat) return false;
+    _clearPendingAppSwitchFence();
     final epoch = ++_historyEpoch;
     isLoadingMessages = true;
     loadingOlderMessages = false;
@@ -78,8 +90,9 @@ mixin ChatHistoryState on ChangeNotifier {
     chatSessionId = session.id;
     isFreshChat = false;
     final loaded = result as ApiSuccess<List<ServerMessage>>;
-    messages = loaded.data..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    _messageOffset = messages.length + loaded.rejectedRows;
+    messages = loaded.data.where((m) => !m.isAutomaticChatEntry).toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    _messageOffset = loaded.data.length + loaded.rejectedRows;
     hasOlderMessages = _messageOffset == 100;
     historyProblem = loaded.rejectedRows > 0 ? const ApiProblem(ApiProblemKind.decode) : null;
     hasCachedMessages = false;
@@ -119,7 +132,7 @@ mixin ChatHistoryState on ChangeNotifier {
     loadingOlderMessages = false;
     if (result is ApiSuccess<List<ServerMessage>>) {
       final ids = messages.map((m) => m.id).toSet();
-      messages = [...messages, ...result.data.where((m) => ids.add(m.id))]
+      messages = [...messages, ...result.data.where((m) => !m.isAutomaticChatEntry && ids.add(m.id))]
         ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
       final received = result.data.length + result.rejectedRows;
       _messageOffset += received;
@@ -170,7 +183,44 @@ mixin ChatHistoryState on ChangeNotifier {
 
   void setLoadingMessages(bool value) {
     isLoadingMessages = value;
+    // An app-switch read replaces the whole visible thread (refreshMessages with
+    // dropdownSelected). While it runs, a send would beginChatTurn() (invalidating
+    // the read) and then append the new turn to the old app's projection once the
+    // stale read still lands. Fence sends for the switch window only.
+    isSwitchingChatApp = value && _pendingAppSwitch;
+    if (!value) _pendingAppSwitch = false;
     notifyListeners();
+  }
+
+  /// Set by the drawer's app switch before its bootstrap read starts.
+  bool _pendingAppSwitch = false;
+  bool isSwitchingChatApp = false;
+
+  void markPendingAppSwitch() {
+    _pendingAppSwitch = true;
+  }
+
+  /// Raises the switch fence as soon as the selection itself changes, instead
+  /// of only when the bootstrap read starts: the deliberate pre-read delay in
+  /// the drawer's switch handler is otherwise a window where a send would
+  /// target the new app while the old app's transcript is still visible.
+  /// Call [markPendingAppSwitch] first; the fence clears with the read.
+  void notifySwitchingChatApp() {
+    if (!_pendingAppSwitch) return;
+    if (isSwitchingChatApp) return;
+    isSwitchingChatApp = true;
+    notifyListeners();
+  }
+
+  /// Drops a raised switch fence when the switch itself is superseded (a turn
+  /// started before the bootstrap read, or another flow replaced the thread).
+  /// Without this the fence would outlive the switch and block Send forever.
+  void _clearPendingAppSwitchFence() {
+    _pendingAppSwitch = false;
+    if (isSwitchingChatApp) {
+      isSwitchingChatApp = false;
+      notifyListeners();
+    }
   }
 
   void setClearingChat(bool value) {
@@ -180,7 +230,12 @@ mixin ChatHistoryState on ChangeNotifier {
 
   /// Explicit sessions never consume the legacy cache, which has no session/app ownership key.
   Future<void> refreshMessages({bool dropdownSelected = false}) async {
-    if (chatMutationInProgress) return;
+    if (chatMutationInProgress) {
+      // A turn (e.g. pendant voice) started inside the switch window: the
+      // bootstrap read is superseded, so the raised fence must not survive it.
+      _clearPendingAppSwitchFence();
+      return;
+    }
     if (dropdownSelected || (appProvider?.selectedChatAppId ?? '').isNotEmpty) {
       _historyEpoch++;
       chatSessionId = null;
@@ -189,7 +244,9 @@ mixin ChatHistoryState on ChangeNotifier {
     if (isFreshChat) return;
     final epoch = ++_historyEpoch;
     final appId = appProvider?.selectedChatAppId;
+    if (dropdownSelected) markPendingAppSwitch();
     isLoadingMessages = true;
+    isSwitchingChatApp = dropdownSelected;
     loadingOlderMessages = false;
     hasOlderMessages = false;
     notifyListeners();
@@ -197,25 +254,30 @@ mixin ChatHistoryState on ChangeNotifier {
       final result = await chatSessionsApi.messages(id);
       if (_historyDisposed || epoch != _historyEpoch) return;
       isLoadingMessages = false;
+      _pendingAppSwitch = false;
+      isSwitchingChatApp = false;
       if (result is ApiFailure<List<ServerMessage>>) {
         historyProblem = result.problem;
       } else {
         final loaded = result as ApiSuccess<List<ServerMessage>>;
-        messages = loaded.data;
-        _messageOffset = messages.length + loaded.rejectedRows;
+        messages = loaded.data.where((m) => !m.isAutomaticChatEntry).toList();
+        _messageOffset = loaded.data.length + loaded.rejectedRows;
         hasOlderMessages = _messageOffset == 100;
         historyProblem = loaded.rejectedRows > 0 ? const ApiProblem(ApiProblemKind.decode) : null;
       }
     } else {
-      final loaded = await getMessagesServer(appId: appId, dropdownSelected: dropdownSelected);
+      final loaded =
+          await (legacyMessagesLoader ?? getMessagesServer)(appId: appId, dropdownSelected: dropdownSelected);
       if (_historyDisposed || epoch != _historyEpoch || appId != appProvider?.selectedChatAppId) return;
       isLoadingMessages = false;
-      messages = loaded;
+      _pendingAppSwitch = false;
+      isSwitchingChatApp = false;
+      messages = loaded.where((m) => !m.isAutomaticChatEntry).toList();
       historyProblem = null;
       // The legacy cache has no session/app key. Never use it in an explicitly selected thread.
       if ((appId ?? '').isEmpty && !dropdownSelected) {
         if (messages.isEmpty) {
-          messages = List.of(SharedPreferencesUtil().cachedMessages);
+          messages = SharedPreferencesUtil().cachedMessages.where((m) => !m.isAutomaticChatEntry).toList();
         } else {
           SharedPreferencesUtil().cachedMessages = messages;
         }
@@ -233,7 +295,8 @@ mixin ChatHistoryState on ChangeNotifier {
 
   void setMessagesFromCache() {
     if (chatSessionId != null || isFreshChat || (appProvider?.selectedChatAppId ?? '').isNotEmpty) return;
-    messages = List.of(SharedPreferencesUtil().cachedMessages)..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    messages = SharedPreferencesUtil().cachedMessages.where((m) => !m.isAutomaticChatEntry).toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     hasCachedMessages = messages.isNotEmpty;
     notifyListeners();
   }
@@ -248,7 +311,8 @@ mixin ChatHistoryState on ChangeNotifier {
     try {
       final loaded = await clearChatServer(appId: appProvider?.selectedChatAppId, chatSessionId: chatSessionId);
       resetChatDraft();
-      messages = loaded..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      messages = loaded.where((m) => !m.isAutomaticChatEntry).toList()
+        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     } catch (e) {
       Logger.debug('Failed to clear chat: $e');
       final l10n = globalNavigatorKey.currentContext?.l10n;

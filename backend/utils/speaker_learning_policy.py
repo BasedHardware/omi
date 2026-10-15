@@ -80,12 +80,26 @@ def union_seconds(intervals: List[Tuple[float, float]]) -> float:
 
 
 def winning_receipt_decision(receipt: Mapping[str, Any], segment: Mapping[str, Any]) -> Optional[Mapping[str, Any]]:
+    """The receipt decision that governs teaching from ``segment``, or None.
+
+    A merged conversation reuses numeric speaker ids across capture scopes, so a
+    speaker-level entry stamped with a scope covers only segments in that scope:
+    without this a label carried into one scope would authorize another scope's audio.
+    Conversation-wide resolution rewrites every segment to a ``conversation:`` scope
+    while keeping the explicit label, so a hand-made entry (never a carried one) still
+    governs there; the segment's own label is rechecked by every caller.
+    """
+    by_speaker = (receipt.get('speakers') or {}).get(str(segment.get('speaker_id')))
+    if isinstance(by_speaker, Mapping) and by_speaker.get('speaker_id_scope') is not None:
+        segment_scope = segment.get('speaker_id_scope')
+        resolved = isinstance(segment_scope, str) and segment_scope.startswith('conversation:')
+        if by_speaker.get('speaker_id_scope') != segment_scope and (
+            by_speaker.get('source') == 'carried' or not resolved
+        ):
+            by_speaker = None
     decisions = [
         decision
-        for decision in (
-            (receipt.get('segments') or {}).get(segment.get('id')),
-            (receipt.get('speakers') or {}).get(str(segment.get('speaker_id'))),
-        )
+        for decision in ((receipt.get('segments') or {}).get(segment.get('id')), by_speaker)
         if isinstance(decision, Mapping)
     ]
     if not decisions:

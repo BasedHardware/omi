@@ -27,7 +27,7 @@ enum DesktopCapabilityRegistry {
     let proactiveGuidance = proactiveGuidancePrompt(availableToolNames: availableToolNames)
     let usageGuidance = usageGuidancePrompt(availableToolNames: availableToolNames)
     return """
-      These Omi data/status tools are documented for desktop chat. Use them before answering when the question depends on the user's personal data, tasks, conversations, memories, app/screen activity, or task-agent state. Do not guess when you can look it up. Do not call tools for simple chit-chat or general knowledge that does not depend on the user's data.
+      These Omi data/status tools are documented for desktop chat. Use them before answering when the question depends on the user's personal data, tasks, conversations, memories, app/screen activity, task-agent state, or how to use Omi on this Mac. Do not guess when you can look it up. Do not call tools for simple chit-chat or general knowledge that does not depend on the user's data or on how Omi itself works.
 
       \(docs)
 
@@ -132,6 +132,10 @@ enum DesktopCapabilityRegistry {
       if condition { lines.append("- \(line)") }
     }
 
+    append(
+      "How to use, enable, or configure Omi on this Mac (Only Meetings, Always On, permissions, settings paths, what a screen does) -> get_product_kb. Do not use get_product_kb for the user's personal conversations, memories, tasks, or screen history.",
+      when: has("get_product_kb")
+    )
     let personalTools = ["get_memories", "search_memories", "execute_sql"]
     append(
       "Personal facts/preferences -> \(toolList(personalTools)) over memories.",

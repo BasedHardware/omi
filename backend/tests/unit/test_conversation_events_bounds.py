@@ -142,6 +142,7 @@ def router():
         "database": _pkg("database"),
         "database._client": client_mod,
         "database.conversations": _pkg("database.conversations"),
+        "database.conversation_scan": _pkg("database.conversation_scan"),
         "database.screen_frames": _pkg("database.screen_frames"),
         "database.action_items": _pkg("database.action_items"),
         "database.memories": _pkg("database.memories"),
@@ -589,9 +590,13 @@ def _set_action_item_status(router, mirrored, values):
     ), patch.object(router.conv.conversations_db, "update_conversation_action_items"), patch.object(
         router.conv.action_items_db, "get_action_items_by_conversation", return_value=mirrored
     ), patch.object(
-        router.conv.action_items_db, "mark_action_item_completed"
+        router.conv.action_items_db, "mark_action_item_completed", return_value=True
     ) as mark, patch.dict(
         "sys.modules", {"utils.notifications": notifications}
+    ), patch.object(
+        router.conv.action_items_db,
+        "get_action_item",
+        return_value={**mirrored[0], 'completed': values[0], 'status': 'completed' if values[0] else 'active'},
     ):
         router.conv.set_action_item_status(data, "c1", uid="u1")
     return mark, notifications.sync_action_item_reminder
@@ -605,7 +610,13 @@ def test_checking_off_a_conversation_task_cancels_its_reminder(router):
 
     mark.assert_called_once_with("u1", "task-1", True)
     reminder.assert_called_once_with(
-        user_id="u1", action_item_id="task-1", description="Send the budget", completed=True, due_at=due
+        user_id="u1",
+        action_item_id="task-1",
+        description="Send the budget",
+        completed=True,
+        due_at=due,
+        status='completed',
+        deleted=False,
     )
 
 
@@ -617,7 +628,13 @@ def test_unchecking_a_conversation_task_rearms_its_reminder(router):
 
     mark.assert_called_once_with("u1", "task-1", False)
     reminder.assert_called_once_with(
-        user_id="u1", action_item_id="task-1", description="Send the budget", completed=False, due_at=due
+        user_id="u1",
+        action_item_id="task-1",
+        description="Send the budget",
+        completed=False,
+        due_at=due,
+        status='active',
+        deleted=False,
     )
 
 

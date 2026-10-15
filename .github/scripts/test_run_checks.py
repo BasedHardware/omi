@@ -607,6 +607,17 @@ class RunnerBehaviorTests(unittest.TestCase):
         self.assertIs(command_for_host(node_command, platform_name="nt"), node_command)
         self.assertIs(command_for_host(bash_command, platform_name="posix"), bash_command)
 
+    def test_posix_python3_alias_honors_the_selected_interpreter(self) -> None:
+        """A host whose PATH `python3` is Xcode CLT 3.9 must not run manifest
+        checks under it: the alias follows the interpreter that launched
+        run_checks (the dev harness already floor-probed that one)."""
+
+        command = ["python3", ".github/scripts/check.py"]
+        resolved = command_for_host(command, platform_name="posix", python_executable="/path/python3.14")
+        self.assertEqual(resolved, ["/path/python3.14", ".github/scripts/check.py"])
+        # No explicit interpreter: keep the alias untouched (CI hosts, PATH `python3`).
+        self.assertIs(command_for_host(command, platform_name="posix"), command)
+
     def test_execute_checks_normalizes_the_manifest_command(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -634,7 +645,7 @@ class RunnerBehaviorTests(unittest.TestCase):
                 )
 
             self.assertEqual(result, 0)
-            normalize.assert_called_once_with(["bash", "check.sh"])
+            normalize.assert_called_once_with(["bash", "check.sh"], python_executable=sys.executable)
             run.assert_called_once_with(["git-bash.exe", "check.sh"], cwd=root, check=False)
 
     def test_windows_bash_resolution_uses_the_git_install(self) -> None:
@@ -642,6 +653,23 @@ class RunnerBehaviorTests(unittest.TestCase):
             git_root = Path(tmp)
             git = git_root / "cmd/git.exe"
             git.parent.mkdir()
+            git.touch()
+            bash = git_root / "bin/bash.exe"
+            bash.parent.mkdir()
+            bash.touch()
+
+            resolved = bash_executable(
+                platform_name="nt",
+                which=lambda name: str(git) if name == "git" else None,
+            )
+
+            self.assertTrue(Path(resolved).samefile(bash))
+
+    def test_windows_bash_resolution_from_git_hook_exec_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            git_root = Path(tmp)
+            git = git_root / "mingw64/libexec/git-core/git.exe"
+            git.parent.mkdir(parents=True)
             git.touch()
             bash = git_root / "bin/bash.exe"
             bash.parent.mkdir()
@@ -1199,6 +1227,47 @@ class PlatformTests(unittest.TestCase):
         self.assertTrue(trigger_matches("**/*.json", "backend/config/plan_catalog.json"))
         self.assertFalse(trigger_matches("**/*.json", "firebase.yaml"))
         self.assertFalse(trigger_matches("**/AGENTS.md", "AGENTS.md.bak"))
+
+    def test_literal_package_json_does_not_select_nested_copies(self):
+        """Root firebase-tools pins must not wake admission when a web package changes.
+
+        The iOS compile runner executes macOS-exclusive checks and has no backend
+        venv. `web/frontend/package.json` is not the Firestore emulator pin.
+        """
+        self.assertTrue(trigger_matches("package.json", "package.json"))
+        self.assertFalse(trigger_matches("package.json", "web/frontend/package.json"))
+        self.assertFalse(trigger_matches("package-lock.json", "web/frontend/package-lock.json"))
+        self.assertTrue(trigger_matches("**/AGENTS.md", "backend/AGENTS.md"))
+        self.assertFalse(trigger_matches("AGENTS.md", "backend/AGENTS.md"))
+
+        manifest = load_manifest(MANIFEST_PATH)
+        web_share = {
+            check.id
+            for check in resolve_checks(
+                manifest,
+                [".github/checks-manifest.yaml", "web/frontend/package.json"],
+                "ci",
+                platform="macos",
+                exclusive_platform=True,
+                manifest_changed_ids={"web-share-http-tests"},
+            )
+        }
+        self.assertNotIn("desktop-beta-admission-firestore-contention", web_share)
+
+        root_pin = {
+            check.id
+            for check in resolve_checks(
+                manifest,
+                ["package.json"],
+                "ci",
+                platform="macos",
+                exclusive_platform=True,
+            )
+        }
+        self.assertIn("desktop-beta-admission-firestore-contention", root_pin)
+
+        nested_agents = {check.id for check in resolve_checks(manifest, ["backend/AGENTS.md"], "ci")}
+        self.assertIn("agents-md-lean", nested_agents)
 
     def test_root_level_source_change_selects_plan_catalog_contract(self):
         """The Stripe-literal scan walks from the root, so selection must too.

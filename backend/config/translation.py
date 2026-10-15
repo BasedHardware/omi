@@ -11,15 +11,17 @@ from typing import Mapping
 
 
 class TranslationProvider(str, Enum):
-    gemini = 'gemini'
-    # Internal compatibility alias: this must never produce "google" telemetry.
-    google = 'gemini'
+    luna = 'luna'
+    # Legacy provider names remain aliases for stored/runtime configuration.
+    # They resolve to the gateway-backed Luna provider and never select Google.
+    gemini = 'luna'
+    google = 'luna'
     nllb = 'nllb'
 
     @staticmethod
     def get_display_name(value: 'TranslationProvider') -> str:
-        if value == TranslationProvider.gemini:
-            return 'Gemini 2.5 Flash-Lite via LLM gateway'
+        if value == TranslationProvider.luna:
+            return 'Luna via LLM gateway'
         if value == TranslationProvider.nllb:
             return 'NLLB-200 (self-hosted)'
         return str(value)
@@ -67,8 +69,8 @@ def resolve_translation_profile(env: Mapping[str, str] | None = None) -> Transla
         token = raw_token.strip().lower()
         if not token:
             continue
-        if token in {TranslationProvider.gemini.value, 'google'}:
-            provider = TranslationProvider.gemini
+        if token in {'gemini', 'google', 'luna'}:
+            provider = TranslationProvider.luna
         elif token == TranslationProvider.nllb.value:
             provider = TranslationProvider.nllb
         else:
@@ -142,6 +144,8 @@ class OnDemandTranslationConfig:
     shadow_enabled: bool
     gate_enabled: bool
     lease_v1_enabled: bool
+    # Compatibility name for the existing rollout env contract. When enabled,
+    # this selects the Luna-backed viewed translation policy.
     gemini_enabled: bool
     onopen_enabled: bool
     cohort_percent: int
@@ -222,9 +226,9 @@ def resolve_ondemand_config(env: Mapping[str, str] | None = None) -> OnDemandTra
 
 
 def viewed_translation_profile(legacy: TranslationProfile, config: OnDemandTranslationConfig) -> TranslationProfile:
-    """Gemini-only quality policy; the configured gateway route remains authoritative."""
+    """Luna-only quality policy; the configured gateway route remains authoritative."""
     return TranslationProfile(
-        providers=(TranslationProvider.gemini,),
+        providers=(TranslationProvider.luna,),
         nllb_url=legacy.nllb_url,
         nllb_timeout_seconds=legacy.nllb_timeout_seconds,
         cache_ttl_seconds=legacy.cache_ttl_seconds,

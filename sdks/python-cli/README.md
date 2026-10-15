@@ -54,6 +54,34 @@ omi action-item list --open
 omi goal list
 ```
 
+## Terminal chat
+
+Sign in with your Omi account, then chat on your current default Omi cloud
+chat thread:
+
+```bash
+omi auth login --browser
+omi chat                        # interactive; replies stream as they arrive
+omi chat "What did we decide?"  # one message, then exit
+omi chat --history --limit 20   # recent shared messages
+omi chat --clear                 # asks before deleting shared chat history
+omi chat --clear --yes           # explicit non-interactive reset
+omi --json chat "Summarize today"  # one final response as JSON
+```
+
+Interactive commands: `/history`, `/clear`, `/tasks`, `/task add TEXT`,
+`/task done ID`, `/help`, and `/quit`. `/clear` removes the shared cloud chat
+history across clients, not just terminal output. It always asks first.
+The terminal does not keep a second transcript on disk. If a stream disconnects,
+check `omi chat --history` before resending because the server may have saved the turn.
+
+This uses the cloud chat backend and its synced memories, conversations, and
+tasks. It does **not** grant the terminal live access to the Mac's private
+screen or the desktop-only agent context; use the desktop app for those.
+Developer API keys cannot authenticate the user chat endpoint, so `omi chat`
+requires browser sign-in. `omi ask` remains available for scoped, one-shot
+developer API-key questions.
+
 Pass `--json` to any command (as a global flag, before the verb) to get
 machine-readable output, ready for `jq`, agent harnesses, or whatever else:
 
@@ -283,15 +311,31 @@ omi
 │       ├── search <query> [--include-completed]
 │       ├── complete <id>
 │       └── delete <id> [-y]
-└── goal
-    ├── list [--limit N] [--include-inactive]
-    ├── get <id>
-    ├── create <title> --target N [--type ...] [--current N] [--unit ...]
-    ├── update <id> [--unit ... | --clear-unit] [...]
-    ├── progress <id> <value>
-    ├── history <id> [--days N]
-    └── delete <id> [-y]
+├── goal
+│   ├── list [--limit N] [--include-inactive]
+│   ├── get <id>
+│   ├── create <title> --target N [--type ...] [--current N] [--unit ...]
+│   ├── update <id> [--unit ... | --clear-unit] [...]
+│   ├── progress <id> <value>
+│   ├── history <id> [--days N]
+│   └── delete <id> [-y]
+└── app
+    ├── events
+    ├── payload <event> [--uid UID]
+    ├── send <event> --to URL [--uid UID] [--payload-file FILE] [--idempotency-key K] [--timeout S]
+    ├── verify --to URL [--event EVENT] [--uid UID]
+    └── serve [--port N] [--host H] [--status N] [--reply JSON] [--requests N]
 ```
+
+`omi app` is the local test harness for an Omi app. `omi app serve` receives
+deliveries and prints them, `omi app send` posts a sample event the way the
+backend posts it: same query parameters, content type, and `Idempotency-Key`
+header. `send` exits non-zero unless the receiver answers 2xx, and says what
+Omi would do next, including whether a `realtime_transcript` reply was long
+enough to reach the user as a notification. `omi app verify` posts every event
+to one URL and reports whether that endpoint would work in production: a
+private or loopback host, a redirect, or a response slower than 30 seconds all
+fail, because that is what the backend's delivery client does with them.
 
 `conversation from-segments` reads JSON files as UTF-8 (with or without a BOM),
 UTF-16, or UTF-32, independently of the system's default text encoding.

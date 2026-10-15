@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-git-newer-peels-full-sha-rev",
+  "violated_contract": "Every workflow_dispatch prod deploy validates its release SHA with git cat-file -e \"<full-40-hex-SHA>^{commit}\" (and peels the same form for source-SHA admission in the pusher lane). git 2.54 runner images regressed peeling ^{commit} off a full 40-hex SHA: the expression now fails with 'Not a valid object name'/'ambiguous argument' even when the commit object is present in the pack (repro'd on a clean clone: abbreviated SHA peels fine, bare full SHA resolves, full-SHA+peel fails). First production hit 2026-10-10T09:15Z, run 38040612226, deterministic across two dispatches; every merge-commit release_sha deploy is blocked fleet-wide until fixed.",
+  "canonical_prevention": "Never peel ^{commit} off a full-length literal SHA in CI; check existence and type directly with [ \"$(git cat-file -t \"$SHA\" 2>/dev/null)\" = \"commit\" ], which is version-stable and identical in admission semantics. Peel only refs or abbreviated SHAs (still supported), and keep a canary deploy of each deploy workflow on runner-image rollouts.",
+  "canonical_prevention_artifact": [
+    ".github/workflows/gcp_backend.yml",
+    ".github/workflows/gcp_backend_pusher.yml"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    ".github/workflows/*deploy*.yml",
+    ".github/workflows/gcp_backend.yml",
+    ".github/workflows/gcp_backend_pusher.yml",
+    ".github/workflows/desktop_backend_prod.yml"
+  ],
+  "status": "open"
+}

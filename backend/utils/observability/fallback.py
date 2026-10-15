@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Literal, TypedDict
 
 from utils.metrics import OMI_FALLBACK_TOTAL
+from utils.observability.routing_cohort import current_routing_cohort
 from utils.stt.live_reason import LIVE_STT_REASONS
 
 logger = logging.getLogger(__name__)
@@ -127,6 +128,13 @@ ALLOWED_OUTCOMES = frozenset({'recovered', 'degraded', 'exhausted'})
 
 ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
     {
+        'gate_unavailable',
+        'http_error',
+        'http_429',
+        'transport_error',
+        'unavailable',
+        'unconfigured',
+        'malformed',
         'timeout',
         'provider_5xx',
         'provider_429',
@@ -145,6 +153,8 @@ ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
         'byok',
         'malformed_doc',
         'capacity_full',
+        'auth_error',
+        'connection_error',
         'first_text_deadline',
         'empty_streak',
         'allocation_rejected',
@@ -152,6 +162,7 @@ ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
         'not_authorized',
         'authorization_unavailable',
         'unmigrated_principal',
+        'document_size_limit',
         'other',
         'none',
     }
@@ -159,7 +170,7 @@ ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
 
 # Diagnostic detail stays in the log; metric dimensions stay fixed and live
 # STT reasons share the bounded vocabulary used by cost health.
-ALLOWED_CAPACITY_SUBTYPES = frozenset({'buffer_cap', 'span_cap', 'admission', 'replay_ring_cap'})
+ALLOWED_CAPACITY_SUBTYPES = frozenset({'buffer_cap', 'span_cap', 'admission', 'replay_ring_cap', 'queue_timeout'})
 ALLOWED_STT_FAILURE_SUBTYPES = frozenset(
     {
         'initialization_failed',
@@ -169,6 +180,7 @@ ALLOWED_STT_FAILURE_SUBTYPES = frozenset(
         'modulate_serve_error',
         'provider_rate_limited',
         'soniox_idle_timeout',
+        'soniox_request_timeout',
         'soniox_rotation',
         'provider_5xx',
         'capacity_full',
@@ -181,6 +193,7 @@ ALLOWED_STT_FAILURE_SUBTYPES = frozenset(
 
 ALLOWED_COMPONENTS = frozenset(
     {
+        'screen_task_gate',
         'sync_dispatch',
         'pusher',
         'stt_selection',
@@ -200,6 +213,7 @@ ALLOWED_COMPONENTS = frozenset(
         'firestore_read',
         'knowledge_graph',
         'agent_tools',
+        'conversation_relevance',
         'conversation_finalization',
         'conversation_notes',
         'daily_summary',
@@ -242,6 +256,10 @@ def record_fallback(
         ).inc()
     except Exception:
         pass
+
+    cohort = current_routing_cohort.get()
+    if cohort is not None and component_label in {'stt_selection', 'stt_live_session'} and outcome_label == 'exhausted':
+        cohort.exhausted = True
 
     emit_log = log or logger
     try:
@@ -299,3 +317,49 @@ def safe_label(value: object, *, default: str = 'unknown') -> str:
         text = default
     normalized = ''.join(char if char.isalnum() or char in _SAFE_LABEL_CHARS else '_' for char in text)
     return (normalized or default)[:_LABEL_MAX_LENGTH]
+
+
+def initialize_live_stt_exhausted_children() -> None:
+    """Expose zero before the first burst so increase() can observe it."""
+    providers = ('parakeet', 'modulate', 'soniox', 'deepgram')
+    reasons = LIVE_STT_REASONS | {'auth', 'quota', 'last_resort', 'config_incomplete'}
+    for reason in sorted(reasons):
+        for provider in providers:
+            for replacement in providers:
+                OMI_FALLBACK_TOTAL.labels(
+                    component='stt_live_session',
+                    from_mode=provider,
+                    to_mode=replacement,
+                    reason=reason,
+                    outcome='exhausted',
+                )
+            OMI_FALLBACK_TOTAL.labels(
+                component='stt_live_session',
+                from_mode=provider,
+                to_mode='unavailable',
+                reason=reason,
+                outcome='exhausted',
+            )
+            OMI_FALLBACK_TOTAL.labels(
+                component='stt_selection',
+                from_mode=provider,
+                to_mode='unavailable',
+                reason=reason,
+                outcome='exhausted',
+            )
+
+
+def initialize_cache_write_fail_open_children() -> None:
+    """Expose zero before the first Redis cache-write fail-open so increase() can see it."""
+    for reason in ('capacity_full', 'auth_error', 'connection_error', 'timeout'):
+        OMI_FALLBACK_TOTAL.labels(
+            component='other',
+            from_mode='cache_write',
+            to_mode='skip',
+            reason=reason,
+            outcome='degraded',
+        )
+
+
+initialize_live_stt_exhausted_children()
+initialize_cache_write_fail_open_children()

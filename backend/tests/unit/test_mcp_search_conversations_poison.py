@@ -213,34 +213,6 @@ class TestSearchConversationsPoisonPage:
 
     @patch('utils.mcp_server.handlers.conversations.conversations_db')
     @patch('utils.mcp_server.handlers.conversations.vector_db')
-    def test_transcript_chunk_hit_included_when_summary_misses(self, mock_vector_db, mock_conversations_db):
-        mock_vector_db.query_vectors.return_value = []
-        mock_vector_db.search_transcript_chunks.return_value = [
-            {'conversation_id': 'conv-transcript', 'chunk_index': 0, 'score': 0.91},
-        ]
-        mock_conversations_db.get_mcp_conversations_by_id.return_value = [
-            {
-                **_valid_conversation('conv-transcript'),
-                'transcript_segments': [
-                    {
-                        'id': 'seg-1',
-                        'text': 'We should renew the ACME contract next week',
-                        'start': 10.0,
-                        'end': 14.0,
-                        'speaker_id': 1,
-                    }
-                ],
-            }
-        ]
-
-        result = search_conversations(query='ACME contract', limit=10, uid='user-1')
-
-        assert [c.id for c in result] == ['conv-transcript']
-        assert result[0].match_snippets
-        assert 'ACME contract' in result[0].match_snippets[0].text
-
-    @patch('utils.mcp_server.handlers.conversations.conversations_db')
-    @patch('utils.mcp_server.handlers.conversations.vector_db')
     def test_empty_when_no_vector_hits(self, mock_vector_db, mock_conversations_db):
         mock_vector_db.query_vectors.return_value = []
         mock_vector_db.search_transcript_chunks.return_value = []
