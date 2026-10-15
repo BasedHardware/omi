@@ -497,8 +497,9 @@ and actual decoded PCM. Channel FFmpeg comes from the pinned `imageio-ffmpeg==0.
 platform wheel in both the runtime and CI locks; it does not depend on a runner's
 system packages and never downloads executables at runtime. A validated system
 FFmpeg is the fallback, recorded through the shared fallback event. Enabled channel
-startup probes the decoder off the event loop before registering gateways; missing
-or unusable decoders fail startup with `Messaging audio decoder unavailable`.
+startup probes the decoder off the event loop; a missing or unusable decoder logs
+ERROR `Messaging audio decoder unavailable` but never blocks API startup — text
+turns continue and voice notes get the typed decode reply.
 Repair by syncing the locked dependencies (`make setup-backend`) or reinstalling
 the existing system FFmpeg package. Disabled channels need no decoder probe.
 FFmpeg has a 30-second decode deadline, one decoder/filter

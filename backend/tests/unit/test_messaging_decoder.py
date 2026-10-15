@@ -5,7 +5,7 @@ import logging
 import shutil
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -65,17 +65,26 @@ def test_unavailable_or_broken_decoder_is_explicit(monkeypatch, caplog, system_p
     assert decoder.UNAVAILABLE in caplog.text
 
 
-def test_enabled_channel_startup_fails_before_registration_without_decoder(monkeypatch):
+def test_missing_decoder_is_loud_but_never_blocks_startup(monkeypatch, caplog):
     monkeypatch.setattr(runtime, 'configured_adapters', lambda: (SimpleNamespace(channel='telegram'),))
+    monkeypatch.setattr(runtime, 'recover_pending', AsyncMock())
     register = MagicMock()
 
     def unavailable():
         raise decoder.MediaDecoderUnavailable(decoder.UNAVAILABLE)
 
     monkeypatch.setattr(runtime, 'get_media_decoder', unavailable)
-    with pytest.raises(decoder.MediaDecoderUnavailable, match='Messaging audio decoder unavailable'):
-        asyncio.run(runtime.start_adapters(register))
-    register.assert_not_called()
+
+    async def run():
+        result = await runtime.start_adapters(register)
+        result[0].set()
+        await result[1]
+
+    with caplog.at_level(logging.ERROR):
+        asyncio.run(run())
+    # Text channels stay registered; the API process must not fail on a voice-only dependency.
+    register.assert_called_once()
+    assert 'Messaging audio decoder unavailable' in caplog.text
 
 
 def test_disabled_channels_do_not_require_decoder(monkeypatch):
