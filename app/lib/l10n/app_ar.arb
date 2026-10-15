@@ -4126,5 +4126,13 @@
     "onboardingNoOmiYet": "ليس لديك Omi بعد؟",
     "onboardingOmiNotOrdered": "لم أطلبه بعد",
     "onboardingOmiOrdered": "لقد طلبته",
-    "onboardingPermissionTapToFix": "اضغط للإصلاح"
+    "onboardingPermissionTapToFix": "اضغط للإصلاح",
+    "homePendingTitle": "محادثات في الطريق",
+    "homePendingCatchingUp": "جارٍ اللحاق بالصوت السابق",
+    "onTheWayTitle": "في الطريق",
+    "onTheWayAlmostReady": "على وشك الجاهزية",
+    "activityEmpty": "لا يوجد نشاط بعد",
+    "activityNewSemantics": "النشاط، عناصر جديدة",
+    "activityLoadFailed": "تعذّر تحميل كل نشاطك",
+    "activityNewItem": "جديد"
 }

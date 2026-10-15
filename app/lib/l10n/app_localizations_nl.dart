@@ -13490,4 +13490,28 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Tik om te herstellen';
+
+  @override
+  String get homePendingTitle => 'Gesprekken onderweg';
+
+  @override
+  String get homePendingCatchingUp => 'Eerdere audio wordt ingehaald';
+
+  @override
+  String get onTheWayTitle => 'Onderweg';
+
+  @override
+  String get onTheWayAlmostReady => 'Bijna klaar';
+
+  @override
+  String get activityEmpty => 'Nog geen activiteit';
+
+  @override
+  String get activityNewSemantics => 'Activiteit, nieuwe items';
+
+  @override
+  String get activityLoadFailed => 'Niet al je activiteit kon worden geladen';
+
+  @override
+  String get activityNewItem => 'Nieuw';
 }

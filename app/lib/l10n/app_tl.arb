@@ -11552,5 +11552,13 @@
     "onboardingNoOmiYet": "Wala ka pang Omi?",
     "onboardingOmiNotOrdered": "Hindi pa naka-order",
     "onboardingOmiOrdered": "Na-order ko na",
-    "onboardingPermissionTapToFix": "I-tap para ayusin"
+    "onboardingPermissionTapToFix": "I-tap para ayusin",
+    "homePendingTitle": "Paparating na ang mga usapan",
+    "homePendingCatchingUp": "Hinahabol ang naunang audio",
+    "onTheWayTitle": "Paparating",
+    "onTheWayAlmostReady": "Halos handa na",
+    "activityEmpty": "Wala pang aktibidad",
+    "activityNewSemantics": "Aktibidad, mga bagong item",
+    "activityLoadFailed": "Hindi ma-load ang lahat ng iyong aktibidad",
+    "activityNewItem": "Bago"
 }

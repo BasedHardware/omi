@@ -13381,4 +13381,28 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'اضغط للإصلاح';
+
+  @override
+  String get homePendingTitle => 'محادثات في الطريق';
+
+  @override
+  String get homePendingCatchingUp => 'جارٍ اللحاق بالصوت السابق';
+
+  @override
+  String get onTheWayTitle => 'في الطريق';
+
+  @override
+  String get onTheWayAlmostReady => 'على وشك الجاهزية';
+
+  @override
+  String get activityEmpty => 'لا يوجد نشاط بعد';
+
+  @override
+  String get activityNewSemantics => 'النشاط، عناصر جديدة';
+
+  @override
+  String get activityLoadFailed => 'تعذّر تحميل كل نشاطك';
+
+  @override
+  String get activityNewItem => 'جديد';
 }

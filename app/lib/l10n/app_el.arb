@@ -4126,5 +4126,13 @@
     "onboardingNoOmiYet": "Δεν έχετε ακόμα το Omi σας;",
     "onboardingOmiNotOrdered": "Δεν το έχω παραγγείλει ακόμα",
     "onboardingOmiOrdered": "Το έχω παραγγείλει",
-    "onboardingPermissionTapToFix": "Πατήστε για διόρθωση"
+    "onboardingPermissionTapToFix": "Πατήστε για διόρθωση",
+    "homePendingTitle": "Συνομιλίες καθ' οδόν",
+    "homePendingCatchingUp": "Επεξεργασία προηγούμενου ήχου",
+    "onTheWayTitle": "Καθ' οδόν",
+    "onTheWayAlmostReady": "Σχεδόν έτοιμο",
+    "activityEmpty": "Δεν υπάρχει δραστηριότητα ακόμα",
+    "activityNewSemantics": "Δραστηριότητα, νέα στοιχεία",
+    "activityLoadFailed": "Δεν ήταν δυνατή η φόρτωση όλης της δραστηριότητάς σας",
+    "activityNewItem": "Νέο"
 }

@@ -13448,4 +13448,28 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Puuduta parandamiseks';
+
+  @override
+  String get homePendingTitle => 'Vestlused teel';
+
+  @override
+  String get homePendingCatchingUp => 'Varasema heli töötlemine';
+
+  @override
+  String get onTheWayTitle => 'Teel';
+
+  @override
+  String get onTheWayAlmostReady => 'Peaaegu valmis';
+
+  @override
+  String get activityEmpty => 'Tegevusi veel pole';
+
+  @override
+  String get activityNewSemantics => 'Tegevus, uued üksused';
+
+  @override
+  String get activityLoadFailed => 'Kogu tegevust ei õnnestunud laadida';
+
+  @override
+  String get activityNewItem => 'Uus';
 }

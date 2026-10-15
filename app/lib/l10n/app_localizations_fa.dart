@@ -13449,4 +13449,28 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'برای رفع ضربه بزنید';
+
+  @override
+  String get homePendingTitle => 'گفتگوها در راه است';
+
+  @override
+  String get homePendingCatchingUp => 'در حال پردازش صدای قبلی';
+
+  @override
+  String get onTheWayTitle => 'در راه';
+
+  @override
+  String get onTheWayAlmostReady => 'تقریباً آماده';
+
+  @override
+  String get activityEmpty => 'هنوز فعالیتی نیست';
+
+  @override
+  String get activityNewSemantics => 'فعالیت، موارد جدید';
+
+  @override
+  String get activityLoadFailed => 'بارگیری همه فعالیت‌های شما ممکن نشد';
+
+  @override
+  String get activityNewItem => 'جدید';
 }

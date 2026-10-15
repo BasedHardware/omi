@@ -11552,5 +11552,13 @@
     "onboardingNoOmiYet": "Još nemate Omi?",
     "onboardingOmiNotOrdered": "Još nisam naručio/la",
     "onboardingOmiOrdered": "Naručio/la sam ga",
-    "onboardingPermissionTapToFix": "Dodirnite za popravak"
+    "onboardingPermissionTapToFix": "Dodirnite za popravak",
+    "homePendingTitle": "Razgovori stižu",
+    "homePendingCatchingUp": "Obrađujemo raniji zvuk",
+    "onTheWayTitle": "Na putu",
+    "onTheWayAlmostReady": "Gotovo spremno",
+    "activityEmpty": "Još nema aktivnosti",
+    "activityNewSemantics": "Aktivnost, nove stavke",
+    "activityLoadFailed": "Nismo mogli učitati svu vašu aktivnost",
+    "activityNewItem": "Novo"
 }

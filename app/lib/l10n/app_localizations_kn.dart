@@ -13493,4 +13493,28 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'ಸರಿಪಡಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ';
+
+  @override
+  String get homePendingTitle => 'ಸಂಭಾಷಣೆಗಳು ಬರುತ್ತಿವೆ';
+
+  @override
+  String get homePendingCatchingUp => 'ಹಿಂದಿನ ಆಡಿಯೊವನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲಾಗುತ್ತಿದೆ';
+
+  @override
+  String get onTheWayTitle => 'ದಾರಿಯಲ್ಲಿದೆ';
+
+  @override
+  String get onTheWayAlmostReady => 'ಬಹುತೇಕ ಸಿದ್ಧ';
+
+  @override
+  String get activityEmpty => 'ಇನ್ನೂ ಯಾವುದೇ ಚಟುವಟಿಕೆ ಇಲ್ಲ';
+
+  @override
+  String get activityNewSemantics => 'ಚಟುವಟಿಕೆ, ಹೊಸ ಐಟಂಗಳು';
+
+  @override
+  String get activityLoadFailed => 'ನಿಮ್ಮ ಎಲ್ಲಾ ಚಟುವಟಿಕೆಯನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ';
+
+  @override
+  String get activityNewItem => 'ಹೊಸದು';
 }

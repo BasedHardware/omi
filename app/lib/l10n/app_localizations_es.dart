@@ -13494,4 +13494,28 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Toca para solucionarlo';
+
+  @override
+  String get homePendingTitle => 'Conversaciones en camino';
+
+  @override
+  String get homePendingCatchingUp => 'Poniéndonos al día con el audio anterior';
+
+  @override
+  String get onTheWayTitle => 'En camino';
+
+  @override
+  String get onTheWayAlmostReady => 'Casi listo';
+
+  @override
+  String get activityEmpty => 'Aún no hay actividad';
+
+  @override
+  String get activityNewSemantics => 'Actividad, elementos nuevos';
+
+  @override
+  String get activityLoadFailed => 'No se pudo cargar toda tu actividad';
+
+  @override
+  String get activityNewItem => 'Nuevo';
 }

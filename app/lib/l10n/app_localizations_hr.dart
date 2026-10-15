@@ -13488,4 +13488,28 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Dodirnite za popravak';
+
+  @override
+  String get homePendingTitle => 'Razgovori stižu';
+
+  @override
+  String get homePendingCatchingUp => 'Obrađujemo raniji zvuk';
+
+  @override
+  String get onTheWayTitle => 'Na putu';
+
+  @override
+  String get onTheWayAlmostReady => 'Gotovo spremno';
+
+  @override
+  String get activityEmpty => 'Još nema aktivnosti';
+
+  @override
+  String get activityNewSemantics => 'Aktivnost, nove stavke';
+
+  @override
+  String get activityLoadFailed => 'Nismo mogli učitati svu vašu aktivnost';
+
+  @override
+  String get activityNewItem => 'Novo';
 }

@@ -249,3 +249,14 @@ String _sectionLabel(BuildContext context, RecentChangeSection section) {
     RecentChangeSection.other => l10n.reviewChangesSectionOther,
   };
 }
+
+/// The glyph a change of [kind] wears wherever Omi's own changes are listed.
+IconData reviewChangeIcon(ReviewChangeKind kind) => switch (kind) {
+      ReviewChangeKind.rename => Icons.spellcheck,
+      ReviewChangeKind.mergeMemories => Icons.call_merge,
+      ReviewChangeKind.updatePerson => Icons.person_outline,
+      ReviewChangeKind.labelSpeaker => Icons.record_voice_over_outlined,
+      ReviewChangeKind.titleConversation => Icons.edit_outlined,
+      ReviewChangeKind.closeTask => Icons.task_alt,
+      ReviewChangeKind.other => Icons.auto_fix_high_outlined,
+    };

@@ -11552,5 +11552,13 @@
     "onboardingNoOmiYet": "Яшчэ няма Omi?",
     "onboardingOmiNotOrdered": "Яшчэ не замовіў",
     "onboardingOmiOrdered": "Я ўжо замовіў",
-    "onboardingPermissionTapToFix": "Націсніце, каб выправіць"
+    "onboardingPermissionTapToFix": "Націсніце, каб выправіць",
+    "homePendingTitle": "Размовы ў дарозе",
+    "homePendingCatchingUp": "Апрацоўваем ранейшае аўдыя",
+    "onTheWayTitle": "У дарозе",
+    "onTheWayAlmostReady": "Амаль гатова",
+    "activityEmpty": "Пакуль няма актыўнасці",
+    "activityNewSemantics": "Актыўнасць, новыя элементы",
+    "activityLoadFailed": "Не ўдалося загрузіць усю вашу актыўнасць",
+    "activityNewItem": "Новае"
 }

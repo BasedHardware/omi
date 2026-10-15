@@ -11552,5 +11552,13 @@
     "onboardingNoOmiYet": "هنوز Omi ندارید؟",
     "onboardingOmiNotOrdered": "هنوز سفارش نداده‌ام",
     "onboardingOmiOrdered": "سفارش داده‌ام",
-    "onboardingPermissionTapToFix": "برای رفع ضربه بزنید"
+    "onboardingPermissionTapToFix": "برای رفع ضربه بزنید",
+    "homePendingTitle": "گفتگوها در راه است",
+    "homePendingCatchingUp": "در حال پردازش صدای قبلی",
+    "onTheWayTitle": "در راه",
+    "onTheWayAlmostReady": "تقریباً آماده",
+    "activityEmpty": "هنوز فعالیتی نیست",
+    "activityNewSemantics": "فعالیت، موارد جدید",
+    "activityLoadFailed": "بارگیری همه فعالیت‌های شما ممکن نشد",
+    "activityNewItem": "جدید"
 }

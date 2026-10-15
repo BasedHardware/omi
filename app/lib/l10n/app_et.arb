@@ -4126,5 +4126,13 @@
     "onboardingNoOmiYet": "Sul pole veel Omit?",
     "onboardingOmiNotOrdered": "Pole veel tellinud",
     "onboardingOmiOrdered": "Olen selle tellinud",
-    "onboardingPermissionTapToFix": "Puuduta parandamiseks"
+    "onboardingPermissionTapToFix": "Puuduta parandamiseks",
+    "homePendingTitle": "Vestlused teel",
+    "homePendingCatchingUp": "Varasema heli töötlemine",
+    "onTheWayTitle": "Teel",
+    "onTheWayAlmostReady": "Peaaegu valmis",
+    "activityEmpty": "Tegevusi veel pole",
+    "activityNewSemantics": "Tegevus, uued üksused",
+    "activityLoadFailed": "Kogu tegevust ei õnnestunud laadida",
+    "activityNewItem": "Uus"
 }

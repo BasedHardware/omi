@@ -13500,4 +13500,28 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Нажмите, чтобы исправить';
+
+  @override
+  String get homePendingTitle => 'Разговоры в пути';
+
+  @override
+  String get homePendingCatchingUp => 'Обрабатываем более раннее аудио';
+
+  @override
+  String get onTheWayTitle => 'В пути';
+
+  @override
+  String get onTheWayAlmostReady => 'Почти готово';
+
+  @override
+  String get activityEmpty => 'Пока нет активности';
+
+  @override
+  String get activityNewSemantics => 'Активность, новые элементы';
+
+  @override
+  String get activityLoadFailed => 'Не удалось загрузить всю активность';
+
+  @override
+  String get activityNewItem => 'Новое';
 }

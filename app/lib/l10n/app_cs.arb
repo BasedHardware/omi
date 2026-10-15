@@ -4126,5 +4126,13 @@
     "onboardingNoOmiYet": "Ještě nemáte Omi?",
     "onboardingOmiNotOrdered": "Ještě neobjednáno",
     "onboardingOmiOrdered": "Už jsem ho objednal/a",
-    "onboardingPermissionTapToFix": "Klepnutím opravíte"
+    "onboardingPermissionTapToFix": "Klepnutím opravíte",
+    "homePendingTitle": "Konverzace na cestě",
+    "homePendingCatchingUp": "Zpracováváme dřívější zvuk",
+    "onTheWayTitle": "Na cestě",
+    "onTheWayAlmostReady": "Téměř hotovo",
+    "activityEmpty": "Zatím žádná aktivita",
+    "activityNewSemantics": "Aktivita, nové položky",
+    "activityLoadFailed": "Nepodařilo se načíst celou vaši aktivitu",
+    "activityNewItem": "Nové"
 }

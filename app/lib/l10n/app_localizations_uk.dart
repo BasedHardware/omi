@@ -13484,4 +13484,28 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Торкніться, щоб виправити';
+
+  @override
+  String get homePendingTitle => 'Розмови в дорозі';
+
+  @override
+  String get homePendingCatchingUp => 'Обробляємо попереднє аудіо';
+
+  @override
+  String get onTheWayTitle => 'У дорозі';
+
+  @override
+  String get onTheWayAlmostReady => 'Майже готово';
+
+  @override
+  String get activityEmpty => 'Поки немає активності';
+
+  @override
+  String get activityNewSemantics => 'Активність, нові елементи';
+
+  @override
+  String get activityLoadFailed => 'Не вдалося завантажити всю активність';
+
+  @override
+  String get activityNewItem => 'Нове';
 }

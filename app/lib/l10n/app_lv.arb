@@ -4126,5 +4126,13 @@
     "onboardingNoOmiYet": "Vēl nav Omi?",
     "onboardingOmiNotOrdered": "Vēl neesmu pasūtījis",
     "onboardingOmiOrdered": "Esmu to pasūtījis",
-    "onboardingPermissionTapToFix": "Pieskarieties, lai labotu"
+    "onboardingPermissionTapToFix": "Pieskarieties, lai labotu",
+    "homePendingTitle": "Sarunas ceļā",
+    "homePendingCatchingUp": "Apstrādājam iepriekšējo audio",
+    "onTheWayTitle": "Ceļā",
+    "onTheWayAlmostReady": "Gandrīz gatavs",
+    "activityEmpty": "Vēl nav aktivitātes",
+    "activityNewSemantics": "Aktivitāte, jauni vienumi",
+    "activityLoadFailed": "Neizdevās ielādēt visu jūsu aktivitāti",
+    "activityNewItem": "Jauns"
 }

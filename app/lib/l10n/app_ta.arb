@@ -11552,5 +11552,13 @@
     "onboardingNoOmiYet": "இன்னும் உங்கள் Omi இல்லையா?",
     "onboardingOmiNotOrdered": "இன்னும் ஆர்டர் செய்யவில்லை",
     "onboardingOmiOrdered": "நான் ஆர்டர் செய்துவிட்டேன்",
-    "onboardingPermissionTapToFix": "சரிசெய்ய தட்டவும்"
+    "onboardingPermissionTapToFix": "சரிசெய்ய தட்டவும்",
+    "homePendingTitle": "உரையாடல்கள் வருகின்றன",
+    "homePendingCatchingUp": "முந்தைய ஆடியோ செயலாக்கப்படுகிறது",
+    "onTheWayTitle": "வழியில்",
+    "onTheWayAlmostReady": "கிட்டத்தட்ட தயார்",
+    "activityEmpty": "இதுவரை எந்தச் செயல்பாடும் இல்லை",
+    "activityNewSemantics": "செயல்பாடு, புதிய உருப்படிகள்",
+    "activityLoadFailed": "உங்கள் எல்லா செயல்பாடுகளையும் ஏற்ற முடியவில்லை",
+    "activityNewItem": "புதியது"
 }
