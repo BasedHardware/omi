@@ -196,3 +196,34 @@ def test_incomplete_reconciliation_fails_closed(object_index, path, value, expec
     findings = validate_readiness(*objects)
     assert any(expected in finding for finding in findings)
     assert all('unrelated' not in finding and 'not-a-quantity' not in finding for finding in findings)
+
+
+def test_retired_alertmanager_has_no_resources_endpoints_or_grafana_datasource(rendered):
+    assert not any(obj['kind'] == 'Alertmanager' for obj in rendered)
+    alertmanager_name = 'prod-omi-kube-prometheus-s-alertmanager'
+    retired = {'Service', 'ServiceAccount', 'ServiceMonitor', 'StatefulSet'}
+    assert not any(obj['kind'] in retired and obj['metadata']['name'] == alertmanager_name for obj in rendered)
+    assert not any(
+        obj['kind'] == 'StatefulSet' and obj['metadata']['name'] == 'alertmanager-' + alertmanager_name
+        for obj in rendered
+    )
+    prometheus = next(obj for obj in rendered if obj['kind'] == 'Prometheus')
+    assert not prometheus['spec'].get('alerting', {}).get('alertmanagers')
+    assert prometheus['spec']['persistentVolumeClaimRetentionPolicy'] == {
+        'whenDeleted': 'Retain',
+        'whenScaled': 'Retain',
+    }
+    claim = prometheus['spec']['storage']['volumeClaimTemplate']['spec']
+    assert claim['storageClassName'] == 'standard-rwo'
+    assert claim['resources']['requests']['storage'] == '100Gi'
+    datasources = next(
+        yaml.safe_load(obj['data']['datasource.yaml'])
+        for obj in rendered
+        if obj['kind'] == 'ConfigMap' and 'datasource.yaml' in obj.get('data', {})
+    )
+    assert not any(source.get('uid') == 'alertmanager' for source in datasources['datasources'])
+    assert not datasources.get('deleteDatasources')
+    assert (
+        next(source for source in datasources['datasources'] if source.get('uid') == 'prometheus')['isDefault'] is True
+    )
+    assert not datasources.get('prune')

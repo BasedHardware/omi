@@ -48,13 +48,20 @@ defaultRules:
     prometheus: false
     prometheusOperator: false
 
-# Keep Alertmanager: Grafana still provisions its datasource, and Loki ruler
-# consumers/delivery have not been proven absent.
+# Native Prometheus alerts are disabled above; Grafana routes directly to
+# Telegram/Instatus. Live Loki 3.5.2 has no Alertmanager URL (empty means no
+# notifier destinations), so the legacy Alertmanager has no remaining producer.
+# Its live data volume is emptyDir; no Alertmanager PVC exists.
 alertmanager:
-  enabled: true
+  enabled: false
 
 grafana:
   enabled: true
+  sidecar:
+    datasources:
+      alertmanager:
+        enabled: false
+  # Do not prune existing SQLite datasource records during this retirement.
   # 2026-10-14: Grafana ran with no requests/limits (BestEffort) on the ~1.93
   # allocatable-core monitoring node while Prometheus sustained 1.5-2.2 cores
   # and pinned it for hours, so kubelet probes and Grafana's own HTTP server

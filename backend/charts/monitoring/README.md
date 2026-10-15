@@ -157,7 +157,7 @@ Cloud Run application metrics take a push-then-pull bridge because a public URL 
 |-----------|-------|---------|-----------|
 | **Prometheus** | `kube-prometheus-stack` | Metrics collection, 10d retention; prod 100Gi PVC, dev 50Gi | `{env}-omi-monitoring` |
 | **Grafana** | `kube-prometheus-stack` | Dashboards and alerting (prod: `monitor.omi.me`, dev: `monitor.omiapi.com`) | `{env}-omi-monitoring` |
-| **Alertmanager** | `kube-prometheus-stack` | Alert routing and notification | `{env}-omi-monitoring` |
+| **Alertmanager** | `kube-prometheus-stack` | Development only; production retired with native alerts | `dev-omi-monitoring` |
 | **Grafana Image Renderer** | `kube-prometheus-stack` | Alert screenshot capture | `{env}-omi-monitoring` |
 | **Loki** | `loki` | Log aggregation, distributed mode, GCS backend, 15d retention | `{env}-omi-monitoring` |
 | **Alloy** | `alloy` (k8s-monitoring) | Pod log collection via Kubernetes API | `{env}-omi-monitoring` |
@@ -193,7 +193,7 @@ Used by: Cloud Run `backend`, `desktop-backend`, sync services, and `notificatio
 
 ### Custom Scrape Jobs (prod)
 
-These are the `additionalScrapeConfigs` and ServiceMonitor targets. Built-in kube-prometheus-stack targets (kube-state-metrics, node-exporter, kubelet, Alertmanager, Prometheus itself) are not listed here.
+These are the `additionalScrapeConfigs` and ServiceMonitor targets. Built-in kube-prometheus-stack targets (kube-state-metrics, node-exporter, kubelet, development Alertmanager, Prometheus itself) are not listed here.
 
 | Job | Target | Interval | Auth |
 |-----|--------|----------|------|
@@ -312,7 +312,7 @@ Most are bundled with kube-prometheus-stack and auto-provisioned. Custom dashboa
 
 | Dashboard | UID | Tags | Notes |
 |-----------|-----|------|-------|
-| Alertmanager / Overview | `alertmanager-overview` | `alertmanager-mixin` | Bundled |
+| Alertmanager / Overview | `alertmanager-overview` | `alertmanager-mixin` | Development bundled |
 | Backend API Monitoring | `57c2a5ea-c310-4401-ac72-54dbc6da4c7e` | `api, backend, monitoring, omi` | **Custom** |
 | Backend API Monitoring | `3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd` | `api, backend, monitoring, omi` | **Custom** (duplicate — consolidate) |
 | CoreDNS | `vkQ0UHxik` | `coredns, dns` | Bundled |
@@ -695,7 +695,9 @@ Alerting is configured through Grafana unified alerting (not Prometheus AlertMan
 
 Alert rules never query a log datasource (Cloud Logging or Loki) for raw lines. Each 60s tick re-scans raw lines, exceeds the 30s datasource timeout, drops evaluation ticks, and has twice loaded the alerting plane into 502s: 2026-10-13 via Cloud Logging (#21390) and 2026-10-14 via Loki (`{namespace="prod-omi-backend"}` regex scans; one rule alone failed 196 times in 3h). `test_live_alert_rules_never_query_log_datasources` rejects any unpaused rule that tries. Held rules stay paused via `metric-inventory.prod.json` `admission_holds`; re-admit only on a bounded counter (a Cloud Monitoring log-based metric or an exported Prometheus counter). The paused corrupted-stream rule's signal lives on `omi_listen_audio_decode_failures_total`, replaced by `omi-listen-audio-decode-failures`; the listen-429, ASGI-handshake and direct-OpenAI-quota signals have no counter yet — tracked in #21461.
 
-Loki ruler is configured to send alerts to AlertManager at `http://prod-kube-prometheus-stack-alertmanager:9093`.
+The Loki values contain a legacy Alertmanager URL, but live Loki3.5.2 has no
+configured notifier destination. Its empty URL has no discovery fallback; it
+does not feed the retired in-cluster Alertmanager.
 
 ### Telegram notification quality
 
@@ -883,8 +885,13 @@ backend/charts/monitoring/
 Grafana is the production alert plane. Maintain `alerts/*.json` and the identical
 combined `alert-rules.json`; do not add native Prometheus alerts. Production Helm
 values disable chart alerting groups while preserving all 81 recording rules.
-Alertmanager remains installed until Loki ruler and any other consumers are
-proven retired; zero notification counters do not prove zero consumers.
+The in-cluster Alertmanager is disabled: its only proven producer was the native
+Prometheus alert path removed here, and Loki has no notifier destination. It had
+no PVC or silences at the2026-10-15 audit. Grafana's embedded notification manager
+and Telegram/Instatus routes remain independent. Generated external-Alertmanager
+datasource provisioning is disabled; an existing unused SQLite entry is retained
+until its exact live organization and ownership are checked. No datasource pruning
+or persistent-store deletion occurs.
 
 Two datasource canaries cover local Prometheus and Cloud Monitoring, with
 `execErrState=Alerting` and `noDataState=Alerting`, routed directly to Telegram.
