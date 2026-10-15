@@ -46,6 +46,15 @@ def _prod_sync_stage(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
 
 
+@pytest.fixture(autouse=True)
+def _collect_previous_case_mocks():
+    # Endpoint and coordinator cases both create cyclic MagicMock graphs.
+    # Collect prior-case mocks in setup so a later call does not pay their cleanup.
+    import gc
+
+    gc.collect()
+
+
 def _read_pipeline_source():
     with open(PIPELINE_PATH, encoding='utf-8') as f:
         return f.read()
@@ -1321,14 +1330,6 @@ def _install_sync_observability_stubs():
 class TestAsyncCoordinatorBehavioral:
     """Behavioral tests that invoke _run_full_pipeline_background_async with
     mocked dependencies. Verifies actual call sequences and outcomes."""
-
-    @pytest.fixture(autouse=True)
-    def _collect_previous_case_mocks(self):
-        # Each case creates a fresh cyclic MagicMock graph. Collect the prior
-        # case in setup so a random later call does not pay its cleanup cost.
-        import gc
-
-        gc.collect()
 
     @staticmethod
     def _load_sync_module():
