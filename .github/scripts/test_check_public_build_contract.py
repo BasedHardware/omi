@@ -1282,6 +1282,14 @@ class AcceptanceRouteFixture(unittest.TestCase):
         self.assertEqual(STATIC.serving_revision({"status": {"traffic": []}}), "")
         self.assertEqual(STATIC.serving_revision({}), "")
 
+    def test_admin_background_refresh_has_production_cpu_after_the_response(self) -> None:
+        target = STATIC.load_contract(STATIC.DEFAULT_CONTRACT).targets["admin"]
+        self.assertIn("--no-cpu-throttling", target.deployment.flags_for("prod"))
+        self.assertNotIn("--no-cpu-throttling", target.deployment.flags_for("development"))
+        for environment in ("prod", "development"):
+            self.assertIn("--timeout=3600", target.deployment.flags_for(environment))
+            self.assertIn("--memory=2Gi", target.deployment.flags_for(environment))
+
     def test_shipped_frontend_contract_declares_its_balancer_hostname(self) -> None:
         # h.omi.me fronts the `frontend` service, whose contract restricts ingress
         # to the balancer; without this URL no prod frontend candidate can ever be accepted.
