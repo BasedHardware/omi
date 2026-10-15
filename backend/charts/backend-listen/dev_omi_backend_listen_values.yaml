@@ -243,6 +243,12 @@ env:
     value: "gateway"
   - name: OMI_SHAPED_AGENT_MODE
     value: "on"
+  - name: DREAM_AGENT_ELIGIBILITY
+    value: 'allowlist'
+  - name: DREAM_AGENT_UID_ALLOWLIST
+    value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
+  - name: DREAM_ON_DEMAND_ENABLED
+    value: 'true'
   - name: REVIEW_SURFACE_MODE
     value: "on"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
