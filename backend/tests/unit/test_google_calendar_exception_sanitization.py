@@ -52,7 +52,7 @@ async def test_get_events_masks_retry_error_detail(monkeypatch):
         nonlocal first_call
         if first_call:
             first_call = False
-            raise RuntimeError("Authentication failed: error 401 invalid_token")
+            raise RuntimeError("Authentication failed: error 401 invalid_grant")
         raise RuntimeError("Internal Google SSL failure: certificate verify failed [Errno 1] on backend host")
 
     monkeypatch.setattr(gc_routes, "get_google_calendar_events", mock_get_events)
