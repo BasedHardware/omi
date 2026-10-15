@@ -13,9 +13,9 @@ import 'package:omi/backend/preferences.dart';
 /// seen time nor their lit dot into the next.
 class ActivitySeen {
   ActivitySeen({int Function()? read, void Function(int)? write, String Function()? owner})
-    : _owner = owner ?? (() => SharedPreferencesUtil().uid),
-      _readOverride = read,
-      _writeOverride = write;
+      : _owner = owner ?? (() => SharedPreferencesUtil().uid),
+        _readOverride = read,
+        _writeOverride = write;
 
   static ActivitySeen instance = ActivitySeen();
 

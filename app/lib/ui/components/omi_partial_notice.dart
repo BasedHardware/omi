@@ -25,10 +25,8 @@ class OmiPartialNotice extends StatelessWidget {
             Icon(Icons.error_outline_rounded, size: 16, color: OmiColors.textTertiary),
             const SizedBox(width: OmiSpacing.xs),
             Expanded(
-              child: Text(
-                message ?? l10n.searchPartialFailure,
-                style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-              ),
+              child: Text(message ?? l10n.searchPartialFailure,
+                  style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
             ),
             OmiButton.secondary(
               key: const ValueKey('search_partial_retry'),

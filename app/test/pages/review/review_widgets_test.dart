@@ -69,14 +69,14 @@ Future<ReviewProvider> _provider(List<ReviewItem> items, List<(String, Map<Strin
 }
 
 Widget _host(ReviewProvider provider, Widget child) => ChangeNotifierProvider<ReviewProvider>.value(
-  value: provider,
-  child: MaterialApp(
-    theme: buildOmiTheme(),
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    supportedLocales: AppLocalizations.supportedLocales,
-    home: Scaffold(body: ListView(children: [child])),
-  ),
-);
+      value: provider,
+      child: MaterialApp(
+        theme: buildOmiTheme(),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: ListView(children: [child])),
+      ),
+    );
 
 void main() {
   testWidgets('a quick answer on the card sends it and the card leaves the queue', (tester) async {
@@ -141,10 +141,9 @@ void main() {
 
   testWidgets('the Home entry shows the fallback while Review is off, and hides when caught up', (tester) async {
     final off = ReviewProvider(
-      isEligible: () => true,
-      reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
-      loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.notFound)),
-    );
+        isEligible: () => true,
+        reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
+        loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.notFound)));
     await off.load();
     await tester.pumpWidget(_host(off, const ReviewEntryCard(fallback: Text('old card'))));
     expect(find.text('old card'), findsOneWidget);

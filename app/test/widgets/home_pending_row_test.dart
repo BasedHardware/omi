@@ -43,11 +43,11 @@ class _FakeSync extends ChangeNotifier implements SyncProvider {
 
   @override
   SyncState get syncState => switch ((syncing, fetching, fetchingWithUploadPhase)) {
-    (true, _, _) => const SyncState(status: SyncStatus.syncing, phase: SyncPhase.downloadingFromDevice),
-    (_, true, _) => const SyncState(status: SyncStatus.fetchingConversations),
-    (_, _, true) => const SyncState(status: SyncStatus.fetchingConversations, phase: SyncPhase.uploadingToCloud),
-    _ => const SyncState(),
-  };
+        (true, _, _) => const SyncState(status: SyncStatus.syncing, phase: SyncPhase.downloadingFromDevice),
+        (_, true, _) => const SyncState(status: SyncStatus.fetchingConversations),
+        (_, _, true) => const SyncState(status: SyncStatus.fetchingConversations, phase: SyncPhase.uploadingToCloud),
+        _ => const SyncState(),
+      };
   @override
   bool get isSyncing => syncing;
   @override
@@ -125,39 +125,34 @@ class _FakeSync extends ChangeNotifier implements SyncProvider {
 }
 
 Wal _wal(String id, int minutes, WalStatus status) => Wal(
-  timerStart: 1000 + id.length,
-  codec: BleAudioCodec.opus,
-  seconds: minutes * 60,
-  status: status,
-  storage: WalStorage.disk,
-  device: 'pendant',
-);
+      timerStart: 1000 + id.length,
+      codec: BleAudioCodec.opus,
+      seconds: minutes * 60,
+      status: status,
+      storage: WalStorage.disk,
+      device: 'pendant',
+    );
 
 Widget _app(SyncProvider sync, Widget child, {List<SingleChildWidget> extras = const []}) => MultiProvider(
-  providers: [
-    ...extras,
-    ChangeNotifierProvider<SyncProvider>.value(value: sync),
-  ],
-  child: MaterialApp(
-    localizationsDelegates: const [
-      AppLocalizations.delegate,
-      GlobalMaterialLocalizations.delegate,
-      GlobalWidgetsLocalizations.delegate,
-      GlobalCupertinoLocalizations.delegate,
-    ],
-    supportedLocales: AppLocalizations.supportedLocales,
-    home: child,
-  ),
-);
+      providers: [...extras, ChangeNotifierProvider<SyncProvider>.value(value: sync)],
+      child: MaterialApp(
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: child,
+      ),
+    );
 
 Future<void> _pumpRow(WidgetTester tester, SyncProvider sync, {List<SingleChildWidget> extras = const []}) async {
-  await tester.pumpWidget(
-    _app(
-      sync,
-      const Scaffold(body: SingleChildScrollView(child: HomePendingRow(multiFileSync: true))),
-      extras: extras,
-    ),
-  );
+  await tester.pumpWidget(_app(
+    sync,
+    const Scaffold(body: SingleChildScrollView(child: HomePendingRow(multiFileSync: true))),
+    extras: extras,
+  ));
   await tester.pump();
 }
 
@@ -221,9 +216,7 @@ void main() {
 
     testWidgets('keeps the transcribing copy through the post-sync conversation fetch', (tester) async {
       await _pumpRow(
-        tester,
-        _FakeSync(wals: [_wal('processing', 4, WalStatus.uploaded)], fetchingWithUploadPhase: true),
-      );
+          tester, _FakeSync(wals: [_wal('processing', 4, WalStatus.uploaded)], fetchingWithUploadPhase: true));
       expect(find.text('Transcribing…'), findsOneWidget);
     });
 
@@ -290,16 +283,14 @@ void main() {
     // box widget (SizedBox.shrink included) asserts against the viewport.
     testWidgets('mounts inside a sliver list, hidden and visible', (tester) async {
       Widget host(SyncProvider sync) => _app(
-        sync,
-        const Scaffold(
-          body: CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(child: CaptureRecoveryBanner()),
-              SliverToBoxAdapter(child: HomePendingRow(showTodayHeader: true)),
-            ],
-          ),
-        ),
-      );
+            sync,
+            const Scaffold(
+              body: CustomScrollView(slivers: [
+                SliverToBoxAdapter(child: CaptureRecoveryBanner()),
+                SliverToBoxAdapter(child: HomePendingRow(showTodayHeader: true)),
+              ]),
+            ),
+          );
 
       await tester.pumpWidget(host(_FakeSync(wals: [_wal('done', 15, WalStatus.synced)])));
       await tester.pump();
@@ -336,76 +327,56 @@ void main() {
     });
 
     testWidgets('counts fragments of one recording as one row', (tester) async {
-      final a = Wal(
-        timerStart: 1000,
-        codec: BleAudioCodec.opus,
-        seconds: 60,
-        status: WalStatus.miss,
-        device: 'pendant',
-      );
-      final b = Wal(
-        timerStart: 1060,
-        codec: BleAudioCodec.opus,
-        seconds: 60,
-        status: WalStatus.miss,
-        device: 'pendant',
-      );
+      final a =
+          Wal(timerStart: 1000, codec: BleAudioCodec.opus, seconds: 60, status: WalStatus.miss, device: 'pendant');
+      final b =
+          Wal(timerStart: 1060, codec: BleAudioCodec.opus, seconds: 60, status: WalStatus.miss, device: 'pendant');
       await _pumpPage(tester, _FakeSync(wals: [b, a]));
       expect(find.text('Waiting to sync'), findsOneWidget);
     });
 
     test('a device drain in progress lists the recording once, not its copied pieces too', () {
       final source = Wal(
-        timerStart: 1000,
-        codec: BleAudioCodec.opus,
-        seconds: 600,
-        status: WalStatus.miss,
-        storage: WalStorage.sdcard,
-        device: 'pendant',
-      );
+          timerStart: 1000,
+          codec: BleAudioCodec.opus,
+          seconds: 600,
+          status: WalStatus.miss,
+          storage: WalStorage.sdcard,
+          device: 'pendant');
       Wal piece(int start) => Wal(
-        timerStart: start,
-        codec: BleAudioCodec.opus,
-        seconds: 60,
-        status: WalStatus.miss,
-        storage: WalStorage.disk,
-        originalStorage: WalStorage.sdcard,
-        device: 'pendant',
-      );
-      final phoneOnly = Wal(
-        timerStart: 5000,
-        codec: BleAudioCodec.opus,
-        seconds: 60,
-        status: WalStatus.miss,
-        device: 'pendant',
-      );
-      final ids = SyncPendingWork.syncing(
-        _FakeSync(wals: [source, piece(1000), piece(1060), phoneOnly]),
-      ).map((w) => w.timerStart).toList();
+          timerStart: start,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+          originalStorage: WalStorage.sdcard,
+          device: 'pendant');
+      final phoneOnly =
+          Wal(timerStart: 5000, codec: BleAudioCodec.opus, seconds: 60, status: WalStatus.miss, device: 'pendant');
+      final ids = SyncPendingWork.syncing(_FakeSync(wals: [source, piece(1000), piece(1060), phoneOnly]))
+          .map((w) => w.timerStart)
+          .toList();
       expect(ids, [5000, 1000]);
       expect(SyncPendingWork.syncing(_FakeSync(wals: [source, piece(1000)])).single.storage, WalStorage.sdcard);
     });
 
-    testWidgets('a stalled device drain reads as one recording: copied pieces and the rest on the device', (
-      tester,
-    ) async {
+    testWidgets('a stalled device drain reads as one recording: copied pieces and the rest on the device',
+        (tester) async {
       final rest = Wal(
-        timerStart: 1300,
-        codec: BleAudioCodec.opus,
-        seconds: 300,
-        status: WalStatus.miss,
-        storage: WalStorage.flashPage,
-        device: 'pendant',
-      );
+          timerStart: 1300,
+          codec: BleAudioCodec.opus,
+          seconds: 300,
+          status: WalStatus.miss,
+          storage: WalStorage.flashPage,
+          device: 'pendant');
       Wal piece(int start) => Wal(
-        timerStart: start,
-        codec: BleAudioCodec.opus,
-        seconds: 150,
-        status: WalStatus.miss,
-        storage: WalStorage.disk,
-        originalStorage: WalStorage.flashPage,
-        device: 'pendant',
-      );
+          timerStart: start,
+          codec: BleAudioCodec.opus,
+          seconds: 150,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+          originalStorage: WalStorage.flashPage,
+          device: 'pendant');
       await _pumpPage(tester, _FakeSync(wals: [rest, piece(1000), piece(1150)]));
       expect(find.textContaining('· 10m'), findsOneWidget);
       expect(find.textContaining('·'), findsOneWidget);
@@ -413,42 +384,34 @@ void main() {
 
     test('a device drain counts its audio once toward catching up', () {
       final source = Wal(
-        timerStart: 1000,
-        codec: BleAudioCodec.opus,
-        seconds: 20 * 60,
-        status: WalStatus.miss,
-        storage: WalStorage.sdcard,
-        device: 'pendant',
-      );
+          timerStart: 1000,
+          codec: BleAudioCodec.opus,
+          seconds: 20 * 60,
+          status: WalStatus.miss,
+          storage: WalStorage.sdcard,
+          device: 'pendant');
       final copied = Wal(
-        timerStart: 1000,
-        codec: BleAudioCodec.opus,
-        seconds: 15 * 60,
-        status: WalStatus.miss,
-        storage: WalStorage.disk,
-        originalStorage: WalStorage.sdcard,
-        device: 'pendant',
-      );
+          timerStart: 1000,
+          codec: BleAudioCodec.opus,
+          seconds: 15 * 60,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+          originalStorage: WalStorage.sdcard,
+          device: 'pendant');
       expect(SyncPendingWork.isLargeBacklog(_FakeSync(wals: [source, copied])), isFalse);
     });
 
     testWidgets('keeps refused recordings one tap away, on the Sync Details row', (tester) async {
-      await _pumpPage(
-        tester,
-        _FakeSync(wals: [_wal('ready', 5, WalStatus.miss), _wal('too-old', 3, WalStatus.outsideRecoveryWindow)]),
-      );
+      await _pumpPage(tester,
+          _FakeSync(wals: [_wal('ready', 5, WalStatus.miss), _wal('too-old', 3, WalStatus.outsideRecoveryWindow)]));
       expect(find.text('1 recording need attention'), findsOneWidget);
     });
 
     testWidgets('Sync Details opens the Offline Sync page the device settings open', (tester) async {
-      await _pumpPage(
-        tester,
-        _FakeSync(wals: [_wal('processing', 4, WalStatus.uploaded)]),
-        extras: [
-          ChangeNotifierProvider<UserProvider>(create: (_) => UserProvider()),
-          ChangeNotifierProvider<DeviceProvider>(create: (_) => _Device()),
-        ],
-      );
+      await _pumpPage(tester, _FakeSync(wals: [_wal('processing', 4, WalStatus.uploaded)]), extras: [
+        ChangeNotifierProvider<UserProvider>(create: (_) => UserProvider()),
+        ChangeNotifierProvider<DeviceProvider>(create: (_) => _Device()),
+      ]);
       await tester.tap(find.byKey(const Key('on_the_way_sync_details')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
@@ -457,14 +420,10 @@ void main() {
 
     testWidgets('Sync Details shows the v2 alert when device-resident work has no storage support', (tester) async {
       final device = _wal('device', 2, WalStatus.miss)..storage = WalStorage.sdcard;
-      await _pumpPage(
-        tester,
-        _FakeSync(wals: [device]),
-        extras: [
-          ChangeNotifierProvider<UserProvider>(create: (_) => UserProvider()),
-          ChangeNotifierProvider<DeviceProvider>(create: (_) => _Device(storageSupport: false)),
-        ],
-      );
+      await _pumpPage(tester, _FakeSync(wals: [device]), extras: [
+        ChangeNotifierProvider<UserProvider>(create: (_) => UserProvider()),
+        ChangeNotifierProvider<DeviceProvider>(create: (_) => _Device(storageSupport: false)),
+      ]);
       await tester.tap(find.byKey(const Key('on_the_way_sync_details')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
@@ -485,71 +444,47 @@ void main() {
 
     testWidgets('a live capture still processing is listed once, not again as its uploaded audio', (tester) async {
       final now = DateTime.now();
-      final conversations =
-          ConversationProvider(
-              conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
-              isSignedIn: () => true,
-            )
-            ..processingConversations = [
-              ServerConversation(
-                id: 'conv-1',
-                createdAt: now,
-                startedAt: now,
-                structured: Structured('', ''),
-                status: ConversationStatus.processing,
-              ),
-            ];
+      final conversations = ConversationProvider(
+          conversationListFetcher: () async => (items: <ServerConversation>[], ok: true), isSignedIn: () => true)
+        ..processingConversations = [
+          ServerConversation(
+              id: 'conv-1',
+              createdAt: now,
+              startedAt: now,
+              structured: Structured('', ''),
+              status: ConversationStatus.processing),
+        ];
       final uploaded = _wal('live', 4, WalStatus.uploaded)..conversationId = 'conv-1';
-      await _pumpPage(
-        tester,
-        _FakeSync(wals: [uploaded]),
-        extras: [ChangeNotifierProvider<ConversationProvider>.value(value: conversations)],
-      );
+      await _pumpPage(tester, _FakeSync(wals: [uploaded]),
+          extras: [ChangeNotifierProvider<ConversationProvider>.value(value: conversations)]);
       expect(find.text('Processing'), findsOneWidget);
       expect(find.text('Transcribing…'), findsNothing);
     });
 
     testWidgets('a live capture still processing is not repeated as its not-yet-uploaded audio', (tester) async {
       final now = DateTime.now();
-      final conversations =
-          ConversationProvider(
-              conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
-              isSignedIn: () => true,
-            )
-            ..processingConversations = [
-              ServerConversation(
-                id: 'conv-2',
-                createdAt: now,
-                startedAt: now,
-                structured: Structured('', ''),
-                status: ConversationStatus.processing,
-              ),
-            ];
+      final conversations = ConversationProvider(
+          conversationListFetcher: () async => (items: <ServerConversation>[], ok: true), isSignedIn: () => true)
+        ..processingConversations = [
+          ServerConversation(
+              id: 'conv-2',
+              createdAt: now,
+              startedAt: now,
+              structured: Structured('', ''),
+              status: ConversationStatus.processing),
+        ];
       final safety = _wal('safety', 4, WalStatus.miss)..conversationId = 'conv-2';
-      await _pumpPage(
-        tester,
-        _FakeSync(wals: [safety]),
-        extras: [ChangeNotifierProvider<ConversationProvider>.value(value: conversations)],
-      );
+      await _pumpPage(tester, _FakeSync(wals: [safety]),
+          extras: [ChangeNotifierProvider<ConversationProvider>.value(value: conversations)]);
       expect(find.text('Processing'), findsOneWidget);
       expect(find.text('SYNCING'), findsNothing);
     });
 
     testWidgets('one recording straddling an upload batch is listed once, by its least advanced part', (tester) async {
-      final done = Wal(
-        timerStart: 1000,
-        codec: BleAudioCodec.opus,
-        seconds: 300,
-        status: WalStatus.uploaded,
-        device: 'pendant',
-      );
-      final next = Wal(
-        timerStart: 1300,
-        codec: BleAudioCodec.opus,
-        seconds: 120,
-        status: WalStatus.miss,
-        device: 'pendant',
-      );
+      final done =
+          Wal(timerStart: 1000, codec: BleAudioCodec.opus, seconds: 300, status: WalStatus.uploaded, device: 'pendant');
+      final next =
+          Wal(timerStart: 1300, codec: BleAudioCodec.opus, seconds: 120, status: WalStatus.miss, device: 'pendant');
       await _pumpPage(tester, _FakeSync(wals: [next, done]));
       expect(find.text('ALMOST READY'), findsNothing);
       expect(find.text('Waiting to sync'), findsOneWidget);
