@@ -227,7 +227,7 @@ def _gateway_mode_enabled() -> bool:
     return os.getenv(PUBLIC_SHARED_CONVERSATION_CHAT_MODE_ENV_VAR, 'off').strip().lower() == 'gateway'
 
 
-def _gateway_messages(request: SharedConversationChatRequest, conversation: dict[str, Any]) -> list[dict[str, str]]:
+def _gateway_messages(request: SharedConversationChatRequest, conversation: object) -> list[dict[str, str]]:
     # A resolved conversation is user/server data, not a trusted shape: a
     # non-Mapping row or a non-sequence transcript_segments crashes .get()/the
     # transcript join with AttributeError/TypeError before the gateway call.
@@ -235,7 +235,7 @@ def _gateway_messages(request: SharedConversationChatRequest, conversation: dict
         segments: list[Any] = []
     else:
         raw_segments = conversation.get('transcript_segments')
-        segments = raw_segments if isinstance(raw_segments, (list, tuple)) else []
+        segments = list(raw_segments) if isinstance(raw_segments, (list, tuple)) else []
     transcript = build_bounded_transcript(segments, max_chars=_MAX_TRANSCRIPT_CHARS)
     system_content = (
         'Answer briefly and accurately using only the shared conversation transcript below. '
