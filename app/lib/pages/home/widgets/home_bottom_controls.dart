@@ -191,52 +191,81 @@ class HomeLivePillContent extends StatelessWidget {
     required this.onStop,
     this.lastLine,
     this.live = true,
+    this.attention = false,
     this.stopping = false,
+    this.onResume,
   });
 
   final String status;
   final String? lastLine;
   final bool live;
+
+  /// Something the person should look at (tap the pill for why): an orange dot.
+  final bool attention;
   final bool stopping;
   final VoidCallback? onStop;
+
+  /// Paused by the person: the one control is Resume (Stop is in the sheet the pill opens).
+  final VoidCallback? onResume;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
         const SizedBox(width: OmiSpacing.md + 2),
-        HomeLiveDot(live: live),
+        HomeLiveDot(live: live, attention: attention),
         const SizedBox(width: OmiSpacing.sm),
         Expanded(child: _StatusAndWords(status: status, lastLine: lastLine)),
-        Semantics(
-          button: true,
-          label: context.l10n.stopRecording,
-          child: GestureDetector(
-            key: const ValueKey('home_record_pill_stop_button'),
-            behavior: HitTestBehavior.opaque,
-            onTap: stopping ? null : onStop,
-            child: SizedBox(
-              width: kHomeChatBarHeight,
-              height: kHomeChatBarHeight,
-              child: Center(
-                child: _Disc(
-                  color: OmiColors.danger,
-                  child: stopping
-                      ? const OmiSpinner(size: OmiSpinnerSize.small, color: Colors.white)
-                      : Container(
-                          width: 10,
-                          height: 10,
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            borderRadius:
-                                BorderRadius.all(Radius.circular(2.5)), // omi-ux-allow: radius-literal -- a glyph
+        if (onResume != null)
+          Semantics(
+            button: true,
+            label: context.l10n.resume,
+            child: GestureDetector(
+              key: const ValueKey('home_record_pill_resume_button'),
+              behavior: HitTestBehavior.opaque,
+              onTap: onResume,
+              child: SizedBox(
+                width: kHomeChatBarHeight,
+                height: kHomeChatBarHeight,
+                child: Center(
+                  child: _Disc(
+                    color: OmiColors.textPrimary,
+                    child: Icon(Icons.play_arrow_rounded, size: 20, color: OmiColors.surface1),
+                  ),
+                ),
+              ),
+            ),
+          )
+        else
+          Semantics(
+            button: true,
+            label: context.l10n.stopRecording,
+            child: GestureDetector(
+              key: const ValueKey('home_record_pill_stop_button'),
+              behavior: HitTestBehavior.opaque,
+              onTap: stopping ? null : onStop,
+              child: SizedBox(
+                width: kHomeChatBarHeight,
+                height: kHomeChatBarHeight,
+                child: Center(
+                  child: _Disc(
+                    color: OmiColors.danger,
+                    child: stopping
+                        ? const OmiSpinner(size: OmiSpinnerSize.small, color: Colors.white)
+                        : Container(
+                            width: 10,
+                            height: 10,
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              borderRadius:
+                                  BorderRadius.all(Radius.circular(2.5)), // omi-ux-allow: radius-literal -- a glyph
+                            ),
                           ),
-                        ),
+                  ),
                 ),
               ),
             ),
           ),
-        ),
       ],
     );
   }
@@ -314,9 +343,13 @@ class HomeDevicePillContent extends StatelessWidget {
     required this.status,
     required this.live,
     this.lastLine,
+    this.attention = false,
   });
 
   final BtDevice device;
+
+  /// Something the person should look at: an orange dot.
+  final bool attention;
   final String status;
   final String? lastLine;
 
@@ -346,7 +379,7 @@ class HomeDevicePillContent extends StatelessWidget {
                     fit: BoxFit.contain,
                   ),
                 ),
-                Positioned(right: -2, bottom: -1, child: HomeLiveDot(live: live)),
+                Positioned(right: -2, bottom: -1, child: HomeLiveDot(live: live, attention: attention)),
               ],
             ),
           ),
@@ -359,11 +392,12 @@ class HomeDevicePillContent extends StatelessWidget {
 }
 
 /// A 10pt status dot ringed in the pill's colour so it reads on top of the device picture. Live:
-/// red, breathing (still under Reduce Motion). Idle: grey.
+/// red, breathing (still under Reduce Motion). Idle or paused: grey. Needs a look: orange, still.
 class HomeLiveDot extends StatefulWidget {
-  const HomeLiveDot({super.key, required this.live});
+  const HomeLiveDot({super.key, required this.live, this.attention = false});
 
   final bool live;
+  final bool attention;
 
   @override
   State<HomeLiveDot> createState() => _HomeLiveDotState();
@@ -386,7 +420,7 @@ class _HomeLiveDotState extends State<HomeLiveDot> with SingleTickerProviderStat
   }
 
   void _sync() {
-    final breathe = widget.live && OmiMotion.of(context).standard != Duration.zero;
+    final breathe = widget.live && !widget.attention && OmiMotion.of(context).standard != Duration.zero;
     if (breathe && !_breath.isAnimating) {
       _breath.repeat(reverse: true);
     } else if (!breathe) {
@@ -413,7 +447,7 @@ class _HomeLiveDotState extends State<HomeLiveDot> with SingleTickerProviderStat
         opacity: _breath,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: widget.live ? OmiColors.danger : OmiColors.textTertiary,
+            color: widget.attention ? OmiColors.warning : (widget.live ? OmiColors.danger : OmiColors.textTertiary),
             shape: BoxShape.circle,
           ),
         ),

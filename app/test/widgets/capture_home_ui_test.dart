@@ -566,34 +566,94 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('a paused or failing phone recording keeps the card', (tester) async {
-      for (final capture in [_Capture(_Live.phone, readerPaused: true), _Capture(_Live.phone, failure: true)]) {
+    testWidgets('Home never shows the card: paused, failing, reconnecting or mic taken all live in the pill',
+        (tester) async {
+      for (final capture in [
+        _Capture(_Live.phone, readerPaused: true),
+        _Capture(_Live.phone, failure: true),
+        _Capture(_Live.phone, interrupted: true),
+        _Capture(_Live.phone, interrupted: true, callActive: true),
+      ]) {
         await pump(tester, const ConversationCaptureWidget(showsCall: true, deviceStatusInBottomBar: true),
             device: _Device(connected: false, paired: false), capture: capture);
-        expect(find.byType(LiveCaptureCard), findsOneWidget);
+        expect(find.byType(LiveCaptureCard), findsNothing);
         await tester.pumpWidget(const SizedBox());
       }
     });
 
-    testWidgets('a phone recording reconnecting on its own says so in the pill, not in a card', (tester) async {
+    testWidgets('a paused phone recording: the pill says Paused and its one control is Resume', (tester) async {
+      final capture = _Capture(_Live.phone, readerPaused: true);
+      await pump(tester, const HomeRecordButton(), device: _Device(connected: false, paired: false), capture: capture);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.textContaining(en.paused), findsOneWidget);
+      expect(find.byKey(const ValueKey('home_record_pill_resume_button')), findsOneWidget);
+      expect(find.byKey(const ValueKey('home_record_pill_stop_button')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('home_record_pill_resume_button')));
+      await tester.pump();
+      expect(capture.resumes, 1);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('a phone recording reconnecting on its own says so in the pill, keeping Stop', (tester) async {
       await pump(tester, const HomeRecordButton(),
           device: _Device(connected: false, paired: false), capture: _Capture(_Live.phone, interrupted: true));
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.byKey(const ValueKey('home_record_pill_stop')), findsOneWidget);
       expect(find.textContaining(en.reconnecting), findsOneWidget);
       expect(find.textContaining(en.listening), findsNothing);
+      expect(find.byKey(const ValueKey('home_record_pill_stop_button')), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
+    });
 
-      await pump(tester, const ConversationCaptureWidget(showsCall: true, deviceStatusInBottomBar: true),
-          device: _Device(connected: false, paired: false), capture: _Capture(_Live.phone, interrupted: true));
-      expect(find.byType(LiveCaptureCard), findsNothing);
-      await tester.pumpWidget(const SizedBox());
-
-      // The OS holding the microphone needs the person: the card stays.
-      await pump(tester, const ConversationCaptureWidget(showsCall: true, deviceStatusInBottomBar: true),
-          device: _Device(connected: false, paired: false),
-          capture: _Capture(_Live.phone, interrupted: true, callActive: true));
+    testWidgets('a failing recording: tapping the pill opens why, the controls and the live transcript',
+        (tester) async {
+      await pump(tester, const HomeRecordButton(),
+          device: _Device(connected: false, paired: false), capture: _Capture(_Live.phone, failure: true));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const ValueKey('home_record_pill_stop')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('home_capture_sheet_explanation')), findsOneWidget);
       expect(find.byType(LiveCaptureCard), findsOneWidget);
+      expect(find.byKey(const ValueKey('home_capture_sheet_transcript')), findsOneWidget);
+      expect(find.byKey(const ValueKey('home_capture_sheet_stop')), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('a paused pendant reads Paused in its pill and opens the controls on tap', (tester) async {
+      await pump(tester, const HomeRecordButton(), capture: _Capture(_Live.pendantPaused), device: _Device());
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const ValueKey('home_record_pill_device')), findsOneWidget);
+      expect(find.textContaining(en.paused), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('home_record_pill_device')));
+      await tester.pumpAndSettle();
+      expect(find.byType(LiveCaptureCard), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('a pendant that drops mid-capture: the pill says Disconnected, and why on tap', (tester) async {
+      final device = _Device();
+      await pump(tester, const HomeRecordButton(), capture: _Capture(_Live.pendant), device: device);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const ValueKey('home_record_pill_device')), findsOneWidget);
+      device.drop();
+      await pump(tester, const HomeRecordButton(), capture: _Capture(_Live.idleDeviceConnected), device: device);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const ValueKey('home_record_pill_dropped')), findsOneWidget);
+      expect(find.textContaining(en.disconnected), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('home_record_pill_dropped')));
+      await tester.pumpAndSettle();
+      expect(find.text(en.capturePendantDisconnectedDetail), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('a Transcribe Later pendant shows in the pill, not as New', (tester) async {
+      SharedPreferencesUtil().batchModeEnabled = true;
+      addTearDown(() => SharedPreferencesUtil().batchModeEnabled = false);
+      await pump(tester, const HomeRecordButton(), capture: _Capture(_Live.pendantBatch), device: _Device());
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const ValueKey('home_record_pill_new')), findsNothing);
+      expect(find.byKey(const ValueKey('home_record_pill_device')), findsOneWidget);
+      expect(find.textContaining(en.recording), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     });
 

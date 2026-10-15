@@ -16,6 +16,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
+import 'package:omi/pages/conversations/live_capture_summary.dart';
 import 'package:omi/pages/processing_conversations/page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -38,9 +39,9 @@ class ConversationCaptureWidget extends StatefulWidget {
   /// Home shows an Omi call on this card; the Conversations tab has its own call banner.
   final bool showsCall;
 
-  /// Home's bottom pill already says the connected pendant is listening, so the card stays out
-  /// of the way then; it still shows whenever there is more to say (paused, reconnecting, saving
-  /// for later, a dropped pendant) or the phone is the one recording.
+  /// Home: the bottom pill is the one place a live recording shows (its status, dot and control;
+  /// tapping it opens this card in a sheet when there is more to say), so this card shows nothing
+  /// for a recording here. An Omi call still shows.
   final bool deviceStatusInBottomBar;
 
   @override
@@ -124,6 +125,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       );
     }
 
+    if (widget.deviceStatusInBottomBar) return const SizedBox.shrink();
+
     return Consumer<CaptureProvider>(
       builder: (context, provider, child) {
         // The card means "what's recording now": hidden when nothing is (a connected pendant
@@ -143,12 +146,6 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             provider.recordingState == RecordingState.systemAudioRecord ||
             provider.isPhoneMicPaused;
         if (provider.liveCaptureSource == null && !phoneLive && !batch) {
-          return const SizedBox.shrink();
-        }
-        if (widget.deviceStatusInBottomBar && !phoneLive && !batch && _pendantJustListening(provider)) {
-          return const SizedBox.shrink();
-        }
-        if (widget.deviceStatusInBottomBar && phoneLive && !batch && _phoneJustListening(provider)) {
           return const SizedBox.shrink();
         }
 
@@ -194,29 +191,6 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         ]);
       },
     );
-  }
-
-  /// The pendant is capturing: Home's bottom bar already says so (listening, still connecting to
-  /// transcription, buffering), so no separate "Listening" card. The card stays for what needs the
-  /// person: paused, or transcription that has failed.
-  static bool _pendantJustListening(CaptureProvider provider) {
-    final source = provider.liveCaptureSource;
-    return source != null && source != 'phone' && !provider.isPaused && provider.terminalTranscriptionFailure == null;
-  }
-
-  /// The phone is recording, or reconnecting on its own: Home's bottom bar shows it (status —
-  /// Listening or Reconnecting… — newest words, the live transcript on tap, Stop), so no card,
-  /// including the moment it is starting, or the old card flashes before the bar takes over. It
-  /// stays for what needs the person: paused, the microphone taken by a call, and transcription
-  /// that has failed.
-  static bool _phoneJustListening(CaptureProvider provider) {
-    final recovering = provider.recordingState == RecordingState.interrupted && !provider.isCallActive;
-    return (provider.recordingState == RecordingState.record ||
-            provider.recordingState == RecordingState.initialising ||
-            recovering) &&
-        !provider.isPaused &&
-        !provider.isPhoneMicPaused &&
-        provider.terminalTranscriptionFailure == null;
   }
 
   /// The live card's glyph and 44pt Pause target carry their own air, so its edges are tighter
@@ -309,51 +283,12 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             provider.recordingState == RecordingState.interrupted ||
             provider.isPhoneMicPaused);
 
-    // A pause the reader chose (the control reads Resume only then).
-    final isAudioInterrupted = provider.recordingState == RecordingState.interrupted;
-    bool isPaused = false;
-    if (isDeviceRecording) {
-      isPaused = provider.isPaused && provider.recordingState == RecordingState.pause;
-    } else if (isPhoneRecording) {
-      isPaused = provider.isPhoneMicPaused || provider.isPaused;
-    }
-    // `interrupted` is the OS holding the mic (explained, no control) or capture recovering on its
-    // own (Reconnecting, Pause still works); a reader pause keeps Resume either way.
-    final interruption = captureInterruption(
-      interrupted: isPhoneRecording && isAudioInterrupted,
-      readerPaused: isPaused,
-      osHoldsMic: provider.isCallActive,
-    );
-    final micTaken = interruption == CaptureInterruption.micTaken;
-    final hasTerminalTranscriptionFailure =
-        provider.terminalTranscriptionFailure != null || provider.localSttFailure != null;
-    final bufferingFor = provider.customSttBufferingDuration;
-
-    // Determine if this is an OmiGlass-type device (captures photos)
+    // Status, pause and microphone state come from the summary the Home pill reads too.
+    final summary = isDeviceRecording || isPhoneRecording ? summarizeLiveCapture(context.l10n, provider) : null;
+    final isPaused = summary?.readerPaused ?? false;
+    final micTaken = summary?.micTaken ?? false;
+    final copy = summary?.copy ?? CaptureCardCopy(context.l10n.listening);
     bool hasPhotos = provider.photos.isNotEmpty;
-    // WAL saves audio locally whatever the transcription connection does, so a degraded
-    // transcription names the consequence ("Audio saved, transcribes later"), not a stop.
-    final displayState = liveCaptureDisplayState(
-      audioInterrupted: micTaken,
-      paused: isPaused,
-      transcriptionUnavailable: hasTerminalTranscriptionFailure,
-      bufferingFor: bufferingFor,
-      reconnecting: interruption == CaptureInterruption.recovering,
-      capturingPhotos: hasPhotos,
-    );
-    // Initialising: the microphone is opening and no audio flows yet, so it is not Listening.
-    final starting = isPhoneRecording &&
-        provider.recordingState == RecordingState.initialising &&
-        displayState == CaptureDisplayState.listening;
-    final copy = provider.localSttFailure != null
-        ? CaptureCardCopy(context.l10n.transcriptionUnavailable,
-            detail: context.l10n.setupOnDevice, explanation: context.l10n.transcriptionUnavailableRecordingSaved)
-        : unverified
-            ? CaptureCardCopy(context.l10n.captureSourcePendant)
-            : starting
-                ? CaptureCardCopy(context.l10n.captureStarting)
-                : captureCardCopy(context.l10n, displayState,
-                    micTaken: micTaken, socketDown: !provider.transcriptServiceReady);
 
     // When recording is active: the one capture status and control surface.
     if (isDeviceRecording || isPhoneRecording) {
@@ -418,27 +353,10 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         : (provider.liveCaptureSource ?? (isLimitless ? 'limitless' : 'omi'));
     final elapsedSeconds = provider.offlineRecordingElapsedSeconds;
 
-    final CaptureCardCopy copy;
+    final copy = summarizeLiveCapture(l10n, provider)?.copy ?? CaptureCardCopy(l10n.recording);
     String? note;
     if (isLimitless) {
-      final minutesStored = (prefs.pendantPagesStored * 1.4 / 60).round();
-      final almostFull = prefs.pendantStorageAlmostFull;
-      final detail = [
-        if (minutesStored > 0) l10n.pendantMinutesStored(minutesStored),
-        if (almostFull) l10n.captureStorageAlmostFull,
-      ].join('  ·  ');
-      copy = CaptureCardCopy(l10n.recording,
-          detail: detail.isEmpty ? null : detail, explanation: almostFull ? l10n.pendantStorageAlmostFull : null);
       note = prefs.pendantDraining ? l10n.pendantSyncingRecordings : l10n.pendantRecordingNote;
-    } else if (storageFull) {
-      copy = CaptureCardCopy(l10n.paused,
-          detail: l10n.capturePhoneStorageFull, explanation: l10n.transcribeLaterStorageFull);
-    } else if (muted) {
-      copy = CaptureCardCopy(l10n.paused);
-    } else if (unverified) {
-      copy = CaptureCardCopy(l10n.captureSourcePendant);
-    } else {
-      copy = CaptureCardCopy(l10n.recording, detail: l10n.captureAudioSavedTranscribesLater);
     }
 
     final actions = <_OfflineAction>[
