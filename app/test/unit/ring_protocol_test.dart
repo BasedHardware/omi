@@ -38,6 +38,27 @@ void main() {
     });
   });
 
+  group('RingProtocol.isUsableEpochTimestamp', () {
+    test('accepts valid real-world UTC epoch timestamps', () {
+      expect(RingProtocol.isUsableEpochTimestamp(1700000000), isTrue);
+      expect(RingProtocol.isUsableEpochTimestamp(1727883480), isTrue); // 2024-10-02
+      expect(RingProtocol.isUsableEpochTimestamp(0x6824B5C0), isTrue);
+    });
+
+    test('rejects missing or uptime counter timestamps', () {
+      expect(RingProtocol.isUsableEpochTimestamp(0), isFalse);
+      expect(RingProtocol.isUsableEpochTimestamp(-1), isFalse);
+      expect(RingProtocol.isUsableEpochTimestamp(500), isFalse); // Uptime in seconds
+      expect(RingProtocol.isUsableEpochTimestamp(1699999999), isFalse);
+    });
+
+    test('rejects far future timestamps exceeding one day ahead', () {
+      const now = 1727883480;
+      expect(RingProtocol.isUsableEpochTimestamp(now + 86400, nowSeconds: now), isTrue);
+      expect(RingProtocol.isUsableEpochTimestamp(now + 86401, nowSeconds: now), isFalse);
+    });
+  });
+
   group('RingProtocol.parseInfoNotification', () {
     test('decodes a full 31-byte NOTIFY_INFO frame', () {
       // [0x02][read:u64 BE][write:u64 BE][cap:u32 BE][dropped:u64 BE][pkt_size:u16 BE]
