@@ -1008,7 +1008,12 @@ def update_action_item(
                 firestore_client=db,
                 allow_ended_goal=(goal_id, workstream_id) == (current.get('goal_id'), current.get('workstream_id')),
             )
-            write_transaction.update(action_item_ref, {**update_data, 'updated_at': now})
+            payload = dict(update_data)
+            # Same preserve as the plain update path below: a re-completion
+            # keeps the stored completed_at instead of re-stamping.
+            if payload.get('completed') is True and current.get('completed') is True:
+                payload['completed_at'] = current.get('completed_at')
+            write_transaction.update(action_item_ref, {**payload, 'updated_at': now})
             return True
 
         updated = bool(
@@ -1025,8 +1030,17 @@ def update_action_item(
         return updated
 
     # Check if exists
-    if not action_item_ref.get().exists:
+    existing = action_item_ref.get()
+    if not existing.exists:
         return False
+
+    # A completion that already happened keeps its original completed_at —
+    # a duplicate tap, a whole-object edit, or a sync replay must not
+    # re-stamp when the task was done. Preserve the stored timestamp when
+    # the item is already completed.
+    existing_data = typed_doc(existing)
+    if update_data.get('completed') is True and existing_data.get('completed') is True:
+        update_data['completed_at'] = existing_data.get('completed_at')
 
     # Add updated timestamp
     update_data['updated_at'] = datetime.now(timezone.utc)
@@ -1403,6 +1417,17 @@ def batch_sync_update_action_items(uid: str, updates: List[Dict[str, Any]]) -> B
         # Clear sync_requested when item is successfully exported
         if update_data.get('exported') is True:
             update_data['sync_requested'] = False
+        if update_data.get('completed') is True:
+            # A sync replay of an already-completed row must not re-stamp
+            # completed_at — same preserve as update_action_item. Costs one
+            # read per completion entry only.
+            existing = doc_ref.get()
+            if not existing.exists:
+                result.missing_ids.append(entry['id'])
+                continue
+            existing_data = typed_doc(existing)
+            if existing_data.get('completed') is True:
+                update_data['completed_at'] = existing_data.get('completed_at')
         try:
             doc_ref.update(update_data)
         except NotFound:
