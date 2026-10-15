@@ -60,7 +60,7 @@ def transcript_texts(uid: str, conversation: Mapping[str, Any]) -> tuple[list[st
     time title with no Retry, and never aborts the terminal write.
     """
     raw_segments = conversation.get('transcript_segments')
-    if not raw_segments:
+    if raw_segments is None:
         return [], True
     try:
         segments = conversations_db.decode_transcript_segments_verified(
@@ -70,8 +70,10 @@ def transcript_texts(uid: str, conversation: Mapping[str, Any]) -> tuple[list[st
         return [], False
     texts: list[str] = []
     for segment in segments:
-        text: Any = segment.get('text') if isinstance(segment, Mapping) else None
-        if isinstance(text, str) and text.strip():
+        if not isinstance(segment, Mapping) or not isinstance(segment.get('text'), str):
+            return [], False  # Malformed stored content is not proof of silence.
+        text = segment['text']
+        if text.strip():
             texts.append(text)
     return texts, True
 

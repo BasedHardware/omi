@@ -577,3 +577,20 @@ def test_calendar_overlap_blocks_terminal_rule_discard(monkeypatch):
     patch = _dead_letter(_conversation({'transcript_segments': _segments('Huh?')}))
     assert patch['discarded'] is False
     assert patch['relevance_decision']['reason'] == 'calendar_overlap'
+
+
+@pytest.mark.parametrize('segment', [None, 'unknown encoded content', {'text': None}, {'unknown': 'content'}])
+def test_malformed_segment_content_is_never_inferred_empty(monkeypatch, segment):
+    monkeypatch.setattr(terminal_title, 'calendar_retains', lambda *_: False)
+    patch = _dead_letter(_conversation({'transcript_segments': [segment]}))
+    assert patch['discarded'] is False
+    assert patch['relevance_decision']['verdict'] == 'keep'
+    assert patch['relevance_decision']['reason'] == 'dead_letter_default'
+
+
+@pytest.mark.parametrize('raw', [{}, '', b'', False, 0])
+def test_malformed_falsey_transcript_is_never_inferred_empty(monkeypatch, raw):
+    monkeypatch.setattr(terminal_title, 'calendar_retains', lambda *_: False)
+    patch = _dead_letter(_conversation({'transcript_segments': raw}))
+    assert patch['discarded'] is False
+    assert patch['relevance_decision']['reason'] == 'dead_letter_default'

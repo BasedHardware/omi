@@ -207,7 +207,7 @@ def test_real_terminal_calendar_probe_distinguishes_unavailable_evidence(monkeyp
 
 
 @pytest.mark.parametrize(
-    'source', ['workflow', 'external_integration', 'openglass', 'screenpipe', 'onboarding', 'unknown', None]
+    'source', ['workflow', 'external_integration', 'openglass', 'screenpipe', 'onboarding', 'unknown', None, {}, []]
 )
 def test_non_audio_terminal_never_infers_silence_from_other_content(source):
     decision = terminal_decision(
@@ -215,3 +215,36 @@ def test_non_audio_terminal_never_infers_silence_from_other_content(source):
     )
     assert decision['verdict'] == 'keep'
     assert decision['decided_by'] == 'policy'
+
+
+@pytest.mark.parametrize(
+    'prior,tier,reason',
+    [
+        ({'verdict': 'keep', 'decided_by': 'rule', 'reason': 'explicit_reminder'}, 'rule', 'explicit_reminder'),
+        ({'verdict': 'keep', 'decided_by': 'rule'}, 'rule', 'prior_rule_keep'),
+        ({'verdict': 'keep', 'decided_by': 'rule', 'reason': []}, 'rule', 'prior_rule_keep'),
+        ({'verdict': 'keep', 'reason': 'calendar_overlap'}, 'override', 'calendar_overlap'),
+        ({'verdict': 'keep'}, 'policy', 'prior_keep'),
+    ],
+)
+def test_incomplete_prior_keeps_are_repaired_without_reversal(prior, tier, reason):
+    row = {'source': 'omi', 'discarded': False, 'relevance_decision': prior}
+    decision = terminal_decision(
+        row, path='dead_letter', texts=['Huh?'], decoded=True, assess=True, calendar_retains=lambda: False
+    )
+    assert valid_decision(decision)
+    assert (decision['verdict'], decision['decided_by'], decision['reason']) == ('keep', tier, reason)
+    # Explicit user discard still outranks even prior positive evidence.
+    row['discarded'] = True
+    assert terminal_decision(row, path='dead_letter')['verdict'] == 'discard'
+
+
+@pytest.mark.parametrize('reason', ['prior_keep', 'prior_rule_keep'])
+def test_repaired_prior_keep_reasons_have_distinct_metric_labels(reason):
+    from utils.metrics import CONVERSATION_RELEVANCE_DECISION_TOTAL, record_conversation_relevance
+
+    labels = dict(trigger='dead_letter', verdict='keep', decided_by='policy', reason=reason)
+    counter = CONVERSATION_RELEVANCE_DECISION_TOTAL.labels(**labels)
+    before = counter._value.get()
+    record_conversation_relevance(**labels)
+    assert counter._value.get() == before + 1

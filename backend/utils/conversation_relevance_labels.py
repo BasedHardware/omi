@@ -60,6 +60,8 @@ TERMINAL_METRIC_REASONS = frozenset(
         'lifecycle_terminal_default',
         'fixture_seed_default',
         'already_discarded',
+        'prior_keep',
+        'prior_rule_keep',
         'restored',
         'calendar_overlap',
         'empty_transcript',

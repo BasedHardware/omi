@@ -70,6 +70,7 @@ def terminal_decision(
     """
     assert path in TERMINAL_PATHS
     prior = row.get('relevance_decision')
+    source = getattr(row.get('source'), 'value', row.get('source'))
     discarded = bool(row.get('discarded'))
     if valid_decision(prior) and (prior['verdict'] == 'discard') == discarded:
         return dict(prior)
@@ -78,14 +79,26 @@ def terminal_decision(
         verdict, reason = 'discard', 'already_discarded'
     elif row.get('sync_relevance_user_kept'):
         tier, reason = 'user', 'restored'
-    elif valid_decision(prior) and prior['verdict'] == 'keep':
-        return dict(prior)
+    elif isinstance(prior, Mapping) and prior.get('verdict') == 'keep':
+        # Missing provenance is not permission to reverse prior positive evidence.
+        tier, reason = 'policy', 'prior_keep'
+        if prior.get('decided_by') == 'rule':
+            tier = 'rule'
+            prior_reason = prior.get('reason')
+            reason = (
+                prior_reason
+                if isinstance(prior_reason, str) and prior_reason in {'explicit_reminder', 'substantial_length'}
+                else 'prior_rule_keep'
+            )
+        elif prior.get('reason') == 'calendar_overlap':
+            tier, reason = 'override', 'calendar_overlap'
     elif (
         assess
         and decoded
+        and isinstance(source, str)
+        and source in TRANSCRIPT_SOURCES
         and not (
-            getattr(row.get('source'), 'value', row.get('source')) not in TRANSCRIPT_SOURCES
-            or row.get('imported')
+            row.get('imported')
             or row.get('has_photos')
             or row.get('photos')
             or row.get('user_title')

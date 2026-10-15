@@ -39,6 +39,8 @@ threshold, recovery feature flag, client, or deletion contract changes.
 
 `utils/conversations/terminal_relevance.py` validates existing records, preserves
 valid prior decisions and rule KEEP outcomes, and supplies a total decision.
+Malformed prior keep records are repaired conservatively without reversing their
+positive evidence, including rule and calendar keeps.
 Terminal recovery strictly decodes the held transcript snapshot before using
 `deterministic_relevance`. Ambiguous/substantive text stays kept with a bounded,
 path-specific policy reason; reminders and substantial-length rules retain their
