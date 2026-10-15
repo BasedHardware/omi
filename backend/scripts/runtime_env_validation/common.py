@@ -197,7 +197,7 @@ PUSHER_CLIENT_SERVICES = frozenset({'backend'})
 
 def _remove_env_extra(service: str, service_config: ConfigDict) -> str:
     """Manifest forbidden keys the action's literal list lacks, each with a leading comma."""
-    listed = set(RETIRED_ENV_NAMES)
+    listed: set[str] = set(RETIRED_ENV_NAMES)
     if service not in PUSHER_CLIENT_SERVICES:
         listed.add('HOSTED_PUSHER_API_URL')
     return ''.join(f',{name}' for name in sorted(set(service_config.get('forbidden_env', [])) - listed))
