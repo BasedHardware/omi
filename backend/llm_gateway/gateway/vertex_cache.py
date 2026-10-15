@@ -280,20 +280,21 @@ async def scoped_cache_stream(
 
 
 async def validated_stream(
-    stream: AsyncGenerator[bytes, None], *, enabled: bool, max_bytes: int
+    stream: AsyncGenerator[bytes, None], *, enabled: bool, max_bytes: int | Callable[[], int]
 ) -> AsyncGenerator[bytes, None]:
     """Hold retiring-model output until its final traffic receipt is validated.
 
     A rejected late ON_DEMAND receipt must not leave generated content already
     visible. Bound retained bytes, and always close the native stream on abort.
     """
+    limit = (max_bytes() if callable(max_bytes) else max_bytes) if enabled else 0
     pending: list[bytes] = []
     size = 0
     try:
         async for chunk in stream:
             if enabled:
                 size += len(chunk)
-                if size > max_bytes:
+                if size > limit:
                     raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID)
                 pending.append(chunk)
             else:

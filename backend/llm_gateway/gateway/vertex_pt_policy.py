@@ -140,7 +140,25 @@ class VertexPTPolicyMixin:
             observe_forbidden_flash(model, capacity, self._product_policy_lane)
             raise ProviderFailure(FailureClass.RESERVED_CAPACITY_UNAVAILABLE)
 
-    def _reject_managed_on_demand(self, model: str, payload: Mapping[str, Any]) -> None:
+    def _hold_retiring_stream(self, model: str) -> bool:
+        return (
+            model == ptr.PT_MODEL_CURRENT
+            and self._dream_mode is None
+            and (
+                self._reservation_states.get(ptr.PT_MODEL_TARGET) == State.ACTIVE
+                or self._reservation_states.get(ptr.PT_MODEL_CURRENT) != State.ACTIVE
+            )
+        )
+
+    def _observe_stream_traffic(self, model: str, payload: Mapping[str, Any], reported: bool) -> bool:
+        if not reported and vertex_usage_from_response(payload).traffic_type == 'ON_DEMAND':
+            self._observe_managed_traffic(model, 'ON_DEMAND')
+            reported = True
+        return self._reject_managed_on_demand(model, payload, streaming=True, reported=reported) or reported
+
+    def _reject_managed_on_demand(
+        self, model: str, payload: Mapping[str, Any], *, streaming: bool = False, reported: bool = False
+    ) -> bool:
         usage = payload.get('usageMetadata')
         nested = usage.get('trafficType') if isinstance(usage, Mapping) else None
         if (
@@ -148,8 +166,10 @@ class VertexPTPolicyMixin:
             and self._dream_mode is None
             and (payload.get('trafficType') == 'ON_DEMAND' or nested == 'ON_DEMAND')
         ):
-            if payload.get('trafficType') != 'ON_DEMAND':
+            if payload.get('trafficType') != 'ON_DEMAND' and not reported:
                 self._observe_managed_traffic(model, 'ON_DEMAND')
+            if streaming and not self._hold_retiring_stream(model):
+                return True
             error = ProviderFailure(FailureClass.RESERVED_CAPACITY_UNAVAILABLE)
             metadata = replace(vertex_usage_from_response(payload), traffic_type='ON_DEMAND')
             context = self._cache_context.get()
@@ -158,6 +178,7 @@ class VertexPTPolicyMixin:
                 metadata = context[2].accounting(metadata)
             error.accounting = metadata
             raise error
+        return False
 
     def _observe_managed_traffic(self, model: str, traffic_type: str | None) -> None:
         observe_reported_traffic(model, traffic_type, self._product_policy_lane)

@@ -454,17 +454,23 @@ async def test_real_refresh_preserves_raw_evidence_under_25_pin(monkeypatch, str
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('receipt_location', ['top', 'usage', 'contradictory'])
-async def test_late_25_on_demand_receipt_releases_no_stream_output(monkeypatch, receipt_location):
+@pytest.mark.parametrize('observation', ['active_25', 'unknown_25', 'active_38'])
+async def test_25_stream_holds_only_raw_move_risk(monkeypatch, receipt_location, observation):
     from llm_gateway.gateway.schemas import ProviderRef, FailureClass
     from llm_gateway.gateway.provider_types import ProviderFailure
 
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
-    monkeypatch.delenv(ptr.PT_MODEL_OVERRIDE_ENV, raising=False)
+    monkeypatch.setenv(ptr.PT_MODEL_OVERRIDE_ENV, OLD)
     monkeypatch.delenv(vr.STATE_OVERRIDE_ENV, raising=False)
+    risky = observation != 'active_25'
+    monkeypatch.setenv('OPENAI_MAX_RESPONSE_BYTES', '1048576' if risky else '256')
+    stages = []
 
     class Body(httpx.AsyncByteStream):
         async def __aiter__(self):
+            stages.append('first')
             yield b'data: {"candidates":[{"content":{"parts":[{"text":"must never escape"}]}}]}\n\n'
+            stages.append('final')
             final: dict[str, Any] = {
                 'candidates': [{'finishReason': 'STOP'}],
                 'usageMetadata': {'promptTokenCount': 7, 'candidatesTokenCount': 4},
@@ -478,17 +484,37 @@ async def test_late_25_on_demand_receipt_releases_no_stream_output(monkeypatch, 
         transport=httpx.MockTransport(lambda request: httpx.Response(200, stream=Body()))
     ) as client:
         vertex = VertexGeminiProvider(http_client=client, access_token_supplier=AsyncMock(return_value='synthetic'))
-        monkeypatch.setattr(vertex._reservations, 'refresh', AsyncMock(return_value={OLD: vr.State.ACTIVE}))
+        states = {
+            OLD: vr.State.UNKNOWN if observation == 'unknown_25' else vr.State.ACTIVE,
+            NEW: vr.State.ACTIVE if observation == 'active_38' else vr.State.UNKNOWN,
+        }
+        monkeypatch.setattr(vertex._reservations, 'refresh', AsyncMock(return_value=states))
         record = AsyncMock()
         monkeypatch.setattr(vertex._reservations, 'record', record)
+        from utils.llm.vertex_policy_metrics import UNEXPECTED_25_PAYGO
+
+        metric = UNEXPECTED_25_PAYGO.labels(lane='backend_other')
+        before = metric._value.get()
+        stream = vertex.stream_chat_completion(
+            {'messages': [{'role': 'user', 'content': 'invented'}]},
+            provider_ref=ProviderRef(provider='gemini', model=OLD),
+            credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+            timeout_ms=1000,
+        )
+        if not risky:
+            first = await anext(stream)
+            assert stages == ['first']  # Native EOF/receipt has not been requested.
+            assert b'must never escape' in first  # Accepted pre-move window.
+            remaining = [chunk async for chunk in stream]
+            assert remaining[-1] == b'data: [DONE]\n\n'
+            assert len(first) + sum(map(len, remaining)) > 256
+            assert metric._value.get() == before + 1
+            record.assert_awaited_once()
+            assert record.call_args.args[3] is None
+            return
         chunks = []
         with pytest.raises(ProviderFailure) as raised:
-            async for chunk in vertex.stream_chat_completion(
-                {'messages': [{'role': 'user', 'content': 'invented'}]},
-                provider_ref=ProviderRef(provider='gemini', model=OLD),
-                credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
-                timeout_ms=1000,
-            ):
+            async for chunk in stream:
                 chunks.append(chunk)
         assert not chunks
         assert raised.value.failure_class == FailureClass.RESERVED_CAPACITY_UNAVAILABLE
@@ -496,4 +522,5 @@ async def test_late_25_on_demand_receipt_releases_no_stream_output(monkeypatch, 
         assert accounting is not None and accounting.usage is not None
         assert accounting.traffic_type == 'ON_DEMAND'
         assert accounting.usage.prompt_tokens == 7
+        assert metric._value.get() == before + 1
         record.assert_not_awaited()

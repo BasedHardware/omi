@@ -576,8 +576,8 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                             requested_model=provider_ref.model,
                             timeout_ms=remaining_ms,
                         ),
-                        enabled=model == ptr.PT_MODEL_CURRENT,
-                        max_bytes=_configured_max_response_bytes(),
+                        enabled=self._hold_retiring_stream(model),
+                        max_bytes=_configured_max_response_bytes,
                     ):
                         yield chunk
                     yield _openai_sse_done()
@@ -693,10 +693,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                     if not data or data == '[DONE]':
                         continue
                     parsed = _parse_limited_json_response(data.encode('utf-8'))
-                    if not reported_paygo and vertex_usage_from_response(parsed).traffic_type == 'ON_DEMAND':
-                        self._observe_managed_traffic(model, 'ON_DEMAND')
-                        reported_paygo = True
-                    self._reject_managed_on_demand(model, parsed)
+                    reported_paygo = self._observe_stream_traffic(model, parsed, reported_paygo)
                     context = self._cache_context.get()
                     if context is not None:
                         parsed = {**parsed, '_gateway_cache_receipt': asdict(context[2])}

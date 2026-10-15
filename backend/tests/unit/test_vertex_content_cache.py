@@ -33,7 +33,8 @@ async def test_retiring_stream_buffer_is_bounded_and_closes_without_output():
 
 
 @pytest.mark.asyncio
-async def test_unbuffered_dream_stream_keeps_first_chunk_latency():
+@pytest.mark.parametrize('limit_kind', ['small', 'invalid_config'])
+async def test_unbuffered_stream_preserves_first_chunk_and_bytes_without_limit_read(limit_kind):
     stages = []
 
     async def source():
@@ -42,7 +43,8 @@ async def test_unbuffered_dream_stream_keeps_first_chunk_latency():
         stages.append('second')
         yield b'cd'
 
-    stream = validated_stream(source(), enabled=False, max_bytes=1)
+    limit = 1 if limit_kind == 'small' else lambda: pytest.fail('unbuffered stream must not read a new byte cap')
+    stream = validated_stream(source(), enabled=False, max_bytes=limit)
     assert await anext(stream) == b'ab'
     assert stages == ['first']
     assert [part async for part in stream] == [b'cd']
