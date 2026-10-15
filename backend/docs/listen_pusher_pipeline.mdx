@@ -4821,3 +4821,34 @@ labels are added. Optional final-pass logs now include `lane` and
 `duration_seconds`, covering decoding, embedding triage, diarization and naming
 inside the adapter. These times exclude the preceding WAV download and are
 not whole-job latency. See [drain qualification](runbooks/sync-legacy-fresh-drain.md).
+
+
+### Sync assignment contention retry
+
+Fresh uploads can overlap for one account: clients serialize the HTTP POST, but
+continue uploading after the asynchronous 202 response. Backfill sequencing
+reduces overlap among backfill jobs; it does not exclude fresh/live writes.
+Atomic assignment reads/writes `users/{uid}/sync_assignment/recent`, relevant
+UTC day index documents, and canonical/donor conversation documents. Segments
+are embedded in conversations; separate content ledgers do not serialize these
+assignment transactions.
+
+`SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED=true` (default false everywhere) wraps
+sync assignment in the existing shared bounded contention helper. Five outer
+attempts use fresh transactions and equal-jitter backoff (maximum 2.4s total
+sleep), retaining the SDK's five commit attempts and the existing three-attempt
+expired-ID restart. The outer budget also handles read-time `Aborted`, which the
+SDK's commit-only retry misses. Only explicit aborts/cause chains are replayed;
+ambiguous transport failures and unrelated invalid arguments still escape.
+Indexes, conversation append, dedupe and revision ownership remain atomic.
+The static `firestore_transaction_contention operation=sync_assignment` log
+records retry/recovered/exhausted without identity/content fields. Disable the
+flag to restore the previous boundary; no schema migration is needed.
+
+A later content revision may fence an older enrichment pass after its intake
+already committed. That job can ACK `outcome=superseded` with zero successful
+segments. Prove convergence with processed-segment receipts and actual segment
+IDs in the surviving conversation; a zero-success ACK alone is not proof of
+no loss. User-deletion/assignment supersession is a different path and must not
+be treated as evidence that content landed. Qualification requires every
+synthetic uploaded segment to appear exactly once, including these cases.
