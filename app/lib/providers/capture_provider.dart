@@ -81,19 +81,17 @@ class CaptureProvider extends CaptureController {
     if (_liveSegmentWriteQueued && _queuedLiveSegmentWriteToken == tokenKey) return;
     _liveSegmentWriteQueued = true;
     _queuedLiveSegmentWriteToken = tokenKey;
-    _liveSegmentWrite = _liveSegmentWrite
-        .then((_) async {
-          if (_queuedLiveSegmentWriteToken == tokenKey) _liveSegmentWriteQueued = false;
-          if (owner != null && token != null && !owner.isCurrent(token)) return;
-          final currentSession = activeCaptureSessionId ?? activeRecordingId;
-          if (currentSession == null) return;
-          await localSegmentStore.replaceSession(currentSession, List.of(segments));
-        })
-        .catchError((Object e) {
-          // Let the next notify retry.
-          _lastSeenSegmentsKey = null;
-          Logger.debug('Error persisting live segments: $e');
-        });
+    _liveSegmentWrite = _liveSegmentWrite.then((_) async {
+      if (_queuedLiveSegmentWriteToken == tokenKey) _liveSegmentWriteQueued = false;
+      if (owner != null && token != null && !owner.isCurrent(token)) return;
+      final currentSession = activeCaptureSessionId ?? activeRecordingId;
+      if (currentSession == null) return;
+      await localSegmentStore.replaceSession(currentSession, List.of(segments));
+    }).catchError((Object e) {
+      // Let the next notify retry.
+      _lastSeenSegmentsKey = null;
+      Logger.debug('Error persisting live segments: $e');
+    });
     unawaited(_liveSegmentWrite);
   }
 }

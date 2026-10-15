@@ -7,9 +7,8 @@ abstract final class AppleSpeechAnalyzerGate {
 
   static Future<bool> useNewEngine({Future<bool> Function(String)? readFlag}) async {
     try {
-      final killed = await (readFlag ?? AnalyticsManager().isFeatureEnabled)(
-        enabledFlag,
-      ).timeout(const Duration(seconds: 2));
+      final killed =
+          await (readFlag ?? AnalyticsManager().isFeatureEnabled)(enabledFlag).timeout(const Duration(seconds: 2));
       return !killed;
     } catch (_) {
       return true;

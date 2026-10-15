@@ -179,65 +179,67 @@ class _ActivationFlowState extends State<ActivationFlow> {
     final l10n = context.l10n;
     final Widget child = switch (_stage) {
       ActivationStage.intro => _IntroLine(
-        key: const ValueKey('intro'),
-        text: l10n.onboardingActIntro,
-        onDone: _afterIntro,
-      ),
+          key: const ValueKey('intro'),
+          text: l10n.onboardingActIntro,
+          onDone: _afterIntro,
+        ),
       ActivationStage.microphone => _Stage(
-        key: const ValueKey('microphone'),
-        title: l10n.onboardingActMicTitle,
-        subtitle: _phoneInstead ? l10n.onboardingActMicFallbackBody : l10n.onboardingActMicBody,
-        body: const _MicVisual(),
-        bottom: _ContinueButton(stage: 'microphone', label: l10n.onboardingActMicAllow, onPressed: _allowMicrophone),
-      ),
+          key: const ValueKey('microphone'),
+          title: l10n.onboardingActMicTitle,
+          subtitle: _phoneInstead ? l10n.onboardingActMicFallbackBody : l10n.onboardingActMicBody,
+          body: const _MicVisual(),
+          bottom: _ContinueButton(
+            stage: 'microphone',
+            label: l10n.onboardingActMicAllow,
+            onPressed: _allowMicrophone,
+          ),
+        ),
       ActivationStage.dictate => _DictationStep(
-        key: const ValueKey('dictate'),
-        capture: _capture ??= _newCapture(context),
-        onDone: _dictated,
-        onSkip: _skipped,
-        onNeedsMicrophone: _needsMicrophone,
-        throughOmi: widget.hasDevice && !_phoneInstead,
-      ),
+          key: const ValueKey('dictate'),
+          capture: _capture ??= _newCapture(context),
+          onDone: _dictated,
+          onSkip: _skipped,
+          onNeedsMicrophone: _needsMicrophone,
+          throughOmi: widget.hasDevice && !_phoneInstead,
+        ),
       ActivationStage.writing => _Stage(
-        key: const ValueKey('writing'),
-        title: l10n.onboardingActWriting,
-        // The dictation's subtitle keeps its space (unseen), so the card doesn't move between the two.
-        subtitle: widget.hasDevice && !_phoneInstead ? l10n.onboardingActDictateBodyOmi : l10n.onboardingActDictateBody,
-        subtitleHidden: true,
-        body: CompactingCard(text: _heard, style: _wordsStyle),
-        bottom: const CondensingControl(),
-        bottomHeight: _kControlHeight,
-      ),
+          key: const ValueKey('writing'),
+          title: l10n.onboardingActWriting,
+          // The dictation's subtitle keeps its space (unseen), so the card doesn't move between the two.
+          subtitle:
+              widget.hasDevice && !_phoneInstead ? l10n.onboardingActDictateBodyOmi : l10n.onboardingActDictateBody,
+          subtitleHidden: true,
+          body: CompactingCard(text: _heard, style: _wordsStyle),
+          bottom: const CondensingControl(),
+          bottomHeight: _kControlHeight,
+        ),
       ActivationStage.summary => _Stage(
-        key: const ValueKey('summary'),
-        eyebrow: l10n.onboardingActRemembers,
-        title: _result!.hasNotes ? l10n.onboardingActNotesLabel : l10n.onboardingActYourWords,
-        body: SummaryReveal(
-          child: _SummaryCard(result: _result!, heard: _heard),
+          key: const ValueKey('summary'),
+          eyebrow: l10n.onboardingActRemembers,
+          title: _result!.hasNotes ? l10n.onboardingActNotesLabel : l10n.onboardingActYourWords,
+          body: SummaryReveal(child: _SummaryCard(result: _result!, heard: _heard)),
+          bottom: _ContinueButton(
+            stage: 'summary',
+            onPressed: () => _go(
+              _result!.hasNotes && _result!.tasks.isNotEmpty ? ActivationStage.taskList : ActivationStage.congrats,
+            ),
+          ),
+          bottomHeight: _kControlHeight,
         ),
-        bottom: _ContinueButton(
-          stage: 'summary',
-          onPressed: () =>
-              _go(_result!.hasNotes && _result!.tasks.isNotEmpty ? ActivationStage.taskList : ActivationStage.congrats),
-        ),
-        bottomHeight: _kControlHeight,
-      ),
       ActivationStage.taskList => _Stage(
-        key: const ValueKey('taskList'),
-        title: l10n.onboardingActTasksLabel,
-        body: _TasksCard(tasks: _result!.tasks),
-        bottom: _ContinueButton(stage: 'tasks', onPressed: () => _go(ActivationStage.congrats)),
-        bottomHeight: _kControlHeight,
-      ),
-      ActivationStage.congrats => _Hooray(
-        key: const ValueKey('congrats'),
-        onContinue: () => _go(ActivationStage.rating),
-      ),
+          key: const ValueKey('taskList'),
+          title: l10n.onboardingActTasksLabel,
+          body: _TasksCard(tasks: _result!.tasks),
+          bottom: _ContinueButton(stage: 'tasks', onPressed: () => _go(ActivationStage.congrats)),
+          bottomHeight: _kControlHeight,
+        ),
+      ActivationStage.congrats =>
+        _Hooray(key: const ValueKey('congrats'), onContinue: () => _go(ActivationStage.rating)),
       ActivationStage.rating => _RatingAsk(
-        key: const ValueKey('rating'),
-        requestReview: widget.requestReview ?? InAppReview.instance.requestReview,
-        onDone: _afterRating,
-      ),
+          key: const ValueKey('rating'),
+          requestReview: widget.requestReview ?? InAppReview.instance.requestReview,
+          onDone: _afterRating,
+        ),
     };
     final reduce = OmiMotion.of(context).emphasized == Duration.zero;
     return AnimatedSwitcher(
@@ -307,10 +309,7 @@ class _Stage extends StatelessWidget {
                   style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
                 ),
               ),
-            Semantics(
-              header: true,
-              child: Text(title, style: OmiType.title1, textAlign: TextAlign.center),
-            ),
+            Semantics(header: true, child: Text(title, style: OmiType.title1, textAlign: TextAlign.center)),
             if (subtitle != null) ...[
               const SizedBox(height: OmiSpacing.xs),
               Opacity(
@@ -339,14 +338,8 @@ class _Stage extends StatelessWidget {
             ),
             if (bottom != null)
               bottomHeight == null
-                  ? Padding(
-                      padding: const EdgeInsets.only(top: OmiSpacing.md),
-                      child: bottom,
-                    )
-                  : SizedBox(
-                      height: bottomHeight,
-                      child: Align(alignment: Alignment.bottomCenter, child: bottom),
-                    ),
+                  ? Padding(padding: const EdgeInsets.only(top: OmiSpacing.md), child: bottom)
+                  : SizedBox(height: bottomHeight, child: Align(alignment: Alignment.bottomCenter, child: bottom)),
           ],
         ),
       ),
@@ -616,12 +609,14 @@ class _DictationStepState extends State<_DictationStep> {
                   status: _failed
                       ? l10n.somethingWentWrong
                       : heard
-                      ? l10n.onboardingActDictateHint
-                      : !_started
-                      ? l10n.listening
-                      : _quiet
-                      ? (widget.capture.usesDevice ? l10n.onboardingActNoAudioOmi : l10n.onboardingActNoAudioPhone)
-                      : '${l10n.listening} · $source',
+                          ? l10n.onboardingActDictateHint
+                          : !_started
+                              ? l10n.listening
+                              : _quiet
+                                  ? (widget.capture.usesDevice
+                                      ? l10n.onboardingActNoAudioOmi
+                                      : l10n.onboardingActNoAudioPhone)
+                                  : '${l10n.listening} · $source',
                   onDone: _done,
                 ),
           bottomHeight: _kControlHeight,
@@ -739,7 +734,10 @@ class _ListeningControl extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (listening && !failed) ...[_LevelMeter(level: level), const SizedBox(width: OmiSpacing.xs)],
+            if (listening && !failed) ...[
+              _LevelMeter(level: level),
+              const SizedBox(width: OmiSpacing.xs),
+            ],
             Flexible(
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 250),
@@ -865,10 +863,9 @@ class _SummaryCardState extends State<_SummaryCard> {
                       height: 44,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
-                      child: Text(
-                        _r.emoji,
-                        style: const TextStyle(fontSize: 22),
-                      ), // omi-ux-allow: font-size-literal -- emoji glyph sized to its 44 pt tile
+                      child: Text(_r.emoji,
+                          style: const TextStyle(
+                              fontSize: 22)), // omi-ux-allow: font-size-literal -- emoji glyph sized to its 44 pt tile
                     ),
                   ),
                   const SizedBox(width: OmiSpacing.sm),
@@ -880,10 +877,8 @@ class _SummaryCardState extends State<_SummaryCard> {
                         const SizedBox(height: 2),
                         rise(
                           segment(t, 0.14, 0.32),
-                          Text(
-                            l10n.onboardingActJustNow,
-                            style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-                          ),
+                          Text(l10n.onboardingActJustNow,
+                              style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
                           distance: 6,
                         ),
                       ],
@@ -1034,10 +1029,8 @@ class _TasksCardState extends State<_TasksCard> {
                     children: [
                       Icon(Icons.check_circle_rounded, size: 16, color: OmiColors.success),
                       const SizedBox(width: OmiSpacing.xs),
-                      Text(
-                        l10n.onboardingActSavedToTasks,
-                        style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-                      ),
+                      Text(l10n.onboardingActSavedToTasks,
+                          style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
                     ],
                   ),
                 ),
@@ -1146,9 +1139,7 @@ class _HoorayState extends State<_Hooray> {
             child: Stack(
               alignment: Alignment.center,
               children: [
-                Positioned.fill(
-                  child: CustomPaint(painter: ConfettiPainter(t: segment(t, 0.2, 1, Curves.linear))),
-                ),
+                Positioned.fill(child: CustomPaint(painter: ConfettiPainter(t: segment(t, 0.2, 1, Curves.linear)))),
                 Transform.scale(
                   scale: Curves.elasticOut.transform(segment(t, 0.12, 0.55, Curves.linear)),
                   child: Container(

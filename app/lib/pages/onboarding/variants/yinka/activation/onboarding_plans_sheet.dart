@@ -15,10 +15,8 @@ class _OnboardingPlansSheetState extends State<OnboardingPlansSheet> with Ticker
     ..repeat();
   late final AnimationController _arrow = AnimationController(duration: const Duration(milliseconds: 800), vsync: this)
     ..repeat(reverse: true);
-  late final Animation<double> _arrowOffset = Tween<double>(
-    begin: 0,
-    end: 3,
-  ).animate(CurvedAnimation(parent: _arrow, curve: Curves.easeInOut));
+  late final Animation<double> _arrowOffset =
+      Tween<double>(begin: 0, end: 3).animate(CurvedAnimation(parent: _arrow, curve: Curves.easeInOut));
 
   @override
   void dispose() {

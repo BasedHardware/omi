@@ -88,7 +88,9 @@ class MemoryItem extends StatelessWidget {
                       ),
                     ),
                   ],
-                  Expanded(child: Text(memory.content.decodeString, style: OmiType.subhead.copyWith(height: 1.4))),
+                  Expanded(
+                    child: Text(memory.content.decodeString, style: OmiType.subhead.copyWith(height: 1.4)),
+                  ),
                   if (editable)
                     Padding(
                       padding: const EdgeInsetsDirectional.only(start: 12),
@@ -104,7 +106,10 @@ class MemoryItem extends StatelessWidget {
               if (memory.ledgerSlot != null && memory.ledgerSlot!.trim().isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
-                  child: Text(memory.ledgerSlot!, style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
+                  child: Text(
+                    memory.ledgerSlot!,
+                    style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
+                  ),
                 ),
               if (memory.isLedgerPlaybook && (memory.ledgerBody ?? '').trim().isNotEmpty)
                 Padding(
@@ -134,7 +139,12 @@ class MemoryItem extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (memory.isBaseline) ...[
-              Icon(Icons.flag, color: OmiColors.textSecondary, size: 20, semanticLabel: context.l10n.baselineMemory),
+              Icon(
+                Icons.flag,
+                color: OmiColors.textSecondary,
+                size: 20,
+                semanticLabel: context.l10n.baselineMemory,
+              ),
               const SizedBox(width: AppStyles.spacingS),
             ],
             if (memory.conversationId != null) ...[

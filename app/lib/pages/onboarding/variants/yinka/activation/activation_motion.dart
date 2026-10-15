@@ -211,7 +211,9 @@ class _ReadAlongCardState extends State<ReadAlongCard> with SingleTickerProvider
   Widget _scripted(bool reduce) {
     return Wrap(
       key: const ValueKey('script'),
-      children: [for (var i = 0; i < _scriptWords.length; i++) _word(i, reduce)],
+      children: [
+        for (var i = 0; i < _scriptWords.length; i++) _word(i, reduce),
+      ],
     );
   }
 
@@ -225,11 +227,8 @@ class _ReadAlongCardState extends State<ReadAlongCard> with SingleTickerProvider
         : Color.lerp(OmiColors.textTertiary.withValues(alpha: 0.55), OmiColors.textSecondary, lit)!;
     // A word lifts a touch as the voice lights it, then settles.
     final lift = reduce || confirmed ? 0.0 : -2.0 * math.sin(math.pi * lit);
-    return _flashWord(
-      Text('${_scriptWords[i]} ', style: widget.style.copyWith(color: color)),
-      reduce ? 0 : _flashOf(i),
-      lift: lift,
-    );
+    return _flashWord(Text('${_scriptWords[i]} ', style: widget.style.copyWith(color: color)), reduce ? 0 : _flashOf(i),
+        lift: lift);
   }
 
   /// The moment Omi hears a word: a soft highlight behind it and a small pop, fading out.
@@ -293,9 +292,7 @@ class _Waveform extends CustomPainter {
       final paint = Paint()..color = color.withValues(alpha: 0.18 + 0.7 * v);
       canvas.drawRRect(
         RRect.fromRectAndRadius(
-          Rect.fromCenter(center: Offset(x, size.height / 2), width: w, height: h),
-          Radius.circular(w),
-        ),
+            Rect.fromCenter(center: Offset(x, size.height / 2), width: w, height: h), Radius.circular(w)),
         paint,
       );
     }
@@ -379,10 +376,8 @@ class CompactingCard extends StatefulWidget {
 class _CompactingCardState extends State<CompactingCard> with TickerProviderStateMixin {
   late final AnimationController _fold = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))
     ..forward();
-  late final AnimationController _sweep = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1400),
-  );
+  late final AnimationController _sweep =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 1400));
   late final List<String> _words = widget.text.trim().split(RegExp(r'\s+'));
   late final List<bool> _keep = [
     for (final w in _words)
@@ -416,7 +411,7 @@ class _CompactingCardState extends State<CompactingCard> with TickerProviderStat
         child: Text(
           [
             for (var i = 0; i < _words.length; i++)
-              if (_keep[i]) _words[i],
+              if (_keep[i]) _words[i]
           ].join(' '),
           style: widget.style.copyWith(color: OmiColors.textPrimary),
         ),
@@ -481,7 +476,7 @@ class _CompactingCardState extends State<CompactingCard> with TickerProviderStat
         colors: [
           OmiColors.surface1.withValues(alpha: 0),
           OmiColors.surface1.withValues(alpha: 0.75),
-          OmiColors.surface1.withValues(alpha: 0),
+          OmiColors.surface1.withValues(alpha: 0)
         ],
         stops: const [0.35, 0.5, 0.65],
       ).createShader(bounds),
@@ -558,11 +553,8 @@ class _CondensingLines extends CustomPainter {
     for (var k = 0; k < 3; k++) {
       final y = c.dy + (k - 1) * 8 * (1 - phase);
       final w = widths[k] * (1 - phase) + 18 * phase;
-      canvas.drawLine(
-        Offset(c.dx - w / 2, y),
-        Offset(c.dx + w / 2, y),
-        paint..color = color.withValues(alpha: k == 1 ? 1 : 1 - 0.6 * phase),
-      );
+      canvas.drawLine(Offset(c.dx - w / 2, y), Offset(c.dx + w / 2, y),
+          paint..color = color.withValues(alpha: k == 1 ? 1 : 1 - 0.6 * phase));
     }
   }
 
@@ -616,10 +608,7 @@ class _SummaryRevealState extends State<SummaryReveal> with SingleTickerProvider
                 imageFilter: ImageFilter.blur(sigmaX: 12 * (1 - appear), sigmaY: 12 * (1 - appear)),
                 child: child,
               );
-        Widget out = Opacity(
-          opacity: appear,
-          child: Transform.scale(scale: 0.94 + 0.06 * appear, child: settled),
-        );
+        Widget out = Opacity(opacity: appear, child: Transform.scale(scale: 0.94 + 0.06 * appear, child: settled));
         if (sweep > 0 && sweep < 1) {
           final x = -1.5 + 3.0 * Curves.easeInOut.transform(sweep);
           out = ShaderMask(
@@ -630,7 +619,7 @@ class _SummaryRevealState extends State<SummaryReveal> with SingleTickerProvider
               colors: [
                 OmiColors.surface1.withValues(alpha: 0),
                 OmiColors.surface1.withValues(alpha: 0.6),
-                OmiColors.surface1.withValues(alpha: 0),
+                OmiColors.surface1.withValues(alpha: 0)
               ],
             ).createShader(bounds),
             child: out,
@@ -691,10 +680,7 @@ class SummaryText extends StatelessWidget {
       final words = line.text.split(' ');
       final spans = <TextSpan>[
         if (line.bullet)
-          TextSpan(
-            text: '•  ',
-            style: lineStyle.copyWith(color: index < shown ? null : Colors.transparent),
-          ),
+          TextSpan(text: '•  ', style: lineStyle.copyWith(color: index < shown ? null : Colors.transparent)),
         for (var i = 0; i < words.length; i++)
           TextSpan(
             text: i == words.length - 1 ? words[i] : '${words[i]} ',
@@ -704,18 +690,13 @@ class SummaryText extends StatelessWidget {
           ),
       ];
       index += words.length;
-      children.add(
-        Padding(
-          padding: EdgeInsets.only(top: k == 0 ? 0 : (line.heading ? OmiSpacing.md : OmiSpacing.xs)),
-          child: Text.rich(TextSpan(children: spans)),
-        ),
-      );
+      children.add(Padding(
+        padding: EdgeInsets.only(top: k == 0 ? 0 : (line.heading ? OmiSpacing.md : OmiSpacing.xs)),
+        child: Text.rich(TextSpan(children: spans)),
+      ));
     }
-    final column = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: children,
-    );
+    final column =
+        Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: children);
     return ConstrainedBox(
       constraints: BoxConstraints(maxHeight: maxHeight),
       child: ShaderMask(

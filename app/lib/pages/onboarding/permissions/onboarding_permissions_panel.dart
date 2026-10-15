@@ -39,10 +39,10 @@ class PlatformOnboardingPermissionsSource implements OnboardingPermissionsSource
 
   @override
   List<OnboardingPermission> get permissions => [
-    if (Platform.isAndroid) OnboardingPermission.background,
-    OnboardingPermission.location,
-    OnboardingPermission.notifications,
-  ];
+        if (Platform.isAndroid) OnboardingPermission.background,
+        OnboardingPermission.location,
+        OnboardingPermission.notifications,
+      ];
 
   @override
   Future<OmiPermissionStatus> status(OnboardingPermission permission) async {
@@ -85,31 +85,32 @@ class PlatformOnboardingPermissionsSource implements OnboardingPermissionsSource
 
 /// The same glyphs as the Settings permission list.
 FaIconData onboardingPermissionIcon(OnboardingPermission permission) => switch (permission) {
-  OnboardingPermission.bluetooth => FontAwesomeIcons.bluetoothB,
-  OnboardingPermission.background => FontAwesomeIcons.batteryFull,
-  OnboardingPermission.location => FontAwesomeIcons.locationArrow,
-  OnboardingPermission.notifications => FontAwesomeIcons.solidBell,
-};
+      OnboardingPermission.bluetooth => FontAwesomeIcons.bluetoothB,
+      OnboardingPermission.background => FontAwesomeIcons.batteryFull,
+      OnboardingPermission.location => FontAwesomeIcons.locationArrow,
+      OnboardingPermission.notifications => FontAwesomeIcons.solidBell,
+    };
 
 String onboardingPermissionTitle(AppLocalizations l10n, OnboardingPermission permission) => switch (permission) {
-  OnboardingPermission.bluetooth => l10n.bluetooth,
-  OnboardingPermission.background => l10n.backgroundActivity,
-  OnboardingPermission.location => l10n.locationAccess,
-  OnboardingPermission.notifications => l10n.notifications,
-};
+      OnboardingPermission.bluetooth => l10n.bluetooth,
+      OnboardingPermission.background => l10n.backgroundActivity,
+      OnboardingPermission.location => l10n.locationAccess,
+      OnboardingPermission.notifications => l10n.notifications,
+    };
 
 String onboardingPermissionReason(AppLocalizations l10n, OnboardingPermission permission) => switch (permission) {
-  OnboardingPermission.bluetooth => l10n.onboardingBluetoothRequired,
-  OnboardingPermission.background => l10n.backgroundActivityDesc,
-  OnboardingPermission.location => l10n.locationAccessDesc,
-  OnboardingPermission.notifications => l10n.notificationsDesc,
-};
+      OnboardingPermission.bluetooth => l10n.onboardingBluetoothRequired,
+      OnboardingPermission.background => l10n.backgroundActivityDesc,
+      OnboardingPermission.location => l10n.locationAccessDesc,
+      OnboardingPermission.notifications => l10n.notificationsDesc,
+    };
 
 /// [source], or the platform source over the ambient [OnboardingProvider].
 OnboardingPermissionsSource resolveOnboardingPermissionsSource(
   BuildContext context,
   OnboardingPermissionsSource? source,
-) => source ?? PlatformOnboardingPermissionsSource(context.read<OnboardingProvider>());
+) =>
+    source ?? PlatformOnboardingPermissionsSource(context.read<OnboardingProvider>());
 
 /// What Continue does on the first-run step and the interstitial: asks, in row order, for every
 /// permission that can still be asked. Allowed, blocked and service-off ones are left alone, and a

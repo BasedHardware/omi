@@ -38,15 +38,9 @@ void main() {
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
     final long = List.filled(4, _realNotes).join('\n\n');
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: SummaryText(text: long, t: 1, style: const TextStyle(fontSize: 17)),
-          ),
-        ),
-      ),
-    );
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: Center(child: SummaryText(text: long, t: 1, style: const TextStyle(fontSize: 17)))),
+    ));
     expect(tester.takeException(), isNull);
     expect(tester.getSize(find.byType(SummaryText)).height, lessThanOrEqualTo(190));
     expect(find.textContaining('##', findRichText: true), findsNothing);

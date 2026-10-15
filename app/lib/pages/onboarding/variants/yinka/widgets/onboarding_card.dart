@@ -25,12 +25,8 @@ class OnboardingCard extends StatelessWidget {
     super.key,
     required this.content,
     this.footer = const [],
-    this.padding = const EdgeInsets.fromLTRB(
-      OmiSpacing.xxl,
-      OmiSpacing.xxl,
-      OmiSpacing.xxl,
-      kOnboardingButtonBottomGap,
-    ),
+    this.padding =
+        const EdgeInsets.fromLTRB(OmiSpacing.xxl, OmiSpacing.xxl, OmiSpacing.xxl, kOnboardingButtonBottomGap),
     this.crossAxisAlignment = CrossAxisAlignment.center,
     this.reserveBottomInset = true,
   });
@@ -130,19 +126,13 @@ class OnboardingHeroStep extends StatelessWidget {
           SizedBox(height: heroBottom),
           // The headline sits low, just above the button(s).
           Expanded(
-            child: Align(
-              alignment: Alignment.bottomCenter,
-              child: SingleChildScrollView(child: headline),
-            ),
+            child: Align(alignment: Alignment.bottomCenter, child: SingleChildScrollView(child: headline)),
           ),
           const SizedBox(height: OmiSpacing.xxl),
           ...buttons,
           SizedBox(
             height: belowButton,
-            child: Padding(
-              padding: const EdgeInsets.only(top: OmiSpacing.xs),
-              child: legal,
-            ),
+            child: Padding(padding: const EdgeInsets.only(top: OmiSpacing.xs), child: legal),
           ),
         ],
       ),
@@ -153,13 +143,8 @@ class OnboardingHeroStep extends StatelessWidget {
 /// The onboarding action button in the hero steps: the same 48pt pill as the other steps' Continue,
 /// coloured from [OnboardingHero.palette] so it inverts over the film.
 class OnboardingHeroButton extends StatelessWidget {
-  const OnboardingHeroButton({
-    super.key,
-    required this.label,
-    required this.onPressed,
-    this.icon,
-    this.outlined = false,
-  });
+  const OnboardingHeroButton(
+      {super.key, required this.label, required this.onPressed, this.icon, this.outlined = false});
 
   final String label;
   final VoidCallback onPressed;
@@ -174,15 +159,10 @@ class OnboardingHeroButton extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         if (icon != null) ...[
-          IconTheme(
-            data: IconThemeData(color: style.color, size: 20),
-            child: icon!,
-          ),
+          IconTheme(data: IconThemeData(color: style.color, size: 20), child: icon!),
           const SizedBox(width: OmiSpacing.xs),
         ],
-        Flexible(
-          child: Text(label, style: style, overflow: TextOverflow.ellipsis),
-        ),
+        Flexible(child: Text(label, style: style, overflow: TextOverflow.ellipsis)),
       ],
     );
     return SizedBox(

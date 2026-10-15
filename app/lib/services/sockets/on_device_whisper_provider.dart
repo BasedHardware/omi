@@ -149,10 +149,7 @@ class OnDeviceWhisperProvider implements ISttProvider {
       offset += audioDurationSeconds(chunk);
     }
     return SttTranscriptionResult(
-      segments: segments,
-      rawText: text.join(' '),
-      audioEndSeconds: audioOffsetSeconds + normalized.duration,
-    );
+        segments: segments, rawText: text.join(' '), audioEndSeconds: audioOffsetSeconds + normalized.duration);
   }
 
   @visibleForTesting
@@ -185,7 +182,10 @@ class OnDeviceWhisperProvider implements ISttProvider {
         cleanText = cleanText.replaceAll(RegExp(r'\(.*?\)'), '').trim();
 
         final duration = audioDurationSeconds(audioData);
-        final filteredText = _qualityGate.filter(cleanText, audioData: audioData);
+        final filteredText = _qualityGate.filter(
+          cleanText,
+          audioData: audioData,
+        );
         if (filteredText == null) {
           CustomSttLogService.instance.warning('OnDeviceWhisper', 'Dropped low-quality local transcript: $cleanText');
           return null;

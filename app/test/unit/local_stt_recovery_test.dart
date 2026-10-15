@@ -42,16 +42,12 @@ class SpeechThenSilence extends OnDeviceWhisperProvider {
   SpeechThenSilence() : super(modelPath: '/unused');
   final offsets = <double>[];
   @override
-  Future<SttTranscriptionResult?> transcribeChunk(
-    Uint8List bytes, {
-    double audioOffsetSeconds = 0,
-    String? language,
-  }) async {
+  Future<SttTranscriptionResult?> transcribeChunk(Uint8List bytes,
+      {double audioOffsetSeconds = 0, String? language}) async {
     offsets.add(audioOffsetSeconds);
     return offsets.length == 1
         ? SttTranscriptionResult(
-            segments: [SttSegment(text: 'speech', start: audioOffsetSeconds, end: audioOffsetSeconds + 30)],
-          )
+            segments: [SttSegment(text: 'speech', start: audioOffsetSeconds, end: audioOffsetSeconds + 30)])
         : null;
   }
 }
@@ -67,9 +63,8 @@ class PausedSpeech implements ISttProvider, RecoverableLocalSttProvider {
     offsets.add(audioOffsetSeconds);
     final seconds = PassThroughTranscoder().sourceSeconds(bytes);
     return SttTranscriptionResult(
-      audioEndSeconds: audioOffsetSeconds + seconds,
-      segments: [SttSegment(text: 'recovered', start: audioOffsetSeconds, end: audioOffsetSeconds + seconds)],
-    );
+        audioEndSeconds: audioOffsetSeconds + seconds,
+        segments: [SttSegment(text: 'recovered', start: audioOffsetSeconds, end: audioOffsetSeconds + seconds)]);
   }
 
   @override
@@ -100,13 +95,9 @@ void main() {
       final provider = PausedSpeech();
       final listener = Listener();
       final socket = PurePollingSocket(
-        config: AudioPollingConfig(
-          minBufferSizeBytes: 1,
-          maxBufferBytes: rate * 2 * 2,
-          transcoder: PcmToWavTranscoder(sampleRate: rate),
-        ),
-        sttProvider: provider,
-      );
+          config: AudioPollingConfig(
+              minBufferSizeBytes: 1, maxBufferBytes: rate * 2 * 2, transcoder: PcmToWavTranscoder(sampleRate: rate)),
+          sttProvider: provider);
       socket.setListener(listener);
       await socket.connect();
       socket.setAudioOffset(10);
@@ -139,12 +130,11 @@ void main() {
       await SharedPreferencesUtil().saveCustomSttConfig(config);
       final probed = <String>[];
       final service = FreemiumTranscriptionService.testing(
-        iosOverride: true,
-        appleReadinessReader: (language) async {
-          probed.add(language);
-          return AppleSpeechReadiness('speech_analyzer', language == 'en' ? 'ready' : 'unavailable');
-        },
-      );
+          iosOverride: true,
+          appleReadinessReader: (language) async {
+            probed.add(language);
+            return AppleSpeechReadiness('speech_analyzer', language == 'en' ? 'ready' : 'unavailable');
+          });
       final resolver = SttModeResolver(flagReader: () => false, readinessReader: service.checkReadiness);
       final decision = await resolver.decide(persistedCustomStt: config, codec: BleAudioCodec.pcm16);
       expect(probed, [configured]);
@@ -174,9 +164,8 @@ void main() {
   });
   test('actual malformed-input provider path pauses polling and retains frames', () async {
     final socket = PurePollingSocket(
-      config: const AudioPollingConfig(minBufferSizeBytes: 1),
-      sttProvider: OnDeviceWhisperProvider(modelPath: '/unused'),
-    );
+        config: const AudioPollingConfig(minBufferSizeBytes: 1),
+        sttProvider: OnDeviceWhisperProvider(modelPath: '/unused'));
     final listener = Listener();
     socket.setListener(listener);
     await socket.connect();
@@ -206,21 +195,17 @@ void main() {
         calls++;
         if (rollback) {
           throw PlatformException(
-            code: denied == 'permission_denied' ? 'UNAUTHORIZED' : 'UNAVAILABLE',
-            details: {'status': denied},
-          );
+              code: denied == 'permission_denied' ? 'UNAUTHORIZED' : 'UNAVAILABLE', details: {'status': denied});
         }
         return 'We are testing local speech today.';
       });
       final provider = OnDeviceAppleProvider(useSpeechAnalyzer: () async => !rollback);
       final service = FreemiumTranscriptionService.testing(
-        iosOverride: true,
-        appleReadinessReader: (lang) => OnDeviceAppleProvider.readiness(lang, useSpeechAnalyzer: () async => !rollback),
-      );
+          iosOverride: true,
+          appleReadinessReader: (lang) =>
+              OnDeviceAppleProvider.readiness(lang, useSpeechAnalyzer: () async => !rollback));
       final socket = PurePollingSocket(
-        config: AudioPollingConfig(minBufferSizeBytes: 1, transcoder: PcmToWavTranscoder()),
-        sttProvider: provider,
-      );
+          config: AudioPollingConfig(minBufferSizeBytes: 1, transcoder: PcmToWavTranscoder()), sttProvider: provider);
       final listener = Listener();
       socket.setListener(listener);
       try {
@@ -232,14 +217,10 @@ void main() {
         debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
         final resolver = SttModeResolver(flagReader: () => false, readinessReader: service.checkReadiness);
         final decision = await resolver.decide(
-          persistedCustomStt: const CustomSttConfig(provider: SttProvider.onDeviceWhisper),
-          codec: BleAudioCodec.pcm16,
-        );
-        expect(
-          decision.blockSocket,
-          isTrue,
-          reason: 'today’s persisted free fallback checks readiness even with plan flag off',
-        );
+            persistedCustomStt: const CustomSttConfig(provider: SttProvider.onDeviceWhisper),
+            codec: BleAudioCodec.pcm16);
+        expect(decision.blockSocket, isTrue,
+            reason: 'today’s persisted free fallback checks readiness even with plan flag off');
         expect(decision.allowanceOnDevice, isTrue);
         debugDefaultTargetPlatformOverride = null;
         final pcm = Uint8List(32000);

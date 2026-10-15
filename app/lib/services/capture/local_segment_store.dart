@@ -54,16 +54,15 @@ class LocalSegmentStore {
     // The rows are already canonical, and hashing them yields the same digest
     // as hashing the segments ([transcriptSha256FromMaps] canonicalizes again).
     final encoded = await offUiIsolate(
-      () => jsonEncode(<String, Object?>{
-        'encoding_version': transcriptHashEncodingVersion,
-        'session_id': sessionId,
-        'transcript_sha256': transcriptSha256FromMaps(rows),
-        'segments': rows,
-      }),
-      size: rows.length,
-      threshold: backgroundEncodeThreshold,
-      debugName: 'live_segments_encode',
-    );
+        () => jsonEncode(<String, Object?>{
+              'encoding_version': transcriptHashEncodingVersion,
+              'session_id': sessionId,
+              'transcript_sha256': transcriptSha256FromMaps(rows),
+              'segments': rows,
+            }),
+        size: rows.length,
+        threshold: backgroundEncodeThreshold,
+        debugName: 'live_segments_encode');
     await tmp.writeAsString(encoded);
     if (await file.exists()) {
       await file.delete();

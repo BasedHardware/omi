@@ -10,12 +10,7 @@ import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 
 Wal _wal(int timerStart) => Wal(
-  timerStart: timerStart,
-  codec: BleAudioCodec.opus,
-  seconds: 60,
-  status: WalStatus.miss,
-  storage: WalStorage.disk,
-);
+    timerStart: timerStart, codec: BleAudioCodec.opus, seconds: 60, status: WalStatus.miss, storage: WalStorage.disk);
 
 /// The WAL index is rewritten whole on every save and grows with every kept
 /// recording, so its save path must stay off the UI isolate's critical path
@@ -72,10 +67,8 @@ void main() {
     final onDisk = jsonDecode(walFile.readAsStringSync()) as Map<String, dynamic>;
     expect((onDisk['wals'] as List).map((w) => w['timer_start']), [3000], reason: 'last write wins, as before');
     final backup = jsonDecode(backupFile.readAsStringSync()) as Map<String, dynamic>;
-    expect((backup['wals'] as List).map((w) => w['timer_start']), [
-      1000,
-      2000,
-    ], reason: 'the newest replaced snapshot is the backup');
+    expect((backup['wals'] as List).map((w) => w['timer_start']), [1000, 2000],
+        reason: 'the newest replaced snapshot is the backup');
     await Future.wait([first, newest]);
   });
 

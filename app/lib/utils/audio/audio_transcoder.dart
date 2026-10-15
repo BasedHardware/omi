@@ -84,7 +84,7 @@ class OpusToWavTranscoder implements IAudioTranscoder {
   final SimpleOpusDecoder _decoder;
 
   OpusToWavTranscoder({this.sampleRate = 16000, this.channels = 1})
-    : _decoder = SimpleOpusDecoder(sampleRate: sampleRate, channels: channels);
+      : _decoder = SimpleOpusDecoder(sampleRate: sampleRate, channels: channels);
 
   @override
   Uint8List transcode(Uint8List opusData) {
@@ -157,7 +157,7 @@ class OpusToRawPcmTranscoder implements IAudioTranscoder {
   final SimpleOpusDecoder _decoder;
 
   OpusToRawPcmTranscoder({this.sampleRate = 16000, this.channels = 1})
-    : _decoder = SimpleOpusDecoder(sampleRate: sampleRate, channels: channels);
+      : _decoder = SimpleOpusDecoder(sampleRate: sampleRate, channels: channels);
 
   @override
   Uint8List transcode(Uint8List opusData) {
@@ -208,7 +208,7 @@ class OpusFramesToWavTranscoder implements IAudioTranscoder {
   final SimpleOpusDecoder _decoder;
 
   OpusFramesToWavTranscoder({this.sampleRate = 16000, this.channels = 1, this.frameSizeBytes = 80})
-    : _decoder = SimpleOpusDecoder(sampleRate: sampleRate, channels: channels);
+      : _decoder = SimpleOpusDecoder(sampleRate: sampleRate, channels: channels);
 
   @override
   Uint8List transcode(Uint8List opusFramesData) {
@@ -334,8 +334,8 @@ double opusPacketSeconds(Uint8List packet) {
   final milliseconds = toc & 128 != 0
       ? 2.5 * (1 << size)
       : toc & 96 == 96
-      ? (toc & 8 != 0 ? 20.0 : 10.0)
-      : (size == 3 ? 60.0 : 10.0 * (1 << size));
+          ? (toc & 8 != 0 ? 20.0 : 10.0)
+          : (size == 3 ? 60.0 : 10.0 * (1 << size));
   final duration = frames * milliseconds / 1000;
   return duration <= 0.12 ? duration : 0;
 }

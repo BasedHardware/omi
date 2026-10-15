@@ -21,9 +21,11 @@ import 'guided_voice_controller.dart';
 import 'guided_voice_requests.dart';
 
 class DeviceGuidedVoiceIO implements GuidedVoiceIO, GuidedVoiceExperienceIO {
-  DeviceGuidedVoiceIO({Future<Memory?> Function(String, String, String)? createMemoryRequest, IMicRecorderService? mic})
-    : _createMemoryRequest = createMemoryRequest ?? createMemoryServer,
-      _mic = mic;
+  DeviceGuidedVoiceIO({
+    Future<Memory?> Function(String, String, String)? createMemoryRequest,
+    IMicRecorderService? mic,
+  })  : _createMemoryRequest = createMemoryRequest ?? createMemoryServer,
+        _mic = mic;
 
   final Future<Memory?> Function(String, String, String) _createMemoryRequest;
   final IMicRecorderService? _mic;
@@ -58,8 +60,7 @@ class DeviceGuidedVoiceIO implements GuidedVoiceIO, GuidedVoiceExperienceIO {
     // Resolve the engine gate once here; the provider created in prepare()
     // reuses this exact choice instead of re-reading the flag per operation.
     final analyzer = Platform.isIOS ? await AppleSpeechAnalyzerGate.useNewEngine() : true;
-    final local =
-        Platform.isIOS &&
+    final local = Platform.isIOS &&
         await OnDeviceAppleProvider.isOnDeviceAvailable(_language, useSpeechAnalyzer: () async => analyzer);
     // A slow preflight may finish after recording has been allowed. Never
     // switch its engine after prepare selected the recognizer/cloud path.
@@ -72,20 +73,16 @@ class DeviceGuidedVoiceIO implements GuidedVoiceIO, GuidedVoiceExperienceIO {
 
   @override
   Future<String> ask(String question, List<String> savedAnswers) async {
-    return askGuidedPayoff(
-      question,
-      savedAnswers,
-      onAccepted: () {
-        PlatformManager.instance.analytics.chatMessageSent(
-          message: question,
-          includesFiles: false,
-          numberOfFiles: 0,
-          chatTargetId: 'omi',
-          isPersonaChat: false,
-          isVoiceInput: false,
-        );
-      },
-    );
+    return askGuidedPayoff(question, savedAnswers, onAccepted: () {
+      PlatformManager.instance.analytics.chatMessageSent(
+        message: question,
+        includesFiles: false,
+        numberOfFiles: 0,
+        chatTargetId: 'omi',
+        isPersonaChat: false,
+        isVoiceInput: false,
+      );
+    });
   }
 
   @override
@@ -156,8 +153,7 @@ class DeviceGuidedVoiceIO implements GuidedVoiceIO, GuidedVoiceExperienceIO {
   Future<String> transcribe(Uint8List pcm) async {
     String text;
     if (_local) {
-      text =
-          (await _recognizer!.transcribe(_wav(pcm), language: _language).timeout(const Duration(seconds: 25)))
+      text = (await _recognizer!.transcribe(_wav(pcm), language: _language).timeout(const Duration(seconds: 25)))
               ?.rawText ??
           '';
     } else {

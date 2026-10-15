@@ -86,9 +86,9 @@ abstract class ActivationCapture {
 
 class PipelineActivationCapture implements ActivationCapture {
   PipelineActivationCapture(BuildContext context, {this.expectDevice = false})
-    : _capture = context.read<CaptureProvider>(),
-      _conversations = context.read<ConversationProvider>(),
-      _home = context.read<HomeProvider>();
+      : _capture = context.read<CaptureProvider>(),
+        _conversations = context.read<ConversationProvider>(),
+        _home = context.read<HomeProvider>();
 
   /// The reader connected an Omi: wait for it to stream rather than taking over with the phone.
   final bool expectDevice;
@@ -254,9 +254,8 @@ class PipelineActivationCapture implements ActivationCapture {
     File? file;
     try {
       final directory = await getTemporaryDirectory();
-      file = await File(
-        '${directory.path}/omi-first-voice-${DateTime.now().millisecondsSinceEpoch}.wav',
-      ).writeAsBytes(WavBytes.fromPcm(pcm, sampleRate: 16000, numChannels: 1).asBytes());
+      file = await File('${directory.path}/omi-first-voice-${DateTime.now().millisecondsSinceEpoch}.wav')
+          .writeAsBytes(WavBytes.fromPcm(pcm, sampleRate: 16000, numChannels: 1).asBytes());
       if (await uploadProfile(file).timeout(const Duration(seconds: 45))) {
         SharedPreferencesUtil().hasSpeakerProfile = true;
         _home.setSpeakerProfile(true);

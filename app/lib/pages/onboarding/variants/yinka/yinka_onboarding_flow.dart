@@ -56,7 +56,7 @@ class _YinkaOnboardingFlowState extends State<YinkaOnboardingFlow> {
     kPermissionsPage,
     kPrimaryLanguagePage,
     kConnectOmiPage,
-    kActivationPage,
+    kActivationPage
   ];
 
   late int _index;
@@ -241,8 +241,10 @@ class _StepTransition extends StatelessWidget {
       reverseDuration: reduce ? Duration.zero : const Duration(milliseconds: 260),
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeInCubic,
-      layoutBuilder: (current, previous) =>
-          Stack(fit: StackFit.expand, children: [...previous, if (current != null) current]),
+      layoutBuilder: (current, previous) => Stack(
+        fit: StackFit.expand,
+        children: [...previous, if (current != null) current],
+      ),
       transitionBuilder: (child, animation) {
         final incoming = child.key == ValueKey(index);
         // An outgoing child runs its animation backwards, ending at its begin offset.

@@ -5,10 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/ui/ui.dart';
 
 const _cardShadow = BoxShadow(
-  color: Color(0x14000000),
-  blurRadius: 24,
-  offset: Offset(0, 8),
-); // omi-ux-allow: color-literal -- soft card shadow
+    color: Color(0x14000000), blurRadius: 24, offset: Offset(0, 8)); // omi-ux-allow: color-literal -- soft card shadow
 
 /// Runs [builder] with a 0→1 value once over [duration] (instant under Reduce Motion).
 class OneShot extends StatefulWidget {
@@ -55,9 +52,9 @@ double segment(double t, double start, double end, [Curve curve = Curves.easeOut
 
 /// Fades and lifts [child] in as [t] goes 0→1.
 Widget rise(double t, Widget child, {double distance = 10}) => Opacity(
-  opacity: t,
-  child: Transform.translate(offset: Offset(0, (1 - t) * distance), child: child),
-);
+      opacity: t,
+      child: Transform.translate(offset: Offset(0, (1 - t) * distance), child: child),
+    );
 
 /// A note card in the app's style: optional emoji + title, then body text.
 class NoteCard extends StatelessWidget {
@@ -85,7 +82,10 @@ class NoteCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (title != null)
-            Text(emoji == null || emoji!.isEmpty ? title! : '${emoji!}  ${title!}', style: OmiType.headline),
+            Text(
+              emoji == null || emoji!.isEmpty ? title! : '${emoji!}  ${title!}',
+              style: OmiType.headline,
+            ),
           if (title != null && (body != null || child != null)) const SizedBox(height: OmiSpacing.xs),
           if (body != null) Text(body!, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.4)),
           if (child != null) child!,
@@ -194,9 +194,7 @@ class ConfettiPainter extends CustomPainter {
       final w = 5 + random.nextDouble() * 4;
       canvas.drawRRect(
         RRect.fromRectAndRadius(
-          Rect.fromCenter(center: Offset.zero, width: w, height: w * 1.8),
-          const Radius.circular(1.5),
-        ),
+            Rect.fromCenter(center: Offset.zero, width: w, height: w * 1.8), const Radius.circular(1.5)),
         paint,
       );
       canvas.restore();

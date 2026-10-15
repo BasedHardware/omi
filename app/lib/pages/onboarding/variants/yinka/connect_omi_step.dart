@@ -253,10 +253,10 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> with TickerProviderStat
         final String subtitle = provider.isConnected
             ? (provider.deviceName.isNotEmpty ? provider.deviceName : l10n.connected)
             : found
-            ? l10n.onboardingConnectTapToConnect
-            : cantFind
-            ? l10n.cantFindDeviceHint
-            : l10n.pairingDescOmi;
+                ? l10n.onboardingConnectTapToConnect
+                : cantFind
+                    ? l10n.cantFindDeviceHint
+                    : l10n.pairingDescOmi;
 
         return SafeArea(
           child: Padding(
@@ -364,10 +364,8 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> with TickerProviderStat
                   child: IgnorePointer(
                     ignoring: provider.isConnected || provider.isClicked,
                     child: _rise(
-                      _links,
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
+                        _links,
+                        Column(mainAxisSize: MainAxisSize.min, children: [
                           Text(
                             l10n.onboardingNoOmiYet,
                             style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
@@ -396,10 +394,8 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> with TickerProviderStat
                               ),
                             ],
                           ),
-                        ],
-                      ),
-                      distance: 8,
-                    ),
+                        ]),
+                        distance: 8),
                   ),
                 ),
               ],
@@ -453,9 +449,7 @@ class _ConnectedHalo extends StatelessWidget {
               ),
             SizedBox.square(
               dimension: diameter,
-              child: CustomPaint(
-                painter: _RingPainter(progress: ring, color: OmiColors.textPrimary),
-              ),
+              child: CustomPaint(painter: _RingPainter(progress: ring, color: OmiColors.textPrimary)),
             ),
             child!,
             Transform.translate(

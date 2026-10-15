@@ -259,9 +259,8 @@ class _OnboardingPermissionRow extends StatelessWidget {
                     denied: denied,
                     busy: busy,
                     // Notifications that are off are worth fixing (red); the rest are a caution (orange).
-                    deniedColor: permission == OnboardingPermission.notifications
-                        ? OmiColors.danger
-                        : OmiColors.warning,
+                    deniedColor:
+                        permission == OnboardingPermission.notifications ? OmiColors.danger : OmiColors.warning,
                   ),
                 ],
               ),

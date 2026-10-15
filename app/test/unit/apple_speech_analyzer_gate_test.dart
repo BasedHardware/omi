@@ -14,14 +14,11 @@ void main() {
 
   test('missing/false kill switch keeps improved engine on', () async {
     expect(
-      await AppleSpeechAnalyzerGate.useNewEngine(
-        readFlag: (key) async {
+        await AppleSpeechAnalyzerGate.useNewEngine(readFlag: (key) async {
           expect(key, 'mobile-speech-analyzer-disabled');
           return false;
-        },
-      ),
-      isTrue,
-    );
+        }),
+        isTrue);
   });
   test('true kill switch rolls back to SFSpeech', () async {
     expect(await AppleSpeechAnalyzerGate.useNewEngine(readFlag: (_) async => true), isFalse);
@@ -37,19 +34,15 @@ void main() {
         expect(call.arguments['language'], 'en');
         return true; // Either analyzer or legacy availability can satisfy this.
       });
-      expect(
-        await OnDeviceAppleProvider.isOnDeviceAvailable('en', isIOS: true, useSpeechAnalyzer: () async => enabled),
-        isTrue,
-      );
+      expect(await OnDeviceAppleProvider.isOnDeviceAvailable('en', isIOS: true, useSpeechAnalyzer: () async => enabled),
+          isTrue);
     });
   }
   for (final available in [false, null]) {
     test('native unavailable or unsupported reports $available safely', () async {
       messenger.setMockMethodCallHandler(channel, (_) async => available);
-      expect(
-        await OnDeviceAppleProvider.isOnDeviceAvailable('zz', isIOS: true, useSpeechAnalyzer: () async => true),
-        isFalse,
-      );
+      expect(await OnDeviceAppleProvider.isOnDeviceAvailable('zz', isIOS: true, useSpeechAnalyzer: () async => true),
+          isFalse);
     });
   }
   test('availability channel failure and non-iOS are unavailable', () async {

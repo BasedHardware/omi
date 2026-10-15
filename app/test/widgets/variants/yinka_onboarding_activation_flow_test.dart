@@ -248,9 +248,8 @@ void main() {
     await tester.pump(const Duration(seconds: 3)); // Lets the celebration finish.
   });
 
-  testWidgets('slow notes: after the deadline the reader moves on with their words, told notes are coming', (
-    tester,
-  ) async {
+  testWidgets('slow notes: after the deadline the reader moves on with their words, told notes are coming',
+      (tester) async {
     final run = await pump(tester, capture: _SlowCapture.new);
     await tester.pump(const Duration(seconds: 4));
     run.capture.live.value = 'Lunch with Sam today';

@@ -232,11 +232,8 @@ void main() {
     final adapter = _FlagAdapter();
     AnalyticsManager.configure(adapter);
     await AnalyticsManager.init();
-    expect(
-      AnalyticsManager().recordFeatureFlagExposure('paywall-variant', 'control'),
-      isFalse,
-      reason: 'nothing to attribute to before an identity settles',
-    );
+    expect(AnalyticsManager().recordFeatureFlagExposure('paywall-variant', 'control'), isFalse,
+        reason: 'nothing to attribute to before an identity settles');
 
     await settleIdentity(adapter, 'user-a');
     expect(AnalyticsManager().recordFeatureFlagExposure('paywall-variant', 'control'), isTrue);
@@ -244,11 +241,8 @@ void main() {
     expect(AnalyticsManager().recordFeatureFlagExposure('paywall-variant', 'outline'), isTrue);
 
     await settleIdentity(adapter, 'user-b');
-    expect(
-      AnalyticsManager().recordFeatureFlagExposure('paywall-variant', 'control'),
-      isTrue,
-      reason: 'a different account is exposed in its own right',
-    );
+    expect(AnalyticsManager().recordFeatureFlagExposure('paywall-variant', 'control'), isTrue,
+        reason: 'a different account is exposed in its own right');
   });
 
   test('a failed flag reload is reported as false even when a stale flag reads enabled', () async {

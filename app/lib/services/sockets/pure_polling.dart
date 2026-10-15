@@ -201,10 +201,8 @@ class PurePollingSocket implements IPureSocket {
         if (result.segments.isNotEmpty) {
           _audioOffsetSeconds = result.audioEndSeconds ?? result.segments.last.end;
         }
-        final segmentsJson = result.segments
-            .where((s) => s.text.trim().isNotEmpty)
-            .map((s) => s.toTranscriptSegmentJson())
-            .toList();
+        final segmentsJson =
+            result.segments.where((s) => s.text.trim().isNotEmpty).map((s) => s.toTranscriptSegmentJson()).toList();
         if (segmentsJson.isNotEmpty) {
           onMessage(jsonEncode(segmentsJson));
         }

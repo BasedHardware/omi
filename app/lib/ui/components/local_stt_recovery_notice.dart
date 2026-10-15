@@ -9,15 +9,14 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// A local setup problem leaves capture and its WAL active. Reuses existing
 /// fallback copy and offers permission/settings plus an explicit retained retry.
 class LocalSttRecoveryNotice extends StatefulWidget {
-  const LocalSttRecoveryNotice({
-    super.key,
-    required this.failure,
-    required this.onRetry,
-    required this.onSetup,
-    this.language,
-    this.preparePermission,
-    this.openSettings,
-  });
+  const LocalSttRecoveryNotice(
+      {super.key,
+      required this.failure,
+      required this.onRetry,
+      required this.onSetup,
+      this.language,
+      this.preparePermission,
+      this.openSettings});
   final LocalSttFailure failure;
   final String? language;
   final Future<void> Function() onRetry;
@@ -41,12 +40,11 @@ class _LocalSttRecoveryNoticeState extends State<LocalSttRecoveryNotice> {
 
   Future<void> _setup() async {
     if (widget.failure.code == 'permission_required') {
-      final ready =
-          await (widget.preparePermission ??
-              () async => (await OnDeviceAppleProvider.readiness(
-                FreemiumTranscriptionService.effectiveLanguage(language: widget.language),
-                prepare: true,
-              )).ready)();
+      final ready = await (widget.preparePermission ??
+          () async => (await OnDeviceAppleProvider.readiness(
+                  FreemiumTranscriptionService.effectiveLanguage(language: widget.language),
+                  prepare: true))
+              .ready)();
       if (ready) {
         await _retry();
         return;
@@ -63,33 +61,23 @@ class _LocalSttRecoveryNoticeState extends State<LocalSttRecoveryNotice> {
   Widget build(BuildContext context) {
     final permission = widget.failure.code.startsWith('permission') || widget.failure.code == 'unauthorized';
     return Semantics(
-      liveRegion: true,
-      child: Padding(
-        padding: const EdgeInsets.all(OmiSpacing.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        liveRegion: true,
+        child: Padding(
+          padding: const EdgeInsets.all(OmiSpacing.md),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(context.l10n.transcriptionUnavailableRecordingSaved, style: OmiType.footnote),
             const SizedBox(height: OmiSpacing.sm),
-            Wrap(
-              spacing: OmiSpacing.sm,
-              runSpacing: OmiSpacing.sm,
-              children: [
-                OmiButton.secondary(
+            Wrap(spacing: OmiSpacing.sm, runSpacing: OmiSpacing.sm, children: [
+              OmiButton.secondary(
                   key: const ValueKey('local_stt_setup'),
                   label: permission ? context.l10n.openSettings : context.l10n.setupOnDevice,
-                  onPressed: _busy ? null : _setup,
-                ),
-                OmiButton.secondary(
+                  onPressed: _busy ? null : _setup),
+              OmiButton.secondary(
                   key: const ValueKey('local_stt_retry'),
                   label: context.l10n.tryAgain,
-                  onPressed: _busy ? null : _retry,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
+                  onPressed: _busy ? null : _retry),
+            ]),
+          ]),
+        ));
   }
 }

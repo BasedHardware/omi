@@ -53,8 +53,6 @@ class WhisperPcm {
       pcm.setInt16(i * 2, value.round().clamp(-32768, 32767), Endian.little);
     }
     return WhisperPcm(
-      WavBytes.fromPcm(pcm.buffer.asUint8List(), sampleRate: 16000, numChannels: 1).asBytes(),
-      duration,
-    );
+        WavBytes.fromPcm(pcm.buffer.asUint8List(), sampleRate: 16000, numChannels: 1).asBytes(), duration);
   }
 }

@@ -17,20 +17,21 @@ PostHogAnalyticsAdapter _adapter(
   String? distinctId = 'u',
   DateTime Function()? clock,
   Map<String, Object?> Function()? personProperties,
-}) => PostHogAnalyticsAdapter(
-  apiKey: 'phc_test',
-  host: 'https://ph.test',
-  client: client,
-  distinctIdReader: () async => distinctId,
-  personPropertiesForFlags: personProperties,
-  clock: clock,
-);
+}) =>
+    PostHogAnalyticsAdapter(
+      apiKey: 'phc_test',
+      host: 'https://ph.test',
+      client: client,
+      distinctIdReader: () async => distinctId,
+      personPropertiesForFlags: personProperties,
+      clock: clock,
+    );
 
 MockClient _answering(Map<String, Object?> body, {int status = 200}) => MockClient((request) async {
-  expect(request.url.toString(), 'https://ph.test/decide/?v=3');
-  expect(jsonDecode(request.body), {'api_key': 'phc_test', 'distinct_id': 'u'});
-  return http.Response(jsonEncode(body), status);
-});
+      expect(request.url.toString(), 'https://ph.test/decide/?v=3');
+      expect(jsonDecode(request.body), {'api_key': 'phc_test', 'distinct_id': 'u'});
+      return http.Response(jsonEncode(body), status);
+    });
 
 void main() {
   test('person properties ride along with the fetch; blank ones are dropped', () async {
@@ -39,26 +40,22 @@ void main() {
       sent = jsonDecode(request.body);
       return http.Response(jsonEncode({'featureFlags': {}}), 200);
     });
-    expect(
-      await _adapter(client, personProperties: () => {'\$email': 'n@x.io', '\$name': ''}).reloadFeatureFlags(),
-      isTrue,
-    );
+    expect(await _adapter(client, personProperties: () => {'\$email': 'n@x.io', '\$name': ''}).reloadFeatureFlags(),
+        isTrue);
     expect(sent, {
       'api_key': 'phc_test',
       'distinct_id': 'u',
-      'person_properties': {'\$email': 'n@x.io'},
+      'person_properties': {'\$email': 'n@x.io'}
     });
     expect(await _adapter(client, personProperties: () => {'\$email': ''}).reloadFeatureFlags(), isTrue);
     expect(sent, {'api_key': 'phc_test', 'distinct_id': 'u'});
   });
 
   test('a successful fetch verifies the flags and the reads use them', () async {
-    final adapter = _adapter(
-      _answering({
-        'featureFlags': {'onboarding-webview': true, 'paywall-variant': 'outline', 'off-flag': false},
-        'featureFlagPayloads': {'onboarding-webview': '{"url": "https://x.example/onboarding"}'},
-      }),
-    );
+    final adapter = _adapter(_answering({
+      'featureFlags': {'onboarding-webview': true, 'paywall-variant': 'outline', 'off-flag': false},
+      'featureFlagPayloads': {'onboarding-webview': '{"url": "https://x.example/onboarding"}'},
+    }));
     expect(await adapter.reloadFeatureFlags(), isTrue);
     expect(await adapter.isFeatureEnabled('onboarding-webview'), isTrue);
     expect(await adapter.isFeatureEnabled('off-flag'), isFalse);
@@ -70,14 +67,12 @@ void main() {
 
   test('a failed fetch is not a reload, and a stale enabled flag does not survive it', () async {
     var status = 200;
-    final client = MockClient(
-      (_) async => http.Response(
-        jsonEncode({
-          'featureFlags': {'onboarding-webview': true},
-        }),
-        status,
-      ),
-    );
+    final client = MockClient((_) async => http.Response(
+          jsonEncode({
+            'featureFlags': {'onboarding-webview': true}
+          }),
+          status,
+        ));
     final adapter = _adapter(client);
     expect(await adapter.reloadFeatureFlags(), isTrue);
     expect(await adapter.isFeatureEnabled('onboarding-webview'), isTrue);
@@ -90,20 +85,16 @@ void main() {
 
   test('network errors, bad bodies and a missing distinct id all report no reload', () async {
     expect(
-      await _adapter(MockClient((_) async => throw const SocketException('offline'))).reloadFeatureFlags(),
-      isFalse,
-    );
+        await _adapter(MockClient((_) async => throw const SocketException('offline'))).reloadFeatureFlags(), isFalse);
     expect(await _adapter(MockClient((_) async => http.Response('not json', 200))).reloadFeatureFlags(), isFalse);
     expect(await _adapter(MockClient((_) async => http.Response('{"status":1}', 200))).reloadFeatureFlags(), isFalse);
     expect(await _adapter(_answering({'featureFlags': {}}), distinctId: null).reloadFeatureFlags(), isFalse);
   });
 
   test('an identity change drops the verified snapshot', () async {
-    final adapter = _adapter(
-      _answering({
-        'featureFlags': {'onboarding-webview': true},
-      }),
-    );
+    final adapter = _adapter(_answering({
+      'featureFlags': {'onboarding-webview': true}
+    }));
     expect(await adapter.reloadFeatureFlags(), isTrue);
     expect(adapter.hasVerifiedFlags, isTrue);
     adapter.identify(userId: 'someone-else');
@@ -117,11 +108,10 @@ void main() {
       requests++;
       if (requests == 1) return pendingA.future; // A's request hangs
       return http.Response(
-        jsonEncode({
-          'featureFlags': {'only-b': true},
-        }),
-        200,
-      );
+          jsonEncode({
+            'featureFlags': {'only-b': true}
+          }),
+          200);
     });
     final adapter = _adapter(client);
     final reloadA = adapter.reloadFeatureFlags();
@@ -129,14 +119,11 @@ void main() {
     expect(await adapter.reloadFeatureFlags(), isTrue);
     expect(await adapter.isFeatureEnabled('only-b'), isTrue);
 
-    pendingA.complete(
-      http.Response(
+    pendingA.complete(http.Response(
         jsonEncode({
-          'featureFlags': {'only-a': true},
+          'featureFlags': {'only-a': true}
         }),
-        200,
-      ),
-    );
+        200));
     expect(await reloadA, isFalse, reason: 'started under A, finished under B');
     expect(await adapter.isFeatureEnabled('only-a'), isFalse);
     expect(await adapter.isFeatureEnabled('only-b'), isTrue);
@@ -145,11 +132,10 @@ void main() {
   test('a verified fetch outranks the SDK only briefly; later reads fall through to the SDK cache', () async {
     var now = DateTime(2026, 10, 14, 20);
     final adapter = _adapter(
-      _answering({
-        'featureFlags': {'paywall-variant': 'outline'},
-      }),
-      clock: () => now,
-    );
+        _answering({
+          'featureFlags': {'paywall-variant': 'outline'}
+        }),
+        clock: () => now);
     expect(await adapter.reloadFeatureFlags(), isTrue);
     expect(await adapter.getFeatureFlagVariant('paywall-variant'), 'outline');
     expect(adapter.hasVerifiedFlags, isTrue);

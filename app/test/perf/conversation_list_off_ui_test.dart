@@ -10,23 +10,22 @@ import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 ServerConversation _conversation(int i) => ServerConversation(
-  id: 'conv-$i',
-  createdAt: DateTime.utc(2026, 9, 16, 9).subtract(Duration(minutes: i)),
-  structured: Structured('Conversation $i — café ✓', 'Summary $i with ünïcödé.', emoji: '🧠', category: 'other'),
-  transcriptSegments: [
-    for (var j = 0; j < 20; j++)
-      TranscriptSegment(
-        id: 'seg-$i-$j',
-        text: 'Transcript line $j of conversation $i — naïve façade.',
-        speaker: 'SPEAKER_0${j % 2}',
-        isUser: j.isEven,
-        personId: null,
-        start: j * 2.0,
-        end: j * 2.0 + 1,
-        translations: [],
-      ),
-  ],
-);
+      id: 'conv-$i',
+      createdAt: DateTime.utc(2026, 9, 16, 9).subtract(Duration(minutes: i)),
+      structured: Structured('Conversation $i — café ✓', 'Summary $i with ünïcödé.', emoji: '🧠', category: 'other'),
+      transcriptSegments: [
+        for (var j = 0; j < 20; j++)
+          TranscriptSegment(
+              id: 'seg-$i-$j',
+              text: 'Transcript line $j of conversation $i — naïve façade.',
+              speaker: 'SPEAKER_0${j % 2}',
+              isUser: j.isEven,
+              personId: null,
+              start: j * 2.0,
+              end: j * 2.0 + 1,
+              translations: [])
+      ],
+    );
 
 /// The conversation list is parsed on resume and re-cached on every refresh.
 /// Both paths must give identical results on and off the UI isolate.
@@ -51,10 +50,9 @@ void main() {
     addTearDown(() => conversationListBackgroundParseBytes = previous);
     conversationListBackgroundParseBytes = 1;
     final viaIsolate = await offUiIsolate(
-      () => parseConversationListBody(jsonDecode(utf8.decode(body)) as List<dynamic>),
-      size: body.length,
-      threshold: conversationListBackgroundParseBytes,
-    );
+        () => parseConversationListBody(jsonDecode(utf8.decode(body)) as List<dynamic>),
+        size: body.length,
+        threshold: conversationListBackgroundParseBytes);
 
     expect(viaIsolate.map((c) => jsonEncode(c.toJson())), inline.map((c) => jsonEncode(c.toJson())));
     expect(inline.first.structured.title, 'Conversation 0 — café ✓');

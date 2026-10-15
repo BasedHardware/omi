@@ -18,25 +18,17 @@ void main() {
   test('parse: yinka is native, reid needs an https URL from a map or a JSON string', () {
     expect(OnboardingVariantGate.parse(variant: 'yinka'), OnboardingArm.yinka);
     expect(OnboardingVariantGate.parse(variant: ' yinka ', payload: 'ignored'), OnboardingArm.yinka);
-    expect(
-      OnboardingVariantGate.parse(variant: 'reid', payload: {'url': 'https://x.example/onboarding'}).variant,
-      OnboardingVariant.reid,
-    );
-    expect(
-      OnboardingVariantGate.parse(variant: 'reid', payload: {'url': 'https://x.example/onboarding'}).webUrl,
-      Uri.parse('https://x.example/onboarding'),
-    );
-    expect(
-      OnboardingVariantGate.parse(variant: 'reid', payload: '{"url":"https://x.example/o"}').webUrl,
-      Uri.parse('https://x.example/o'),
-    );
+    expect(OnboardingVariantGate.parse(variant: 'reid', payload: {'url': 'https://x.example/onboarding'}).variant,
+        OnboardingVariant.reid);
+    expect(OnboardingVariantGate.parse(variant: 'reid', payload: {'url': 'https://x.example/onboarding'}).webUrl,
+        Uri.parse('https://x.example/onboarding'));
+    expect(OnboardingVariantGate.parse(variant: 'reid', payload: '{"url":"https://x.example/o"}').webUrl,
+        Uri.parse('https://x.example/o'));
     expect(OnboardingVariantGate.parse(variant: 'reid', payload: {'url': 'http://x.example'}), OnboardingArm.control);
     expect(OnboardingVariantGate.parse(variant: 'reid', payload: {}), OnboardingArm.control);
     expect(OnboardingVariantGate.parse(variant: 'reid', payload: 'garbage'), OnboardingArm.control);
     expect(
-      OnboardingVariantGate.parse(variant: 'control', payload: {'url': 'https://x.example'}),
-      OnboardingArm.control,
-    );
+        OnboardingVariantGate.parse(variant: 'control', payload: {'url': 'https://x.example'}), OnboardingArm.control);
     expect(OnboardingVariantGate.parse(variant: 'something-else'), OnboardingArm.control);
     expect(OnboardingVariantGate.parse(variant: null), OnboardingArm.control);
   });
@@ -91,13 +83,11 @@ void main() {
 
   test('flag read error -> native (fail closed)', () async {
     expect(
-      await OnboardingVariantGate.resolve(
-        settledIdentity: () => 'u',
-        reload: () async => true,
-        readVariant: (_) => Future.error(StateError('no sdk')),
-      ),
-      OnboardingArm.control,
-    );
+        await OnboardingVariantGate.resolve(
+            settledIdentity: () => 'u',
+            reload: () async => true,
+            readVariant: (_) => Future.error(StateError('no sdk'))),
+        OnboardingArm.control);
   });
 
   test('waits for the identity to settle and reloads flags before the first read', () async {
@@ -152,10 +142,8 @@ void main() {
     expect(arm, OnboardingArm.yinka);
     expect(reads, 1);
     // The warm-up is consumed: the next resolve is a cold read again.
-    expect(
-      await OnboardingVariantGate.resolve(settledIdentity: () => null, identityWait: Duration.zero),
-      OnboardingArm.control,
-    );
+    expect(await OnboardingVariantGate.resolve(settledIdentity: () => null, identityWait: Duration.zero),
+        OnboardingArm.control);
   });
 
   test('a warm-up for account A is discarded when the account changes before the tap', () async {

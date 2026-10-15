@@ -36,12 +36,8 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
       identical(other.usageProvider, usageProvider);
 
   @override
-  int get hashCode => Object.hash(
-    identityHashCode(conversationProvider),
-    identityHashCode(messageProvider),
-    identityHashCode(peopleProvider),
-    identityHashCode(usageProvider),
-  );
+  int get hashCode => Object.hash(identityHashCode(conversationProvider), identityHashCode(messageProvider),
+      identityHashCode(peopleProvider), identityHashCode(usageProvider));
 
   @override
   bool? get isOutOfCredits => usageProvider.isOutOfCredits;
@@ -105,13 +101,8 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
 
   @override
   Future<bool> assignSpeaker(String conversationId, List<String> segmentIds, String personId, {int? speakerId}) =>
-      assignBulkConversationTranscriptSegments(
-        conversationId,
-        segmentIds,
-        isUser: personId == 'user',
-        personId: personId == 'user' ? null : personId,
-        speakerId: speakerId,
-      );
+      assignBulkConversationTranscriptSegments(conversationId, segmentIds,
+          isUser: personId == 'user', personId: personId == 'user' ? null : personId, speakerId: speakerId);
 
   @override
   Future<void> refreshPeople() {

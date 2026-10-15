@@ -69,12 +69,9 @@ void main() {
 
   // The providers are app-wide singletons in production: hand them in by value so the test owns
   // their lifetime, as the app does.
-  Future<void> pump(
-    WidgetTester tester,
-    _FakeOnboarding onboarding, {
-    required void Function(OnboardingDeviceChoice) onDone,
-    Future<void> Function(BuildContext, {required String source})? openShop,
-  }) {
+  Future<void> pump(WidgetTester tester, _FakeOnboarding onboarding,
+      {required void Function(OnboardingDeviceChoice) onDone,
+      Future<void> Function(BuildContext, {required String source})? openShop}) {
     return tester.pumpWidget(
       MultiProvider(
         providers: [
@@ -85,9 +82,8 @@ void main() {
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: const [Locale('en')],
           home: Scaffold(
-            body: openShop == null
-                ? ConnectOmiStep(onDone: onDone)
-                : ConnectOmiStep(onDone: onDone, openShop: openShop),
+            body:
+                openShop == null ? ConnectOmiStep(onDone: onDone) : ConnectOmiStep(onDone: onDone, openShop: openShop),
           ),
         ),
       ),

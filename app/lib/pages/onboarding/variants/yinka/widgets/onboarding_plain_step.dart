@@ -4,15 +4,13 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/pages/onboarding/variants/yinka/widgets/onboarding_card.dart';
 
 const _thumbShadow = BoxShadow(
-  color: Color(0x26000000), // omi-ux-allow: color-literal -- switch thumb shadow
-  blurRadius: 4,
-  offset: Offset(0, 2),
-);
+    color: Color(0x26000000), // omi-ux-allow: color-literal -- switch thumb shadow
+    blurRadius: 4,
+    offset: Offset(0, 2));
 const _bangStyle = TextStyle(
-  fontSize: 15, // omi-ux-allow: font-size-literal -- "!" sized to the switch thumb
-  fontWeight: FontWeight.w800,
-  height: 1,
-);
+    fontSize: 15, // omi-ux-allow: font-size-literal -- "!" sized to the switch thumb
+    fontWeight: FontWeight.w800,
+    height: 1);
 
 /// A first-run step without artwork: the title (and an optional line under it) at the top, the
 /// step's [body] below, and the step's [action] pinned to the bottom, above the keyboard when it is
@@ -39,17 +37,10 @@ class OnboardingPlainStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final heading = <Widget>[
-      Semantics(
-        header: true,
-        child: Text(title, style: OmiType.title1, textAlign: TextAlign.center),
-      ),
+      Semantics(header: true, child: Text(title, style: OmiType.title1, textAlign: TextAlign.center)),
       if (subtitle != null) ...[
         const SizedBox(height: OmiSpacing.xs),
-        Text(
-          subtitle!,
-          style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-          textAlign: TextAlign.center,
-        ),
+        Text(subtitle!, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary), textAlign: TextAlign.center),
       ],
     ];
     final Widget content = Column(
@@ -119,12 +110,11 @@ class OnboardingPermissionToggle extends StatelessWidget {
     final track = on
         ? OmiColors.accent
         : denied
-        ? denyColor
-        : OmiColors.surface3;
+            ? denyColor
+            : OmiColors.surface3;
     // On the accent track the thumb takes the accent's contrast colour (white on black, black on white).
-    final thumb = on
-        ? OmiColors.onAccent
-        : const Color(0xFFFFFFFF); // omi-ux-allow: color-literal -- white thumb, as iOS
+    final thumb =
+        on ? OmiColors.onAccent : const Color(0xFFFFFFFF); // omi-ux-allow: color-literal -- white thumb, as iOS
     return AnimatedContainer(
       duration: motion.standard,
       curve: Curves.easeOut,
@@ -139,13 +129,20 @@ class OnboardingPermissionToggle extends StatelessWidget {
         child: Container(
           width: _thumb,
           height: _thumb,
-          decoration: BoxDecoration(color: thumb, shape: BoxShape.circle, boxShadow: const [_thumbShadow]),
+          decoration: BoxDecoration(
+            color: thumb,
+            shape: BoxShape.circle,
+            boxShadow: const [_thumbShadow],
+          ),
           child: Center(
             child: busy
                 ? const SizedBox(width: 14, height: 14, child: OmiSpinner(size: OmiSpinnerSize.small))
                 : denied && !on
-                ? Text('!', style: _bangStyle.copyWith(color: denyColor))
-                : null,
+                    ? Text(
+                        '!',
+                        style: _bangStyle.copyWith(color: denyColor),
+                      )
+                    : null,
           ),
         ),
       ),

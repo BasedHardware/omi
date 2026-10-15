@@ -23,10 +23,9 @@ class RecordingWhisper extends OnDeviceWhisperProvider {
     calls.add(duration);
     expect(language, 'de');
     if (silentTailChunks.contains(index)) return null;
-    return SttTranscriptionResult(
-      rawText: 'chunk',
-      segments: [SttSegment(text: 'chunk', start: audioOffsetSeconds, end: audioOffsetSeconds + duration)],
-    );
+    return SttTranscriptionResult(rawText: 'chunk', segments: [
+      SttSegment(text: 'chunk', start: audioOffsetSeconds, end: audioOffsetSeconds + duration),
+    ]);
   }
 }
 
