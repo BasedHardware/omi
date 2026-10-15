@@ -1,0 +1,220 @@
+"""Model-facing text: every value the chat model reads must describe itself.
+
+Tool results reach the model as prose, so nothing types a timestamp, an elapsed offset or a
+cut-off list. Whatever the text leaves implicit, the model fills in with a guess:
+
+- an unlabelled UTC wall clock reads as local time ("7:18 a.m." for a 2:18 PM event in
+  Asia/Ho_Chi_Minh; issues #4643 and #6214);
+- an elapsed transcript offset such as ``1:05:00`` reads as a time of day;
+- a silently truncated transcript reads as complete, so a missing detail becomes "not discussed".
+
+Every chat or MCP tool that renders a timestamp, duration, elapsed offset or truncation for a
+model goes through this module. ``tests/unit/test_model_text_contract.py`` rejects new ad-hoc
+``strftime``/``isoformat`` calls in model-facing modules.
+
+The timezone is resolved once per chat turn (``configurable['user_timezone']``, set by
+``chat_turn_configurable``) and read through :meth:`DisplayClock.for_turn`; tools must not
+re-read the stored user timezone per call.
+"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone, tzinfo
+from typing import Any, Mapping, Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+logger = logging.getLogger(__name__)
+
+ELAPSED_LEGEND = 'Transcript times like [+0:12:30] are elapsed time since the conversation started, not clock times.'
+
+
+@dataclass(frozen=True)
+class DisplayClock:
+    """The zone a model-facing timestamp is rendered in, plus the label that names it."""
+
+    tz: tzinfo
+    name: str
+
+    @classmethod
+    def utc(cls) -> 'DisplayClock':
+        return cls(timezone.utc, 'UTC')
+
+    @classmethod
+    def from_name(cls, name: Optional[str]) -> 'DisplayClock':
+        """Resolve an IANA zone name; missing or invalid names fall back to UTC (still labelled)."""
+        if name:
+            try:
+                return cls(ZoneInfo(name), name)
+            except (ZoneInfoNotFoundError, ValueError):
+                logger.warning('DisplayClock: invalid timezone name, falling back to UTC')
+        return cls.utc()
+
+    @classmethod
+    def for_uid(cls, uid: str) -> 'DisplayClock':
+        """Resolve from the stored user timezone. Only for callers without a chat turn (MCP, REST)."""
+        from database import notifications as notification_db
+
+        try:
+            return cls.from_name(notification_db.get_user_time_zone(uid))
+        except Exception as error:
+            logger.warning('DisplayClock.for_uid: timezone lookup failed error_type=%s', type(error).__name__)
+            return cls.utc()
+
+    @classmethod
+    def for_turn(cls, configurable: Optional[Mapping[str, Any]], uid: Optional[str] = None) -> 'DisplayClock':
+        """Resolve the clock for a chat turn.
+
+        Prefers the zone the turn already resolved (the same one the prompt's current-datetime
+        block uses), so tool output and prompt can never disagree. Falls back to the stored
+        timezone only when the turn did not carry one.
+        """
+        name = (configurable or {}).get('user_timezone')
+        if name:
+            return cls.from_name(str(name))
+        if uid:
+            return cls.for_uid(uid)
+        return cls.utc()
+
+    @property
+    def is_utc(self) -> bool:
+        return self.name == 'UTC'
+
+
+def to_datetime(value: Any) -> Optional[datetime]:
+    """Coerce a stored timestamp to an aware UTC-based datetime.
+
+    Accepts aware or naive datetimes (naive means UTC, never server-local), unix seconds and
+    ISO-8601 strings (``Z`` allowed). Returns ``None`` for anything else.
+    """
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(value, tz=timezone.utc)
+        except (OverflowError, OSError, ValueError):
+            return None
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace('Z', '+00:00'))
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+    return None
+
+
+def _offset_label(local: datetime) -> str:
+    offset = local.utcoffset() or timedelta(0)
+    total_minutes = int(offset.total_seconds() // 60)
+    sign = '+' if total_minutes >= 0 else '-'
+    hours, minutes = divmod(abs(total_minutes), 60)
+    return f'UTC{sign}{hours:02d}:{minutes:02d}'
+
+
+def _zone_label(local: datetime, clock: DisplayClock) -> str:
+    if clock.is_utc:
+        return 'UTC'
+    return f'{clock.name} ({_offset_label(local)})'
+
+
+def _day(local: datetime) -> str:
+    return f"{local.strftime('%a')} {local.day} {local.strftime('%b %Y')}"
+
+
+def format_instant(value: Any, clock: DisplayClock, *, unknown: str = 'unknown time') -> str:
+    """``Sat 26 Sep 2026, 14:18 Asia/Ho_Chi_Minh (UTC+07:00)``."""
+    dt = to_datetime(value)
+    if dt is None:
+        return unknown
+    local = dt.astimezone(clock.tz)
+    return f"{_day(local)}, {local.strftime('%H:%M')} {_zone_label(local, clock)}"
+
+
+def format_date(value: Any, clock: DisplayClock, *, unknown: str = 'unknown date') -> str:
+    """The calendar day in the user's zone: ``Sat 26 Sep 2026``.
+
+    The UTC date rolls over at a different instant than the user's, so a raw UTC date is a day
+    off for evening events west of Greenwich and morning events east of it.
+    """
+    dt = to_datetime(value)
+    if dt is None:
+        return unknown
+    return _day(dt.astimezone(clock.tz))
+
+
+def format_duration(seconds: Any) -> str:
+    """``2h 12m``, ``45m``, ``30s``. Negative or invalid input renders as ``unknown duration``."""
+    try:
+        total = int(round(float(seconds)))
+    except (TypeError, ValueError):
+        return 'unknown duration'
+    if total < 0:
+        return 'unknown duration'
+    hours, rem = divmod(total, 3600)
+    minutes, secs = divmod(rem, 60)
+    if hours:
+        return f'{hours}h {minutes}m' if minutes else f'{hours}h'
+    if minutes:
+        return f'{minutes}m'
+    return f'{secs}s'
+
+
+def format_span(start: Any, end: Any, clock: DisplayClock) -> str:
+    """A labelled interval with its precomputed end and duration, so the model does no arithmetic.
+
+    Same day: ``Sat 26 Sep 2026, 14:18–16:30 Asia/Ho_Chi_Minh (UTC+07:00), 2h 12m``.
+    Missing end: the start instant alone.
+    """
+    start_dt = to_datetime(start)
+    end_dt = to_datetime(end)
+    if start_dt is None:
+        return format_instant(end_dt, clock) if end_dt is not None else 'unknown time'
+    if end_dt is None or end_dt < start_dt:
+        return format_instant(start_dt, clock)
+    start_local = start_dt.astimezone(clock.tz)
+    end_local = end_dt.astimezone(clock.tz)
+    duration = format_duration((end_dt - start_dt).total_seconds())
+    same_label = _zone_label(start_local, clock) == _zone_label(end_local, clock)
+    if start_local.date() == end_local.date() and same_label:
+        return (
+            f"{_day(start_local)}, {start_local.strftime('%H:%M')}–{end_local.strftime('%H:%M')} "
+            f"{_zone_label(start_local, clock)}, {duration}"
+        )
+    if same_label:
+        return (
+            f"{_day(start_local)}, {start_local.strftime('%H:%M')} – {_day(end_local)}, "
+            f"{end_local.strftime('%H:%M')} {_zone_label(start_local, clock)}, {duration}"
+        )
+    return f'{format_instant(start_dt, clock)} – {format_instant(end_dt, clock)}, {duration}'
+
+
+def format_elapsed(seconds: Any) -> str:
+    """An offset from a conversation's start: ``+0:12:30``. Never a clock time.
+
+    Any output that uses this must also carry :data:`ELAPSED_LEGEND` (once per tool result).
+    """
+    try:
+        total = int(float(seconds))
+    except (TypeError, ValueError):
+        return '+?:??:??'
+    total = max(total, 0)
+    hours, rem = divmod(total, 3600)
+    minutes, secs = divmod(rem, 60)
+    return f'+{hours}:{minutes:02d}:{secs:02d}'
+
+
+def truncation_note(*, shown: int, total: int, unit: str, how_to_get_more: str) -> str:
+    """Say what was dropped and how to get it. Every cut of model-facing evidence needs one.
+
+    Without it the model treats a partial transcript or list as complete and reports absence.
+    Returns ``''`` when nothing was cut.
+    """
+    if total <= shown:
+        return ''
+    return (
+        f'[Showing {shown} of {total} {unit}; the remaining {total - shown} were omitted, not absent. '
+        f'{how_to_get_more}]'
+    )
