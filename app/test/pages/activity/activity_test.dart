@@ -246,6 +246,24 @@ void main() {
       expect(seen.hasNew.value, isFalse);
     });
 
+    test('a recap without a server creation time never lights the bell', () {
+      final (seen, _) = _seen(yesterday.millisecondsSinceEpoch);
+      final unstamped = DailySummary(
+        id: 'legacy',
+        date: '2026-10-15',
+        createdAt: DateTime.now(),
+        createdAtKnown: false,
+        headline: 'Recap legacy',
+        overview: '',
+        dayEmoji: '📊',
+        stats: DayStats(totalConversations: 1, actionItemsCount: 0),
+      );
+      seen.observe(ActivitySeen.recapArrivals([unstamped]));
+      expect(seen.hasNew.value, isFalse);
+      seen.observe(ActivitySeen.recapArrivals([unstamped, _recap('real', anHourAgo)]));
+      expect(seen.hasNew.value, isTrue);
+    });
+
     testWidgets('an empty feed still pulls to refresh', (tester) async {
       final (seen, _) = _seen(yesterday.millisecondsSinceEpoch);
       var recaps = <DailySummary>[];

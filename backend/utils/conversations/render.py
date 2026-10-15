@@ -302,7 +302,14 @@ def conversations_to_string(
         if conversation.structured.events:
             conversation_str += "Events:\n"
             for event in conversation.structured.events:
-                conversation_str += f"- {event.title} ({event.start} - {event.duration} minutes)\n"
+                # Same contract as Started/Finished above: every timestamp fed to the chat
+                # model must carry the user's local wall clock and tz label. str(event.start)
+                # printed raw UTC ('2026-09-26 07:18:00+00:00'), which the model read as the
+                # local a.m. time and stated the wrong time of day for the event.
+                formatted_event_start = (
+                    _as_utc(event.start).astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
+                )
+                conversation_str += f"- {event.title} ({formatted_event_start}, duration: {event.duration} minutes)\n"
 
         if use_transcript:
             if include_refs:
