@@ -15,6 +15,7 @@ from utils.batch_pipeline.artifacts import (
     UPLOAD_RETRY,
 )
 from utils.batch_pipeline.contracts import Priority, WorkItem
+from utils.batch_pipeline import upload_policy
 
 
 class ObjectClient:
@@ -213,3 +214,19 @@ def test_stale_registration_never_starts_upload(monkeypatch):
     with pytest.raises(TimeoutError, match='too old'):
         store.stage_audio(item(), b'audio')
     assert client.uploads == 0 and len(state.registered) == 1
+
+
+def test_slow_upload_stops_new_chunks_before_deletion_outbox_can_drop_the_name(monkeypatch):
+    clock = [0.0]
+    monkeypatch.setattr(upload_policy.time, 'monotonic', lambda: clock[0])
+    stream = upload_policy.UploadStream(b'synthetic audio')
+    assert stream.read(4) == b'synt'
+    clock[0] = upload_policy.UPLOAD_STREAM_SECONDS
+    with pytest.raises(TimeoutError, match='upload deadline'):
+        stream.read(4)
+    assert upload_policy.UPLOAD_PENDING_SECONDS > (
+        upload_policy.UPLOAD_STREAM_SECONDS
+        + upload_policy.UPLOAD_RETRY_SECONDS
+        + sum(upload_policy.UPLOAD_TIMEOUT)
+        + 30
+    )

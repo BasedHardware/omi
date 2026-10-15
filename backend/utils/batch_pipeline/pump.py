@@ -8,6 +8,7 @@ from typing import Any
 
 from utils.batch_pipeline.contracts import BatchWorker, HEARTBEAT_SECONDS, LeasedWork, PoolCapacity
 from utils.batch_pipeline.merge import OrderedMerge
+from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.compute_client import from_env as compute_client_from_env
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
@@ -51,6 +52,8 @@ class Pump:
         while not stop_event.is_set():
             try:
                 count = await self.run_once(stop_event=stop_event)
+            except FatalGpuError:
+                raise  # Fatal CUDA requires process replacement, never another pull.
             except Exception as error:
                 logger.error('event=batch_pump outcome=retry exception_type=%s', type(error).__name__)
                 count = 0
@@ -165,6 +168,21 @@ class Pump:
                 results = await asyncio.shield(compute)
             except asyncio.CancelledError:
                 results = await compute
+                raise
+            except FatalGpuError:
+                # The whole GPU flight is uncertain. Return every owned lease
+                # without charging an attempt; preserve its ordered position.
+                for lease in leases:
+                    try:
+                        await run_blocking(
+                            db_executor, self.scheduler.defer, lease.item.segment_id, lease.token, time.time()
+                        )
+                    except Exception as error:
+                        # A revoked owner / ambiguous DB response must not stop
+                        # us refunding siblings. Lease recovery remains durable.
+                        logger.error(
+                            'event=batch_gpu_restart outcome=lease_recovery exception_type=%s', type(error).__name__
+                        )
                 raise
             except Exception as error:
                 logger.error('event=batch_chain outcome=retry exception_type=%s', type(error).__name__)

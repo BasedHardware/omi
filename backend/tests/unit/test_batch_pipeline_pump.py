@@ -11,6 +11,7 @@ from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
 from utils.batch_pipeline import pump as module
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from utils.batch_pipeline.merge import OrderedMerge
+from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.scheduler import Scheduler
 
@@ -208,3 +209,28 @@ async def test_single_missed_heartbeat_retries_and_does_not_requeue_long_chain(m
     assert clock[0] >= 140  # The chain crossed the original 120s lease horizon.
     assert store.rows['jobs', 'long']['state'] == 'committed'
     assert store.rows['jobs', 'long']['attempt'] == 1
+
+
+@pytest.mark.asyncio
+async def test_fatal_gpu_restarts_without_fail_or_attempt_charge_then_fresh_worker_completes(monkeypatch):
+    class Poisoned:
+        def process_batch(self, items):
+            raise FatalGpuError('synthetic CUDA OOM')
+
+    store, queue, pump = setup(Poisoned())
+    queue.enqueue(item('second', capture=2), time.time())
+    monkeypatch.setattr(queue, 'fail', lambda *args: pytest.fail('fatal GPU must not fail a segment'))
+    for _ in range(7):
+        with pytest.raises(FatalGpuError):
+            await pump.run(asyncio.Event())
+        for segment in ('first', 'second'):
+            job = store.rows['jobs', segment]
+            assert job['state'] == 'retry' and job['attempt'] == 0
+            assert job['merge_pending'] and ('results', segment) not in store.rows
+            job['available_at'] = time.time() - 1
+        pump._last_recovery = float('-inf')
+    pump.worker = Worker()
+    assert await pump.run_once() == 2
+    assert store.rows['jobs', 'first']['state'] == 'committed'
+    assert store.rows['jobs', 'second']['state'] == 'committed'
+    assert store.rows['results', 'second']['previous_segment_id'] == 'first'

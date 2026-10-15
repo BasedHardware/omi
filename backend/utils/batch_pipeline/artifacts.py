@@ -8,7 +8,6 @@ callers must not substitute cached profile data for that transactional check.
 
 from dataclasses import dataclass
 import hashlib
-from io import BytesIO
 import json
 import os
 import re
@@ -21,15 +20,14 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from google.cloud.storage.retry import DEFAULT_RETRY
 
 from utils.batch_pipeline.contracts import WorkItem
+from utils.batch_pipeline.upload_policy import UPLOAD_CHUNK_BYTES, UPLOAD_TIMEOUT, UPLOAD_RETRY_SECONDS, UploadStream
 
 AUDIO_LIMIT = 7200 * 32000 + 4096
 RESULT_LIMIT = 8 * 1024 * 1024
 MAGIC = b'OMIBP1'
 # A one-hour PCM16 object is ~115 MB. Bound retransmission to 8 MiB chunks;
 # allow slow links and transient service failures without changing object name.
-UPLOAD_CHUNK_BYTES = 8 * 1024 * 1024
-UPLOAD_TIMEOUT = (10, 120)
-UPLOAD_RETRY = DEFAULT_RETRY.with_deadline(600)
+UPLOAD_RETRY = DEFAULT_RETRY.with_deadline(UPLOAD_RETRY_SECONDS)
 
 
 @dataclass(frozen=True)
@@ -117,7 +115,7 @@ class ArtifactStore:
         # Omitting size forces the SDK's resumable path even for short captures.
         # SDK retries reuse this stream/session and the one registered name.
         blob.upload_from_file(
-            BytesIO(self._seal(item, kind, context, body)),
+            UploadStream(self._seal(item, kind, context, body)),
             content_type='application/octet-stream',
             if_generation_match=0,
             timeout=UPLOAD_TIMEOUT,

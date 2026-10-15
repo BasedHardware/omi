@@ -135,5 +135,7 @@ Autoscaling defaults off; verify fresh series and the external adapter before
 turning it on. Both fixed replicas and the HPA minimum must remain at least one.
 
 Staging uses resumable GCS uploads (including short captures), 8MiB chunks,
-10s connect/120s read timeout per request and a 600s retry budget per request.
+10s connect/120s read timeout per request and a 120s retry budget per request.
+The stream refuses new chunks after 15 minutes. The deletion outbox keeps the
+unique object name for 30 minutes, covering the last request/retry plus margin.
 Retries retain the registered create-only object name and encrypted stream.

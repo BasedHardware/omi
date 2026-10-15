@@ -18,6 +18,8 @@ from google.cloud import firestore
 from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed, privacy_owner_key
 
+from utils.batch_pipeline.upload_policy import UPLOAD_PENDING_SECONDS
+
 ARTIFACT_RETENTION = timedelta(hours=24)
 RECEIPT_RETENTION = timedelta(days=45)
 
@@ -112,7 +114,7 @@ def register_batch_artifact(
                     'uri': uri,
                     'kind': kind,
                     'privacy_generation': expected_generation,
-                    'write_pending_until': datetime.now(timezone.utc) + timedelta(minutes=2),
+                    'write_pending_until': datetime.now(timezone.utc) + timedelta(seconds=UPLOAD_PENDING_SECONDS),
                 },
             )
 
