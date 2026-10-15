@@ -13335,4 +13335,22 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'แตะเพื่อแก้ไข';
+
+  @override
+  String get homePendingTitle => 'บทสนทนากำลังมา';
+
+  @override
+  String get homePendingCatchingUp => 'กำลังประมวลผลเสียงก่อนหน้า';
+
+  @override
+  String get onTheWayTitle => 'กำลังมา';
+
+  @override
+  String get onTheWayAlmostReady => 'ใกล้เสร็จแล้ว';
+
+  @override
+  String get activityEmpty => 'ยังไม่มีกิจกรรม';
+
+  @override
+  String get activityNewSemantics => 'กิจกรรม, รายการใหม่';
 }

@@ -13425,4 +13425,22 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Toque para corrigir';
+
+  @override
+  String get homePendingTitle => 'Conversas a caminho';
+
+  @override
+  String get homePendingCatchingUp => 'Processando áudio anterior';
+
+  @override
+  String get onTheWayTitle => 'A caminho';
+
+  @override
+  String get onTheWayAlmostReady => 'Quase pronto';
+
+  @override
+  String get activityEmpty => 'Nenhuma atividade ainda';
+
+  @override
+  String get activityNewSemantics => 'Atividade, novos itens';
 }

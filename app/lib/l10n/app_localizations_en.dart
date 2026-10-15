@@ -13386,4 +13386,22 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Tap to fix';
+
+  @override
+  String get homePendingTitle => 'Conversations on the way';
+
+  @override
+  String get homePendingCatchingUp => 'Catching up on earlier audio';
+
+  @override
+  String get onTheWayTitle => 'On the Way';
+
+  @override
+  String get onTheWayAlmostReady => 'Almost ready';
+
+  @override
+  String get activityEmpty => 'No activity yet';
+
+  @override
+  String get activityNewSemantics => 'Activity, new items';
 }

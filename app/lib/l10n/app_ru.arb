@@ -4150,5 +4150,11 @@
     "onboardingNoOmiYet": "Ещё нет Omi?",
     "onboardingOmiNotOrdered": "Ещё не заказал",
     "onboardingOmiOrdered": "Я уже заказал",
-    "onboardingPermissionTapToFix": "Нажмите, чтобы исправить"
+    "onboardingPermissionTapToFix": "Нажмите, чтобы исправить",
+    "homePendingTitle": "Разговоры в пути",
+    "homePendingCatchingUp": "Обрабатываем более раннее аудио",
+    "onTheWayTitle": "В пути",
+    "onTheWayAlmostReady": "Почти готово",
+    "activityEmpty": "Пока нет активности",
+    "activityNewSemantics": "Активность, новые элементы"
 }

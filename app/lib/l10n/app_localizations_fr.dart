@@ -13507,4 +13507,22 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Touchez pour corriger';
+
+  @override
+  String get homePendingTitle => 'Conversations en route';
+
+  @override
+  String get homePendingCatchingUp => 'Rattrapage de l\'audio précédent';
+
+  @override
+  String get onTheWayTitle => 'En route';
+
+  @override
+  String get onTheWayAlmostReady => 'Presque prêt';
+
+  @override
+  String get activityEmpty => 'Aucune activité pour l\'instant';
+
+  @override
+  String get activityNewSemantics => 'Activité, nouveaux éléments';
 }

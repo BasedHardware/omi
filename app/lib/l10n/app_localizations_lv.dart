@@ -13430,4 +13430,22 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Pieskarieties, lai labotu';
+
+  @override
+  String get homePendingTitle => 'Sarunas ceļā';
+
+  @override
+  String get homePendingCatchingUp => 'Apstrādājam iepriekšējo audio';
+
+  @override
+  String get onTheWayTitle => 'Ceļā';
+
+  @override
+  String get onTheWayAlmostReady => 'Gandrīz gatavs';
+
+  @override
+  String get activityEmpty => 'Vēl nav aktivitātes';
+
+  @override
+  String get activityNewSemantics => 'Aktivitāte, jauni vienumi';
 }

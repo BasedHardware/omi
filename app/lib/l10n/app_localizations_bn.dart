@@ -13398,4 +13398,22 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'ঠিক করতে ট্যাপ করুন';
+
+  @override
+  String get homePendingTitle => 'কথোপকথন আসছে';
+
+  @override
+  String get homePendingCatchingUp => 'আগের অডিও প্রক্রিয়া করা হচ্ছে';
+
+  @override
+  String get onTheWayTitle => 'আসছে';
+
+  @override
+  String get onTheWayAlmostReady => 'প্রায় প্রস্তুত';
+
+  @override
+  String get activityEmpty => 'এখনও কোনো কার্যকলাপ নেই';
+
+  @override
+  String get activityNewSemantics => 'কার্যকলাপ, নতুন আইটেম';
 }

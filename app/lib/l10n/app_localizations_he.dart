@@ -13308,4 +13308,22 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'הקישו לתיקון';
+
+  @override
+  String get homePendingTitle => 'שיחות בדרך';
+
+  @override
+  String get homePendingCatchingUp => 'משלימים אודיו קודם';
+
+  @override
+  String get onTheWayTitle => 'בדרך';
+
+  @override
+  String get onTheWayAlmostReady => 'כמעט מוכן';
+
+  @override
+  String get activityEmpty => 'אין פעילות עדיין';
+
+  @override
+  String get activityNewSemantics => 'פעילות, פריטים חדשים';
 }

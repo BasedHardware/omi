@@ -4115,5 +4115,11 @@
     "onboardingNoOmiYet": "Bạn chưa có Omi?",
     "onboardingOmiNotOrdered": "Chưa đặt hàng",
     "onboardingOmiOrdered": "Tôi đã đặt hàng",
-    "onboardingPermissionTapToFix": "Nhấn để khắc phục"
+    "onboardingPermissionTapToFix": "Nhấn để khắc phục",
+    "homePendingTitle": "Cuộc trò chuyện đang đến",
+    "homePendingCatchingUp": "Đang xử lý âm thanh trước đó",
+    "onTheWayTitle": "Đang đến",
+    "onTheWayAlmostReady": "Sắp xong",
+    "activityEmpty": "Chưa có hoạt động",
+    "activityNewSemantics": "Hoạt động, mục mới"
 }

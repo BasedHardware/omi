@@ -10,6 +10,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
 
+import 'package:omi/pages/activity/activity_bell_button.dart';
 import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
@@ -1026,6 +1027,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 icon: Icon(Icons.search, size: 20, color: OmiColors.textSecondary),
                 onTap: () => unawaited(_openSearch()),
               ),
+              // Activity: what Omi did on its own; the dot only for something new worth opening.
+              if (onHome) const ActivityBellButton(),
               // Settings button - always visible
               HeaderCircleButton(
                 semanticLabel: context.l10n.settings,

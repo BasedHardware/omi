@@ -13411,4 +13411,22 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Ketuk untuk memperbaiki';
+
+  @override
+  String get homePendingTitle => 'Percakapan sedang diproses';
+
+  @override
+  String get homePendingCatchingUp => 'Mengejar audio sebelumnya';
+
+  @override
+  String get onTheWayTitle => 'Dalam perjalanan';
+
+  @override
+  String get onTheWayAlmostReady => 'Hampir siap';
+
+  @override
+  String get activityEmpty => 'Belum ada aktivitas';
+
+  @override
+  String get activityNewSemantics => 'Aktivitas, item baru';
 }

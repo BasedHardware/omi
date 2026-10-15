@@ -8,7 +8,8 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
-/// Home entry to questions and the applied-change history, including Undo.
+/// Home entry to the questions only the user can answer. With none waiting it draws nothing: the
+/// applied-change history lives in Activity, behind Home's bell.
 ///
 /// Review absorbs the older single-purpose prompt cards, so while Review is off for the account
 /// (or not yet known) [fallback] is shown in its place instead.
@@ -38,12 +39,13 @@ class _ReviewEntryCardState extends State<ReviewEntryCard> {
     final provider = context.watch<ReviewProvider?>();
     if (provider == null || !provider.isOn) return widget.fallback ?? const SizedBox.shrink();
     final count = provider.items.length;
-    final title = count == 0 ? context.l10n.reviewRecentChanges : context.l10n.reviewEntryTitle;
+    if (count == 0) return const SizedBox.shrink();
+    final title = context.l10n.reviewEntryTitle;
     return Padding(
       padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 15, OmiSpacing.md, 0),
       child: Semantics(
         button: true,
-        label: count == 0 ? title : '$title, $count',
+        label: '$title, $count',
         excludeSemantics: true,
         child: Material(
           key: const Key('review_entry_card'),
@@ -66,25 +68,23 @@ class _ReviewEntryCardState extends State<ReviewEntryCard> {
                           width: 40,
                           height: 40,
                           decoration: BoxDecoration(color: OmiColors.surface2, shape: BoxShape.circle),
-                          child: Icon(count == 0 ? Icons.history : Icons.record_voice_over_outlined,
-                              size: 20, color: OmiColors.textPrimary),
+                          child: Icon(Icons.record_voice_over_outlined, size: 20, color: OmiColors.textPrimary),
                         ),
-                        if (count > 0)
-                          Positioned(
-                            top: -2,
-                            right: -2,
-                            child: Container(
-                              constraints: const BoxConstraints(minWidth: 18),
-                              height: 18,
-                              padding: const EdgeInsets.symmetric(horizontal: 5),
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(color: OmiColors.accent, borderRadius: OmiRadius.pillAll),
-                              child: Text(
-                                '$count',
-                                style: OmiType.caption.copyWith(color: OmiColors.onAccent, fontWeight: FontWeight.w700),
-                              ),
+                        Positioned(
+                          top: -2,
+                          right: -2,
+                          child: Container(
+                            constraints: const BoxConstraints(minWidth: 18),
+                            height: 18,
+                            padding: const EdgeInsets.symmetric(horizontal: 5),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(color: OmiColors.accent, borderRadius: OmiRadius.pillAll),
+                            child: Text(
+                              '$count',
+                              style: OmiType.caption.copyWith(color: OmiColors.onAccent, fontWeight: FontWeight.w700),
                             ),
                           ),
+                        ),
                       ],
                     ),
                   ),

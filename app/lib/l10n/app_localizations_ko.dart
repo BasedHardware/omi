@@ -13219,4 +13219,22 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => '탭하여 해결';
+
+  @override
+  String get homePendingTitle => '대화 준비 중';
+
+  @override
+  String get homePendingCatchingUp => '이전 오디오 처리 중';
+
+  @override
+  String get onTheWayTitle => '준비 중';
+
+  @override
+  String get onTheWayAlmostReady => '거의 완료';
+
+  @override
+  String get activityEmpty => '아직 활동이 없습니다';
+
+  @override
+  String get activityNewSemantics => '활동, 새 항목';
 }

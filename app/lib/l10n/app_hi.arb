@@ -4115,5 +4115,11 @@
     "onboardingNoOmiYet": "अभी तक आपका Omi नहीं आया?",
     "onboardingOmiNotOrdered": "अभी ऑर्डर नहीं किया",
     "onboardingOmiOrdered": "मैंने ऑर्डर कर दिया है",
-    "onboardingPermissionTapToFix": "ठीक करने के लिए टैप करें"
+    "onboardingPermissionTapToFix": "ठीक करने के लिए टैप करें",
+    "homePendingTitle": "बातचीत आ रही हैं",
+    "homePendingCatchingUp": "पहले का ऑडियो प्रोसेस हो रहा है",
+    "onTheWayTitle": "रास्ते में",
+    "onTheWayAlmostReady": "लगभग तैयार",
+    "activityEmpty": "अभी तक कोई गतिविधि नहीं",
+    "activityNewSemantics": "गतिविधि, नए आइटम"
 }

@@ -13410,4 +13410,22 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Додирните да поправите';
+
+  @override
+  String get homePendingTitle => 'Разговори стижу';
+
+  @override
+  String get homePendingCatchingUp => 'Обрађујемо ранији звук';
+
+  @override
+  String get onTheWayTitle => 'На путу';
+
+  @override
+  String get onTheWayAlmostReady => 'Скоро спремно';
+
+  @override
+  String get activityEmpty => 'Још нема активности';
+
+  @override
+  String get activityNewSemantics => 'Активност, нове ставке';
 }

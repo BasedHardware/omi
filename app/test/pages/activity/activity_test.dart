@@ -1,0 +1,133 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/daily_summary.dart';
+import 'package:omi/backend/schema/review.dart';
+import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/activity/activity_bell_button.dart';
+import 'package:omi/pages/activity/activity_page.dart';
+import 'package:omi/pages/activity/activity_seen.dart';
+
+/// An in-memory bell state starting at [stored] (0: never visited).
+(ActivitySeen, int Function()) _seen(int stored) {
+  var value = stored;
+  return (ActivitySeen(read: () => value, write: (v) => value = v), () => value);
+}
+
+DailySummary _recap(String id, DateTime createdAt) => DailySummary(
+      id: id,
+      date: createdAt.toIso8601String().substring(0, 10),
+      createdAt: createdAt,
+      headline: 'Recap $id',
+      overview: '',
+      dayEmoji: '📊',
+      stats: DayStats(totalConversations: 1, actionItemsCount: 0),
+    );
+
+Widget _app(Widget home) => MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: home,
+    );
+
+void main() {
+  final yesterday = DateTime.now().subtract(const Duration(days: 1));
+  final anHourAgo = DateTime.now().subtract(const Duration(hours: 1));
+
+  group('ActivitySeen', () {
+    test('first sight on an install is the baseline, not news', () {
+      final (seen, stored) = _seen(0);
+      seen.reportDelight(yesterday);
+      expect(seen.hasNew.value, isFalse);
+      expect(stored(), yesterday.millisecondsSinceEpoch);
+    });
+
+    test('a recap newer than the last visit lights the bell; visiting clears it', () {
+      final (seen, stored) = _seen(yesterday.millisecondsSinceEpoch);
+      seen.reportDelight(yesterday);
+      expect(seen.hasNew.value, isFalse);
+      seen.reportDelight(anHourAgo);
+      expect(seen.hasNew.value, isTrue);
+
+      final now = DateTime.now();
+      seen.markSeen(now: now);
+      expect(seen.hasNew.value, isFalse);
+      expect(stored(), now.millisecondsSinceEpoch);
+      seen.reportDelight(anHourAgo);
+      expect(seen.hasNew.value, isFalse);
+    });
+  });
+
+  group('ActivityBellButton', () {
+    testWidgets('is always there, with a dot only when something is new', (tester) async {
+      final (seen, _) = _seen(yesterday.millisecondsSinceEpoch);
+      await tester.pumpWidget(_app(Scaffold(body: Center(child: ActivityBellButton(seen: seen)))));
+      expect(find.byKey(const ValueKey('home_activity_button')), findsOneWidget);
+      expect(find.byKey(const ValueKey('home_activity_dot')), findsNothing);
+      expect(find.bySemanticsLabel('Activity'), findsOneWidget);
+
+      seen.reportDelight(anHourAgo);
+      await tester.pump();
+      expect(find.byKey(const ValueKey('home_activity_dot')), findsOneWidget);
+      expect(find.bySemanticsLabel('Activity, new items'), findsOneWidget);
+    });
+  });
+
+  group('ActivityPage', () {
+    Widget page(ActivitySeen seen, {bool changesOk = true}) => ActivityPage(
+          seen: seen,
+          probeDreamReport: () async => false,
+          loadRecaps: () async => (items: [_recap('new', anHourAgo), _recap('old', yesterday)], ok: true),
+          loadChanges: ({cursor}) async => changesOk
+              ? ApiSuccess(ReviewChangesPage(changes: [
+                  ReviewChange(
+                    changeId: 'c1',
+                    kind: ReviewChangeKind.mergeMemories,
+                    title: 'Merged two memories',
+                    createdAt: DateTime.now().subtract(const Duration(minutes: 30)),
+                  ),
+                ]))
+              : const ApiFailure<ReviewChangesPage>(ApiProblem(ApiProblemKind.notFound)),
+        );
+
+    testWidgets('lists recaps and changes newest first, dots only the recap new since the last visit', (tester) async {
+      final (seen, stored) = _seen(DateTime.now().subtract(const Duration(hours: 3)).millisecondsSinceEpoch);
+      await tester.pumpWidget(_app(page(seen)));
+      await tester.pumpAndSettle();
+
+      final change = tester.getTopLeft(find.text('Merged two memories')).dy;
+      final fresh = tester.getTopLeft(find.text('Recap new')).dy;
+      final old = tester.getTopLeft(find.text('Recap old')).dy;
+      expect(change, lessThan(fresh));
+      expect(fresh, lessThan(old));
+      expect(find.byKey(const Key('activity_new_dot')), findsOneWidget);
+      expect(find.byKey(const Key('activity_recent_changes')), findsOneWidget);
+
+      // Opening it marked everything seen: the bell is dark, with no "mark all read" anywhere.
+      expect(seen.hasNew.value, isFalse);
+      expect(stored(), greaterThanOrEqualTo(anHourAgo.millisecondsSinceEpoch));
+      expect(find.textContaining('Mark'), findsNothing);
+    });
+
+    testWidgets('still shows recaps when changes are unavailable for the account', (tester) async {
+      final (seen, _) = _seen(yesterday.millisecondsSinceEpoch);
+      await tester.pumpWidget(_app(page(seen, changesOk: false)));
+      await tester.pumpAndSettle();
+      expect(find.text('Recap new'), findsOneWidget);
+      expect(find.byKey(const Key('activity_recent_changes')), findsNothing);
+    });
+
+    testWidgets('says so when there is nothing yet', (tester) async {
+      final (seen, _) = _seen(0);
+      await tester.pumpWidget(_app(ActivityPage(
+        seen: seen,
+        probeDreamReport: () async => false,
+        loadRecaps: () async => (items: <DailySummary>[], ok: true),
+        loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])),
+      )));
+      await tester.pumpAndSettle();
+      expect(find.text('No activity yet'), findsOneWidget);
+    });
+  });
+}

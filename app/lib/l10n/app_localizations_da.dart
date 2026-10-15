@@ -13388,4 +13388,22 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Tryk for at rette';
+
+  @override
+  String get homePendingTitle => 'Samtaler på vej';
+
+  @override
+  String get homePendingCatchingUp => 'Indhenter tidligere lyd';
+
+  @override
+  String get onTheWayTitle => 'På vej';
+
+  @override
+  String get onTheWayAlmostReady => 'Næsten klar';
+
+  @override
+  String get activityEmpty => 'Ingen aktivitet endnu';
+
+  @override
+  String get activityNewSemantics => 'Aktivitet, nye elementer';
 }

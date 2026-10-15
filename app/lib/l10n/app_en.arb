@@ -16132,5 +16132,29 @@
     "onboardingPermissionTapToFix": "Tap to fix",
     "@onboardingPermissionTapToFix": {
         "description": "Onboarding permissions: shown on a denied permission card; tapping opens Settings"
+    },
+    "homePendingTitle": "Conversations on the way",
+    "@homePendingTitle": {
+        "description": "Home row title while recordings are still turning into conversations"
+    },
+    "homePendingCatchingUp": "Catching up on earlier audio",
+    "@homePendingCatchingUp": {
+        "description": "Home row title when a long backlog of recordings is still being processed"
+    },
+    "onTheWayTitle": "On the Way",
+    "@onTheWayTitle": {
+        "description": "Title of the page listing recordings not yet turned into conversations"
+    },
+    "onTheWayAlmostReady": "Almost ready",
+    "@onTheWayAlmostReady": {
+        "description": "Section header: recordings being transcribed or summarized"
+    },
+    "activityEmpty": "No activity yet",
+    "@activityEmpty": {
+        "description": "Empty state of the Activity page"
+    },
+    "activityNewSemantics": "Activity, new items",
+    "@activityNewSemantics": {
+        "description": "Screen reader label for the Activity bell when it has new items"
     }
 }

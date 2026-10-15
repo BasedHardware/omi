@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
+import 'package:omi/pages/activity/activity_seen.dart';
 import 'package:omi/pages/conversations/daily_recaps_page.dart';
 import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
 import 'package:omi/pages/home/widgets/daily_summary_card.dart';
@@ -55,6 +56,12 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> {
     setState(() => _loading = _recaps.isEmpty);
     final result = await widget.load();
     if (!mounted) return;
+    // A new recap is the delight that lights Home's Activity bell.
+    if (result.ok) {
+      for (final recap in result.items) {
+        ActivitySeen.instance.reportDelight(recap.createdAt);
+      }
+    }
     setState(() {
       if (result.ok) _recaps = result.items;
       _loading = false;

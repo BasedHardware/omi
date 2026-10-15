@@ -13403,4 +13403,22 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Trykk for å fikse';
+
+  @override
+  String get homePendingTitle => 'Samtaler på vei';
+
+  @override
+  String get homePendingCatchingUp => 'Tar igjen tidligere lyd';
+
+  @override
+  String get onTheWayTitle => 'På vei';
+
+  @override
+  String get onTheWayAlmostReady => 'Nesten klar';
+
+  @override
+  String get activityEmpty => 'Ingen aktivitet ennå';
+
+  @override
+  String get activityNewSemantics => 'Aktivitet, nye elementer';
 }

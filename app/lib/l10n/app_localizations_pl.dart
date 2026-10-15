@@ -13440,4 +13440,22 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Dotknij, aby naprawić';
+
+  @override
+  String get homePendingTitle => 'Rozmowy w drodze';
+
+  @override
+  String get homePendingCatchingUp => 'Nadrabiamy wcześniejsze nagrania';
+
+  @override
+  String get onTheWayTitle => 'W drodze';
+
+  @override
+  String get onTheWayAlmostReady => 'Prawie gotowe';
+
+  @override
+  String get activityEmpty => 'Brak aktywności';
+
+  @override
+  String get activityNewSemantics => 'Aktywność, nowe elementy';
 }

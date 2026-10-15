@@ -11541,5 +11541,11 @@
     "onboardingNoOmiYet": "עדיין אין לכם Omi?",
     "onboardingOmiNotOrdered": "עוד לא הזמנתי",
     "onboardingOmiOrdered": "הזמנתי",
-    "onboardingPermissionTapToFix": "הקישו לתיקון"
+    "onboardingPermissionTapToFix": "הקישו לתיקון",
+    "homePendingTitle": "שיחות בדרך",
+    "homePendingCatchingUp": "משלימים אודיו קודם",
+    "onTheWayTitle": "בדרך",
+    "onTheWayAlmostReady": "כמעט מוכן",
+    "activityEmpty": "אין פעילות עדיין",
+    "activityNewSemantics": "פעילות, פריטים חדשים"
 }

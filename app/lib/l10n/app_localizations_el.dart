@@ -13485,4 +13485,22 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Πατήστε για διόρθωση';
+
+  @override
+  String get homePendingTitle => 'Συνομιλίες καθ\' οδόν';
+
+  @override
+  String get homePendingCatchingUp => 'Επεξεργασία προηγούμενου ήχου';
+
+  @override
+  String get onTheWayTitle => 'Καθ\' οδόν';
+
+  @override
+  String get onTheWayAlmostReady => 'Σχεδόν έτοιμο';
+
+  @override
+  String get activityEmpty => 'Δεν υπάρχει δραστηριότητα ακόμα';
+
+  @override
+  String get activityNewSemantics => 'Δραστηριότητα, νέα στοιχεία';
 }

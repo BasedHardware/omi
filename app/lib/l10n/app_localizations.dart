@@ -23882,6 +23882,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Tap to fix'**
   String get onboardingPermissionTapToFix;
+
+  /// Home row title while recordings are still turning into conversations
+  ///
+  /// In en, this message translates to:
+  /// **'Conversations on the way'**
+  String get homePendingTitle;
+
+  /// Home row title when a long backlog of recordings is still being processed
+  ///
+  /// In en, this message translates to:
+  /// **'Catching up on earlier audio'**
+  String get homePendingCatchingUp;
+
+  /// Title of the page listing recordings not yet turned into conversations
+  ///
+  /// In en, this message translates to:
+  /// **'On the Way'**
+  String get onTheWayTitle;
+
+  /// Section header: recordings being transcribed or summarized
+  ///
+  /// In en, this message translates to:
+  /// **'Almost ready'**
+  String get onTheWayAlmostReady;
+
+  /// Empty state of the Activity page
+  ///
+  /// In en, this message translates to:
+  /// **'No activity yet'**
+  String get activityEmpty;
+
+  /// Screen reader label for the Activity bell when it has new items
+  ///
+  /// In en, this message translates to:
+  /// **'Activity, new items'**
+  String get activityNewSemantics;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

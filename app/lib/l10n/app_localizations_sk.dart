@@ -13397,4 +13397,22 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Ťuknutím opravíte';
+
+  @override
+  String get homePendingTitle => 'Konverzácie na ceste';
+
+  @override
+  String get homePendingCatchingUp => 'Spracúvame skorší zvuk';
+
+  @override
+  String get onTheWayTitle => 'Na ceste';
+
+  @override
+  String get onTheWayAlmostReady => 'Takmer hotovo';
+
+  @override
+  String get activityEmpty => 'Zatiaľ žiadna aktivita';
+
+  @override
+  String get activityNewSemantics => 'Aktivita, nové položky';
 }

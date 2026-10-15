@@ -11541,5 +11541,11 @@
     "onboardingNoOmiYet": "এখনও Omi নেই?",
     "onboardingOmiNotOrdered": "এখনও অর্ডার করিনি",
     "onboardingOmiOrdered": "আমি অর্ডার করেছি",
-    "onboardingPermissionTapToFix": "ঠিক করতে ট্যাপ করুন"
+    "onboardingPermissionTapToFix": "ঠিক করতে ট্যাপ করুন",
+    "homePendingTitle": "কথোপকথন আসছে",
+    "homePendingCatchingUp": "আগের অডিও প্রক্রিয়া করা হচ্ছে",
+    "onTheWayTitle": "আসছে",
+    "onTheWayAlmostReady": "প্রায় প্রস্তুত",
+    "activityEmpty": "এখনও কোনো কার্যকলাপ নেই",
+    "activityNewSemantics": "কার্যকলাপ, নতুন আইটেম"
 }

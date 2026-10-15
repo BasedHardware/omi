@@ -4115,5 +4115,11 @@
     "onboardingNoOmiYet": "Belum ada Omi lagi?",
     "onboardingOmiNotOrdered": "Belum memesan",
     "onboardingOmiOrdered": "Saya sudah memesannya",
-    "onboardingPermissionTapToFix": "Ketik untuk membetulkan"
+    "onboardingPermissionTapToFix": "Ketik untuk membetulkan",
+    "homePendingTitle": "Perbualan sedang diproses",
+    "homePendingCatchingUp": "Mengejar audio terdahulu",
+    "onTheWayTitle": "Dalam perjalanan",
+    "onTheWayAlmostReady": "Hampir siap",
+    "activityEmpty": "Belum ada aktiviti",
+    "activityNewSemantics": "Aktiviti, item baharu"
 }

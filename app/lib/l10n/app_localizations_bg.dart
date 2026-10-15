@@ -13449,4 +13449,22 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Докоснете, за да поправите';
+
+  @override
+  String get homePendingTitle => 'Разговори на път';
+
+  @override
+  String get homePendingCatchingUp => 'Наваксваме по-ранното аудио';
+
+  @override
+  String get onTheWayTitle => 'На път';
+
+  @override
+  String get onTheWayAlmostReady => 'Почти готово';
+
+  @override
+  String get activityEmpty => 'Все още няма активност';
+
+  @override
+  String get activityNewSemantics => 'Активност, нови елементи';
 }

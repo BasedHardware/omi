@@ -4115,5 +4115,11 @@
     "onboardingNoOmiYet": "Encara no tens l'Omi?",
     "onboardingOmiNotOrdered": "Encara no l'he demanat",
     "onboardingOmiOrdered": "Ja l'he demanat",
-    "onboardingPermissionTapToFix": "Toca per solucionar-ho"
+    "onboardingPermissionTapToFix": "Toca per solucionar-ho",
+    "homePendingTitle": "Converses en camí",
+    "homePendingCatchingUp": "Posant al dia l'àudio anterior",
+    "onTheWayTitle": "En camí",
+    "onTheWayAlmostReady": "Gairebé a punt",
+    "activityEmpty": "Encara no hi ha activitat",
+    "activityNewSemantics": "Activitat, elements nous"
 }

@@ -13414,4 +13414,22 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Düzeltmek için dokunun';
+
+  @override
+  String get homePendingTitle => 'Konuşmalar yolda';
+
+  @override
+  String get homePendingCatchingUp => 'Önceki ses işleniyor';
+
+  @override
+  String get onTheWayTitle => 'Yolda';
+
+  @override
+  String get onTheWayAlmostReady => 'Neredeyse hazır';
+
+  @override
+  String get activityEmpty => 'Henüz etkinlik yok';
+
+  @override
+  String get activityNewSemantics => 'Etkinlik, yeni öğeler';
 }

@@ -13453,4 +13453,22 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Koppints a javításhoz';
+
+  @override
+  String get homePendingTitle => 'Beszélgetések úton';
+
+  @override
+  String get homePendingCatchingUp => 'Korábbi hang feldolgozása';
+
+  @override
+  String get onTheWayTitle => 'Úton';
+
+  @override
+  String get onTheWayAlmostReady => 'Majdnem kész';
+
+  @override
+  String get activityEmpty => 'Még nincs tevékenység';
+
+  @override
+  String get activityNewSemantics => 'Tevékenység, új elemek';
 }

@@ -4115,5 +4115,11 @@
     "onboardingNoOmiYet": "Все още нямате Omi?",
     "onboardingOmiNotOrdered": "Още не съм поръчал",
     "onboardingOmiOrdered": "Поръчал съм го",
-    "onboardingPermissionTapToFix": "Докоснете, за да поправите"
+    "onboardingPermissionTapToFix": "Докоснете, за да поправите",
+    "homePendingTitle": "Разговори на път",
+    "homePendingCatchingUp": "Наваксваме по-ранното аудио",
+    "onTheWayTitle": "На път",
+    "onTheWayAlmostReady": "Почти готово",
+    "activityEmpty": "Все още няма активност",
+    "activityNewSemantics": "Активност, нови елементи"
 }

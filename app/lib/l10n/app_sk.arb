@@ -4115,5 +4115,11 @@
     "onboardingNoOmiYet": "Ešte nemáte Omi?",
     "onboardingOmiNotOrdered": "Ešte neobjednané",
     "onboardingOmiOrdered": "Už som ho objednal/a",
-    "onboardingPermissionTapToFix": "Ťuknutím opravíte"
+    "onboardingPermissionTapToFix": "Ťuknutím opravíte",
+    "homePendingTitle": "Konverzácie na ceste",
+    "homePendingCatchingUp": "Spracúvame skorší zvuk",
+    "onTheWayTitle": "Na ceste",
+    "onTheWayAlmostReady": "Takmer hotovo",
+    "activityEmpty": "Zatiaľ žiadna aktivita",
+    "activityNewSemantics": "Aktivita, nové položky"
 }

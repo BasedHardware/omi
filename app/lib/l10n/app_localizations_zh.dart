@@ -13194,4 +13194,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => '点按以修复';
+
+  @override
+  String get homePendingTitle => '对话正在生成';
+
+  @override
+  String get homePendingCatchingUp => '正在处理之前的音频';
+
+  @override
+  String get onTheWayTitle => '处理中';
+
+  @override
+  String get onTheWayAlmostReady => '即将完成';
+
+  @override
+  String get activityEmpty => '暂无活动';
+
+  @override
+  String get activityNewSemantics => '活动，有新内容';
 }

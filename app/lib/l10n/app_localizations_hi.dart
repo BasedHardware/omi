@@ -13382,4 +13382,22 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'ठीक करने के लिए टैप करें';
+
+  @override
+  String get homePendingTitle => 'बातचीत आ रही हैं';
+
+  @override
+  String get homePendingCatchingUp => 'पहले का ऑडियो प्रोसेस हो रहा है';
+
+  @override
+  String get onTheWayTitle => 'रास्ते में';
+
+  @override
+  String get onTheWayAlmostReady => 'लगभग तैयार';
+
+  @override
+  String get activityEmpty => 'अभी तक कोई गतिविधि नहीं';
+
+  @override
+  String get activityNewSemantics => 'गतिविधि, नए आइटम';
 }

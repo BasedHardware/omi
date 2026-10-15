@@ -4150,5 +4150,11 @@
     "onboardingNoOmiYet": "Nie masz jeszcze Omi?",
     "onboardingOmiNotOrdered": "Jeszcze nie zamówiłem/am",
     "onboardingOmiOrdered": "Już zamówiłem/am",
-    "onboardingPermissionTapToFix": "Dotknij, aby naprawić"
+    "onboardingPermissionTapToFix": "Dotknij, aby naprawić",
+    "homePendingTitle": "Rozmowy w drodze",
+    "homePendingCatchingUp": "Nadrabiamy wcześniejsze nagrania",
+    "onTheWayTitle": "W drodze",
+    "onTheWayAlmostReady": "Prawie gotowe",
+    "activityEmpty": "Brak aktywności",
+    "activityNewSemantics": "Aktywność, nowe elementy"
 }

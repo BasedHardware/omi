@@ -4115,5 +4115,11 @@
     "onboardingNoOmiYet": "ยังไม่มี Omi ใช่ไหม",
     "onboardingOmiNotOrdered": "ยังไม่ได้สั่งซื้อ",
     "onboardingOmiOrdered": "สั่งซื้อแล้ว",
-    "onboardingPermissionTapToFix": "แตะเพื่อแก้ไข"
+    "onboardingPermissionTapToFix": "แตะเพื่อแก้ไข",
+    "homePendingTitle": "บทสนทนากำลังมา",
+    "homePendingCatchingUp": "กำลังประมวลผลเสียงก่อนหน้า",
+    "onTheWayTitle": "กำลังมา",
+    "onTheWayAlmostReady": "ใกล้เสร็จแล้ว",
+    "activityEmpty": "ยังไม่มีกิจกรรม",
+    "activityNewSemantics": "กิจกรรม, รายการใหม่"
 }

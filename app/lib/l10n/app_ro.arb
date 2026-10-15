@@ -4115,5 +4115,11 @@
     "onboardingNoOmiYet": "Nu ai încă Omi?",
     "onboardingOmiNotOrdered": "Încă nu am comandat",
     "onboardingOmiOrdered": "L-am comandat",
-    "onboardingPermissionTapToFix": "Atinge pentru a remedia"
+    "onboardingPermissionTapToFix": "Atinge pentru a remedia",
+    "homePendingTitle": "Conversații pe drum",
+    "homePendingCatchingUp": "Recuperăm audio anterior",
+    "onTheWayTitle": "Pe drum",
+    "onTheWayAlmostReady": "Aproape gata",
+    "activityEmpty": "Nicio activitate încă",
+    "activityNewSemantics": "Activitate, elemente noi"
 }
