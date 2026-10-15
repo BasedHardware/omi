@@ -51,6 +51,8 @@ environments:
           TRANSLATION_DEMAND_LEASE_V1_ENABLED: {value: 'true', category: rollout}
           TRANSLATION_ONDEMAND_GEMINI_ENABLED: {value: 'true', category: rollout}
           TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
+          TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
+          TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
           TRANSLATION_ONDEMAND_COHORT_PERCENT: {value: '100', category: rollout}
           TRANSLATION_ONDEMAND_UID_ALLOWLIST: {value: '', category: rollout}
           TRANSLATION_ONDEMAND_MAX_SEGMENTS: {value: '50', category: rollout}
@@ -673,6 +675,8 @@ environments:
             TRANSLATION_DEMAND_LEASE_V1_ENABLED: {value: 'true', category: rollout}
             TRANSLATION_ONDEMAND_GEMINI_ENABLED: {value: 'true', category: rollout}
             TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
+            TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
+            TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
             TRANSLATION_ONDEMAND_COHORT_PERCENT: {value: '100', category: rollout}
             TRANSLATION_ONDEMAND_UID_ALLOWLIST: {value: '', category: rollout}
             TRANSLATION_ONDEMAND_MAX_SEGMENTS: {value: '50', category: rollout}
@@ -871,6 +875,8 @@ environments:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend-sync
+            TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
+            TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -1092,6 +1098,8 @@ environments:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend-sync-backfill
+            TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
+            TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -1301,6 +1309,8 @@ environments:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend-integration
+            TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
+            TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -1846,6 +1856,8 @@ environments:
           TRANSLATION_DEMAND_LEASE_V1_ENABLED: {value: 'true', category: rollout}
           TRANSLATION_ONDEMAND_GEMINI_ENABLED: {value: 'true', category: rollout}
           TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
+          TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
+          TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
           TRANSLATION_ONDEMAND_COHORT_PERCENT: {value: '100', category: rollout}
           TRANSLATION_ONDEMAND_UID_ALLOWLIST: {value: '', category: rollout}
           TRANSLATION_ONDEMAND_MAX_SEGMENTS: {value: '50', category: rollout}
@@ -2496,6 +2508,8 @@ environments:
             TRANSLATION_DEMAND_LEASE_V1_ENABLED: {value: 'true', category: rollout}
             TRANSLATION_ONDEMAND_GEMINI_ENABLED: {value: 'true', category: rollout}
             TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
+            TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
+            TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
             TRANSLATION_ONDEMAND_COHORT_PERCENT: {value: '100', category: rollout}
             TRANSLATION_ONDEMAND_UID_ALLOWLIST: {value: '', category: rollout}
             TRANSLATION_ONDEMAND_MAX_SEGMENTS: {value: '50', category: rollout}
@@ -2775,6 +2789,8 @@ environments:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend-sync
+            TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
+            TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -3043,6 +3059,8 @@ environments:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend-sync-backfill
+            TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
+            TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -3299,6 +3317,8 @@ environments:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend-integration
+            TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
+            TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
