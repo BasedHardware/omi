@@ -16,7 +16,7 @@ on:
           - development
           - prod
       branch:
-        description: 'Branch to deploy from'
+        description: 'Source ref (prod: main or a full merged commit SHA)'
         required: true
         default: 'main'
       release_version:
@@ -55,6 +55,28 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch }}
+          fetch-depth: 0
+
+      - name: Select merged production source and image tag
+        id: vars
+        env:
+          DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
+          DEPLOY_REF: ${{ github.event.inputs.branch }}
+        run: |
+          set -euo pipefail
+          if [[ "$DEPLOY_ENVIRONMENT" == prod ]]; then
+            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+            source_sha=$(git rev-parse origin/main)
+            if [[ "$DEPLOY_REF" != main ]]; then
+              [[ "$DEPLOY_REF" =~ ^[0-9a-f]{40}$ ]] || { echo "Production source must be main or a full merged SHA" >&2; exit 1; }
+              source_sha="$DEPLOY_REF"
+            fi
+            git merge-base --is-ancestor "$source_sha" origin/main
+            git checkout --detach "$source_sha"
+          fi
+          echo "short_sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
 
       # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C, plan v2 Phase E).
       # Development keeps its JSON lane.
@@ -82,11 +104,11 @@ jobs:
 
       - name: Build and Push Docker image
         run: |
-          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/${{ env.SERVICE }}/Dockerfile .
+          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.vars.outputs.short_sha }} -f backend/${{ env.SERVICE }}/Dockerfile .
           python3 backend/scripts/runtime_image_contracts.py smoke \
             --dockerfile backend/diarizer/Dockerfile \
-            --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
-          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
+            --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.vars.outputs.short_sha }}
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.vars.outputs.short_sha }}
 
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v3
@@ -97,7 +119,7 @@ jobs:
 
       - name: Deploy Diarizer to GKE cluster using Helm
         run: |
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-${{ env.SERVICE }} ./backend/charts/${{ env.SERVICE }} -f ./backend/charts/${{ env.SERVICE }}/${{ vars.ENV }}_omi_${{ env.SERVICE }}_values.yaml --set-string "image.tag=${GITHUB_SHA::7}"
+          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-${{ env.SERVICE }} ./backend/charts/${{ env.SERVICE }} -f ./backend/charts/${{ env.SERVICE }}/${{ vars.ENV }}_omi_${{ env.SERVICE }}_values.yaml --set-string "image.tag=${{ steps.vars.outputs.short_sha }}"
 
       - name: Verify rollout
         run: |

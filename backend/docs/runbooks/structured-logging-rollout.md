@@ -84,3 +84,8 @@ Diarizer adoption explicitly keeps general access logs: the live Gateway backend
 has logging disabled while its separate Ingress backend enables it. Historical
 request metrics also name a now-missing backend, so service-wide LB coverage is
 not proven. Recheck the active route and matching backend before suppressing it.
+
+For diarizer, dispatch `gcp_diarizer.yml` from protected `main` with
+`environment=prod` and `branch=<full merged source SHA>`. The existing branch
+input controls checkout and the image tag comes from that checkout. Roll back
+through the same workflow using the recorded previous source SHA.
