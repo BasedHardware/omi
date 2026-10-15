@@ -67,8 +67,7 @@ class OnTheWayPage extends StatelessWidget {
         if (almostReady.isEmpty && syncing.isEmpty && SyncPendingWork.hasServerJobs(p)) {
           final status = SyncPendingWork.stageLabel(p, l);
           final phase = p.syncState.phase;
-          final transferring =
-              p.syncState.isSyncing &&
+          final transferring = p.syncState.isSyncing &&
               !p.syncState.isFetchingConversations &&
               (phase == SyncPhase.downloadingFromDevice ||
                   phase == SyncPhase.waitingForInternet ||
@@ -81,8 +80,14 @@ class OnTheWayPage extends StatelessWidget {
           body = ListView(
             padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.xxl),
             children: [
-              if (almostReady.isNotEmpty) ...[_SectionHeader(label: l.onTheWayAlmostReady), _Group(items: almostReady)],
-              if (syncing.isNotEmpty) ...[_SectionHeader(label: l.syncingStatus), _Group(items: syncing)],
+              if (almostReady.isNotEmpty) ...[
+                _SectionHeader(label: l.onTheWayAlmostReady),
+                _Group(items: almostReady),
+              ],
+              if (syncing.isNotEmpty) ...[
+                _SectionHeader(label: l.syncingStatus),
+                _Group(items: syncing),
+              ],
               const SizedBox(height: OmiSpacing.lg),
               Material(
                 key: const Key('on_the_way_sync_details'),
@@ -140,11 +145,13 @@ class _PendingItem {
   const _PendingItem({required this.start, required this.seconds, required this.label, required this.step});
 
   _PendingItem.block(RecordingBlock block, {required this.label, required this.step})
-    : start = DateTime.fromMillisecondsSinceEpoch(block.startSeconds * 1000),
-      seconds = block.seconds;
+      : start = DateTime.fromMillisecondsSinceEpoch(block.startSeconds * 1000),
+        seconds = block.seconds;
 
   /// A stage with no recording to name yet: only the label shows.
-  const _PendingItem.status({required this.label, required this.step}) : start = null, seconds = 0;
+  const _PendingItem.status({required this.label, required this.step})
+      : start = null,
+        seconds = 0;
 
   final DateTime? start;
   final int seconds;
@@ -167,11 +174,8 @@ class _SectionHeader extends StatelessWidget {
         header: true,
         child: Text(
           label.toUpperCase(),
-          style: OmiType.footnote.copyWith(
-            fontWeight: FontWeight.w600,
-            color: OmiColors.textSecondary,
-            letterSpacing: 0.4,
-          ),
+          style: OmiType.footnote
+              .copyWith(fontWeight: FontWeight.w600, color: OmiColors.textSecondary, letterSpacing: 0.4),
         ),
       ),
     );

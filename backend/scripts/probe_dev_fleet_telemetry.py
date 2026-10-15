@@ -88,9 +88,8 @@ def main():
         raise SystemExit('dev fleet unauthenticated probe did not return 401')
     status, body = post(args.candidate_api_url, args.bearer_token_file.read_text().strip())
     if status == 429:
-        # The fixed release-probe UID is shared across dev deploys. Do not turn
-        # >12 dev builds/hour into a deployment outage for this optional sink.
-        print('Dev fleet probe: auth enforced; fixed release-probe UID budget exhausted (429)')
+        # Do not retry the shared UID or report an unaccepted summary as proof.
+        raise SystemExit('Dev fleet acceptance incomplete: release-probe UID budget exhausted (429)')
     elif status == 200 and body == {'schema_version': 1, 'accepted': True, 'clamped': False}:
         print('Dev fleet probe: auth enforced; counter and fixed histogram summary accepted (200)')
     else:

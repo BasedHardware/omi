@@ -17,20 +17,20 @@ import 'package:omi/pages/activity/activity_seen.dart';
 }
 
 DailySummary _recap(String id, DateTime createdAt) => DailySummary(
-  id: id,
-  date: createdAt.toIso8601String().substring(0, 10),
-  createdAt: createdAt,
-  headline: 'Recap $id',
-  overview: '',
-  dayEmoji: '📊',
-  stats: DayStats(totalConversations: 1, actionItemsCount: 0),
-);
+      id: id,
+      date: createdAt.toIso8601String().substring(0, 10),
+      createdAt: createdAt,
+      headline: 'Recap $id',
+      overview: '',
+      dayEmoji: '📊',
+      stats: DayStats(totalConversations: 1, actionItemsCount: 0),
+    );
 
 Widget _app(Widget home) => MaterialApp(
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
-  supportedLocales: AppLocalizations.supportedLocales,
-  home: home,
-);
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: home,
+    );
 
 void main() {
   final yesterday = DateTime.now().subtract(const Duration(days: 1));
@@ -105,13 +105,7 @@ void main() {
   group('ActivityBellButton', () {
     testWidgets('is always there, with a dot only when something is new', (tester) async {
       final (seen, _) = _seen(yesterday.millisecondsSinceEpoch);
-      await tester.pumpWidget(
-        _app(
-          Scaffold(
-            body: Center(child: ActivityBellButton(seen: seen)),
-          ),
-        ),
-      );
+      await tester.pumpWidget(_app(Scaffold(body: Center(child: ActivityBellButton(seen: seen)))));
       expect(find.byKey(const ValueKey('home_activity_button')), findsOneWidget);
       expect(find.byKey(const ValueKey('home_activity_dot')), findsNothing);
       expect(find.bySemanticsLabel('Activity'), findsOneWidget);
@@ -127,16 +121,12 @@ void main() {
     testWidgets('a failed recap load leaves an unseen recap unseen', (tester) async {
       final (seen, stored) = _seen(yesterday.millisecondsSinceEpoch);
       seen.observe([anHourAgo]);
-      await tester.pumpWidget(
-        _app(
-          ActivityPage(
-            seen: seen,
-            probeDreamReport: () async => false,
-            loadRecaps: () async => (items: <DailySummary>[], ok: false),
-            loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])),
-          ),
-        ),
-      );
+      await tester.pumpWidget(_app(ActivityPage(
+        seen: seen,
+        probeDreamReport: () async => false,
+        loadRecaps: () async => (items: <DailySummary>[], ok: false),
+        loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])),
+      )));
       await tester.pumpAndSettle();
       await tester.pumpWidget(const SizedBox());
       expect(stored(), yesterday.millisecondsSinceEpoch);
@@ -149,18 +139,14 @@ void main() {
           probeDreamReport: () async => false,
           loadRecaps: () async => (items: [_recap('new', anHourAgo), _recap('old', yesterday)], ok: true),
           loadChanges: ({cursor}) async => changesOk
-              ? ApiSuccess(
-                  ReviewChangesPage(
-                    changes: [
-                      ReviewChange(
-                        changeId: 'c1',
-                        kind: ReviewChangeKind.mergeMemories,
-                        title: 'Merged two memories',
-                        createdAt: DateTime.now().subtract(const Duration(minutes: 30)),
-                      ),
-                    ],
+              ? ApiSuccess(ReviewChangesPage(changes: [
+                  ReviewChange(
+                    changeId: 'c1',
+                    kind: ReviewChangeKind.mergeMemories,
+                    title: 'Merged two memories',
+                    createdAt: DateTime.now().subtract(const Duration(minutes: 30)),
                   ),
-                )
+                ]))
               : ApiFailure<ReviewChangesPage>(ApiProblem(failure)),
         );
 
@@ -215,27 +201,15 @@ void main() {
     testWidgets('a refresh where one source fails keeps that source\'s rows', (tester) async {
       final (seen, _) = _seen(yesterday.millisecondsSinceEpoch);
       var recapsOk = true;
-      await tester.pumpWidget(
-        _app(
-          ActivityPage(
-            seen: seen,
-            probeDreamReport: () async => false,
-            loadRecaps: () async => (items: recapsOk ? [_recap('kept', anHourAgo)] : <DailySummary>[], ok: recapsOk),
-            loadChanges: ({cursor}) async => ApiSuccess(
-              ReviewChangesPage(
-                changes: [
-                  ReviewChange(
-                    changeId: 'c1',
-                    kind: ReviewChangeKind.rename,
-                    title: 'Renamed a person',
-                    createdAt: DateTime.now(),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
+      await tester.pumpWidget(_app(ActivityPage(
+        seen: seen,
+        probeDreamReport: () async => false,
+        loadRecaps: () async => (items: recapsOk ? [_recap('kept', anHourAgo)] : <DailySummary>[], ok: recapsOk),
+        loadChanges: ({cursor}) async => ApiSuccess(ReviewChangesPage(changes: [
+          ReviewChange(
+              changeId: 'c1', kind: ReviewChangeKind.rename, title: 'Renamed a person', createdAt: DateTime.now()),
+        ])),
+      )));
       await tester.pumpAndSettle();
       expect(find.text('Recap kept'), findsOneWidget);
 
@@ -248,16 +222,12 @@ void main() {
 
     testWidgets('says so when there is nothing yet', (tester) async {
       final (seen, _) = _seen(0);
-      await tester.pumpWidget(
-        _app(
-          ActivityPage(
-            seen: seen,
-            probeDreamReport: () async => false,
-            loadRecaps: () async => (items: <DailySummary>[], ok: true),
-            loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])),
-          ),
-        ),
-      );
+      await tester.pumpWidget(_app(ActivityPage(
+        seen: seen,
+        probeDreamReport: () async => false,
+        loadRecaps: () async => (items: <DailySummary>[], ok: true),
+        loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])),
+      )));
       await tester.pumpAndSettle();
       expect(find.text('No activity yet'), findsOneWidget);
     });
@@ -265,16 +235,12 @@ void main() {
     testWidgets('a recap stamped ahead of the phone clock is seen once shown', (tester) async {
       final (seen, _) = _seen(yesterday.millisecondsSinceEpoch);
       final ahead = DateTime.now().add(const Duration(minutes: 10));
-      await tester.pumpWidget(
-        _app(
-          ActivityPage(
-            seen: seen,
-            probeDreamReport: () async => false,
-            loadRecaps: () async => (items: [_recap('ahead', ahead)], ok: true),
-            loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])),
-          ),
-        ),
-      );
+      await tester.pumpWidget(_app(ActivityPage(
+        seen: seen,
+        probeDreamReport: () async => false,
+        loadRecaps: () async => (items: [_recap('ahead', ahead)], ok: true),
+        loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])),
+      )));
       await tester.pumpAndSettle();
       expect(find.text('Recap ahead'), findsOneWidget);
       expect(seen.hasNew.value, isFalse);
@@ -283,16 +249,12 @@ void main() {
     testWidgets('an empty feed still pulls to refresh', (tester) async {
       final (seen, _) = _seen(yesterday.millisecondsSinceEpoch);
       var recaps = <DailySummary>[];
-      await tester.pumpWidget(
-        _app(
-          ActivityPage(
-            seen: seen,
-            probeDreamReport: () async => false,
-            loadRecaps: () async => (items: recaps, ok: true),
-            loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])),
-          ),
-        ),
-      );
+      await tester.pumpWidget(_app(ActivityPage(
+        seen: seen,
+        probeDreamReport: () async => false,
+        loadRecaps: () async => (items: recaps, ok: true),
+        loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])),
+      )));
       await tester.pumpAndSettle();
       expect(find.text('No activity yet'), findsOneWidget);
 

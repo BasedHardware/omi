@@ -140,7 +140,7 @@ minutes and compare 5xx and container startup/restart signals to the preceding
 (rate(omi_sync_upload_total[5m]))` and verify series originate from sync. A live
 sidecar or `up=1` alone is insufficient evidence of ingestion. The existing manual dev transcription-candidate probe also sends one counter/histogram
 summary using its short-lived release-probe token, after checking the candidate
-URL against the dev service. A shared-UID 429 is reported, not amplified.
+URL against the dev service. A shared-UID 429 fails acceptance without retrying.
 Test authenticated summaries only locally/dev; an unauthenticated fleet POST may check 401 in prod.
 Rollback uses the recorded four-service traffic snapshot via the existing
 release workflow/runbook, preserving the previous images and collector config.
