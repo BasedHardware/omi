@@ -371,7 +371,9 @@ class TranscriptSegment(BaseModel):
                 if segment.person_id and segment.person_id in people_map:
                     speaker_name = people_map[segment.person_id]
                 else:
-                    speaker_name = f'Speaker {segment.speaker_id}'
+                    speaker_name = (
+                        f'Speaker {segment.speaker_id}' if segment.speaker_id is not None else 'Unknown speaker'
+                    )
             transcript += f'{timestamp_str}{speaker_name}: {segment_text}\n\n'
 
         return transcript.strip()

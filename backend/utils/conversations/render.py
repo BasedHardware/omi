@@ -15,7 +15,18 @@ from models.note_claims import current_note_claims
 from models.transcript_segment import TranscriptSegment, strip_grouping_internal_fields
 from utils.conversations.summary_selection import select_primary_summary
 from models.conversation_photo import ConversationPhoto
-from utils.model_text import DisplayClock, ELAPSED_LEGEND, format_date, format_duration, format_instant, format_span
+from utils.conversations.transcript_for_llm import owner_safe_transcript_segments
+from utils.model_text import (
+    DisplayClock,
+    ELAPSED_LEGEND,
+    UNTRUSTED_LEGEND,
+    format_date,
+    format_duration,
+    format_instant,
+    format_span,
+    generated,
+    untrusted_block,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +102,8 @@ def populate_speaker_names(uid: str, conversations: List[Dict[str, Any]]) -> Non
             elif seg.get('person_id') and str(seg['person_id']) in people_map:
                 seg['speaker_name'] = people_map[str(seg['person_id'])]
             else:
-                seg['speaker_name'] = f"Speaker {seg.get('speaker_id', 0)}"
+                speaker_id = seg.get('speaker_id')
+                seg['speaker_name'] = f"Speaker {speaker_id}" if speaker_id is not None else 'Unknown speaker'
 
 
 def populate_folder_names(uid: str, conversations: List[Dict[str, Any]]) -> None:
@@ -236,6 +248,7 @@ def conversations_to_string(
     include_refs: bool = False,
     index_start: int = 1,
     truncation_notes: Optional[Dict[str, str]] = None,
+    include_legends: bool = True,
 ) -> str:
     """Format a sequence of Conversation objects into a human-readable string.
 
@@ -263,9 +276,15 @@ def conversations_to_string(
         # Add started_at and finished_at if available
         conversation_str += f"When: {format_span(conversation.started_at or conversation.created_at, conversation.finished_at, clock)}\n"
 
-        conversation_str += f"{str(conversation.structured.title).capitalize()}\n"
+        conversation_content: List[str] = []
+        title = str(conversation.structured.title or '')
+        title = title[:1].upper() + title[1:] if title else ''
+        if title:
+            conversation_content.append(generated('Title', title))
 
-        conversation_str += f"{select_primary_summary(conversation).content}\n"
+        overview = str(select_primary_summary(conversation).content or '')
+        if overview:
+            conversation_content.append(generated('Overview', overview))
 
         # attendees
         if people_map:
@@ -281,21 +300,23 @@ def conversations_to_string(
                     conversation_str += f"Attendees: {attendees}\n"
 
         if conversation.structured.action_items:
-            conversation_str += "Action Items:\n"
+            action_items: List[str] = []
             for item in conversation.structured.action_items:
-                conversation_str += f"- {item.description}\n"
+                state = 'done' if item.completed else 'open'
+                action_items.append(f'- [{state}] {item.description}')
+            conversation_content.append(generated('Action Items', '\n'.join(action_items)))
 
         if conversation.structured.events:
-            conversation_str += "Events:\n"
+            events: List[str] = []
             for event in conversation.structured.events:
-                conversation_str += (
-                    f"- {event.title} ({format_instant(event.start, clock)}, {format_duration(event.duration * 60)})\n"
+                events.append(
+                    f"- {event.title} ({format_instant(event.start, clock)}, {format_duration(event.duration * 60)})"
                 )
+            conversation_content.append(generated('Events', '\n'.join(events)))
 
         if use_transcript:
-            show_timestamps = include_timestamps and TranscriptSegment.can_display_seconds(
-                conversation.transcript_segments
-            )
+            safe_segments, owner_note = owner_safe_transcript_segments(conversation.transcript_segments)
+            show_timestamps = include_timestamps and TranscriptSegment.can_display_seconds(safe_segments)
             if include_refs:
                 transcript = '\n\n'.join(
                     f'#{segment.id} '
@@ -306,11 +327,11 @@ def conversations_to_string(
                         user_name=user_name,
                         elapsed_timestamps=True,
                     )
-                    for segment in conversation.transcript_segments
+                    for segment in safe_segments
                 )
             else:
                 transcript = TranscriptSegment.segments_as_string(
-                    conversation.transcript_segments,
+                    safe_segments,
                     include_timestamps=include_timestamps,
                     people=people,
                     user_name=user_name,
@@ -318,7 +339,9 @@ def conversations_to_string(
                 )
             if show_timestamps and transcript:
                 elapsed_timestamps_shown = True
-            conversation_str += f"\nTranscript:\n{transcript}\n"
+            transcript_block = f"Transcript:\n{owner_note + chr(10) if owner_note else ''}{transcript}"
+            if transcript:
+                conversation_content.append(transcript_block)
             if truncation_notes and truncation_notes.get(conversation.id):
                 conversation_str += truncation_notes[conversation.id] + '\n'
             # photos
@@ -328,13 +351,19 @@ def conversations_to_string(
                 clock=clock,
             )
             if photo_descriptions != 'None':
-                conversation_str += f"Photo Descriptions from a wearable camera:\n{photo_descriptions}\n"
+                conversation_content.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
+
+        if conversation_content:
+            conversation_str += untrusted_block('conversation', '\n'.join(conversation_content)) + '\n'
 
         result.append(conversation_str.strip())
 
     rendered = "\n\n---------------------\n\n".join(result).strip()
-    if elapsed_timestamps_shown and rendered:
-        rendered = ELAPSED_LEGEND + '\n' + rendered
+    if include_legends and rendered:
+        legends = [UNTRUSTED_LEGEND]
+        if elapsed_timestamps_shown:
+            legends.insert(0, ELAPSED_LEGEND)
+        rendered = '\n'.join(legends) + '\n' + rendered
     return rendered
 
 

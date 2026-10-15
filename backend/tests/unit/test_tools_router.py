@@ -109,6 +109,7 @@ _SYS_MODULE_NAMES = [
     "utils.conversations.search",
     "utils.conversations.mcp_transcript_search",
     "utils.conversations.transcript_chunks",
+    "utils.conversations.transcript_for_llm",
     "utils.retrieval",
     "utils.retrieval.tools",
     "utils.retrieval.tools.calendar_tools",
@@ -158,6 +159,8 @@ for mod_name in [
 ]:
     if mod_name not in sys.modules:
         _stub_module(mod_name)
+
+sys.modules["database.auth"].get_user_name = MagicMock(return_value="Test User")
 
 # Stub database packages
 _stub_package("database")
@@ -210,6 +213,8 @@ _stub_package("utils.retrieval.tools")
 _stub_package("utils.retrieval.tool_services")
 _stub_package("utils.other")
 _stub_package("utils.memory")
+transcript_for_llm_stub = _stub_module("utils.conversations.transcript_for_llm")
+transcript_for_llm_stub.owner_safe_transcript_segments = lambda segments, **_kwargs: (list(segments), "")
 
 # This router suite exercises the released service contract. Temporal policy
 # and Beta traversal are covered by the memory service's dedicated suites.
@@ -587,7 +592,8 @@ class TestGetConversationsText:
             end_date="2024-01-31T23:59:59Z",
         )
         assert "No conversations found" in result
-        assert "2024-01" in result
+        assert "Mon 1 Jan 2024" in result
+        assert "Wed 31 Jan 2024" in result
 
     def test_invalid_start_date(self):
         result = conversations_svc.get_conversations_text(uid="test-uid", start_date="bad-date")
@@ -705,7 +711,9 @@ class TestSearchConversationsText:
             result = conversations_svc.search_conversations_text(
                 uid='test-uid', query='invoice amount', source_sink=sources
             )
-        conversations_db.get_conversations_by_id.assert_called_once_with('test-uid', ['spoken-only'])
+        conversations_db.get_conversations_by_id.assert_called_once_with(
+            'test-uid', ['spoken-only'], include_discarded=True
+        )
         assert embeddings.embed_query.call_count == 1
         assert vector_db.query_vectors.call_args.kwargs['query_vector'] == [0.5]
         assert transcript_search_mod.search_chat_transcript_chunks.call_args.kwargs['query_vector'] == [0.5]
@@ -770,7 +778,7 @@ class TestSearchConversationsText:
             {'id': 'conv-1', 'transcript_segments': []},
         ]
         result = conversations_svc.search_conversations_text(uid="test-uid", query="test query")
-        assert "Found" in result
+        assert "1 nearest conversations" in result
         assert "1 conversations formatted" in result
 
     def test_exact_reference_bypasses_keyword_and_vector_search(self):
@@ -788,7 +796,9 @@ class TestSearchConversationsText:
         assert "1 conversations formatted" in result
         search_mod.keyword_search_conversation_ids.assert_not_called()
         vector_db.query_vectors.assert_not_called()
-        conversations_db.get_conversations_by_id.assert_called_once_with("test-uid", [conversation_id])
+        conversations_db.get_conversations_by_id.assert_called_once_with(
+            "test-uid", [conversation_id], include_discarded=True
+        )
 
     def test_exact_reference_respects_date_filter(self):
         conversation_id = "e8c05000-52f0-4a95-951c-ccd715523429"
