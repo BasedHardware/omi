@@ -176,7 +176,9 @@ async def test_keyless_probe_denial_is_advisory_without_a_provider_fallback(monk
 
     def denied(request):
         requests.append(request)
-        assert request.url.path.endswith(f'/models/{OLD}:generateContent')
+        # #21743 scopes the advisory failed-probe cooldown to the Dream model;
+        # probe it so the denial stays inconclusive AND the cooldown persists.
+        assert request.url.path.endswith(f'/models/{NEW}:generateContent')
         assert request.headers['X-Vertex-AI-LLM-Request-Type'] == 'dedicated'
         assert not request.url.params
         assert json.loads(request.content)['contents'][0]['parts'] == [{'text': 'Reply OK.'}]
@@ -184,7 +186,7 @@ async def test_keyless_probe_denial_is_advisory_without_a_provider_fallback(monk
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(denied)) as client:
         monkeypatch.setattr(dream_capacity, 'get_desktop_gemini_client', lambda: client)
-        assert await dream_capacity._probe(OLD, 'us-central1') == 'inconclusive'
+        assert await dream_capacity._probe(NEW, 'us-central1') == 'inconclusive'
 
     assert len(requests) == (0 if credential_failure else 1)
     assert dream_capacity._local().probe_failed_until > 0
