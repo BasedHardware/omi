@@ -931,7 +931,7 @@
       "matrix_size": 1,
       "needs": "scope",
       "owner": "CI maintainers",
-      "rationale": "Explicit one-off prod legacy retirement dispatch after admin deploy; estimate one additional manual migration run per100days (0.01/day), five-minute ceiling, no PR execution. Existing service image is retained.",
+      "rationale": "Explicit one-off prod legacy retirement dispatch after admin deploy; estimate one additional manual migration run per100days (0.01/day), five-minute p50 budget, no PR execution. Existing service image is retained.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -949,7 +949,7 @@
       "matrix_size": 1,
       "needs": "deploy",
       "owner": "CI maintainers",
-      "rationale": "Explicit one-off prod legacy retirement dispatch after admin deploy; estimate one additional manual migration run per100days (0.01/day), five-minute ceiling, no PR execution. Existing service image is retained.",
+      "rationale": "Explicit one-off prod legacy retirement dispatch after admin deploy; estimate one additional manual migration run per100days (0.01/day), five-minute p50 budget, no PR execution. Existing service image is retained.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -967,7 +967,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Explicit one-off prod legacy retirement dispatch after admin deploy; estimate one additional manual migration run per100days (0.01/day), five-minute ceiling, no PR execution. Existing service image is retained.",
+      "rationale": "Explicit one-off prod legacy retirement dispatch after admin deploy; estimate one additional manual migration run per100days (0.01/day), five-minute p50 budget, no PR execution. Existing service image is retained.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
