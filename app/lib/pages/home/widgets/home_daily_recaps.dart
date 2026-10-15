@@ -57,11 +57,7 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> {
     final result = await widget.load();
     if (!mounted) return;
     // A new recap is the delight that lights Home's Activity bell.
-    if (result.ok) {
-      for (final recap in result.items) {
-        ActivitySeen.instance.reportDelight(recap.createdAt);
-      }
-    }
+    if (result.ok) ActivitySeen.instance.observe(result.items.map((r) => r.createdAt));
     setState(() {
       if (result.ok) _recaps = result.items;
       _loading = false;

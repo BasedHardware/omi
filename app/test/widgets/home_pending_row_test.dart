@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nested/nested.dart';
@@ -10,6 +11,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart' show BleAudioCodec;
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
+import 'package:omi/pages/conversations/conversations_page.dart' show dateFilterIncludesToday;
 import 'package:omi/pages/conversations/on_the_way_page.dart';
 import 'package:omi/pages/conversations/widgets/home_pending_row.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -23,12 +25,7 @@ import 'package:omi/services/wals/wal.dart';
 /// tap away and the Offline Sync page one tap beyond that.
 
 class _FakeSync extends ChangeNotifier implements SyncProvider {
-  _FakeSync(
-      {this.wals = const [],
-      this.syncing = false,
-      this.fetching = false,
-      this.fetchingWithUploadPhase = false,
-      this.progress = 0.0});
+  _FakeSync({this.wals = const [], this.syncing = false, this.fetching = false, this.fetchingWithUploadPhase = false});
 
   final List<Wal> wals;
   final bool syncing;
@@ -37,14 +34,12 @@ class _FakeSync extends ChangeNotifier implements SyncProvider {
   /// Models the real upload→fetch transition, which retains the uploading
   /// phase instead of moving to idle.
   final bool fetchingWithUploadPhase;
-  final double progress;
   bool rateLimited = false;
   RateLimitReason? reason;
 
   @override
   SyncState get syncState => switch ((syncing, fetching, fetchingWithUploadPhase)) {
-        (true, _, _) =>
-          SyncState(status: SyncStatus.syncing, phase: SyncPhase.downloadingFromDevice, progress: progress),
+        (true, _, _) => SyncState(status: SyncStatus.syncing, phase: SyncPhase.downloadingFromDevice),
         (_, true, _) => const SyncState(status: SyncStatus.fetchingConversations),
         (_, _, true) => const SyncState(status: SyncStatus.fetchingConversations, phase: SyncPhase.uploadingToCloud),
         _ => const SyncState(),
@@ -221,6 +216,11 @@ void main() {
       expect(find.text('Transcribing…'), findsOneWidget);
     });
 
+    testWidgets('reads the conversation fetch after a sync as transcribing', (tester) async {
+      await _pumpRow(tester, _FakeSync(wals: [_wal('done', 4, WalStatus.synced)], fetching: true));
+      expect(find.text('Transcribing…'), findsOneWidget);
+    });
+
     testWidgets('reads a backend-busy cooldown as itself, not pending work', (tester) async {
       final sync = _FakeSync(wals: [_wal('ready', 5, WalStatus.miss)])
         ..rateLimited = true
@@ -239,6 +239,24 @@ void main() {
       final local = _wal('local', 5, WalStatus.miss)..onDeviceOnly = true;
       await _pumpRow(tester, _FakeSync(wals: [local]));
       expect(find.byKey(_row), findsNothing);
+    });
+
+    testWidgets('stays activatable for screen readers', (tester) async {
+      final handle = tester.ensureSemantics();
+      await _pumpRow(tester, _FakeSync(wals: [_wal('processing', 4, WalStatus.uploaded)]));
+      final node = tester.getSemantics(find.byKey(_row));
+      expect(node.label, 'Conversations on the way, Transcribing…');
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      handle.dispose();
+    });
+
+    test('belongs to Today only: a date filter that excludes today hides it', () {
+      final now = DateTime(2026, 10, 15, 18);
+      expect(dateFilterIncludesToday(null, null, now), isTrue);
+      expect(dateFilterIncludesToday(DateTime(2026, 10, 15), null, now), isTrue);
+      expect(dateFilterIncludesToday(DateTime(2026, 10, 1), DateTime(2026, 10, 15), now), isTrue);
+      expect(dateFilterIncludesToday(DateTime(2026, 10, 1), DateTime(2026, 10, 14), now), isFalse);
+      expect(dateFilterIncludesToday(DateTime(2026, 10, 14), null, now), isFalse);
     });
 
     testWidgets('tapping opens On the Way', (tester) async {

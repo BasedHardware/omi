@@ -27,14 +27,18 @@ class ActivitySeen {
   /// When Activity was last opened or left, in epoch milliseconds; 0 if never.
   int get seenAtMs => _read();
 
-  /// Reported by every surface that loads delight items.
-  void reportDelight(DateTime at) {
-    final ms = at.millisecondsSinceEpoch;
-    if (ms > _latestDelightMs) _latestDelightMs = ms;
+  /// Reported by every surface after a successful load of delight items, even an empty one.
+  void observe(Iterable<DateTime> delights, {DateTime? now}) {
+    for (final at in delights) {
+      final ms = at.millisecondsSinceEpoch;
+      if (ms > _latestDelightMs) _latestDelightMs = ms;
+    }
     final seen = seenAtMs;
     if (seen == 0) {
-      // First sight on this install: what already exists is the baseline, not news.
-      _write(_latestDelightMs);
+      // First successful load on this install is the baseline, not news: what exists now (or
+      // nothing at all) is seen, and the next recap to arrive lights the bell.
+      final nowMs = (now ?? DateTime.now()).millisecondsSinceEpoch;
+      _write(nowMs > _latestDelightMs ? nowMs : _latestDelightMs);
       hasNew.value = false;
       return;
     }

@@ -72,9 +72,22 @@ abstract final class SyncPendingWork {
   static List<Wal> attention(SyncProvider p) =>
       p.displaySortedWals.where((w) => needsAttention(w.syncDisplayState)).toList(growable: false);
 
-  static int pendingSeconds(SyncProvider p) => walSeconds(uploaded(p)) + walSeconds(syncing(p));
-
-  static bool isLargeBacklog(SyncProvider p) => pendingSeconds(p) >= largeSyncBacklogSeconds;
+  /// One pass over the unsorted index, stopping at the threshold: Home's row asks this on every
+  /// SyncProvider notify, which streams progress during a sync.
+  static bool isLargeBacklog(SyncProvider p) {
+    var seconds = 0;
+    Set<String>? moved;
+    for (final w in p.allWals) {
+      if (w.status == WalStatus.uploaded) {
+        seconds += w.seconds > 0 ? w.seconds : 0;
+      } else if (isPendingWal(w)) {
+        if (walIsOnDevice(w) && (moved ??= movedIds(p)).contains(w.id)) continue;
+        seconds += w.seconds > 0 ? w.seconds : 0;
+      }
+      if (seconds >= largeSyncBacklogSeconds) return true;
+    }
+    return false;
+  }
 
   /// Where the pending work is right now, in one short line.
   static String stageLabel(SyncProvider p, AppLocalizations l) {

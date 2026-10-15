@@ -234,6 +234,16 @@ List<_ConversationListRow> _buildConversationListRows({
   return rows;
 }
 
+/// Whether the date filter, if any, covers today: the pending row belongs to Today only.
+@visibleForTesting
+bool dateFilterIncludesToday(DateTime? start, DateTime? end, DateTime now) {
+  if (start == null) return true;
+  final today = DateTime(now.year, now.month, now.day);
+  end ??= start;
+  return !today.isBefore(DateTime(start.year, start.month, start.day)) &&
+      !today.isAfter(DateTime(end.year, end.month, end.day));
+}
+
 /// [rows] with Home's pending row placed right under today's header, or, with no today in the list,
 /// ahead of it carrying its own header. The row draws nothing while no recording is pending.
 List<_ConversationListRow> _withPendingSyncRow(List<_ConversationListRow> rows, DateTime now) {
@@ -540,7 +550,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           processingByDate: processingByDate,
         );
         // Recordings that are not conversations yet sit in Today, where they will land.
-        final conversationRows = showRecordings ? _withPendingSyncRow(listRows, DateTime.now()) : listRows;
+        final showPending = showRecordings &&
+            dateFilterIncludesToday(convoProvider.selectedStartDate, convoProvider.selectedEndDate, DateTime.now());
+        final conversationRows = showPending ? _withPendingSyncRow(listRows, DateTime.now()) : listRows;
 
         return RefreshIndicator(
           onRefresh: () async {
@@ -567,7 +579,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               const SliverToBoxAdapter(child: ReviewEntryCard(fallback: SpeakerTagPromptCard())),
               const SliverToBoxAdapter(child: CaptureRecoveryBanner()),
               // With no list to sit in, the pending row brings its own Today header.
-              if (listRows.isEmpty && showRecordings)
+              if (listRows.isEmpty && showPending)
                 const SliverToBoxAdapter(child: HomePendingRow(showTodayHeader: true)),
               SliverToBoxAdapter(
                 child: widget.loadRecaps == null

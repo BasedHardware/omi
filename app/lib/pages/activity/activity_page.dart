@@ -59,6 +59,10 @@ class _ActivityPageState extends State<ActivityPage> {
   bool _failed = false;
   bool _hasChanges = false;
 
+  /// One source failed for a reason other than "not available for this account": what loaded is
+  /// shown, with a retry, instead of passing for a complete list.
+  bool _partial = false;
+
   @override
   void initState() {
     super.initState();
@@ -89,13 +93,15 @@ class _ActivityPageState extends State<ActivityPage> {
       if (recaps.ok) ...recaps.items.map(_RecapItem.new),
       if (changes case ApiSuccess(:final data)) ...data.changes.map(_ChangeItem.new),
     ]..sort((a, b) => b.at.compareTo(a.at));
-    for (final recap in recaps.items) {
-      _seen.reportDelight(recap.createdAt);
-    }
+    if (recaps.ok) _seen.observe(recaps.items.map((r) => r.createdAt));
     _seen.markSeen();
+    // Review changes answer 404 for accounts outside the Review cohort: absent, not failed.
+    final changesFailed = changes is ApiFailure<ReviewChangesPage> && changes.problem.kind != ApiProblemKind.notFound;
+    final anyFailed = !recaps.ok || changesFailed;
     setState(() {
       _loading = false;
-      _failed = !recaps.ok && changes is ApiFailure;
+      _failed = anyFailed && items.isEmpty;
+      _partial = anyFailed && items.isNotEmpty;
       _hasChanges = changes is ApiSuccess<ReviewChangesPage> && changes.data.changes.isNotEmpty;
       _items = items;
     });
@@ -133,6 +139,23 @@ class _ActivityPageState extends State<ActivityPage> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.xxl),
           children: [
+            if (_partial)
+              Padding(
+                padding: const EdgeInsets.only(top: OmiSpacing.xs),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(l.reviewChangesLoadFailed,
+                          style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+                    ),
+                    OmiButton.tertiary(
+                        key: const Key('activity_retry'),
+                        label: l.retry,
+                        size: OmiButtonSize.compact,
+                        onPressed: _refresh),
+                  ],
+                ),
+              ),
             for (final (header, items) in groups) ...[
               _DayHeader(label: header),
               _ActivityGroup(
@@ -250,6 +273,7 @@ class _ActivityRow extends StatelessWidget {
     return Semantics(
       button: true,
       label: '$title, $subtitle',
+      onTap: onTap,
       excludeSemantics: true,
       child: InkWell(
         onTap: onTap,

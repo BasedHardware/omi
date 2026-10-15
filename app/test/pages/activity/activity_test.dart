@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/http/api_result.dart';
@@ -36,25 +37,34 @@ void main() {
   final anHourAgo = DateTime.now().subtract(const Duration(hours: 1));
 
   group('ActivitySeen', () {
-    test('first sight on an install is the baseline, not news', () {
+    test('first successful load on an install is the baseline, not news', () {
       final (seen, stored) = _seen(0);
-      seen.reportDelight(yesterday);
+      final now = DateTime.now();
+      seen.observe([yesterday], now: now);
       expect(seen.hasNew.value, isFalse);
-      expect(stored(), yesterday.millisecondsSinceEpoch);
+      expect(stored(), now.millisecondsSinceEpoch);
+    });
+
+    test('an empty first load still sets the baseline, so the first recap lights the bell', () {
+      final (seen, _) = _seen(0);
+      seen.observe(const [], now: anHourAgo);
+      expect(seen.hasNew.value, isFalse);
+      seen.observe([DateTime.now()]);
+      expect(seen.hasNew.value, isTrue);
     });
 
     test('a recap newer than the last visit lights the bell; visiting clears it', () {
       final (seen, stored) = _seen(yesterday.millisecondsSinceEpoch);
-      seen.reportDelight(yesterday);
+      seen.observe([yesterday]);
       expect(seen.hasNew.value, isFalse);
-      seen.reportDelight(anHourAgo);
+      seen.observe([anHourAgo]);
       expect(seen.hasNew.value, isTrue);
 
       final now = DateTime.now();
       seen.markSeen(now: now);
       expect(seen.hasNew.value, isFalse);
       expect(stored(), now.millisecondsSinceEpoch);
-      seen.reportDelight(anHourAgo);
+      seen.observe([anHourAgo]);
       expect(seen.hasNew.value, isFalse);
     });
   });
@@ -67,7 +77,7 @@ void main() {
       expect(find.byKey(const ValueKey('home_activity_dot')), findsNothing);
       expect(find.bySemanticsLabel('Activity'), findsOneWidget);
 
-      seen.reportDelight(anHourAgo);
+      seen.observe([anHourAgo]);
       await tester.pump();
       expect(find.byKey(const ValueKey('home_activity_dot')), findsOneWidget);
       expect(find.bySemanticsLabel('Activity, new items'), findsOneWidget);
@@ -75,7 +85,8 @@ void main() {
   });
 
   group('ActivityPage', () {
-    Widget page(ActivitySeen seen, {bool changesOk = true}) => ActivityPage(
+    Widget page(ActivitySeen seen, {bool changesOk = true, ApiProblemKind failure = ApiProblemKind.notFound}) =>
+        ActivityPage(
           seen: seen,
           probeDreamReport: () async => false,
           loadRecaps: () async => (items: [_recap('new', anHourAgo), _recap('old', yesterday)], ok: true),
@@ -88,7 +99,7 @@ void main() {
                     createdAt: DateTime.now().subtract(const Duration(minutes: 30)),
                   ),
                 ]))
-              : const ApiFailure<ReviewChangesPage>(ApiProblem(ApiProblemKind.notFound)),
+              : ApiFailure<ReviewChangesPage>(ApiProblem(failure)),
         );
 
     testWidgets('lists recaps and changes newest first, dots only the recap new since the last visit', (tester) async {
@@ -116,6 +127,25 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Recap new'), findsOneWidget);
       expect(find.byKey(const Key('activity_recent_changes')), findsNothing);
+    });
+
+    testWidgets('a real failure of one source shows what loaded, with a retry', (tester) async {
+      final (seen, _) = _seen(yesterday.millisecondsSinceEpoch);
+      await tester.pumpWidget(_app(page(seen, changesOk: false, failure: ApiProblemKind.server)));
+      await tester.pumpAndSettle();
+      expect(find.text('Recap new'), findsOneWidget);
+      expect(find.byKey(const Key('activity_retry')), findsOneWidget);
+    });
+
+    testWidgets('rows stay activatable for screen readers', (tester) async {
+      final handle = tester.ensureSemantics();
+      final (seen, _) = _seen(yesterday.millisecondsSinceEpoch);
+      await tester.pumpWidget(_app(page(seen)));
+      await tester.pumpAndSettle();
+      final node = tester.getSemantics(find.byKey(const ValueKey('activity_recap_new')));
+      expect(node.label, startsWith('Recap new, '));
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      handle.dispose();
     });
 
     testWidgets('says so when there is nothing yet', (tester) async {

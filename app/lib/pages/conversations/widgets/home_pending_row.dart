@@ -39,6 +39,7 @@ class HomePendingRow extends StatelessWidget {
         final title = SyncPendingWork.isLargeBacklog(p) ? l.homePendingCatchingUp : l.homePendingTitle;
         final subtitle = SyncPendingWork.stageLabel(p, l);
         final now = DateTime.now();
+        void open() => routeToPage(context, OnTheWayPage(syncProvider: syncProvider, multiFileSync: multiFileSync));
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
@@ -50,6 +51,7 @@ class HomePendingRow extends StatelessWidget {
                 button: true,
                 liveRegion: true,
                 label: '$title, $subtitle',
+                onTap: open,
                 excludeSemantics: true,
                 child: Material(
                   key: const Key('home_pending_row'),
@@ -57,10 +59,7 @@ class HomePendingRow extends StatelessWidget {
                   borderRadius: OmiRadius.xlAll,
                   child: InkWell(
                     borderRadius: OmiRadius.xlAll,
-                    onTap: () => routeToPage(
-                      context,
-                      OnTheWayPage(syncProvider: syncProvider, multiFileSync: multiFileSync),
-                    ),
+                    onTap: open,
                     child: Padding(
                       padding: const EdgeInsetsDirectional.fromSTEB(14, 14, 10, 14),
                       child: Row(
