@@ -135,13 +135,23 @@ live layout on subsequent applies. This slice does not switch `/dashboard`.
 The admin-authenticated `/api/omi/stats/wall` returns the 22 contract IDs plus
 explicit capture-week-1 and plan-prepay-cash lines. Definitions, UTC cutoffs,
 primary/entry attribution and qualification come from `lib/qualified-activity.ts`.
-A bounded, coalesced 15-minute in-process cache preserves source refresh stamps
-and expires at UTC midnight. PostHog carries its upstream `last_refresh`, or the
+A coalesced 15-minute in-process cache preserves source refresh stamps. Expired
+and previous-UTC-day payloads (at most 24h old) are served while one refresh runs;
+previous-day or failed-refresh payloads dim. A cold process returns loading cards
+within five seconds and retains the computation with Next's `after()`. The board
+polls every 30s, so results appear without a manual reload. All-source failure
+cannot replace the last good payload; failed refreshes have a 30s retry cooldown.
+A partial payload with exhausted transient queries is retried on the next poll,
+rather than holding its nulls for 15 minutes. PostHog carries its upstream `last_refresh`, or the
 execution completion time of our live HogQL aggregate when the API omits it.
 A cached upstream result without a refresh receipt stays unknown. Payload-cache
 reads never advance source refresh timestamps.
-It performs no Firestore cache writes and has no
-stale-on-error fallback. Counts use primary qualified platform; cohort rates use
+It performs no Firestore cache writes. Bounded last-good reads are an explicit
+wall-only exception to the general stale-data rule. Source timestamps never advance
+on a cache read. Each PostHog query has classified, secret-safe failure telemetry
+and bounded retries. Six-period cohort/established trends use two-period reads,
+splitting time-limited pairs into single periods; MAU uses separate 30-day reads.
+The 180-day lookback, denominator and observation windows remain unchanged. Counts use primary qualified platform; cohort rates use
 entry platform and include the full denominator. Rates do not add across splits:
 the split numerators and denominators do. Missing sources remain null.
 
@@ -194,7 +204,7 @@ The provisioned board rewrites the proxy URL only in its local copy.
 Run records and screenshots are written only to
 `/Users/dazheng/workspace/omi/data/run-2026-10-14-omi-tv-metrics/`;
 never commit that workspace run directory in the public repository. The local
-verifier uses the `omi-tv-v2-rev1-1440.png` / `-1920.png` screenshot names.
+verifier uses the `omi-tv-v2-prod-fix-1440.png` / `-1920.png` screenshot names.
 Tracked UI-evidence copies belong under `.agent-artifacts/ui-evidence/`.
 
 Deploy prerequisites and limits:
@@ -214,10 +224,11 @@ Deploy prerequisites and limits:
   extra enterprise product IDs use `OMI_TV_PLAN_PRODUCT_IDS`; unknown products and
   tiered prices remain coverage gaps. JPY is zero-decimal and never treated as
   USD cents. Non-USD amounts need approved FX; otherwise they are excluded and
-  the book is partial. The live book has no fabricated prior/trend. **Production
-  ARPMAU stays null until a corrected same-cutoff MRR snapshot source is wired**;
-  corrupt historic FinOps aggregates cannot repair their dropped products/JPY
-  from totals alone. Synthetic same-cutoff fixtures exercise the arithmetic.
+  the book is partial. The live book has no fabricated prior/trend. ARPMAU divides available MRR by qualified MAU. Live MRR over completed MAU is
+  explicitly dimmed and labeled as a cutoff-mismatched proxy; the contract's
+  same-cutoff close still needs a corrected MRR snapshot. Historic corrupt FinOps
+  aggregates cannot repair dropped products/JPY from totals alone. Synthetic
+  same-cutoff fixtures exercise the strict snapshot arithmetic.
 - Billing reuses `infra-costs` billing mode with aggregate-only reads, skipping
   Firestore/ledger diagnostics and the estimated fallback. Select ro-prod ADC
   locally; the runtime billing identity needs its existing BigQuery read/job

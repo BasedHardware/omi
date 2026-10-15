@@ -106,6 +106,20 @@ def screens():
               if (!title || !chip) return [];
               const b=title.getBoundingClientRect();return b.right > chip.getBoundingClientRect().left-5 ? [title.textContent] : [];
             })''')
+            text_collisions = page.locator('svg[data-omi-card]').evaluate_all("""svgs => svgs.flatMap(svg => {
+              const texts = Array.from(svg.querySelectorAll('text'));
+              const hits = [];
+              const intersects = (a,b) => a.left < b.right-0.5 && a.right > b.left+0.5 && a.top < b.bottom-0.5 && a.bottom > b.top+0.5;
+              texts.forEach((a,i) => texts.slice(i+1).forEach(b => {
+                if (intersects(a.getBoundingClientRect(),b.getBoundingClientRect())) hits.push([a.textContent,b.textContent]);
+              }));
+              svg.querySelectorAll('svg:has(path)').forEach(chart => texts.forEach(t => {
+                if (intersects(chart.getBoundingClientRect(),t.getBoundingClientRect())) hits.push(['sparkline',t.textContent]);
+              }));
+              return hits;
+            })""")
+            if text_collisions:
+                raise RuntimeError(f'Card text/sparkline overlap at {width}px: {text_collisions}')
             if overlap:
                 raise RuntimeError(f'Card title overlaps its scope chip at {width}px: {overlap}')
             if clipped:
@@ -113,7 +127,7 @@ def screens():
             diagnostics = page.get_by_text('Diagnostics · definitions and coverage',exact=True)
             if diagnostics.count() and diagnostics.bounding_box()['y'] < height:
                 raise RuntimeError(f'Diagnostics visible above the fold at {width}px')
-            page.screenshot(path=str(out/f'omi-tv-v2-rev1-{width}.png'))
+            page.screenshot(path=str(out/f'omi-tv-v2-prod-fix-{width}.png'))
         browser.close()
 
 
