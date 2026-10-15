@@ -119,8 +119,18 @@ class _ConversationProcessingCardState extends State<ConversationProcessingCard>
                 // to open for it. Phone-side WALs and uploaded server jobs
                 // need no connected device; the sync pages render and process
                 // them on their own, so the card never strands that work
-                // behind the "Offline Sync unavailable" alert.
-                final hasDeviceWork = p.allWals.any((w) => w.status == WalStatus.miss && walIsOnDevice(w));
+                // behind the "Offline Sync unavailable" alert. A device twin
+                // whose phone copy is already uploaded/synced has moved its
+                // audio — it is lagging bookkeeping, not pending device work
+                // (the twin keeps the device_timerStart id; see
+                // offline_processing_display's server-job filter).
+                final movedIds = p.allWals
+                    .where((w) => !walIsOnDevice(w) && (w.status == WalStatus.uploaded || w.status == WalStatus.synced))
+                    .map((w) => w.id)
+                    .toSet();
+                final hasDeviceWork = p.allWals.any(
+                  (w) => w.status == WalStatus.miss && walIsOnDevice(w) && !movedIds.contains(w.id),
+                );
                 if (hasDeviceWork && !context.read<DeviceProvider>().isDeviceStorageSupport) {
                   showOmiAlert(
                     context,

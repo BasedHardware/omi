@@ -399,6 +399,27 @@ void main() {
       expect(find.text('Sync details'), findsOneWidget);
     });
 
+    testWidgets('a lagging device twin does not block the tap once its phone copy moved', (tester) async {
+      // Importing device audio leaves the device twin `miss` (same
+      // device_timerStart id) while the phone copy uploads; the twin is
+      // bookkeeping lag, not pending device work, so the tap must open.
+      final phone = _wal('twin', 40, WalStatus.uploaded);
+      final deviceTwin = _wal('twin', 40, WalStatus.miss)..storage = WalStorage.sdcard;
+      final sync = _FakeSync(wals: [phone, deviceTwin]);
+
+      await _pump(tester, sync, multiFile: true, extras: [
+        ChangeNotifierProvider<UserProvider>(create: (_) => UserProvider()),
+        ChangeNotifierProvider<DeviceProvider>(create: (_) => _Device(storageSupport: false)),
+      ]);
+
+      await tester.tap(find.byKey(const Key('conversation_processing_card')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.text('Offline Sync unavailable'), findsNothing);
+      expect(find.text('Sync details'), findsOneWidget);
+    });
+
     testWidgets('names what needs the user before anything else', (tester) async {
       SharedPreferencesUtil().autoSyncOfflineRecordings = false;
       final sync = _FakeSync(
