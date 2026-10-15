@@ -298,11 +298,14 @@
             "name": "nllb-translation",
             "dockerfile": "backend/nllb_translation/Dockerfile",
             "deployment_workflows": [".github/workflows/gcp_nllb_translation.yml"],
-            "build_context": "backend/nllb_translation",
+            "build_context": ".",
             "source_root": "backend/nllb_translation",
+            "dependency_probe_exclusions": {
+                "omi_logging": "Standalone first-party module copied into /app; the isolated dependency probe cannot see /app."
+            },
             "workdir": "/app",
             "entrypoints": ["main"],
-            "image_import_smoke": false,
+            "image_import_smoke": true,
             "smoke_python": "python3",
             "dependency_probe_smoke": true,
             "pull_request_smoke": false

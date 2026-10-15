@@ -42,10 +42,6 @@
     "missing_setup": 1,
     "basicConfig": 1
   },
-  "backend/nllb_translation/main.py": {
-    "missing_setup": 1,
-    "uvicorn_reconfigures": 1
-  },
   "backend/parakeet/main.py": {
     "missing_setup": 1
   },
