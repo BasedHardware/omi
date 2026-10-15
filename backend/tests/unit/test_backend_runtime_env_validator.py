@@ -409,6 +409,19 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_capture_evidence_env(payload)
     payload = with_screen_frame_egress_env(payload)
     payload = with_firestore_read_ledger_env(payload)
+    # Keep dev snapshots complete while individual tests remove unrelated
+    # gateway/secret fields. Train 1 switches remain explicitly off in dev.
+    for service in ('backend-sync', 'backend-sync-backfill'):
+        payload = re.sub(
+            rf'("{service}":\s*\{{.*?"env":\s*\[\s*\{{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\}},)',
+            r'\1\n        {"name": "SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM", "value": "false"},'
+            r'\n        {"name": "SYNC_REPROCESS_COALESCE_ENABLED", "value": "false"},'
+            r'\n        {"name": "SYNC_REPROCESS_SETTLE_SECONDS", "value": "600"},'
+            r'\n        {"name": "CONVERSATION_LLM_INPUT_DEDUPE_ENABLED", "value": "false"},',
+            payload,
+            count=1,
+            flags=re.DOTALL,
+        )
     # Carry the dev finalization worker's explicit dark shadow bindings.
     payload = re.sub(
         r'("backend-sync":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
@@ -513,6 +526,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = re.sub(
         r'("backend-sync(?:-backfill)?":\s*\{.*?"env":\s*\[)',
         r'\1\n        {"name": "SYNC_LEGACY_FRESH_ENABLED", "value": "false"},'
+        r'\n        {"name": "SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED", "value": "false"},'
         r'\n        {"name": "SYNC_LEGACY_FRESH_UID_ALLOWLIST", "value": ""},'
         r'\n        {"name": "SYNC_LEGACY_FRESH_PERCENT", "value": "0"},'
         r'\n        {"name": "SYNC_LEGACY_FRESH_HOURLY_TOKENS", "value": "60"},'
