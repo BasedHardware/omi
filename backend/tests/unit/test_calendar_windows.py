@@ -118,6 +118,8 @@ _gu.refresh_google_token = MagicMock()
 
 _ib = _mod("utils.retrieval.tools.integration_base")
 _ib.ensure_capped = lambda val, cap, msg: min(val, cap)
+
+
 def _real_parse(name, value, _hint):
     if value is None:
         return None, None
@@ -149,10 +151,7 @@ ct = _load(
 
 def _event(day_offset, title="evt"):
     d = datetime.now(timezone.utc) + timedelta(days=day_offset)
-    return {"id": f"e{day_offset}", "summary": title,
-            "start": {"dateTime": d.isoformat()}}
-
-
+    return {"id": f"e{day_offset}", "summary": title, "start": {"dateTime": d.isoformat()}}
 
 
 class TestCalendarSearchFutureWindow(unittest.IsolatedAsyncioTestCase):
@@ -169,12 +168,11 @@ class TestCalendarSearchFutureWindow(unittest.IsolatedAsyncioTestCase):
 
         now = datetime.now(timezone.utc)
         future_start = now + timedelta(days=3)
-        with patch.object(ct, "prepare_access",
-                          return_value=("u", {"a": 1}, "tok", None)), \
-             patch.object(ct, "get_google_calendar_events", new=fake_fetch):
+        with patch.object(ct, "prepare_access", return_value=("u", {"a": 1}, "tok", None)), patch.object(
+            ct, "get_google_calendar_events", new=fake_fetch
+        ):
             await ct.get_calendar_events_tool.func(
-                start_date=future_start.isoformat(),
-                search_query="andy", max_results=10)
+                start_date=future_start.isoformat(), search_query="andy", max_results=10
+            )
 
-        self.assertGreater(captured["time_max"], future_start,
-                           "search must look past the future start date")
+        self.assertGreater(captured["time_max"], future_start, "search must look past the future start date")
