@@ -102,13 +102,18 @@ def create_local_worker(
     lane. No API or vendor calls are introduced. Alternative providers must be
     explicitly registered in PipelineWorker, never silently mapped to Parakeet.
     """
+    config = provider_config()
+    if config.pool_kind != 'dedicated_batch':
+        raise ValueError(
+            'local model chain requires dedicated batch GPU; shared-live requires its existing GPU arbiter'
+        )
     return PipelineWorker(
         decode=lambda item: decode_pcm16_wav(fetch_audio(item)),
         vad=PyannoteVAD(vad_model),
         words_providers={'parakeet': ParakeetWords(parakeet_model)},
         diarizers={'pyannote': PyannoteDiarizer(pyannote_model)},
         persist=persist_result,
-        config=provider_config(),
+        config=config,
         live_words=live_words,
         single_speaker=single_speaker,
         on_failure=on_failure,

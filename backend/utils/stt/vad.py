@@ -427,3 +427,24 @@ def apply_vad_for_speech_profile(file_path: str) -> None:
         # Explicitly free memory
         del full_audio
         del trimmed_aseg
+
+
+def offline_pcm_speech_segments(pcm: bytes) -> List[Dict[str, Any]]:
+    """Strict, local-only VAD for canonical stored 16kHz mono PCM16.
+
+    Include the final partial window; VAD failure propagates to the compaction
+    caller, which retains uncompressed behavior. No hosted request or cache.
+    """
+    if not pcm or len(pcm) % 2 or len(pcm) > 7200 * 32000:
+        raise VADAudioDecodeError('invalid stored PCM shape')
+    samples = np.frombuffer(pcm, dtype='<i2').astype(np.float32) / 32768
+    duration = len(samples) / VAD_SAMPLE_RATE
+    remainder = len(samples) % VAD_WINDOW_SAMPLES
+    if remainder:
+        samples = np.pad(samples, (0, VAD_WINDOW_SAMPLES - remainder))
+    result = _segments_from_16khz_samples(samples)
+    return [
+        {**span, 'end': min(duration, span['end']), 'duration': min(duration, span['end']) - span['start']}
+        for span in result
+        if span['start'] < duration
+    ]

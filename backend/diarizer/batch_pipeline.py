@@ -156,6 +156,10 @@ class PipelineWorker:
     def process_batch(self, items: Sequence[WorkItem]) -> Sequence[WorkResult]:
         if len(items) > 32 or len({i.segment_id for i in items}) != len(items):
             raise ValueError('pull must contain at most 32 distinct conversations')
+        if any(item.duration_seconds > self.config.max_unit_seconds for item in items):
+            raise ValueError('conversation requires a dedicated batch GPU or a smaller admitted unit')
+        if self.config.pool_kind == 'shared_live' and sum(i.duration_seconds for i in items) > 120:
+            raise ValueError('shared-live pull exceeds 120 audio seconds; yield between pulls')
         with self._lock:
             if self._unavailable:
                 raise RuntimeError('GPU chain unavailable; restart required')

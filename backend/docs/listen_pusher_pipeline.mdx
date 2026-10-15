@@ -4863,3 +4863,21 @@ projection, live listen/pusher and legacy-fresh routing remain unchanged.
 admission seam; no serving sync route calls it yet. Accepted protocol records
 must retain their recovery worker when admission is disabled. Conversation
 projection, deletion integration and late-capture policy are rollout gates.
+
+### Dark batch-worker GPU and compaction boundaries (PR 21674)
+
+Conversation-sized compute belongs on dedicated batch GPUs. Shared-live compute
+must use the existing live model arbiter, units and total pulls <=120 audio
+seconds, and one in-flight batch per GPU; dispatch priority cannot preempt a
+running inference. `BATCH_PIPELINE_POOL_KIND` and `BATCH_PIPELINE_UNIT_SECONDS`
+bound worker units independently of durable conversation identity. The local
+multi-model worker factory rejects live co-location.
+
+Default-off `TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED` runs local speech
+VAD before stored-audio shadow ASR and shared pyannote final-pass inference.
+300 ms onset/500 ms tail padding and exact sample maps restore original word,
+turn and overlap clocks. VAD failure or ambiguous word mapping retains original
+behavior; legacy/single-speaker resolution stays on original clocks. The sync
+final-pass adapter receives existing words and does not add an STT request.
+No Nemotron cascade is routed. WAL pre-STT proof matching is unchanged; bounded
+coverage outcome/reason diagnostics now explain conservative abstention.

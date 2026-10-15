@@ -60,8 +60,47 @@ window cells; the whole baseline retains full audio. Compare that run to a run
 without VAD to isolate VAD boundary effects. This measures ASR only, not full-chain
 throughput. Batch size is the maximum window count, and effective sizes are
 reported. Whole-input full attention is excluded above 300 seconds to avoid an
-unbounded quadratic allocation. No benchmark has run for this implementation:
-both dev L4s were occupied and isolated pool creation was denied by dev IAM.
-There is no reproduced 17% deficit or validated chunking fix yet. Hold runtime
-qualification and rollout until measured AMI WER, token recall, GPU throughput,
-co-resident model memory, failure recovery and full-chain latency pass review.
+unbounded quadratic allocation. The [October 15 isolated dev L4 receipt](batch_pipeline_benchmark.md)
+measures ASR batching and a length-dependent word-loss mitigation. The exact
+reported 17% vendor-relative deficit was not reproduced. VAD compaction failed
+its word-quality gate and remains off. Co-resident model memory, pyannote DER,
+failure recovery and full-chain latency still require runtime qualification.
+
+## Pool boundaries and stored-audio compaction
+
+`BATCH_PIPELINE_POOL_KIND=dedicated_batch` is the default. Set
+`BATCH_PIPELINE_UNIT_SECONDS` per pool (dedicated default/hard cap 7200 seconds).
+Hour-sized conversation compute must never run on live Parakeet pods. A running
+inference cannot be preempted: the October 15 dev requalification's 3600-second
+backfill rejected every overlapping live upload and used 10.76 GiB.
+
+`shared_live` requires units <=120 seconds, a total pull <=120 audio seconds,
+a padded model batch <=120 seconds, and one in-flight batch per GPU. The local
+multi-model factory refuses shared-live placement: future co-location must use
+the existing live model's priority/admission arbiter, yield between bounded
+pulls and pass joint latency/memory qualification. Merely choosing a pool config
+must not launch a second chain on a live GPU. A's scheduler pool capacity gate
+and these worker limits both apply; durable conversation identity need not
+change when an integration layer introduces bounded compute pieces.
+
+`TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED=false` preserves the existing
+stored-audio path. When explicitly enabled, local Silero speech regions retain
+300 ms onset/500 ms tail margins, merge overlapping padded intervals and compact
+PCM before shadow Parakeet. Word clocks map back by original sample offsets;
+a word crossing a removed gap abstains to the original request. The shared
+pyannote final-pass seam also compacts sync/shadow diarization input and splits
+turns and overlaps back onto original intervals. Embeddings and source audio
+remain on the original timeline. Empty VAD skips shadow ASR, but existing sync
+words never lose all speaker evidence merely because VAD is empty. VAD failure
+retains original behavior and records the shared fallback.
+
+The sync adapter already receives words; it makes no additional Parakeet call.
+Compacting its shared pyannote seam saves diarization work without retranscribing
+those words. No Nemotron routing or cascade is introduced. The selector remains
+available; pyannote stays the default.
+
+Pre-STT WAL coverage now emits `reason` in its existing aggregate log and
+`omi_sync_wal_audio_coverage_total{outcome,reason}`. Reason values are bounded to
+none/unparseable/degraded/truncated/overflow/evidence/geometry/error/other.
+Matcher/proof eligibility is unchanged. This distinguishes missing evidence,
+geometry failures and degraded/truncated lookups without exposing user data.

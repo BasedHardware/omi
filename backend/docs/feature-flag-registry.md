@@ -278,6 +278,7 @@ and an explicit empty literal renders as `''`.
 | `TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE` | Revision-fenced speaker-only promotion preserving stored text | backend | env | closed | — | — | true (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | pending | 2026-11-12 | dazheng |
 | `TRANSCRIPTION_FINAL_PASS_PERCENT` | Shared diarization cohort percentage | backend | env | closed | — | — | 1 (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | pending | 2026-11-12 | dazheng |
 | `TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED` | Shared diarization and centroid naming for sync and safety WAL | backend | env | closed | — | — | true (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | pending | 2026-11-12 | dazheng |
+| `TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED` | Default-off local speech VAD compaction for stored-audio ASR and pyannote final passes; sample-exact original clocks; failures retain original audio | backend | env | closed | — | — | — | — | pending | 2026-11-14 | dazheng |
 | `TRANSCRIPTION_SHADOW_ENABLED` | Run the stored-audio Parakeet final pass in shadow | backend | env | closed | — | false (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen); true (gke/pusher, pusher (chart)) | true (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | pending | 2026-10-26 | dazheng |
 | `TRANSCRIPTION_SHADOW_PERCENT` | Allocate UIDs to the Parakeet final-pass shadow | backend | env | closed | — | 0 (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | 1 (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | pending | 2026-10-26 | dazheng |
 | `TRANSLATION_DEMAND_LEASE_V1_ENABLED` | Accept lease-v1 demand semantics from opted-in clients | backend | env | closed | {value: 'true', category: rollout} | true (backend-listen (chart)); {value: 'true', category: rollout} (cloud_run/backend, gke/backend-listen) | true (backend-listen (chart)); {value: 'true', category: rollout} (cloud_run/backend, gke/backend-listen) | — | pending | 2026-10-29 | dazheng |
@@ -366,8 +367,10 @@ and an explicit empty literal renders as `''`.
 | `BATCH_PIPELINE_CONTEXT_SECONDS` | GPU chain internal ASR boundary context seconds; default 2; requires AMI qualification | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `BATCH_PIPELINE_DIARIZER` | GPU chain diarizer registry selection; default pyannote; unavailable candidates fail closed | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `BATCH_PIPELINE_MODEL_BATCH_SIZE` | GPU chain maximum model window batch size; default 8; hard ceiling 32 | backend | env | closed | — | — | — | — | keep | — | dazheng |
-| `BATCH_PIPELINE_PADDED_SECONDS` | GPU chain padded waveform seconds per model batch; default 240 | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `BATCH_PIPELINE_PADDED_SECONDS` | GPU chain padded waveform seconds per model batch; default 272 (8 windows with context); shared-live hard cap 120 | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `BATCH_PIPELINE_POOL_KIND` | Dedicated batch GPU by default; shared_live requires bounded units and the existing live GPU arbiter | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `BATCH_PIPELINE_REUSE_LIVE_ENABLED` | Default-off GPU-chain pre-STT reuse; requires existing lineage gates and full-span words-of-record quality proof | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `BATCH_PIPELINE_UNIT_SECONDS` | Per-pool compute-unit ceiling; dedicated batch default 7200, shared live default and hard maximum 120 seconds | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `BATCH_PIPELINE_WINDOW_SECONDS` | GPU chain internal ASR core window seconds; default 30; queue units remain conversations | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `BATCH_PIPELINE_WORDS_PROVIDER` | GPU chain words registry selection; default parakeet; unavailable providers fail closed | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `BILLING_WEBHOOK_LEDGER_ENABLED` | Durable Stripe webhook receipts, duplicate suppression and failed-schedule retries; default false; no deployment declaration or activation in INF sprint | backend | env | closed | — | — | — | — | pending | — | dazheng |
@@ -450,11 +453,13 @@ their code default (`fail` tells you which way a missing value resolves).
 - `BATCH_PIPELINE_DIARIZER` — GPU chain diarizer registry selection; default pyannote; unavailable candidates fail closed (fail: closed)
 - `BATCH_PIPELINE_ENABLED` — Default-off durable batch admission gate; existing sync routes remain unconnected until projection qualification (fail: closed)
 - `BATCH_PIPELINE_MODEL_BATCH_SIZE` — GPU chain maximum model window batch size; default 8; hard ceiling 32 (fail: closed)
-- `BATCH_PIPELINE_PADDED_SECONDS` — GPU chain padded waveform seconds per model batch; default 240 (fail: closed)
+- `BATCH_PIPELINE_PADDED_SECONDS` — GPU chain padded waveform seconds per model batch; default 272 (8 windows with context); shared-live hard cap 120 (fail: closed)
 - `BATCH_PIPELINE_PERCENT` — Stable owner cohort for durable batch admission; default zero percent and requires global enable (fail: closed)
+- `BATCH_PIPELINE_POOL_KIND` — Dedicated batch GPU by default; shared_live requires bounded units and the existing live GPU arbiter (fail: closed)
 - `BATCH_PIPELINE_REUSE_LIVE_ENABLED` — Default-off GPU-chain pre-STT reuse; requires existing lineage gates and full-span words-of-record quality proof (fail: closed)
 - `BATCH_PIPELINE_SHARED_LIVE_ENABLED` — Default-off shared-live pull gate; requires fresh exclusive slack, empty live queue, GPU memory and utilization checks and one item at most 120 seconds (fail: closed)
 - `BATCH_PIPELINE_UID_ALLOWLIST` — Explicit durable batch admission owner cohort; default empty and requires global enable (fail: closed)
+- `BATCH_PIPELINE_UNIT_SECONDS` — Per-pool compute-unit ceiling; dedicated batch default 7200, shared live default and hard maximum 120 seconds (fail: closed)
 - `BATCH_PIPELINE_WINDOW_SECONDS` — GPU chain internal ASR core window seconds; default 30; queue units remain conversations (fail: closed)
 - `BATCH_PIPELINE_WORDS_PROVIDER` — GPU chain words registry selection; default parakeet; unavailable providers fail closed (fail: closed)
 - `BILLING_WEBHOOK_LEDGER_ENABLED` — Durable Stripe webhook receipts, duplicate suppression and failed-schedule retries; default false; no deployment declaration or activation in INF sprint (fail: closed)
@@ -523,6 +528,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SYNC_BACKFILL_ROUTING_ENABLED` — Route eligible sync work to backfill lane (fail: closed)
 - `SYNC_DISPATCH_MODE` — Select sync dispatch lane (fail: closed)
 - `SYNC_LINEAGE_RESOLVE_ENABLED` — Bind each segment of a recording-id safety-WAL upload to the live rollover generation that owns its audio, and stamp live generations with their origin recording id (default on) (fail: open)
+- `TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED` — Default-off local speech VAD compaction for stored-audio ASR and pyannote final passes; sample-exact original clocks; failures retain original audio (fail: closed)
 - `TRANSLATION_OUTPUT_GUARD_ENABLED` — Reject conservative same-language translation rewrites (fail: open)
 - `TRANSLATION_PROFILE_GATE_ENABLED` — Defer short out-of-profile translation guesses (fail: open)
 - `TYPESENSE_CONVERSATION_INDEX_WRITES` — Write conversations to Typesense index (fail: closed)

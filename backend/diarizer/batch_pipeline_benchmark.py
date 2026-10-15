@@ -57,7 +57,8 @@ def main():
     reference = tokens(Path(args.reference).read_text())
     if not reference:
         raise ValueError('public reference must contain words')
-    spans = json.loads(Path(args.vad_json).read_text()) if args.vad_json else [(0, duration)]
+    raw_spans = json.loads(Path(args.vad_json).read_text()) if args.vad_json else [(0, duration)]
+    spans = [(s['start'], s['end']) if isinstance(s, dict) else tuple(s) for s in raw_spans]
     model = nemo_asr.models.ASRModel.from_pretrained(args.model).cuda().eval()
     if hasattr(model, 'decoding') and hasattr(model.decoding, 'decoding'):
         model.decoding.decoding.disable_cuda_graphs()
