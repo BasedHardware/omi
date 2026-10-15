@@ -12407,6 +12407,15 @@ class AppLocalizationsSv extends AppLocalizations {
   String get reviewRecentChanges => 'Senaste ändringar';
 
   @override
+  String get reviewChangeAfter => 'Efter';
+
+  @override
+  String get reviewChangeBefore => 'Före';
+
+  @override
+  String get reviewChangeRemoved => 'Borttaget från den aktiva listan';
+
+  @override
   String get reviewChangesIntro => 'Vad Omi har ändrat på egen hand de senaste 30 dagarna. Ångra allt som ser fel ut.';
 
   @override

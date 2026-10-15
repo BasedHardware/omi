@@ -987,7 +987,7 @@ async def sync_local_files_v2(
     lane_decision = classify_sync_lane(
         filenames,
         client_device_id=client_device_context.client_device_id if has_server_capture_proof else None,
-        allow_legacy_fresh=legacy_fresh.enabled(),
+        allow_legacy_fresh=legacy_fresh.enabled_for(uid),
     )
     if lane_decision.reason == 'recent_legacy_capture':
         lane_decision = await run_blocking(db_executor, legacy_fresh.admit, uid, lane_decision, [f.size for f in files])

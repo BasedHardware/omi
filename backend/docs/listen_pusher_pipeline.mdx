@@ -792,6 +792,16 @@ side effect. Completed fanout replays do not repeat the write.
 
 ## Duplicate captures across devices
 
+Dream's verified `merge_conversations` cleanup is separate from ingest merging.
+It requires completed, uncurated captures with overlapping time and matching
+speech. The journal atomically adds `dream_duplicate_of` to the redundant row;
+current/default visibility hides that row without changing lifecycle status,
+moving segments, or deleting either recording's audio. Review preserves the two
+labels and surrounding speech. Exact row and account-generation fences protect
+Undo/Redo, which removes/restores the link. A later user edit conflicts. Existing
+capture ownership, finalization, relevance discard and compliance remain with
+their current writers.
+
 An Omi device paired to the phone app and the macOS app in the same room open
 two independent `/v4/listen` streams, and each stream owns its own
 conversation — cross-source sockets never share one, because the two captures
@@ -999,6 +1009,15 @@ any error keeps both. Every answered pair stores a server-only
 `smart_merge_decision` (numbers and ids, no text) on the new conversation.
 For a merge verdict, the decision is persisted before the absorb transaction
 so a retry reuses the same score.
+
+The absorb transaction also refuses either parent when
+`has_transcript_corrections` is set. User and agent corrections live in an
+encrypted overlay anchored to captured segments; folding their source rows would
+invalidate those anchors and Undo receipts. The live-parent check runs before
+planning or writing inside the transaction, including when a correction races a
+previously computed merge verdict. Both captures and their original speech stay
+intact. Dream's duplicate-capture correction uses a reversible hide-with-link
+instead of this ingest absorb path.
 
 One more deterministic gate never reaches Jev: a discarded capture of the same
 source and `client_device_id` whose `started_at`/`finished_at` interval
@@ -4725,6 +4744,19 @@ programming and caller reachability before deploying.
 Caller deploy order, route requirements and independent rollback are documented
 in [the Gateway caller runbook](internal-gateway-callers.md).
 
+### Sync batch final-pass admission
+
+The optional sync final pass shares a fleet Redis budget across fresh and backfill
+(10 audio-hours and 1,000 attempts per UTC hour) and one in-flight call per process.
+Admission refuses immediately, before embeddings and batch work. Redis connect/read
+I/O has finite 0.5s timeouts; a stalled peer cannot retain the final-pass slot. Exhaustion, Redis
+failure or invalid limits retains legacy speakers and logs
+`event=sync_final_pass outcome=skipped_budget`. Retries consume another reservation.
+`TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS` and
+`TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS` declare the limits. Production defaults stay at stage B (David-only); selecting complete
+stage C explicitly enables 1% plus David on all four hosts. Outcome/failure logs use the full
+SHA-256 of `sync-final-pass:` plus UID for correlation, with no identity metric label.
+
 Long-audio batch qualification uses the same final-pass HTTP client and public
 corpus only; see [the stage C load method and probe commands](diarizer-batch-stagec-load.md).
 Its wall/RTF scenarios remain unqualified until the lead fills the timing table.
@@ -4761,7 +4793,12 @@ cannot claim the existing immutable manifest either.
 
 `SYNC_LEGACY_FRESH_ENABLED=true` (code/dev/prod default false) lets whole LEGACY
 batches whose oldest capture is within `SYNC_FRESH_MAX_AGE_SECONDS` enter fresh
-capacity after an atomic Redis token reservation. Trust remains LEGACY. Each
+capacity only for an exact UID in `SYNC_LEGACY_FRESH_UID_ALLOWLIST` (default
+empty), or a stable SHA-256 UID bucket in `SYNC_LEGACY_FRESH_PERCENT` (default
+zero). Buckets match transcription final pass; the master flag disables both.
+Malformed/non-finite percentages select nobody beyond the allowlist; finite
+percentages clamp to 0–100. The atomic Redis token reservation still applies to
+every selected account. Existing historical jobs are never moved. Trust remains LEGACY. Each
 request costs `max(1, ceil(actual multipart bytes / MiB))`; defaults refill 60
 tokens/hour with a ten-token burst per account across replicas and devices.
 `SYNC_LEGACY_FRESH_HOURLY_TOKENS` supports 1–120 and

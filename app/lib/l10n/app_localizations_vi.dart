@@ -12400,6 +12400,15 @@ class AppLocalizationsVi extends AppLocalizations {
   String get reviewRecentChanges => 'Thay đổi gần đây';
 
   @override
+  String get reviewChangeAfter => 'Sau';
+
+  @override
+  String get reviewChangeBefore => 'Trước';
+
+  @override
+  String get reviewChangeRemoved => 'Đã xóa khỏi danh sách đang hoạt động';
+
+  @override
   String get reviewChangesIntro => 'Những gì Omi tự thay đổi trong 30 ngày qua. Hoàn tác bất cứ điều gì có vẻ sai.';
 
   @override

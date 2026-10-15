@@ -12395,6 +12395,15 @@ class AppLocalizationsEt extends AppLocalizations {
   String get reviewRecentChanges => 'Hiljutised muudatused';
 
   @override
+  String get reviewChangeAfter => 'Pärast';
+
+  @override
+  String get reviewChangeBefore => 'Enne';
+
+  @override
+  String get reviewChangeRemoved => 'Aktiivsest loendist eemaldatud';
+
+  @override
   String get reviewChangesIntro =>
       'Mida Omi on viimase 30 päeva jooksul ise muutnud. Võta tagasi kõik, mis tundub vale.';
 

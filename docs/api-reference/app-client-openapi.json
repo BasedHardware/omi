@@ -1475,6 +1475,31 @@
               }
             ]
           },
+          "operation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HarnessEdit"
+              },
+              {
+                "$ref": "#/components/schemas/MemoryHygieneEdit"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation"
+          },
+          "other_content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Other Content"
+          },
           "other_label": {
             "anyOf": [
               {
@@ -1485,6 +1510,17 @@
               }
             ],
             "title": "Other Label"
+          },
+          "target_content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Content"
           },
           "target_label": {
             "default": "",
@@ -13554,6 +13590,17 @@
             ],
             "title": "Id"
           },
+          "original_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Text"
+          },
           "speaker_id": {
             "anyOf": [
               {
@@ -17713,6 +17760,108 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HarnessEdit": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "default": "",
+            "description": "Corrected text or new language tag. For supersede_memory choose new fact text OR other. Empty for retirement, dismissal and task/conversation/person merges: preserve the survivor.",
+            "maxLength": 16000,
+            "title": "After",
+            "type": "string"
+          },
+          "before": {
+            "default": "",
+            "description": "Exact wrong text as it appears in the target, including its capitalization. For spelling, one edit fixes every occurrence of this text.",
+            "maxLength": 16000,
+            "title": "Before",
+            "type": "string"
+          },
+          "effective_from": {
+            "default": "",
+            "description": "For supersede_memory: optional timezone-aware ISO 8601 time when the cited evidence says the new fact became true. Never invent a time; omit to use apply time.",
+            "maxLength": 40,
+            "title": "Effective From",
+            "type": "string"
+          },
+          "evidence": {
+            "description": "Fully read owner refs, with segment ids for speech when available. Cited evidence must support this change; do not invent refs or use the old memory itself as retirement support.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "kind": {
+            "description": "Correct evidenced defects, never style or low importance. Retire memories only for garbage, contradiction or facts spoken by someone else but attributed to the owner. Supersede only with a newer fact about the same attribute. Dismiss junk person detections (filler, nationalities, fragments), never a real person. Merge tasks only when they represent the same obligation; retire duplicates or someone else's task misfiled to the owner. Autonomous agents must not change manual or edited tasks. Merge conversations only for overlapping captures of the same speech, preserving both records and audio. Set language to the language actually spoken, never translate speech.",
+            "enum": [
+              "spelling",
+              "title",
+              "overview",
+              "memory",
+              "merge_memories",
+              "retire_memory",
+              "supersede_memory",
+              "merge_people",
+              "entity_summary",
+              "close_task",
+              "dismiss_person",
+              "merge_tasks",
+              "retire_task",
+              "merge_conversations",
+              "set_language"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "other": {
+            "default": "",
+            "description": "Second fully read ref for a merge; target is retired into other for task/conversation merges. For supersede_memory, the existing newer memory. Otherwise empty.",
+            "maxLength": 256,
+            "title": "Other",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Explain the defect and cited evidence.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "target": {
+            "description": "Supplied record ref to edit, optionally with #segment-id or #start-seconds. One spelling edit fixes every occurrence in its target; with a fragment, only that transcript segment is changed.",
+            "maxLength": 256,
+            "minLength": 3,
+            "title": "Target",
+            "type": "string"
+          },
+          "value": {
+            "default": 3,
+            "description": "how much the answer changes what future agents should believe about this person's people, projects or vocabulary; trivial acronym casing is 1",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Value",
+            "type": "integer"
+          },
+          "why_it_matters": {
+            "default": "",
+            "description": "Short explanation of future value.",
+            "maxLength": 200,
+            "title": "Why It Matters",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "target",
+          "reason",
+          "evidence"
+        ],
+        "title": "HarnessEdit",
+        "type": "object"
+      },
       "HasSpeechProfileResponse": {
         "properties": {
           "has_profile": {
@@ -21256,6 +21405,76 @@
           "reason"
         ],
         "title": "MemoryGlobalReadGateObservability",
+        "type": "object"
+      },
+      "MemoryHygieneEdit": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "default": "",
+            "description": "For supersede_memory without other, the newer time-scoped fact text supported by conversations. Empty for retire_memory.",
+            "maxLength": 2000,
+            "title": "After",
+            "type": "string"
+          },
+          "before": {
+            "default": "",
+            "description": "Exact wrong text as it appears in the target, including its capitalization. For spelling, one edit fixes every occurrence of this text.",
+            "title": "Before",
+            "type": "string"
+          },
+          "effective_from": {
+            "default": "",
+            "description": "For supersede_memory: optional timezone-aware ISO 8601 time when the cited evidence says the new fact became true. Never invent a time; omit to use apply time.",
+            "maxLength": 40,
+            "title": "Effective From",
+            "type": "string"
+          },
+          "evidence": {
+            "description": "Supplied conversation refs or other memory refs supporting retirement or replacement. The target alone is not evidence.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "kind": {
+            "description": "Retire garbage (not merely low-importance facts), facts misattributed from another speaker, or facts contradicted by evidence. Supersede an old fact only with a newer time-scoped fact about the same attribute; age alone is not staleness.",
+            "enum": [
+              "retire_memory",
+              "supersede_memory"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "other": {
+            "default": "",
+            "description": "For supersede_memory, the supplied newer memory ref. Otherwise empty. Choose exactly one of other or after.",
+            "title": "Other",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Required explanation of garbage, another speaker attribution, contradiction, or the newer fact about the same attribute.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "target": {
+            "description": "Supplied record ref to edit, optionally with #segment-id or #start-seconds. One spelling edit fixes every occurrence in its target; with a fragment, only that transcript segment is changed.",
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "target",
+          "reason",
+          "evidence"
+        ],
+        "title": "MemoryHygieneEdit",
         "type": "object"
       },
       "MemoryItemStatus": {
@@ -26434,14 +26653,60 @@
       },
       "ReviewChange": {
         "properties": {
+          "after": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
           "change_id": {
             "title": "Change Id",
             "type": "string"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpellingContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "edit_kind": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edit Kind"
           },
           "kind": {
             "enum": [
@@ -28902,6 +29167,17 @@
             "title": "Is User",
             "type": "boolean"
           },
+          "original_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Text"
+          },
           "person_id": {
             "anyOf": [
               {
@@ -29293,6 +29569,17 @@
               }
             ],
             "title": "Id"
+          },
+          "original_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Text"
           },
           "speaker_id": {
             "anyOf": [
@@ -33569,6 +33856,18 @@
           "is_user": {
             "title": "Is User",
             "type": "boolean"
+          },
+          "original_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Immutable captured text when text includes active corrections.",
+            "title": "Original Text"
           },
           "person_id": {
             "anyOf": [

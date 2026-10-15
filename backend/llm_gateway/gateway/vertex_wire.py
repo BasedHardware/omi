@@ -219,7 +219,12 @@ def _vertex_tools(value: Any) -> list[dict[str, Any]] | None:
             declaration['description'] = description
         parameters = function.get('parameters')
         if isinstance(parameters, Mapping) and parameters:
-            declaration['parameters'] = dict(cast(Mapping[str, Any], parameters))
+            if '$defs' in parameters or '$ref' in parameters:
+                # Agent tools share nested Pydantic contracts. Vertex's Schema arm
+                # cannot represent local refs; its JSON Schema arm can.
+                declaration['parametersJsonSchema'] = vertex_response_json_schema(parameters)
+            else:
+                declaration['parameters'] = dict(cast(Mapping[str, Any], parameters))
         declarations.append(declaration)
     return [{'functionDeclarations': declarations}]
 

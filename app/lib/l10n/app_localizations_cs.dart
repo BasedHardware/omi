@@ -12403,6 +12403,15 @@ class AppLocalizationsCs extends AppLocalizations {
   String get reviewRecentChanges => 'Nedávné změny';
 
   @override
+  String get reviewChangeAfter => 'Po';
+
+  @override
+  String get reviewChangeBefore => 'Před';
+
+  @override
+  String get reviewChangeRemoved => 'Odebráno z aktivního seznamu';
+
+  @override
   String get reviewChangesIntro => 'Co Omi změnilo samo za posledních 30 dní. Vraťte zpět vše, co vypadá špatně.';
 
   @override

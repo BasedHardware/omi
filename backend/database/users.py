@@ -925,7 +925,7 @@ def claim_deletion_wipe_for_task(uid: str, running_stale_after: timedelta = DELE
 
 def create_person(uid: str, data: dict):
     people_ref = db.collection('users').document(uid).collection('people')
-    people_ref.document(data['id']).set(data)
+    people_ref.document(data['id']).set({**data, 'is_user_created': True})
     return data
 
 

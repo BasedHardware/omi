@@ -151,7 +151,8 @@ void main() {
     final empty = await _provider(const [], []);
     await tester.pumpWidget(_host(empty, const ReviewEntryCard(fallback: Text('old card'))));
     expect(find.text('old card'), findsNothing);
-    expect(find.byKey(const Key('review_entry_card')), findsNothing);
+    expect(find.byKey(const Key('review_entry_card')), findsOneWidget);
+    expect(find.text('Recent Changes'), findsOneWidget);
 
     final some = await _provider([_task], []);
     await tester.pumpWidget(_host(some, const ReviewEntryCard(fallback: Text('old card'))));

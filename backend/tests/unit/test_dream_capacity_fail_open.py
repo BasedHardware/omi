@@ -78,16 +78,14 @@ async def test_unavailable_evidence_admits_and_logs_only_safe_fields(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_missing_store_does_not_stop_real_or_canary_admission(monkeypatch):
+async def test_missing_shared_store_keeps_local_slots_and_releases_them(monkeypatch):
     state = ReservationState()
     monkeypatch.setattr(state, 'client', lambda: None)
     monkeypatch.setattr(state, 'refresh', AsyncMock(return_value={}))
     monkeypatch.setattr(dream_capacity, 'reservation_state', state)
-    admitted = AsyncMock(return_value={'status': 'complete'})
-    monkeypatch.setattr(dream_agent, '_run_admitted_pass', admitted)
-    for canary in (False, True):
-        assert await dream_agent.run_pass('synthetic', canary=canary) == {'status': 'complete'}
-    assert admitted.await_count == 2
+    slot = await dream_capacity.claim(2, slot_seconds=1740)
+    assert slot and slot[0].startswith('dream-local:')
+    await dream_capacity.release(slot)
     assert not dream_capacity._local().slots
 
 
