@@ -107,6 +107,117 @@ def test_restore_drops_generation_matched_segment_scoped_exclusions():
     assert db.ignored_voice_keys(store.rows[STATE]) == set()
 
 
+def test_restore_removes_stacked_generation_exclusions_no_newer_than_the_marker():
+    """A restore must clear every not_a_person decision at/below the marker.
+
+    One voice can stack exclusions across generations — a whole-voice
+    exclusion (gen 1) later narrowed by a selected-segment exclusion (gen 3,
+    the marker's generation). Clearing only the exact-generation entries
+    leaves the older whole-voice decision winning: the voice stays excluded
+    and prompt-suppressed while its sole marker (and Settings restore
+    affordance) is gone. Genuinely newer decisions (gen > marker) survive.
+    """
+    store = StrictFirestore()
+    # The marker remembers only the newest exclusion generation (3).
+    db.record_ignored_voice('u', 'c1', 4, NOW, assignment_generation=3, firestore_client=store)
+    path = ('users', 'u', 'conversations', 'c1')
+    store.rows[path] = {
+        'manual_speaker_assignments': {
+            'generation': 3,
+            'speakers': {
+                # Stacked older whole-voice exclusion the restore must drop.
+                '4': {
+                    'generation': 1,
+                    'person_id': None,
+                    'is_user': False,
+                    'rejection': {'kind': 'not_a_person', 'person_id': None},
+                },
+            },
+            'segments': {
+                # Newer selected-segment exclusion the marker was recorded for.
+                's1': {
+                    'generation': 3,
+                    'person_id': None,
+                    'is_user': False,
+                    'speaker_id': 4,
+                    'rejection': {'kind': 'not_a_person', 'person_id': None},
+                },
+                # A genuinely newer exclusion from another surface: survives.
+                's2': {
+                    'generation': 5,
+                    'person_id': None,
+                    'is_user': False,
+                    'speaker_id': 4,
+                    'rejection': {'kind': 'not_a_person', 'person_id': None},
+                },
+                # Another voice's exclusion: untouched.
+                's3': {
+                    'generation': 3,
+                    'person_id': None,
+                    'is_user': False,
+                    'speaker_id': 9,
+                    'rejection': {'kind': 'not_a_person', 'person_id': None},
+                },
+            },
+        }
+    }
+    assert db.remove_ignored_voice('u', 'c1', 4, [], firestore_client=store)
+    raw = store.rows[path]
+    receipt = conversations_db.decode_manual_speaker_assignments(
+        'u', raw['manual_speaker_assignments'], bool(raw.get('manual_speaker_assignments_compressed'))
+    )
+    # The stacked older whole-voice exclusion and the marker-generation
+    # selected-segment exclusion are gone; the newer and other-voice entries
+    # survive untouched.
+    assert 'speakers' not in receipt or '4' not in (receipt.get('speakers') or {})
+    assert set(receipt.get('segments') or {}) == {'s2', 's3'}
+    assert receipt['generation'] == 4
+    assert db.ignored_voice_keys(store.rows[STATE]) == set()
+
+
+def test_restore_keeps_a_newer_not_me_answer_intact():
+    """The broader sweep must not eat an explicit older-kind answer.
+
+    A not_me answer at a generation <= the marker's is a different decision
+    the user made (not the exclusion being restored): it survives the sweep,
+    so restore stays scoped to not_a_person decisions only.
+    """
+    store = StrictFirestore()
+    db.record_ignored_voice('u', 'c1', 4, NOW, assignment_generation=3, firestore_client=store)
+    path = ('users', 'u', 'conversations', 'c1')
+    store.rows[path] = {
+        'manual_speaker_assignments': {
+            'generation': 3,
+            'speakers': {
+                '4': {
+                    'generation': 3,
+                    'person_id': None,
+                    'is_user': False,
+                    'rejection': {'kind': 'not_me', 'person_id': None},
+                },
+            },
+            'segments': {
+                's1': {
+                    'generation': 3,
+                    'person_id': None,
+                    'is_user': False,
+                    'speaker_id': 4,
+                    'rejection': {'kind': 'not_a_person', 'person_id': None},
+                },
+            },
+        }
+    }
+    assert db.remove_ignored_voice('u', 'c1', 4, [], firestore_client=store)
+    raw = store.rows[path]
+    receipt = conversations_db.decode_manual_speaker_assignments(
+        'u', raw['manual_speaker_assignments'], bool(raw.get('manual_speaker_assignments_compressed'))
+    )
+    # The not_me whole-voice answer survives; only the not_a_person segment
+    # exclusion was dropped.
+    assert receipt['speakers']['4']['rejection']['kind'] == 'not_me'
+    assert set(receipt.get('segments') or {}) == set()
+
+
 def test_positive_assignment_supersedes_marker():
     store = StrictFirestore()
     db.record_ignored_voice('u', 'c1', 1, NOW, assignment_generation=1, firestore_client=store)

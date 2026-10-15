@@ -521,9 +521,15 @@ class Conversation(BaseModel):
     def _project_excluded_speakers(cls, data):
         if isinstance(data, dict) and 'excluded_speakers' not in data:
             receipt = data.get('manual_speaker_assignments')
-            excluded = receipt_excluded_speakers(receipt)
-            if excluded:
-                return {**data, 'excluded_speakers': excluded}
+            if isinstance(receipt, Mapping):
+                # Emit the projection whenever a manual receipt exists, empty
+                # set included: a selected-segment superseder or cross-client
+                # restoration that removed the last not_a_person decision must
+                # read as an authoritative `[]`. Leaving it null would make
+                # clients treat the response as an old server without the
+                # projection and fall back to the lossy whole-cluster
+                # heuristic, so the exclusion could never retire locally.
+                return {**data, 'excluded_speakers': receipt_excluded_speakers(receipt)}
         return data
 
     # Absent on conversations processed before speakers were resolved: count no ids as people.

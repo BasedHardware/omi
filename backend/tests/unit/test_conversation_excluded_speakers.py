@@ -69,7 +69,12 @@ def test_selected_segment_superseder_retires_the_exclusion():
         'segments': {'seg-1': dict(_speaker_entry(5, person_id='p1'), speaker_id=4)},
     }
     conversation = Conversation(**_row(manual_speaker_assignments=receipt))
-    assert conversation.excluded_speakers is None
+    # Authoritative empty projection: the receipt exists, so clients must read
+    # "no exclusions" — not null, which they would treat as an old server
+    # without the projection and fall back to the lossy whole-cluster
+    # heuristic (the exclusion could then never retire locally).
+    assert conversation.excluded_speakers == []
+    assert conversation.model_dump(mode='json')['excluded_speakers'] == []
 
 
 def test_newer_whole_voice_positive_retires_the_exclusion():
@@ -78,7 +83,7 @@ def test_newer_whole_voice_positive_retires_the_exclusion():
         'speakers': {'4': _speaker_entry(5, person_id='p1')},
     }
     assert receipt_excluded_speakers(receipt) == []
-    assert Conversation(**_row(manual_speaker_assignments=receipt)).excluded_speakers is None
+    assert Conversation(**_row(manual_speaker_assignments=receipt)).excluded_speakers == []
 
 
 def test_newer_not_me_supersedes_not_a_person():
@@ -91,13 +96,29 @@ def test_newer_not_me_supersedes_not_a_person():
         },
     }
     assert receipt_excluded_speakers(receipt) == []
-    assert Conversation(**_row(manual_speaker_assignments=receipt)).excluded_speakers is None
+    assert Conversation(**_row(manual_speaker_assignments=receipt)).excluded_speakers == []
 
 
 def test_malformed_receipt_sections_do_not_crash():
     receipt = {'speakers': {'x': 'not-a-dict'}, 'segments': {'seg': 7}, 'generation': 'oops'}
     assert receipt_excluded_speakers(receipt) == []
-    assert Conversation(**_row(manual_speaker_assignments=receipt)).excluded_speakers is None
+    assert Conversation(**_row(manual_speaker_assignments=receipt)).excluded_speakers == []
+
+
+def test_cross_client_restore_projects_an_authoritative_empty_set():
+    # A receipt that once excluded voices but no longer does (e.g. another
+    # client restored them) must project [], never null: null is reserved for
+    # "no manual speaker decision at all" and makes clients fall back to the
+    # whole-cluster heuristic that cannot retire selected-segment superseders.
+    receipt = {
+        'generation': 6,
+        'speakers': {'4': _speaker_entry(6, person_id='p1')},
+        'segments': {'seg-1': dict(_speaker_entry(6, person_id='p1'), speaker_id=4)},
+    }
+    conversation = Conversation(**_row(manual_speaker_assignments=receipt))
+    assert conversation.excluded_speakers == []
+    # A receipt key present but None (legacy empty) is still a manual receipt.
+    assert Conversation(**_row(manual_speaker_assignments=None)).excluded_speakers is None
 
 
 def test_explicit_excluded_speakers_roundtrips():

@@ -1,12 +1,10 @@
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from database import conversations as conversations_db
-from database import voice_profiles as voice_profiles_db
 from models.conversation import Conversation
 from models.speaker_labels import RejectSpeakerRequest, VoiceMatchesResponse
 from utils.conversations.factory import deserialize_conversation
+from utils.ignored_voice_markers import record_exclusion_markers, retire_exclusion_markers
 from utils.other import endpoints as auth
 from utils.other.storage import delete_speech_profile_blob
 from utils.speaker_voice_matches import find_person_voice_matches
@@ -44,17 +42,18 @@ def reject_speaker_label(
     except ValueError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     if data.kind == 'not_a_person':
-        resolved_ids = set(resolved)
-        affected = {
-            int(segment['speaker_id'])
-            for segment in raw.get('transcript_segments') or []
-            if segment.get('id') in resolved_ids and isinstance(segment.get('speaker_id'), int)
-        } or {speaker_id}
-        generation = (raw.get('manual_speaker_assignments') or {}).get('generation')
-        for affected_speaker in sorted(affected):
-            voice_profiles_db.record_ignored_voice(
-                uid, raw['id'], affected_speaker, datetime.now(timezone.utc), assignment_generation=generation
-            )
+        # Live-sheet exclusions, card answers, and this reject route write the
+        # same ignored-voice marker through the shared helpers: the marker only
+        # powers Settings > Ignored Voices and restoration, and a persistence
+        # failure there must not surface a committed rejection as failed
+        # (fail-open with shared fallback telemetry).
+        record_exclusion_markers(uid, raw['id'], raw, resolved, speaker_id=speaker_id)
+    else:
+        # Every other committed answer — not_me / not_person included — must
+        # reconcile the ignored-voice marker: a newer non-not_a_person decision
+        # supersedes an earlier media exclusion, and the shared helper decides
+        # which markers still win (range-only entries keep theirs restorable).
+        retire_exclusion_markers(uid, raw['id'], raw, resolved, speaker_id=speaker_id)
     for path in removed:
         background_tasks.add_task(delete_speech_profile_blob, path)
     return deserialize_conversation(raw)

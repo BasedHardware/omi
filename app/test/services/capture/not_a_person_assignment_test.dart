@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -919,5 +920,31 @@ void main() {
     final suggestion = SpeakerLabelSuggestionEvent(speakerId: 4, personId: '', personName: 'Sam', segmentId: 's1');
     controller.onMessageEventReceived(suggestion);
     expect(controller.suggestionsBySegmentId, isEmpty);
+  });
+
+  test('reconcile completion frees the in-flight slot before it can yield', () {
+    // Source-order invariant for the release-window race: the completion
+    // callback must null _exclusionReconcileRefresh (and schedule any queued
+    // follow-up) synchronously, BEFORE awaiting owned.release(). Once the
+    // completion awaits, a conflict arriving in that window would still see
+    // the in-flight slot set, queue itself, and be stranded when the slot is
+    // nulled afterwards with a stale queueFollowUp == false — its refresh
+    // would never be scheduled and the affected speaker would stay locally
+    // excluded. Behavioral suites above cover the coalescing semantics; this
+    // pins the ordering that makes the window unreachable.
+    final source = File('lib/services/capture/capture_controller.dart').readAsStringSync();
+    final completion = source.indexOf('_exclusionReconcileRefresh = null;');
+    expect(completion, greaterThanOrEqualTo(0));
+    final release = source.indexOf('await owned.release();', completion);
+    expect(release, greaterThanOrEqualTo(0));
+    // Between freeing the slot and the release await there must be no other
+    // await: any await reintroduces the stranding window.
+    final window = source.substring(completion, release);
+    expect(window.contains('await'), isFalse);
+    // And the slot must be freed inside the completion (whenComplete), not
+    // merely anywhere in the file: the schedule call that follows decides
+    // whether a queued conflict gets its refresh.
+    final whenComplete = source.lastIndexOf('whenComplete', completion);
+    expect(whenComplete, greaterThanOrEqualTo(0));
   });
 }

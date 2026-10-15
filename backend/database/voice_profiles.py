@@ -377,14 +377,42 @@ def remove_ignored_voice(
             uid, raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
         )
         speakers = dict(receipt.get('speakers') or {})
-        decision = speakers.get(str(speaker_id)) or {}
         # Restore eligibility without undoing a newer manual label or guessing
         # which decision created a legacy marker without a generation fence.
+        # One voice can also carry stacked not_a_person exclusions from
+        # several generations — a whole-voice exclusion later narrowed by a
+        # selected-segment one, or overlapping clients excluding different
+        # segment sets — while the marker only remembers the newest
+        # generation. A restore must therefore clear every exclusion decision
+        # no newer than the marker: an older one left standing keeps the voice
+        # excluded and prompt-suppressed after its sole marker (and Settings
+        # restore affordance) is gone. Genuinely newer decisions keep their
+        # authority and stay restorable through their own marker.
         receipt_changed = False
-        if marker.get('assignment_generation') is not None and (
-            decision.get('generation') == marker['assignment_generation']
-            and not decision.get('person_id')
-            and not decision.get('is_user')
+        marker_generation = marker.get('assignment_generation')
+
+        def _restorable_exclusion(entry: dict) -> bool:
+            # Droppable: not_a_person exclusions at/below the marker's
+            # generation, plus the legacy pre-receipt-kind unnamed shape
+            # (no rejection, no positive identity) those tests and documents
+            # already promise restore clears. Explicit not_me / not_person
+            # answers and every positive decision stay untouched.
+            generation = entry.get('generation')
+            rejection = entry.get('rejection') or {}
+            kind = rejection.get('kind', 'not_a_person')
+            return (
+                isinstance(generation, int)
+                and generation <= marker_generation
+                and kind == 'not_a_person'
+                and not entry.get('person_id')
+                and not entry.get('is_user')
+            )
+
+        restorable_speaker = speakers.get(str(speaker_id))
+        if (
+            marker_generation is not None
+            and isinstance(restorable_speaker, dict)
+            and _restorable_exclusion(restorable_speaker)
         ):
             speakers.pop(str(speaker_id), None)
             receipt['speakers'] = speakers
@@ -392,15 +420,12 @@ def remove_ignored_voice(
         # Live-sheet bulk exclusions store segment-scoped decisions; a restore
         # must drop those too, or the speaker stays manually decided (and
         # prompt-suppressed) while the marker is gone from Settings.
-        if marker.get('assignment_generation') is not None:
+        if marker_generation is not None:
             segments = {
                 segment_id: entry
                 for segment_id, entry in (receipt.get('segments') or {}).items()
                 if not (
-                    entry.get('speaker_id') == speaker_id
-                    and entry.get('generation') == marker['assignment_generation']
-                    and not entry.get('person_id')
-                    and not entry.get('is_user')
+                    isinstance(entry, dict) and entry.get('speaker_id') == speaker_id and _restorable_exclusion(entry)
                 )
             }
             if segments != dict(receipt.get('segments') or {}):

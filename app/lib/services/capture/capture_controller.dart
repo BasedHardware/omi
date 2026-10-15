@@ -3372,13 +3372,20 @@ class CaptureController extends ChangeNotifier
       // flips this closure's own cancelled flag.
       final queueFollowUp = _exclusionReconcileQueued && stillCurrent();
       _exclusionReconcileQueued = false;
-      // The reconcile finished on its own: stop tracking this cancellation
-      // so one-shot entries do not accumulate in the lifetime ledger.
-      await owned.release();
+      // Free the in-flight slot and schedule any follow-up synchronously,
+      // before the first await in this completion: once this closure yields
+      // (release awaits a microtask boundary), a conflict can arrive, see
+      // _exclusionReconcileRefresh still set, queue itself, and return —
+      // and would then be stranded when the slot is nulled afterwards with
+      // the earlier queueFollowUp == false. With the slot freed first, that
+      // conflict instead schedules a fresh refresh itself.
       _exclusionReconcileRefresh = null;
       if (queueFollowUp) {
         _scheduleExclusionReconcileRefresh();
       }
+      // The reconcile finished on its own: stop tracking this cancellation
+      // so one-shot entries do not accumulate in the lifetime ledger.
+      await owned.release();
     });
   }
 
