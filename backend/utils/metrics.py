@@ -4,6 +4,7 @@ import threading
 from typing import Any
 
 from database.fsr_cache_telemetry import OMI_FALLBACK_TOTAL as OMI_FALLBACK_TOTAL
+from utils.conversation_relevance_labels import DECISION_TRIGGERS, TERMINAL_METRIC_TRIGGERS, TERMINAL_METRIC_REASONS
 
 from fastapi import Response
 from prometheus_client import (
@@ -458,28 +459,7 @@ def record_lazy_desktop_deferral(*, event: str) -> None:
 # assess; a share of them that grows is a path skipping the gate by design,
 # and degraded reasons identify the cheaper arm that resolved a model failure.
 CONVERSATION_RELEVANCE_LABELS = {
-    'trigger': frozenset(
-        {
-            'capture_end',
-            'client_finalize',
-            'sync_update',
-            'first_open',
-            'user_reprocess',
-            'merge',
-            'sync_intake',
-            'smart_merge',
-            'server_recovery',
-            'dead_letter',
-            'byok_abandoned',
-            'orphan_terminal',
-            'oversized_terminal',
-            'deferred_retry',
-            'user_restore',
-            'import',
-            'external_text',
-            'lifecycle_terminal',
-        }
-    ),
+    'trigger': DECISION_TRIGGERS,
     'verdict': frozenset({'keep', 'discard'}),
     'decided_by': frozenset({'policy', 'user', 'rule', 'model', 'jev', 'override', 'deterministic'}),
 }
@@ -495,44 +475,6 @@ CONVERSATION_RELEVANCE_DECISION_TOTAL = Counter(
     ['trigger', 'verdict', 'decided_by', 'reason'],
 )
 
-# Terminal defaults have a closed vocabulary, independent of exception text.
-_RELEVANCE_TERMINAL_TRIGGERS = frozenset(
-    {
-        'dead_letter',
-        'byok_abandoned',
-        'orphan_terminal',
-        'oversized_terminal',
-        'deferred_retry',
-        'sync_intake',
-        'user_restore',
-        'import',
-        'external_text',
-        'lifecycle_terminal',
-    }
-)
-_RELEVANCE_TERMINAL_REASONS = frozenset(
-    {
-        'dead_letter_default',
-        'byok_abandoned_default',
-        'orphan_terminal_default',
-        'oversized_terminal_default',
-        'deferred_retry_default',
-        'sync_intake_default',
-        'user_restore_default',
-        'import_default',
-        'external_text_default',
-        'lifecycle_terminal_default',
-        'already_discarded',
-        'restored',
-        'calendar_overlap',
-        'empty_transcript',
-        'filler_only',
-        'no_content_words',
-        'mic_check',
-        'explicit_reminder',
-        'substantial_length',
-    }
-)
 _RELEVANCE_REASON = re.compile(r'^[a-z][a-z0-9_]{0,39}$')
 
 
@@ -544,8 +486,8 @@ def record_conversation_relevance(*, trigger: str, verdict: str, decided_by: str
             for name, value in (('trigger', trigger), ('verdict', verdict), ('decided_by', decided_by))
         }
         allowed_reason = (
-            reason in _RELEVANCE_TERMINAL_REASONS
-            if trigger in _RELEVANCE_TERMINAL_TRIGGERS
+            reason in TERMINAL_METRIC_REASONS
+            if trigger in TERMINAL_METRIC_TRIGGERS
             else bool(_RELEVANCE_REASON.match(reason))
         )
         labels['reason'] = reason if allowed_reason else 'other'

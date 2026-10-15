@@ -29,7 +29,7 @@ threshold, recovery feature flag, client, or deletion contract changes.
 | Immutable Limitless / transcript-file imports (`persist_imported_conversation`) | Create completed once; duplicate import no-op | No | Explicit `import_default` keep policy: deliberate user import remains kept. Create-if-absent still preserves user edits. |
 | Sync intake and subsequent append (`utils/sync/assignment.py`) | Completed rule discard or provisional keep; live target retains lifecycle; donor redirects hidden | Discard yes; keep/promotion could clear decision to None | Existing intake discard rules unchanged. Every keep/promotion now records `sync_intake_default` if no valid keep exists, before the transactional survivor write. Paid `SYNC_UPDATE` assessment follows over full transcript. |
 | Sync processing (`utils/sync/pipeline.py`) | Completed keep/discard or recovery terminal | Normal assessment yes | Lifecycle result boundary now supplies a decision if any minimum/bypass omits one; transcript-revision CAS still rejects stale processors. |
-| Explicit merge (`merge_conversations.py`) | New survivor processing → completed; source rollback to completed; donors hidden/deleted | Survivor yes (`policy/merge`); legacy source rollback not guaranteed | Both unconditional and CAS completion transitions now fill missing decisions. Existing merge policy keeps and valid rule keeps survive. |
+| Explicit merge (`merge_conversations.py`) | New survivor processing → completed; source rollback to completed; donors hidden/deleted | Survivor yes (`policy/merge`); legacy source rollback not guaranteed | The status storage primitive in `database/conversation_status_transitions.py` and CAS completion transitions now fill missing decisions. Existing merge policy keeps and valid rule keeps survive. |
 | Smart merge survivor / refresh | Existing survivor completed; refresh processing → completed; donors hidden | Normal survivor decision / `policy/smart_merge` yes | Existing relevance policy and refresh lease/revision fences remain. Generic completion boundary covers absent records. Donor tombstones are untouched. |
 | User discard / restore / deletion | Discard stays hidden; restore makes explicit user keep; deletion never recreated | Existing user-owned contract | Restore now adds user-decision metadata after the unchanged tombstone fence. No deletion/discard semantics change. New helper never turns an existing discard into keep, respects restores, and normal persistence still refuses missing/deleted rows. |
 | Finalization job completion/fanout bookkeeping, audio/segment/photo metadata updates | Do not independently create or terminalize a conversation row | Not a separate decision path | Job completion requires committed fanout; conversation completion is owned by processing. Metadata writes cannot set lifecycle fields through generic update. |
@@ -60,7 +60,8 @@ costs terminal behavior, necessary to avoid a visible undecided row without
 removing captured data. It does not set discarded or deleted.
 
 New outcomes use `omi_conversation_relevance_decision_total` with distinct trigger,
-verdict, deciding tier, and closed terminal reason labels in `utils/metrics.py`.
+verdict, deciding tier, and closed terminal reason labels imported by `utils/metrics.py` from
+`utils/conversation_relevance_labels.py`.
 Recovery degradation and size exhaustion also use the shared fallback emitter.
 Counters emitted in transactions count attempts, so contention retries can repeat
 an increment; these are not exactly-once row counts.

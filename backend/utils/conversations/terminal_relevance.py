@@ -14,34 +14,8 @@ import re
 
 from utils.conversations.relevance_rules import RULES_VERSION, deterministic_relevance
 
-TERMINAL_PATHS = frozenset(
-    {
-        'dead_letter',
-        'byok_abandoned',
-        'orphan_terminal',
-        'oversized_terminal',
-        'deferred_retry',
-        'user_restore',
-        'import',
-        'external_text',
-        'sync_intake',
-        'lifecycle_terminal',
-    }
-)
-DECISION_TRIGGERS = TERMINAL_PATHS | frozenset(
-    {
-        'capture_end',
-        'client_finalize',
-        'sync_update',
-        'first_open',
-        'user_reprocess',
-        'merge',
-        'smart_merge',
-        'server_recovery',
-        'backfill',
-    }
-)
-DECIDERS = frozenset({'policy', 'user', 'rule', 'model', 'jev', 'override', 'deterministic'})
+from utils.conversation_relevance_labels import TERMINAL_PATHS, DECISION_TRIGGERS, DECIDERS
+
 # Terminal snapshots may belong to integrations/cameras whose useful content
 # lives outside transcript_segments. Restrict transcript-only repair to audio.
 TRANSCRIPT_SOURCES = frozenset(

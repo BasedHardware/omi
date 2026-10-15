@@ -17,6 +17,7 @@ SOURCE_ROOTS = ('backend/database', 'backend/routers', 'backend/services', 'back
 LIFECYCLE_SERVICE = 'backend/utils/conversations/lifecycle.py'
 RAW_STORAGE_ALLOWLIST = {
     'backend/database/conversations.py',
+    'backend/database/conversation_status_transitions.py',
     'backend/database/conversation_finalization_jobs.py',
     # Atomic merge storage shares the finalization outbox; lifecycle.merge_jobs owns callers.
     'backend/database/conversation_merge_jobs.py',

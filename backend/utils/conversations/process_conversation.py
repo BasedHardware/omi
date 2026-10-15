@@ -112,6 +112,7 @@ from utils.conversations.relevance_io import (
 )
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.projection_payload import (
+    terminal_persist_payload,
     clear_summary_retryable,
     client_processing_mutation,
     omit_null_processing_state,

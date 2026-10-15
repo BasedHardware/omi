@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from google.api_core.exceptions import Aborted
 
 from database import conversation_finalization_jobs as jobs
+from database import conversation_terminal_title as terminal_title
 from database import firestore_transaction_retry
 from models.conversation import Conversation
 from utils.listen_pusher_session import FINALIZATION_IN_FLIGHT_ERROR
@@ -1851,10 +1852,10 @@ def test_recover_deferred_processing_failure_atomically_rearms_retry():
     already_deferred = _Ref('already-deferred', {'status': 'processing', 'deferred': True})
     discarded = _Ref('discarded', {'status': 'processing', 'deferred': False, 'discarded': True})
 
-    assert jobs._recover_deferred_processing_failure_txn(transaction, processing) is True
-    assert jobs._recover_deferred_processing_failure_txn(transaction, completed) is True
-    assert jobs._recover_deferred_processing_failure_txn(transaction, already_deferred) is False
-    assert jobs._recover_deferred_processing_failure_txn(transaction, discarded) is False
+    assert terminal_title.recover_deferred_processing_failure_txn(transaction, processing) is True
+    assert terminal_title.recover_deferred_processing_failure_txn(transaction, completed) is True
+    assert terminal_title.recover_deferred_processing_failure_txn(transaction, already_deferred) is False
+    assert terminal_title.recover_deferred_processing_failure_txn(transaction, discarded) is False
     for (ref, patch), expected in zip(transaction.updates, (processing, completed)):
         assert ref is expected
         assert patch['status'] == 'completed'

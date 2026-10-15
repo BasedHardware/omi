@@ -17,15 +17,16 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from config.listen_quiet_finalization import enabled as quiet_finalization_enabled
-from utils.conversations.terminal_relevance import stamp_terminal_decision
 from database import conversations as conversations_db
 from database import recording_sessions as recording_sessions_db
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database._client import document_id_from_seed, get_firestore_client
 from database.conversation_terminal_title import (
     dead_letter_conversation_updates,
+    recover_deferred_processing_failure_txn,
     kept_row_terminal_update,
     user_time_zone,
+    uid_from_conversation_path,
 )
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.firestore_index_registry import (
@@ -233,14 +234,6 @@ def _client(firestore_client: Any = None) -> Any:
 
 def _conversation_ref(client: Any, uid: str, conversation_id: str) -> Any:
     return client.collection('users').document(uid).collection(CONVERSATIONS_COLLECTION).document(conversation_id)
-
-
-def _uid_from_conversation_path(path: str) -> str | None:
-    """Return the uid from a ``users/{uid}/conversations/{conversation_id}`` path."""
-    parts = path.split('/')
-    if len(parts) == 4 and parts[0] == 'users' and parts[2] == CONVERSATIONS_COLLECTION:
-        return parts[1]
-    return None
 
 
 def _job_ref(client: Any, job_id: str) -> Any:
@@ -1677,7 +1670,7 @@ def get_meeting_receipt_backfill_candidates(
             if scanned > max_scan:
                 break
             last_path = snapshot.reference.path
-            uid = _uid_from_conversation_path(snapshot.reference.path)
+            uid = uid_from_conversation_path(snapshot.reference.path)
             if uid is None:
                 continue
             data = snapshot.to_dict() or {}
@@ -1948,7 +1941,7 @@ def get_stale_processing_orphan_candidates(
             if scanned > safe_max_scan:
                 break
             last_path = snapshot.reference.path
-            uid = _uid_from_conversation_path(snapshot.reference.path)
+            uid = uid_from_conversation_path(snapshot.reference.path)
             if uid is None:
                 continue
             data = snapshot.to_dict() or {}
@@ -2048,7 +2041,7 @@ def scan_in_progress_conversations(
             if scanned > max_scan:
                 break
             last_path = snapshot.reference.path
-            uid = _uid_from_conversation_path(snapshot.reference.path)
+            uid = uid_from_conversation_path(snapshot.reference.path)
             if uid is None:
                 continue
             rows.append(
@@ -2322,7 +2315,7 @@ def _complete_unstampable_orphan_conversation_txn(
     last_written = _parse_timestamp(getattr(snapshot, 'update_time', None))
     if last_written is None or last_written > stale_before:
         return False
-    uid = _uid_from_conversation_path(str(getattr(conversation_ref, 'path', '') or ''))
+    uid = uid_from_conversation_path(str(getattr(conversation_ref, 'path', '') or ''))
     terminal = kept_row_terminal_update(
         uid or '',
         data,
@@ -2382,7 +2375,7 @@ def _complete_orphan_conversation_txn(
     expected_admitted = _parse_timestamp(expected_admitted_at)
     if admitted_at is None or admitted_at != expected_admitted:
         return False
-    uid = uid or _uid_from_conversation_path(str(getattr(conversation_ref, 'path', '') or ''))
+    uid = uid or uid_from_conversation_path(str(getattr(conversation_ref, 'path', '') or ''))
     terminal: dict[str, Any] = {'status': 'completed'}
     terminal = kept_row_terminal_update(
         uid or '', data, conversation_ref, terminal, time_zone_for_uid, transaction=transaction
@@ -2461,29 +2454,11 @@ def reacquire_deferred_processing(uid: str, conversation_id: str, *, firestore_c
     return transactional(transaction, _conversation_ref(client, uid, conversation_id), _now())
 
 
-def _recover_deferred_processing_failure_txn(transaction: Any, conversation_ref: Any) -> bool:
-    """Atomically publish a retryable terminal after deferred enrichment fails."""
-    snapshot = conversation_ref.get(transaction=transaction)
-    if not getattr(snapshot, 'exists', False):
-        return False
-    data = snapshot.to_dict() or {}
-    if (
-        data.get('status') not in {'processing', 'completed'}
-        or data.get('discarded')
-        or data.get('deferred') is not False
-    ):
-        return False
-    terminal = {**data, 'status': 'completed', 'deferred': True}
-    stamp_terminal_decision(terminal, path='deferred_retry')
-    transaction.update(conversation_ref, {key: terminal[key] for key in ('status', 'deferred', 'relevance_decision')})
-    return True
-
-
 def recover_deferred_processing_failure(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
     """Atomically re-arm deferred enrichment without exposing a stuck processing row."""
     client = _client(firestore_client)
     transaction = client.transaction()
-    transactional = firestore.transactional(_recover_deferred_processing_failure_txn)
+    transactional = firestore.transactional(recover_deferred_processing_failure_txn)
     return transactional(transaction, _conversation_ref(client, uid, conversation_id))
 
 

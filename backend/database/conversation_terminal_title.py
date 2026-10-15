@@ -31,7 +31,7 @@ from database import conversations as conversations_db
 from utils.conversations.deterministic_minimum import deterministic_minimum_title
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 from utils.conversations.recovery import structured_has_protected_content
-from utils.conversations.terminal_relevance import terminal_decision, valid_decision
+from utils.conversations.terminal_relevance import terminal_decision, valid_decision, stamp_terminal_decision
 from utils.conversations.terminal_calendar import calendar_retains
 from utils.metrics import record_conversation_relevance
 
@@ -295,3 +295,29 @@ def user_time_zone(client: Any, uid: str) -> str | None:
         return None
     zone = (snapshot.to_dict() or {}).get('time_zone')
     return zone if isinstance(zone, str) and zone else None
+
+
+def recover_deferred_processing_failure_txn(transaction: Any, conversation_ref: Any) -> bool:
+    """Atomically publish a retryable terminal after deferred enrichment fails."""
+    snapshot = conversation_ref.get(transaction=transaction)
+    if not getattr(snapshot, 'exists', False):
+        return False
+    data = snapshot.to_dict() or {}
+    if (
+        data.get('status') not in {'processing', 'completed'}
+        or data.get('discarded')
+        or data.get('deferred') is not False
+    ):
+        return False
+    terminal = {**data, 'status': 'completed', 'deferred': True}
+    stamp_terminal_decision(terminal, path='deferred_retry')
+    transaction.update(conversation_ref, {key: terminal[key] for key in ('status', 'deferred', 'relevance_decision')})
+    return True
+
+
+def uid_from_conversation_path(path: str) -> str | None:
+    """Return the uid from a ``users/{uid}/conversations/{conversation_id}`` path."""
+    parts = path.split('/')
+    if len(parts) == 4 and parts[0] == 'users' and parts[2] == 'conversations':
+        return parts[1]
+    return None

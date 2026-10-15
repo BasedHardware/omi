@@ -50,6 +50,7 @@ from ._client import db, delete_collection_recursive, get_firestore_client, run_
 from database.sync_assignment import SyncAssignmentClock, encode_sync_assignment_plan, run_sync_assignment
 from database.sync_live_overlap import find_sync_live_overlap_candidates
 from utils.sync.live_overlap import live_overlap_enabled
+from .conversation_status_transitions import recovery_discard_payload
 from .audio_timeline import group_chunks_by_coverage
 from .capture_groups import CAPTURE_GROUP_FIELD, leave_capture_group, transcript_fingerprint
 from .firestore_index_registry import (
@@ -387,14 +388,6 @@ def _require_segment_list(parsed: Any) -> List[Any]:
     if not isinstance(parsed, list):
         raise ValueError(f'undecodable transcript_segments: parsed {type(parsed).__name__}')
     return parsed
-
-
-def _is_verified_recovery_discard(write_data: Dict[str, Any]) -> bool:
-    # Imported lazily: several unit harnesses load this module with a stubbed
-    # ``utils`` package that has no ``utils.conversations`` subpackage.
-    from utils.conversations.recovery import verified_recovery_discard
-
-    return verified_recovery_discard(write_data.get('discarded'), write_data.get('relevance_decision'))
 
 
 def _decode_transcript_segments_strict(
@@ -1199,7 +1192,7 @@ def persist_processing_result_with_lifecycle(
             stale_sync_revision = True
             return False
 
-        if write_data.get('discarded') is True and _is_verified_recovery_discard(write_data):
+        if write_data.get('discarded') is True and recovery_discard_payload(write_data):
             from utils.conversations.recovery import (
                 RecoveryStructureUnavailableError,
                 structured_has_protected_content,
@@ -2674,29 +2667,6 @@ def link_duplicate_capture(uid: str, primary: Any, secondary: Any, overlap: dict
         return True
 
     return run_transactional(client, link)
-
-
-def transition_conversation_status(uid: str, conversation_id: str, status: str):
-    user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-
-    @firestore.transactional
-    def _transition(transaction):
-        snapshot = conversation_ref.get(transaction=transaction)
-        if not snapshot.exists:
-            return
-        current = snapshot.to_dict() or {}
-        updates = {'status': status}
-        if getattr(status, 'value', status) == 'completed':
-            from utils.conversations.terminal_relevance import stamp_terminal_decision
-
-            result = {**current, **updates}
-            stamp_terminal_decision(result, path='lifecycle_terminal')
-            updates['relevance_decision'] = result['relevance_decision']
-        transaction.update(conversation_ref, updates)
-
-    run_transactional(db, _transition)
-    invalidate_people_stats_cache(uid)
 
 
 def claim_conversation_status(

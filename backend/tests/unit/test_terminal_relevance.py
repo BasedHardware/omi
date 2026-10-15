@@ -4,7 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from utils.conversations.terminal_relevance import TERMINAL_PATHS, terminal_decision, valid_decision
+from utils.conversation_relevance_labels import TERMINAL_PATHS
+from utils.conversations.terminal_relevance import terminal_decision, valid_decision
 from database import conversation_terminal_title as terminal
 
 
