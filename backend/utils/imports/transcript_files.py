@@ -285,21 +285,35 @@ def _srt_block_cues(lines: Sequence[str], *, keep_label: bool = False) -> Option
 
 
 def _paragraph_cues(block: Sequence[str]) -> List[TranscriptCue]:
-    """An untimed block: one cue per "Name: text" turn when it holds several, else one cue.
+    """An untimed block: split title lines before the first label, then one cue per turn.
 
     A line that is not a label continues the turn above it (a wrapped turn), or
     stands as its own cue before the first label (a title).
     """
+    if not block:
+        return []
     labeled = [_LABEL_RE.match(line) is not None for line in block]
-    if sum(labeled) < 2:
+    if not any(labeled):
         return [TranscriptCue(text=' '.join(block))]
+    first_label_idx = labeled.index(True)
+    cues: List[TranscriptCue] = []
+    if first_label_idx > 0:
+        cues.append(TranscriptCue(text=' '.join(block[:first_label_idx])))
+        rest = block[first_label_idx:]
+        labeled_rest = labeled[first_label_idx:]
+    else:
+        rest = block
+        labeled_rest = labeled
+    if not rest:
+        return cues
     turns: List[List[str]] = []
-    for line, is_label in zip(block, labeled):
+    for line, is_label in zip(rest, labeled_rest):
         if is_label or not turns:
             turns.append([line])
         else:
             turns[-1].append(line)
-    return [TranscriptCue(text=' '.join(turn)) for turn in turns]
+    cues.extend([TranscriptCue(text=' '.join(turn)) for turn in turns])
+    return cues
 
 
 def parse_srt(text: str) -> List[TranscriptCue]:
