@@ -3209,9 +3209,17 @@ def test_receipt_sweep_stops_after_peer_takeover_preserving_next_receipt(store, 
     def rotate_after_delete(ref):
         original_delete(ref)
         if ref.path == paths[0]:
-            legal_holds.acquire_destructive_operation("u1", kind="retention_cleanup", token="peer", firestore_client=db)
+            # Simulate a peer acquiring AFTER this holder's gate went stale, then
+            # completing — the only way a same-kind rotation can occur now that
+            # fresh same-kind acquires block instead of replacing.
+            from datetime import timedelta as _td
+
+            future = datetime.now(timezone.utc) + timedelta(seconds=legal_holds.GATE_STALE_AFTER_SECONDS + 1)
+            legal_holds.acquire_destructive_operation(
+                "u1", kind="retention_cleanup", token="peer", firestore_client=db, now=future
+            )
             legal_holds.finish_destructive_operation(
-                "u1", kind="retention_cleanup", token="peer", outcome="completed", firestore_client=db
+                "u1", kind="retention_cleanup", token="peer", outcome="completed", firestore_client=db, now=future
             )
             if place_hold:
                 legal_holds.place_legal_hold("u1", issuer="admin", firestore_client=db)

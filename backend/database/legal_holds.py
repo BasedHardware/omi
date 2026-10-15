@@ -120,7 +120,7 @@ def _gate_blocks(gate: dict[str, Any] | None, now: datetime, *, kind: str | None
 
     if gate is None or gate["state"] != "running":
         return False
-    if gate["kind"] == _OBSOLETE_WRITER_GATE_KIND or (kind is not None and gate["kind"] == kind):
+    if gate["kind"] == _OBSOLETE_WRITER_GATE_KIND:
         return False
     return (now - gate["started_at"]).total_seconds() < GATE_STALE_AFTER_SECONDS
 
@@ -220,10 +220,13 @@ def _acquire_destructive_operation_transaction(
     if gate is not None and gate["state"] == "running":
         if gate["uid"] == uid and gate["kind"] == kind and gate["token"] == token:
             return
-        if _gate_blocks(gate, now, kind=kind):
+        if _gate_blocks(gate, now):
+            # ANY fresh running gate blocks — including same-kind. A replacing
+            # token would let a peer's check-then-delete chunks run after a
+            # legal hold lands (the original holder keeps deleting post-takeover
+            # and post-hold). Same-kind overlap waits like every other kind;
+            # abandoned (stale) and obsolete-kind gates still allow takeover.
             raise DestructiveOperationInProgress("another destructive operation owns the account gate")
-        # Same-kind peers replace the token; abandoned and obsolete gates
-        # also allow takeover. Transactional deletion still checks the token.
     transaction.set(
         gate_ref,
         {

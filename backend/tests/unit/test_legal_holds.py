@@ -310,8 +310,8 @@ def test_inflight_deletion_blocks_external_writer_before_provider_work():
         )
 
 
-def test_concurrent_same_kind_deletes_both_finish_but_write_fence_still_blocks(monkeypatch):
-    """Same-kind contexts overlap while conservative write fences block."""
+def test_concurrent_same_kind_delete_waits_then_acquires_after_release(monkeypatch):
+    """Same-kind contenders queue on the account gate; fences stay blocked."""
     client = _FakeClient()
     gate_lock = threading.Lock()
 
@@ -350,13 +350,23 @@ def test_concurrent_same_kind_deletes_both_finish_but_write_fence_still_blocks(m
                 outcomes.append("fence_leaked")
         except legal_holds.DestructiveOperationInProgress:
             outcomes.append("fence_blocked")
+        # While the holder is inside the gate, a same-kind acquire still raises.
         try:
             with legal_holds.destructive_operation_gate("uid1", firestore_client=client):
-                outcomes.append("second_ok")
-        except legal_holds.DestructiveOperationInProgress as exc:
-            outcomes.append(type(exc).__name__)
-        finally:
-            release.set()
+                outcomes.append("second_ok_early")
+        except legal_holds.DestructiveOperationInProgress:
+            outcomes.append("second_blocked_while_held")
+        release.set()
+        deadline = legal_holds.datetime.now(legal_holds.timezone.utc)
+        import time as _time
+
+        for _ in range(100):
+            if "first_ok" in outcomes:
+                break
+            _time.sleep(0.05)
+        # After the holder releases, the same-kind contender acquires cleanly.
+        with legal_holds.destructive_operation_gate("uid1", firestore_client=client):
+            outcomes.append("second_ok")
 
     first = threading.Thread(target=holder)
     second = threading.Thread(target=contender)
@@ -366,7 +376,8 @@ def test_concurrent_same_kind_deletes_both_finish_but_write_fence_still_blocks(m
     second.join(timeout=5)
     assert not first.is_alive() and not second.is_alive()
     assert outcomes.count("first_ok") == 1
-    assert "DestructiveOperationInProgress" not in outcomes
+    assert outcomes.count("second_blocked_while_held") == 1
+    assert "second_ok_early" not in outcomes
     assert outcomes.count("second_ok") == 1
     assert "fence_blocked" in outcomes
     assert "fence_leaked" not in outcomes
@@ -374,19 +385,23 @@ def test_concurrent_same_kind_deletes_both_finish_but_write_fence_still_blocks(m
 
 
 @pytest.mark.parametrize("kind", ["explicit_memory_deletion", "retention_cleanup", "account_deletion"])
-def test_same_kind_fresh_acquire_replaces_token_and_invalidates_old_authority(kind):
+def test_same_kind_fresh_gate_still_blocks(kind):
+    """Any fresh running gate — same kind included — blocks acquisition.
+
+    Replacing a fresh same-kind token would let the replaced holder's
+    check-then-delete chunks continue after a legal hold lands (the peer can
+    finish the single gate row while the original holder is still mid-loop).
+    Same-kind overlap therefore waits like every other kind; only stale
+    (6h) and obsolete-kind rows are takeover candidates.
+    """
     now = legal_holds.datetime.now(legal_holds.timezone.utc)
-    client = _FakeClient({"legal_hold_deletion_gates/uid1": _gate(kind=kind)})
-    legal_holds._acquire_destructive_operation_transaction.to_wrap(
-        client.transaction(), client, "uid1", kind, "peer-token", now
-    )
-    assert client.docs["legal_hold_deletion_gates/uid1"]["token"] == "peer-token"
-    with pytest.raises(legal_holds.LegalHoldAuthorityUnavailable):
-        legal_holds.assert_destructive_operation_transaction(
-            client.transaction(), client, uid="uid1", kind=kind, token="token-1"
-        )
+    original = _gate(kind=kind)
+    client = _FakeClient({"legal_hold_deletion_gates/uid1": original})
     with pytest.raises(legal_holds.DestructiveOperationInProgress):
-        legal_holds.assert_no_destructive_operation_transaction(client.transaction(), client, uid="uid1")
+        legal_holds._acquire_destructive_operation_transaction.to_wrap(
+            client.transaction(), client, "uid1", kind, "peer-token", now
+        )
+    assert client.docs["legal_hold_deletion_gates/uid1"] == original
 
 
 @pytest.mark.parametrize(
@@ -478,7 +493,8 @@ def test_revalidation_missing_or_malformed_gate_fails_closed(payload):
         )
 
 
-def test_active_context_revalidation_detects_same_kind_takeover(monkeypatch):
+def test_active_context_revalidation_detects_stale_takeover(monkeypatch):
+    """A stale (6h) takeover rotates the token; the old holder's next chunk aborts."""
     client = _FakeClient()
     now = legal_holds.datetime.now(legal_holds.timezone.utc)
     monkeypatch.setattr(
@@ -493,8 +509,9 @@ def test_active_context_revalidation_detects_same_kind_takeover(monkeypatch):
     )
     with legal_holds.destructive_operation_gate("uid1", firestore_client=client):
         legal_holds.assert_destructive_gate_still_ours("uid1", "explicit_memory_deletion", firestore_client=client)
+        future = now + timedelta(seconds=legal_holds.GATE_STALE_AFTER_SECONDS + 1)
         legal_holds.acquire_destructive_operation(
-            "uid1", kind="explicit_memory_deletion", token="peer", firestore_client=client, now=now
+            "uid1", kind="explicit_memory_deletion", token="peer", firestore_client=client, now=future
         )
         with pytest.raises(legal_holds.DestructiveGateTakeover):
             legal_holds.assert_destructive_gate_still_ours("uid1", "explicit_memory_deletion", firestore_client=client)
