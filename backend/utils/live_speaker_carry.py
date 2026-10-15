@@ -9,7 +9,10 @@ provider scope carry, never an automatic match or a mapped suggestion.
 
 from typing import Any, Dict, List, Mapping, Optional
 
-from utils.manual_speaker_assignments import _receipt_section, manual_rejected_speakers
+from utils.manual_speaker_assignments import (
+    _receipt_section,  # pyright: ignore[reportPrivateUsage]  # intentional shared receipt accessor
+    manual_rejected_speakers,
+)
 from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL, canonical_speaker_label
 
 _IDENTITY_KEYS = ('person_id', 'is_user', 'use_for_speech_training', 'rejection')
