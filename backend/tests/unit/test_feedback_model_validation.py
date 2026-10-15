@@ -126,6 +126,29 @@ class TestFeedbackModelValidation(unittest.TestCase):
         )
         self.assertIsNone(req_empty.comment)
 
+    def test_feedback_event_non_string_comment_rejected(self):
+        with self.assertRaises(ValidationError):
+            FeedbackEvent(
+                id="ev_123",
+                uid="usr_456",
+                surface=FeedbackSurface.chat_text,
+                target_kind=FeedbackTargetKind.chat_message,
+                target_id="msg_789",
+                value=1,
+                created_at=self.now,
+                comment=123,
+            )
+
+    def test_mobile_feedback_request_non_string_comment_rejected(self):
+        with self.assertRaises(ValidationError):
+            MobileFeedbackRequest(
+                feedback_id="fb_123",
+                kind=MobileFeedbackKind.summary_helpfulness,
+                target_id="conv_123",
+                value=1,
+                comment=123,
+            )
+
     def test_feedback_context_pointer_bounds(self):
         ptr = FeedbackContextPointer(
             event_id="ev_1",

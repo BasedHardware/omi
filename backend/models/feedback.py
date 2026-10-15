@@ -193,7 +193,7 @@ class FeedbackEvent(BaseModel):
         if value is None:
             return None
         if not isinstance(value, str):
-            raise TypeError('comment must be a string')
+            raise ValueError('comment must be a string')
         normalized = value.strip()
         return normalized or None
 
@@ -234,7 +234,7 @@ class MobileFeedbackRequest(BaseModel):
         if value is None:
             return None
         if not isinstance(value, str):
-            raise TypeError('comment must be a string')
+            raise ValueError('comment must be a string')
         normalized = value.strip()
         return normalized or None
 
