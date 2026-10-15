@@ -375,15 +375,12 @@ def with_belief_model_env(payload: str) -> str:
     )
 
 
-def with_screen_frame_egress_env(payload: str) -> str:
-    """Meeting-note screenshot egress is provisioned on the dev Cloud Run `backend` only.
-
-    The adjudication and read routes run there; the gate in
-    utils/screen_frames/availability.py needs the flag, the bucket, and the signer.
-    """
+def with_backend_storage_env(payload: str) -> str:
+    """Dev backend snapshots carry screenshot egress and voice staging bindings."""
     return re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
-        r'\1\n        {"name": "SCREEN_FRAME_EGRESS_ENABLED", "value": "true"},'
+        r'\1\n        {"name": "BUCKET_TEMPORAL_SYNC_LOCAL", "value": "syncing-local-development"},'
+        r'\n        {"name": "SCREEN_FRAME_EGRESS_ENABLED", "value": "true"},'
         r'\n        {"name": "BUCKET_SCREEN_FRAMES", "value": "based-hardware-dev-screen-frames"},'
         r'\n        {"name": "SCREEN_FRAME_SIGNING_SECRET", "valueFrom": {"secretKeyRef": {"name": "SCREEN_FRAME_SIGNING_SECRET", "key": "latest"}}},',
         payload,
@@ -407,7 +404,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(payload)
     payload = with_audio_timeline_span_env(payload)
     payload = with_capture_evidence_env(payload)
-    payload = with_screen_frame_egress_env(payload)
+    payload = with_backend_storage_env(payload)
     payload = with_firestore_read_ledger_env(payload).replace(
         '"FIRESTORE_READ_LEDGER", "value": "1"},',
         '"FIRESTORE_READ_LEDGER", "value": "1"},\n        {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},',
@@ -535,6 +532,23 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         payload,
         flags=re.DOTALL,
     )
+    # Dev keeps Dream disabled, but these processing hosts declare its bindings.
+    # Derive fixtures from the manifest, including the empty dev allowlist.
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    services = manifest['environments']['dev']['cloud_run']['services']
+    for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        bindings = services[service]['env']
+        entries = ',\n'.join(
+            '        ' + json.dumps({'name': name, 'value': bindings[name]['value']})
+            for name in ('DREAM_AGENT_ELIGIBILITY', 'DREAM_AGENT_UID_ALLOWLIST', 'DREAM_ON_DEMAND_ENABLED')
+        )
+        payload = re.sub(
+            rf'("{service}":\s*\{{.*?"env":\s*\[)',
+            lambda match: match.group(1) + '\n' + entries + ',',
+            payload,
+            count=1,
+            flags=re.DOTALL,
+        )
     return with_backend_integration_events_secret(payload)
 
 
@@ -2310,6 +2324,7 @@ def test_provisional_prod_endpoint_requires_presence_but_not_exact_value(tmp_pat
     "backend": {
         "env": [
           {"name": "OMI_LLM_GATEWAY_URL", "value": "http://stable-private-endpoint"},
+          {"name": "BUCKET_TEMPORAL_SYNC_LOCAL", "value": "syncing-local"},
           {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omi.me"},
           {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}},
           {"name": "STT_PRERECORDED_MODEL", "valueFrom": {"secretKeyRef": {"name": "STT_PRERECORDED_MODEL"}}},
@@ -3202,6 +3217,23 @@ _JEV_PROCESS_CONVERSATION_HOSTS = {
     'cloud_run/backend-sync',
 }
 _JEV_LIVE_RELEVANCE_HOSTS = _JEV_PROCESS_CONVERSATION_HOSTS | {'cloud_run/backend-sync-backfill'}
+
+
+def test_batch_pipeline_namespace_is_absent_from_backend_sync_runtime_env(monkeypatch):
+    key = 'BATCH_PIPELINE_NAMESPACE'
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    for environment in ('dev', 'prod'):
+        config = validator._get_env_config(manifest, environment)
+        overlay = validator._load_yaml(ROOT / f'deploy/runtime_env/{environment}.overlay.yaml')['overlay']
+        for source in (config, overlay):
+            sync_env = source['cloud_run']['services']['backend-sync']['env']
+            assert key not in sync_env
+            assert all(key not in env for _, env in _manifest_env_blocks(source))
+        with monkeypatch.context() as patch:
+            state = render_cloud_run_state(config, patch)
+        rendered_env = state['services']['backend-sync']['env']
+        assert all(entry['name'] != key for entry in rendered_env), environment
 
 
 def test_transcription_shadow_dev_scope_matches_generated_manifest_and_charts():

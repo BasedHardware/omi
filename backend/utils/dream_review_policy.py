@@ -1,8 +1,6 @@
 """Typed writes through Review seams. No hard deletes or unjournaled user edits."""
 
-import json
 from datetime import datetime, timezone
-from uuid import uuid5, NAMESPACE_URL
 from typing import Any
 
 from database import review_changes, review_store
@@ -83,7 +81,7 @@ def suggest_edit(uid, edit, records, *, run_id=None):
     item = ReviewItemV2(
         item_id='agent_proposal:' + review_store.safe_id(key),
         kind='agent_proposal',
-        title=edit.reason,
+        title=edit.kind.replace('_', ' ').capitalize(),
         created_at=datetime.now(timezone.utc),
         agent_proposal=proposal,
     )
@@ -142,11 +140,7 @@ def ask(uid, item, records, *, run_id=None):
         ReviewItem.model_validate(
             {
                 **item.model_dump(exclude={'value', 'why_it_matters'}),
-                'item_id': item.kind
-                + ':'
-                + str(
-                    uuid5(NAMESPACE_URL, json.dumps([uid, item.kind, item.source_ref, item.quote], ensure_ascii=False))
-                ),
+                'item_id': review_store.dream_question_item_id(uid, item.kind, item.source_ref, item.quote),
                 'created_at': datetime.now(timezone.utc),
             }
         ),

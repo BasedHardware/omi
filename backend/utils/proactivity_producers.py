@@ -24,6 +24,7 @@ from utils import proactivity as spine
 from utils.executors import db_executor, run_blocking
 from utils.llm import proactive_notification as legacy
 from utils.llm.model_config import LUNA_MODEL
+from utils.llm.prompt_cache import EXPLICIT_CACHE_OPTIONS
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -218,6 +219,10 @@ async def structured(
         data = _render_fields(data)
         return {
             'messages': [{'role': 'user', 'content': prompt.format(**data)}],
+            # These single-turn prompts have no reusable prefix. Include the
+            # gateway's explicit-mode default before fitting the byte envelope;
+            # otherwise a full-size prompt grows beyond admission at the gateway.
+            'prompt_cache_options': dict(EXPLICIT_CACHE_OPTIONS),
             'stream': False,
             'max_completion_tokens': tokens,
             'reasoning_effort': 'low',

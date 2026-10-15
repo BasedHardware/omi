@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "field": "expires_at",
+  "collection_groups": [
+    "batch_pipeline_prod_jobs",
+    "batch_pipeline_dev_jobs",
+    "batch_pipeline_prod_results",
+    "batch_pipeline_dev_results",
+    "batch_pipeline_prod_artifacts",
+    "batch_pipeline_dev_artifacts",
+    "batch_pipeline_prod_projections",
+    "batch_pipeline_dev_projections",
+    "batch_pipeline_prod_intakes",
+    "batch_pipeline_dev_intakes"
+  ],
+  "receipt_retention_days": 45,
+  "artifact_cleanup_hours_after_projection": 24,
+  "pending_or_dead_letter_ttl": false,
+  "privacy_authority_ttl": false
+}

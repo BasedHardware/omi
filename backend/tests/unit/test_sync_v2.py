@@ -32,6 +32,12 @@ from io import BytesIO
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import gc
+
+# Keep additive batch imports real before legacy fixtures replace package roots.
+from utils.batch_pipeline import intake as _batch_intake  # noqa: F401
+from routers import batch_pipeline as _batch_router  # noqa: F401
+from models import sync_job_status as _sync_job_status  # noqa: F401
 from fastapi.routing import APIRoute
 from models.users import PlanType
 from utils.executors import run_blocking as _production_run_blocking
@@ -1655,6 +1661,7 @@ class TestAsyncCoordinatorBehavioral:
             os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'),
         )
         module = importlib.util.module_from_spec(spec)
+
         spec.loader.exec_module(module)
 
         pipeline_mod = sys.modules['utils.sync.pipeline']
@@ -1683,6 +1690,9 @@ class TestAsyncCoordinatorBehavioral:
     def fenced_worker_module(self):
         """Build the import-heavy behavioral harness outside the test call budget."""
         module, stubs = self._load_sync_module()
+        # Release prior cyclic mock graphs during harness setup, so a full-heap
+        # collection does not get charged to an unrelated request assertion.
+        gc.collect()
         try:
             yield module, stubs
         finally:
@@ -1871,9 +1881,9 @@ class TestAsyncCoordinatorBehavioral:
         pipeline._cleanup_files.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_rejected_terminal_fence_never_releases_content_claim(self):
+    async def test_rejected_terminal_fence_never_releases_content_claim(self, fenced_worker_module):
         """A stale owner cannot turn an already-built result into a retry release."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             pipeline = stubs['pipeline']
             pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
@@ -1907,9 +1917,9 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_lost_content_ledger_owner_stops_before_completed_job_publication(self):
+    async def test_lost_content_ledger_owner_stops_before_completed_job_publication(self, fenced_worker_module):
         """A newer ledger owner cannot be acknowledged by an old worker's Redis result."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             pipeline = stubs['pipeline']
             pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
@@ -2052,9 +2062,9 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_inline_lease_renews_while_waiting_for_pipeline_capacity(self):
+    async def test_inline_lease_renews_while_waiting_for_pipeline_capacity(self, fenced_worker_module):
         """A saturated semaphore cannot let an already-owned token expire."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         gate = asyncio.Semaphore(1)
         await gate.acquire()
         lease_tasks = []
@@ -2106,9 +2116,11 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_inline_renew_errors_cancel_before_capacity_admission_without_releasing_retry_material(self):
+    async def test_inline_renew_errors_cancel_before_capacity_admission_without_releasing_retry_material(
+        self, fenced_worker_module
+    ):
         """A broken Redis lease aborts queued inline work before its token expires."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         gate = asyncio.Semaphore(1)
         await gate.acquire()
         lease_tasks = []
@@ -2162,9 +2174,9 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_lost_inline_lease_during_teardown_preserves_retry_material(self):
+    async def test_lost_inline_lease_during_teardown_preserves_retry_material(self, fenced_worker_module):
         """A lease loss racing normal teardown cannot be swallowed into cleanup."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         lease_tasks = []
         cleanup_calls_at_loss = []
         try:
@@ -2214,9 +2226,9 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_cancellation_during_decode_keeps_raw_retry_material(self):
+    async def test_cancellation_during_decode_keeps_raw_retry_material(self, fenced_worker_module):
         """Cancelling a coordinator cannot delete input a decoder leaf may still read."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             pipeline = stubs['pipeline']
             pipeline._get_sync_pipeline_semaphore = lambda _lane: asyncio.Semaphore(1)
@@ -2256,9 +2268,9 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_cancellation_during_vad_keeps_inflight_audio_and_retry_material(self):
+    async def test_cancellation_during_vad_keeps_inflight_audio_and_retry_material(self, fenced_worker_module):
         """A cancelled coordinator cannot clean audio still owned by a VAD worker."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         release_vad = threading.Event()
         vad_finished = threading.Event()
         vad_started = asyncio.Event()
@@ -2329,11 +2341,11 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_decode_http_exception_marks_failed(self):
+    async def test_decode_http_exception_marks_failed(self, fenced_worker_module):
         """Decode raising HTTPException must mark job failed."""
         from fastapi import HTTPException as _HTTPException
 
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             stubs['pipeline'].decode_files_to_wav = MagicMock(
                 side_effect=_HTTPException(status_code=400, detail='bad format')
@@ -2350,9 +2362,9 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_decode_generic_exception_marks_failed(self):
+    async def test_decode_generic_exception_marks_failed(self, fenced_worker_module):
         """Decode raising generic Exception must mark job failed."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             stubs['pipeline'].decode_files_to_wav = MagicMock(side_effect=RuntimeError('corrupt file'))
             stubs['pipeline']._cleanup_files = MagicMock()
@@ -2366,9 +2378,9 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_empty_decode_marks_failed_and_releases_retry_claim(self):
+    async def test_empty_decode_marks_failed_and_releases_retry_claim(self, fenced_worker_module):
         """Empty decoder output is invalid input, not authoritative silence."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=[])
             stubs['pipeline']._cleanup_files = MagicMock()
@@ -2390,9 +2402,9 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_vad_errors_mark_failed(self):
+    async def test_vad_errors_mark_failed(self, fenced_worker_module):
         """VAD errors must mark job failed and clean up."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
             stubs['pipeline']._cleanup_files = MagicMock()
@@ -2416,9 +2428,9 @@ class TestAsyncCoordinatorBehavioral:
         'vad_error, expected_class',
         [('ConnectTimeout', 'ConnectTimeout'), ('uid-secret-9f2c detail', 'OtherException')],
     )
-    async def test_vad_failure_propagates_bounded_class(self, vad_error, expected_class):
+    async def test_vad_failure_propagates_bounded_class(self, fenced_worker_module, vad_error, expected_class):
         """The first VAD error's class reaches the terminal log, bounded to the closed set."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             pipeline = stubs['pipeline']
             pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
@@ -2440,10 +2452,10 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_silence_segment_marks_processed_and_is_skipped_on_task_retry(self):
+    async def test_silence_segment_marks_processed_and_is_skipped_on_task_retry(self, fenced_worker_module):
         """A confirmed-empty segment persists its processed markers, so a Cloud
         Tasks redelivery skips it while a failed sibling retries."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             pipeline = stubs['pipeline']
             pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
@@ -2525,9 +2537,9 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_zero_segments_after_vad_completes(self):
+    async def test_zero_segments_after_vad_completes(self, fenced_worker_module):
         """Zero segmented_paths after VAD must complete with 0 segments."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
             stubs['pipeline']._cleanup_files = MagicMock()
@@ -2549,11 +2561,13 @@ class TestAsyncCoordinatorBehavioral:
     @pytest.mark.asyncio
     @pytest.mark.parametrize('intake_outcome', ['silence', 'deleted', 'lineage', 'protected'])
     @pytest.mark.parametrize('task_mode', [False, True])
-    async def test_empty_or_superseded_intake_completes_without_retry(self, intake_outcome, task_mode):
+    async def test_empty_or_superseded_intake_completes_without_retry(
+        self, fenced_worker_module, intake_outcome, task_mode
+    ):
         """Silence and user-superseded intake finish the ledger without errors or
         usage in both inline and Cloud Tasks modes; #14337 must not recur as
         endless client re-upload of an intentionally empty result."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
             stubs['pipeline']._cleanup_files = MagicMock()
@@ -2622,9 +2636,9 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_tokenized_partial_terminal_releases_retired_claim_before_deleting_epoch(self):
+    async def test_tokenized_partial_terminal_releases_retired_claim_before_deleting_epoch(self, fenced_worker_module):
         """A winning terminal fence orders retry release and epoch retirement after Redis publication."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             pipeline = stubs['pipeline']
             pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
@@ -2686,9 +2700,9 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_success_metric_waits_for_durable_segment_checkpoint(self):
+    async def test_success_metric_waits_for_durable_segment_checkpoint(self, fenced_worker_module):
         """A checkpoint failure must not advertise a successful transcription."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             segmented_path = '/tmp/seg_1700000001.wav'
             stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
@@ -2726,9 +2740,9 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_content_completion_failure_cannot_publish_completed_job(self):
+    async def test_content_completion_failure_cannot_publish_completed_job(self, fenced_worker_module):
         """A durable-ledger failure must retry before the client sees completed."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
             stubs['pipeline']._cleanup_files = MagicMock()
@@ -2753,9 +2767,9 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_dg_budget_exhausted_marks_failed(self):
+    async def test_dg_budget_exhausted_marks_failed(self, fenced_worker_module):
         """DG budget exhausted must mark job failed."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
             stubs['pipeline']._cleanup_files = MagicMock()
@@ -2782,9 +2796,9 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_dg_budget_not_exhausted_continues(self):
+    async def test_dg_budget_not_exhausted_continues(self, fenced_worker_module):
         """DG budget NOT exhausted must continue to segment processing."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
             stubs['pipeline']._cleanup_files = MagicMock()
@@ -2826,9 +2840,11 @@ class TestAsyncCoordinatorBehavioral:
         ],
         ids=['unlimited', 'basic', 'missing-subscription', 'subscription-read-failure'],
     )
-    async def test_fresh_soft_caps_use_the_current_subscription_plan(self, subscription, expected_plan, lookup_error):
+    async def test_fresh_soft_caps_use_the_current_subscription_plan(
+        self, fenced_worker_module, subscription, expected_plan, lookup_error
+    ):
         """Queued fresh work applies the persisted plan instead of the default cap tier."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             pipeline = stubs['pipeline']
             pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
@@ -2877,9 +2893,9 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_partial_segment_failure_completes(self):
+    async def test_partial_segment_failure_completes(self, fenced_worker_module):
         """Partial segment failure must complete (not fail) with error count."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
             stubs['pipeline']._cleanup_files = MagicMock()
@@ -2922,9 +2938,9 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_generic_segment_task_exception_counts_as_failed_segment(self):
+    async def test_generic_segment_task_exception_counts_as_failed_segment(self, fenced_worker_module):
         """A task-level segment exception must not complete with failed_segments=0."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
             stubs['pipeline']._cleanup_files = MagicMock()
@@ -2959,9 +2975,9 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_retry_skips_segment_already_committed_by_prior_attempt(self):
+    async def test_retry_skips_segment_already_committed_by_prior_attempt(self, fenced_worker_module):
         """Cloud Tasks retry must not re-transcribe a segment with a durable job marker."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             segment_path = '/tmp/seg_1700000001.wav'
             stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
@@ -2997,9 +3013,11 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_retry_hydration_excludes_durably_fenced_conversation_from_audio_finalization(self):
+    async def test_retry_hydration_excludes_durably_fenced_conversation_from_audio_finalization(
+        self, fenced_worker_module
+    ):
         """A fence recorded before a retry cannot let its stale checkpoint finalize audio."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             segment_path = '/tmp/seg_1700000001.wav'
             pipeline = stubs['pipeline']
@@ -3051,9 +3069,9 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_fence_checkpoint_handoffs_to_db_executor_before_audio_finalization(self):
+    async def test_fence_checkpoint_handoffs_to_db_executor_before_audio_finalization(self, fenced_worker_module):
         """A sync-worker fence persists ledger then job state through the coordinator loop."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         sync_worker = ThreadPoolExecutor(max_workers=1)
         try:
             segment_path = '/tmp/seg_1700000001.wav'
@@ -3125,9 +3143,9 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_fence_checkpoint_lease_loss_stops_audio_finalization(self):
+    async def test_fence_checkpoint_lease_loss_stops_audio_finalization(self, fenced_worker_module):
         """A durable fence checkpoint failure reaches the sync callback before side effects."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         sync_worker = ThreadPoolExecutor(max_workers=1)
         try:
             segment_path = '/tmp/seg_1700000001.wav'
@@ -3180,9 +3198,9 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_person_embeddings_fallback(self):
+    async def test_person_embeddings_fallback(self, fenced_worker_module):
         """Person embeddings failure must fall back to empty dict, not crash."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
             stubs['pipeline']._cleanup_files = MagicMock()
@@ -3212,9 +3230,9 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_target_conversation_id_forwarded(self):
+    async def test_target_conversation_id_forwarded(self, fenced_worker_module):
         """target_conversation_id must be forwarded to process_segment."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
             stubs['pipeline']._cleanup_files = MagicMock()
@@ -3247,9 +3265,9 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_private_cloud_sync_enabled_forwarded(self):
+    async def test_private_cloud_sync_enabled_forwarded(self, fenced_worker_module):
         """private_cloud_sync_enabled must be forwarded to process_segment."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
             stubs['pipeline']._cleanup_files = MagicMock()
@@ -3281,9 +3299,9 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_cleanup_called_on_success(self):
+    async def test_cleanup_called_on_success(self, fenced_worker_module):
         """Cleanup must be called even on successful completion."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
             cleanup_calls = []
@@ -3308,9 +3326,9 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_cleanup_called_on_failure(self):
+    async def test_cleanup_called_on_failure(self, fenced_worker_module):
         """Cleanup and BYOK clear must happen even when pipeline crashes."""
-        module, stubs = self._load_sync_module()
+        module, stubs = fenced_worker_module
         try:
             stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
             cleanup_calls = []
@@ -3639,22 +3657,14 @@ class TestV2EndpointExecution:
             else:
                 sys.modules[mod_name] = orig
 
-    def test_get_poll_404_expired_job(self):
+    def test_get_poll_404_expired_job(self, sync_endpoint_module):
         """GET poll returns 404 when job not found."""
-        saved, mock_sync_jobs, _ = self._build_test_app()
+        saved, mock_sync_jobs, module = sync_endpoint_module
         mock_sync_jobs.get_sync_job = MagicMock(return_value=None)
 
         try:
-            sys.modules.pop('routers.sync', None)
-            sys.modules.pop('utils.sync.pipeline', None)
-            import importlib.util
-
-            spec = importlib.util.spec_from_file_location(
-                'sync_poll_404',
-                os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'),
-            )
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+            module.get_sync_job = mock_sync_jobs.get_sync_job
+            module.create_sync_job = mock_sync_jobs.create_sync_job
 
             from fastapi import FastAPI
             from fastapi.testclient import TestClient
@@ -3672,9 +3682,9 @@ class TestV2EndpointExecution:
         finally:
             self._cleanup_modules(saved)
 
-    def test_get_poll_403_wrong_owner(self):
+    def test_get_poll_403_wrong_owner(self, sync_endpoint_module):
         """GET poll returns 403 when job belongs to different user."""
-        saved, mock_sync_jobs, _ = self._build_test_app()
+        saved, mock_sync_jobs, module = sync_endpoint_module
         mock_sync_jobs.get_sync_job = MagicMock(
             return_value={
                 'job_id': 'some-job',
@@ -3688,16 +3698,8 @@ class TestV2EndpointExecution:
         )
 
         try:
-            sys.modules.pop('routers.sync', None)
-            sys.modules.pop('utils.sync.pipeline', None)
-            import importlib.util
-
-            spec = importlib.util.spec_from_file_location(
-                'sync_poll_403',
-                os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'),
-            )
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+            module.get_sync_job = mock_sync_jobs.get_sync_job
+            module.create_sync_job = mock_sync_jobs.create_sync_job
 
             from fastapi import FastAPI
             from fastapi.testclient import TestClient
@@ -3712,9 +3714,9 @@ class TestV2EndpointExecution:
         finally:
             self._cleanup_modules(saved)
 
-    def test_get_poll_completed_includes_result(self):
+    def test_get_poll_completed_includes_result(self, sync_endpoint_module):
         """GET poll returns result and error fields on terminal status."""
-        saved, mock_sync_jobs, _ = self._build_test_app()
+        saved, mock_sync_jobs, module = sync_endpoint_module
         mock_sync_jobs.get_sync_job = MagicMock(
             return_value={
                 'job_id': 'done-job',
@@ -3730,16 +3732,8 @@ class TestV2EndpointExecution:
         )
 
         try:
-            sys.modules.pop('routers.sync', None)
-            sys.modules.pop('utils.sync.pipeline', None)
-            import importlib.util
-
-            spec = importlib.util.spec_from_file_location(
-                'sync_poll_done',
-                os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'),
-            )
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+            module.get_sync_job = mock_sync_jobs.get_sync_job
+            module.create_sync_job = mock_sync_jobs.create_sync_job
 
             from fastapi import FastAPI
             from fastapi.testclient import TestClient
@@ -3759,9 +3753,9 @@ class TestV2EndpointExecution:
         finally:
             self._cleanup_modules(saved)
 
-    def test_get_poll_failed_includes_error(self):
+    def test_get_poll_failed_includes_error(self, sync_endpoint_module):
         """GET poll returns error field when all segments failed."""
-        saved, mock_sync_jobs, _ = self._build_test_app()
+        saved, mock_sync_jobs, module = sync_endpoint_module
         mock_sync_jobs.get_sync_job = MagicMock(
             return_value={
                 'job_id': 'fail-job',
@@ -3777,16 +3771,8 @@ class TestV2EndpointExecution:
         )
 
         try:
-            sys.modules.pop('routers.sync', None)
-            sys.modules.pop('utils.sync.pipeline', None)
-            import importlib.util
-
-            spec = importlib.util.spec_from_file_location(
-                'sync_poll_failed',
-                os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'),
-            )
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+            module.get_sync_job = mock_sync_jobs.get_sync_job
+            module.create_sync_job = mock_sync_jobs.create_sync_job
 
             from fastapi import FastAPI
             from fastapi.testclient import TestClient
@@ -3805,9 +3791,9 @@ class TestV2EndpointExecution:
         finally:
             self._cleanup_modules(saved)
 
-    def test_get_poll_processing_excludes_result(self):
+    def test_get_poll_processing_excludes_result(self, sync_endpoint_module):
         """GET poll must NOT include result/error when job is still processing."""
-        saved, mock_sync_jobs, _ = self._build_test_app()
+        saved, mock_sync_jobs, module = sync_endpoint_module
         mock_sync_jobs.get_sync_job = MagicMock(
             return_value={
                 'job_id': 'active-job',
@@ -3823,16 +3809,8 @@ class TestV2EndpointExecution:
         )
 
         try:
-            sys.modules.pop('routers.sync', None)
-            sys.modules.pop('utils.sync.pipeline', None)
-            import importlib.util
-
-            spec = importlib.util.spec_from_file_location(
-                'sync_poll_active',
-                os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'),
-            )
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+            module.get_sync_job = mock_sync_jobs.get_sync_job
+            module.create_sync_job = mock_sync_jobs.create_sync_job
 
             from fastapi import FastAPI
             from fastapi.testclient import TestClient
@@ -3852,9 +3830,9 @@ class TestV2EndpointExecution:
         finally:
             self._cleanup_modules(saved)
 
-    def test_post_returns_202_and_schedules_background(self):
+    def test_post_returns_202_and_schedules_background(self, sync_endpoint_module):
         """POST /v2/sync-local-files must return 202, create job, and schedule async background task."""
-        saved, mock_sync_jobs, _ = self._build_test_app()
+        saved, mock_sync_jobs, module = sync_endpoint_module
         mock_sync_jobs.create_sync_job = MagicMock(
             return_value={
                 'job_id': 'created-job',
@@ -3866,16 +3844,8 @@ class TestV2EndpointExecution:
         )
 
         try:
-            sys.modules.pop('routers.sync', None)
-            sys.modules.pop('utils.sync.pipeline', None)
-            import importlib.util
-
-            spec = importlib.util.spec_from_file_location(
-                'sync_post_202',
-                os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'),
-            )
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+            module.get_sync_job = mock_sync_jobs.get_sync_job
+            module.create_sync_job = mock_sync_jobs.create_sync_job
 
             module._retrieve_file_paths_v2 = MagicMock(return_value=['/tmp/fake.opus'])
 
@@ -3921,19 +3891,27 @@ class TestV2EndpointExecution:
         finally:
             self._cleanup_modules(saved)
 
-    @pytest.mark.parametrize('failure_key', ['invalid_audio', 'persistent_persistence'])
-    def test_capped_content_returns_a_per_wal_retryable_job_without_dispatch(self, failure_key):
-        saved, mock_sync_jobs, _ = self._build_test_app()
+    @pytest.fixture
+    def sync_endpoint_module(self):
+        """Keep real router import/setup outside the endpoint execution budget."""
+        saved, jobs, _ = self._build_test_app()
         try:
-            sys.modules.pop('routers.sync', None)
-            sys.modules.pop('utils.sync.pipeline', None)
             import importlib.util
 
             spec = importlib.util.spec_from_file_location(
-                'sync_post_capped', os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
+                'sync_endpoint_fixture', os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
             )
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
+            gc.collect()
+            yield saved, jobs, module
+        finally:
+            self._cleanup_modules(saved)
+
+    @pytest.mark.parametrize('failure_key', ['invalid_audio', 'persistent_persistence'])
+    def test_capped_content_returns_a_per_wal_retryable_job_without_dispatch(self, failure_key, sync_endpoint_module):
+        saved, mock_sync_jobs, module = sync_endpoint_module
+        try:
             module._retrieve_file_paths_v2 = MagicMock(return_value=['/tmp/fake.opus'])
             module._cleanup_files = MagicMock()
             module.claim_sync_content = MagicMock(

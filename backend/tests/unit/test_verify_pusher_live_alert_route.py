@@ -7,6 +7,7 @@ import io
 import json
 import runpy
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from types import SimpleNamespace
@@ -201,10 +202,241 @@ def test_prepublish_does_not_deadlock_on_a_not_yet_deployed_metric_family(verifi
     )
 
 
-def test_live_query_requires_every_scrape_target_in_each_job_to_be_up() -> None:
+def test_serving_check_keeps_min_over_non_deleting_targets_and_does_not_use_max() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
-    assert 'min(up{job=~"pusher-metrics|backend-listen-metrics"}) by (job)' in source
-    assert 'max(up{job=~"pusher-metrics|backend-listen-metrics"}) by (job)' not in source
+    assert 'up{job=~"pusher-metrics|backend-listen-metrics"}' in source
+    assert "kube_pod_deletion_timestamp" in source
+    assert "kube_pod_status_phase" not in source
+    assert 'max(up{job=~"pusher-metrics|backend-listen-metrics"})' not in source
+
+
+def _ksm_present() -> dict[str, Any]:
+    return {"status": "success", "data": {"result": [{"metric": {}, "value": [1, "8"]}]}}
+
+
+def _ksm_absent() -> dict[str, Any]:
+    return {"status": "success", "data": {"result": []}}
+
+
+def _series_query(series: list[dict[str, Any]]) -> dict[str, Any]:
+    return {"status": "success", "data": {"result": series}}
+
+
+def _target(job: str, pod: str, value: str = "1", namespace: str = "prod-omi-backend", **labels: str) -> dict[str, Any]:
+    metric = {"job": job, "namespace": namespace, "pod": pod}
+    metric.update(labels)
+    return {"metric": metric, "value": [1, value]}
+
+
+def _deletion(pod: str, namespace: str = "prod-omi-backend", stamp: str = "1.792061362e+09") -> dict[str, Any]:
+    return {"metric": {"namespace": namespace, "pod": pod, "uid": "uid-1"}, "value": [1, stamp]}
+
+
+def _serving_errors(
+    verifier: SimpleNamespace,
+    up_series: list[dict[str, Any]],
+    deletion_query: dict[str, Any],
+    ksm_presence_query: dict[str, Any],
+    *,
+    phase: str = "postrollout",
+) -> list[str]:
+    rules, datasource, _up, metric_query, contact_points = _inputs(verifier)
+    return verifier.validate_live_route(
+        rules,
+        datasource,
+        _series_query(up_series),
+        metric_query,
+        contact_points,
+        phase=phase,
+        deletion_query=deletion_query,
+        ksm_presence_query=ksm_presence_query,
+    )
+
+
+def test_healthy_replacement_targets_pass(verifier: SimpleNamespace) -> None:
+    errors = _serving_errors(
+        verifier,
+        [
+            _target("pusher-metrics", "pusher-a"),
+            _target("pusher-metrics", "pusher-b"),
+            _target("backend-listen-metrics", "listen-a"),
+        ],
+        _series_query([]),
+        _ksm_present(),
+    )
+    assert errors == []
+
+
+@pytest.mark.parametrize("job", ["pusher-metrics", "backend-listen-metrics"])
+def test_deleting_down_pod_does_not_fail_healthy_replacements(verifier: SimpleNamespace, job: str) -> None:
+    """Old-pod drain leaves phase Running and up=0 until grace + preStop finish.
+    Pusher and backend-listen share the namespace/pod join, so either job's
+    terminating target is ignored while its replacement stays in min(up)."""
+    other = "backend-listen-metrics" if job == "pusher-metrics" else "pusher-metrics"
+    up_series = [
+        _target(job, f"{job}-new"),
+        _target(job, f"{job}-old", "0", phase="Running"),
+        _target(other, f"{other}-new"),
+    ]
+    deletion_query = _series_query([_deletion(f"{job}-old")])
+    assessment = verifier.serving_up_by_job(_series_query(up_series), deletion_query, _ksm_present())
+    assert assessment.excluded_targets == 1
+    assert assessment.by_job[job] == "1"
+    assert assessment.deletion_timestamps_confirmed is True
+    assert _serving_errors(verifier, up_series, deletion_query, _ksm_present()) == []
+
+
+def test_down_non_terminating_pod_fails_even_when_phase_is_running(verifier: SimpleNamespace) -> None:
+    errors = _serving_errors(
+        verifier,
+        [
+            _target("pusher-metrics", "pusher-new"),
+            _target("pusher-metrics", "pusher-broken", "0", phase="Running"),
+            _target("backend-listen-metrics", "listen-a"),
+        ],
+        _series_query([_deletion("pusher-broken", stamp="0")]),
+        _ksm_present(),
+    )
+    message = next(error for error in errors if "scrape targets" in error)
+    assert "pusher-metrics=0" in message
+    assert "backend-listen-metrics=1" in message
+    assert "not treated as terminating" not in message
+
+
+def test_missing_scrape_job_still_fails_when_deletions_are_confirmed(verifier: SimpleNamespace) -> None:
+    errors = _serving_errors(
+        verifier,
+        [_target("backend-listen-metrics", "listen-a")],
+        _series_query([]),
+        _ksm_present(),
+    )
+    message = next(error for error in errors if "scrape targets" in error)
+    assert "pusher-metrics=absent" in message
+    assert "backend-listen-metrics=1" in message
+
+
+def test_kube_state_metrics_absent_does_not_excuse_a_down_target(verifier: SimpleNamespace) -> None:
+    """Empty deletion results are not proof that a down pod is draining. Without
+    kube_pod_info, the gate keeps that target in min(up) and fails."""
+    errors = _serving_errors(
+        verifier,
+        [
+            _target("pusher-metrics", "pusher-new"),
+            _target("pusher-metrics", "pusher-old", "0", phase="Running"),
+            _target("backend-listen-metrics", "listen-a"),
+        ],
+        _series_query([]),
+        _ksm_absent(),
+    )
+    message = next(error for error in errors if "scrape targets" in error)
+    assert "pusher-metrics=0" in message
+    assert "not treated as terminating" in message
+
+
+def test_kube_state_metrics_absent_still_passes_when_every_target_is_up(verifier: SimpleNamespace) -> None:
+    errors = _serving_errors(
+        verifier,
+        [
+            _target("pusher-metrics", "pusher-a"),
+            _target("backend-listen-metrics", "listen-a"),
+        ],
+        {"status": "error"},
+        _ksm_absent(),
+    )
+    assert errors == []
+
+
+def test_job_with_only_terminating_targets_is_absent(verifier: SimpleNamespace) -> None:
+    errors = _serving_errors(
+        verifier,
+        [
+            _target("pusher-metrics", "pusher-old", "0"),
+            _target("backend-listen-metrics", "listen-a"),
+        ],
+        _series_query([_deletion("pusher-old")]),
+        _ksm_present(),
+    )
+    message = next(error for error in errors if "scrape targets" in error)
+    assert "pusher-metrics=absent" in message
+
+
+def test_deletion_timestamp_in_another_namespace_does_not_exclude_the_target(verifier: SimpleNamespace) -> None:
+    errors = _serving_errors(
+        verifier,
+        [
+            _target("pusher-metrics", "pusher-old", "0"),
+            _target("backend-listen-metrics", "listen-a"),
+        ],
+        _series_query([_deletion("pusher-old", namespace="dev-omi-backend")]),
+        _ksm_present(),
+    )
+    message = next(error for error in errors if "scrape targets" in error)
+    assert "pusher-metrics=0" in message
+    assert "not treated as terminating" not in message
+
+
+def test_pusher_gate_queries_per_target_up_and_deletion_timestamps(
+    verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rules, datasource, up_query, metric_query, contact_points = _inputs(verifier)
+    queries: list[str] = []
+
+    def fake_request(_url: str, path: str, _token: str, **_kwargs: object) -> object:
+        if path.startswith("/api/datasources/proxy/uid/prometheus/api/v1/query?"):
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(path).query)["query"][0]
+            queries.append(query)
+            if query == verifier.POD_DELETION_TIMESTAMP_QUERY:
+                raise verifier.AlertRouteError("deletion timestamps unavailable")
+            if query == verifier.KSM_POD_INFO_COUNT_QUERY:
+                return _ksm_absent()
+            if query == verifier.SERVING_UP_QUERY:
+                return up_query
+            return metric_query
+        if path.startswith("/api/v1/provisioning/alert-rules/"):
+            return rules[path.rsplit("/", 1)[-1]]
+        if path == "/api/datasources/uid/prometheus/health":
+            return datasource
+        if path == "/api/v1/provisioning/contact-points":
+            return contact_points
+        raise AssertionError(path)
+
+    monkeypatch.setitem(verifier._run_pusher_gate.__globals__, "_request_json", fake_request)
+    assert verifier._run_pusher_gate("https://monitor.omi.me", "secret", "postrollout", 1) == []
+    assert verifier.SERVING_UP_QUERY in queries
+    assert verifier.POD_DELETION_TIMESTAMP_QUERY in queries
+    assert verifier.KSM_POD_INFO_COUNT_QUERY in queries
+    assert 'max(up{job=~"pusher-metrics|backend-listen-metrics"})' not in " ".join(queries)
+
+
+def test_deletion_query_error_still_fails_a_down_target(
+    verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rules, datasource, up_query, metric_query, contact_points = _inputs(verifier)
+    up_query["data"]["result"] = [
+        _target("pusher-metrics", "pusher-new"),
+        _target("pusher-metrics", "pusher-old", "0"),
+        _target("backend-listen-metrics", "listen-a"),
+    ]
+
+    def fake_request(_url: str, path: str, _token: str, **_kwargs: object) -> object:
+        if path.startswith("/api/datasources/proxy/uid/prometheus/api/v1/query?"):
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(path).query)["query"][0]
+            if query in (verifier.POD_DELETION_TIMESTAMP_QUERY, verifier.KSM_POD_INFO_COUNT_QUERY):
+                raise verifier.AlertRouteError("kube-state-metrics unavailable")
+            if query == verifier.SERVING_UP_QUERY:
+                return up_query
+            return metric_query
+        if path.startswith("/api/v1/provisioning/alert-rules/"):
+            return rules[path.rsplit("/", 1)[-1]]
+        if path == "/api/datasources/uid/prometheus/health":
+            return datasource
+        if path == "/api/v1/provisioning/contact-points":
+            return contact_points
+        raise AssertionError(path)
+
+    monkeypatch.setitem(verifier._run_pusher_gate.__globals__, "_request_json", fake_request)
+    failures = verifier._run_pusher_gate("https://monitor.omi.me", "secret", "postrollout", 1)
+    assert any("pusher-metrics=0" in failure and "not treated as terminating" in failure for failure in failures)
 
 
 def test_scrape_target_failure_names_each_jobs_observed_up_state(verifier: SimpleNamespace) -> None:
@@ -218,10 +450,20 @@ def test_scrape_target_failure_names_each_jobs_observed_up_state(verifier: Simpl
         {"metric": {"job": "backend-listen-metrics"}, "value": [1, "1"]},
         {"metric": {"job": "pusher-metrics"}, "value": [1, "0"]},
     ]
-    errors = verifier.validate_live_route(rules, datasource, up_query, metric_query, contact_points, phase="prepublish")
+    errors = verifier.validate_live_route(
+        rules,
+        datasource,
+        up_query,
+        metric_query,
+        contact_points,
+        phase="prepublish",
+        deletion_query=_series_query([]),
+        ksm_presence_query=_ksm_present(),
+    )
     message = next(error for error in errors if "scrape targets" in error)
     assert "backend-listen-metrics=1" in message
     assert "pusher-metrics=0" in message
+    assert "not treated as terminating" not in message
 
 
 def test_scrape_target_failure_marks_a_job_with_no_series_absent(verifier: SimpleNamespace) -> None:
@@ -796,4 +1038,6 @@ def test_pusher_gate_selects_development_expectations_by_grafana_host(verifier, 
 
     monkeypatch.setitem(verifier._run_pusher_gate.__globals__, '_request_json', read)
     assert verifier._run_pusher_gate('https://monitor.omiapi.com', 'dummy-secret', 'postrollout', 1) == []
-    assert verifier._run_pusher_gate('https://monitor.omi.me', 'dummy-secret', 'postrollout', 1)
+    production_failures = verifier._run_pusher_gate('https://monitor.omi.me', 'dummy-secret', 'postrollout', 1)
+    assert production_failures
+    assert all('execErrState does not match' in failure for failure in production_failures)

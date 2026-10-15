@@ -264,6 +264,40 @@ class RunIOSTests(unittest.TestCase):
         ):
             self.assertFalse(train.ios_phased_release_paused("live-version-id"))
 
+    def test_phased_release_null_data_is_not_a_pause(self):
+        # Apple's live answer for a version released without a phased rollout.
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def read(self):
+                return json.dumps({"data": None, "links": {"self": "https://example"}}).encode()
+
+        with patch.object(train.urllib.request, "urlopen", return_value=Response()), patch.object(
+            train, "_asc_rest_token", return_value="faketoken"
+        ):
+            self.assertFalse(train.ios_phased_release_paused("live-version-id"))
+
+    def test_phased_release_without_data_still_fails_closed(self):
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def read(self):
+                return json.dumps({"errors": []}).encode()
+
+        with patch.object(train.urllib.request, "urlopen", return_value=Response()), patch.object(
+            train, "_asc_rest_token", return_value="faketoken"
+        ):
+            with self.assertRaisesRegex(train.TrainError, "invalid resource"):
+                train.ios_phased_release_paused("live-version-id")
+
     def test_phased_release_lookup_failure_fails_closed(self):
         import email.message
         import urllib.error as urlerror
