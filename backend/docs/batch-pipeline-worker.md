@@ -140,7 +140,8 @@ already-running long backfill can violate the fresh latency target.
 Queue units are conversations/capture spans (target ≤1h, hard ceiling 7200s),
 never internal ASR windows. Dedicated batch GPUs own conversation-sized jobs.
 `Scheduler.pull(..., capacity=PoolCapacity(...))` caps leases to available slots
-and protects fresh reservations. Samples expire after 15s; invalid samples close
+and protects fresh reservations; `max_item_seconds` sets each pool’s unit ceiling.
+Samples expire after 15s; invalid samples close
 admission. No-snapshot pulls are dedicated-batch-only. An off-peak trough
 (~25% lower listen load near 03:00Z, lead evidence) is a forecast, not slack.
 
@@ -160,7 +161,7 @@ results after lease loss. Bounded deficit accrual may return empty before long
 items earn credit; continue polling. Ring cap: 1024 active owners per class.
 
 Expose the registry through the worker exporter; adapter max-ready-age signals
-must exclude samples older than 60s. HPA External Value targets are 30/300/3600s
+must exclude samples older than 60s. Batch HPA External Value targets are 30/300/3600s
 by class with qualified pool min/max. Throughput is completed-event rate;
 ambiguous replies may undercount receipts, so durable state is authoritative.
 Ten declared stage indexes need READY receipts. Emulator contention verifies

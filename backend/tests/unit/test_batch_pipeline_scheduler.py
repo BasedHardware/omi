@@ -305,3 +305,19 @@ def test_capacity_never_spends_reserved_fresh_slots_on_multiple_backfill_items()
     for n in range(3):
         queue.enqueue(item(f'backfill{n}'), 0)
     assert len(queue.pull(10, 3, capacity=PoolCapacity(10, 3, reserved_fresh_slots=2))) == 1
+
+
+def test_per_pool_unit_ceiling_and_malformed_capacity_fail_closed():
+    from utils.batch_pipeline.contracts import PoolCapacity
+
+    queue = Scheduler(MemoryStore())
+    queue.enqueue(item('long', duration=5400), 0)
+    queue.enqueue(item('bounded', owner='bounded', duration=30), 0)
+    assert queue.pull(10, capacity=PoolCapacity(10, 1, max_item_seconds=3600))[0].item.segment_id == 'bounded'
+    assert queue.pull(10, capacity=PoolCapacity(10, 1, max_item_seconds=3600)) == []
+    for capacity in (
+        PoolCapacity(10, 1.5),
+        PoolCapacity(10, 1, max_item_seconds=float('nan')),
+        PoolCapacity(10, 1, max_item_seconds=0),
+    ):
+        assert queue.pull(10, capacity=capacity) == []

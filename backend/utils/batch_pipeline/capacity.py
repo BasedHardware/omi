@@ -17,9 +17,17 @@ class PoolCapacity:
     live_queue_age_seconds: float = 0.0
     gpu_utilization: float = 0.0
     memory_headroom_bytes: int = 0
+    max_item_seconds: float = 7200.0
 
     def limits(self, now: float, *, shared_live_enabled: bool) -> tuple[int, bool, float]:
-        numbers = (now, self.observed_at, self.live_queue_age_seconds, self.gpu_utilization)
+        numbers = (now, self.observed_at, self.live_queue_age_seconds, self.gpu_utilization, self.max_item_seconds)
+        if any(
+            type(value) is not int
+            for value in (self.available_slots, self.reserved_fresh_slots, self.memory_headroom_bytes)
+        ):
+            return 0, False, 0
+        if self.memory_headroom_bytes < 0 or not 0 < self.max_item_seconds <= 7200:
+            return 0, False, 0
         if not all(math.isfinite(value) for value in numbers):
             return 0, False, 0
         if not 0 <= now - self.observed_at <= 15 or not 0 <= self.gpu_utilization <= 1:
@@ -37,5 +45,5 @@ class PoolCapacity:
                 and self.gpu_utilization < 0.5
                 and self.memory_headroom_bytes >= 8 * 1024**3
             )
-            return (1, True, 120.0) if safe else (0, False, 0)
-        return self.available_slots, self.available_slots > self.reserved_fresh_slots, 7200.0
+            return (1, True, min(120.0, self.max_item_seconds)) if safe else (0, False, 0)
+        return self.available_slots, self.available_slots > self.reserved_fresh_slots, self.max_item_seconds
