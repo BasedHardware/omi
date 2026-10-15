@@ -321,7 +321,7 @@ Pod stdout/stderr → Alloy (kubernetesApi method) → Loki gateway (basic auth)
                                                                     Grafana Explore (LogQL)
 ```
 
-Alloy collects from `{env}-omi-backend` namespace only. Labels kept: `app_kubernetes_io_name`, `container`, `instance`, `job`, `level`, `namespace`, `service_name`, `pod` (structured metadata).
+Collector values stay enabled pending the valid teardown review in [LOG_CONSOLIDATION.md](LOG_CONSOLIDATION.md). Held route/error and storm preparations live in [route-errors/](route-errors/README.md). Alloy collects from `{env}-omi-backend` namespace only. Labels kept: `app_kubernetes_io_name`, `container`, `instance`, `job`, `level`, `namespace`, `service_name`, `pod` (structured metadata).
 
 Loki runs in distributed mode: 2x ingester, 2x querier, 2x query-frontend, 2x query-scheduler, 2x distributor, 1x compactor, 2x index-gateway, 1x ruler. Storage on GCS (`prod-omi-loki-chunks`). Retention: 15 days (360h).
 
@@ -1003,8 +1003,8 @@ exactly one page per outage is made while those exceptions remain.
 
 The Cloud Logging plugin does not support Grafana-managed alerting. A synthetic
 raw-log alert would be a permanent error, not a health canary; use bounded
-log-based metrics through Cloud Monitoring for alert signals. Loki rules remain
-paused pending the separate log-plane migration. The external deadman covers
+log-based metrics through Cloud Monitoring for alert signals. Four paused Loki definitions are retired from source; manual live retirement and
+Cloud Logging presentation acceptance follow [LOG_CONSOLIDATION.md](LOG_CONSOLIDATION.md). The external deadman covers
 Grafana availability independently; it cannot prove query-path or delivery health.
 
 ### Metrics Contract
