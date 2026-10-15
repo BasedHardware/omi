@@ -20,8 +20,21 @@ from unittest.mock import MagicMock
 
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 
-_STUB = ('firebase_admin', 'google', 'pusher', 'modal', 'ulid', 'redis', 'prometheus_client', 'cachetools',
-         'sentry_sdk', 'pydub', 'opuslib', 'pinecone', 'typesense')
+_STUB = (
+    'firebase_admin',
+    'google',
+    'pusher',
+    'modal',
+    'ulid',
+    'redis',
+    'prometheus_client',
+    'cachetools',
+    'sentry_sdk',
+    'pydub',
+    'opuslib',
+    'pinecone',
+    'typesense',
+)
 
 
 class _AutoMock(types.ModuleType):
@@ -80,6 +93,7 @@ def _mem(mid, *, hidden=None, has_updated=True, order=0):
 
 def _install_streams(monkeypatch, updated_docs, created_docs):
     """Ordered fake windows: each stream returns its first `candidate_limit` rows."""
+
     def fake_stream(ref, order_field, candidate_limit, *, budget=None):
         src = updated_docs if order_field == 'updated_at' else created_docs
         return [_Doc(d) for d in src[:candidate_limit]]
@@ -98,8 +112,8 @@ class TestHiddenRowsDontShrinkPages:
         m4 = _mem('m4', order=3)
         m5 = _mem('m5', has_updated=False, order=4)
         m6 = _mem('m6', order=5)
-        updated = [m1, m2, m3, m4, m6]          # updated_at DESC (m5 lacks it)
-        created = [m1, m2, m3, m4, m5, m6]      # created_at DESC
+        updated = [m1, m2, m3, m4, m6]  # updated_at DESC (m5 lacks it)
+        created = [m1, m2, m3, m4, m5, m6]  # created_at DESC
         _install_streams(monkeypatch, updated, created)
 
         page = mem_db.list_memory_updated_or_created_index('u1', limit=3, offset=0)
@@ -125,5 +139,7 @@ class TestHiddenRowsDontShrinkPages:
 
         page = mem_db.list_memory_updated_or_created_index('u1', limit=3, offset=0)
         assert [m['id'] for m in page] == ['m0', 'm1', 'm2']
-        assert calls == [('updated_at', 3), ('created_at', 3)], \
-            'a clean page must pay exactly the needed window, no growth'
+        assert calls == [
+            ('updated_at', 3),
+            ('created_at', 3),
+        ], 'a clean page must pay exactly the needed window, no growth'
