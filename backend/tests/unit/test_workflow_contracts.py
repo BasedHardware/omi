@@ -863,6 +863,28 @@ def _workflow_policy():
     return module
 
 
+def test_gcp_diarizer_checks_deployment_files_only_after_checkout():
+    workflow_path = BACKEND_DIR.parent / ".github/workflows/gcp_diarizer.yml"
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["deploy"]["steps"]
+    checkout_index = next(
+        index for index, step in enumerate(steps) if step.get("uses", "").startswith("actions/checkout@")
+    )
+    target_index = next(index for index, step in enumerate(steps) if step.get("name") == "Resolve deployment target")
+    file_check_indices = [
+        index
+        for index, step in enumerate(steps)
+        if re.search(r"(?:\[\[?|\btest\b)[^\n]*(?:-f|-e)\b", step.get("run", ""))
+    ]
+
+    assert file_check_indices
+    assert target_index > checkout_index
+    assert all(index > checkout_index for index in file_check_indices)
+    target_script = steps[target_index]["run"]
+    assert re.search(r"(?:\[\[?|\btest\b)[^\n]*-f[^\n]*\$dockerfile", target_script)
+    assert re.search(r"(?:\[\[?|\btest\b)[^\n]*-f[^\n]*\$values_file", target_script)
+
+
 def test_firestore_readiness_gate_covers_every_backend_image_shipment():
     """Every backend-source image push/deploy needs the shared immutable gate."""
     policy = _workflow_policy()

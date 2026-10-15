@@ -57,6 +57,13 @@ jobs:
             exit 1
           fi
 
+      # To workaround "no space left on device" issue of GitHub-hosted runner
+      - name: Delete huge unnecessary tools folder
+        run: rm -rf /opt/hostedtoolcache
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
       - name: Resolve deployment target
         id: target
         shell: bash
@@ -97,13 +104,6 @@ jobs:
             echo "release_name=${DEPLOY_ENV}-omi-${SERVICE}"
             echo "image_repository=gcr.io/${GCP_PROJECT_ID}/${image_name}"
           } >> "$GITHUB_OUTPUT"
-
-      # To workaround "no space left on device" issue of GitHub-hosted runner
-      - name: Delete huge unnecessary tools folder
-        run: rm -rf /opt/hostedtoolcache
-
-      - name: Checkout
-        uses: actions/checkout@v7
 
       # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C, plan v2 Phase E).
       # Development keeps its JSON lane.

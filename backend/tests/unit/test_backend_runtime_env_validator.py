@@ -392,6 +392,19 @@ def with_screen_frame_egress_env(payload: str) -> str:
     )
 
 
+def with_dev_batch_pipeline_namespace(payload: str) -> str:
+    return re.sub(
+        r'("backend-sync":\s*\{.*?"env":\s*\[)',
+        lambda match: match.group(1)
+        + '\n'
+        + json.dumps({'name': 'BATCH_PIPELINE_NAMESPACE', 'value': 'batch_pipeline_dev'})
+        + ',',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_account_cutover_enforcement(payload)
     payload = with_sync_ledger_fence_mode(payload)
@@ -535,7 +548,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         payload,
         flags=re.DOTALL,
     )
-    return with_backend_integration_events_secret(payload)
+    return with_dev_batch_pipeline_namespace(with_backend_integration_events_secret(payload))
 
 
 def validate_cloud_run_workflows_only(validator, *, env: str, manifest_path: Path, workflow_root: Path | None = None):
@@ -3202,6 +3215,35 @@ _JEV_PROCESS_CONVERSATION_HOSTS = {
     'cloud_run/backend-sync',
 }
 _JEV_LIVE_RELEVANCE_HOSTS = _JEV_PROCESS_CONVERSATION_HOSTS | {'cloud_run/backend-sync-backfill'}
+
+
+def test_batch_pipeline_namespace_is_dev_backend_sync_only(monkeypatch):
+    key = 'BATCH_PIPELINE_NAMESPACE'
+    expected = {'value': 'batch_pipeline_dev'}
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    dev = validator._get_env_config(manifest, 'dev')
+    prod = validator._get_env_config(manifest, 'prod')
+    dev_overlay = validator._load_yaml(ROOT / 'deploy/runtime_env/dev.overlay.yaml')['overlay']
+    prod_overlay = validator._load_yaml(ROOT / 'deploy/runtime_env/prod.overlay.yaml')['overlay']
+
+    for source in (dev, dev_overlay):
+        sync_env = source['cloud_run']['services']['backend-sync']['env']
+        assert sync_env[key] == expected
+        assert {scope for scope, env in _manifest_env_blocks(source) if key in env} == {'cloud_run/backend-sync'}
+
+    for source in (prod, prod_overlay):
+        assert all(key not in env for _, env in _manifest_env_blocks(source))
+
+    for environment, config, expected_value in (
+        ('dev', dev, 'batch_pipeline_dev'),
+        ('prod', prod, None),
+    ):
+        with monkeypatch.context() as patch:
+            state = render_cloud_run_state(config, patch)
+        rendered_env = state['services']['backend-sync']['env']
+        actual_value = next((entry.get('value') for entry in rendered_env if entry.get('name') == key), None)
+        assert actual_value == expected_value, environment
 
 
 def test_transcription_shadow_dev_scope_matches_generated_manifest_and_charts():
