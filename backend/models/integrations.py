@@ -47,7 +47,7 @@ class ExternalIntegrationMemory(BaseModel):
     @classmethod
     def _validate_content(cls, value: Any) -> str:
         if not isinstance(value, str):
-            raise TypeError("content must be a string")
+            raise ValueError("content must be a string")
         value = value.strip()
         if not value:
             raise ValueError("content must not be blank")
@@ -94,39 +94,19 @@ class MemoriesResponse(BaseModel):
 
 
 class ActionItem(BaseModel):
-    description: str = Field(min_length=1, description="The action item to be completed")
+    description: str = Field(description="The action item to be completed")
     completed: bool = False
     exported: bool = False
     export_date: Optional[datetime] = None
     export_platform: Optional[str] = None
 
-    @field_validator("description", mode="before")
-    @classmethod
-    def _validate_description(cls, value: Any) -> str:
-        if not isinstance(value, str):
-            raise TypeError("description must be a string")
-        value = value.strip()
-        if not value:
-            raise ValueError("description must not be blank")
-        return value
-
 
 class Event(BaseModel):
-    title: str = Field(min_length=1, description="The title of the event")
+    title: str = Field(description="The title of the event")
     description: str = Field(description="A brief description of the event", default='')
     start: datetime = Field(description="The start date and time of the event")
-    duration: int = Field(ge=0, description="The duration of the event in minutes", default=30)
+    duration: int = Field(description="The duration of the event in minutes", default=30)
     created: bool = False
-
-    @field_validator("title", mode="before")
-    @classmethod
-    def _validate_title(cls, value: Any) -> str:
-        if not isinstance(value, str):
-            raise TypeError("event title must be a string")
-        value = value.strip()
-        if not value:
-            raise ValueError("event title must not be blank")
-        return value
 
     def as_dict_cleaned_dates(self) -> Dict[str, Any]:
         event_dict = self.model_dump()
@@ -149,8 +129,8 @@ class ConversationItemStructured(BaseModel):
 
 class ConversationItemGeolocation(BaseModel):
     google_place_id: Optional[str] = None
-    latitude: float = Field(ge=-90.0, le=90.0)
-    longitude: float = Field(ge=-180.0, le=180.0)
+    latitude: float
+    longitude: float
     address: Optional[str] = None
     location_type: Optional[str] = None
 

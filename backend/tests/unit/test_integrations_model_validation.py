@@ -1,10 +1,8 @@
 import sys
 import unittest
-from datetime import datetime, timezone
 from unittest.mock import MagicMock
 from pydantic import BaseModel, ValidationError
 
-# Mock uninstalled / heavy backend DB dependencies to keep test hermetic
 if "models.memories" not in sys.modules:
     mock_memories = MagicMock()
     mock_memories.MemoryDB = BaseModel
@@ -51,47 +49,17 @@ class TestIntegrationsModelValidation(unittest.TestCase):
         with self.assertRaises(ValidationError):
             ExternalIntegrationMemory(content="   ")
 
-    def test_action_item_valid(self):
-        item = ActionItem(description="  Review proposal  ")
-        self.assertEqual(item.description, "Review proposal")
-
-    def test_action_item_blank_description_rejected(self):
+    def test_external_integration_memory_non_string_rejected(self):
         with self.assertRaises(ValidationError):
-            ActionItem(description="   ")
+            ExternalIntegrationMemory(content=123)
 
-    def test_event_valid(self):
-        now = datetime(2026, 10, 14, 12, 0, 0, tzinfo=timezone.utc)
-        ev = Event(title="  Team Sync  ", start=now, duration=45)
-        self.assertEqual(ev.title, "Team Sync")
-        self.assertEqual(ev.duration, 45)
+    def test_response_models_permissive_for_legacy_stored_data(self):
+        # Stored historical LLM data should not be dropped on read
+        item = ActionItem(description="legacy item")
+        self.assertEqual(item.description, "legacy item")
 
-    def test_event_blank_title_rejected(self):
-        now = datetime(2026, 10, 14, 12, 0, 0, tzinfo=timezone.utc)
-        with self.assertRaises(ValidationError):
-            Event(title="   ", start=now, duration=30)
-
-    def test_event_negative_duration_rejected(self):
-        now = datetime(2026, 10, 14, 12, 0, 0, tzinfo=timezone.utc)
-        with self.assertRaises(ValidationError):
-            Event(title="Team Sync", start=now, duration=-10)
-
-    def test_geolocation_valid_bounds(self):
         geo = ConversationItemGeolocation(latitude=37.7749, longitude=-122.4194)
         self.assertEqual(geo.latitude, 37.7749)
-        self.assertEqual(geo.longitude, -122.4194)
-
-    def test_geolocation_out_of_bounds_rejected(self):
-        with self.assertRaises(ValidationError):
-            ConversationItemGeolocation(latitude=91.0, longitude=0.0)
-
-        with self.assertRaises(ValidationError):
-            ConversationItemGeolocation(latitude=-91.0, longitude=0.0)
-
-        with self.assertRaises(ValidationError):
-            ConversationItemGeolocation(latitude=0.0, longitude=181.0)
-
-        with self.assertRaises(ValidationError):
-            ConversationItemGeolocation(latitude=0.0, longitude=-181.0)
 
     def test_search_conversations_response_valid(self):
         resp = SearchConversationsResponse(
