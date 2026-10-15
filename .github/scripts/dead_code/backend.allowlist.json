@@ -50,10 +50,6 @@
     },
     {
       "path": "backend/utils/batch_pipeline/merge.py",
-      "reason": "PR #21674 intentionally dormant ordered result-log/outbox protocol. Existing sync routes must remain unchanged until serving intake/pump, idempotent conversation/content-ledger projection, account deletion and late-capture policy are qualified. Pure merge behavior is exercised by test_batch_pipeline_scheduler.py and real loopback Firestore tests; see backend/docs/batch-pipeline-worker.md. Remove this exception when the serving pump imports the merge module."
-    },
-    {
-      "path": "backend/utils/batch_pipeline/merge.py",
       "reason": "PR #21674 deliberately leaves the ordered result-log API disconnected from serving sync while flags default off. Covered by test_batch_pipeline_scheduler.py and real loopback test_batch_pipeline_firestore.py; backend/docs/batch-pipeline-worker.md requires idempotent conversation/content-ledger projection, deletion integration and late-capture policy before intake activation. Remove this entry when the qualified serving pump imports OrderedMerge."
     }
   ]
