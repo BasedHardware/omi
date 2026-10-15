@@ -8,6 +8,7 @@ Extracted from routers/sync.py so the router stays thin and utils never imports 
 from __future__ import annotations
 
 from utils.observability.sync_phases import sync_phase, sync_attempt
+from utils.sync.vad_segments import MAX_VAD_SEGMENT_SECONDS
 
 import asyncio
 import contextlib
@@ -206,7 +207,6 @@ from utils.observability.journeys import record_client_journey_accepted, record_
 
 logger = logging.getLogger(__name__)
 
-MAX_VAD_SEGMENT_SECONDS = int(os.getenv('SYNC_MAX_VAD_SEGMENT_SECONDS', '300'))
 
 # Valid terminal segment results — a transcript, or audio with no speech. All else is a failure.
 _NON_ERROR_SEGMENT_OUTCOMES = frozenset({TranscriptionOutcome.SUCCESS, TranscriptionOutcome.EXPECTED_SILENCE})
@@ -955,28 +955,9 @@ def finalize_sync_job_failure_now(
 
 
 def _merge_and_cap_vad_segments(voice_segments: list) -> list:
-    merged = []
-    for segment in voice_segments:
-        if (
-            merged
-            and (segment['start'] - merged[-1]['end']) < 120
-            and (segment['end'] - merged[-1]['start']) <= MAX_VAD_SEGMENT_SECONDS
-        ):
-            merged[-1]['end'] = segment['end']
-        else:
-            merged.append(dict(segment))
+    from utils.sync.vad_segments import merge_and_cap_vad_segments
 
-    segments = []
-    for segment in merged:
-        if segment['end'] - segment['start'] <= MAX_VAD_SEGMENT_SECONDS:
-            segments.append(segment)
-        else:
-            chunk_start = segment['start']
-            while chunk_start < segment['end']:
-                chunk_end = min(chunk_start + MAX_VAD_SEGMENT_SECONDS, segment['end'])
-                segments.append({'start': chunk_start, 'end': chunk_end})
-                chunk_start = chunk_end
-    return segments
+    return merge_and_cap_vad_segments(voice_segments, MAX_VAD_SEGMENT_SECONDS)
 
 
 @sync_phase('decode_vad')

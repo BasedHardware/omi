@@ -124,91 +124,26 @@ class Projector:
         self.fetch_audio = fetch_audio
 
     def project(self, segment_id: str) -> dict | None:
-        from database.conversations import assign_sync_conversation
-
         job, entry, binding = self.store.read(segment_id)
         item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
         session = self.store.session(segment_id, binding, self.clock())
         try:
-            # Check replay/order/privacy before downloading any transcript body.
             self.store.check(session)
+        except ProjectionReplay:
+            # Every assignment committed already; no transcript/audio download
+            # is needed to resume outstanding post-persist obligations.
+            pass
+        else:
             if entry['result']['outcome'] == 'silence':
-                receipt = session.persist_empty()
+                session.persist_empty()
             else:
-                payload = self.load_result(item, entry['result']['result_uri'])
-                from utils.batch_pipeline.context import ResolvedContext, resolve_context
-
-                context = ResolvedContext(binding.target_conversation_id)
-                if item.requires_compute_admission:
-                    if self.fetch_audio is None:
-                        raise ProjectionBlocked('authenticated intake manifest loader required')
-                    from utils.batch_pipeline.audio import read_context
-
-                    context = resolve_context(item, binding, read_context(self.fetch_audio(item)), self.store.client)
-                incoming = build_incoming(item, binding, payload, geolocation=context.geolocation)
-                if context.binding_reason is not None and context.target_id:
-                    incoming['_sync_lineage_binding'] = context.binding_reason
-                from utils.conversation_continuity import intervals_connect
-
-                segments = incoming['transcript_segments']
-                if any(
-                    not intervals_connect(a['start'], a['end'], b['start'], b['end'])
-                    for a, b in zip(segments, segments[1:])
-                ):
-                    raise ProjectionBlocked('capture spans multiple legacy conversation groups')
-                speech = payload.get('speech_seconds')
-                if (
-                    not isinstance(speech, (int, float))
-                    or not math.isfinite(speech)
-                    or not 0 < speech <= float(payload['audio_seconds'])
-                ):
-                    raise ProjectionBlocked('validated VAD speech accounting required')
-                session.speech_seconds = float(speech)
-                session.incoming_segment_count = len(incoming['transcript_segments'])
-                receipt_box = []
-
-                def persisted(transaction, planned):
-                    receipt_box[:] = [session.persist(transaction, planned)]
-
-                candidate = None
-                if context.target_id is None:
-                    from database.conversations import get_closest_conversation_to_timestamps
-
-                    candidate = get_closest_conversation_to_timestamps(
-                        binding.owner_id,
-                        int(incoming['started_at'].timestamp()),
-                        int(incoming['finished_at'].timestamp()),
-                    )
-                assign_sync_conversation(
-                    binding.owner_id,
-                    incoming,
-                    target_id=context.target_id,
-                    candidate_id=candidate['id'] if candidate else None,
-                    firestore_client=self.store.client,
-                    before_assign=session.prepare,
-                    validate_plan=session.validate_plan,
-                    after_assign=persisted,
-                )
-                receipt = receipt_box[0]
-        except ProjectionReplay as replay:
-            receipt = replay.receipt
-        if receipt['state'] != 'ready':
-            if receipt.get('conversation_id'):
-                # Retractions/audio copying use the same replayable bridge helper.
-                from utils.sync.bridge import finish_sync_bridges
-
-                canonical = finish_sync_bridges(binding.owner_id, receipt['conversation_id'])
-                if receipt.get('audio_required'):
-                    if self.playback is not None:
-                        self.playback(item, canonical)
-                    else:
-                        self.persist_playback(item, binding, canonical, receipt)
-                if receipt['enrichment_required']:
-                    self.store.mark_enrichment(segment_id, binding, self.clock(), canonical, receipt['language'])
-                else:
-                    self.store.ready(segment_id, binding, self.clock())
-            else:
-                self.store.ready(segment_id, binding, self.clock())
+                self.assign_parts(item, entry, binding)
+        entry = self.store.ref('results', segment_id).get().to_dict() or {}
+        parts = entry.get('projection_parts')
+        for index, receipt in (
+            sorted(parts.items(), key=lambda pair: int(pair[0])) if parts else [(None, entry['projection'])]
+        ):
+            self.finish_part(item, binding, receipt, int(index) if index is not None else None)
         accounting = self.store.prepare_accounting(binding, self.clock())
         if accounting is None:
             return None
@@ -227,10 +162,112 @@ class Projector:
             self.publish(binding, result)
             from utils.batch_pipeline.retention import expire_completed_segment
 
-            if not expire_completed_segment(self.store.store, binding.owner_id, segment_id, self.clock()):
-                raise ProjectionBlocked('completion retention receipt unavailable')
-            self.store.acknowledge(segment_id, binding, self.clock())
+            for sibling in binding.segment_ids:
+                retained = self.store.ref('results', sibling).get().to_dict() or {}
+                if retained.get('projection_state') == 'erased':
+                    continue
+                if not expire_completed_segment(self.store.store, binding.owner_id, sibling, self.clock()):
+                    raise ProjectionBlocked('completion retention receipt unavailable')
+                self.store.acknowledge(sibling, binding, self.clock())
         return result
+
+    def assign_parts(self, item, entry, binding):
+        from database.conversations import assign_sync_conversation, get_closest_conversation_to_timestamps
+        from utils.batch_pipeline.context import ResolvedContext, resolve_context
+        from utils.batch_pipeline.projection_parts import split_result
+
+        payload = self.load_result(item, entry['result']['result_uri'])
+        speech = payload.get('speech_seconds')
+        if (
+            not isinstance(speech, (int, float))
+            or isinstance(speech, bool)
+            or not math.isfinite(speech)
+            or not 0 < speech <= float(payload['audio_seconds'])
+        ):
+            raise ProjectionBlocked('validated VAD speech accounting required')
+        parts = split_result(item, payload)
+        manifest = None
+        if item.requires_compute_admission:
+            if self.fetch_audio is None:
+                raise ProjectionBlocked('authenticated intake manifest loader required')
+            from utils.batch_pipeline.audio import read_context
+
+            manifest = read_context(self.fetch_audio(item))
+        for index, (part, part_payload) in enumerate(parts):
+            session = self.store.session(
+                item.segment_id,
+                binding,
+                self.clock(),
+                part_index=index,
+                part_count=len(parts),
+            )
+            session.capture_at, session.audio_end = part.capture_at, part.capture_at + part.duration_seconds
+            session.speaker_scope = f'sync:{part.segment_id}'
+            session.speech_seconds = float(part_payload['speech_seconds'])
+            session.total_speech_seconds = float(speech)
+            try:
+                # Resume at the first uncommitted group before rebuilding it.
+                self.store.check(session)
+                context = ResolvedContext(binding.target_conversation_id)
+                if manifest is not None:
+                    context = resolve_context(item, binding, manifest, self.store.client, projection_item=part)
+                if not part_payload['words']:
+                    receipt = session.persist_empty()
+                else:
+                    incoming = build_incoming(part, binding, part_payload, geolocation=context.geolocation)
+                    if context.binding_reason is not None and context.target_id:
+                        incoming['_sync_lineage_binding'] = context.binding_reason
+                    session.incoming_segment_count = len(incoming['transcript_segments'])
+                    receipt_box = []
+
+                    def persisted(transaction, planned):
+                        receipt_box[:] = [session.persist(transaction, planned)]
+
+                    candidate = None
+                    if context.target_id is None:
+                        candidate = get_closest_conversation_to_timestamps(
+                            binding.owner_id,
+                            int(incoming['started_at'].timestamp()),
+                            int(incoming['finished_at'].timestamp()),
+                        )
+                    assign_sync_conversation(
+                        binding.owner_id,
+                        incoming,
+                        target_id=context.target_id,
+                        candidate_id=candidate['id'] if candidate else None,
+                        firestore_client=self.store.client,
+                        before_assign=session.prepare,
+                        validate_plan=session.validate_plan,
+                        after_assign=persisted,
+                    )
+                    receipt = receipt_box[0]
+            except ProjectionReplay as replay:
+                receipt = replay.receipt
+            self.finish_part(item, binding, receipt, index)
+
+    def finish_part(self, item, binding, receipt, index):
+        if receipt['state'] == 'ready':
+            return
+        if receipt.get('conversation_id'):
+            from utils.sync.bridge import finish_sync_bridges
+
+            canonical = finish_sync_bridges(binding.owner_id, receipt['conversation_id'])
+            if receipt.get('audio_required'):
+                if self.playback is not None:
+                    self.playback(item, canonical)
+                else:
+                    self.persist_playback(item, binding, canonical, receipt)
+            if receipt['enrichment_required']:
+                self.store.mark_enrichment(
+                    item.segment_id,
+                    binding,
+                    self.clock(),
+                    canonical,
+                    receipt['language'],
+                    part_index=index,
+                )
+                return
+        self.store.ready(item.segment_id, binding, self.clock(), part_index=index)
 
     def persist_playback(self, item: WorkItem, binding, canonical: str, receipt: dict):
         if self.fetch_audio is None:
@@ -256,28 +293,42 @@ class Projector:
             bool(row.get('transcript_segments_compressed')),
         )
         origin = row['started_at'].timestamp()
+        capture_at = receipt.get('capture_at') or item.capture_at
+        scope = receipt.get('speaker_scope') or f'sync:{item.segment_id}'
         survivors = []
         for segment in segments:
-            if segment.get('speaker_id_scope') == f'sync:{item.segment_id}':
+            if segment.get('speaker_id_scope') == scope:
                 stamp = origin + segment['start']
                 survivors.append(
                     {
                         **segment,
                         'timestamp': stamp,
-                        'start': stamp - item.capture_at,
-                        'end': origin + segment['end'] - item.capture_at,
+                        'start': stamp - capture_at,
+                        'end': origin + segment['end'] - capture_at,
                     }
                 )
         if not survivors:
             return
         audio = self.fetch_audio(item)
+        audio_end = receipt.get('audio_end') or item.capture_at + item.duration_seconds
+        if capture_at != item.capture_at or audio_end != item.capture_at + item.duration_seconds:
+            import io
+            from pydub import AudioSegment
+
+            # Match legacy retrieve_vad_segments slicing before full/partial
+            # audio policy. Never copy a whole multipart capture to each row.
+            decoded = AudioSegment.from_wav(io.BytesIO(audio))
+            sliced = decoded[(capture_at - item.capture_at) * 1000 : (audio_end - item.capture_at) * 1000]
+            output = io.BytesIO()
+            sliced.export(output, format='wav')
+            audio = output.getvalue()
         # Deliberately share the legacy audio persistence and partial-overlap
         # policy; its stable chunk timestamps make replay an overwrite.
         from utils.sync.merge_audio import store_intake_audio
 
         store_intake_audio(
             binding.owner_id,
-            item.capture_at,
+            capture_at,
             audio,
             binding.data_protection_level,
             survivors,

@@ -4,7 +4,7 @@ No transcript bodies are copied into scheduler metadata. Durable completion is
 separate from the Redis client projection, and can repair a lost Redis reply.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 from google.cloud import firestore
@@ -12,28 +12,17 @@ from google.cloud import firestore
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import assert_batch_write_allowed
 from database.sync_ledger import (
-    batch_projection_ledger_owner_matches,
     sync_content_ledger_ref,
     is_valid_completed_sync_content_result,
-    LEDGER_RETENTION_DAYS,
 )
 from utils.batch_pipeline.contracts import ProjectionBinding
 from utils.batch_pipeline.scheduler import owner_key
-from utils.sync.capture import chunk_identity
-
-
-class ProjectionBlocked(RuntimeError):
-    """A predecessor, immutable binding, or ledger owner is not ready."""
-
-
-class ProjectionReplay(Exception):
-    def __init__(self, receipt: dict):
-        self.receipt = receipt
-
-
-def normalized_binding(raw: dict[str, Any]) -> ProjectionBinding:
-    values: dict[str, Any] = {**raw, 'segment_ids': tuple(raw['segment_ids'])}
-    return ProjectionBinding(**values)
+from database.batch_pipeline_projection_protocol import (
+    ProjectionBlocked as ProjectionBlocked,
+    ProjectionReplay as ProjectionReplay,
+    normalized_binding,
+)
+from database.batch_pipeline_projection_session import ProjectionSession as ProjectionSession
 
 
 class ProjectionStore:
@@ -55,21 +44,21 @@ class ProjectionStore:
             raise ProjectionBlocked('committed result and durable intake binding required')
         return job, entry, normalized_binding(job['projection_binding'])
 
-    def session(self, segment_id: str, binding: ProjectionBinding, now: float):
-        return ProjectionSession(self, segment_id, binding, now)
+    def session(self, segment_id: str, binding: ProjectionBinding, now: float, **part):
+        return ProjectionSession(self, segment_id, binding, now, **part)
 
-    def ready(self, segment_id: str, binding: ProjectionBinding, now: float) -> dict:
+    def ready(self, segment_id: str, binding: ProjectionBinding, now: float, *, part_index=None) -> dict:
         """Acknowledge a replayable post-persist mark; never append again."""
 
         @firestore.transactional
         def commit(transaction):
-            session = self.session(segment_id, binding, now)
+            session = self.session(segment_id, binding, now, part_index=part_index)
             session.prepare(transaction, replay=False)
-            receipt = dict(session.entry.get('projection') or {})
+            receipt = dict(session.receipt())
             if not receipt:
                 raise ProjectionBlocked('projection must persist before enrichment acknowledgment')
             receipt['state'] = 'ready'
-            transaction.update(session.result_ref, {'projection': receipt, 'projection_state': 'ready'})
+            session.write_receipt(transaction, receipt)
             return receipt
 
         return self.run(commit)
@@ -109,16 +98,18 @@ class ProjectionStore:
 
         return self.run(read)
 
-    def mark_enrichment(self, segment_id: str, binding: ProjectionBinding, now: float, canonical: str, language: str):
+    def mark_enrichment(
+        self, segment_id: str, binding: ProjectionBinding, now: float, canonical: str, language: str, *, part_index=None
+    ):
         from utils.sync import reprocess
 
         def mutate(document_id, operation):
             @firestore.transactional
             def commit(transaction):
-                session = self.session(segment_id, binding, now)
+                session = self.session(segment_id, binding, now, part_index=part_index)
                 session.prepare(transaction, replay=False)
                 session.guard(transaction, [canonical])
-                receipt = dict(session.entry.get('projection') or {})
+                receipt = dict(session.receipt())
                 ref = self.client.collection(reprocess.COLLECTION).document(document_id)
                 snapshot = ref.get(transaction=transaction)
                 old = snapshot.to_dict() if snapshot.exists else None
@@ -146,7 +137,7 @@ class ProjectionStore:
                 # receipt commit together, fenced against account deletion.
                 transaction.set(ref, row)
                 receipt.update(state='ready', conversation_id=canonical)
-                transaction.update(session.result_ref, {'projection': receipt, 'projection_state': 'ready'})
+                session.write_receipt(transaction, receipt)
                 return result
 
             return self.run(commit)
@@ -233,7 +224,8 @@ class ProjectionStore:
                 receipt = entry.get('projection') or {}
                 if receipt.get('state') != 'ready':
                     return None
-                receipts.append(receipt)
+                parts = entry.get('projection_parts')
+                receipts.extend(parts.values() if parts else [receipt])
             # Earlier receipt IDs can have become bridge donors. Follow the
             # same server redirects, retaining only visible canonical IDs.
             mapped = []
@@ -278,7 +270,14 @@ class ProjectionStore:
                 if not is_valid_completed_sync_content_result(old):
                     raise ProjectionBlocked('invalid existing ledger completion')
                 return old
-            seconds = sum(receipt.get('speech_seconds', 0.0) for receipt in receipts)
+            # Part-level attribution need not sum to the worker's speech union
+            # for older receipts. The immutable result summary owns metering.
+            seconds = sum(
+                (self.ref('results', sid).get(transaction=transaction).to_dict() or {})
+                .get('projection', {})
+                .get('speech_seconds', 0.0)
+                for sid in live_siblings
+            )
             if seconds != accounting['seconds']:
                 raise ProjectionBlocked('speech accounting changed during completion')
             if session.ledger.get('usage_committed_at') is None:
@@ -310,146 +309,3 @@ class ProjectionStore:
             return result
 
         return self.run(commit)
-
-
-class ProjectionSession:
-    def __init__(self, store: ProjectionStore, segment_id: str, binding: ProjectionBinding, now: float):
-        self.store, self.segment_id, self.binding, self.now = store, segment_id, binding, now
-        self.client = store.client
-        self.result_ref = store.ref('results', segment_id)
-        self.owner_ref = store.ref('owners', owner_key(binding.owner_id))
-        self.ledger_ref = sync_content_ledger_ref(self.client, binding.owner_id, binding.content_id)
-        self.entry: dict[str, Any] = {}
-        self.ledger: dict[str, Any] = {}
-        self.job: dict[str, Any] = {}
-        self.incoming_segment_count = 0
-        self.speech_seconds = 0.0
-        self.erased_predecessors: list[Any] = []
-
-    def guard(self, transaction, conversation_ids=()):
-        return assert_batch_write_allowed(
-            self.client,
-            transaction,
-            self.binding.owner_id,
-            conversation_ids=conversation_ids,
-            expected_generation=self.binding.privacy_generation,
-        )
-
-    def prepare(self, transaction, *, replay=True):
-        self.job = self.store.ref('jobs', self.segment_id).get(transaction=transaction).to_dict() or {}
-        self.entry = self.result_ref.get(transaction=transaction).to_dict() or {}
-        owner = self.owner_ref.get(transaction=transaction).to_dict() or {}
-        self.ledger = self.ledger_ref.get(transaction=transaction).to_dict() or {}
-        if (
-            not self.job.get('projection_binding')
-            or normalized_binding(self.job['projection_binding']) != self.binding
-            or self.segment_id not in self.binding.segment_ids
-            or self.job.get('owner_id') != self.binding.owner_id
-            or self.entry.get('owner_key') != owner_key(self.binding.owner_id)
-            or self.entry.get('protocol_version') != 1
-            or self.entry.get('segment_id') != self.segment_id
-            or self.entry.get('capture_at') != self.job.get('capture_at')
-            or self.job.get('privacy_generation') != self.binding.privacy_generation
-            or self.job.get('result') != self.entry.get('result')
-            or 'previous_segment_id' not in self.entry
-        ):
-            raise ProjectionBlocked('immutable result binding mismatch')
-        ids = [
-            chunk_identity(
-                self.binding.owner_id,
-                self.binding.source,
-                self.binding.client_device_id,
-                self.binding.is_locked,
-                self.job['capture_at'],
-            )
-        ]
-        if self.binding.target_conversation_id:
-            ids.append(self.binding.target_conversation_id)
-        if self.job.get('conversation_id'):
-            ids.append(self.job['conversation_id'])
-        self.guard(transaction, ids)
-        durable = self.ledger.get('batch_pipeline') or {}
-        if (
-            self.ledger.get('dispatch_protocol') != 'batch_v1'
-            or durable
-            != {
-                'protocol_version': 1,
-                'namespace': self.store.store.namespace,
-                'segment_ids': list(self.binding.segment_ids),
-            }
-            or self.ledger.get('job_id') != self.binding.job_id
-        ):
-            raise ProjectionBlocked('durable intake ledger binding required')
-        receipt = self.entry.get('projection')
-        if not (receipt and self.ledger.get('status') == 'completed') and not batch_projection_ledger_owner_matches(
-            self.ledger,
-            self.binding.job_id,
-            self.binding.run_token,
-            self.binding.run_epoch,
-        ):
-            raise ProjectionBlocked('content ledger owner lost')
-        if receipt:
-            if replay:
-                raise ProjectionReplay(receipt)
-            return
-        from database.batch_pipeline_privacy import erased_predecessors
-
-        erased = erased_predecessors(
-            self.client,
-            transaction,
-            self.store.store.namespace,
-            owner_key(self.binding.owner_id),
-            self.entry['previous_segment_id'],
-            owner.get('projection_watermark'),
-        )
-        if erased is None:
-            raise ProjectionBlocked('earlier committed projection must persist first')
-        self.erased_predecessors = erased
-
-    def validate_plan(self, transaction, planned):
-        # encode is still in assignment's read-only planning phase.
-        self.guard(transaction, [planned['id'], *(planned.get('sync_merged_from') or [])])
-
-    def persist(self, transaction, planned=None):
-        assigned, created, survivors = planned if planned is not None else ({}, False, [])
-        repeat_only = assigned.get('_sync_lineage_repeat_only', False)
-        receipt = {
-            'state': 'persisted',
-            'conversation_id': assigned.get('id'),
-            'created': created,
-            'language': assigned.get('language') or self.binding.language or 'en',
-            'persisted_at': self.now,
-            'audio_required': bool(survivors and self.binding.private_cloud_sync_enabled),
-            'incoming_segment_count': self.incoming_segment_count,
-            'speech_seconds': self.speech_seconds,
-            'enrichment_required': bool(
-                assigned.get('id') and (not repeat_only or assigned.get('_sync_lineage_completion_pending'))
-            ),
-        }
-        transaction.update(self.result_ref, {'projection': receipt, 'projection_state': 'persisted'})
-        transaction.update(self.owner_ref, {'projection_watermark': self.segment_id})
-        for reference in self.erased_predecessors:
-            transaction.update(
-                reference,
-                {
-                    'expires_at': datetime.fromtimestamp(self.now, timezone.utc)
-                    + timedelta(days=LEDGER_RETENTION_DAYS),
-                },
-            )
-        # A read-before-write ledger checkpoint shares the assignment commit.
-        transaction.update(
-            self.ledger_ref,
-            {
-                'processed_segment_ids': firestore.ArrayUnion([self.segment_id]),
-                'updated_at': datetime.fromtimestamp(self.now, timezone.utc),
-            },
-        )
-        return receipt
-
-    def persist_empty(self):
-        @firestore.transactional
-        def commit(transaction):
-            self.prepare(transaction)
-            return self.persist(transaction)
-
-        return self.store.run(commit)

@@ -18,7 +18,12 @@ class ResolvedContext:
 
 
 def resolve_context(
-    item: WorkItem, binding: ProjectionBinding, context: dict[str, Any], client: Any
+    item: WorkItem,
+    binding: ProjectionBinding,
+    context: dict[str, Any],
+    client: Any,
+    *,
+    projection_item: WorkItem | None = None,
 ) -> ResolvedContext:
     expected = {
         'owner_id': item.owner_id,
@@ -39,6 +44,7 @@ def resolve_context(
         from utils.conversations.location import resolve_geolocation
 
         geo = resolve_geolocation(Geolocation.model_validate(geo))
+    projection_item = projection_item or item
     target = binding.target_conversation_id
     origin = context.get('recording_session_id')
     start, end = context.get('audio_start_seconds'), context.get('audio_end_seconds')
@@ -71,9 +77,9 @@ def resolve_context(
             raise ProjectionBlocked('recording identity required for lineage resolution')
         reasons: dict = {}
         targets = plan_segment_targets(
-            [item.segment_id],
-            lambda _: item.capture_at,
-            lambda _: item.duration_seconds,
+            [projection_item.segment_id],
+            lambda _: projection_item.capture_at,
+            lambda _: projection_item.duration_seconds,
             item.owner_id,
             origin,
             target,
@@ -83,7 +89,7 @@ def resolve_context(
             binding.job_id,
             reasons,
         )
-        target, reason = targets.get(item.segment_id), reasons.get(item.segment_id)
+        target, reason = targets.get(projection_item.segment_id), reasons.get(projection_item.segment_id)
         if ambiguous_binding_pending(item.owner_id, reason):
             raise ProjectionBlocked('recording generation binding remains ambiguous')
     elif origin and start is not None and end is not None:

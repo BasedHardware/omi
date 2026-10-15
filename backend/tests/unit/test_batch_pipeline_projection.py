@@ -75,3 +75,44 @@ def test_custom_enrichment_mutation_cannot_bypass_runtime_stage_guard(monkeypatc
     with pytest.raises(RuntimeError, match='production or a Firestore emulator'):
         reprocess.mark('synthetic-owner', 'conversation', 'en', mutate=mutate)
     mutate.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'spans',
+    [
+        None,
+        [],
+        [{'start': 2, 'end': 1}],
+        [{'start': 0, 'end': float('nan')}],
+        [{'start': -1, 'end': 1}],
+        [{'start': 0, 'end': 5}],
+        [{'start': 0, 'end': 2}, {'start': 1, 'end': 3}],
+    ],
+)
+def test_original_vad_span_contract_rejects_invalid_or_noncanonical_union(spans):
+    from utils.batch_pipeline.contracts import projection_speech_spans
+
+    with pytest.raises(ValueError):
+        projection_speech_spans({'speech_spans': spans, 'speech_seconds': 2}, 4)
+
+
+def test_original_vad_union_must_agree_with_speech_metering():
+    from utils.batch_pipeline.contracts import projection_speech_spans
+
+    payload = {'speech_spans': [{'start': 0, 'end': 1}, {'start': 150, 'end': 151}], 'speech_seconds': 2}
+    assert projection_speech_spans(payload, 160) == payload['speech_spans']
+    payload['speech_seconds'] = 3
+    with pytest.raises(ValueError, match='accounting'):
+        projection_speech_spans(payload, 160)
+
+
+def test_production_result_cannot_invent_vad_groups_from_transcript_gaps():
+    from utils.batch_pipeline.contracts import WorkItem, Priority
+    from utils.batch_pipeline.projection_parts import split_result
+
+    item = WorkItem(
+        'segment', 'synthetic-owner', 0, 'gs://synthetic/wav', 200, Priority.FRESH, requires_compute_admission=True
+    )
+    payload = {'audio_seconds': 200, 'words': [{'word': 'Text.', 'timestamp': [0, 1]}]}
+    with pytest.raises(ValueError, match='speech_spans'):
+        split_result(item, payload)

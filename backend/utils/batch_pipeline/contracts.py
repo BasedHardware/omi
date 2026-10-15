@@ -8,6 +8,44 @@ from typing import Protocol, Sequence
 from config.batch_pipeline import Priority
 from utils.batch_pipeline.capacity import PoolCapacity as PoolCapacity
 
+MAX_PROJECTION_PARTS = 128
+
+
+def projection_speech_spans(payload: dict, duration: float) -> list[dict[str, float]]:
+    """Encrypted result contract: original sample-rounded, unpadded VAD union.
+
+    No transcript-derived estimate may substitute for this production evidence.
+    Parts/receipts stay embedded in the original result document for erasure.
+    """
+    raw = payload.get('speech_spans')
+    if not isinstance(raw, list) or not raw:
+        raise ValueError('original VAD speech_spans required')
+    spans = []
+    previous_end = -1.0
+    for span in raw:
+        if not isinstance(span, dict):
+            raise ValueError('invalid VAD span')
+        start, end = span.get('start'), span.get('end')
+        if (
+            not isinstance(start, (int, float))
+            or isinstance(start, bool)
+            or not isinstance(end, (int, float))
+            or isinstance(end, bool)
+        ):
+            raise ValueError('numeric VAD span required')
+        if not math.isfinite(start) or not math.isfinite(end):
+            raise ValueError('finite VAD span required')
+        if not 0 <= start < end <= duration or start < previous_end:
+            raise ValueError('ordered nonoverlapping VAD spans required')
+        spans.append({'start': float(start), 'end': float(end)})
+        previous_end = end
+    speech = payload.get('speech_seconds')
+    if not isinstance(speech, (int, float)) or isinstance(speech, bool) or not math.isfinite(speech):
+        raise ValueError('validated speech_seconds required')
+    if abs(sum(span['end'] - span['start'] for span in spans) - speech) > 1 / 16000 + 1e-9:
+        raise ValueError('VAD union disagrees with speech accounting')
+    return spans
+
 
 @dataclass(frozen=True)
 class WorkItem:

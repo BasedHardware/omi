@@ -585,6 +585,7 @@ def test_authenticated_manifest_preserves_location_and_uses_legacy_lineage_polic
     lane.conversations.assign_sync_conversation(lane.uid, live, firestore_client=lane.client)
     lane.finish(batch)
     lane.projector.store.ref('jobs', batch.ids[0]).update({'requires_compute_admission': True})
+    lane.payload['speech_spans'] = [{'start': 0, 'end': 4}]
     geo = {'latitude': 21.03, 'longitude': 105.85, 'google_place_id': 'synthetic-place'}
     manifest = frozen_manifest(
         lane,
@@ -601,7 +602,7 @@ def test_authenticated_manifest_preserves_location_and_uses_legacy_lineage_polic
 
     def plan(segments, timestamp_of, duration_of, uid, origin, stamped, source, device, locked, job, reasons):
         assert uid == lane.uid and origin == 'synthetic-recording'
-        assert timestamp_of(segments[0]) == 1000 and duration_of(segments[0]) == 30
+        assert timestamp_of(segments[0]) == 1000 and duration_of(segments[0]) == 4
         reasons[segments[0]] = 'bound'
         return {segments[0]: 'live-target'}
 
@@ -618,6 +619,7 @@ def test_authenticated_manifest_rejects_cross_owner_binding_before_assignment(la
     batch = lane.seed()
     lane.finish(batch)
     lane.projector.store.ref('jobs', batch.ids[0]).update({'requires_compute_admission': True})
+    lane.payload['speech_spans'] = [{'start': 0, 'end': 4}]
     manifest = frozen_manifest(lane, batch, owner_id='different-synthetic-owner')
     lane.projector.fetch_audio = lambda _: manifest
     with pytest.raises(ProjectionBlocked, match='metadata binding mismatch'):
@@ -693,19 +695,244 @@ def test_backfill_enrichment_retains_configured_worker_queue_and_audience(lane, 
     assert dispatch['audience'] == 'https://synthetic.invalid'
 
 
-def test_disconnected_legacy_groups_are_held_without_false_completion(lane):
-    from database.batch_pipeline_projection import ProjectionBlocked
+def multipart(lane, count):
+    duration = (count - 1) * 150 + 10
+    batch = lane.seed(duration_seconds=duration)
+    lane.payload.update(
+        audio_seconds=duration,
+        speech_seconds=float(count),
+        speech_spans=[{'start': i * 150, 'end': i * 150 + 1} for i in range(count)],
+        words=[{'word': f'Group {i}.', 'timestamp': [i * 150, i * 150 + 1]} for i in range(count)],
+        diarization={'turns': [{'start': 0, 'end': duration, 'speaker': 'SPEAKER_00'}]},
+    )
+    lane.finish(batch)
+    return batch
 
+
+@pytest.mark.parametrize('count', [2, 3])
+def test_multipart_capture_uses_separate_legacy_assignments_and_replays_once(lane, count):
+    batch = multipart(lane, count)
+    result = lane.projector.project(batch.ids[0])
+    rows = sorted(active_rows(lane), key=lambda row: row['started_at'])
+    assert len(rows) == count and result['total_segments'] == count
+    assert result['new_memories'] == sorted(row['id'] for row in rows)
+    assert [row['started_at'].timestamp() for row in rows] == [1000 + 150 * i for i in range(count)]
+    assert all(row['sync_content_revision'] == 1 for row in rows)
+    assert all(row['transcript_segments'][0]['start'] == 0 for row in rows)
+    receipt = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert set(receipt['projection_parts']) == {str(i) for i in range(count)}
+    assert set(receipt['conversation_ids']) == set(result['new_memories'])
+    assert lane.projector.project(batch.ids[0]) == result
+    assert len(lane.tasks) == count and lane.loads == [batch.ids[0]]
+    assert all(row['sync_content_revision'] == 1 for row in active_rows(lane))
+    assert batch.ledger.get().to_dict()['status'] == 'completed'
+    usage = list(lane.user.collection('hourly_usage').stream())[0].to_dict()
+    assert usage['speech_seconds'] == count
+
+
+@pytest.mark.parametrize('crash_after', [1, 2])
+def test_multipart_crash_resumes_first_uncommitted_group_and_holds_owner_cursor(lane, monkeypatch, crash_after):
+    from utils.batch_pipeline import projection
+    from utils.batch_pipeline.scheduler import owner_key
+
+    batch = multipart(lane, 3)
+    original = projection.build_incoming
+    calls = []
+
+    def crash(*args, **kwargs):
+        calls.append(args[0].capture_at)
+        if len(calls) == crash_after + 1:
+            raise RuntimeError('synthetic between groups')
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(projection, 'build_incoming', crash)
+    with pytest.raises(RuntimeError, match='between groups'):
+        lane.projector.project(batch.ids[0])
+    owner = lane.projector.store.ref('owners', owner_key(lane.uid))
+    assert owner.get().to_dict().get('projection_watermark') is None
+    assert len(active_rows(lane)) == crash_after
+    assert not batch.ledger.get().to_dict().get('processed_segment_ids')
+    assert not lane.published
+    monkeypatch.setattr(projection, 'build_incoming', original)
+    result = lane.projector.project(batch.ids[0])
+    assert result['total_segments'] == 3 and len(active_rows(lane)) == 3
+    assert all(row['sync_content_revision'] == 1 for row in active_rows(lane))
+    assert owner.get().to_dict()['projection_watermark'] == batch.ids[0]
+    assert len(lane.tasks) == 3
+
+
+@pytest.mark.parametrize('part_index', [0, 1, 2])
+def test_d_purge_finds_every_multipart_conversation_and_scrubs_all_receipts(lane, part_index):
+    from database.batch_pipeline_purge import purge_batch_owner
+
+    batch = multipart(lane, 3)
+    lane.projector.project(batch.ids[0])
+    rows = sorted(active_rows(lane), key=lambda row: row['started_at'])
+    cid = rows[part_index]['id']
+    lane.user.collection('deleted_conversations').document(cid).set({'deleted': True})
+    lane.user.collection('conversations').document(cid).delete()
+    purge_batch_owner(
+        lane.uid,
+        firestore_client=lane.client,
+        conversation_id=cid,
+        namespaces=[lane.store.namespace],
+        delete_uri=lambda *_: None,
+    )
+    assert not lane.projector.store.ref('jobs', batch.ids[0]).get().exists
+    receipt = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert receipt['projection_state'] == 'erased'
+    assert 'projection_parts' not in receipt and 'conversation_ids' not in receipt and 'result' not in receipt
+    assert len(active_rows(lane)) == 2  # Other user conversations remain intact.
+
+
+@pytest.mark.parametrize('kind', ['account', 'conversation'])
+def test_delete_during_multipart_never_recreates_later_groups(lane, monkeypatch, kind):
+    from database.batch_pipeline_purge import purge_batch_owner
+    from utils.batch_pipeline import projection
+
+    batch = multipart(lane, 3)
+    original = projection.build_incoming
+    calls = []
+
+    def delete_after_first(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 2:
+            cid = active_rows(lane)[0]['id']
+            if kind == 'account':
+                lane.client.collection('account_deletions').document(lane.uid).set({'wipe_status': 'queued'})
+            else:
+                lane.user.collection('deleted_conversations').document(cid).set({'deleted': True})
+            purge_batch_owner(
+                lane.uid,
+                firestore_client=lane.client,
+                conversation_id=cid if kind == 'conversation' else None,
+                namespaces=[lane.store.namespace],
+                delete_uri=lambda *_: None,
+            )
+            # Existing deletion lifecycle owns conversation removal, not C.
+            lane.user.collection('conversations').document(cid).delete()
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(projection, 'build_incoming', delete_after_first)
+    from database.batch_pipeline_projection import ProjectionBlocked
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    with pytest.raises((ProjectionBlocked, BatchPrivacyBlocked)):
+        lane.projector.project(batch.ids[0])
+    assert not active_rows(lane) and not lane.published
+    receipt = lane.projector.store.ref('results', batch.ids[0]).get().to_dict() or {}
+    assert 'projection_parts' not in receipt
+    assert batch.ledger.get().to_dict()['status'] == 'processing'
+
+
+def test_erased_edge_ttl_waits_for_final_multipart_cursor_commit(lane, monkeypatch):
+    from database.batch_pipeline_purge import purge_batch_owner
+    from database.batch_pipeline_projection import ProjectionSession
+    from utils.batch_pipeline.scheduler import owner_key
+
+    first = lane.seed(capture_at=500)
+    erased = lane.seed(capture_at=600)
+    lane.finish(first)
+    lane.finish(erased)
+    cid = erased.items[0].conversation_id
+    lane.user.collection('deleted_conversations').document(cid).set({'deleted': True})
+    purge_batch_owner(
+        lane.uid,
+        firestore_client=lane.client,
+        conversation_id=cid,
+        namespaces=[lane.store.namespace],
+        delete_uri=lambda *_: None,
+    )
+    lane.projector.project(first.ids[0])
+    batch = multipart(lane, 2)
+    stub = lane.projector.store.ref('results', erased.ids[0])
+    original = ProjectionSession.persist
+
+    def fail_final(session, transaction, planned=None):
+        receipt = original(session, transaction, planned)
+        if session.segment_id == batch.ids[0] and session.part_index == 1:
+            raise RuntimeError('synthetic before final commit')
+        return receipt
+
+    monkeypatch.setattr(ProjectionSession, 'persist', fail_final)
+    with pytest.raises(RuntimeError, match='before final commit'):
+        lane.projector.project(batch.ids[0])
+    owner = lane.projector.store.ref('owners', owner_key(lane.uid))
+    assert owner.get().to_dict()['projection_watermark'] == first.ids[0]
+    assert 'expires_at' not in stub.get().to_dict()
+    monkeypatch.setattr(ProjectionSession, 'persist', original)
+    lane.projector.project(batch.ids[0])
+    assert owner.get().to_dict()['projection_watermark'] == batch.ids[0]
+    assert 'expires_at' in stub.get().to_dict() and 'result' not in stub.get().to_dict()
+
+
+def test_concurrent_multipart_replay_never_duplicates_parts_or_marks(lane):
+    batch = multipart(lane, 3)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lane.projector.project, [batch.ids[0], batch.ids[0]]))
+    assert results[0] == results[1]
+    assert len(active_rows(lane)) == 3 and len(lane.tasks) == 3
+    assert all(row['sync_content_revision'] == 1 for row in active_rows(lane))
+
+
+def test_multipart_private_playback_slices_each_legacy_group(lane, monkeypatch):
+    from dataclasses import asdict
+    import io
+    import wave
+    from utils.sync import merge_audio
+
+    batch = multipart(lane, 2)
+    binding = replace(batch.binding, private_cloud_sync_enabled=True)
+    lane.projector.store.ref('jobs', batch.ids[0]).update({'projection_binding': asdict(binding)})
+    audio = io.BytesIO()
+    with wave.open(audio, 'wb') as output:
+        output.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+        output.writeframes(b'\0' * (32000 * 160))
+    lane.projector.fetch_audio = lambda _: audio.getvalue()
+    calls = []
+
+    def persist(uid, timestamp, body, protection, survivors, count, enabled, cid):
+        with wave.open(io.BytesIO(body)) as decoded:
+            assert decoded.getnframes() == 16000  # Only this 1s group, not 160s capture.
+        assert survivors[0]['start'] == 0 and survivors[0]['end'] == 1
+        calls.append(timestamp)
+
+    monkeypatch.setattr(merge_audio, 'store_intake_audio', persist)
+    lane.projector.project(batch.ids[0])
+    lane.projector.project(batch.ids[0])
+    assert calls == [1000, 1150]
+
+
+def test_vad_grouping_does_not_split_on_missing_asr_words(lane):
     batch = lane.seed(duration_seconds=200)
     lane.payload.update(
         audio_seconds=200,
-        speech_seconds=2.0,
+        speech_seconds=151.0,
+        speech_spans=[{'start': 0, 'end': 151}],
         words=[{'word': 'First.', 'timestamp': [0, 1]}, {'word': 'Later.', 'timestamp': [150, 151]}],
         diarization={'turns': [{'start': 0, 'end': 200, 'speaker': 'SPEAKER_00'}]},
     )
     lane.finish(batch)
-    with pytest.raises(ProjectionBlocked, match='multiple legacy conversation groups'):
+    result = lane.projector.project(batch.ids[0])
+    assert result['total_segments'] == 1 and len(active_rows(lane)) == 1
+
+
+def test_crash_after_final_part_commit_resumes_marks_without_loading_result(lane, monkeypatch):
+    batch = multipart(lane, 2)
+    calls = []
+
+    def lost_final_reply(*_):
+        calls.append(1)
+        if len(calls) == 2:
+            raise RuntimeError('synthetic lost final part reply')
+
+    monkeypatch.setattr(lane.conversations, '_sync_conversation_search_index', lost_final_reply)
+    with pytest.raises(RuntimeError, match='lost final part reply'):
         lane.projector.project(batch.ids[0])
-    assert not active_rows(lane) and not lane.tasks and not lane.published
-    assert batch.ledger.get().to_dict()['status'] == 'processing'
-    assert lane.projector.store.ref('results', batch.ids[0]).get().to_dict()['projection_state'] == 'pending'
+    assert len(active_rows(lane)) == 2 and batch.ledger.get().to_dict()['status'] == 'processing'
+    assert len(lane.tasks) == 1 and not lane.published
+    monkeypatch.setattr(lane.conversations, '_sync_conversation_search_index', lambda *_: None)
+    result = lane.projector.project(batch.ids[0])
+    assert result['total_segments'] == 2 and len(lane.tasks) == 2
+    assert lane.loads == [batch.ids[0]]
+    assert all(row['sync_content_revision'] == 1 for row in active_rows(lane))
