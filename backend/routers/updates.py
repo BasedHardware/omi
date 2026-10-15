@@ -1117,14 +1117,15 @@ def _verify_admin_key(secret_key: str) -> None:
     leaks the key via a non-constant-time ``!=`` comparison.
     """
     configured = os.getenv('ADMIN_KEY') or ''
-    if not configured or not secret_key or not hmac.compare_digest(secret_key, configured):
+    # compare_digest raises TypeError on non-ASCII str — encode to bytes so a non-ASCII header 403s rather than 500s.
+    if not configured or not secret_key or not hmac.compare_digest(secret_key.encode(), configured.encode()):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
 
 
 def _has_preview_publish_authorization(secret_key: str) -> bool:
     """Require a preview-only secret and fail closed when it is not configured."""
     preview_key = os.getenv("DESKTOP_PREVIEW_PUBLISH_KEY")
-    return bool(preview_key) and hmac.compare_digest(secret_key, preview_key)
+    return bool(preview_key) and hmac.compare_digest(secret_key.encode(), preview_key.encode())
 
 
 def _has_beta_promotion_authorization(authorization: str | None) -> bool:
@@ -1132,7 +1133,7 @@ def _has_beta_promotion_authorization(authorization: str | None) -> bool:
     configured = os.getenv("BETA_PROMOTION_TOKEN")
     if not configured or not authorization or not authorization.startswith("Bearer "):
         return False
-    return hmac.compare_digest(authorization.removeprefix("Bearer "), configured)
+    return hmac.compare_digest(authorization.removeprefix("Bearer ").encode(), configured.encode())
 
 
 @router.post("/v2/desktop/previews/publish", status_code=201)

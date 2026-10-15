@@ -61,3 +61,22 @@ def test_both_empty_no_longer_passes(monkeypatch):
     _set_key(monkeypatch, '')
     with pytest.raises(HTTPException):
         updates_router._verify_admin_key('')
+
+
+def test_non_ascii_secret_returns_403_not_500(monkeypatch):
+    # hmac.compare_digest(str, str) TypeErrors on non-ASCII — the encoded
+    # comparison must 403 cleanly instead of surfacing as a 500.
+    _set_key(monkeypatch, 'real-admin-key')
+    with pytest.raises(HTTPException) as exc:
+        updates_router._verify_admin_key('sécret-with-ünïcode')
+    assert exc.value.status_code == 403
+
+
+def test_non_ascii_configured_key_compares_bytewise(monkeypatch):
+    # A non-ASCII configured key is honored bytewise — same secret in,
+    # authorized; different, rejected.
+    _set_key(monkeypatch, 'âdmîn-kéy')
+    updates_router._verify_admin_key('âdmîn-kéy')  # no raise
+    with pytest.raises(HTTPException) as exc:
+        updates_router._verify_admin_key('different')
+    assert exc.value.status_code == 403
