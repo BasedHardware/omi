@@ -22,6 +22,11 @@ on:
         default: 'prod'
         type: choice
         options: [development, prod]
+      retire_legacy_grafana:
+        description: 'Disable anonymous access on legacy omi-grafana (breaks old anonymous TV links)'
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: deploy-cloud-run-omi-admin-dashboard-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}
@@ -94,6 +99,9 @@ jobs:
             OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}
             ADMIN_STATS_READER_SAS=${{ vars.ADMIN_STATS_READER_SAS }}
             ADMIN_STATS_READER_AUDIENCE=${{ vars.ADMIN_STATS_READER_AUDIENCE }}
+            GRAFANA_EMBED_ENABLED=${{ vars.GRAFANA_EMBED_ENABLED }}
+            GRAFANA_EMBED_SIGNING_SECRET=${{ vars.GRAFANA_EMBED_SIGNING_SECRET }}
+            GRAFANA_BUSINESS_TOKEN_SECRET=${{ vars.GRAFANA_BUSINESS_TOKEN_SECRET }}
           require_gateway_url: true
 
       # The live boards are edited in the Grafana UI (drag/resize persists in
@@ -124,3 +132,36 @@ jobs:
           GRAFANA_URL: ${{ vars.GRAFANA_URL }}
           GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
         run: python3 web/admin/grafana/apply_omi_tv_dashboard.py
+
+  retire-legacy-grafana:
+    needs: deploy
+    if: github.event_name == 'workflow_dispatch' && inputs.environment == 'prod' && inputs.retire_legacy_grafana
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-web-prod@based-hardware.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Record rollback and retire legacy anonymous access
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Never print service env or secret references. Preserve immutable image.
+          prior=$(gcloud run services describe omi-grafana --project=based-hardware --region=us-central1 --format='value(status.latestReadyRevisionName)')
+          image=$(gcloud run revisions describe "$prior" --project=based-hardware --region=us-central1 --format='value(spec.containers[0].image)')
+          test -n "$prior"
+          test -n "$image"
+          [[ "$image" != *:latest ]]
+          printf 'Legacy rollback revision: %s\nLegacy image: %s\n' "$prior" "$image" >> "$GITHUB_STEP_SUMMARY"
+          gcloud run services update omi-grafana --project=based-hardware --region=us-central1 \
+            --update-env-vars=GF_AUTH_ANONYMOUS_ENABLED=false --quiet
+          # Cloud Run update waits for readiness; prove the anonymous API closed.
+          for base in 'https://admin.omi.me/grafana' 'https://omi-grafana-208440318997.us-central1.run.app/grafana'; do
+            status=$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 30 "$base/api/datasources")
+            [[ "$status" == 401 || "$status" == 403 ]]
+          done

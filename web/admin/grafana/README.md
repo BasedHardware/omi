@@ -129,8 +129,8 @@ repo variable `GRAFANA_URL` pointing at the direct Cloud Run URL.
 
 `omi-tv-v2` is a separate UID. Its source is `build_wall_dashboard.py`, called
 by `build_dashboards.py`; the three legacy board files retain their existing
-contract. `apply_omi_tv_dashboard.py` accepts the new UID and still preserves
-live layout on subsequent applies. This slice does not switch `/dashboard`.
+contract. `apply_omi_tv_dashboard.py` publishes only the legacy UIDs and preserves
+live layout. The private monitoring provisioning workflow owns v2 publication.
 
 The admin-authenticated `/api/omi/stats/wall` returns the 22 contract IDs plus
 explicit capture-week-1 and plan-prepay-cash lines. Definitions, UTC cutoffs,
@@ -231,3 +231,5 @@ Validation: `npm test`, `npm run typecheck`, `npm run lint` in `web/admin`,
 `python3 web/admin/grafana/test_build_dashboards.py`, and `make preflight`.
 Opt-in live aggregate smoke checks: `OMI_TV_LIVE_CHECK=1 npm test --
 lib/__tests__/wall-live.test.ts` with the authorized read-only source env loaded.
+
+Private monitor.omi.me cutover, JWT prerequisites and kiosk limits: [platform runbook](../../../backend/charts/monitoring/grafana/README.md).

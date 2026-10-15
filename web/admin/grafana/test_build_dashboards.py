@@ -285,7 +285,7 @@ class MirrorTests(unittest.TestCase):
 
 
 class ApplyScopeTests(unittest.TestCase):
-    def test_apply_publishes_legacy_and_v2_boards(self) -> None:
+    def test_apply_publishes_only_legacy_boards(self) -> None:
         import apply_omi_tv_dashboard as apply_mod
 
         found = {
@@ -293,7 +293,7 @@ class ApplyScopeTests(unittest.TestCase):
             for path in (HERE / "dashboards").glob("*.json")
         }
         self.assertEqual(found, set(BOARDS) | {"omi-tv-v2"})
-        self.assertEqual(apply_mod.ALLOWED_UIDS, set(BOARDS) | {"omi-tv-v2"})
+        self.assertEqual(apply_mod.ALLOWED_UIDS, set(BOARDS))
 
     def test_apply_rejects_foreign_uids(self) -> None:
         import tempfile
@@ -573,10 +573,11 @@ class WallV2Contract(unittest.TestCase):
         self.assertGreater(geometry("growth.wau")[0], geometry("engagement.dau")[0])
         self.assertLess(geometry("revenue.plan_prepay_usd_week")[0], geometry("revenue.arpmau")[0])
 
-    def test_apply_accepts_new_uid_without_changing_legacy_layout_policy(self):
+    def test_legacy_apply_rejects_private_uid_without_changing_layout_policy(self):
         import apply_omi_tv_dashboard as apply_module
         from build_wall_dashboard import HERE
-        self.assertEqual(apply_module.load_dashboard(HERE / "dashboards/omi-tv-v2.json")["uid"], "omi-tv-v2")
+        with self.assertRaises(SystemExit):
+            apply_module.load_dashboard(HERE / "dashboards/omi-tv-v2.json")
         incoming=[{"id":1,"gridPos":{"x":0}}]
         apply_module.preserve_live_layout(incoming,[{"id":1,"gridPos":{"x":5}}])
         self.assertEqual(incoming[0]["gridPos"],{"x":5})
