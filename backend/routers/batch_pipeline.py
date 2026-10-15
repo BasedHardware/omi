@@ -17,7 +17,7 @@ from utils.batch_pipeline.enrichment import run_enrichment
 from utils.batch_pipeline.serving import serving_for_stage
 from utils.cloud_tasks import verify_configured_cloud_tasks_oidc
 from utils.executors import db_executor, run_blocking, sync_executor
-from utils.sync.stage import current_stage
+from utils.sync.stage import current_stage, require_http_stage
 
 
 def verify_worker(request: Request) -> int:
@@ -29,7 +29,7 @@ def verify_worker(request: Request) -> int:
     )
 
 
-router = APIRouter(prefix='/v2/batch-pipeline', dependencies=[Depends(verify_worker)])
+router = APIRouter(prefix='/v2/batch-pipeline', dependencies=[Depends(verify_worker), Depends(require_http_stage)])
 
 
 class WorkerRequest(BaseModel):

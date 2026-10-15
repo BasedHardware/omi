@@ -56,6 +56,7 @@ from routers import (
     support,
     trends,
     sync,
+    batch_pipeline,
     apps,
     payment,
     storefront,
@@ -287,6 +288,7 @@ app.include_router(other.router)
 app.include_router(firmware.router)
 app.include_router(updates.router)
 app.include_router(sync.router)
+app.include_router(batch_pipeline.router)
 
 app.include_router(apps.router)
 app.include_router(calendar_meetings.router)

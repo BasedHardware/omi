@@ -24,7 +24,7 @@ from models.sync_job_status import (
     SyncCaptureManifestRequest,
     SyncCaptureManifestResponse,
 )
-from routers.batch_pipeline import router as batch_pipeline_router, enrichment_response
+from routers.batch_pipeline import enrichment_response
 from database import conversations as conversations_db
 from database import fair_use as fair_use_db
 from database import sync_dead_letters
@@ -192,7 +192,6 @@ AUDIO_SAMPLE_RATE = 16000
 _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'}
 
 router = APIRouter(route_class=MultipartMaxPartSizeRoute, dependencies=[Depends(sync_stage.require_http_stage)])
-router.include_router(batch_pipeline_router)
 
 
 @router.post('/v2/sync-capture-manifest', response_model=SyncCaptureManifestResponse)
