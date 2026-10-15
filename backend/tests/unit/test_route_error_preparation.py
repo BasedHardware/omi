@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -118,3 +119,30 @@ def test_descriptor_omitted_label_type_uses_string_default():
     assert s.descriptor_shape(expected, actual)
     actual['labels'].append({'key': 'unreviewed_url', 'valueType': 'STRING'})
     assert not s.descriptor_shape(expected, actual)
+
+
+@pytest.mark.parametrize(
+    'suffix,accepted',
+    [
+        ('12345678-abcd-1234-abcd-123456789abc', True),
+        ('12345678-abcd-1234-abcd-123456789abc?retry=1', True),
+        ('private-job-id', False),
+        ('12345678-ABCD-1234-abcd-123456789abc', False),
+        ('12345678abcd1234abcd123456789abc', False),
+        ('12345678-abcd-1234-abcd-123456789ab', False),
+        ('12345678-abcd-1234-abcd-123456789abc/status', False),
+        ('12345678-abcd-1234-abcd-123456789abc-extra', False),
+        ('12345678-abcd-1234-abcd-123456789abc#fragment', False),
+        ('12345678-abcd-1234-abcd-123456789abc?retry=1#fragment', False),
+    ],
+)
+def test_platform_poll_counter_matches_edge_canonical_job_cohort(suffix, accepted):
+    # Authenticated invalid slugs can receive429 before the job lookup. They
+    # must not contaminate the canonical storm cohort or its calibration.
+    url = 'https://api.omi.me/v2/sync-local-files/' + suffix
+    for name in ('omi_cloud_run_sync_poll_429', 'edge-4xx-storm'):
+        definition = json.loads((s.ROOT / (name + '.json')).read_text())
+        encoded = re.search(r'httpRequest.requestUrl =~ ("(?:\\.|[^"\\])*")', definition['filter'])
+        assert encoded is not None
+        pattern = json.loads(encoded[1])
+        assert bool(re.search(pattern, url)) is accepted, name
