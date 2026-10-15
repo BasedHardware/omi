@@ -511,6 +511,7 @@ def test_recovery_minimum_structure_raises_before_persist_or_fanout(capsys):
             'outcome': 'refused',
             'reason': 'empty_structured',
             'relevance_verdict': 'missing',
+            'structure_reason': 'no_enriched_structure',
             'uid': 'uid-recovery',
             'conversation_id': 'recovery-conv',
         }

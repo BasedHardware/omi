@@ -203,6 +203,9 @@ def create_action_item_text(
                     action_item_id=action_item_id,
                     description=task_desc,
                     due_at=due.isoformat(),
+                    completed=bool(created_item.get('completed')),
+                    status=created_item.get('status'),
+                    deleted=bool(created_item.get('deleted')),
                 )
             except Exception as notif_error:
                 logger.error(f"Failed to send notification: {notif_error}")
@@ -271,7 +274,9 @@ def update_action_item_text(
 
         # Re-fetch the authoritative post-write state so reminder reconciliation can't act on a stale
         # pre-update value (matches the update_action_item_tool path).
-        updated_item = action_items_db.get_action_item(uid, action_item_id) or existing
+        updated_item = action_items_db.get_action_item(uid, action_item_id)
+        if not updated_item:
+            return f"Successfully updated action item '{action_item_id}', but couldn't retrieve details."
 
         # Send notification if completed
         if completed is True:
@@ -290,6 +295,8 @@ def update_action_item_text(
                     updated_item.get('description', ''),
                     bool(updated_item.get('completed')),
                     updated_item.get('due_at'),
+                    status=updated_item.get('status'),
+                    deleted=bool(updated_item.get('deleted')),
                 )
             except Exception as notif_error:
                 logger.error(f"Failed to sync action item reminder: {notif_error}")

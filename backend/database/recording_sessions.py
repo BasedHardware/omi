@@ -16,6 +16,7 @@ from google.cloud import firestore
 
 from database import conversations as conversations_db
 from database._client import get_firestore_client
+from database.people_stats_cache import invalidate_people_stats_cache
 
 RECORDING_SESSIONS_COLLECTION = 'recording_sessions'
 CONVERSATIONS_COLLECTION = 'conversations'
@@ -315,7 +316,10 @@ def tombstone_and_delete_empty_conversation(
         transaction.delete(conversation_ref)
         return True
 
-    return _delete_empty(transaction)
+    deleted = _delete_empty(transaction)
+    if deleted:
+        invalidate_people_stats_cache(uid)
+    return deleted
 
 
 def _record_lifecycle_event_txn(

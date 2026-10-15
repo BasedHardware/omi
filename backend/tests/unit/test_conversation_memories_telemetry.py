@@ -266,6 +266,7 @@ def test_posthog_constructor_failure_is_fail_open_at_public_extraction_boundary(
 
     result = ConversationMemoryExtractionResult(count=1, source=SOURCE_TRANSCRIPTION, path=PATH_CANONICAL)
     monkeypatch.setattr(process_conversation, "_extract_memories_inner", lambda _uid, _conversation: result)
+    monkeypatch.setattr(process_conversation, "_sweep_owned_writer_mode", lambda _uid: None)
     monkeypatch.setattr(process_conversation, "track_usage", lambda *_args: nullcontext())
     monkeypatch.setattr(met, "try_claim_conversation_memory_analytics", lambda *_args: True)
     monkeypatch.setenv("POSTHOG_PROJECT_API_KEY", "configured-test-key")

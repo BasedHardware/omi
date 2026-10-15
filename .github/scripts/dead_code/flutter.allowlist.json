@@ -47,6 +47,10 @@
     {
       "path": "app/lib/services/capture/capture_lifetime.dart",
       "reason": "Spine A/C1 compiling ownership contract, intentionally unreachable until App core implements composition; exercised by protected spine tests. Remove on wiring."
+    },
+    {
+      "path": "app/lib/pages/apps/page.dart",
+      "reason": "AppsPage left the shell (the catalog is Settings > Integrations), but protected spine oracles (app/test/spine/b1_surface_contract.dart) import it; remove with the B1 contract revision"
     }
-]
+  ]
 }

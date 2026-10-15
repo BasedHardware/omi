@@ -83,7 +83,7 @@
             {
               "evaluator": {
                 "params": [
-                  1
+                  8
                 ],
                 "type": "gt"
               },
@@ -116,13 +116,13 @@
     ],
     "updated": "2026-06-20T02:27:38Z",
     "noDataState": "OK",
-    "execErrState": "Error",
-    "for": "5m",
+    "execErrState": "KeepLast",
+    "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "19",
-      "threshold": "1",
+      "threshold": ">8 rps for 10m. Supplied production sweep of each rule's own query A, 2026-09-28..2026-10-12 at 1h steps: old >1 rps threshold breached 71% of hours; p50 1.68 / p90 3.07 / p99 4.36 / max 4.79 rps. Threshold above the measured maximum.",
       "summary": "Omi live transcription alert: Backend-listen - 4XX error rate is high.",
       "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
       "scope": "The Omi live transcription production service path.",
@@ -131,7 +131,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -259,7 +260,7 @@
     ],
     "updated": "2026-06-20T02:27:37Z",
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "3m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -281,7 +282,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -403,7 +405,7 @@
     ],
     "updated": "2026-06-23T01:20:17Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -418,7 +420,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -518,9 +521,9 @@
             {
               "evaluator": {
                 "params": [
-                  50
+                  58
                 ],
-                "type": "gt"
+                "type": "gte"
               },
               "operator": {
                 "type": "and"
@@ -551,13 +554,13 @@
     ],
     "updated": "2026-06-20T02:27:38Z",
     "noDataState": "OK",
-    "execErrState": "Error",
-    "for": "5m",
+    "execErrState": "KeepLast",
+    "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "21",
-      "threshold": "50",
+      "threshold": ">=58 replicas for 30m (maxReplicas - 2). Supplied production sweep of each rule's own query A, 2026-09-28..2026-10-12 at 1h steps: old >50 threshold breached 13% of hours; p50 34 / p90 52 / max 60. backend/charts/backend-listen/prod_omi_backend_listen_values.yaml sets HPA maxReplicas=60.",
       "summary": "Omi live transcription alert: Backend-listen replica count is high.",
       "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
       "scope": "The Omi live transcription production service path.",
@@ -566,161 +569,14 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
       "severity": "ticket",
       "instatus_component": "live-transcription",
       "alert_identity": "aevzf0r8z6ayoe",
-      "component": "live-transcription",
-      "impact": "infrastructure"
-    }
-  },
-  {
-    "id": 11,
-    "uid": "bevzfbkx3fuo0c",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Transcription Services",
-    "title": "Backend-listen request per pod is high",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 21600,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "adhocFilters": [],
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "kube_horizontalpodautoscaler_status_target_metric{horizontalpodautoscaler=\"prod-omi-backend-listen\",metric_name=\"backend_listen_requests_per_pod\"}",
-          "instant": false,
-          "interval": "",
-          "intervalMs": 30000,
-          "legendFormat": "{{metric_name}} - Current",
-          "maxDataPoints": 43200,
-          "range": true,
-          "refId": "A"
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "E"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  8
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "F"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "updated": "2026-06-20T02:27:38Z",
-    "noDataState": "OK",
-    "execErrState": "Error",
-    "for": "5m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
-      "__panelId__": "15",
-      "threshold": "8",
-      "summary": "Omi live transcription alert: Backend-listen request per pod is high.",
-      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
-      "scope": "The Omi live transcription production service path.",
-      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
-      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null,
-    "labels": {
-      "severity": "warning",
-      "instatus_component": "live-transcription",
-      "alert_identity": "bevzfbkx3fuo0c",
       "component": "live-transcription",
       "impact": "infrastructure"
     }
@@ -854,7 +710,7 @@
     ],
     "updated": "2026-06-20T02:27:39Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -869,7 +725,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -1024,7 +881,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -1173,9 +1031,10 @@
       "component": "live-transcription",
       "impact": "product"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -1320,9 +1179,10 @@
       "component": "live-transcription",
       "impact": "infrastructure"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -1347,7 +1207,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\"}[6h]))",
+          "expr": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\"}[6h])) unless on(to_mode) label_replace(max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1), \"to_mode\", \"$1\", \"provider\", \"(.*)\")",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -1367,7 +1227,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",outcome=\"recovered\"}[6h])) or sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\"}[6h])) * 0",
+          "expr": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\",outcome=\"recovered\"}[6h])) or sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\"}[6h])) * 0",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -1439,21 +1299,21 @@
     ],
     "updated": "2026-09-20T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "omi-resilience-fallbacks",
       "__panelId__": "16",
       "summary": "A live-STT fallback leg (to_mode) had at least 50 selection or mid-session hops in 6h and recovered none of them",
-      "threshold": "recovered < 1 with >= 50 stt_selection|stt_live_session attempts in 6h, per to_mode, for 30m",
-      "user_impact": "That provider is not serving live sessions. The chain may still recover via another leg; if every remaining leg is also dead, sessions exhaust (see chain-exhaustion alerts). Deepgram has been in this state since 2026-09-14. Soniox was in this state for 27.5h on 2026-09-19/20 because recovered was recorded at connect.",
-      "scope": "backend-listen omi_fallback_total component=~stt_selection|stt_live_session, grouped by to_mode. job=backend-listen-metrics Counter.",
-      "verification": "Evidence layer is Cloud Logging. Deepgram: recovered=0 in both the 2026-09-18 09:00Z 5m tolerable window and the 2026-09-19 04:40-10:40Z 6h incident window; exhausted-to-deepgram was 20000+ (query cap) in that 6h. Soniox mid-session: omi_fallback_event was recorded as component=other from=modulate to=soniox outcome=recovered at connect (58 recovered alongside 42 budget closes in the 2026-09-19 16:00Z 2m window). After truthful recovery those hops are exhausted, recovered=0, so this rule would fire on to_mode=soniox. 2m budget-close/connect samples: 2026-09-19 03:00Z 30/30, 04:40Z 32/32, 2026-09-20 04:00Z 40/39 versus good 2026-09-18 09:00Z 0/16 and 2026-09-20 07:30Z 0/13. Prometheus evaluation of this exact increase() expression is still owed.",
+      "threshold": "recovered < 1 with >= 50 stt_selection|stt_live_session attempts in 6h, per to_mode (excluding the terminal to_mode=unavailable), for 30m",
+      "user_impact": "That provider is not serving live sessions. The chain may still recover via another leg; if every remaining leg is also dead, sessions exhaust (see chain-exhaustion alerts). Retired providers (omi_stt_provider_retired == 1, e.g. Deepgram) are excluded so an intentionally unfunded leg cannot page. Soniox was in this state for 27.5h on 2026-09-19/20 because recovered was recorded at connect.",
+      "scope": "backend-listen omi_fallback_total component=~stt_selection|stt_live_session, grouped by to_mode. to_mode=unavailable is the no-provider-left sentinel, never a leg that can recover, so it is excluded (chain-exhaustion alerts own it). job=backend-listen-metrics Counter.",
+      "verification": "Evidence layer is Cloud Logging. Deepgram: recovered=0 in both the 2026-09-18 09:00Z 5m tolerable window and the 2026-09-19 04:40-10:40Z 6h incident window; exhausted-to-deepgram was 20000+ (query cap) in that 6h. Soniox mid-session: omi_fallback_event was recorded as component=other from=modulate to=soniox outcome=recovered at connect (58 recovered alongside 42 budget closes in the 2026-09-19 16:00Z 2m window). After truthful recovery those hops are exhausted, recovered=0, so this rule would fire on to_mode=soniox. 2m budget-close/connect samples: 2026-09-19 03:00Z 30/30, 04:40Z 32/32, 2026-09-20 04:00Z 40/39 versus good 2026-09-18 09:00Z 0/16 and 2026-09-20 07:30Z 0/13. Prometheus replay 2026-10-13 (30m steps, 10 days, after excluding unavailable and retired legs): one real episode, to_mode=parakeet 10-06 13:43 to 10-07 04:13 (capacity_full exhaustion during the L4 stockout), plus two single samples.",
       "safe_next_action": "Identify the to_mode on panel 16. For budget exhaustion see panel 18 and raise the vendor cap. For Deepgram, confirm the account/handshake error in backend-listen logs; do not rotate unrelated provider keys.",
       "runbook": "backend/docs/runbooks/resilience-dashboards.md",
-      "evaluated_bad": "to_mode=soniox: Cloud Logging proxy of the lying recovered series was 58 in 2m at 2026-09-19 16:00Z with 42 budget closes the same 2m — after the fix recovered=0 and attempts>=50 over 6h. to_mode=deepgram recovered=0, exhausted>=20000 in 2026-09-19 04:40-10:40Z. Prometheus evaluation still owed.",
-      "evaluated_good": "to_mode=soniox: 2026-09-18 09:00Z and 2026-09-20 after 07:30Z had 0 budget closes (0/16 and 0/13 connections); hops that transcribe would recover. to_mode=deepgram recovered=0 also in the 2026-09-18 09:00Z tolerable window — that leg has been dead through both periods, which is why the alert is the standing-failure detector. Prometheus evaluation still owed."
+      "evaluated_bad": "to_mode=soniox: Cloud Logging proxy of the lying recovered series was 58 in 2m at 2026-09-19 16:00Z with 42 budget closes the same 2m — after the fix recovered=0 and attempts>=50 over 6h. to_mode=deepgram recovered=0, exhausted>=20000 in 2026-09-19 04:40-10:40Z. Prometheus replay 2026-10-13 confirmed (see verification).",
+      "evaluated_good": "to_mode=soniox: 2026-09-18 09:00Z and 2026-09-20 after 07:30Z had 0 budget closes (0/16 and 0/13 connections); hops that transcribe would recover. to_mode=deepgram recovered=0 also in the 2026-09-18 09:00Z tolerable window — that leg has been dead through both periods, which is why the alert is the standing-failure detector. Prometheus replay 2026-10-13 confirmed (see verification)."
     },
     "labels": {
       "alert_identity": "omi-stt-fallback-leg-dead",
@@ -1464,7 +1324,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -1561,7 +1422,7 @@
     ],
     "updated": "2026-09-26T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -1586,7 +1447,130 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "id": 86,
+    "uid": "omi-listen-audio-decode-failures",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Transcription Services",
+    "title": "Transcription Service Error Rate: undecodable audio frames",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_listen_audio_decode_failures_total{job=\"backend-listen-metrics\"}[15m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-14T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "__panelId__": "63",
+      "summary": "Transcription service alert: audio frames the transcription path cannot decode.",
+      "user_impact": "No confirmed user impact yet; sessions that keep sending undecodable frames may lose their transcript, one-off frames self-heal on reconnect.",
+      "scope": "backend-listen omi_listen_audio_decode_failures_total summed across job=backend-listen-metrics over 15m; metric replacement for the paused raw-line Loki rule df2a40h2fbjswe (corrupted stream).",
+      "verification": "Verify in the linked panel that corrupted-stream log lines are still arriving, and check backend-listen readiness before intervention.",
+      "safe_next_action": "Inspect backend-listen readiness and the codec or client_platform labels on the counter before intervening; use the documented scaling or rollback path only if the condition persists.",
+      "threshold": "sum(increase(omi_listen_audio_decode_failures_total{job=\"backend-listen-metrics\"}[15m])) or vector(0) > 0",
+      "evaluated_bad": "Synthetic contract: at least one undecodable audio frame in the rolling 15m window fires after the 5m pending period.",
+      "evaluated_good": "Synthetic contract: zero undecodable audio frames in the rolling 15m window stays healthy."
+    },
+    "labels": {
+      "instatus_component": "live-transcription",
+      "severity": "ticket",
+      "alert_identity": "omi-listen-audio-decode-failures",
+      "component": "live-transcription",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   }

@@ -1,0 +1,7 @@
+{
+  "version": "0.12.452",
+  "date": "2026-10-08",
+  "changes": [
+    "Fixed chat failing with a generic error for BYOK users despite validated API keys — the desktop backend now actually reads the keys instead of silently ignoring them."
+  ]
+}

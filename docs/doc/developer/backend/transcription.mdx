@@ -48,6 +48,15 @@ flowchart LR
   </Tab>
 </Tabs>
 
+## Saved phone recordings
+
+Phone recordings made with **Transcribe Later** are saved locally until the user
+selects **Process Now**. The app uploads one recording to
+`POST /v2/sync-local-files` and polls the returned job ID. Once speech is
+transcribed, that explicit selection keeps the conversation visible, including
+short recordings. Silence or an empty transcription creates no conversation.
+Automatic offline fallback recordings still follow the usual relevance policy.
+
 ## WebSocket Endpoint
 
 <Warning>
@@ -163,6 +172,19 @@ non-cloud `DEEPGRAM_SELF_HOSTED_URL`; it is never a fallback to
 `api.deepgram.com`. If no supported provider can serve a language, the request
 fails closed.
 
+Managed live connections can use a declarative target registry to select the
+cheapest capable endpoint within its rollout share and capacity. Shared health
+gates remove disrupted targets and restore cheaper targets through staged
+recovery. Target identity is separate from provider family, so two endpoints
+using the same provider protocol can have independent routing health. Custom
+STT, BYOK and multichannel connections keep their existing paths. Fleet trial
+rejection requires broad failure evidence; healthy small cohorts can recover
+without a distinct-user minimum. Capacity signals and short local capacity
+cooldowns apply to terminal failover legs as well as primary selection. If all
+candidates are capacity-blocked, one least-recently-refused candidate may dial
+through normal admission. Recovery gives each trial user one majority-outcome
+vote, preventing repeated client failures from blocking a healthy majority.
+
 ```mermaid
 flowchart TD
     Start[Incoming Audio] --> Lang{Language?}
@@ -202,7 +224,7 @@ Response (mirrors parakeet `/v2/transcribe`):
 }
 ```
 
-Errors: `400` empty file, `401` missing/invalid bearer token, `413` audio exceeds the duration/size limits, `429` per-user rate limit exceeded (`stt:transcribe` policy — honor `Retry-After`), `503` model loading or service busy (retry later), `502` upstream failure. Implementation: `backend/routers/stt.py`.
+Errors: `400` empty file or unreadable/invalid media duration, `401` missing/invalid bearer token, `402` transcription allowance exhausted or insufficient for this file, `413` audio exceeds the duration/size limits, `429` per-user rate limit exceeded (`stt:transcribe` policy — honor `Retry-After`), `503` model loading, service busy, duration-probe deadline, or temporarily unavailable allowance (retry later), `502` upstream failure. Implementation: `backend/routers/stt.py`.
 
 ## Transcription outcome contract
 

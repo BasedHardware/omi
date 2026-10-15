@@ -5,19 +5,26 @@ import type { InsightPayload, MeetingToastPayload } from '../../../../shared/typ
 import { InsightToast } from './InsightToast'
 
 let onMeetingToast: ((payload: MeetingToastPayload) => void) | null = null
-let onInsightShow: ((payload: InsightPayload) => void) | null = null
 const meetingAction = vi.fn()
 const rewindFocusFrame = vi.fn()
-const jitFeedback = vi.fn(() => Promise.resolve())
 const insightDismiss = vi.fn()
+const proactivityNotificationOpen = vi.fn()
+const proactivityNotificationRendered = vi.fn()
+const proactivityNotificationFeedback = vi.fn()
+let frame: FrameRequestCallback | null = null
+let onInsightShow: ((payload: InsightPayload) => void) | null = null
 
 beforeEach(() => {
+  frame = null
+  proactivityNotificationRendered.mockReset()
+  proactivityNotificationFeedback.mockReset()
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frame = callback; return 1 })
+  vi.stubGlobal('cancelAnimationFrame', () => { frame = null })
   onMeetingToast = null
   onInsightShow = null
+  proactivityNotificationOpen.mockReset()
   meetingAction.mockReset()
   rewindFocusFrame.mockReset()
-  jitFeedback.mockReset()
-  jitFeedback.mockResolvedValue(undefined)
   insightDismiss.mockReset()
   vi.stubGlobal('window', {
     omi: {
@@ -25,6 +32,9 @@ beforeEach(() => {
         onInsightShow = cb
         return () => {}
       },
+      proactivityNotificationOpen,
+      proactivityNotificationRendered,
+      proactivityNotificationFeedback,
       onMeetingToast: (cb: (payload: MeetingToastPayload) => void) => {
         onMeetingToast = cb
         return () => {}
@@ -36,7 +46,6 @@ beforeEach(() => {
       insightHoverStart: vi.fn(),
       insightHoverEnd: vi.fn(),
       rewindFocusFrame,
-      jitFeedback,
       insightDismiss
     }
   })
@@ -60,41 +69,6 @@ function showError(errorKind: NonNullable<MeetingToastPayload['errorKind']>): vo
       appName: 'Google Meet',
       kind: 'error',
       errorKind
-    })
-  })
-}
-
-function showInsight(): void {
-  act(() => {
-    onInsightShow?.({
-      headline: 'A timely thought',
-      advice: 'Do the next step.',
-      reasoning: 'A trigger matched.',
-      category: 'other',
-      sourceApp: 'Omi',
-      confidence: 1,
-      jit: {
-        lane: 'planned',
-        eventId: 'e'.repeat(64),
-        subjectId: 'trigger-1',
-        candidateId: 'c'.repeat(64),
-        triggerRevision: 1,
-        accountGeneration: 1,
-        rewindFrameId: 42
-      }
-    })
-  })
-}
-
-function showAmbientInsight(): void {
-  act(() => {
-    onInsightShow?.({
-      headline: 'A context thought',
-      advice: 'Consider whether this is useful.',
-      reasoning: 'Ambient context.',
-      category: 'other',
-      sourceApp: 'Omi',
-      confidence: 1
     })
   })
 }
@@ -129,29 +103,27 @@ describe('meeting capture status toast', () => {
   })
 })
 
-describe('JIT evidence navigation', () => {
-  it('uses main-process frame focus instead of a toast href', () => {
-    render(<InsightToast />)
-    showInsight()
-    fireEvent.click(screen.getByRole('button', { name: 'Open keyframe in Rewind' }))
-    expect(rewindFocusFrame).toHaveBeenCalledWith(42)
-  })
+it('opens a v2 card by opaque ID without accepting a renderer-supplied destination', () => {
+  render(<InsightToast />)
+  act(() => onInsightShow?.({ headline: 'Follow up', advice: 'Synthetic long body '.repeat(40),
+    reasoning: '', category: 'other', sourceApp: 'Omi', confidence: 1, proactivityItemID: 'item-1' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Open' }))
+  expect(proactivityNotificationOpen).toHaveBeenCalledWith('item-1')
+  expect(meetingAction).not.toHaveBeenCalled()
+})
 
-  it('keeps the actionable toast open when feedback enqueue fails', async () => {
-    jitFeedback.mockRejectedValueOnce(new Error('database unavailable'))
-    render(<InsightToast />)
-    showInsight()
-    fireEvent.click(screen.getByRole('button', { name: 'Useful' }))
-    await act(async () => Promise.resolve())
-    expect(insightDismiss).not.toHaveBeenCalled()
-    expect(screen.getByRole('alert').textContent).toMatch(/retry/i)
-  })
-
-  it('does not expose trigger feedback controls for an ambient result without a revision fence', () => {
-    render(<InsightToast />)
-    showAmbientInsight()
-    expect(screen.queryByRole('button', { name: 'Useful' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Not relevant' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Snooze' })).toBeNull()
-  })
+it('acknowledges a mounted frame, reports feedback, and sends explicit dismiss separately', () => {
+  render(<InsightToast />)
+  expect(proactivityNotificationRendered).not.toHaveBeenCalled()
+  act(() => onInsightShow?.({ headline: 'Follow up', advice: 'Synthetic', reasoning: '',
+    category: 'other', sourceApp: 'Omi', confidence: 1, proactivityItemID: 'item-2' }))
+  expect(proactivityNotificationRendered).not.toHaveBeenCalled()
+  act(() => frame?.(0))
+  expect(proactivityNotificationRendered).toHaveBeenCalledWith('item-2')
+  fireEvent.click(screen.getByRole('button', { name: 'Helpful' }))
+  expect(proactivityNotificationFeedback).toHaveBeenCalledWith('item-2', 'thumbs_up')
+  fireEvent.click(screen.getByRole('button', { name: 'Not helpful' }))
+  expect(proactivityNotificationFeedback).toHaveBeenCalledWith('item-2', 'thumbs_down')
+  fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+  expect(insightDismiss).toHaveBeenCalledOnce()
 })

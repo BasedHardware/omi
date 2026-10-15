@@ -26,26 +26,30 @@ def responses() -> dict[str, dict[str, object]]:
         f"/repos/{REPOSITORY}/git/ref/heads/main": {"object": {"sha": MAIN}},
         f"/repos/{REPOSITORY}/compare/{SHA}...{MAIN}": {"status": "ahead"},
         f"/repos/{REPOSITORY}/actions/runs?head_sha={SHA}&event=push&branch=main&per_page=100": {
-            "workflow_runs": [{
-                "name": "Release Eligibility",
-                "path": ".github/workflows/release-eligibility.yml",
-                "event": "push",
-                "status": "completed",
-                "conclusion": "success",
-                "run_attempt": 1,
-                "head_branch": "main",
-                "head_sha": SHA,
-                "repository": {"full_name": REPOSITORY},
-            }],
+            "workflow_runs": [
+                {
+                    "name": "Release Eligibility",
+                    "path": ".github/workflows/release-eligibility.yml",
+                    "event": "push",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "run_attempt": 1,
+                    "head_branch": "main",
+                    "head_sha": SHA,
+                    "repository": {"full_name": REPOSITORY},
+                }
+            ],
         },
         f"/repos/{REPOSITORY}/commits/{SHA}/check-runs?per_page=100": {
-            "check_runs": [{
-                "name": "Mobile Release Eligibility",
-                "status": "completed",
-                "conclusion": "success",
-                "head_sha": SHA,
-                "details_url": "https://github.com/BasedHardware/omi/actions/runs/12345/job/67890",
-            }],
+            "check_runs": [
+                {
+                    "name": "Mobile Release Eligibility",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "head_sha": SHA,
+                    "details_url": "https://github.com/BasedHardware/omi/actions/runs/12345/job/67890",
+                }
+            ],
         },
         f"/repos/{REPOSITORY}/actions/runs/12345": {
             "name": "Mobile App Checks",
@@ -59,12 +63,14 @@ def responses() -> dict[str, dict[str, object]]:
             "repository": {"full_name": REPOSITORY},
         },
         f"/repos/{REPOSITORY}/actions/runs/12345/jobs?per_page=100": {
-            "jobs": [{
-                "id": 67890,
-                "name": "Mobile Release Eligibility",
-                "status": "completed",
-                "conclusion": "success",
-            }],
+            "jobs": [
+                {
+                    "id": 67890,
+                    "name": "Mobile Release Eligibility",
+                    "status": "completed",
+                    "conclusion": "success",
+                }
+            ],
         },
     }
 
@@ -91,6 +97,75 @@ class CollectorTests(unittest.TestCase):
         proof = collector.collect_from_github(lambda path: data[path], repository=REPOSITORY, source_sha=SHA)
         self.assertEqual(proof["source_sha"], SHA)
         self.assertEqual(proof["mobile_aggregate"]["check_name"], "Mobile Release Eligibility")
+
+    def android_data(self, event="push"):
+        data = responses()
+        check = {
+            "name": "Android Emulator Acceptance",
+            "status": "completed",
+            "conclusion": "success",
+            "head_sha": SHA,
+            "details_url": "https://github.com/BasedHardware/omi/actions/runs/54321/job/98765",
+        }
+        data[f"/repos/{REPOSITORY}/commits/{SHA}/check-runs?per_page=100"]["check_runs"].append(check)
+        data[f"/repos/{REPOSITORY}/actions/runs/54321"] = {
+            **data[f"/repos/{REPOSITORY}/actions/runs/12345"],
+            "event": event,
+        }
+        data[f"/repos/{REPOSITORY}/actions/runs/54321/jobs?per_page=100"] = {
+            "jobs": [{"id": 98765, "name": check["name"], "status": "completed", "conclusion": "success"}],
+        }
+        return data
+
+    def test_android_requires_successful_actual_job_on_exact_main_source(self):
+        for event in ("push", "workflow_dispatch"):
+            with self.subTest(event=event):
+                data = self.android_data(event)
+                if event == "workflow_dispatch":
+                    # Manual execution emits a second successful aggregate; it
+                    # cannot be mistaken for the canonical main-push aggregate.
+                    data[f"/repos/{REPOSITORY}/commits/{SHA}/check-runs?per_page=100"]["check_runs"].append(
+                        {
+                            "name": "Mobile Release Eligibility",
+                            "status": "completed",
+                            "conclusion": "success",
+                            "head_sha": SHA,
+                            "details_url": "https://github.com/BasedHardware/omi/actions/runs/54321/job/87654",
+                        }
+                    )
+                proof = collector.collect_from_github(
+                    lambda path: data[path], repository=REPOSITORY, source_sha=SHA, platform="android"
+                )
+                self.assertEqual(proof["android_acceptance"]["event"], event)
+                self.assertEqual(proof["mobile_aggregate"]["event"], "push")
+        with self.assertRaises(collector.AdmissionCollectionError):
+            data = responses()
+            collector.collect_from_github(
+                lambda path: data[path], repository=REPOSITORY, source_sha=SHA, platform="android"
+            )
+
+    def test_android_rejects_skipped_job_forged_run_stale_source_and_rerun(self):
+        run_path = f"/repos/{REPOSITORY}/actions/runs/54321"
+        jobs_path = run_path + "/jobs?per_page=100"
+        changes = (
+            (run_path, "head_sha", "c" * 40),
+            (run_path, "head_branch", "feature"),
+            (run_path, "event", "pull_request"),
+            (run_path, "event", "schedule"),
+            (run_path, "run_attempt", 2),
+            (run_path, "path", ".github/workflows/other.yml"),
+            (jobs_path, "conclusion", "skipped"),
+            (jobs_path, "conclusion", "failure"),
+        )
+        for path, key, value in changes:
+            with self.subTest(key=key, value=value):
+                data = self.android_data()
+                target = data[path]["jobs"][0] if path == jobs_path else data[path]
+                target[key] = value
+                with self.assertRaises(collector.AdmissionCollectionError):
+                    collector.collect_from_github(
+                        lambda request: data[request], repository=REPOSITORY, source_sha=SHA, platform="android"
+                    )
 
     def test_rejects_wrong_sha_or_missing_proof(self) -> None:
         data = responses()

@@ -29,6 +29,7 @@ export type FetchMemoriesOptions = {
 }
 
 export const MEMORY_BELIEF_ENABLED_HEADER = 'x-omi-memory-belief-enabled'
+export const MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER = 'x-omi-memory-device-scope-supported'
 export const MEMORY_NEXT_CURSOR_HEADER = 'x-omi-memory-next-cursor'
 export const MEMORY_LIST_TRUNCATED_HEADER = 'x-omi-list-truncated'
 export const MEMORY_TRUNCATED_MESSAGE =
@@ -51,6 +52,11 @@ export function beliefCapabilityFromResponse(response: MemoriesResponse): boolea
   return null
 }
 
+export function canonicalLifecycleFromResponse(response: MemoriesResponse): boolean | null {
+  const value = headerValue(response.headers, MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER)
+  return value === undefined ? null : value === 'true'
+}
+
 export function nextMemoryCursor(response: MemoriesResponse): string | undefined {
   return headerValue(response.headers, MEMORY_NEXT_CURSOR_HEADER)
 }
@@ -68,9 +74,8 @@ const MEMORIES_PAGE_LIMIT = 500
 const MAX_MEMORY_PAGES = 10_000
 //
 // `onResponse` fires for every raw page response so a caller (the Memories page)
-// can read capability headers off the first page — e.g.
-// X-Omi-Memory-Canonical-Lifecycle-Exposed, which gates the tier/device filters
-// — without a second request. It is the single source of truth for "fetch every
+// can read capability headers off the first page without a second request.
+// It is the single source of truth for "fetch every
 // memory": the display hook (useMemories) and the bulk export/purge paths all go
 // through it, so the pagination contract can never drift between them again.
 export async function fetchAllMemoriesPaged(

@@ -102,6 +102,21 @@ User/API intents: `PhoneStartRequested`, `PhoneStopRequested`,
 `TranscriptionSettingsChanged`, `RecordProfileChanged`,
 `OnboardingBatchChanged`.
 
+A Live Activity tap sends `PauseCaptureRequested`, `ResumeCaptureRequested` or
+`FinishRequested` with the card's `SystemSurfaceTarget` (recording id and
+conversation revision). The reducer compares it with the environment when it
+applies the event and rejects a stale tap with no effects
+(`StaleSystemSurfaceTarget`), so a tap queued behind a stop, handoff or finish
+never acts on the recording or conversation that replaced the card's.
+
+The card is quiet by default. Healthy pendant capture shows no Live Activity;
+`CapturePresentationPolicy` (`app/ios/LiveActivity/OmiCaptureAttributes.swift`)
+shows one only while capture needs the user: paused, the pendant unheard for two
+minutes, or its battery at 15% or less. A phone recording the user started keeps
+the recording card. iOS starts a Live Activity only while Omi is in the
+foreground, so a notice that begins in the background appears the next time Omi
+is opened.
+
 External signals: `CallStateChanged`, `MicInterruptionChanged`,
 `NativeMicStalled`, `AppForegrounded`, `SocketClosed`, `SocketConnected`,
 `SocketError`, `KeepAliveTick`, `LaunchRecovery`.

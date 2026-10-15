@@ -372,6 +372,9 @@ class TestAcceptEndpoint:
             action_item_id="new_t1",
             description="Review PR",
             due_at=due.isoformat(),
+            completed=False,
+            status=None,
+            deleted=False,
         )
 
     def test_accept_schedules_no_reminder_without_due_date(self):
@@ -787,6 +790,7 @@ class TestSyncBatchSkipsLocked:
         assert call_args[1][0]['id'] == 't1'
 
     def test_sync_batch_distinguishes_explicit_due_date_clear_from_omission(self):
+        original_due = datetime(2030, 1, 1, 12, tzinfo=timezone.utc)
         batch_result = types.SimpleNamespace(
             updated_ids=["t1"],
             missing_ids=[],
@@ -800,17 +804,34 @@ class TestSyncBatchSkipsLocked:
             "noop_ids": [],
         }
 
-        with patch.object(action_items_router, 'action_items_db') as mock_db:
+        with patch.object(action_items_router, 'action_items_db') as mock_db, patch.object(
+            action_items_router, 'sync_action_item_reminder'
+        ) as reminder:
             mock_db.get_action_item.side_effect = [
                 {
                     "id": "t1",
                     "description": "Clear the deadline",
                     "is_locked": False,
+                    "completed": False,
+                    "status": "active",
+                    "due_at": original_due,
                 },
                 {
                     "id": "t2",
                     "description": "Leave the deadline unchanged",
                     "is_locked": False,
+                    "completed": False,
+                    "status": "active",
+                    "due_at": original_due,
+                },
+                {
+                    # Authoritative post-write state, after the explicit clear.
+                    "id": "t1",
+                    "description": "Clear the deadline",
+                    "is_locked": False,
+                    "completed": False,
+                    "status": "active",
+                    "due_at": None,
                 },
             ]
             mock_db.batch_sync_update_action_items.return_value = batch_result
@@ -827,3 +848,13 @@ class TestSyncBatchSkipsLocked:
         assert updates == [
             {'id': 't1', 'data': {'due_at': None}}
         ], 'an explicit null due_at must reach storage instead of being treated as an omitted field'
+        assert mock_db.get_action_item.call_count == 3
+        reminder.assert_called_once_with(
+            user_id='test-uid',
+            action_item_id='t1',
+            description='Clear the deadline',
+            completed=False,
+            due_at=None,
+            status='active',
+            deleted=False,
+        )

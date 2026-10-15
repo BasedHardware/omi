@@ -807,3 +807,41 @@ async def test_rollover_recovery_does_not_reuse_failed_owner_offsets_or_marker(m
     )
     assert [(s['start'], s['end'], s['audio_alignment']) for s in stored] == [(-1.0, -1.0, 'unplaced')]
     assert 'audio_timeline' not in fresh
+
+
+async def test_legacy_live_persist_failure_is_retained_and_not_fatal(monkeypatch):
+    """A failing flag-off live persist must not crash process_loop (the stream_transcript lifetime
+    task) and must not drop the drained segments. The v2 sibling retains-and-retries; the
+    legacy branch — the production path, since AUDIO_TIMELINE_V2 defaults off — did neither."""
+    store = StrictFirestore()
+    _seed_row(store, 'conv-legacy', started_at=datetime.fromtimestamp(T0, tz=timezone.utc))
+    processor, _ = _processor(monkeypatch, store, current='conv-legacy')
+    processor.host.state.capture_timeline_v2 = False
+    processor.host.state.first_audio_byte_timestamp = T0
+    processor.host.state.speaker_map_dirty = False
+    processor.segment_buffer.append(
+        {'id': 's1', 'text': 'hi', 'start': 0.0, 'end': 1.0, 'speaker': 'SPEAKER_00', 'is_user': True}
+    )
+
+    original = processor._update_live_conversation
+    calls = 0
+
+    async def fail_once(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError('temporary store outage')
+        return await original(*args, **kwargs)
+
+    processor._update_live_conversation = fail_once
+    processor.host.state.active = False
+    processor.host.wait = lambda seconds: asyncio.sleep(0, result=False)
+    processor.host.speakers.tasks = []
+    processor.host.speakers.drain = _async_noop
+    processor.flush_speaker_assignments = _async_noop
+
+    # Before the fix the RuntimeError escaped process_loop (supervisor crash, session teardown).
+    await asyncio.wait_for(processor.process_loop(), timeout=3)
+
+    # The failure neither escaped nor dropped the drain: it was re-queued and retried.
+    assert calls >= 2, 'the failed legacy persist must be retried, not dropped'

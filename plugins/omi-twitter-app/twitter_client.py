@@ -3,6 +3,8 @@ from typing import Optional
 import os
 from dotenv import load_dotenv
 
+REQUEST_TIMEOUT = (5, 30)
+
 load_dotenv()  # Load .env file
 
 
@@ -134,7 +136,8 @@ class TwitterClient:
                     "refresh_token": refresh_token,
                     "client_id": self.client_id
                 },
-                headers={"Content-Type": "application/x-www-form-urlencoded"}
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                timeout=REQUEST_TIMEOUT,
             )
             
             if response.status_code == 200:

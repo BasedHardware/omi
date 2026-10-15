@@ -208,7 +208,15 @@ const ChatComposer = memo(function ChatComposer({
       />
       <button
         type="button"
-        onClick={onSubmit}
+        onClick={() => {
+          onSubmit()
+          // Clicking Send moves keyboard focus to this button (Enter never does — the
+          // textarea keeps focus for a keyboard submit). Return it to the composer so
+          // the next message can be typed immediately. Deferred a frame: a no-op if the
+          // view flipped (list -> conversation remounts the textarea; the focus-on-
+          // expand effect above already handles that case) or the surface closed.
+          requestAnimationFrame(() => inputRef.current?.focus())
+        }}
         disabled={sendDisabled}
         className="rounded-xl bg-neutral-200 px-3 py-2 text-sm font-medium text-neutral-900 disabled:opacity-40"
       >

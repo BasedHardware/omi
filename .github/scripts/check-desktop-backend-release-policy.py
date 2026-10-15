@@ -112,6 +112,9 @@ def _validate_production_python_runtime(text: str, *, workflow: str) -> list[str
         "REDIS_DB_PASSWORD=REDIS_DB_PASSWORD:latest",
         "REDIS_DB_HOST=REDIS_DB_HOST:latest",
         "REDIS_DB_PORT=REDIS_DB_PORT:latest",
+        # V2 producers and feed/outcome routes run on the main backend, not this service.
+        # Do not introduce an unnecessary Secret Manager dependency for its runtime SA.
+        "PROACTIVITY_REDIS_",
         "PINECONE_API_KEY=",
         "PINECONE_HOST=",
     ):

@@ -99,10 +99,12 @@ class SttSegment {
 }
 
 class SttTranscriptionResult {
+  /// End of successfully consumed audio, including silence.
+  final double? audioEndSeconds;
   final List<SttSegment> segments;
   final String? rawText;
 
-  SttTranscriptionResult({this.segments = const [], this.rawText});
+  SttTranscriptionResult({this.segments = const [], this.rawText, this.audioEndSeconds});
 
   bool get isEmpty => segments.isEmpty && (rawText == null || rawText!.trim().isEmpty);
   bool get isNotEmpty => !isEmpty;

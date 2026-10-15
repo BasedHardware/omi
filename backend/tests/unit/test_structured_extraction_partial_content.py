@@ -156,7 +156,7 @@ def test_explicit_nulls_fall_back_to_defaults_instead_of_failing():
 
 
 def test_action_items_extraction_shares_the_guard():
-    """`extract_action_items` parses through the action-item-only model, on the main conversation path."""
+    """The retired action-item-only parser used this model before notes v2."""
     completion = json.dumps({'action_items': [{'due_at': None}, {'description': 'Send the deck'}]})
 
     extraction = PydanticOutputParser(pydantic_object=ActionItemsExtraction).parse(completion)

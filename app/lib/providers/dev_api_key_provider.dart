@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/dev_api.dart';
 import 'package:omi/backend/schema/dev_api_key.dart';
+import 'package:omi/utils/logger.dart';
 
 class DevApiKeyProvider with ChangeNotifier {
   List<DevApiKey> _keys = [];
@@ -26,6 +27,7 @@ class DevApiKeyProvider with ChangeNotifier {
     try {
       _keys = await DevApi.getDevApiKeys();
     } catch (e) {
+      Logger.warning('Developer API keys failed to load: $e');
       _error = e.toString();
     } finally {
       _isLoading = false;

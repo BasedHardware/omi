@@ -35,8 +35,9 @@ from langchain_core.runnables import RunnableLambda  # noqa: E402
 import utils.llm.model_config as model_config  # noqa: E402
 import utils.llm.working_observations as working_observations  # noqa: E402
 from models.transcript_segment import TranscriptSegment  # noqa: E402
-from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix  # noqa: E402
+from utils.llm.conversation_prompt_context import ConversationPromptPrefix
 from utils.llm.gateway_resilience import DEFAULT_GATEWAY_FIRST_BYTE_TIMEOUT_SECONDS  # noqa: E402
+from utils.llm.memories import extract_canonical_l1_memory_candidates  # noqa: E402
 
 PROVIDER_FIRST_BYTE_SECONDS = 25.0
 _REQUEST = httpx.Request("POST", "https://gateway.invalid/v1/chat/completions")
@@ -208,7 +209,6 @@ def test_byok_gateway_construction_carries_the_foreground_deadline(monkeypatch):
         return object()
 
     monkeypatch.setattr(clients, "get_or_create_omi_gateway_llm_for_byok", fake_byok_gateway)
-    monkeypatch.setattr(clients, "maybe_wrap_dev_gateway_shadow", lambda **kwargs: kwargs["legacy_model"])
 
     clients.get_llm("memory_l1")
 
@@ -232,7 +232,6 @@ def test_byok_direct_construction_never_drops_below_the_foreground_deadline(monk
         "_cached_openai_chat",
         lambda model, key, kwargs: captured.update(model=model, kwargs=dict(kwargs)) or object(),
     )
-    monkeypatch.setattr(clients, "maybe_wrap_dev_gateway_shadow", lambda **kwargs: kwargs["legacy_model"])
 
     clients.get_llm("memory_l1")
 
@@ -240,22 +239,24 @@ def test_byok_direct_construction_never_drops_below_the_foreground_deadline(monk
     assert captured["kwargs"]["request_timeout"] >= model_config.FOREGROUND_REQUEST_TIMEOUT_SECONDS
 
 
-def test_direct_route_no_byok_carries_the_foreground_deadline(monkeypatch):
+def test_managed_route_uses_gateway_with_foreground_deadline_even_when_optional_gateway_is_off(monkeypatch):
     import utils.llm.clients as clients
 
     captured: dict = {}
     monkeypatch.setattr("utils.llm.clients.should_route_features_through_gateway", lambda: False)
+    monkeypatch.setattr("utils.llm.clients.should_route_company_paid_features_through_gateway", lambda: True)
     monkeypatch.setattr("utils.llm.clients.get_byok_key", lambda *_a, **_k: None)
 
-    def fake_default_client(model, provider, streaming, options=None):
-        captured.update(options=dict(options or {}))
+    def fake_gateway(lane_id, streaming=False, options=None, *, feature=None):
+        captured.update(lane_id=lane_id, options=dict(options or {}), feature=feature)
+        return object()
 
-    monkeypatch.setattr(clients, "get_default_client", fake_default_client)
-    monkeypatch.setattr(clients, "maybe_wrap_dev_gateway_shadow", lambda **kwargs: kwargs["legacy_model"])
+    monkeypatch.setattr(clients, "get_or_create_omi_gateway_llm", fake_gateway)
 
     clients.get_llm("memory_l1")
 
     assert captured["options"]["request_timeout"] == model_config.FOREGROUND_REQUEST_TIMEOUT_SECONDS
+    assert captured["feature"] == "memory_l1"
 
 
 # ---------------------------------------------------------------------------
@@ -295,8 +296,6 @@ def test_foreground_deadline_stays_under_the_finalization_budget():
 
 
 def test_wrapper_seam_resolves_the_same_deadline_for_voice_transcripts(resolved_deadlines):
-    from utils.llm.memories import extract_canonical_l1_memory_candidates
-
     candidates = extract_canonical_l1_memory_candidates(
         "uid-l1-invariance",
         "conversation-l1-invariance",

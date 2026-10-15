@@ -125,11 +125,24 @@ enum SiriIntentService {
     return value
   }
 
+  static func normalizedQuestion(_ input: String) -> String {
+    var value = input.trimmingCharacters(in: .whitespacesAndNewlines)
+    for prefix in ["ask omi about ", "ask omi ", "ask about ", "ask "] where value.lowercased().hasPrefix(prefix) {
+      value = String(value.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+      break
+    }
+    return value
+  }
+
+  static func attemptedAnswerResult(_ answer: String?) -> SiriAskResult {
+    answer.map(SiriAskResult.answered) ?? .pending
+  }
+
   /// Use the canonical main-chat provider so Siri's turn belongs to the same
   /// journal and answer timeline as a typed Ask Omi turn.
   @MainActor
   static func ask(_ input: String) async throws -> SiriAskResult {
-    let question = input.trimmingCharacters(in: .whitespacesAndNewlines)
+    let question = normalizedQuestion(input)
     guard !question.isEmpty else { throw SiriActionFailure(action: "ask", failure: .unsupported) }
     guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
       throw SiriFailure.auth
@@ -137,7 +150,9 @@ enum SiriIntentService {
     if let answerWriter {
       let answer = try await answerWriter(question)
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw SiriFailure.cancelled }
-      return answer.map(SiriAskResult.answered) ?? .draft
+      // The writer ran. A missing response may follow an accepted send, so
+      // opening chat must never cause an automatic second send.
+      return attemptedAnswerResult(answer)
     }
     guard let provider = ChatProvider.mainInstance, provider.canAcceptSend else {
       return .draft
@@ -158,7 +173,7 @@ enum SiriIntentService {
     let answer = await iterator.next() ?? nil
     timeout.cancel()
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw SiriFailure.cancelled }
-    return answer.map(SiriAskResult.answered) ?? .pending
+    return attemptedAnswerResult(answer)
   }
 
   static func remember(_ input: String) async throws -> ServerMemory {

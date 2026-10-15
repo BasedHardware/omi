@@ -1,0 +1,3 @@
+{
+  "change": "Settings search header maintains a stable height and alignment to prevent rows jumping on open and cancel"
+}

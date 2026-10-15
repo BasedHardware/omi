@@ -34,6 +34,14 @@ class _Persistence:
                 raise ConnectionError('firestore unavailable')
             self.updates.append(args)
             return None
+        if fn is conversations_db.materialize_translation:
+            # Legacy-path fake: the gate-off/upstream tests assert the legacy
+            # update_conversation_segments write; admit materialization so the
+            # default-on viewed path persists through this seam too.
+            if self._fail_update:
+                raise ConnectionError('firestore unavailable')
+            self.updates.append(args)
+            return {'id': args[2], 'text': args[3], 'translations': [{'lang': args[4], 'text': args[5]}]}
         return None
 
 
@@ -69,9 +77,12 @@ async def test_successful_persist_still_writes_the_translation():
     await processor._on_translation_ready('seg-1', 'hola', 'es', 'conv-1')
 
     assert host.persistence.updates, 'the translation should have been persisted'
-    persisted_segments = host.persistence.updates[0][2]
-    assert persisted_segments[0]['translations'][0]['text'] == 'hola'
-    assert persisted_segments[0]['translations'][0]['lang'] == 'es'
+    materialization = host.persistence.updates[0]
+    # Default-on viewed path: materialize_translation(uid, conversation_id,
+    # segment_id, source_text, target, translated_text, **kwargs)
+    assert materialization[0] == 'uid-1' and materialization[1] == 'conv-1'
+    assert materialization[2] == 'seg-1' and materialization[4] == 'es'
+    assert materialization[5] == 'hola'
 
 
 def test_processor_forwards_existing_spoken_language_profile():

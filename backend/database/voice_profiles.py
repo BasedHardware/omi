@@ -5,7 +5,10 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from google.cloud import firestore
 
+from utils.owner_voice_evidence import owner_base
+
 from ._client import get_firestore_client, run_transactional
+from .speaker_profile_authority import owner_teaching_authorized
 
 SETTINGS_DEFAULTS: Dict[str, bool] = {
     'speaker_tag_prompts_enabled': True,
@@ -157,6 +160,9 @@ def add_owner_voice_confirmation(
     pool: Callable[[List[List[float]]], List[float]],
     *,
     conversation_id: str,
+    expected_receipt_generation: Optional[int] = None,
+    segment_ids: Optional[List[str]] = None,
+    card_generation: Optional[int] = None,
     firestore_client: Any = None,
 ) -> int:
     """Pool a confirmed owner clip into the owner's voiceprint in one transaction."""
@@ -165,17 +171,27 @@ def add_owner_voice_confirmation(
 
     @firestore.transactional
     def pool_in(transaction: Any) -> int:
+        if expected_receipt_generation is not None and not owner_teaching_authorized(
+            transaction, ref, uid, conversation_id, segment_ids, expected_receipt_generation, card_generation
+        ):
+            return 0
         snapshot = ref.get(transaction=transaction)
         data = snapshot.to_dict() or {}
-        current = data.get('speaker_embedding')
-        base = data.get('speaker_embedding_base')
-        pooled_at = as_utc(data.get('owner_voice_pooled_at'))
-        updated_at = as_utc(data.get('speaker_embedding_updated_at'))
-        if current and (pooled_at is None or (updated_at is not None and updated_at > pooled_at)):
-            base = current
+        base = owner_base(data)
         now = datetime.now(timezone.utc)
         confirmations = list(data.get('owner_voice_confirmations') or [])
-        confirmations.append({'embedding': list(embedding), 'conversation_id': conversation_id, 'at': now})
+        # One contribution per conversation: retries and repeated cards cannot
+        # consume the entire bounded bank or amplify a single recording.
+        confirmations = [item for item in confirmations if item.get('conversation_id') != conversation_id]
+        confirmations.append(
+            {
+                'embedding': list(embedding),
+                'conversation_id': conversation_id,
+                'segment_ids': list(segment_ids or []),
+                'generation': expected_receipt_generation,
+                'at': now,
+            }
+        )
         confirmations = confirmations[-OWNER_VOICE_CONFIRMATIONS_MAX:]
         vectors = ([list(base)] if base else []) + [list(item['embedding']) for item in confirmations]
         update: Dict[str, Any] = {
@@ -193,3 +209,118 @@ def add_owner_voice_confirmation(
         return len(confirmations)
 
     return run_transactional(client, pool_in)
+
+
+IGNORED_VOICES_LIMIT = 200
+
+
+def ignored_voice_key(conversation_id: str, speaker_id: int) -> str:
+    return f'{conversation_id}:{speaker_id}'
+
+
+def ignored_voices(state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Stored "Not a Person" markers, newest first."""
+    entries = [
+        entry
+        for entry in (state.get('ignored_voices') or {}).values()
+        if isinstance(entry, dict) and entry.get('conversation_id') and isinstance(entry.get('speaker_id'), int)
+    ]
+    return sorted(
+        entries,
+        key=lambda entry: as_utc(entry.get('ignored_at')) or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
+
+
+def ignored_voice_keys(state: Dict[str, Any]) -> set:
+    return {ignored_voice_key(entry['conversation_id'], entry['speaker_id']) for entry in ignored_voices(state)}
+
+
+def record_ignored_voice(
+    uid: str,
+    conversation_id: str,
+    speaker_id: int,
+    now: datetime,
+    *,
+    assignment_generation: Optional[int] = None,
+    firestore_client: Any = None,
+) -> None:
+    """Remember a voice the user said is not a person (bounded, newest kept)."""
+    client = _client(firestore_client)
+    ref = _state_ref(uid, client)
+
+    @firestore.transactional
+    def record(transaction: Any) -> None:
+        snapshot = ref.get(transaction=transaction)
+        state = snapshot.to_dict() or {}
+        entry: Dict[str, Any] = {'conversation_id': conversation_id, 'speaker_id': speaker_id, 'ignored_at': now}
+        if assignment_generation is not None:
+            entry['assignment_generation'] = assignment_generation
+        kept = [
+            e
+            for e in ignored_voices(state)
+            if ignored_voice_key(str(e['conversation_id']), int(e['speaker_id']))
+            != ignored_voice_key(conversation_id, speaker_id)
+        ]
+        kept = [entry, *kept][:IGNORED_VOICES_LIMIT]
+        update = {
+            'ignored_voices': {ignored_voice_key(str(e['conversation_id']), int(e['speaker_id'])): e for e in kept}
+        }
+        if snapshot.exists:
+            transaction.update(ref, update)
+        else:
+            transaction.create(ref, update)
+
+    run_transactional(client, record)
+
+
+def remove_ignored_voice(
+    uid: str, conversation_id: str, speaker_id: int, prompt_ids: list, *, firestore_client: Any = None
+) -> bool:
+    """Undo "Not a Person": drop the marker and forget those answered prompts so Omi may ask again."""
+    client = _client(firestore_client)
+    ref = _state_ref(uid, client)
+
+    @firestore.transactional
+    def remove(transaction: Any) -> bool:
+        snapshot = ref.get(transaction=transaction)
+        state = snapshot.to_dict() or {}
+        ignored = dict(state.get('ignored_voices') or {})
+        marker = ignored.pop(ignored_voice_key(conversation_id, speaker_id), None)
+        if marker is None:
+            return False
+        from database import conversations as conversations_db
+
+        conversation_ref = (
+            client.collection('users')
+            .document(uid)
+            .collection(conversations_db.conversations_collection)
+            .document(conversation_id)
+        )
+        raw = conversation_ref.get(transaction=transaction).to_dict() or {}
+        receipt = conversations_db.decode_manual_speaker_assignments(
+            uid, raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
+        )
+        speakers = dict(receipt.get('speakers') or {})
+        decision = speakers.get(str(speaker_id)) or {}
+        # Restore eligibility without undoing a newer manual label or guessing
+        # which decision created a legacy marker without a generation fence.
+        if marker.get('assignment_generation') is not None and (
+            decision.get('generation') == marker['assignment_generation']
+            and not decision.get('person_id')
+            and not decision.get('is_user')
+        ):
+            speakers.pop(str(speaker_id), None)
+            receipt['speakers'] = speakers
+            receipt['generation'] = receipt.get('generation', 0) + 1
+            transaction.update(
+                conversation_ref,
+                conversations_db.encode_conversation_for_write(
+                    uid, {'manual_speaker_assignments': receipt}, raw.get('data_protection_level', 'standard')
+                ),
+            )
+        answered = {k: v for k, v in (state.get('answered') or {}).items() if k not in set(prompt_ids)}
+        transaction.update(ref, {'ignored_voices': ignored, 'answered': answered})
+        return True
+
+    return run_transactional(client, remove)

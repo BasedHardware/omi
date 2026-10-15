@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-retry-resume-behind-own-fence",
+  "violated_contract": "A retry whose job is to finish work an earlier attempt committed must run that resume before any admission fence that the committed state itself fails. Smart merge commits an absorb that turns the new conversation into a discarded donor tombstone, then raises for a retry when the donor cleanup or survivor refresh fails; the retry reloaded the donor, and the finalization fanout claim fenced the discarded row before smart_merge_step could reach its donor-resume branch, so the job closed as fenced and the owed refresh was stranded permanently (about 2% of merges). The finalizer test faked the claim as always claimed, which hid the fence. A failed refresh also kept its lease, parking the only other path that could pay the refresh.",
+  "canonical_prevention": "Resume the committed work before the fence and let the fence's own transaction close the job (a fenced return without the claim cannot close a job whose earlier attempt leased fanout). Test doubles for an admission fence must apply the production admission rule, and an end-to-end retry test must run the real job transactions. A failed lease holder releases only its own lease.",
+  "canonical_prevention_artifact": [
+    "backend/utils/conversations/finalizer.py",
+    "backend/tests/unit/test_conversation_smart_merge_finalizer.py",
+    "backend/tests/unit/test_conversation_smart_merge.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/conversations/finalizer.py",
+    "backend/utils/conversations/smart_merge.py",
+    "backend/database/smart_merge.py",
+    "backend/database/conversation_finalization_jobs.py"
+  ],
+  "status": "open"
+}

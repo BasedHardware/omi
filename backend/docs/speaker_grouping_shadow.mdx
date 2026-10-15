@@ -1,0 +1,130 @@
+# Cached-evidence provider grouping shadow
+
+`SPEAKER_GROUPING_SHADOW=off|owner|cohort` is off in code. Owner mode admits only
+`SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST` (comma-separated configuration, no UID in
+code). Cohort mode also admits the stable EXP-004 `uid_bucket` slice, salted
+`speaker-grouping-shadow-v1`, below `SPEAKER_GROUPING_SHADOW_PERCENT` (default 10).
+Invalid mode/percentage admits no percentage cohort. Allowlisted accounts get
+additional per-segment logs: segment ID and owner/person/unknown, never text.
+
+The production declarations enable cohort at 10% plus the owner allowlist on
+pusher, backend-listen, Cloud Run backend, backend-sync, backend-sync-backfill,
+and backend-integration. Defaults on other environments remain off. These are
+source declarations, not proof that the image/config has been deployed. Rollback:
+set shadow `off` on all six hosts. `SPEAKER_GROUPING_MODE` remains `incumbent` in
+all declarations and code. Only David's post-shadow decision may switch it to
+`provider_strict` or `provider_cannot_link`. `owner_link` is shadow-only and is
+rejected by authoritative configuration regardless of shadow enrollment. Invalid mode keeps the
+incumbent; missing provenance, limits, and errors fall back to the incumbent even
+when an alternative is configured as authoritative.
+
+The resolution stage passes the *same* cached segment embeddings, deduplicated
+clip evidence seconds, manual receipts, and already admitted voiceprints to:
+
+- **G1 / provider_strict:** pool each original `(provider, scope, speaker_id)`
+  partition, then average-linkage AHC at the incumbent 0.70 cosine distance across
+  scopes. Distinct provider IDs in a scope cannot merge, including transitively,
+  during short-fragment absorption or later automatic identity merging.
+- **G2 / provider_cannot_link:** start from embedded segment units and perform
+  constrained average linkage. Same-scope distinct IDs cannot link. Cross-scope
+  merges use `SPEAKER_GROUPING_CROSS_SCOPE_THRESHOLD` (default 0.60; invalid value
+  restores 0.60); same-ID within-scope merges retain 0.70. Absorption respects the
+  same constraints and the incumbent 0.60 bound.
+- **G4 / owner_link:** use G1, then permit cross-scope links between groups that
+  each independently accept the owner with at least 5 seconds of cached evidence,
+  distance below 0.50 and the existing 0.10 enrolled-print margin. Same-scope
+  cannot-links remain intact. Joint owner arbitration still runs after linking.
+  No such identity-based pooling is done for non-owners. Acoustic cross-scope
+  grouping remains possible on free plans; owner recognition is free, while
+  automatic non-owner naming uses exactly the incumbent's paid profile gate.
+
+Manual must-links/cannot-links outrank provider priors; segment-level manual
+receipts are reapplied using the actual projection before comparison and before
+processing. No alternative can overwrite a manual decision.
+
+**Rewrite safety and provenance limits.** Before `assign_resolved_speaker`
+rewrites the public speaker ID/scope, it preserves the minimal original ID,
+scope and provider as `provider_speaker`. Stored integers are conversation-local
+renumberings that preserve the provider partition, not raw provider integers;
+provider plus original epoch/scope fences reused numbering. Before persistence,
+the codec removes all plaintext grouping fields and seals an internal per-segment
+sidecar with the existing per-user AES-GCM key, for **both standard and enhanced**
+accounts. The sidecars travel inside the same transcript write, independently of
+transcript protection. Maximum 256 sidecars and 64 KiB total plaintext (96 KiB
+ciphertext); on capacity or encryption failure, drop the optional evidence.
+Provenance follows transcript deletion/retention for safe reprocessing; frozen
+identity predictions stop participating in scoring after 30 days, without
+extension by corrections or protection migrations, and are removed on the next
+decoded transcript rewrite. Existing encrypted blobs follow transcript retention;
+there is no new purge worker. Historical plaintext extras and failed authentication are
+never trusted. No separate audio/vector store or key/network lookup. Public
+JSON/OpenAPI, client segment projections, raw list/detail projections, and the
+common app/developer webhook redactor remove all grouping metadata and sidecars. This small mapping is necessary:
+conversation-wide rewriting irreversibly merges provider partitions and neither
+`conversation:{id}` nor acoustic groups can recover them on reprocessing. It is
+preserved even with shadow off, so future cohort enrollment can reuse it. Never
+infer a provider prior from historical rewritten IDs without this mapping, absent
+scopes, or synthesized default IDs: skip and count missing provenance instead.
+Known text redistribution or absorption across provider IDs, including capture
+sentence repair before first resolution, invalidates
+the prior and frozen predictions. Stored allocated provider IDs are a scoped
+partition prior, **not certified raw provider tokens or physical-speaker truth**;
+ingress normalization/older text merging may already have lost boundaries. A
+provider can itself mix voices; the shadow does not prove otherwise.
+
+**Cost and failure bound.** No extra model, embedding, voiceprint-repair, audio
+read, network, or storage call. Frozen comparison decisions travel in the existing
+transcript write. At most 256 input segments are compared; larger conversations
+are counted as `limit` and keep the incumbent. All three variants share a 300 ms
+cooperative wall budget, with checks during constrained clustering and between
+variants. Average-linkage pair updates are quadratic using a heap; bounded NumPy,
+projection and metric/log operations can overrun a deadline check slightly, so
+this is not a preemptive CPU deadline. Exceptions and budget exhaustion cannot
+block finalization or publish an alternative. There is no new asynchronous worker
+or finalization wait. Size/budget/provenance skips are denominators: do not compare
+only the completed subset and claim population-wide safety. In particular this
+cap excludes the long dinner that motivated the work.
+
+`omi_speaker_grouping_shadow_total{variant,outcome}` has closed variant/outcome
+vocabularies and no UID, conversation, provider or source labels. Outcomes count
+owner_same, owner_gained, owner_lost, owner_changed_segments; incumbent_mixed_proxy/incumbent_owner_fragmented
+paired denominators; group-count deltas
+(same, up/down 1–4, up/down 5+); mixed_proxy; owner_fragmented; error/budget/limit/
+missing_provenance; correction_agreed/disagreed; correction_negative_skipped. Mixed proxy counts original
+provider partitions in automatic owner groups whose own pooled >=5s evidence
+rejects owner under the admitted print policy; missing evidence is not rejection.
+Fragmentation counts groups below 5s whose pooled vector would otherwise accept
+the owner (a diagnostic only, never an owner decision). One structured summary
+log per successful conversation/variant carries UID/conversation ID, gained/lost
+segment counts, group counts, incumbent and variant proxies, provider, source and
+surface. No transcript, names, vectors or audio paths are logged.
+
+`speaker_grouping_shadow` stores only each variant's frozen identity decision per
+segment in an always-encrypted sidecar, including person IDs solely for
+exact paid-person correction agreement; never API responses or metric labels.
+After a user commits a later assignment, the shared transaction boundary counts
+exact agreement/disagreement on the explicitly selected surviving segments.
+Projection and scoring share the same winning scoped/generation receipt.
+`not_me`, `not_person`, and `not_a_person` (including selected-rejection spillover)
+count only `correction_negative_skipped`, outside the exact-identity denominator: a
+partial negative edit does not establish an anonymous identity. Newer positive
+receipts resume exact agreement scoring. This is
+agreement with an edit, not independently labeled ground truth; repeated edits
+are events, and reprocessing replaces the frozen predictions. A rejected/failed
+assignment emits no agreement. Text-changed/absorbed segments lose their frozen
+predictions rather than scoring a different utterance under an old segment ID.
+
+**Ship criteria:** on the owner's account, independently score the segment logs
+against his labels and require zero newly introduced false-owner segments. In the
+population require owner gains substantially above losses, mixed-proxy and short
+fragmentation no worse than incumbent, and improved manual-correction agreement.
+Stratify by Soniox/Deepgram/Parakeet, source and capture surface; missing provider
+strata remain unqualified. Include skip rates, evidence coverage, latency and
+paid/free slices. The parallel offline benchmark warns that G4 introduced new
+wrong-owner decisions and that stored-label purity has provenance/selection bias:
+The offline owner evaluation introduced about 10.6 new false-owner clips per
+repeat for G4. G4 remains shadow-only and cannot be selected for authoritative
+processing, even through configuration; recall gains cannot authorize promotion. Shadow
+counts cannot establish false-owner safety by themselves; David gates shipping
+only after label review and consistent provider/source results. Set authoritative
+mode back to `incumbent` for rollback; existing manual assignments still win.

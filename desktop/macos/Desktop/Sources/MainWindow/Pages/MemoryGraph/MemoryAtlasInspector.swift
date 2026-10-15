@@ -141,7 +141,7 @@ struct MemoryAtlasDetailPanel: View {
           .foregroundColor(Ink.secondary)
       }
     } else if evidence.isEmpty && unresolvedEvidenceCount == 0 {
-      Text("Source memories are still being linked for this entity.")
+      Text("Still finding the memories this comes from.")
         .scaledFont(size: 11)
         .foregroundColor(Ink.secondary)
         .fixedSize(horizontal: false, vertical: true)

@@ -1,0 +1,7 @@
+# Opt in only after applying indexes and supplying the admitted backend image.
+enabled: false
+image: ""
+serviceAccountName: ""
+secretName: ""
+retentionDays: 30
+schedule: "17 * * * *"

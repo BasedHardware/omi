@@ -12,6 +12,7 @@ class _FlagAdapter implements AnalyticsAdapter, AnalyticsIdentityAdapter, Analyt
   bool _initialized = false;
   final settles = <Completer<String>>[];
   final flagReads = <Completer<bool>>[];
+  final payloadReads = <Completer<Object?>>[];
 
   @override
   bool get isInitialized => _initialized;
@@ -32,6 +33,30 @@ class _FlagAdapter implements AnalyticsAdapter, AnalyticsIdentityAdapter, Analyt
   Future<bool> isFeatureEnabled(String key) {
     final completer = Completer<bool>();
     flagReads.add(completer);
+    return completer.future;
+  }
+
+  @override
+  Future<Object?> getFeatureFlagPayload(String key) {
+    final completer = Completer<Object?>();
+    payloadReads.add(completer);
+    return completer.future;
+  }
+
+  final variantReads = <Completer<String?>>[];
+  final reloads = <Completer<bool>>[];
+
+  @override
+  Future<bool> reloadFeatureFlags() {
+    final completer = Completer<bool>();
+    reloads.add(completer);
+    return completer.future;
+  }
+
+  @override
+  Future<String?> getFeatureFlagVariant(String key) {
+    final completer = Completer<String?>();
+    variantReads.add(completer);
     return completer.future;
   }
 
@@ -131,6 +156,20 @@ void main() {
     expect(await read, isTrue);
   });
 
+  test('payload read respects settled identity and consent', () async {
+    final adapter = _FlagAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    await settleIdentity(adapter, 'user-a');
+    final read = AnalyticsManager().getFeatureFlagPayload('mobile_store_review_tuning');
+    adapter.payloadReads.single.complete({'reading_seconds': 5});
+    expect(await read, {'reading_seconds': 5});
+    final second = AnalyticsManager().getFeatureFlagPayload('mobile_store_review_tuning');
+    AnalyticsManager().optOutTracking();
+    adapter.payloadReads.last.complete({'reading_seconds': 1});
+    expect(await second, isNull);
+  });
+
   test('an identity switch while the flag read is in flight fails closed', () async {
     final adapter = _FlagAdapter();
     AnalyticsManager.configure(adapter);
@@ -187,5 +226,53 @@ void main() {
     adapter.flagReads.single.completeError(StateError('sdk unavailable'));
 
     expect(await read, isFalse);
+  });
+
+  test('an experiment exposure is sent once per identity and arm, and again for a new identity', () async {
+    final adapter = _FlagAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    expect(AnalyticsManager().recordFeatureFlagExposure('paywall-variant', 'control'), isFalse,
+        reason: 'nothing to attribute to before an identity settles');
+
+    await settleIdentity(adapter, 'user-a');
+    expect(AnalyticsManager().recordFeatureFlagExposure('paywall-variant', 'control'), isTrue);
+    expect(AnalyticsManager().recordFeatureFlagExposure('paywall-variant', 'control'), isFalse);
+    expect(AnalyticsManager().recordFeatureFlagExposure('paywall-variant', 'outline'), isTrue);
+
+    await settleIdentity(adapter, 'user-b');
+    expect(AnalyticsManager().recordFeatureFlagExposure('paywall-variant', 'control'), isTrue,
+        reason: 'a different account is exposed in its own right');
+  });
+
+  test('a failed flag reload is reported as false even when a stale flag reads enabled', () async {
+    final adapter = _FlagAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    await settleIdentity(adapter, 'user-a');
+
+    final reload = AnalyticsManager().reloadFeatureFlags();
+    adapter.reloads.single.complete(false);
+    expect(await reload, isFalse);
+
+    final read = AnalyticsManager().isFeatureEnabled('onboarding-webview');
+    adapter.flagReads.single.complete(true);
+    expect(await read, isTrue, reason: 'the stale value is still readable; callers must not read after a false reload');
+  });
+
+  test('a reload that errors or outlives an identity switch is false', () async {
+    final adapter = _FlagAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    await settleIdentity(adapter, 'user-a');
+
+    final errored = AnalyticsManager().reloadFeatureFlags();
+    adapter.reloads.last.completeError(StateError('offline'));
+    expect(await errored, isFalse);
+
+    final slow = AnalyticsManager().reloadFeatureFlags();
+    await settleIdentity(adapter, 'user-b');
+    adapter.reloads.last.complete(true);
+    expect(await slow, isFalse, reason: "A's answer arrived after B settled");
   });
 }

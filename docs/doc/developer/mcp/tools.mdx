@@ -204,6 +204,8 @@ in the first two sections below; the additional tools are hosted-server tools.
 | `get_goals` | `include_inactive?` (default false) | List goals, active by default |
 | `get_chat_messages` | `limit?` (default 50), `offset?`/`cursor?` | List recent Omi chat messages, newest first |
 | `get_people` | None | List recognized people with speaker samples |
+| `rename_person` | `person_id`, `name` | Correct a display name without exposing speaker samples in the response |
+| `dismiss_person` | `person_id` | Soft-dismiss a false-positive person; requires the opt-in `people.cleanup` scope |
 | `get_screen_activity` | `start_date?`, `end_date?`, `app?`, `group_by?` (`none`\|`app`\|`hour`\|`day`, default `none`), `summary?`, `limit?`, `cursor?` | List synced screen activity rows, aggregate them into buckets, or return the legacy per-app summary |
 | `get_daily_summaries` | `start_date?`, `end_date?`, `limit?` (default 30), `offset?` | List Omi's daily summaries, newest first |
 
@@ -232,6 +234,11 @@ The same summary contract serves hosted MCP, REST MCP, and
 
 Window titles are samples, not a ranking by dwell time. Summaries remain derived
 views of screen evidence; they do not create or promote semantic memories.
+
+`rename_person` requires `people.rename`, which is part of the compatible default MCP key grant.
+`dismiss_person` requires the explicitly requested `people.cleanup` scope. Dismissal is soft: it
+hides the person from default app and MCP People reads while preserving the record for data export.
+Existing and newly created default keys do not receive `people.cleanup` automatically.
 
 ---
 
@@ -322,3 +329,32 @@ Memories and conversations behind the paid plan are handled gracefully:
 - **Conversations:** Action items and events are hidden from the structured data
 - **Direct access:** Returns a tool result with `isError: true` and
   `structuredContent.error.code` of `paid_plan_required`, with a clear message
+
+## Read contracts
+
+`get_conversations` honors limits from 1 to **100** and reports `effective_limit`
+and `has_more`. Prefer `cursor` from `next_cursor`; `offset` (0–100000) is also
+supported and cannot be combined with a cursor. Offset pages now return
+continuation metadata as well. Dates filter **created_at** in UTC: start is
+inclusive midnight and end includes the entire UTC day. To avoid overlap,
+start the next window on the day after the previous end date.
+
+`search_conversations` uses summary vectors with keyword recovery when semantic
+hits are empty, stale, or unavailable. It rechecks date bounds against hydrated
+storage. Empty results include a coverage message, not proof that the topic is
+absent. When keyword recovery is unavailable, an actionable unavailable error
+recommends date-window listing. No new embedding or LLM calls are added.
+
+`search_memories` reports `search_coverage: eligible_indexed_memories`, an
+`effective_limit` up to 20, and an explanation for empty results. Memory list
+inspection can find unindexed content; it still follows eligibility and privacy
+rules. Read grants remain required.
+
+Conversation detail and search cards expose stored speaker/person mappings as
+`participants` and `person_ids` when loaded; `participants_included` indicates
+whether those fields have transcript evidence. Transcript-free list cards do
+not infer participants from summaries.
+
+MCP REST conversation list/search dates use inclusive ISO 8601 instants instead
+of whole-day ends. Naive instants mean UTC, including mixed naive/offset date
+bounds. Date-only whole-day behavior above applies to the hosted tools.

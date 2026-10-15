@@ -9,7 +9,6 @@ final class ChatFirstShellTests: XCTestCase {
   private func enabledControl(generation: Int = 7) -> OmiAPI.TaskWorkflowControl {
     OmiAPI.TaskWorkflowControl(
       accountGeneration: generation,
-      chatFirstUi: true,
       workflowMode: .read
     )
   }
@@ -59,24 +58,20 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertTrue(sample.isResolved)
 
     sample.resolve(
-      control: OmiAPI.TaskWorkflowControl(accountGeneration: 8, chatFirstUi: false, workflowMode: .off),
+      control: OmiAPI.TaskWorkflowControl(accountGeneration: 8, workflowMode: .off),
       requestedOwnerID: "owner-a",
       ownerIsStillCurrent: true
     )
     XCTAssertEqual(sample.projection?.controlGeneration, 7)
   }
 
-  func testLegacyWorkflowMetadataCannotSuppressDerivedChatFirstCapability() throws {
+  func testOffWorkflowMetadataDoesNotGrantChatFirstCapability() throws {
     let control = OmiAPI.TaskWorkflowControl(
       accountGeneration: 9,
-      chatFirstUi: true,
       workflowMode: .off
     )
 
-    let projection = try XCTUnwrap(ChatFirstCapabilityProjection(control: control))
-
-    XCTAssertTrue(projection.chatFirstUi)
-    XCTAssertEqual(projection.controlGeneration, 9)
+    XCTAssertNil(ChatFirstCapabilityProjection(control: control))
   }
 
   func testMissingStaleAndOwnerChangedSamplesFailClosedToCapabilityOff() {

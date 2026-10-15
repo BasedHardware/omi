@@ -3,6 +3,8 @@
 import json
 import uuid
 
+import pytest
+
 from fakes.firestore import get_mock_firestore, read_conversation
 from fakes.stt import fake_suggested_transcript_event, install_streaming_stt_fake
 from listen_test_helpers import (
@@ -406,10 +408,12 @@ def test_web_listen_streaming_stt_send_failure_emits_terminal_status_then_closes
     assert len(sockets[0].sent_chunks) == 1
 
 
+@pytest.mark.parametrize('primary_circuit_was_open', [False, True])
 def test_web_listen_streaming_stt_send_failure_fails_over_and_the_session_survives(
     client,
     test_uid,
     monkeypatch,
+    primary_circuit_was_open,
 ):
     """A provider death with a provider left in the chain moves the session, not ends it.
 
@@ -420,6 +424,14 @@ def test_web_listen_streaming_stt_send_failure_fails_over_and_the_session_surviv
     client socket never sees ``stt_failed``.
     """
     from utils.stt.streaming import STTService
+    from utils.stt import streaming as st
+    from utils.stt.provider_resilience import ProviderCircuitBreaker
+
+    if primary_circuit_was_open:
+        circuit = ProviderCircuitBreaker(failure_threshold=1, cooldown_seconds=30)
+        circuit.record_serve_failure()
+        monkeypatch.setattr(st, '_parakeet_circuit', circuit)
+        assert not circuit.allow_request()
 
     seed_listen_user(test_uid, uses_custom_stt=False)
     sockets = install_streaming_stt_fake(
@@ -433,6 +445,8 @@ def test_web_listen_streaming_stt_send_failure_fails_over_and_the_session_surviv
         assert websocket.receive_json() == {"type": "auth_response", "success": True}
         receive_until(websocket, is_conversation_session_event)
         receive_until(websocket, is_ready_event)
+
+        assert sockets[0].provider == 'parakeet'
 
         websocket.send_bytes(b"\x80" * 320)
 
