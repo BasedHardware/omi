@@ -270,6 +270,20 @@
             "pull_request_smoke": false
         },
         {
+            "name": "batch-pipeline-worker",
+            "dockerfile": "backend/diarizer/Dockerfile.batch-pipeline",
+            "deployment_workflows": [".github/workflows/gcp_diarizer.yml"],
+            "build_context": ".",
+            "source_root": "backend",
+            "entrypoint_source_root": "backend",
+            "workdir": "/app",
+            "entrypoints": ["diarizer.batch_pipeline_runtime"],
+            "image_import_smoke": false,
+            "smoke_entrypoints": ["diarizer.batch_pipeline_runtime"],
+            "dependency_probe_smoke": true,
+            "pull_request_smoke": false
+        },
+        {
             "name": "parakeet",
             "dockerfile": "backend/parakeet/Dockerfile",
             "deployment_workflows": [".github/workflows/gcp_parakeet.yml"],

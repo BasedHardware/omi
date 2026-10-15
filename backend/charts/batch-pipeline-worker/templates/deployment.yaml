@@ -31,19 +31,14 @@ spec:
     spec:
       serviceAccountName: {{ required "dedicated Workload Identity serviceAccountName required" .Values.serviceAccountName }}
       terminationGracePeriodSeconds: 1500
+      {{- with .Values.nodeSelector }}
       nodeSelector:
-        cloud.google.com/gke-nodepool: diarizer-batch-pool
-        service: diarizer-batch
-        env: {{ .Values.stage }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
       tolerations:
-        - key: omi.ai/diarizer-batch
-          operator: Equal
-          value: "true"
-          effect: NoSchedule
-        - key: nvidia.com/gpu
-          operator: Equal
-          value: present
-          effect: NoSchedule
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: worker
           image: "{{ required "image.repository required" .Values.image.repository }}@{{ .Values.image.digest }}"

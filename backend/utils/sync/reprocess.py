@@ -39,9 +39,12 @@ def key(uid: str, conversation_id: str) -> str:
 
 
 def owns_runtime() -> bool:
-    from utils.sync.stage import production_stage
+    from utils.sync.stage import current_stage
 
-    return bool(os.getenv('FIRESTORE_EMULATOR_HOST')) or production_stage()
+    if os.getenv('FIRESTORE_EMULATOR_HOST'):
+        return True
+    stage = current_stage()
+    return stage == 'prod' or (stage == 'dev' and os.getenv('BATCH_PIPELINE_NAMESPACE') == 'batch_pipeline_dev')
 
 
 def _mutate(document_id: str, operation: Callable[[Row | None], tuple[Row | None, ResultT]]) -> ResultT:

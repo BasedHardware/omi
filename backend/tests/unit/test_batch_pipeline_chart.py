@@ -32,6 +32,12 @@ def enabled_arguments():
         '--set',
         'serviceAccountName=synthetic-worker',
         '--set',
+        'gcpServiceAccount=synthetic-worker@example.invalid',
+        '--set-json',
+        'nodeSelector={"cloud.google.com/gke-nodepool":"diarizer-batch-pool","service":"diarizer-batch","env":"dev"}',
+        '--set-json',
+        'tolerations=[{"key":"omi.ai/diarizer-batch","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Equal","value":"present","effect":"NoSchedule"}]',
+        '--set',
         'bucket=synthetic-batch',
         '--set',
         'secretName=synthetic-secret',
@@ -55,6 +61,10 @@ def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
     manifests = {doc['kind']: doc for doc in yaml.safe_load_all(result.stdout) if doc}
     pod = manifests['Deployment']['spec']['template']['spec']
     assert pod['nodeSelector']['cloud.google.com/gke-nodepool'] == 'diarizer-batch-pool'
+    assert pod['tolerations'][1]['key'] == 'nvidia.com/gpu'
+    assert manifests['ServiceAccount']['metadata']['annotations'] == {
+        'iam.gke.io/gcp-service-account': 'synthetic-worker@example.invalid'
+    }
     container = pod['containers'][0]
     assert '@sha256:' in container['image']
     assert container['resources']['limits']['nvidia.com/gpu'] == '1'
@@ -94,3 +104,60 @@ def test_enabled_release_scrapes_but_waits_for_live_series_before_autoscaling():
     assert env['BATCH_PIPELINE_WORKER_RELEASE']['value'] == 'synthetic-worker'
     assert env['POD_NAMESPACE']['valueFrom']['fieldRef']['fieldPath'] == 'metadata.namespace'
     assert render(*enabled_arguments(), '--set', 'replicaCount=0').returncode != 0
+
+
+@pytest.mark.parametrize(
+    'environment,stage,namespace,project,bucket,gsa,secret',
+    [
+        (
+            'dev',
+            'dev',
+            'batch_pipeline_dev',
+            'based-hardware',
+            'based-hardware-dev-batch-pipeline-staging',
+            'batch-pipeline-worker@based-hardware-dev.iam.gserviceaccount.com',
+            'dev-omi-backend-secrets',
+        ),
+        (
+            'prod',
+            'prod',
+            'batch_pipeline_prod',
+            'based-hardware',
+            'based-hardware-batch-pipeline-staging',
+            'batch-pipeline-worker@based-hardware.iam.gserviceaccount.com',
+            'prod-omi-backend-secrets',
+        ),
+    ],
+)
+def test_environment_values_render_worker_identity_and_gpu_pool(
+    environment, stage, namespace, project, bucket, gsa, secret
+):
+    values = CHART / f'{environment}_omi_batch-pipeline-worker_values.yaml'
+    result = render('-f', str(values), '--set-string', 'image.digest=sha256:' + 'b' * 64)
+    assert result.returncode == 0, result.stderr
+    manifests = {doc['kind']: doc for doc in yaml.safe_load_all(result.stdout) if doc}
+    account = manifests['ServiceAccount']['metadata']
+    assert account['name'] == 'batch-pipeline-worker'
+    assert account['annotations']['iam.gke.io/gcp-service-account'] == gsa
+
+    deployment = manifests['Deployment']
+    pod = deployment['spec']['template']['spec']
+    assert deployment['spec']['replicas'] == 1
+    assert pod['serviceAccountName'] == 'batch-pipeline-worker'
+    assert pod['nodeSelector'] == {
+        'cloud.google.com/gke-nodepool': 'diarizer-batch-pool',
+        'service': 'diarizer-batch',
+        'env': stage,
+    }
+    assert {item['key'] for item in pod['tolerations']} == {'omi.ai/diarizer-batch', 'nvidia.com/gpu'}
+    container = pod['containers'][0]
+    project_env = {item['name']: item for item in container['env']}
+    assert project_env['OMI_FIRESTORE_DATA_PLANE_PROJECT']['value'] == project
+    assert project_env['OMI_ENV_STAGE']['value'] == stage
+    assert project_env['BATCH_PIPELINE_NAMESPACE']['value'] == namespace
+    assert project_env['BUCKET_BATCH_PIPELINE']['value'] == bucket
+    for name in ('ENCRYPTION_SECRET', 'HUGGINGFACE_TOKEN'):
+        assert project_env[name]['valueFrom']['secretKeyRef']['name'] == secret
+    project_id = 'based-hardware-dev' if environment == 'dev' else 'based-hardware'
+    assert container['image'] == f"gcr.io/{project_id}/batch-pipeline-worker@sha256:{'b' * 64}"
+    assert 'HorizontalPodAutoscaler' not in manifests

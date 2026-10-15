@@ -5,12 +5,15 @@ image:
   repository: ""
   digest: ""
 serviceAccountName: ""
+gcpServiceAccount: ""
 namespace: batch_pipeline_prod
 stage: prod
 dataPlaneProject: ""
 bucket: ""
 secretName: ""
 replicaCount: 1
+nodeSelector: {}
+tolerations: []
 worker:
   batchSize: 8
   unitSeconds: 3600
