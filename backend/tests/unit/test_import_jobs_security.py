@@ -28,7 +28,7 @@ from utils.imports.upload_names import safe_upload_basename  # noqa: E402
 
 
 class TestValidateJobId:
-    @pytest.mark.parametrize('bad', ['a/b', '../x', 'a\\b', 'a..b/../../x', '', ' ', 'x'*200, None, 123])
+    @pytest.mark.parametrize('bad', ['a/b', '../x', 'a\\b', 'a..b/../../x', '', ' ', 'x' * 200, None, 123])
     def test_rejects_unsafe(self, bad):
         with pytest.raises(ValueError):
             import_jobs._validate_job_id(bad)
@@ -39,8 +39,9 @@ class TestValidateJobId:
 
 
 class TestFilenameSanitize:
-    @pytest.mark.parametrize('raw', ['../../tmp/evil.zip', '..\\..\\evil.zip', '/etc/passwd.zip',
-                                     'a/b/c/d.zip', 'C:\\..\\win.zip'])
+    @pytest.mark.parametrize(
+        'raw', ['../../tmp/evil.zip', '..\\..\\evil.zip', '/etc/passwd.zip', 'a/b/c/d.zip', 'C:\\..\\win.zip']
+    )
     def test_strips_to_basename(self, raw):
         safe = safe_upload_basename(raw)
         assert safe == 'evil.zip' or safe == 'passwd.zip' or safe == 'd.zip' or safe == 'win.zip'

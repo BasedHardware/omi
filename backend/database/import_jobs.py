@@ -22,14 +22,11 @@ def _validate_job_id(job_id: str) -> str:
     read or delete an unrelated document. Job ids are server-generated, so any id
     outside the safe charset is rejected outright.
     """
-    if (
-        not isinstance(job_id, str)
-        or not job_id
-        or len(job_id) > 128
-        or not set(job_id) <= _JOB_ID_SAFE_CHARS
-    ):
+    if not isinstance(job_id, str) or not job_id or len(job_id) > 128 or not set(job_id) <= _JOB_ID_SAFE_CHARS:
         raise ValueError(f'invalid import job id {job_id!r}')
     return job_id
+
+
 # The counters a worker reports: all that a progress-only write may change.
 IMPORT_JOB_PROGRESS_FIELDS = frozenset({'processed_files', 'conversations_created', 'conversations_skipped'})
 
