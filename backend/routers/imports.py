@@ -290,10 +290,9 @@ def get_import_jobs(
     Returns:
         List of import jobs ordered by creation date (newest first)
     """
-    # Clamp pagination with the db layer's bound so a negative value cannot reach
-    # Firestore (which raises -> HTTP 500) and an oversized limit cannot stream
-    # the whole collection — one constant, no silent 200-vs-1000 divergence.
-    limit = max(1, min(limit, import_jobs_db.MAX_IMPORT_JOBS_LIMIT))
+    # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
+    # oversized limit cannot stream the whole collection; the db layer applies its own tighter cap.
+    limit = max(1, min(limit, 1000))
     jobs = import_jobs_db.get_import_jobs(uid, limit=limit)
 
     # Build each response individually so one malformed/legacy job (missing id, or a status value not in
