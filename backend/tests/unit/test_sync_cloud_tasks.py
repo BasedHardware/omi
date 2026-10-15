@@ -3689,3 +3689,29 @@ async def test_coalesced_enrichment_task_uses_adapter_before_legacy_job_parsing(
                 sys.modules.pop(name, None)
             else:
                 sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_cohort_prior_legacy_receipt_retains_original_claim_and_dispatch(monkeypatch):
+    from starlette.datastructures import UploadFile
+
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.accept_batch_upload = AsyncMock(return_value=None)
+    try:
+        response = await module.sync_local_files_v2(
+            files=[UploadFile(filename='test.opus', file=BytesIO(b'synthetic-audio'))], uid='test-uid'
+        )
+        assert response.status_code == 202
+        module.accept_batch_upload.assert_awaited_once()
+        module.claim_sync_content.assert_called_once()
+        module.enqueue_sync_job.assert_called_once()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original

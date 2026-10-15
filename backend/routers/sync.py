@@ -8,17 +8,16 @@ import threading
 import time
 import uuid as _uuid
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Request, Response, Header
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from config.batch_pipeline import enabled_for as batch_enabled_for
 from utils.batch_pipeline.intake import accept_upload as accept_batch_upload, get_durable_job_status
 from models.sync_job_status import (
-    SyncLocalFilesResultResponse,
     SyncJobStartResponse,
     SyncJobStatusResponse,
     SyncCaptureManifestRequest,
@@ -1095,7 +1094,7 @@ async def sync_local_files_v2(
             # Route ownership is durable before any acceptance; neither errors
             # nor rollback may start a legacy twin or release this batch claim.
             sequencer_registration_started = True
-            return await accept_batch_upload(
+            batch_response = await accept_batch_upload(
                 uid=uid,
                 job_id=job_id,
                 content_id=content_id,
@@ -1120,6 +1119,9 @@ async def sync_local_files_v2(
                     'raw_capture_paths': archive_paths,
                 },
             )
+            if batch_response is not None:
+                return batch_response
+            sequencer_registration_started = False
 
         # Create Redis job — total_segments=0 until VAD completes in background
         await run_blocking(

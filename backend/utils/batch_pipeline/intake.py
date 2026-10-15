@@ -114,17 +114,8 @@ async def accept_upload(
     client_platform: str | None,
     byok_enabled: bool = False,
     intake_context: dict | None = None,
-) -> JSONResponse:
-    """Called only for an enabled cohort. Every outcome owns this route decision."""
-    if byok_enabled:
-        return JSONResponse(
-            status_code=503,
-            headers={'Retry-After': '30'},
-            content={
-                'code': 'sync_batch_byok_unavailable',
-                'detail': 'Retain local audio until private processing is available',
-            },
-        )
+) -> JSONResponse | None:
+    """None preserves a prior legacy receipt; batch outcomes never fall through."""
     store = FirestoreStore(f'batch_pipeline_{current_stage()}')
     public_job_id = JOB_PREFIX + job_id
     iterator = None
@@ -154,7 +145,18 @@ async def accept_upload(
                 if status:
                     return _start_response(status)
         if previous:
-            return sync_content_in_progress_response(previous.get('job_id'))
+            # Existing legacy ownership includes capped/retryable/missing-Redis
+            # recovery. Its original claimant remains the sole authority.
+            return None
+        if byok_enabled:
+            return JSONResponse(
+                status_code=503,
+                headers={'Retry-After': '30'},
+                content={
+                    'code': 'sync_batch_byok_unavailable',
+                    'detail': 'Retain local audio until private processing is available',
+                },
+            )
         seed = WorkItem(
             hashlib.sha256(f'{content_id}:0'.encode()).hexdigest(),
             uid,

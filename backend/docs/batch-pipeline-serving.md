@@ -36,6 +36,11 @@ retry follows that owner. Do not clear these claims or enqueue legacy twins.
 Pending batch claims, audio and unprojected logs have no TTL. C arms completed
 ledger retention; D controls artifact and metadata cleanup after projection.
 
+A cohort retry with a preexisting legacy receipt still invokes the canonical
+legacy claim/recovery path, including capped/retryable and missing-Redis owners.
+Only an explicit existing legacy receipt selects this path; new/ambiguous batch
+admission failures never fall through.
+
 A status job uses `bp_` prefix and the stage-qualified `intakes/{job_id}` record.
 Polling reads durable queue/ledger state. Legacy job IDs perform no new batch
 store lookup and retain their existing response. Cohort intake failures return

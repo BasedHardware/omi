@@ -58,7 +58,9 @@ queue link and merge status. No transcript/audio bodies enter queue metadata.
 One transaction binds content-ledger `dispatch_protocol=batch_v1`, the complete
 sibling set and frozen projection binding, queue entries and durable
 `intakes/bp_<job>` status. Simultaneous legacy/batch claims serialize on that
-same content document. A duplicate follows its existing owner. Legacy claim,
+same content document. A duplicate follows its existing owner. Preexisting legacy receipts retain
+the original cap, retry and missing-Redis recovery path; they never enter batch
+staging. This is recorded protocol selection, not fallback after batch failure. Legacy claim,
 bind and release paths refuse batch ownership even after Redis expiry or
 cohort rollback. Pending batch claims have no TTL; completion starts retention.
 An ambiguous admission reply never releases or dispatches a legacy twin.
