@@ -4,7 +4,9 @@ import { DEFINITION_VERSION, isoDay, utcDay } from "./qualified-activity";
 const TTL = 15 * 60_000;
 const MAX_AGE = 24 * 60 * 60_000;
 const COLD_WAIT = 5_000;
-// Process-local single flight. The route retains the work with Next's after().
+// Process-local, disposable single flight. The route retains work with after().
+// Cloud Run production must supply CPU after HTTP completion: the code-owned
+// admin deploy contract pins --no-cpu-throttling. This is not a durable job/cache.
 let cached: { day: string; at: number; payload: WallPayload } | null = null;
 let flight: Promise<WallPayload> | null = null;
 let retryAfter = 0;
