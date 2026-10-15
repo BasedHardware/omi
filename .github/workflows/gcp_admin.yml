@@ -152,14 +152,15 @@ jobs:
         run: |
           set -euo pipefail
           # Never print service env or secret references. Preserve immutable image.
-          prior=$(gcloud run services describe omi-grafana --project=based-hardware --region=us-central1 --format='value(status.latestReadyRevisionName)')
-          image=$(gcloud run revisions describe "$prior" --project=based-hardware --region=us-central1 --format='value(spec.containers[0].image)')
+          prior=$(gcloud run services describe omi-grafana --project=based-hardware --region=us-central1 --format='json(status.traffic)' |
+            python3 -c 'import json,sys; rows=[r for r in json.load(sys.stdin)["status"]["traffic"] if r.get("percent",0)>0]; assert len(rows)==1 and rows[0]["percent"]==100, "split traffic requires a parent plan"; print(rows[0]["revisionName"])')
+          image=$(gcloud run revisions describe "$prior" --project=based-hardware --region=us-central1 --format='value(status.imageDigest)')
           test -n "$prior"
           test -n "$image"
-          [[ "$image" != *:latest ]]
+          [[ "$image" == *@sha256:* ]]
           printf 'Legacy rollback revision: %s\nLegacy image: %s\n' "$prior" "$image" >> "$GITHUB_STEP_SUMMARY"
           gcloud run services update omi-grafana --project=based-hardware --region=us-central1 \
-            --update-env-vars=GF_AUTH_ANONYMOUS_ENABLED=false --quiet
+            --image="$image" --update-env-vars=GF_AUTH_ANONYMOUS_ENABLED=false --quiet
           # Cloud Run update waits for readiness; prove the anonymous API closed.
           for base in 'https://admin.omi.me/grafana' 'https://omi-grafana-208440318997.us-central1.run.app/grafana'; do
             status=$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 30 "$base/api/datasources")

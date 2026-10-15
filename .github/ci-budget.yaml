@@ -925,13 +925,31 @@
       "budget_p50_minutes": 5,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 0.01,
       "if": "needs.scope.outputs.applies == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "scope",
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Explicit one-off prod legacy retirement dispatch after admin deploy; estimate one additional manual migration run per100days (0.01/day), five-minute ceiling, no PR execution. Existing service image is retained.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_admin.yml/retire-legacy-grafana": {
+      "budget_p50_minutes": 5,
+      "display_name": "retire-legacy-grafana",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0.01,
+      "if": "github.event_name == 'workflow_dispatch' && inputs.environment == 'prod' && inputs.retire_legacy_grafana",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "deploy",
+      "owner": "CI maintainers",
+      "rationale": "Explicit one-off prod legacy retirement dispatch after admin deploy; estimate one additional manual migration run per100days (0.01/day), five-minute ceiling, no PR execution. Existing service image is retained.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -943,13 +961,13 @@
       "budget_p50_minutes": 5,
       "display_name": "Decide admin deployment scope",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 0.01,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Explicit one-off prod legacy retirement dispatch after admin deploy; estimate one additional manual migration run per100days (0.01/day), five-minute ceiling, no PR execution. Existing service image is retained.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1664,7 +1682,7 @@
       "runs_on": "ubuntu-latest"
     },
     "grafana_dashboard_provisioning.yml/provision": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 4,
       "display_name": "provision",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1684,7 +1702,7 @@
       "matrix_size": 2,
       "needs": "validate",
       "owner": "CI maintainers",
-      "rationale": "Provision runs a 2-env matrix only when dashboard JSON changes on main; API POST + read-back per board.",
+      "rationale": "Two existing environments with allowlisted imports; add one prod-only Business board and ACL checks. Four-minute API budget, no PR runs or runner expansion.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1693,7 +1711,7 @@
       "runs_on": "ubuntu-latest"
     },
     "grafana_dashboard_provisioning.yml/validate": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 1,
       "display_name": "validate",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1702,7 +1720,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Register the Grafana provisioning workflow added with auto-provision; validate is a JSON lint.",
+      "rationale": "Existing JSON validation job also triggers for canonical v2/provisioner changes; one-minute pure parsing budget, no new matrix or PR runs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3607,7 +3625,7 @@
     "gcp_admin.yml": {
       "name": "Deploy Admin Dashboard to Cloud Run",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Keep existing admin scope/build/deploy triggers; add explicit manual-only prod legacy retirement input, no PR execution or automatic legacy mutation.",
       "triggers": {
         "push": {
           "branches": [
@@ -3638,6 +3656,12 @@
               ],
               "required": "false",
               "type": "choice"
+            },
+            "retire_legacy_grafana": {
+              "default": "false",
+              "description": "Disable anonymous access on legacy omi-grafana (breaks old anonymous TV links)",
+              "required": "false",
+              "type": "boolean"
             }
           }
         }
@@ -4679,7 +4703,7 @@
     "grafana_dashboard_provisioning.yml": {
       "name": "Provision Grafana dashboards",
       "owner": "CI maintainers",
-      "rationale": "Register the Grafana provisioning workflow; runs on dashboard JSON merges to main.",
+      "rationale": "Provision canonical private v2 board and folder ACL after its JSON or provisioner changes; prod-only Business API step reuses existing job, no new workflow or PR matrix.",
       "triggers": {
         "push": {
           "branches": [
@@ -4687,7 +4711,10 @@
           ],
           "paths": [
             "backend/charts/monitoring/dashboards/**",
-            ".github/workflows/grafana_dashboard_provisioning.yml"
+            ".github/workflows/grafana_dashboard_provisioning.yml",
+            ".github/scripts/provision_grafana_dashboards.py",
+            ".github/scripts/grafana_business.py",
+            "web/admin/grafana/dashboards/omi-tv-v2.json"
           ]
         },
         "workflow_dispatch": {

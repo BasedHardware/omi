@@ -283,7 +283,6 @@ class MirrorTests(unittest.TestCase):
             self.assertIn("viral-metrics", target["url"])
             self.assertEqual(target["columns"][0]["selector"], "allTimeUsers")
 
-
 class ApplyScopeTests(unittest.TestCase):
     def test_apply_publishes_only_legacy_boards(self) -> None:
         import apply_omi_tv_dashboard as apply_mod
@@ -575,7 +574,6 @@ class WallV2Contract(unittest.TestCase):
 
     def test_legacy_apply_rejects_private_uid_without_changing_layout_policy(self):
         import apply_omi_tv_dashboard as apply_module
-        from build_wall_dashboard import HERE
         with self.assertRaises(SystemExit):
             apply_module.load_dashboard(HERE / "dashboards/omi-tv-v2.json")
         incoming=[{"id":1,"gridPos":{"x":0}}]
