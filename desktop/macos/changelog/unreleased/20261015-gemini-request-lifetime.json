@@ -1,0 +1,3 @@
+{
+  "change": "Screen intelligence requests now stop promptly when the server deadline is reached."
+}

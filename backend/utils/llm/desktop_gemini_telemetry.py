@@ -27,7 +27,7 @@ from config.vertex_reservations import State
 from llm_gateway.gateway.accounting import ProviderResponseMetadata, vertex_usage_from_response
 from llm_gateway.gateway.request_context import resolve_request_id
 from utils.journey_metrics_contract import resolve_client_kind_from_headers
-from utils.llm import desktop_gemini_gateway, vertex_pt_routing as ptr
+from utils.llm import desktop_gemini_gateway, desktop_proxy_lifetime, vertex_pt_routing as ptr
 from utils.llm.managed_spend_ledger import DESKTOP_PROXY_CALLER, ManagedAttempt, schedule_managed_attempt
 
 ALLOWED_ACTIONS = frozenset({'generateContent', 'streamGenerateContent', 'embedContent', 'batchEmbedContents'})
@@ -345,13 +345,13 @@ class DesktopGeminiProxyRoute(APIRoute):
             if route_streaming or telemetry.action == 'streamGenerateContent':
                 telemetry.route = 'stream'
             try:
-                response = await original(request)
+                response = await desktop_proxy_lifetime.run_request(request, original, telemetry)
             except HTTPException as exc:
                 telemetry.complete(
-                    outcome=_dependency_outcome(exc),
+                    outcome='validation_rejected' if telemetry.phase == 'upload' else _dependency_outcome(exc),
                     status_code=exc.status_code,
                     retryable=exc.status_code == 429,
-                    phase='authorization',
+                    phase=telemetry.phase,
                 )
                 raise
             except asyncio.CancelledError:
@@ -364,6 +364,7 @@ class DesktopGeminiProxyRoute(APIRoute):
                 raise
             if isinstance(response, StreamingResponse):
                 response.body_iterator = _terminal_stream_guard(response.body_iterator, telemetry)
+                response = desktop_proxy_lifetime.DeadlinedStreamingResponse(response, telemetry)
             elif not telemetry.completed:
                 telemetry.complete(
                     outcome='success' if response.status_code < 400 else 'unobserved_error',
