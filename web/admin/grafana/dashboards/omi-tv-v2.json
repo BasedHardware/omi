@@ -7814,9 +7814,9 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "revenue.hardware_units_week \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
+      "description": "revenue.plan_prepay_usd_week \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
       "type": "stat",
-      "title": "Hardware units \u00b7 UTC week  [All]",
+      "title": "Plan prepay sold \u00b7 cash  [All]",
       "gridPos": {
         "x": 15,
         "y": 32,
@@ -7839,7 +7839,7 @@
           "url_options": {
             "method": "GET"
           },
-          "root_selector": "tiles.revenue_hardware_units_week",
+          "root_selector": "tiles.revenue_plan_prepay_usd_week",
           "columns": [
             {
               "selector": "value",
@@ -7862,7 +7862,7 @@
           "url_options": {
             "method": "GET"
           },
-          "root_selector": "tiles.revenue_hardware_units_week",
+          "root_selector": "tiles.revenue_plan_prepay_usd_week",
           "columns": [
             {
               "selector": "value",
@@ -7901,7 +7901,7 @@
               }
             }
           ],
-          "unit": "short",
+          "unit": "currencyUSD",
           "decimals": 1
         },
         "overrides": []
@@ -7957,7 +7957,7 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "revenue.hardware_units_week \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
+      "description": "revenue.plan_prepay_usd_week \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
       "type": "stat",
       "title": "",
       "gridPos": {
@@ -7982,7 +7982,7 @@
           "url_options": {
             "method": "GET"
           },
-          "root_selector": "tiles.revenue_hardware_units_week",
+          "root_selector": "tiles.revenue_plan_prepay_usd_week",
           "columns": [
             {
               "selector": "delta",
@@ -8057,7 +8057,7 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "revenue.hardware_units_week \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
+      "description": "revenue.plan_prepay_usd_week \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
       "type": "stat",
       "title": "",
       "gridPos": {
@@ -8082,7 +8082,7 @@
           "url_options": {
             "method": "GET"
           },
-          "root_selector": "tiles.revenue_hardware_units_week",
+          "root_selector": "tiles.revenue_plan_prepay_usd_week",
           "columns": [
             {
               "selector": "splitRow",
@@ -8139,7 +8139,7 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "revenue.hardware_units_week \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
+      "description": "revenue.plan_prepay_usd_week \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
       "type": "stat",
       "title": "",
       "gridPos": {
@@ -8164,7 +8164,7 @@
           "url_options": {
             "method": "GET"
           },
-          "root_selector": "tiles.revenue_hardware_units_week",
+          "root_selector": "tiles.revenue_plan_prepay_usd_week",
           "columns": [
             {
               "selector": "footnote",
@@ -8221,495 +8221,12 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "revenue.hardware_units_week \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
+      "description": "revenue.plan_prepay_usd_week \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
       "type": "timeseries",
       "title": "",
       "gridPos": {
         "x": 15,
         "y": 39,
-        "w": 5,
-        "h": 2
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "type": "json",
-          "source": "url",
-          "format": "timeseries",
-          "parser": "backend",
-          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
-          "url_options": {
-            "method": "GET"
-          },
-          "root_selector": "series.revenue_hardware_units_week",
-          "columns": [
-            {
-              "selector": "date",
-              "text": "Date",
-              "type": "timestamp"
-            },
-            {
-              "selector": "value",
-              "text": "Complete periods",
-              "type": "number"
-            }
-          ]
-        }
-      ],
-      "transparent": true,
-      "timeFrom": "42d",
-      "hideTimeOverride": true,
-      "timeShift": null,
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#60a5fa"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 8,
-            "axisPlacement": "hidden",
-            "showPoints": "never",
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "showLegend": false
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "id": 89
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "description": "revenue.plan_prepay_usd_week \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
-      "type": "stat",
-      "title": "Plan prepay sold \u00b7 cash  [All]",
-      "gridPos": {
-        "x": 15,
-        "y": 42,
-        "w": 5,
-        "h": 3
-      },
-      "transparent": false,
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "type": "json",
-          "source": "url",
-          "format": "table",
-          "parser": "backend",
-          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
-          "url_options": {
-            "method": "GET"
-          },
-          "root_selector": "tiles.revenue_plan_prepay_usd_week",
-          "columns": [
-            {
-              "selector": "value",
-              "text": "Value",
-              "type": "number"
-            }
-          ]
-        },
-        {
-          "refId": "B",
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "type": "json",
-          "source": "url",
-          "format": "table",
-          "parser": "backend",
-          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
-          "url_options": {
-            "method": "GET"
-          },
-          "root_selector": "tiles.revenue_plan_prepay_usd_week",
-          "columns": [
-            {
-              "selector": "value",
-              "text": "Mapping value",
-              "type": "number"
-            },
-            {
-              "selector": "display",
-              "text": "Mapping text",
-              "type": "string"
-            },
-            {
-              "selector": "valueColor",
-              "text": "Mapping color",
-              "type": "string"
-            }
-          ]
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#9ca3af"
-          },
-          "noValue": "\u2014",
-          "mappings": [
-            {
-              "type": "special",
-              "options": {
-                "match": "null",
-                "result": {
-                  "text": "\u2014",
-                  "color": "#6b7280"
-                }
-              }
-            }
-          ],
-          "unit": "currencyUSD",
-          "decimals": 1
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "/.*/"
-        },
-        "textMode": "value",
-        "orientation": "horizontal",
-        "justifyMode": "center",
-        "colorMode": "value",
-        "graphMode": "none",
-        "text": {
-          "valueSize": 40,
-          "titleSize": 11
-        }
-      },
-      "transformations": [
-        {
-          "id": "configFromData",
-          "options": {
-            "configRefId": "B",
-            "applyTo": {
-              "id": "byName",
-              "options": "Value"
-            },
-            "mappings": [
-              {
-                "fieldName": "Mapping value",
-                "handlerKey": "mappings.value"
-              },
-              {
-                "fieldName": "Mapping text",
-                "handlerKey": "mappings.text"
-              },
-              {
-                "fieldName": "Mapping color",
-                "handlerKey": "mappings.color"
-              }
-            ]
-          }
-        }
-      ],
-      "id": 90
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "description": "revenue.plan_prepay_usd_week \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
-      "type": "stat",
-      "title": "",
-      "gridPos": {
-        "x": 15,
-        "y": 45,
-        "w": 5,
-        "h": 1
-      },
-      "transparent": true,
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "type": "json",
-          "source": "url",
-          "format": "table",
-          "parser": "backend",
-          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
-          "url_options": {
-            "method": "GET"
-          },
-          "root_selector": "tiles.revenue_plan_prepay_usd_week",
-          "columns": [
-            {
-              "selector": "delta",
-              "text": "vs prior complete",
-              "type": "number"
-            }
-          ]
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "noValue": "\u2014",
-          "mappings": [
-            {
-              "type": "special",
-              "options": {
-                "match": "null",
-                "result": {
-                  "text": "\u2014",
-                  "color": "#6b7280"
-                }
-              }
-            }
-          ],
-          "unit": "percent",
-          "decimals": 1,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#fb923c",
-                "value": null
-              },
-              {
-                "color": "#9ca3af",
-                "value": 0
-              },
-              {
-                "color": "#60a5fa",
-                "value": 1e-06
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "/.*/"
-        },
-        "textMode": "value_and_name",
-        "orientation": "horizontal",
-        "justifyMode": "center",
-        "colorMode": "value",
-        "graphMode": "none",
-        "text": {
-          "valueSize": 14,
-          "titleSize": 11
-        }
-      },
-      "id": 91
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "description": "revenue.plan_prepay_usd_week \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
-      "type": "stat",
-      "title": "",
-      "gridPos": {
-        "x": 15,
-        "y": 46,
-        "w": 5,
-        "h": 2
-      },
-      "transparent": true,
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "type": "json",
-          "source": "url",
-          "format": "table",
-          "parser": "backend",
-          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
-          "url_options": {
-            "method": "GET"
-          },
-          "root_selector": "tiles.revenue_plan_prepay_usd_week",
-          "columns": [
-            {
-              "selector": "splitRow",
-              "text": "macOS / Mobile / Other",
-              "type": "string"
-            }
-          ]
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#9ca3af"
-          },
-          "noValue": "\u2014",
-          "mappings": [
-            {
-              "type": "special",
-              "options": {
-                "match": "null",
-                "result": {
-                  "text": "\u2014",
-                  "color": "#6b7280"
-                }
-              }
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "/.*/"
-        },
-        "textMode": "value",
-        "orientation": "horizontal",
-        "justifyMode": "center",
-        "colorMode": "value",
-        "graphMode": "none",
-        "text": {
-          "valueSize": 12,
-          "titleSize": 11
-        }
-      },
-      "id": 92
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "description": "revenue.plan_prepay_usd_week \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
-      "type": "stat",
-      "title": "",
-      "gridPos": {
-        "x": 15,
-        "y": 48,
-        "w": 5,
-        "h": 1
-      },
-      "transparent": true,
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "type": "json",
-          "source": "url",
-          "format": "table",
-          "parser": "backend",
-          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
-          "url_options": {
-            "method": "GET"
-          },
-          "root_selector": "tiles.revenue_plan_prepay_usd_week",
-          "columns": [
-            {
-              "selector": "footnote",
-              "text": "Coverage",
-              "type": "string"
-            }
-          ]
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#9ca3af"
-          },
-          "noValue": "\u2014",
-          "mappings": [
-            {
-              "type": "special",
-              "options": {
-                "match": "null",
-                "result": {
-                  "text": "\u2014",
-                  "color": "#6b7280"
-                }
-              }
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "/.*/"
-        },
-        "textMode": "value",
-        "orientation": "horizontal",
-        "justifyMode": "center",
-        "colorMode": "value",
-        "graphMode": "none",
-        "text": {
-          "valueSize": 11,
-          "titleSize": 11
-        }
-      },
-      "id": 93
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "description": "revenue.plan_prepay_usd_week \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
-      "type": "timeseries",
-      "title": "",
-      "gridPos": {
-        "x": 15,
-        "y": 49,
         "w": 5,
         "h": 2
       },
@@ -8773,7 +8290,7 @@
           "mode": "single"
         }
       },
-      "id": 94
+      "id": 89
     },
     {
       "datasource": {
@@ -8785,7 +8302,7 @@
       "title": "Payer churn \u00b7 month  [All]",
       "gridPos": {
         "x": 15,
-        "y": 52,
+        "y": 42,
         "w": 5,
         "h": 3
       },
@@ -8829,6 +8346,489 @@
             "method": "GET"
           },
           "root_selector": "tiles.revenue_payer_churn",
+          "columns": [
+            {
+              "selector": "value",
+              "text": "Mapping value",
+              "type": "number"
+            },
+            {
+              "selector": "display",
+              "text": "Mapping text",
+              "type": "string"
+            },
+            {
+              "selector": "valueColor",
+              "text": "Mapping color",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#9ca3af"
+          },
+          "noValue": "\u2014",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "\u2014",
+                  "color": "#6b7280"
+                }
+              }
+            }
+          ],
+          "unit": "percent",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/"
+        },
+        "textMode": "value",
+        "orientation": "horizontal",
+        "justifyMode": "center",
+        "colorMode": "value",
+        "graphMode": "none",
+        "text": {
+          "valueSize": 40,
+          "titleSize": 11
+        }
+      },
+      "transformations": [
+        {
+          "id": "configFromData",
+          "options": {
+            "configRefId": "B",
+            "applyTo": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "mappings": [
+              {
+                "fieldName": "Mapping value",
+                "handlerKey": "mappings.value"
+              },
+              {
+                "fieldName": "Mapping text",
+                "handlerKey": "mappings.text"
+              },
+              {
+                "fieldName": "Mapping color",
+                "handlerKey": "mappings.color"
+              }
+            ]
+          }
+        }
+      ],
+      "id": 90
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "description": "revenue.payer_churn \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
+      "type": "stat",
+      "title": "",
+      "gridPos": {
+        "x": 15,
+        "y": 45,
+        "w": 5,
+        "h": 1
+      },
+      "transparent": true,
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.revenue_payer_churn",
+          "columns": [
+            {
+              "selector": "delta",
+              "text": "vs prior complete",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "\u2014",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "\u2014",
+                  "color": "#6b7280"
+                }
+              }
+            }
+          ],
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#60a5fa",
+                "value": null
+              },
+              {
+                "color": "#9ca3af",
+                "value": 0
+              },
+              {
+                "color": "#fb923c",
+                "value": 1e-06
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/"
+        },
+        "textMode": "value_and_name",
+        "orientation": "horizontal",
+        "justifyMode": "center",
+        "colorMode": "value",
+        "graphMode": "none",
+        "text": {
+          "valueSize": 14,
+          "titleSize": 11
+        }
+      },
+      "id": 91
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "description": "revenue.payer_churn \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
+      "type": "stat",
+      "title": "",
+      "gridPos": {
+        "x": 15,
+        "y": 46,
+        "w": 5,
+        "h": 2
+      },
+      "transparent": true,
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.revenue_payer_churn",
+          "columns": [
+            {
+              "selector": "splitRow",
+              "text": "macOS / Mobile / Other",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#9ca3af"
+          },
+          "noValue": "\u2014",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "\u2014",
+                  "color": "#6b7280"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/"
+        },
+        "textMode": "value",
+        "orientation": "horizontal",
+        "justifyMode": "center",
+        "colorMode": "value",
+        "graphMode": "none",
+        "text": {
+          "valueSize": 12,
+          "titleSize": 11
+        }
+      },
+      "id": 92
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "description": "revenue.payer_churn \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
+      "type": "stat",
+      "title": "",
+      "gridPos": {
+        "x": 15,
+        "y": 48,
+        "w": 5,
+        "h": 1
+      },
+      "transparent": true,
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.revenue_payer_churn",
+          "columns": [
+            {
+              "selector": "footnote",
+              "text": "Coverage",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#9ca3af"
+          },
+          "noValue": "\u2014",
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "\u2014",
+                  "color": "#6b7280"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/"
+        },
+        "textMode": "value",
+        "orientation": "horizontal",
+        "justifyMode": "center",
+        "colorMode": "value",
+        "graphMode": "none",
+        "text": {
+          "valueSize": 11,
+          "titleSize": 11
+        }
+      },
+      "id": 93
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "description": "revenue.payer_churn \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
+      "type": "timeseries",
+      "title": "",
+      "gridPos": {
+        "x": 15,
+        "y": 49,
+        "w": 5,
+        "h": 2
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "timeseries",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "series.revenue_payer_churn",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "Date",
+              "type": "timestamp"
+            },
+            {
+              "selector": "value",
+              "text": "Complete periods",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "transparent": true,
+      "timeFrom": "42d",
+      "hideTimeOverride": true,
+      "timeShift": null,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#60a5fa"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "axisPlacement": "hidden",
+            "showPoints": "never",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "id": 94
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "description": "cost.gross_margin_pct \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
+      "type": "stat",
+      "title": "Gross margin \u00b7 goal 60%  [All]",
+      "gridPos": {
+        "x": 15,
+        "y": 52,
+        "w": 5,
+        "h": 3
+      },
+      "transparent": false,
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.cost_gross_margin_pct",
+          "columns": [
+            {
+              "selector": "value",
+              "text": "Value",
+              "type": "number"
+            }
+          ]
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.cost_gross_margin_pct",
           "columns": [
             {
               "selector": "value",
@@ -8923,7 +8923,7 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "revenue.payer_churn \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
+      "description": "cost.gross_margin_pct \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
       "type": "stat",
       "title": "",
       "gridPos": {
@@ -8948,7 +8948,7 @@
           "url_options": {
             "method": "GET"
           },
-          "root_selector": "tiles.revenue_payer_churn",
+          "root_selector": "tiles.cost_gross_margin_pct",
           "columns": [
             {
               "selector": "delta",
@@ -8982,7 +8982,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "#60a5fa",
+                "color": "#fb923c",
                 "value": null
               },
               {
@@ -8990,7 +8990,7 @@
                 "value": 0
               },
               {
-                "color": "#fb923c",
+                "color": "#60a5fa",
                 "value": 1e-06
               }
             ]
@@ -9023,7 +9023,7 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "revenue.payer_churn \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
+      "description": "cost.gross_margin_pct \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
       "type": "stat",
       "title": "",
       "gridPos": {
@@ -9048,7 +9048,7 @@
           "url_options": {
             "method": "GET"
           },
-          "root_selector": "tiles.revenue_payer_churn",
+          "root_selector": "tiles.cost_gross_margin_pct",
           "columns": [
             {
               "selector": "splitRow",
@@ -9105,7 +9105,7 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "revenue.payer_churn \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
+      "description": "cost.gross_margin_pct \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
       "type": "stat",
       "title": "",
       "gridPos": {
@@ -9130,7 +9130,7 @@
           "url_options": {
             "method": "GET"
           },
-          "root_selector": "tiles.revenue_payer_churn",
+          "root_selector": "tiles.cost_gross_margin_pct",
           "columns": [
             {
               "selector": "footnote",
@@ -9187,495 +9187,12 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "revenue.payer_churn \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
+      "description": "cost.gross_margin_pct \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
       "type": "timeseries",
       "title": "",
       "gridPos": {
         "x": 15,
         "y": 59,
-        "w": 5,
-        "h": 2
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "type": "json",
-          "source": "url",
-          "format": "timeseries",
-          "parser": "backend",
-          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
-          "url_options": {
-            "method": "GET"
-          },
-          "root_selector": "series.revenue_payer_churn",
-          "columns": [
-            {
-              "selector": "date",
-              "text": "Date",
-              "type": "timestamp"
-            },
-            {
-              "selector": "value",
-              "text": "Complete periods",
-              "type": "number"
-            }
-          ]
-        }
-      ],
-      "transparent": true,
-      "timeFrom": "42d",
-      "hideTimeOverride": true,
-      "timeShift": null,
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#60a5fa"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 8,
-            "axisPlacement": "hidden",
-            "showPoints": "never",
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "showLegend": false
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "id": 99
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "description": "cost.gross_margin_pct \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
-      "type": "stat",
-      "title": "Gross margin \u00b7 goal 60%  [All]",
-      "gridPos": {
-        "x": 15,
-        "y": 62,
-        "w": 5,
-        "h": 3
-      },
-      "transparent": false,
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "type": "json",
-          "source": "url",
-          "format": "table",
-          "parser": "backend",
-          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
-          "url_options": {
-            "method": "GET"
-          },
-          "root_selector": "tiles.cost_gross_margin_pct",
-          "columns": [
-            {
-              "selector": "value",
-              "text": "Value",
-              "type": "number"
-            }
-          ]
-        },
-        {
-          "refId": "B",
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "type": "json",
-          "source": "url",
-          "format": "table",
-          "parser": "backend",
-          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
-          "url_options": {
-            "method": "GET"
-          },
-          "root_selector": "tiles.cost_gross_margin_pct",
-          "columns": [
-            {
-              "selector": "value",
-              "text": "Mapping value",
-              "type": "number"
-            },
-            {
-              "selector": "display",
-              "text": "Mapping text",
-              "type": "string"
-            },
-            {
-              "selector": "valueColor",
-              "text": "Mapping color",
-              "type": "string"
-            }
-          ]
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#9ca3af"
-          },
-          "noValue": "\u2014",
-          "mappings": [
-            {
-              "type": "special",
-              "options": {
-                "match": "null",
-                "result": {
-                  "text": "\u2014",
-                  "color": "#6b7280"
-                }
-              }
-            }
-          ],
-          "unit": "percent",
-          "decimals": 1
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "/.*/"
-        },
-        "textMode": "value",
-        "orientation": "horizontal",
-        "justifyMode": "center",
-        "colorMode": "value",
-        "graphMode": "none",
-        "text": {
-          "valueSize": 40,
-          "titleSize": 11
-        }
-      },
-      "transformations": [
-        {
-          "id": "configFromData",
-          "options": {
-            "configRefId": "B",
-            "applyTo": {
-              "id": "byName",
-              "options": "Value"
-            },
-            "mappings": [
-              {
-                "fieldName": "Mapping value",
-                "handlerKey": "mappings.value"
-              },
-              {
-                "fieldName": "Mapping text",
-                "handlerKey": "mappings.text"
-              },
-              {
-                "fieldName": "Mapping color",
-                "handlerKey": "mappings.color"
-              }
-            ]
-          }
-        }
-      ],
-      "id": 100
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "description": "cost.gross_margin_pct \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
-      "type": "stat",
-      "title": "",
-      "gridPos": {
-        "x": 15,
-        "y": 65,
-        "w": 5,
-        "h": 1
-      },
-      "transparent": true,
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "type": "json",
-          "source": "url",
-          "format": "table",
-          "parser": "backend",
-          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
-          "url_options": {
-            "method": "GET"
-          },
-          "root_selector": "tiles.cost_gross_margin_pct",
-          "columns": [
-            {
-              "selector": "delta",
-              "text": "vs prior complete",
-              "type": "number"
-            }
-          ]
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "noValue": "\u2014",
-          "mappings": [
-            {
-              "type": "special",
-              "options": {
-                "match": "null",
-                "result": {
-                  "text": "\u2014",
-                  "color": "#6b7280"
-                }
-              }
-            }
-          ],
-          "unit": "percent",
-          "decimals": 1,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#fb923c",
-                "value": null
-              },
-              {
-                "color": "#9ca3af",
-                "value": 0
-              },
-              {
-                "color": "#60a5fa",
-                "value": 1e-06
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "/.*/"
-        },
-        "textMode": "value_and_name",
-        "orientation": "horizontal",
-        "justifyMode": "center",
-        "colorMode": "value",
-        "graphMode": "none",
-        "text": {
-          "valueSize": 14,
-          "titleSize": 11
-        }
-      },
-      "id": 101
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "description": "cost.gross_margin_pct \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
-      "type": "stat",
-      "title": "",
-      "gridPos": {
-        "x": 15,
-        "y": 66,
-        "w": 5,
-        "h": 2
-      },
-      "transparent": true,
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "type": "json",
-          "source": "url",
-          "format": "table",
-          "parser": "backend",
-          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
-          "url_options": {
-            "method": "GET"
-          },
-          "root_selector": "tiles.cost_gross_margin_pct",
-          "columns": [
-            {
-              "selector": "splitRow",
-              "text": "macOS / Mobile / Other",
-              "type": "string"
-            }
-          ]
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#9ca3af"
-          },
-          "noValue": "\u2014",
-          "mappings": [
-            {
-              "type": "special",
-              "options": {
-                "match": "null",
-                "result": {
-                  "text": "\u2014",
-                  "color": "#6b7280"
-                }
-              }
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "/.*/"
-        },
-        "textMode": "value",
-        "orientation": "horizontal",
-        "justifyMode": "center",
-        "colorMode": "value",
-        "graphMode": "none",
-        "text": {
-          "valueSize": 12,
-          "titleSize": 11
-        }
-      },
-      "id": 102
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "description": "cost.gross_margin_pct \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
-      "type": "stat",
-      "title": "",
-      "gridPos": {
-        "x": 15,
-        "y": 68,
-        "w": 5,
-        "h": 1
-      },
-      "transparent": true,
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "type": "json",
-          "source": "url",
-          "format": "table",
-          "parser": "backend",
-          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
-          "url_options": {
-            "method": "GET"
-          },
-          "root_selector": "tiles.cost_gross_margin_pct",
-          "columns": [
-            {
-              "selector": "footnote",
-              "text": "Coverage",
-              "type": "string"
-            }
-          ]
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#9ca3af"
-          },
-          "noValue": "\u2014",
-          "mappings": [
-            {
-              "type": "special",
-              "options": {
-                "match": "null",
-                "result": {
-                  "text": "\u2014",
-                  "color": "#6b7280"
-                }
-              }
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "/.*/"
-        },
-        "textMode": "value",
-        "orientation": "horizontal",
-        "justifyMode": "center",
-        "colorMode": "value",
-        "graphMode": "none",
-        "text": {
-          "valueSize": 11,
-          "titleSize": 11
-        }
-      },
-      "id": 103
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "description": "cost.gross_margin_pct \u00b7 qualified-v2-2026-10-15. UTC completed buckets only. Rates show numerator/denominator by frozen entry cohort; counts use primary qualified platform. Monetary platform attribution unavailable. See diagnostics below for reason and source timestamps.",
-      "type": "timeseries",
-      "title": "",
-      "gridPos": {
-        "x": 15,
-        "y": 69,
         "w": 5,
         "h": 2
       },
@@ -9739,7 +9256,7 @@
           "mode": "single"
         }
       },
-      "id": 104
+      "id": 99
     },
     {
       "type": "text",
@@ -9754,7 +9271,7 @@
         "mode": "markdown",
         "content": "## Health"
       },
-      "id": 105
+      "id": 100
     },
     {
       "datasource": {
@@ -9897,7 +9414,7 @@
           }
         }
       ],
-      "id": 106
+      "id": 101
     },
     {
       "datasource": {
@@ -9997,7 +9514,7 @@
           "titleSize": 11
         }
       },
-      "id": 107
+      "id": 102
     },
     {
       "datasource": {
@@ -10079,7 +9596,7 @@
           "titleSize": 11
         }
       },
-      "id": 108
+      "id": 103
     },
     {
       "datasource": {
@@ -10161,7 +9678,7 @@
           "titleSize": 11
         }
       },
-      "id": 109
+      "id": 104
     },
     {
       "datasource": {
@@ -10237,7 +9754,7 @@
           "mode": "single"
         }
       },
-      "id": 110
+      "id": 105
     },
     {
       "datasource": {
@@ -10380,7 +9897,7 @@
           }
         }
       ],
-      "id": 111
+      "id": 106
     },
     {
       "datasource": {
@@ -10480,7 +9997,7 @@
           "titleSize": 11
         }
       },
-      "id": 112
+      "id": 107
     },
     {
       "datasource": {
@@ -10562,7 +10079,7 @@
           "titleSize": 11
         }
       },
-      "id": 113
+      "id": 108
     },
     {
       "datasource": {
@@ -10644,7 +10161,7 @@
           "titleSize": 11
         }
       },
-      "id": 114
+      "id": 109
     },
     {
       "datasource": {
@@ -10720,7 +10237,7 @@
           "mode": "single"
         }
       },
-      "id": 115
+      "id": 110
     },
     {
       "datasource": {
@@ -10863,7 +10380,7 @@
           }
         }
       ],
-      "id": 116
+      "id": 111
     },
     {
       "datasource": {
@@ -10963,7 +10480,7 @@
           "titleSize": 11
         }
       },
-      "id": 117
+      "id": 112
     },
     {
       "datasource": {
@@ -11045,7 +10562,7 @@
           "titleSize": 11
         }
       },
-      "id": 118
+      "id": 113
     },
     {
       "datasource": {
@@ -11127,7 +10644,7 @@
           "titleSize": 11
         }
       },
-      "id": 119
+      "id": 114
     },
     {
       "datasource": {
@@ -11203,7 +10720,7 @@
           "mode": "single"
         }
       },
-      "id": 120
+      "id": 115
     },
     {
       "datasource": {
@@ -11346,7 +10863,7 @@
           }
         }
       ],
-      "id": 121
+      "id": 116
     },
     {
       "datasource": {
@@ -11446,7 +10963,7 @@
           "titleSize": 11
         }
       },
-      "id": 122
+      "id": 117
     },
     {
       "datasource": {
@@ -11528,7 +11045,7 @@
           "titleSize": 11
         }
       },
-      "id": 123
+      "id": 118
     },
     {
       "datasource": {
@@ -11610,7 +11127,7 @@
           "titleSize": 11
         }
       },
-      "id": 124
+      "id": 119
     },
     {
       "datasource": {
@@ -11686,7 +11203,7 @@
           "mode": "single"
         }
       },
-      "id": 125
+      "id": 120
     },
     {
       "type": "table",
@@ -11697,7 +11214,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 74,
+        "y": 64,
         "w": 24,
         "h": 12
       },
@@ -11771,7 +11288,7 @@
       "options": {
         "showHeader": true
       },
-      "id": 126
+      "id": 121
     }
   ],
   "description": "Direction A. Complete UTC periods; proxy/partial/null coverage stays visible. Blue better, orange worse, grey flat. Monetary splits unavailable. Legacy boards are unchanged.",

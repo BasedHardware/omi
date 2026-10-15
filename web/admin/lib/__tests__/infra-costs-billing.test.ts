@@ -9,11 +9,15 @@ vi.mock("@/lib/payload-cache", () => ({
   getPayload: vi.fn(async () => null),
   setPayload: vi.fn(async () => {}),
 }));
+const mockGetDb = vi.hoisted(() =>
+  vi.fn(() => {
+    throw new Error("no firestore in test");
+  })
+);
+
 // Firestore llm_usage scan: unavailable in these tests (coverage.trackedLlm=false).
 vi.mock("@/lib/firebase/admin", () => ({
-  getDb: () => {
-    throw new Error("no firestore in test");
-  },
+  getDb: mockGetDb,
   getAdminAuth: vi.fn(),
 }));
 
@@ -320,6 +324,7 @@ describe("wall aggregate-only billing mode", () => {
     expect(payload?.summary.costSource).toBe("billing");
     expect(payload?.summary.partial).toBe(true);
     expect(mockLedger).not.toHaveBeenCalled();
+    expect(mockGetDb).not.toHaveBeenCalled();
     mockGcp.mockResolvedValue(null);
     expect(await computeBillingInfraCosts(60, 0, true)).toBeNull();
   });

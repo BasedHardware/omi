@@ -16,7 +16,7 @@ COLUMNS = [
     ("Growth", ["growth.wau", "growth.true_new_7d", "engagement.dau", "engagement.mau"]),
     ("Activation", ["activation.rate", "activation.capture_week1_share", "engagement.saved_creators", "engagement.assistant_success", "revenue.activated_paid_30d"]),
     ("Retention", ["retention.if_activated", "retention.recovery", "retention.day1_return", "retention.established_week"]),
-    ("Revenue", ["revenue.arpmau", "revenue.mrr", "revenue.hardware_usd_week", "revenue.hardware_units_week", "revenue.plan_prepay_usd_week", "revenue.payer_churn", "cost.gross_margin_pct"]),
+    ("Revenue", ["revenue.arpmau", "revenue.mrr", "revenue.hardware_usd_week", "revenue.plan_prepay_usd_week", "revenue.payer_churn", "cost.gross_margin_pct"]),
     ("Health", ["health.crash_free", "cost.net_day", "cost.per_mau_month", "health.thumbs_positive"]),
 ]
 LABELS = {
@@ -75,7 +75,7 @@ def build_wall_board():
         x += w
     # Full metadata table keeps operational diagnostics below the wall.
     add({"type":"table","title":"Diagnostics · definitions, coverage and source watermarks", "datasource":DS,
-         "gridPos":{"x":0,"y":74,"w":24,"h":12},"targets":[{"refId":"A","datasource":DS,"type":"json","source":"url","format":"table","parser":"backend","url":URL,"root_selector":"metrics","columns":[{"selector":f,"text":f,"type":"string"} for f in ['id','status','reason','numerator','denominator','windowStart','windowEnd','dataThrough','sourceRefreshedAt','definitionVersion']]}],"options":{"showHeader":True}})
+         "gridPos":{"x":0,"y":64,"w":24,"h":12},"targets":[{"refId":"A","datasource":DS,"type":"json","source":"url","format":"table","parser":"backend","url":URL,"root_selector":"metrics","columns":[{"selector":f,"text":f,"type":"string"} for f in ['id','status','reason','numerator','denominator','windowStart','windowEnd','dataThrough','sourceRefreshedAt','definitionVersion']]}],"options":{"showHeader":True}})
     return {"uid":"omi-tv-v2","title":"Omi TV v2 · Direction A","schemaVersion":39,"version":1,"timezone":"utc","refresh":"15m","editable":True,"tags":["omi-tv","v2"],"time":{"from":"now-180d","to":"now/d"},"templating":{"list":[]},"annotations":{"list":[]},"panels":panels,
             "description":"Direction A. Complete UTC periods; proxy/partial/null coverage stays visible. Blue better, orange worse, grey flat. Monetary splits unavailable. Legacy boards are unchanged.","links":[]}
 

@@ -83,6 +83,12 @@ export function wallPresentation(payload: WallPayload, now = new Date()) {
             maximumFractionDigits: m.id === "revenue.arpmau" ? 4 : 2,
           })
         : m.value.toLocaleString("en-US", { maximumFractionDigits: 0 });
+    const hardwareUnits =
+      m.id === "revenue.hardware_usd_week"
+        ? payload.metrics.find(
+            (metric) => metric.id === "revenue.hardware_units_week"
+          )?.value
+        : null;
     tiles[key] = {
       value: m.value,
       display,
@@ -99,7 +105,11 @@ export function wallPresentation(payload: WallPayload, now = new Date()) {
       footnote:
         m.status === "null"
           ? `N/A · ${missingReason[m.id] || "Source unavailable"}`
-          : `${state} · ${
+          : `${
+              hardwareUnits != null
+                ? `${hardwareUnits.toLocaleString("en-US")} devices · `
+                : ""
+            }${state} · ${
               cohort
                 ? `cohort ${cohort}`
                 : m.dataThrough?.slice(0, 10) || "no watermark"
