@@ -37,10 +37,37 @@ def _fake_db(docs):
 
 def test_malformed_docs_are_dropped_not_fatal():
     docs = [
-        _snap('a1', {'content': 'try a walk', 'category': 'other', 'created_at': '2026-10-14T00:00:00Z', 'updated_at': '2026-10-14T00:00:00Z'}),
-        _snap('a2', {'category': 'other', 'created_at': '2026-10-14T00:00:00Z', 'updated_at': '2026-10-14T00:00:00Z'}),  # missing required content
-        _snap('a3', {'content': 'x', 'category': 'other', 'confidence': 5.0, 'created_at': '2026-10-14T00:00:00Z', 'updated_at': '2026-10-14T00:00:00Z'}),  # out of range
-        _snap('a4', {'content': 'rest first', 'category': 'focus', 'created_at': '2026-10-14T00:00:00Z', 'updated_at': '2026-10-14T00:00:00Z'}),
+        _snap(
+            'a1',
+            {
+                'content': 'try a walk',
+                'category': 'other',
+                'created_at': '2026-10-14T00:00:00Z',
+                'updated_at': '2026-10-14T00:00:00Z',
+            },
+        ),
+        _snap(
+            'a2', {'category': 'other', 'created_at': '2026-10-14T00:00:00Z', 'updated_at': '2026-10-14T00:00:00Z'}
+        ),  # missing required content
+        _snap(
+            'a3',
+            {
+                'content': 'x',
+                'category': 'other',
+                'confidence': 5.0,
+                'created_at': '2026-10-14T00:00:00Z',
+                'updated_at': '2026-10-14T00:00:00Z',
+            },
+        ),  # out of range
+        _snap(
+            'a4',
+            {
+                'content': 'rest first',
+                'category': 'focus',
+                'created_at': '2026-10-14T00:00:00Z',
+                'updated_at': '2026-10-14T00:00:00Z',
+            },
+        ),
     ]
     advice_db.db = _fake_db(docs)
     out = advice_db.get_advice('u1')
@@ -49,13 +76,27 @@ def test_malformed_docs_are_dropped_not_fatal():
 
 
 def test_all_poisoned_returns_empty_page():
-    advice_db.db = _fake_db([_snap('a1', {'category': 'other', 'created_at': '2026-10-14T00:00:00Z', 'updated_at': '2026-10-14T00:00:00Z'})])
+    advice_db.db = _fake_db(
+        [_snap('a1', {'category': 'other', 'created_at': '2026-10-14T00:00:00Z', 'updated_at': '2026-10-14T00:00:00Z'})]
+    )
     assert advice_db.get_advice('u1') == []
 
 
 def test_advice_type_returned():
     from models.advice import Advice
 
-    advice_db.db = _fake_db([_snap('a9', {'content': 'hi', 'category': 'other', 'created_at': '2026-10-14T00:00:00Z', 'updated_at': '2026-10-14T00:00:00Z'})])
+    advice_db.db = _fake_db(
+        [
+            _snap(
+                'a9',
+                {
+                    'content': 'hi',
+                    'category': 'other',
+                    'created_at': '2026-10-14T00:00:00Z',
+                    'updated_at': '2026-10-14T00:00:00Z',
+                },
+            )
+        ]
+    )
     out = advice_db.get_advice('u1')
     assert isinstance(out[0], Advice)
