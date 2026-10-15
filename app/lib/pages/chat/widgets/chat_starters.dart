@@ -223,6 +223,7 @@ class _WelcomeMessageState extends State<_WelcomeMessage> {
     _timer = Timer(const Duration(milliseconds: 1300), () {
       if (!mounted) return;
       setState(() => _typing = false);
+      // omi-perf-allow: fast-periodic-timer -- one-shot reveal of the first chat message (~2 s), setState local to this small widget
       _timer = Timer.periodic(const Duration(milliseconds: 45), (timer) {
         if (!mounted) return timer.cancel();
         setState(() => _shown++);
