@@ -221,3 +221,10 @@ def test_directory_copy_merges_contents(tmp_path):
 def test_attribute_assignment_does_not_rebind_logging_module():
     source = 'import logging\nlogging.raiseExceptions = False\nlogging.basicConfig(force=True)'
     assert guard.source_violations(source)['basicConfig'] == 1
+
+
+@pytest.mark.parametrize('separator', [';\n', '&&\n'])
+def test_adjacent_shell_separators_cannot_hide_unknown_command(separator):
+    command = json.dumps(['sh', '-c', 'python first.py' + separator + '/app/start.sh'])
+    with pytest.raises(ValueError, match='unsupported Helm'):
+        list(guard.helm_targets('command: ' + command))

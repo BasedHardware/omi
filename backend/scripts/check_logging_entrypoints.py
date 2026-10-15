@@ -50,7 +50,7 @@ def launch_target(argv: list[str]) -> str:
         if '\n' in args[1]:
             raise ValueError('compound Docker shell launch is unsupported')
         tokens = list(lexer)
-        if any(token in (';', '&&', '||', '&', '|') for token in tokens):
+        if any(re.fullmatch(r'[;&|]+', token) for token in tokens):
             raise ValueError('compound Docker shell launch is unsupported')
         return launch_target(tokens[1:] if tokens[:1] == ['exec'] else tokens)
     if executable in ('python', 'python3'):
@@ -310,7 +310,7 @@ def helm_targets(text: str) -> Iterator[str]:
             lexer.whitespace_split = True
             candidates: list[list[str]] = [[]]
             for token in lexer:
-                if token in (';', '&&', '||', '&', '|', '\n'):
+                if re.fullmatch(r'[;&|\n]+', token):
                     candidates.append([])
                 else:
                     candidates[-1].append(token)
