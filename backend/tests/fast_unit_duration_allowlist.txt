@@ -420,3 +420,8 @@ tests/unit/test_account_gate_busy_http.py
 tests/unit/test_task_sync_apple_async_boundary.py::test_single_apple_reminder_sync_offloads_batch_update_and_preserves_result
 tests/unit/test_task_sync_apple_async_boundary.py::test_batch_apple_reminder_sync_offloads_batch_update_and_preserves_per_item_results
 tests/unit/test_task_sync_apple_async_boundary.py::test_apple_reminder_sync_failure_hides_exception_text_in_single_and_batch_results
+# First test in the file pays yaml.safe_load of deploy/runtime_env.yaml in the
+# call phase. Measured 0.31s alone and 0.32-0.47s inside pre-push (local fail
+# limit 0.30s). The pusher release contract selects this file whenever
+# verify_pusher_live_alert_route.py changes. Assertions still run.
+tests/unit/test_conversation_notes_v2_beta_rollout.py::test_dev_enables_every_rollout_flag_on_every_summary_pipeline_service
