@@ -106,7 +106,7 @@ Apply and Undo rebuild transcript chunk vectors from the projection as well as s
 
 ## Admission, fairness and budgets
 
-`DREAM_AGENT_ENABLED` and the operator document `dream_control/global.enabled` jointly control the global kill switch (10-second last-known cache; async callers refresh in the DB executor): false prevents admission,
+`DREAM_AGENT_ENABLED` and the operator document `dream_control/global.enabled` jointly control the global kill switch (10-second last-known cache; async callers refresh in the DB executor; deny until the first successful read): false prevents admission,
 dispatch and effects, including late executor completions. Code defaults false;
 the prod overlay ships true with `DREAM_AGENT_ELIGIBILITY=all`. Eligibility also
 supports `paid` and `allowlist`; invalid settings deny admission. Release-channel
@@ -119,8 +119,12 @@ transactionally without overwriting dirty work or waiting for model sessions.
 Future hunts remain queued (24 hours, six for heavy owners); daily-capped owners
 are deferred rather than blocking the queue head. Each drain admits up to 5,000
 owners with concurrency derived from reserved TPM and expected tokens (334 at
-defaults, configurable, bounded at 512). Minute holds refund unused tokens after
-each turn. Stale leases reclaim after 1740 seconds with unknown charges retained.
+defaults, configurable, bounded at 512). Minute capacity uses 64 independent
+`dream_scheduler/headroom-N` documents whose integer quotas sum to the TPM ceiling.
+Each owner/run starts at a hashed shard and claims further shards only as needed,
+so large turns can span quotas. Settlement touches only its held shards and
+refunds unused tokens; late settlement cannot refund a newer minute's counters.
+Stale leases reclaim after 1740 seconds with unknown charges retained.
 
 | Owner bucket | Size | Turns | Tools | Read bytes | Token ceiling |
 | --- | --- | --- | --- | --- | --- |
@@ -135,7 +139,7 @@ manual runs per UTC day, $10 per owner/day, $15,000 globally/day, and configured
 reserved headroom of 2,000,000 tokens/minute. The conservative USD ceiling uses
 `DREAM_AGENT_MAX_USD_PER_TOKEN` (default 0.00001); it is a reservation upper
 bound, not a provider price quote. Admission holds the expected 12,000 tokens ($0.12), not the session ceiling. Per-turn reservation atomically tops up both owner and a fixed hash shard before dispatch; 64 disjoint shard quotas sum to the global cap. Turns settle observed usage as they occur;
-unknown or failed attempts retain their conservative charge. Search hydration/snippets debit the session read-byte budget; embedding work is bounded and included in accounting. Turns are a loose backstop; token/USD accounting controls spend. Never clear an unknown lease merely
+unknown or failed attempts retain their conservative charge. Search hydration/snippets debit the session read-byte budget only when they fit; an oversized omitted hit marks the result truncated without consuming its bytes or discarding earlier hits. Fixed search-control metadata is outside that data budget. Embedding work is bounded and included in accounting. Turns are a loose backstop; token/USD accounting controls spend. Never clear an unknown lease merely
 because its HTTP caller timed out.
 
 Pass 1620s < drain 1680s < HTTP 1710s < Scheduler 1740s. Reasoning turns have a

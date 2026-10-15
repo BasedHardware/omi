@@ -6,7 +6,7 @@ import time
 
 _lock = threading.Lock()
 _until = 0.0
-_allowed = True
+_allowed = False
 _refreshing = False
 
 
@@ -23,7 +23,8 @@ def refresh():
         try:
             _allowed = load_flag()
         except Exception:
-            # Never erase an observed stop during an operator-config outage.
+            # Deny until the first successful read; thereafter retain the last
+            # observed state, including an operator stop, during an outage.
             pass
         finally:
             _until = time.monotonic() + 10

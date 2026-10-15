@@ -125,13 +125,23 @@ class Session:
             raise ValueError('agent_read_byte_budget')
         from utils.agent_capabilities.search import OwnerSearch
 
+        byte_budget = self.limits.read_bytes - self.read_bytes
+        result: dict[str, Any]
         if isinstance(self.source, OwnerSearch):
-            result = await self.source.search(request, byte_budget=self.limits.read_bytes - self.read_bytes)
+            result = await self.source.search(request, byte_budget=byte_budget)
         else:
             result = await self.source.search(request)
-        self.read_bytes += max(serialized_bytes(result), result.get('counts', {}).get('read_bytes', 0))
-        if self.read_bytes > self.limits.read_bytes:
-            raise ValueError('agent_read_byte_budget')
+        # Bound injected search providers too. Charge owner data, not the fixed
+        # control envelope that reports truncation, so an oversized dropped hit
+        # cannot consume the budget or discard useful results from this call.
+        hits = []
+        for hit in result.get('results', [])[: request.limit]:
+            if serialized_bytes([*hits, hit]) > byte_budget:
+                result = {**result, 'complete': False, 'truncated': True}
+                break
+            hits.append(hit)
+        result = {**result, 'results': hits}
+        self.read_bytes += max(serialized_bytes(hits) if hits else 0, result.get('counts', {}).get('read_bytes', 0))
         for row in result.get('results', [])[: request.limit]:
             if len(self.known) >= 512:
                 raise ValueError('agent_reference_cap')

@@ -124,11 +124,11 @@ class OwnerSearch:
                     from utils.agent_capabilities.session import serialized_bytes
 
                     size = serialized_bytes(row)
-                    counts['read_bytes'] += size
-                    if counts['read_bytes'] > byte_budget:
+                    if counts['read_bytes'] + size > byte_budget:
                         counts['budget_exhausted'] += 1
                         break
                     if row is None or not matches(row, request):
+                        counts['read_bytes'] += size
                         continue
                     text = snippet(row)
                     if (
@@ -137,8 +137,14 @@ class OwnerSearch:
                         and not all(token.casefold() in snippet(row, limit=64000).casefold() for token in query.split())
                         and collection != 'conversations'
                     ):
+                        counts['read_bytes'] += size
                         continue
-                    found.append({'ref': ref, 'snippet': text})
+                    hit = {'ref': ref, 'snippet': text}
+                    if serialized_bytes([*found, hit]) > byte_budget:
+                        counts['budget_exhausted'] += 1
+                        break
+                    counts['read_bytes'] += size
+                    found.append(hit)
                     if len(found) >= request.limit:
                         break
             except Exception:
@@ -152,11 +158,12 @@ class OwnerSearch:
                     reason='other',
                     outcome='degraded',
                 )
-            if len(found) >= request.limit:
+            if len(found) >= request.limit or counts['budget_exhausted']:
                 break
         return {
             'results': found[: request.limit],
             'cursors': cursors,
             'counts': dict(counts),
-            'complete': counts['failed_paths'] == 0,
+            'complete': counts['failed_paths'] == 0 and not counts['budget_exhausted'],
+            'truncated': bool(counts['budget_exhausted']),
         }

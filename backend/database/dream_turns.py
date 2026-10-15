@@ -1,11 +1,24 @@
 """Transactional minute headroom and per-turn receipts under the owner lease."""
 
 from datetime import datetime, timezone
+from hashlib import sha256
 
 from google.cloud import firestore
 
 from database import dream_store
 from config.dream_agent import enabled
+
+HEADROOM_SHARDS = 64
+
+
+def headroom_ref(database, shard):
+    return database.collection('dream_scheduler').document('headroom-' + str(shard))
+
+
+def headroom_quota(tokens_per_minute, shard):
+    """Integer shard quotas sum exactly to the configured minute ceiling."""
+    base, extra = divmod(tokens_per_minute, HEADROOM_SHARDS)
+    return base + int(shard < extra)
 
 
 def reserve(uid, run_id, tokens, caps, *, now=None, firestore_client=None):
@@ -13,17 +26,35 @@ def reserve(uid, run_id, tokens, caps, *, now=None, firestore_client=None):
         raise ValueError('dream_disabled_or_budget')
     database = dream_store.client(firestore_client)
     state = dream_store.state_ref(database, uid)
-    headroom = database.collection('dream_scheduler').document('headroom')
     minute = (now or datetime.now(timezone.utc)).strftime('%Y-%m-%dT%H:%M')
+    first_shard = int.from_bytes(sha256((uid + ':' + run_id).encode()).digest()[:8], 'big') % HEADROOM_SHARDS
 
     @firestore.transactional
     def claim(tx):
         data = state.get(transaction=tx).to_dict() or {}
-        capacity = headroom.get(transaction=tx).to_dict() or {}
         if (data.get('lease') or {}).get('run_id') != run_id:
             raise RuntimeError('dream_lease_lost')
-        used = capacity.get('tokens', 0) if capacity.get('minute') == minute else 0
-        if used + tokens > caps.tokens_per_minute:
+        if tokens > caps.tokens_per_minute:
+            raise ValueError('dream_minute_headroom')
+        # Rotate the first shard per owner/run. Larger turns can span quotas;
+        # ordinary turns only touch the few shards they need, never a global row.
+        holds, capacities = {}, {}
+        remaining = tokens
+        for offset in range(HEADROOM_SHARDS):
+            shard = (first_shard + offset) % HEADROOM_SHARDS
+            quota = headroom_quota(caps.tokens_per_minute, shard)
+            if not quota:
+                continue
+            capacity = headroom_ref(database, shard).get(transaction=tx).to_dict() or {}
+            used = capacity.get('tokens', 0) if capacity.get('minute') == minute else 0
+            take = min(remaining, max(0, quota - used))
+            if take:
+                holds[str(shard)] = take
+                capacities[shard] = used + take
+                remaining -= take
+            if not remaining:
+                break
+        if remaining:
             raise ValueError('dream_minute_headroom')
         lease = data['lease']
         spend = dream_store.spend_ref(database, uid, lease['day'])
@@ -48,11 +79,12 @@ def reserve(uid, run_id, tokens, caps, *, now=None, firestore_client=None):
                     **lease,
                     'budget_charge_usd': held,
                     'reservation_usd': held,
-                    'minute_hold': {'minute': minute, 'tokens': tokens},
+                    'minute_hold': {'minute': minute, 'tokens': tokens, 'shards': holds},
                 }
             },
         )
-        tx.set(headroom, {'minute': minute, 'tokens': used + tokens})
+        for shard, used in capacities.items():
+            tx.set(headroom_ref(database, shard), {'minute': minute, 'tokens': used})
 
     claim(database.transaction())
 
@@ -79,15 +111,34 @@ def settle(uid, run_id, turn, *, firestore_client=None):
         rate = lease['max_usd_per_token']
         global_spend = dream_store.lease_global_ref(database, uid, lease)
         global_budget = global_spend.get(transaction=tx).to_dict() or {}
-        headroom = database.collection('dream_scheduler').document('headroom')
-        capacity = headroom.get(transaction=tx).to_dict() or {}
         hold = lease.get('minute_hold') or {}
-        if capacity.get('minute') == hold.get('minute') and hold.get('tokens'):
-            tx.set(headroom, {**capacity, 'tokens': max(0, capacity.get('tokens', 0) - hold['tokens'] + charge)})
+        capacities = []
+        held_shards = list((hold.get('shards') or {}).items())
+        remaining = charge
+        for index, (shard, held) in enumerate(held_shards):
+            ref = headroom_ref(database, int(shard))
+            capacity = ref.get(transaction=tx).to_dict() or {}
+            # Attribute known/unknown usage to the reserved shards; any billed
+            # excess stays charged on the final shard rather than disappearing.
+            actual = remaining if index == len(held_shards) - 1 else min(held, remaining)
+            remaining -= actual
+            if capacity.get('minute') == hold.get('minute'):
+                capacities.append((ref, {**capacity, 'tokens': max(0, capacity.get('tokens', 0) - held + actual)}))
+        for ref, capacity in capacities:
+            tx.set(ref, capacity)
         actual = sum(row['accounted_tokens'] for row in rows) * rate
         previous = lease.get('budget_charge_usd', lease['reservation_usd'])
         tx.update(
-            state, {'lease': {**lease, 'turn_receipts': rows, 'budget_charge_usd': actual, 'reservation_usd': actual}}
+            state,
+            {
+                'lease': {
+                    **lease,
+                    'turn_receipts': rows,
+                    'budget_charge_usd': actual,
+                    'reservation_usd': actual,
+                    'minute_hold': None,
+                }
+            },
         )
         tx.set(
             global_spend,
