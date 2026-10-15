@@ -320,6 +320,8 @@ class TestNoConversationAsMemory:
             patch.object(pc, "infer_subject_from_segments", return_value=(None, pc.SubjectAttribution.unknown)),
             patch.object(pc, "associate_canonical_evidence"),
             patch.object(pc, "record_usage"),
+            # Checkpoint persistence has its own tests; keep this extractor boundary hermetic.
+            patch("utils.conversations.llm_input_dedupe.l1_succeeded", return_value=False),
         ):
             pc._extract_memories_canonical("uid-extract", conversation, db_client=MagicMock())
 
@@ -374,6 +376,8 @@ class TestNoConversationAsMemory:
             patch.object(pc, "infer_subject_from_segments", return_value=(None, "unknown")),
             patch.object(pc, "associate_canonical_evidence"),
             patch.object(pc, "record_usage"),
+            # Checkpoint persistence has its own tests; keep this extractor boundary hermetic.
+            patch("utils.conversations.llm_input_dedupe.l1_succeeded", return_value=False),
         ):
             pc._extract_memories_canonical("uid-ext", conversation, db_client=MagicMock())
 
