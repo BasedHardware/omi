@@ -172,7 +172,7 @@ def read_cached_list(key: str) -> Optional[Dict[str, Any]]:
     return payload
 
 
-def write_cached_list(key: str, *, body: Dict[str, Any], etag: str, ttl: int) -> None:
+def write_cached_list(key: str, *, body: Dict[str, Any], etag: str, ttl: object) -> None:
     """Store one list page. Never raises; a failed write just means a later miss."""
     client = _client()
     if client is None:
