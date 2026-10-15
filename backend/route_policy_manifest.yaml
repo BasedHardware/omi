@@ -4612,6 +4612,30 @@ routes:
       deprecation: {state: active}
   - route_type: http
     method: POST
+    path: /v1/telemetry/fleet
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+          - admin_key_uid_prefix
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+          policy_name: telemetry:fleet
+          key_subject: uid
+          enforcement: fail_closed
+          placement: handler
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: metrics
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
     path: /v1/telemetry/client/batches
     policy:
       review_status: reviewed

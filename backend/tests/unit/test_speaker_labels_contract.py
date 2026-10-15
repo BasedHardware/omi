@@ -198,6 +198,22 @@ def test_app_client_openapi_covers_contract():
     assert '/v1/users/people/{person_id}/voice-matches' in paths
     assert 'get' in paths['/v1/users/people/{person_id}/voice-matches']
 
+    reject_parameters = {
+        parameter['name']: parameter['schema']
+        for parameter in paths['/v1/conversations/{conversation_id}/speakers/{speaker_id}/reject']['post']['parameters']
+    }
+    assert reject_parameters['conversation_id']['type'] == 'string'
+    assert not {'pattern', 'minLength', 'maxLength'} & reject_parameters['conversation_id'].keys()
+    assert reject_parameters['speaker_id']['type'] == 'integer'
+    assert not {'minimum', 'maximum'} & reject_parameters['speaker_id'].keys()
+
+    person_parameters = {
+        parameter['name']: parameter['schema']
+        for parameter in paths['/v1/users/people/{person_id}/voice-matches']['get']['parameters']
+    }
+    assert person_parameters['person_id']['type'] == 'string'
+    assert not {'pattern', 'minLength', 'maxLength'} & person_parameters['person_id'].keys()
+
     components = spec['components']['schemas']
     segment_props = components['TranscriptSegment']['properties']
     assert 'speaker_label_source' in segment_props
@@ -232,3 +248,109 @@ def test_generated_dart_wire_models_cover_contract():
     assert 'voiceLearningState' in people_dart
     assert 'class GeneratedVoiceMatch' in people_dart
     assert 'class GeneratedVoiceMatchesResponse' in people_dart
+
+
+def test_reject_route_preserves_legacy_opaque_path_values(client):
+    for opaque in ('a%5Cb', 'a%20b', 'x' * 200, '__id123__', '__', '___'):
+        response = client.post(f'/v1/conversations/{opaque}/speakers/3/reject', json={'kind': 'not_me'})
+        assert response.status_code == 404  # Owned lookup, rather than a narrowed path schema.
+    for speaker in ('-1', '2000000'):
+        assert (
+            client.post(f'/v1/conversations/conv1/speakers/{speaker}/reject', json={'kind': 'not_me'}).status_code
+            == 404
+        )
+    assert not conversations_db.get_firestore_client().rows
+    for invalid in ('a%2Fb', '..', 'x' * 1501, '__reserved__'):
+        assert client.post(f'/v1/conversations/{invalid}/speakers/3/reject', json={'kind': 'not_me'}).status_code in (
+            404,
+            422,
+        )
+
+
+def test_reject_route_rejects_unsafe_body_person_id(client):
+    # person_id is only honored for kind='not_person' (the model validator
+    # nulls it otherwise), so the guard is exercised on that kind.
+    for bad in ('a/b', '../x', '.', '..', 'x' * 1501, '__reserved__'):
+        response = client.post(
+            '/v1/conversations/conv1/speakers/3/reject', json={'kind': 'not_person', 'person_id': bad}
+        )
+        assert response.status_code == 400, (bad, response.status_code)
+        assert response.json()['detail'] == 'invalid person_id'
+
+
+def test_reject_route_conflict_returns_sanitized_409(client, monkeypatch):
+    def raise_conflict(*args, **kwargs):
+        raise ValueError('internal invariant detail that must not leak')
+
+    monkeypatch.setattr(conversations_db, 'assign_conversation_speaker', raise_conflict)
+    response = client.post('/v1/conversations/conv1/speakers/3/reject', json={'kind': 'not_me'})
+    assert response.status_code == 409
+    assert 'internal invariant detail' not in json.dumps(response.json())
+
+
+def test_reject_route_unexpected_error_returns_sanitized_500(client, monkeypatch):
+    def raise_boom(*args, **kwargs):
+        raise RuntimeError('firestore internal: projects/x/databases/y')
+
+    monkeypatch.setattr(conversations_db, 'assign_conversation_speaker', raise_boom)
+    response = client.post('/v1/conversations/conv1/speakers/3/reject', json={'kind': 'not_me'})
+    assert response.status_code == 500
+    assert 'projects/x' not in json.dumps(response.json())
+
+
+def test_reject_route_lookup_miss_returns_sanitized_404(client, monkeypatch):
+    def raise_lookup(*args, **kwargs):
+        raise LookupError('stored doc shape detail')
+
+    monkeypatch.setattr(conversations_db, 'assign_conversation_speaker', raise_lookup)
+    response = client.post('/v1/conversations/conv1/speakers/3/reject', json={'kind': 'not_me'})
+    assert response.status_code == 404
+    assert 'stored doc shape' not in json.dumps(response.json())
+
+
+def test_voice_matches_preserves_legacy_opaque_ids(client, monkeypatch):
+    seen = []
+
+    async def missing(uid, pid):
+        seen.append(pid)
+        raise LookupError('missing')
+
+    monkeypatch.setattr(speaker_labels_router, 'find_person_voice_matches', missing)
+    for value in ('a%20b', 'a%5Cb', 'x' * 200, '__id123__', '__', '___'):
+        assert client.get(f'/v1/users/people/{value}/voice-matches').status_code == 404
+    assert seen == ['a b', 'a\\b', 'x' * 200, '__id123__', '__', '___']
+    for invalid in ('..', 'a%2Fb', 'x' * 1501, '__reserved__'):
+        assert client.get(f'/v1/users/people/{invalid}/voice-matches').status_code in (404, 422)
+    assert len(seen) == 6
+
+
+def test_voice_matches_unexpected_error_returns_sanitized_500(client, monkeypatch):
+    async def raise_boom(uid, pid):
+        raise RuntimeError('pinecone namespace users/u1 detail')
+
+    monkeypatch.setattr(speaker_labels_router, 'find_person_voice_matches', raise_boom)
+    response = client.get('/v1/users/people/p1/voice-matches')
+    assert response.status_code == 500
+    assert 'pinecone' not in json.dumps(response.json())
+
+
+def test_released_path_schemas_remain_unconstrained(client):
+    paths = client.app.openapi()['paths']
+    for path in (
+        '/v1/conversations/{conversation_id}/speakers/{speaker_id}/reject',
+        '/v1/users/people/{person_id}/voice-matches',
+    ):
+        operation = next(iter(paths[path].values()))
+        for parameter in operation['parameters']:
+            if parameter['in'] == 'path':
+                assert not {'pattern', 'minimum', 'maximum'} & parameter['schema'].keys()
+    assert speaker_labels_router._valid_document_id('é' * 750)
+    assert not speaker_labels_router._valid_document_id('é' * 751)
+
+
+def test_generated_ids_fit_the_released_doc_id_contract():
+    """Current generated document IDs remain accepted by the broad released contract."""
+    import uuid
+
+    for _ in range(1000):
+        assert speaker_labels_router._valid_document_id(str(uuid.uuid4()))

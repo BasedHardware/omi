@@ -15,8 +15,16 @@ import {
   establishedQuery,
   Query,
   queryPosthog,
+  periodQueries,
 } from "./wall-posthog";
+import {
+  MCP_ACTIVITY_VERSION,
+  MCP_MARKER_MISSING,
+  MCP_MARKER_STATUS_ROW,
+} from "./wall-mcp";
+import { WallSourceError, wallFailure } from "./wall-source-error";
 import { fetchShopifyWeek } from "./wall-shopify";
+import { WallJobCache } from "./wall-job-cache";
 
 export const WALL_DEFINITIONS = [
   ["growth.wau", "WAU", "people", "Growth"],
@@ -59,6 +67,8 @@ export interface Split {
   macos: number | null;
   mobile: number | null;
   other: number | null;
+  /** Additive MCP-only people: no qualified app activity in the same window. */
+  mcp?: number | null;
 }
 export interface Metric {
   id: MetricId;
@@ -68,12 +78,15 @@ export interface Metric {
   prev: number | null;
   unit: string;
   split: Split;
+  mcpReason?: string;
   numerator: number | null;
   denominator: number | null;
-  splitCounts: Record<
-    keyof Split,
-    { numerator: number; denominator: number }
-  > | null;
+  splitCounts:
+    | (Record<
+        "macos" | "mobile" | "other",
+        { numerator: number; denominator: number }
+      > & { mcp?: { numerator: number; denominator: number } })
+    | null;
   fixture?: boolean;
   materialGap?: boolean;
   status: "exact" | "proxy" | "null";
@@ -82,13 +95,16 @@ export interface Metric {
   sourceRefreshedAt: string | null;
   definitionVersion: string;
   stale: boolean;
+  /** Controlled source error; only failed nulls may retain last-good values. */
+  retryableFailure?: string;
+  retainedSince?: string;
   partial: boolean;
   windowStart: string | null;
   windowEnd: string | null;
   trend: { date: string; value: number | null }[];
 }
 const emptySplit = (): Split => ({ macos: null, mobile: null, other: null });
-const bucket = (p: unknown): keyof Split =>
+const bucket = (p: unknown): "macos" | "mobile" | "other" =>
   p === "macos" ? "macos" : p === "ios" || p === "android" ? "mobile" : "other";
 export interface WallSources {
   query: Query;
@@ -150,21 +166,18 @@ const NULL_REASONS: Partial<Record<MetricId, string>> = {
     "Stripe plan book unavailable; restricted read credentials required",
   "revenue.arpmau": "Corrected same-cutoff MRR snapshot unavailable",
   "revenue.activated_paid_30d":
-    "Signup/person/billing identity join unavailable",
+    "Paid-person billing join missing; signup linkage required",
   "revenue.payer_churn":
-    "Complete-month distinct-payer snapshots and effective lapse history unavailable",
+    "Payer month/lapse history missing; distinct-payer snapshots required",
   "cost.gross_margin_pct":
-    "Recognized subscription revenue, variable cost, STT and fee coverage unavailable; 60% is a goal",
+    "Revenue/cost coverage incomplete; recognized revenue, STT and fees required; 60% is a goal",
   "health.crash_free":
     "Crash reporting coverage unverified; zero crash events cannot prove 100% crash-free",
   "health.thumbs_positive":
-    "Message creation/vote aggregate source unavailable",
+    "Ratings aggregate source missing; message creation/vote linkage required",
 };
-export async function computeWall(
-  sources: WallSources = defaultWallSources,
-  now = new Date()
-) {
-  const metrics = Object.fromEntries(
+export function emptyWallMetrics() {
+  return Object.fromEntries(
     WALL_DEFINITIONS.map(([id, label, unit, column]) => [
       id,
       {
@@ -179,7 +192,11 @@ export async function computeWall(
         denominator: null,
         splitCounts: null,
         status: "null",
-        reason: NULL_REASONS[id] || "Source unavailable",
+        reason:
+          NULL_REASONS[id] ||
+          (id.startsWith("cost.")
+            ? "Settled billing aggregate not refreshed"
+            : "PostHog aggregate not refreshed"),
         dataThrough: null,
         sourceRefreshedAt: null,
         definitionVersion: DEFINITION_VERSION,
@@ -191,6 +208,13 @@ export async function computeWall(
       } as Metric,
     ])
   ) as Record<MetricId, Metric>;
+}
+export async function computeWall(
+  sources: WallSources = defaultWallSources,
+  now = new Date(),
+  jobCache?: WallJobCache
+) {
+  const metrics = emptyWallMetrics();
   const end = utcDay(now);
   function stamp(
     m: Metric,
@@ -216,8 +240,16 @@ export async function computeWall(
     denominatorIndex?: number
   ) {
     const m = metrics[id];
+    const mcpActivity = [
+      "growth.wau",
+      "engagement.dau",
+      "engagement.mau",
+    ].includes(id);
+    const markerSeen = mcpActivity && rows.some((r) => Number(r[3]) > 0);
     for (let period = 5; period >= 0; period--) {
-      const subset = rows.filter((r) => Number(r[0]) === period);
+      const subset = rows.filter(
+        (r) => Number(r[0]) === period && r[1] !== MCP_MARKER_STATUS_ROW
+      );
       const num = subset.reduce((a, r) => a + Number(r[numeratorIndex]), 0);
       const den =
         denominatorIndex == null
@@ -241,14 +273,22 @@ export async function computeWall(
         macos: { numerator: 0, denominator: 0 },
         mobile: { numerator: 0, denominator: 0 },
         other: { numerator: 0, denominator: 0 },
+        mcp: { numerator: 0, denominator: 0 },
       };
       for (const r of subset) {
-        const b = counts[bucket(r[1])];
+        const b =
+          counts[mcpActivity && r[1] === "integrations" ? "mcp" : bucket(r[1])];
         b.numerator += Number(r[numeratorIndex]);
         b.denominator +=
           denominatorIndex == null ? 0 : Number(r[denominatorIndex]);
       }
-      m.splitCounts = counts;
+      m.splitCounts = {
+        macos: counts.macos,
+        mobile: counts.mobile,
+        other: counts.other,
+        ...(markerSeen ? { mcp: counts.mcp } : {}),
+      };
+      if (mcpActivity) m.split.mcp = markerSeen ? counts.mcp.numerator : null;
       for (const key of ["macos", "mobile", "other"] as const)
         m.split[key] =
           den == null
@@ -267,10 +307,55 @@ export async function computeWall(
           : " Source refresh watermark unavailable."),
       rows.sourceRefreshedAt ?? null
     );
+    if (mcpActivity) {
+      m.definitionVersion = MCP_ACTIVITY_VERSION;
+      m.mcpReason = markerSeen
+        ? "MCP-only: no qualified app activity in window; daily cadence screen (cross-day bursts deferred)"
+        : MCP_MARKER_MISSING;
+      m.reason += ` ${m.mcpReason}.`;
+    }
     if (m.value == null)
-      m.reason = "Zero cohort denominator; " + COVERAGE_REASON;
+      m.reason =
+        (denominatorIndex == null
+          ? "No observed PostHog activity in period; "
+          : "Zero cohort denominator; ") + COVERAGE_REASON;
   }
+  let retryableFailures = 0;
   const jobs: (() => Promise<void>)[] = [];
+  const guarded =
+    (ids: MetricId[], source: string, job: () => Promise<void>) => async () => {
+      const restored = jobCache?.restore(ids, metrics, isoDay(end));
+      if (restored) {
+        if (restored === "retryable") retryableFailures++;
+        return;
+      }
+      try {
+        await job();
+        jobCache?.store(ids, metrics, isoDay(end));
+      } catch (error) {
+        const retryable =
+          (error instanceof WallSourceError && error.retryable) ||
+          (error instanceof Error &&
+            ["TimeoutError", "AbortError"].includes(error.name));
+        if (retryable) retryableFailures++;
+        const reason = wallFailure(source, error);
+        for (const id of ids)
+          if (metrics[id].value == null) {
+            metrics[id].reason = reason;
+            if (retryable) metrics[id].retryableFailure = reason;
+          }
+        // Configuration/non-retryable failures retain the normal TTL too.
+        jobCache?.store(ids, metrics, isoDay(end), retryable);
+        console.warn(
+          JSON.stringify({
+            event: "wall_source_failed",
+            source,
+            metrics: ids,
+            reason,
+          })
+        );
+      }
+    };
   for (const [id, days, kind] of [
     ["growth.wau", 7, "active"],
     ["engagement.dau", 1, "active"],
@@ -278,48 +363,81 @@ export async function computeWall(
     ["engagement.saved_creators", 1, "saved"],
     ["engagement.assistant_success", 1, "assistant"],
   ] as const)
-    jobs.push(async () =>
-      fromCounts(
-        id,
-        await sources.query(
-          activityQuery(end, days, kind, days === 30 ? 2 : 6)
-        ),
-        end,
-        days
+    jobs.push(
+      guarded([id], "PostHog", async () =>
+        fromCounts(
+          id,
+          days === 30
+            ? await periodQueries(
+                sources.query,
+                (stop) => activityQuery(stop, 30, kind, 1),
+                end,
+                30,
+                2,
+                1
+              )
+            : await sources.query(activityQuery(end, days, kind)),
+          end,
+          days
+        )
       )
     );
   for (const maturity of [2, 7, 37] as const)
-    jobs.push(async () => {
-      const rows = await sources.query(cohortQuery(end, maturity));
-      const stop = shiftDay(end, -maturity);
-      if (maturity === 2)
-        fromCounts("retention.day1_return", rows, stop, 7, 7, 2);
-      if (maturity === 7) {
-        fromCounts("activation.rate", rows, stop, 7, 3, 2);
-        fromCounts("activation.capture_week1_share", rows, stop, 7, 8, 2);
-      }
-      if (maturity === 37) {
-        fromCounts("retention.if_activated", rows, stop, 7, 4, 3);
-        fromCounts("retention.recovery", rows, stop, 7, 6, 5);
-      }
-    });
-  jobs.push(async () => {
-    const rows = await sources.query(cohortQuery(end, 0)); // latest complete 7d; no future query bounds
-    fromCounts("growth.true_new_7d", rows, end, 7, 2);
-    metrics["growth.true_new_7d"].reason =
-      "Interim first-seen proxy, bounded 180-day history; " + COVERAGE_REASON;
-  });
-  jobs.push(async () => {
-    const stop = completeWeek(now).end;
-    fromCounts(
-      "retention.established_week",
-      await sources.query(establishedQuery(stop)),
-      stop,
-      7,
-      3,
-      2
+    jobs.push(
+      guarded(
+        maturity === 2
+          ? ["retention.day1_return"]
+          : maturity === 7
+          ? ["activation.rate", "activation.capture_week1_share"]
+          : ["retention.if_activated", "retention.recovery"],
+        "PostHog",
+        async () => {
+          const rows = await periodQueries(
+            sources.query,
+            (stop, count) => cohortQuery(stop, maturity, count),
+            end,
+            7
+          );
+          const stop = shiftDay(end, -maturity);
+          if (maturity === 2)
+            fromCounts("retention.day1_return", rows, stop, 7, 7, 2);
+          if (maturity === 7) {
+            fromCounts("activation.rate", rows, stop, 7, 3, 2);
+            fromCounts("activation.capture_week1_share", rows, stop, 7, 8, 2);
+          }
+          if (maturity === 37) {
+            fromCounts("retention.if_activated", rows, stop, 7, 4, 3);
+            fromCounts("retention.recovery", rows, stop, 7, 6, 5);
+          }
+        }
+      )
     );
-  });
+  jobs.push(
+    guarded(["growth.true_new_7d"], "PostHog", async () => {
+      const rows = await periodQueries(
+        sources.query,
+        (stop, count) => cohortQuery(stop, 0, count),
+        end,
+        7
+      ); // latest complete 7d; no future query bounds
+      fromCounts("growth.true_new_7d", rows, end, 7, 2);
+      metrics["growth.true_new_7d"].reason =
+        "Interim first-seen proxy, bounded 180-day history; " + COVERAGE_REASON;
+    })
+  );
+  jobs.push(
+    guarded(["retention.established_week"], "PostHog", async () => {
+      const stop = completeWeek(now).end;
+      fromCounts(
+        "retention.established_week",
+        await periodQueries(sources.query, establishedQuery, stop, 7),
+        stop,
+        7,
+        3,
+        2
+      );
+    })
+  );
   // Bound PostHog concurrency to avoid flooding the query service.
   for (let i = 0; i < jobs.length; i += 2)
     await Promise.allSettled(jobs.slice(i, i + 2).map((job) => job()));
@@ -344,46 +462,51 @@ export async function computeWall(
   }
   const week = completeWeek(now);
   await Promise.allSettled([
-    (async () => {
-      const snapshots = await Promise.allSettled(
-        [0, 1].map(async (i) =>
-          sources.shopify(
-            isoDay(shiftDay(week.start, -7 * i)),
-            isoDay(shiftDay(week.end, -7 * i))
+    guarded(
+      [
+        "revenue.hardware_units_week",
+        "revenue.hardware_usd_week",
+        "revenue.plan_prepay_usd_week",
+      ],
+      "Shopify",
+      async () => {
+        const snapshots = await Promise.allSettled(
+          [0, 1].map(async (i) =>
+            sources.shopify(
+              isoDay(shiftDay(week.start, -7 * i)),
+              isoDay(shiftDay(week.end, -7 * i))
+            )
           )
-        )
-      );
-      for (const [id, key] of [
-        ["revenue.hardware_units_week", "units"],
-        ["revenue.hardware_usd_week", "hardwareUsd"],
-        ["revenue.plan_prepay_usd_week", "prepayUsd"],
-      ] as const) {
-        const current = snapshots[0],
-          previous = snapshots[1];
-        const m = metrics[id];
-        if (current.status !== "fulfilled") {
-          m.reason =
-            "Shopify orders unavailable; read_orders and complete pagination required";
-          continue;
-        }
-        m.value = current.value[key];
-        m.prev = previous.status === "fulfilled" ? previous.value[key] : null;
-        stamp(
-          m,
-          week.start,
-          week.end,
-          `Shopify net of refunds; USD shop currency; title/SKU mapping proxy (${current.value.unmappedLines} other lines). Platform attribution unavailable. Prepay is cash, never MRR.`
         );
-        m.partial = true;
-        m.trend = [
-          ...(previous.status === "fulfilled"
-            ? [{ date: isoDay(shiftDay(week.start, -1)), value: m.prev }]
-            : []),
-          { date: isoDay(shiftDay(week.end, -1)), value: m.value },
-        ];
+        if (snapshots[0].status === "rejected") throw snapshots[0].reason;
+        for (const [id, key] of [
+          ["revenue.hardware_units_week", "units"],
+          ["revenue.hardware_usd_week", "hardwareUsd"],
+          ["revenue.plan_prepay_usd_week", "prepayUsd"],
+        ] as const) {
+          const current = snapshots[0],
+            previous = snapshots[1];
+          const m = metrics[id];
+
+          m.value = current.value[key];
+          m.prev = previous.status === "fulfilled" ? previous.value[key] : null;
+          stamp(
+            m,
+            week.start,
+            week.end,
+            `Shopify net of refunds; USD shop currency; title/SKU mapping proxy (${current.value.unmappedLines} other lines). Platform attribution unavailable. Prepay is cash, never MRR.`
+          );
+          m.partial = true;
+          m.trend = [
+            ...(previous.status === "fulfilled"
+              ? [{ date: isoDay(shiftDay(week.start, -1)), value: m.prev }]
+              : []),
+            { date: isoDay(shiftDay(week.end, -1)), value: m.value },
+          ];
+        }
       }
-    })(),
-    (async () => {
+    )(),
+    guarded(["revenue.mrr"], "Stripe", async () => {
       const book = await sources.stripe();
       const m = metrics["revenue.mrr"];
       m.fixture = book.fixture === true;
@@ -400,13 +523,10 @@ export async function computeWall(
       m.dataThrough = now.toISOString();
       m.stale = false;
       m.reason = `Live renewal run-rate, not a complete-period snapshot; prior/trend unavailable. ${book.unmappedProducts} unmapped product items, ${book.unsupportedItems} tiered/non-USD items excluded; JPY stays yen, no implicit FX. Shopify cash excluded.`;
-      const a = metrics["revenue.arpmau"];
-      a.reason =
-        "MRR snapshot at the qualified-MAU cutoff unavailable; live Stripe book is not a same-cutoff numerator";
-      if (
+      const sameCutoff =
         book.dataThrough === isoDay(shiftDay(end, -1)) &&
-        book.sourceRefreshedAt
-      ) {
+        Boolean(book.sourceRefreshedAt);
+      if (sameCutoff) {
         stamp(
           m,
           shiftDay(end, -1),
@@ -416,36 +536,26 @@ export async function computeWall(
           }Omi-plan renewal run-rate snapshot; Shopify cash excluded; USD/approved FX only`,
           book.sourceRefreshedAt
         );
-        const mau = metrics["engagement.mau"];
-        if (mau.value && m.value != null && !m.partial) {
-          a.fixture = book.fixture === true;
-          a.value = book.usd / mau.value;
-          a.denominator = mau.value;
-          stamp(
-            a,
-            shiftDay(end, -30),
-            end,
-            `${
-              book.fixture ? "LOCAL STRIPE FIXTURE numerator · " : ""
-            }Same-cutoff Omi-plan MRR / qualified MAU. ${COVERAGE_REASON}`,
-            book.sourceRefreshedAt
-          );
-          a.sourceRefreshedAt = mau.sourceRefreshedAt
-            ? [book.sourceRefreshedAt, mau.sourceRefreshedAt].sort()[0]
-            : null;
-          a.stale = m.stale || mau.stale;
-        }
       }
     })(),
-    (async () => {
+    guarded(["cost.net_day", "cost.per_mau_month"], "Billing", async () => {
       const bill = await sources.billing();
-      if (!bill || bill.summary.costSource !== "billing") return;
+      if (!bill || bill.summary.costSource !== "billing") {
+        metrics["cost.net_day"].reason = metrics["cost.per_mau_month"].reason =
+          "Settled billing aggregate unavailable";
+        return;
+      }
       const cutoff = isoDay(shiftDay(end, -2));
       const daily = bill.daily
         .filter((d) => d.date <= cutoff)
         .sort((a, b) => a.date.localeCompare(b.date));
       const last = daily.find((d) => d.date === cutoff);
-      if (!last) return;
+      if (!last) {
+        metrics["cost.net_day"].reason = metrics[
+          "cost.per_mau_month"
+        ].reason = `Billing data has not reached ${cutoff}`;
+        return;
+      }
       const m = metrics["cost.net_day"];
       m.value = last.total;
       m.prev =
@@ -469,9 +579,13 @@ export async function computeWall(
       const costs = daily.filter(
         (d) => d.date >= isoDay(window.start) && d.date < isoDay(window.end)
       );
-      if (new Set(costs.map((d) => d.date)).size !== 30) return;
+      if (new Set(costs.map((d) => d.date)).size !== 30) {
+        metrics["cost.per_mau_month"].reason =
+          "Billing window missing settled days";
+        return;
+      }
       const rows = await sources.query(
-        activityQuery(window.end, 30, "active", 2)
+        activityQuery(window.end, 30, "active", 1)
       );
       const mau = rows
         .filter((r) => Number(r[0]) === 0)
@@ -481,6 +595,7 @@ export async function computeWall(
         c.reason = "Zero same-window MAU denominator";
         return;
       }
+      c.definitionVersion = MCP_ACTIVITY_VERSION;
       c.value = costs.reduce((s, d) => s + d.total, 0) / mau;
       c.denominator = mau;
       c.partial = true;
@@ -506,12 +621,60 @@ export async function computeWall(
       ).stale;
     })(),
   ]);
+  // Derived units recompute from reused source snapshots without querying Stripe
+  // again when only MAU needs retrying (or vice versa).
+  {
+    const a = metrics["revenue.arpmau"];
+    const m = metrics["revenue.mrr"];
+    const mau = metrics["engagement.mau"];
+    const sameCutoff =
+      m.dataThrough === isoDay(shiftDay(end, -1)) &&
+      Boolean(m.sourceRefreshedAt);
+    if (mau.value && m.value != null) {
+      a.fixture = m.fixture === true;
+      a.value = m.value / mau.value;
+      a.numerator = m.value;
+      a.denominator = mau.value;
+      a.partial = m.partial || mau.partial || !sameCutoff;
+      a.materialGap = !sameCutoff;
+      stamp(
+        a,
+        shiftDay(end, -30),
+        end,
+        `${m.fixture ? "LOCAL STRIPE FIXTURE numerator · " : ""}${
+          sameCutoff
+            ? "Same-cutoff Omi-plan MRR / qualified MAU. "
+            : `Live MRR / completed MAU through ${isoDay(
+                shiftDay(end, -1)
+              )}; cutoff mismatch, not the contract same-cutoff close. `
+        }${COVERAGE_REASON}`,
+        mau.sourceRefreshedAt && m.sourceRefreshedAt
+          ? [m.sourceRefreshedAt, mau.sourceRefreshedAt].sort()[0]
+          : null
+      );
+      a.definitionVersion = mau.definitionVersion;
+      a.stale = m.stale || mau.stale;
+    } else {
+      a.reason =
+        mau.value == null || mau.value === 0
+          ? `ARPMAU requires qualified MAU: ${mau.reason}`
+          : `ARPMAU requires MRR: ${m.reason}`;
+    }
+    if (m.retryableFailure || mau.retryableFailure)
+      a.retryableFailure = m.retryableFailure || mau.retryableFailure;
+  }
   const list = WALL_DEFINITIONS.map(([id]) => metrics[id]);
   return {
     definitionVersion: DEFINITION_VERSION,
+    retryableFailures,
+    ...(jobCache ? { sourceRefreshAfter: jobCache.nextRefreshAt() } : {}),
     generatedAt: new Date().toISOString(),
     metrics: list,
     partial: list.some((m) => m.status === "null" || m.partial),
   };
 }
-export type WallPayload = Awaited<ReturnType<typeof computeWall>>;
+export type WallPayload = Awaited<ReturnType<typeof computeWall>> & {
+  refreshing?: boolean;
+  cacheStale?: boolean;
+  refreshError?: string;
+};

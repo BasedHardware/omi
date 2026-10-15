@@ -13432,4 +13432,28 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Ketik untuk membetulkan';
+
+  @override
+  String get homePendingTitle => 'Perbualan sedang diproses';
+
+  @override
+  String get homePendingCatchingUp => 'Mengejar audio terdahulu';
+
+  @override
+  String get onTheWayTitle => 'Dalam perjalanan';
+
+  @override
+  String get onTheWayAlmostReady => 'Hampir siap';
+
+  @override
+  String get activityEmpty => 'Belum ada aktiviti';
+
+  @override
+  String get activityNewSemantics => 'Aktiviti, item baharu';
+
+  @override
+  String get activityLoadFailed => 'Tidak dapat memuatkan semua aktiviti anda';
+
+  @override
+  String get activityNewItem => 'Baharu';
 }

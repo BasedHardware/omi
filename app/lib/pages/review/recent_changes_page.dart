@@ -161,7 +161,8 @@ class _DayHeader extends StatelessWidget {
   }
 }
 
-IconData _changeIcon(ReviewChangeKind kind) => switch (kind) {
+/// The glyph a change of [kind] wears wherever Omi's own changes are listed.
+IconData reviewChangeIcon(ReviewChangeKind kind) => switch (kind) {
       ReviewChangeKind.rename => Icons.spellcheck,
       ReviewChangeKind.mergeMemories => Icons.call_merge,
       ReviewChangeKind.updatePerson => Icons.person_outline,
@@ -193,7 +194,7 @@ class _ChangeRow extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(undone ? Icons.undo : _changeIcon(change.kind), size: 18, color: OmiColors.textSecondary),
+              Icon(undone ? Icons.undo : reviewChangeIcon(change.kind), size: 18, color: OmiColors.textSecondary),
               const SizedBox(width: OmiSpacing.sm),
               Expanded(
                   child: Text(change.title,

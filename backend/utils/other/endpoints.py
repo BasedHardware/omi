@@ -204,12 +204,7 @@ def get_current_user_uid(
     x_app_version: str = Header(None, alias='X-App-Version'),
     request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
 ) -> str:
-    """Authenticate, fence deleted/cutover accounts, and validate BYOK enrollment.
-
-    Platform/device telemetry is best-effort; platform writes are throttled
-    to one per ten minutes. Default-off reset recovery drains bounded pages
-    after all access checks on eligible HTTP requests.
-    """
+    """Authenticate, enforce account fences and BYOK, then optional registration/recovery."""
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header not found")
     elif len(str(authorization).split(' ')) != 2:
@@ -235,6 +230,12 @@ def get_current_user_uid(
     enforce_account_deletion_http_access(uid)
     _enforce_cutover_http_if_request(uid, request)
 
+    # The content-free fleet sink must reject hot callers without customer-store
+    # registration/recovery writes; security fences above and BYOK still apply.
+    if getattr(getattr(request, 'url', None), 'path', None) == '/v1/telemetry/fleet':
+        validate_byok_request(uid)
+        return uid
+
     try:
         record_user_platform(uid, x_app_platform)
     except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
@@ -255,10 +256,7 @@ def get_current_user_uid(
     except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
         logger.debug("record_client_device swallowed error for uid=%s: %s", uid, e)
 
-    # Validate BYOK keys against Firestore enrollment for ALL authenticated
-    # HTTP endpoints.  Runs after auth so we have the uid.  Lightweight: uses
-    # a 30-second TTL cache for Firestore state, and is a no-op when no BYOK
-    # headers are present.
+    # BYOK enrollment is cached; requests without BYOK headers do no work.
     validate_byok_request(uid)
 
     _recover_locked_content_if_request(uid, request)
@@ -421,6 +419,10 @@ async def get_current_user_uid_ws_listen(
     the mutation in the handler's context; the blocking Firebase and
     Firestore calls are offloaded via ``run_blocking``.
     """
+    if websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]  # Direct callers may omit WebSocket.
+        from utils.product_telemetry import bind_websocket_telemetry_context
+
+        bind_websocket_telemetry_context(websocket.headers)
     uid = await run_critical_ws(_verify_ws_auth, authorization)
     try:
         enforce_jit_qa_uid(uid)

@@ -135,13 +135,30 @@ live layout on subsequent applies. This slice does not switch `/dashboard`.
 The admin-authenticated `/api/omi/stats/wall` returns the 22 contract IDs plus
 explicit capture-week-1 and plan-prepay-cash lines. Definitions, UTC cutoffs,
 primary/entry attribution and qualification come from `lib/qualified-activity.ts`.
-A bounded, coalesced 15-minute in-process cache preserves source refresh stamps
-and expires at UTC midnight. PostHog carries its upstream `last_refresh`, or the
+A coalesced 15-minute in-process cache preserves source refresh stamps. Expired
+and previous-UTC-day payloads (at most 24h old) are served while one refresh runs;
+previous-day or failed-refresh payloads dim. A cold process returns loading cards
+within five seconds and retains the computation with Next's `after()`. The board
+polls every 30s, so results appear without a manual reload. All-source failure
+cannot replace the last good payload; failed refreshes have a 30s retry cooldown.
+A partial payload with exhausted transient queries is retried on the next poll,
+rather than holding its nulls for 15 minutes. PostHog carries its upstream `last_refresh`, or the
 execution completion time of our live HogQL aggregate when the API omits it.
 A cached upstream result without a refresh receipt stays unknown. Payload-cache
 reads never advance source refresh timestamps.
-It performs no Firestore cache writes and has no
-stale-on-error fallback. Counts use primary qualified platform; cohort rates use
+Production background progress requires instance-based CPU: the existing admin
+Cloud Run deploy contract (`config/public-build-contract.json`, prod flags) pins
+`--no-cpu-throttling`. Next's `after()` retains work but does not allocate host CPU.
+Minimum instances remain zero, and caches remain disposable/per-instance; restarts
+or new instances return loading cards again. The 30s poll discovers their results.
+The change takes effect only through the normal authorized deployment.
+
+It performs no Firestore cache writes. Bounded last-good reads are an explicit
+wall-only exception to the general stale-data rule. Source timestamps never advance
+on a cache read. Each PostHog query has classified, secret-safe failure telemetry
+and bounded retries. Six-period cohort/established trends use two-period reads,
+splitting time-limited pairs into single periods; MAU uses separate 30-day reads.
+The 180-day lookback, denominator and observation windows remain unchanged. Counts use primary qualified platform; cohort rates use
 entry platform and include the full denominator. Rates do not add across splits:
 the split numerators and denominators do. Missing sources remain null.
 
@@ -194,7 +211,7 @@ The provisioned board rewrites the proxy URL only in its local copy.
 Run records and screenshots are written only to
 `/Users/dazheng/workspace/omi/data/run-2026-10-14-omi-tv-metrics/`;
 never commit that workspace run directory in the public repository. The local
-verifier uses the `omi-tv-v2-rev1-1440.png` / `-1920.png` screenshot names.
+verifier uses the `omi-tv-v2-prod-fix-rev1-1440.png` / `-1920.png` screenshot names.
 Tracked UI-evidence copies belong under `.agent-artifacts/ui-evidence/`.
 
 Deploy prerequisites and limits:
@@ -214,10 +231,11 @@ Deploy prerequisites and limits:
   extra enterprise product IDs use `OMI_TV_PLAN_PRODUCT_IDS`; unknown products and
   tiered prices remain coverage gaps. JPY is zero-decimal and never treated as
   USD cents. Non-USD amounts need approved FX; otherwise they are excluded and
-  the book is partial. The live book has no fabricated prior/trend. **Production
-  ARPMAU stays null until a corrected same-cutoff MRR snapshot source is wired**;
-  corrupt historic FinOps aggregates cannot repair their dropped products/JPY
-  from totals alone. Synthetic same-cutoff fixtures exercise the arithmetic.
+  the book is partial. The live book has no fabricated prior/trend. ARPMAU divides available MRR by qualified MAU. Live MRR over completed MAU is
+  explicitly dimmed and labeled as a cutoff-mismatched proxy; the contract's
+  same-cutoff close still needs a corrected MRR snapshot. Historic corrupt FinOps
+  aggregates cannot repair dropped products/JPY from totals alone. Synthetic
+  same-cutoff fixtures exercise the strict snapshot arithmetic.
 - Billing reuses `infra-costs` billing mode with aggregate-only reads, skipping
   Firestore/ledger diagnostics and the estimated fallback. Select ro-prod ADC
   locally; the runtime billing identity needs its existing BigQuery read/job
@@ -231,3 +249,30 @@ Validation: `npm test`, `npm run typecheck`, `npm run lint` in `web/admin`,
 `python3 web/admin/grafana/test_build_dashboards.py`, and `make preflight`.
 Opt-in live aggregate smoke checks: `OMI_TV_LIVE_CHECK=1 npm test --
 lib/__tests__/wall-live.test.ts` with the authorized read-only source env loaded.
+
+
+### MCP activity split (2026-10-15 threshold ruling)
+
+WAU, DAU and MAU include UTC days with at least two `MCP Tool Use Succeeded`
+events (per-success, unsampled `schema_version=2`), `initiator=user|unknown`.
+`scheduled_agent`, legacy sampled `MCP Tool Call`, and bare `MCP Active` never count.
+MCP days deduplicate by the same resolved actor key as app activity. The additive
+**MCP-only** split contains people with no qualified app activity in that metric's
+window. People who use both retain their primary app platform, so app + MCP-only
+splits sum to the headline and nobody is counted twice. ARPMAU and cost/MAU use the
+corresponding MCP-inclusive MAU. Cohort, established-retention, saved-creator and
+assistant definitions are unchanged/app-scoped; MCP is not silently added there.
+
+Marker availability is observed independently of qualifying days. Before any v2
+marker rows are present in the bounded observation history the split is **—**,
+with **MCP marker not deployed** in the card and diagnostics. Observed marker rows
+with no qualifying people produce **0**, not an unavailable split. A metadata row
+carries availability even for an empty qualified result and never enters counts.
+
+A bounded daily cadence screen excludes person/client/UTC-day streams with ≥10
+calls, ≥8 positive gaps, ≥2h span, ≥80% one tool, a mean gap of 60–86,400 seconds,
+and gap CV ≤0.15. Calls from unflagged clients may still qualify that person.
+Regularity statistics remain inside HogQL; no raw identities leave the aggregate.
+This is a daily approximation of the threshold evidence. **Cross-day and separated
+burst regularity detection is deferred**; client names alone never establish intent.
+Activity metrics and derived MAU units carry the MCP schema-2 definition revision.

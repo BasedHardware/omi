@@ -1,3 +1,5 @@
+import logging
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -11,7 +13,25 @@ from utils.other import endpoints as auth
 from utils.other.storage import delete_speech_profile_blob
 from utils.speaker_voice_matches import find_person_voice_matches
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+
+def _valid_document_id(value: str) -> bool:
+    # Preserve opaque legacy IDs. Only exclude invalid Firestore addresses;
+    # arbitrary charset/128-char bounds narrow the released v1 contract.
+    reserved = re.fullmatch(r'__.*__', value) is not None and re.fullmatch(r'__id[0-9]+__', value) is None
+    try:
+        return (
+            not reserved
+            and bool(value)
+            and '/' not in value
+            and value not in ('.', '..')
+            and len(value.encode('utf-8')) <= 1500
+        )
+    except UnicodeEncodeError:
+        return False
 
 
 @router.post(
@@ -26,6 +46,10 @@ def reject_speaker_label(
     background_tasks: BackgroundTasks,
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    if not _valid_document_id(conversation_id):
+        raise HTTPException(status_code=422, detail='invalid conversation_id')
+    if data.person_id is not None and not _valid_document_id(data.person_id):
+        raise HTTPException(status_code=400, detail='invalid person_id')
     try:
         raw, resolved, removed, _before = conversations_db.assign_conversation_speaker(
             uid,
@@ -38,11 +62,29 @@ def reject_speaker_label(
             rejection={'kind': data.kind, 'person_id': data.person_id},
         )
     except LookupError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
+        # Same rule as the 409 below: log the real detail, return a static one —
+        # a future raise site must not be able to regress this reflection.
+        logger.warning('speaker label reject lookup miss conv=%s speaker=%s: %s', conversation_id, speaker_id, error)
+        raise HTTPException(status_code=404, detail='Conversation or speaker not found') from error
     except PermissionError as error:
         raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.') from error
     except ValueError as error:
-        raise HTTPException(status_code=409, detail=str(error)) from error
+        # A conflict detail is user-actionable, but log the real message and return
+        # a generic one so an internal detail never leaks through the boundary.
+        logger.warning('speaker label reject conflict conv=%s speaker=%s: %s', conversation_id, speaker_id, error)
+        raise HTTPException(status_code=409, detail='The speaker cannot be updated right now.') from error
+    except Exception as error:
+        # Unexpected (Firestore, network, bug): log full context internally,
+        # surface a sanitized 500 to the client.
+        logger.error(
+            'speaker label reject failed conv=%s speaker=%s uid=%s: %s',
+            conversation_id,
+            speaker_id,
+            uid,
+            type(error).__name__,
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail='Failed to update the speaker') from error
     if data.kind == 'not_a_person':
         resolved_ids = set(resolved)
         affected = {
@@ -61,8 +103,22 @@ def reject_speaker_label(
 
 
 @router.get('/v1/users/people/{person_id}/voice-matches', response_model=VoiceMatchesResponse, tags=['v1'])
-async def get_person_voice_matches(person_id: str, uid: str = Depends(auth.get_current_user_uid)):
+async def get_person_voice_matches(
+    person_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    if not _valid_document_id(person_id):
+        raise HTTPException(status_code=422, detail='invalid person_id')
     try:
         return await find_person_voice_matches(uid, person_id)
     except LookupError as error:
         raise HTTPException(status_code=404, detail='Person not found') from error
+    except Exception as error:
+        logger.error(
+            'person voice-matches failed person=%s uid=%s: %s',
+            person_id,
+            uid,
+            type(error).__name__,
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail='Failed to load voice matches') from error

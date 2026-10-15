@@ -799,7 +799,10 @@ def _process_proactive_notification(uid: str, app: App, data):
     max_prompt_char_limit = 128000
     min_message_char_limit = 5
 
-    prompt = data.get('prompt', '')
+    # `data.get(k, default)` returns the stored value even when it's an
+    # explicit JSON null — a default only fires on a MISSING key. `or` coerces
+    # {"prompt": null} to the default so len()/iteration/.get can't TypeError.
+    prompt = data.get('prompt') or ''
     if len(prompt) > max_prompt_char_limit:
         send_app_notification(
             uid,
@@ -810,13 +813,15 @@ def _process_proactive_notification(uid: str, app: App, data):
         logger.info(f"App {app.id}, prompt too long, length: {len(prompt)}/{max_prompt_char_limit} {uid}")
         return None
 
-    filter_scopes = app.filter_proactive_notification_scopes(data.get('params', []))
+    # params/context can also be explicit JSON nulls — coerce to the default so
+    # iteration/lookup can't TypeError/AttributeError on None.
+    filter_scopes = app.filter_proactive_notification_scopes(data.get('params') or [])
 
     user_name, user_facts = get_prompt_memories(uid)
 
     context = None
     if 'user_context' in filter_scopes:
-        memories = _retrieve_contextual_memories(uid, data.get('context', {}))
+        memories = _retrieve_contextual_memories(uid, data.get('context') or {})
         if len(memories) > 0:
             context = conversations_to_string(deserialize_conversations(memories))
 

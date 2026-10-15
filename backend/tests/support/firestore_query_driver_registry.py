@@ -2069,6 +2069,19 @@ _add(
         body_digest=BODY_DIGEST['database.sync_backfill_sequencer._pending_for_uid'],
     )
 )
+
+
+def _seed_sync_retirement(client, combo, trial):
+    client.documents['sync_backfill_pending/shape-job'] = {'uid': UID, 'job_id': 'shape-job', 'payload': {}}
+    if combo['epoch'] is not None:
+        client.documents[f'sync_backfill_sequencer/{UID}'] = {
+            'active_job_id': 'shape-job',
+            'active_epoch': 1,
+            'active_state': 'dispatching',
+            'active_payload': {},
+        }
+
+
 _SYNC_PROD = (_stub('database.sync_backfill_sequencer.production_stage', True),)
 _add(
     DriverEntry(
@@ -2091,6 +2104,54 @@ _add(
         'database.sync_backfill_sequencer.due_pending',
         domains={'now': [None, T0]},
         neutrals={'limit': _LIMIT},
+        patchers=_SYNC_PROD,
+    )
+)
+_add(
+    DriverEntry(
+        'database.sync_backfill_sequencer.repair_owner',
+        base={'uid': UID},
+        domains={'now': [None, T0], 'dry_run': [False, True]},
+        neutrals={'repair_window': (1800, 'staggering controls scheduling, not query filters')},
+        patchers=_SYNC_PROD,
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.sync_backfill_sequencer._has_pending',
+        covered_by=(
+            'database.sync_backfill_sequencer.repair_owner',
+            'database.sync_backfill_sequencer.finish_job',
+            'database.sync_backfill_sequencer.retire_expired',
+            'database.sync_backfill_sequencer.defer_owner',
+        ),
+        reason='bounded presence/successor probes run within the fenced owning transactions',
+    )
+)
+_add(
+    DriverEntry(
+        'database.sync_backfill_sequencer.finish_job',
+        base={'uid': UID, 'job_id': 'shape-job', 'epoch': 1, 'outcome': 'completed'},
+        domains={'now': [None, T0]},
+        setup=_seed(f'sync_backfill_sequencer/{UID}', {'active_job_id': 'shape-job', 'active_epoch': 1}),
+        patchers=_SYNC_PROD,
+    )
+)
+_add(
+    DriverEntry(
+        'database.sync_backfill_sequencer.retire_expired',
+        base={'uid': UID, 'job_id': 'shape-job'},
+        domains={'now': [None, T0], 'epoch': [None, 1]},
+        setup=_seed_sync_retirement,
+        patchers=_SYNC_PROD,
+    )
+)
+_add(
+    DriverEntry(
+        'database.sync_backfill_sequencer.defer_owner',
+        base={'uid': UID, 'seconds': 120},
+        domains={'now': [None, T0]},
+        setup=_seed(f'sync_backfill_sequencer/{UID}', {'epoch': 1}),
         patchers=_SYNC_PROD,
     )
 )
