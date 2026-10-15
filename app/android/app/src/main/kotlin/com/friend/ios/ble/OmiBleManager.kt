@@ -986,4 +986,3 @@ internal fun resolveAddressTypeForConnect(
     persistedType: Int?,
     defaultType: Int = BluetoothDevice.ADDRESS_TYPE_RANDOM
 ): Int = discoveredType ?: persistedType ?: defaultType
-
