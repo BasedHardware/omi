@@ -13,6 +13,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -441,6 +442,172 @@ class RunIOSTests(unittest.TestCase):
             train, "_asc_rest_token", return_value="faketoken"
         ):
             self.assertEqual(train.review_submission_for_version(asc, "target"), "rs")
+
+    def _generate_openssl_ec_pem(self) -> str:
+        result = subprocess.run(
+            ["openssl", "ecparam", "-name", "prime256v1", "-genkey", "-noout"],
+            capture_output=True,
+            check=True,
+            timeout=30,
+        )
+        return result.stdout.decode()
+
+    DER_SIG = b"\x30\x44\x02\x20" + b"\x01" * 32 + b"\x02\x20" + b"\x02" * 32
+
+    def _install_fake_cryptography(self, load_behavior):
+        """Install a fake cryptography module tree so the signer's function-local
+        imports resolve without the real package (not installed everywhere)."""
+        import types
+
+        modules = {}
+        for name in (
+            "cryptography",
+            "cryptography.hazmat",
+            "cryptography.hazmat.primitives",
+            "cryptography.hazmat.primitives.serialization",
+            "cryptography.hazmat.primitives.asymmetric",
+            "cryptography.hazmat.primitives.hashes",
+        ):
+            modules[name] = types.ModuleType(name)
+        modules["cryptography.hazmat.primitives.serialization"].load_pem_private_key = load_behavior
+        modules["cryptography.hazmat.primitives"].serialization = modules[
+            "cryptography.hazmat.primitives.serialization"
+        ]
+        modules["cryptography.hazmat.primitives"].hashes = modules["cryptography.hazmat.primitives.hashes"]
+        modules["cryptography.hazmat.primitives"].asymmetric = modules["cryptography.hazmat.primitives.asymmetric"]
+        saved = {name: train.sys.modules.get(name) for name in modules}
+        train.sys.modules.update(modules)
+        return saved
+
+    def _restore_cryptography(self, saved):
+        for name, module in saved.items():
+            if module is None:
+                train.sys.modules.pop(name, None)
+            else:
+                train.sys.modules[name] = module
+
+    def test_rest_token_falls_back_to_openssl_when_cryptography_rejects_the_key(self):
+        # Some CI OpenSSL builds import fine and then raise at key-load time
+        # (unsupported key type / explicit EC parameters) — observed live on the
+        # Codemagic train 2026-10-15. The fallback must catch ANY cryptography
+        # failure, not only ImportError, or the replace path fails closed with
+        # an approved-but-unreleased version stuck in review.
+        pem = self._generate_openssl_ec_pem()
+        real_run = subprocess.run
+
+        def reject(_data, password=None):
+            raise ValueError("Could not deserialize key data. The data may be in an incorrect format")
+
+        def reject_and_fall_back(command, **kwargs):
+            if command[:2] == ["openssl", "ecparam"]:
+                return real_run(command, **kwargs)
+            self.assertEqual(command[:3], ["openssl", "dgst", "-sha256"])
+            self.assertIn("-sign", command)
+            return Mock(returncode=0, stdout=self.DER_SIG)
+
+        saved = self._install_fake_cryptography(reject)
+        try:
+            with patch.dict(train.os.environ, {
+                "APP_STORE_CONNECT_ISSUER_ID": "iss",
+                "APP_STORE_CONNECT_KEY_IDENTIFIER": "kid",
+                "APP_STORE_CONNECT_PRIVATE_KEY": pem,
+            }), patch.object(train, "log"), patch.object(train.subprocess, "run", side_effect=reject_and_fall_back):
+                token = train._asc_rest_token()
+        finally:
+            self._restore_cryptography(saved)
+        import base64 as b64
+
+        header, _, signature = token.split(".")
+        self.assertEqual(json.loads(b64.urlsafe_b64decode(header + "=="))["kid"], "kid")
+        self.assertEqual(len(b64.urlsafe_b64decode(signature + "==")), 64)
+
+    def test_rest_token_uses_cryptography_directly_when_key_loads(self):
+        pem = self._generate_openssl_ec_pem()
+        openssl_calls = []
+
+        def record_non_ecparam(command, **kwargs):
+            if command[:2] == ["openssl", "ecparam"]:
+                return subprocess.run(command, **kwargs)
+            openssl_calls.append(list(command))
+            return Mock(returncode=0, stdout=b"")
+
+        fake_key = Mock()
+        fake_key.sign = Mock(return_value=self.DER_SIG)
+
+        def load_ok(_data, password=None):
+            return fake_key
+
+        modules_fake_ec = Mock()
+        modules_fake_hashes = Mock()
+
+        def make_fake_tree():
+            import types
+
+            tree = {}
+            for name in (
+                "cryptography",
+                "cryptography.hazmat",
+                "cryptography.hazmat.primitives",
+                "cryptography.hazmat.primitives.serialization",
+                "cryptography.hazmat.primitives.asymmetric",
+                "cryptography.hazmat.primitives.hashes",
+            ):
+                tree[name] = types.ModuleType(name)
+            tree["cryptography.hazmat.primitives.serialization"].load_pem_private_key = load_ok
+            tree["cryptography.hazmat.primitives"].serialization = tree[
+                "cryptography.hazmat.primitives.serialization"
+            ]
+            tree["cryptography.hazmat.primitives"].hashes = modules_fake_hashes
+            tree["cryptography.hazmat.primitives"].asymmetric = tree["cryptography.hazmat.primitives.asymmetric"]
+            tree["cryptography.hazmat.primitives.asymmetric"].ec = modules_fake_ec
+            tree["cryptography.hazmat.primitives.hashes"].SHA256 = Mock(return_value="sha256")
+            tree["cryptography.hazmat.primitives.asymmetric"].ECDSA = Mock(return_value="ecdsa")
+            return tree
+
+        tree = make_fake_tree()
+        saved = {name: train.sys.modules.get(name) for name in tree}
+        train.sys.modules.update(tree)
+        try:
+            with patch.dict(train.os.environ, {
+                "APP_STORE_CONNECT_ISSUER_ID": "iss",
+                "APP_STORE_CONNECT_KEY_IDENTIFIER": "kid",
+                "APP_STORE_CONNECT_PRIVATE_KEY": pem,
+            }), patch.object(train, "log"), patch.object(train.subprocess, "run", side_effect=record_non_ecparam):
+                token = train._asc_rest_token()
+        finally:
+            self._restore_cryptography(saved)
+        self.assertEqual(openssl_calls, [])  # cryptography path, no CLI fallback
+        fake_key.sign.assert_called_once()
+        import base64 as b64
+
+        header, _, signature = token.split(".")
+        self.assertEqual(json.loads(b64.urlsafe_b64decode(header + "=="))["alg"], "ES256")
+        self.assertEqual(len(b64.urlsafe_b64decode(signature + "==")), 64)
+
+    def test_rest_token_raises_when_both_cryptography_and_openssl_fail(self):
+        pem = self._generate_openssl_ec_pem()
+
+        def reject(_data, password=None):
+            raise ValueError("Could not deserialize key data")
+
+        def fail_cli(command, **kwargs):
+            if command[:2] == ["openssl", "ecparam"]:
+                return subprocess.run(command, **kwargs)
+            raise subprocess.CalledProcessError(1, "openssl")
+
+        saved = self._install_fake_cryptography(reject)
+        try:
+            with patch.dict(train.os.environ, {
+                "APP_STORE_CONNECT_ISSUER_ID": "iss",
+                "APP_STORE_CONNECT_KEY_IDENTIFIER": "kid",
+                "APP_STORE_CONNECT_PRIVATE_KEY": pem,
+            }), patch.object(train, "log"), patch.object(train.subprocess, "run", side_effect=fail_cli):
+                with self.assertRaises(train.TrainError) as ctx:
+                    train._asc_rest_token()
+        finally:
+            self._restore_cryptography(saved)
+        self.assertIn("cryptography", str(ctx.exception))
+        self.assertIn("openssl", str(ctx.exception))
 
     def test_rejection_that_does_not_reach_developer_rejected_fails_loudly(self):
         asc = FakeASC(
