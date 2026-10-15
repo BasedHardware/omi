@@ -5806,10 +5806,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get usingNativeIosSpeech => 'मूल iOS स्पीच रिकग्निशन का उपयोग';
 
   @override
-  String get noModelDownloadRequired =>
-      'आपके डिवाइस का नेटिव स्पीच इंजन उपयोग किया जाएगा। कोई मॉडल डाउनलोड आवश्यक नहीं।';
-
-  @override
   String get modelReady => 'मॉडल तैयार';
 
   @override
@@ -5880,9 +5876,6 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get modelTooLargeWarning =>
       'यह मॉडल बड़ा है और मोबाइल डिवाइस पर ऐप क्रैश या बहुत धीमा हो सकता है।\n\nsmall या base की सिफारिश की जाती है।';
-
-  @override
-  String get nativeEngineNoDownload => 'आपके डिवाइस का मूल स्पीच इंजन उपयोग किया जाएगा। मॉडल डाउनलोड की आवश्यकता नहीं।';
 
   @override
   String modelReadyWithName(String model) {
@@ -13258,14 +13251,14 @@ class AppLocalizationsHi extends AppLocalizations {
   String get syncDetailsCopy => 'सपोर्ट के लिए विवरण कॉपी करें';
 
   @override
-  String get onDeviceAtCapTitle => 'आपने इस महीने का लाइव ट्रांसक्रिप्शन इस्तेमाल कर लिया है';
+  String get onDeviceAtCapTitle => 'आप इस महीने की सीमा तक पहुँच गए हैं';
 
   @override
   String get onDeviceAtCapBody => 'Omi अभी भी रिकॉर्ड कर रहा है। चुनें कि महीने के बाकी समय का ट्रांसक्रिप्शन कैसे हो।';
 
   @override
   String onDeviceLiveHoursReturn(String date) {
-    return 'लाइव घंटे $date को वापस आएंगे।';
+    return 'आपका उपयोग $date को रीसेट होगा।';
   }
 
   @override
@@ -13275,8 +13268,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get onDeviceIncluded => 'शामिल';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'फ़ोन चार्ज होते समय चलता है, इसलिए बैटरी लगभग खर्च नहीं होती। चार्जर लगाने के बाद ट्रांसक्रिप्ट दिखते हैं।';
+  String get onDeviceOptionChargingBody => 'फ़ोन चार्ज होते समय चलता है।';
 
   @override
   String get onDeviceUpgradeBody => 'वक्ताओं को अलग पहचानने और अधिक सटीकता के लिए Pro में अपग्रेड करें';
@@ -13292,7 +13284,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get onDeviceSetupBody =>
-      'Omi एक बार स्पीच मॉडल डाउनलोड करता है। उसके बाद आपकी रिकॉर्डिंग यहीं टेक्स्ट में बदल जाती हैं, आपके लाइव घंटे इस्तेमाल किए बिना।';
+      'Omi एक बार स्पीच मॉडल डाउनलोड करता है। उसके बाद आपकी रिकॉर्डिंग यहीं टेक्स्ट में बदल जाती हैं, आपके उपयोग में गिने बिना।';
 
   @override
   String get onDeviceSpeechModel => 'स्पीच मॉडल';
@@ -13354,7 +13346,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get onDeviceScheduleHeadline => 'Omi कब ट्रांसक्राइब करे?';
 
   @override
-  String get onDeviceScheduleBody => 'बैच में ट्रांसक्राइब करने से बैटरी बचती है। आप इसे कभी भी बदल सकते हैं।';
+  String get onDeviceScheduleBody => 'आप इसे कभी भी बदल सकते हैं।';
 
   @override
   String get onDeviceScheduleCharging => 'चार्ज होते समय';
@@ -13439,10 +13431,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get onDeviceWhyLiveHoursUsed =>
-      'आपने इस महीने के लाइव घंटे इस्तेमाल कर लिए हैं, इसलिए Omi ने यह बातचीत इसी फ़ोन पर ट्रांसक्राइब की।';
+      'आप इस महीने की सीमा तक पहुँच गए, इसलिए Omi ने इसे आपके फ़ोन पर ट्रांसक्राइब किया।';
 
   @override
-  String get onDeviceWhySavingLiveHours => 'आपने लाइव घंटे बचाने के लिए इसी फ़ोन पर ट्रांसक्राइब करना चुना।';
+  String get onDeviceWhySavingLiveHours => 'उपयोग बचाने के लिए आपने इसी फ़ोन पर ट्रांसक्राइब करना चुना।';
 
   @override
   String get onDeviceWhySummaryOnPhone => 'सारांश भी इसी iPhone पर लिखा गया।';
@@ -13455,11 +13447,11 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get onDeviceWhyCloudIphone =>
-      'यह iPhone खुद सारांश नहीं बना सकता (इसके लिए iPhone 15 Pro या नया चाहिए)। ट्रांसक्रिप्ट आपके फ़ोन पर बना, और सारांश के लिए सिर्फ़ उसका टेक्स्ट Omi को भेजा गया। इससे आपके लाइव घंटे खर्च नहीं होते।';
+      'यह iPhone खुद सारांश नहीं बना सकता (इसके लिए iPhone 15 Pro या नया चाहिए)। ट्रांसक्रिप्ट आपके फ़ोन पर बना, और सारांश के लिए सिर्फ़ उसका टेक्स्ट Omi को भेजा गया। यह आपके उपयोग में नहीं गिना जाता।';
 
   @override
   String get onDeviceWhyCloudPhone =>
-      'यह फ़ोन खुद सारांश नहीं बना सकता। ट्रांसक्रिप्ट आपके फ़ोन पर बना, और सारांश के लिए सिर्फ़ उसका टेक्स्ट Omi को भेजा गया। इससे आपके लाइव घंटे खर्च नहीं होते।';
+      'यह फ़ोन खुद सारांश नहीं बना सकता। ट्रांसक्रिप्ट आपके फ़ोन पर बना, और सारांश के लिए सिर्फ़ उसका टेक्स्ट Omi को भेजा गया। यह आपके उपयोग में नहीं गिना जाता।';
 
   @override
   String get onDeviceRedoWithCloud => 'Omi Cloud से दोबारा करें';
@@ -13474,23 +13466,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get onDeviceKeepEverythingSubtitle => 'सिर्फ़ ट्रांसक्रिप्ट, कोई सारांश नहीं';
 
   @override
-  String get onDeviceLiveHours => 'लाइव घंटे';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return '$used/$limit घंटे इस्तेमाल हुए';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return '$date को रीसेट होगा';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'और लाइव घंटे पाएं';
-
-  @override
-  String get onDeviceAfterLiveHours => 'लाइव घंटे खत्म होने के बाद';
+  String get onDeviceAfterLiveHours => 'जब आप अपनी सीमा तक पहुँचें';
 
   @override
   String get onDeviceWhen => 'कब';
@@ -13505,10 +13481,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get onDeviceSummariesCloud => 'Omi Cloud द्वारा';
 
   @override
-  String get onDeviceSaveLiveHours => 'लाइव घंटे बचाने के लिए इसी फ़ोन पर ट्रांसक्राइब करें';
+  String get onDeviceSaveLiveHours => 'हमेशा इसी फ़ोन पर ट्रांसक्राइब करें';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => 'वक्ताओं को अलग पहचानने और अधिक सटीकता के लिए Pro में अपग्रेड करें';
+  String get onDeviceSaveLiveHoursSubtitle => 'आपका उपयोग बचाता है। स्पीकर लेबल नहीं।';
 
   @override
   String get onDeviceOnThisPhone => 'इस फ़ोन पर';
@@ -13524,7 +13500,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModelMessage =>
-      'जब तक आप इसे फिर से डाउनलोड नहीं करते या लाइव घंटे वापस नहीं आते, रिकॉर्डिंग इसी फ़ोन पर इंतज़ार करेंगी।';
+      'रिकॉर्डिंग इस फ़ोन पर तब तक रुकेंगी जब तक आप इसे फिर से डाउनलोड नहीं करते या आपका उपयोग रीसेट नहीं होता।';
 
   @override
   String get onDeviceRemove => 'हटाएं';
@@ -13534,7 +13510,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get onDeviceFinishSetupBody =>
-      'आपने इस महीने के लाइव घंटे इस्तेमाल कर लिए हैं। Omi अभी भी रिकॉर्ड कर रहा है और ऑडियो आपके फ़ोन पर सेव कर रहा है। स्पीच मॉडल डाउनलोड करें, फिर बाकी काम पूरा हो जाएगा।';
+      'आप इस महीने की सीमा तक पहुँच गए हैं। Omi अभी भी आपके फ़ोन पर ऑडियो रिकॉर्ड और सेव कर रहा है। स्पीच मॉडल डाउनलोड करें, वह पीछे का काम पूरा कर लेगा।';
 
   @override
   String onDeviceDownloadSize(String size) {
@@ -13543,10 +13519,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get onDeviceUnsupportedBody =>
-      'यह फ़ोन अभी स्पीच मॉडल नहीं चला सकता। लाइव घंटे वापस आने या अपग्रेड करने तक ऑडियो सेव रहेगा।';
+      'यह फ़ोन अभी स्पीच मॉडल नहीं चला सकता। ऑडियो तब तक सेव रहता है जब तक आपका उपयोग रीसेट न हो या आप अपग्रेड न करें।';
 
   @override
-  String get onDeviceEntrySubtitle => 'लाइव घंटे खत्म होने पर, इसी फ़ोन पर ट्रांसक्राइब करें';
+  String get onDeviceEntrySubtitle => 'सीमा तक पहुँचने पर, इसी फ़ोन पर ट्रांसक्राइब करें';
 
   @override
   String get chatAppsChannelPlanRequired => 'Operator और Architect पर उपलब्ध';

@@ -5875,10 +5875,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get usingNativeIosSpeech => 'பூர்வீக iOS பேச்சு அங்கீகாரத்தைப் பயன்படுத்துகிறது';
 
   @override
-  String get noModelDownloadRequired =>
-      'உங்கள் சாதனத்தின் பூர்வீக பேச்சு ஞ்சனം பயன்படுத்தப்படும். மாதிரி பதிவிறக்கம் தேவையில்லை।';
-
-  @override
   String get modelReady => 'மாதிரி தயாரம்';
 
   @override
@@ -5949,10 +5945,6 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get modelTooLargeWarning =>
       'இந்த மாதிரி பெரியதாக உள்ளது மற்றும் மொபைல் சாதனங்களில் பயன்பாட்டை செயலிழக்க அல்லது மிக மெதுவாக இயங்கக்கூடும்.\n\n\"சிறியவை\" அல்லது \"அடிப்படை\" பரிந்துரைக்கப்படுகிறது.';
-
-  @override
-  String get nativeEngineNoDownload =>
-      'உங்கள் சாதனத்தின் பூர்வீக பேச்சு ஞ்சனம் பயன்படுத்தப்படும்। மாதிரி பதிவிறக்கம் தேவையில்லை।';
 
   @override
   String modelReadyWithName(String model) {
@@ -13367,7 +13359,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get syncDetailsCopy => 'ஆதரவுக்காக விவரங்களை நகலெடுக்கவும்';
 
   @override
-  String get onDeviceAtCapTitle => 'இந்த மாதத்தின் நேரலை உரையாக்கத்தைப் பயன்படுத்திவிட்டீர்கள்';
+  String get onDeviceAtCapTitle => 'இந்த மாத வரம்பை அடைந்துவிட்டீர்கள்';
 
   @override
   String get onDeviceAtCapBody =>
@@ -13375,7 +13367,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String onDeviceLiveHoursReturn(String date) {
-    return 'நேரலை மணிநேரங்கள் $date அன்று மீண்டும் கிடைக்கும்.';
+    return 'உங்கள் பயன்பாடு $date அன்று மீட்டமைக்கப்படும்.';
   }
 
   @override
@@ -13385,8 +13377,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get onDeviceIncluded => 'உள்ளடங்கியது';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'ஃபோன் சார்ஜ் ஆகும்போது இயங்குவதால் பேட்டரியைக் கிட்டத்தட்ட பயன்படுத்தாது. சார்ஜரில் இணைத்த பிறகு உரைப்பதிவுகள் தோன்றும்.';
+  String get onDeviceOptionChargingBody => 'தொலைபேசி சார்ஜ் ஆகும்போது இயங்கும்.';
 
   @override
   String get onDeviceUpgradeBody => 'பேச்சாளர்களைப் பிரித்தறியவும் அதிக துல்லியத்திற்கும் Pro-க்கு மேம்படுத்தவும்';
@@ -13401,7 +13392,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get onDeviceSetupBody =>
-      'Omi ஒரு பேச்சு மாதிரியை ஒருமுறை பதிவிறக்கும். அதன் பிறகு, உங்கள் பதிவுகள் நேரலை மணிநேரங்களைப் பயன்படுத்தாமல் இங்கேயே உரையாக மாற்றப்படும்.';
+      'Omi பேச்சு மாதிரியை ஒருமுறை பதிவிறக்கும். அதன் பிறகு உங்கள் பதிவுகள் இங்கேயே உரையாக மாறும், உங்கள் பயன்பாட்டில் கணக்கிடப்படாமல்.';
 
   @override
   String get onDeviceSpeechModel => 'பேச்சு மாதிரி';
@@ -13462,8 +13453,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get onDeviceScheduleHeadline => 'Omi எப்போது உரையாக்க வேண்டும்?';
 
   @override
-  String get onDeviceScheduleBody =>
-      'தொகுப்புகளாக உரையாக்குவது பேட்டரியைச் சேமிக்கும். இதை எப்போது வேண்டுமானாலும் மாற்றலாம்.';
+  String get onDeviceScheduleBody => 'இதை எப்போது வேண்டுமானாலும் மாற்றலாம்.';
 
   @override
   String get onDeviceScheduleCharging => 'சார்ஜ் ஆகும்போது';
@@ -13546,11 +13536,10 @@ class AppLocalizationsTa extends AppLocalizations {
   String get onDeviceWhyPhoneTitle => 'இது ஏன் உங்கள் ஃபோனில் செய்யப்பட்டது';
 
   @override
-  String get onDeviceWhyLiveHoursUsed =>
-      'இந்த மாதத்தின் நேரலை மணிநேரங்களைப் பயன்படுத்திவிட்டதால், Omi இந்த உரையாடலை இந்த ஃபோனில் உரையாக்கியது.';
+  String get onDeviceWhyLiveHoursUsed => 'இந்த மாத வரம்பை அடைந்தீர்கள், எனவே Omi இதை உங்கள் தொலைபேசியில் உரையாக்கியது.';
 
   @override
-  String get onDeviceWhySavingLiveHours => 'நேரலை மணிநேரங்களைச் சேமிக்க இந்த ஃபோனில் உரையாக்கத் தேர்ந்தெடுத்தீர்கள்.';
+  String get onDeviceWhySavingLiveHours => 'பயன்பாட்டைச் சேமிக்க இந்தத் தொலைபேசியில் உரையாக்கத் தேர்ந்தெடுத்தீர்கள்.';
 
   @override
   String get onDeviceWhySummaryOnPhone => 'சுருக்கமும் இந்த iPhone-இலேயே எழுதப்பட்டது.';
@@ -13563,11 +13552,11 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get onDeviceWhyCloudIphone =>
-      'இந்த iPhone தானாகச் சுருக்க முடியாது (அதற்கு iPhone 15 Pro அல்லது அதற்குப் பிந்தையது தேவை). உரைப்பதிவு உங்கள் ஃபோனில் உருவாக்கப்பட்டது, அதன் உரை மட்டுமே சுருக்குவதற்காக Omi-க்கு அனுப்பப்பட்டது. இது உங்கள் நேரலை மணிநேரங்களைப் பயன்படுத்தாது.';
+      'இந்த iPhone தானாகச் சுருக்க முடியாது (அதற்கு iPhone 15 Pro அல்லது அதற்குப் பிந்தையது தேவை). உரைப்பதிவு உங்கள் ஃபோனில் உருவாக்கப்பட்டது, அதன் உரை மட்டுமே சுருக்குவதற்காக Omi-க்கு அனுப்பப்பட்டது. இது உங்கள் பயன்பாட்டில் கணக்கிடப்படாது.';
 
   @override
   String get onDeviceWhyCloudPhone =>
-      'இந்த ஃபோன் தானாகச் சுருக்க முடியாது. உரைப்பதிவு உங்கள் ஃபோனில் உருவாக்கப்பட்டது, அதன் உரை மட்டுமே சுருக்குவதற்காக Omi-க்கு அனுப்பப்பட்டது. இது உங்கள் நேரலை மணிநேரங்களைப் பயன்படுத்தாது.';
+      'இந்த ஃபோன் தானாகச் சுருக்க முடியாது. உரைப்பதிவு உங்கள் ஃபோனில் உருவாக்கப்பட்டது, அதன் உரை மட்டுமே சுருக்குவதற்காக Omi-க்கு அனுப்பப்பட்டது. இது உங்கள் பயன்பாட்டில் கணக்கிடப்படாது.';
 
   @override
   String get onDeviceRedoWithCloud => 'Omi Cloud மூலம் மீண்டும் செய்';
@@ -13582,23 +13571,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get onDeviceKeepEverythingSubtitle => 'உரைப்பதிவுகள் மட்டும், சுருக்கங்கள் இல்லை';
 
   @override
-  String get onDeviceLiveHours => 'நேரலை மணிநேரங்கள்';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return '$used/$limit மணிநேரம் பயன்படுத்தப்பட்டது';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return '$date அன்று மீட்டமைக்கப்படும்';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'கூடுதல் நேரலை மணிநேரங்களைப் பெறு';
-
-  @override
-  String get onDeviceAfterLiveHours => 'நேரலை மணிநேரங்கள் தீர்ந்த பிறகு';
+  String get onDeviceAfterLiveHours => 'உங்கள் வரம்பை அடையும்போது';
 
   @override
   String get onDeviceWhen => 'எப்போது';
@@ -13613,11 +13586,10 @@ class AppLocalizationsTa extends AppLocalizations {
   String get onDeviceSummariesCloud => 'Omi Cloud மூலம்';
 
   @override
-  String get onDeviceSaveLiveHours => 'நேரலை மணிநேரங்களைச் சேமிக்க இந்த ஃபோனில் உரையாக்கு';
+  String get onDeviceSaveLiveHours => 'எப்போதும் இந்தத் தொலைபேசியில் உரையாக்கு';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'பேச்சாளர்களைப் பிரித்தறியவும் அதிக துல்லியத்திற்கும் Pro-க்கு மேம்படுத்தவும்';
+  String get onDeviceSaveLiveHoursSubtitle => 'உங்கள் பயன்பாட்டைச் சேமிக்கும். பேசுபவர் குறிகள் இல்லை.';
 
   @override
   String get onDeviceOnThisPhone => 'இந்த ஃபோனில்';
@@ -13633,7 +13605,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModelMessage =>
-      'நீங்கள் மீண்டும் பதிவிறக்கும் வரை அல்லது நேரலை மணிநேரங்கள் திரும்பக் கிடைக்கும் வரை பதிவுகள் இந்த ஃபோனில் காத்திருக்கும்.';
+      'நீங்கள் அதை மீண்டும் பதிவிறக்கும் வரை அல்லது பயன்பாடு மீட்டமைக்கப்படும் வரை பதிவுகள் இந்தத் தொலைபேசியில் காத்திருக்கும்.';
 
   @override
   String get onDeviceRemove => 'அகற்று';
@@ -13643,7 +13615,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get onDeviceFinishSetupBody =>
-      'இந்த மாதத்தின் நேரலை மணிநேரங்களைப் பயன்படுத்திவிட்டீர்கள். Omi இன்னும் பதிவுசெய்து உங்கள் ஃபோனில் ஆடியோவைச் சேமிக்கிறது. பேச்சு மாதிரியைப் பதிவிறக்கினால் அது ஈடுசெய்யும்.';
+      'இந்த மாத வரம்பை அடைந்துவிட்டீர்கள். Omi இன்னும் உங்கள் தொலைபேசியில் ஒலியைப் பதிவுசெய்து சேமிக்கிறது. பேச்சு மாதிரியைப் பதிவிறக்கவும், அது பின்தங்கியதை நிறைவு செய்யும்.';
 
   @override
   String onDeviceDownloadSize(String size) {
@@ -13652,10 +13624,10 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get onDeviceUnsupportedBody =>
-      'இந்த ஃபோனில் இன்னும் பேச்சு மாதிரியை இயக்க முடியாது. நேரலை மணிநேரங்கள் திரும்பக் கிடைக்கும் வரை அல்லது நீங்கள் மேம்படுத்தும் வரை ஆடியோ சேமிக்கப்பட்டிருக்கும்.';
+      'இந்தத் தொலைபேசி இன்னும் பேச்சு மாதிரியை இயக்க முடியாது. பயன்பாடு மீட்டமைக்கப்படும் வரை அல்லது நீங்கள் மேம்படுத்தும் வரை ஒலி சேமிக்கப்படும்.';
 
   @override
-  String get onDeviceEntrySubtitle => 'நேரலை மணிநேரங்கள் தீர்ந்ததும், இந்த ஃபோனில் உரையாக்கு';
+  String get onDeviceEntrySubtitle => 'வரம்பை அடையும்போது இந்தத் தொலைபேசியில் உரையாக்குங்கள்';
 
   @override
   String get chatAppsChannelPlanRequired => 'Operator மற்றும் Architect இல் கிடைக்கும்';

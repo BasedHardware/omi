@@ -11073,12 +11073,6 @@ abstract class AppLocalizations {
   /// **'Using Native iOS Speech Recognition'**
   String get usingNativeIosSpeech;
 
-  /// Info about iOS native speech
-  ///
-  /// In en, this message translates to:
-  /// **'Your device\'s native speech engine will be used. No model download required.'**
-  String get noModelDownloadRequired;
-
   /// Status when model is downloaded
   ///
   /// In en, this message translates to:
@@ -11204,12 +11198,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.'**
   String get modelTooLargeWarning;
-
-  /// Description of iOS native speech recognition
-  ///
-  /// In en, this message translates to:
-  /// **'Your devices native speech engine will be used. No model download required.'**
-  String get nativeEngineNoDownload;
 
   /// Status when model is ready
   ///
@@ -23643,10 +23631,10 @@ abstract class AppLocalizations {
   /// **'Copy details for support'**
   String get syncDetailsCopy;
 
-  /// Title of the sheet shown when the monthly live transcription hours run out
+  /// Title of the sheet shown when this month's usage limit is reached
   ///
   /// In en, this message translates to:
-  /// **'You\'ve used this month\'s live transcription'**
+  /// **'You\'ve reached this month\'s limit'**
   String get onDeviceAtCapTitle;
 
   /// Body of the live-hours-used sheet
@@ -23655,10 +23643,10 @@ abstract class AppLocalizations {
   /// **'Omi is still recording. Choose how the rest of this month gets transcribed.'**
   String get onDeviceAtCapBody;
 
-  /// Sentence saying when monthly live transcription hours reset; date is a formatted date like 'Nov 1'
+  /// Sentence saying when monthly usage resets; date is a formatted date like 'Nov 1'
   ///
   /// In en, this message translates to:
-  /// **'Live hours come back {date}.'**
+  /// **'Your usage resets {date}.'**
   String onDeviceLiveHoursReturn(String date);
 
   /// Option and setting: turn recordings into text on the phone itself instead of in the cloud
@@ -23673,10 +23661,10 @@ abstract class AppLocalizations {
   /// **'Included'**
   String get onDeviceIncluded;
 
-  /// Explains the on-phone transcription option
+  /// Explains the on-phone transcription option that runs while the phone charges
   ///
   /// In en, this message translates to:
-  /// **'Runs while your phone charges, so it barely touches the battery. Transcripts show up after you plug in.'**
+  /// **'Runs while your phone charges.'**
   String get onDeviceOptionChargingBody;
 
   /// Explains what upgrading the plan gives
@@ -23685,7 +23673,7 @@ abstract class AppLocalizations {
   /// **'Upgrade to Pro for speaker separation and higher accuracy'**
   String get onDeviceUpgradeBody;
 
-  /// Footer under the live-hours-used sheet; 'Settings › Transcription' is a menu path
+  /// Footer under the usage-limit sheet; 'Settings › Transcription' is a menu path
   ///
   /// In en, this message translates to:
   /// **'Nothing is lost either way. You can change this in Settings › Transcription.'**
@@ -23697,10 +23685,10 @@ abstract class AppLocalizations {
   /// **'Step {step} of {total}'**
   String onDeviceStepOf(int step, int total);
 
-  /// Explains on-device transcription setup
+  /// Explains the one-time speech model download and that on-phone transcription does not count toward usage
   ///
   /// In en, this message translates to:
-  /// **'Omi downloads a speech model once. After that, your recordings are turned into text right here, without using your live hours.'**
+  /// **'Omi downloads a speech model once. After that, your recordings are turned into text right here, without counting toward your usage.'**
   String get onDeviceSetupBody;
 
   /// Label for the downloadable on-device speech recognition model
@@ -23799,10 +23787,10 @@ abstract class AppLocalizations {
   /// **'When should Omi transcribe?'**
   String get onDeviceScheduleHeadline;
 
-  /// Explains the schedule choice
+  /// Short note that the transcription schedule can be changed anytime
   ///
   /// In en, this message translates to:
-  /// **'Transcribing in batches saves battery. You can change this anytime.'**
+  /// **'You can change this anytime.'**
   String get onDeviceScheduleBody;
 
   /// Schedule option: transcribe only when the phone is charging
@@ -23949,16 +23937,16 @@ abstract class AppLocalizations {
   /// **'Why this was done on your phone'**
   String get onDeviceWhyPhoneTitle;
 
-  /// Explanation: on-phone transcription because monthly hours ran out
+  /// Why a conversation was transcribed on the phone after the usage limit was reached
   ///
   /// In en, this message translates to:
-  /// **'You\'ve used this month\'s live hours, so Omi transcribed this conversation on this phone.'**
+  /// **'You reached this month\'s limit, so Omi transcribed this on your phone.'**
   String get onDeviceWhyLiveHoursUsed;
 
-  /// Explanation: on-phone transcription by the user's choice
+  /// Why a conversation was transcribed on the phone to save usage
   ///
   /// In en, this message translates to:
-  /// **'You chose to transcribe on this phone to save live hours.'**
+  /// **'You chose to transcribe on this phone to save your usage.'**
   String get onDeviceWhySavingLiveHours;
 
   /// Explanation: summary made on the iPhone
@@ -23979,16 +23967,16 @@ abstract class AppLocalizations {
   /// **'Why Omi Cloud wrote this summary'**
   String get onDeviceWhyCloudTitle;
 
-  /// Explanation: cloud summary on an older iPhone
+  /// Why a summary used the cloud on an iPhone that cannot summarize on device; it does not count toward usage
   ///
   /// In en, this message translates to:
-  /// **'This iPhone can\'t summarize on its own (that needs an iPhone 15 Pro or later). The transcript was made on your phone, and only its text was sent to Omi to summarize. It doesn\'t use your live hours.'**
+  /// **'This iPhone can\'t summarize on its own (that needs an iPhone 15 Pro or later). The transcript was made on your phone, and only its text was sent to Omi to summarize. It doesn\'t count toward your usage.'**
   String get onDeviceWhyCloudIphone;
 
-  /// Explanation: cloud summary on a phone without an on-device model
+  /// Why a summary used the cloud on a phone that cannot summarize on device; it does not count toward usage
   ///
   /// In en, this message translates to:
-  /// **'This phone can\'t summarize on its own. The transcript was made on your phone, and only its text was sent to Omi to summarize. It doesn\'t use your live hours.'**
+  /// **'This phone can\'t summarize on its own. The transcript was made on your phone, and only its text was sent to Omi to summarize. It doesn\'t count toward your usage.'**
   String get onDeviceWhyCloudPhone;
 
   /// Button: transcribe and summarize this conversation again in Omi's cloud
@@ -24015,34 +24003,10 @@ abstract class AppLocalizations {
   /// **'Transcripts only, no summaries'**
   String get onDeviceKeepEverythingSubtitle;
 
-  /// Monthly hours of live cloud transcription in the user's plan
+  /// Settings section header for what happens when the usage limit is reached
   ///
   /// In en, this message translates to:
-  /// **'Live hours'**
-  String get onDeviceLiveHours;
-
-  /// Live hours used this month
-  ///
-  /// In en, this message translates to:
-  /// **'{used} of {limit} hours used'**
-  String onDeviceLiveHoursUsed(String used, String limit);
-
-  /// When the monthly allowance resets; date is like 'Nov 1'
-  ///
-  /// In en, this message translates to:
-  /// **'Resets {date}'**
-  String onDeviceResets(String date);
-
-  /// Button/row: upgrade the plan for more live hours
-  ///
-  /// In en, this message translates to:
-  /// **'Get More Live Hours'**
-  String get onDeviceGetMoreLiveHours;
-
-  /// Settings section header
-  ///
-  /// In en, this message translates to:
-  /// **'After live hours run out'**
+  /// **'When you reach your limit'**
   String get onDeviceAfterLiveHours;
 
   /// Settings row: when transcription runs
@@ -24069,16 +24033,16 @@ abstract class AppLocalizations {
   /// **'By Omi Cloud'**
   String get onDeviceSummariesCloud;
 
-  /// Setting for paid users: use on-phone transcription even before hours run out
+  /// Setting title: always transcribe on this phone
   ///
   /// In en, this message translates to:
-  /// **'Transcribe on this phone to save live hours'**
+  /// **'Always transcribe on this phone'**
   String get onDeviceSaveLiveHours;
 
-  /// Subtitle of the save-live-hours setting
+  /// Explains that on-phone transcription saves usage and has no speaker labels
   ///
   /// In en, this message translates to:
-  /// **'Upgrade to Pro for speaker separation and higher accuracy'**
+  /// **'Saves your usage. No speaker labels.'**
   String get onDeviceSaveLiveHoursSubtitle;
 
   /// Settings section header about storage on the phone
@@ -24105,10 +24069,10 @@ abstract class AppLocalizations {
   /// **'Remove Speech Model?'**
   String get onDeviceRemoveModelTitle;
 
-  /// Confirmation dialog message for removing the speech model
+  /// Warning that recordings wait until the model is downloaded again or usage resets
   ///
   /// In en, this message translates to:
-  /// **'Recordings will wait on this phone until you download it again or live hours come back.'**
+  /// **'Recordings will wait on this phone until you download it again or your usage resets.'**
   String get onDeviceRemoveModelMessage;
 
   /// Confirm button that removes the speech model
@@ -24123,10 +24087,10 @@ abstract class AppLocalizations {
   /// **'Finish setup to see your transcripts'**
   String get onDeviceFinishSetupTitle;
 
-  /// Banner body when recordings are waiting for the speech model
+  /// Explains recordings are waiting because the usage limit was reached
   ///
   /// In en, this message translates to:
-  /// **'You\'ve used this month\'s live hours. Omi is still recording and saving audio on your phone. Download the speech model and it will catch up.'**
+  /// **'You\'ve reached this month\'s limit. Omi is still recording and saving audio on your phone. Download the speech model and it will catch up.'**
   String get onDeviceFinishSetupBody;
 
   /// Download size, e.g. '600 MB download'
@@ -24135,16 +24099,16 @@ abstract class AppLocalizations {
   /// **'{size} download'**
   String onDeviceDownloadSize(String size);
 
-  /// Banner body when the phone cannot run the speech model
+  /// Explains audio stays saved until usage resets or the plan is upgraded
   ///
   /// In en, this message translates to:
-  /// **'This phone can\'t run the speech model yet. Audio stays saved until live hours come back or you upgrade.'**
+  /// **'This phone can\'t run the speech model yet. Audio stays saved until your usage resets or you upgrade.'**
   String get onDeviceUnsupportedBody;
 
-  /// Subtitle of the settings entry for on-device transcription
+  /// Settings subtitle: transcribe on this phone when the usage limit is reached
   ///
   /// In en, this message translates to:
-  /// **'When live hours run out, transcribe on this phone'**
+  /// **'When you reach your limit, transcribe on this phone'**
   String get onDeviceEntrySubtitle;
 
   /// Chat apps row subtitle when the channel (iMessage) needs the Operator or Architect plan; plan names are not translated

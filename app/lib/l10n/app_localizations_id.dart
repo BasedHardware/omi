@@ -5837,10 +5837,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get usingNativeIosSpeech => 'Menggunakan Pengenalan Suara iOS Asli';
 
   @override
-  String get noModelDownloadRequired =>
-      'Mesin ucapan bawaan perangkat Anda akan digunakan. Tidak perlu mengunduh model.';
-
-  @override
   String get modelReady => 'Model Siap';
 
   @override
@@ -5911,9 +5907,6 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get modelTooLargeWarning =>
       'Model ini besar dan dapat menyebabkan aplikasi crash atau berjalan sangat lambat di perangkat seluler.\n\nsmall atau base disarankan.';
-
-  @override
-  String get nativeEngineNoDownload => 'Mesin suara asli perangkat Anda akan digunakan. Tidak perlu mengunduh model.';
 
   @override
   String modelReadyWithName(String model) {
@@ -13287,14 +13280,14 @@ class AppLocalizationsId extends AppLocalizations {
   String get syncDetailsCopy => 'Salin detail untuk dukungan';
 
   @override
-  String get onDeviceAtCapTitle => 'Transkripsi langsung bulan ini sudah habis';
+  String get onDeviceAtCapTitle => 'Anda telah mencapai batas bulan ini';
 
   @override
   String get onDeviceAtCapBody => 'Omi masih merekam. Pilih cara mentranskripsi sisa bulan ini.';
 
   @override
   String onDeviceLiveHoursReturn(String date) {
-    return 'Jam langsung kembali pada $date.';
+    return 'Penggunaan Anda direset pada $date.';
   }
 
   @override
@@ -13304,8 +13297,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get onDeviceIncluded => 'Termasuk';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'Berjalan saat ponsel diisi daya, jadi hampir tidak memakai baterai. Transkrip muncul setelah Anda mengisi daya.';
+  String get onDeviceOptionChargingBody => 'Berjalan saat ponsel mengisi daya.';
 
   @override
   String get onDeviceUpgradeBody => 'Upgrade ke Pro untuk pemisahan pembicara dan akurasi lebih tinggi';
@@ -13320,7 +13312,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get onDeviceSetupBody =>
-      'Omi mengunduh model suara satu kali. Setelah itu, rekaman Anda diubah menjadi teks langsung di sini, tanpa memakai jam langsung.';
+      'Omi mengunduh model ucapan sekali. Setelah itu, rekaman Anda diubah menjadi teks di sini, tanpa dihitung ke dalam penggunaan Anda.';
 
   @override
   String get onDeviceSpeechModel => 'Model suara';
@@ -13381,7 +13373,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get onDeviceScheduleHeadline => 'Kapan Omi sebaiknya mentranskripsi?';
 
   @override
-  String get onDeviceScheduleBody => 'Transkripsi bertahap menghemat baterai. Anda dapat mengubahnya kapan saja.';
+  String get onDeviceScheduleBody => 'Anda dapat mengubahnya kapan saja.';
 
   @override
   String get onDeviceScheduleCharging => 'Saat mengisi daya';
@@ -13465,11 +13457,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get onDeviceWhyPhoneTitle => 'Mengapa ini dilakukan di ponsel Anda';
 
   @override
-  String get onDeviceWhyLiveHoursUsed =>
-      'Jam langsung bulan ini sudah habis, jadi Omi mentranskripsi percakapan ini di ponsel ini.';
+  String get onDeviceWhyLiveHoursUsed => 'Anda mencapai batas bulan ini, jadi Omi mentranskripsinya di ponsel Anda.';
 
   @override
-  String get onDeviceWhySavingLiveHours => 'Anda memilih mentranskripsi di ponsel ini untuk menghemat jam langsung.';
+  String get onDeviceWhySavingLiveHours => 'Anda memilih transkripsi di ponsel ini untuk menghemat penggunaan.';
 
   @override
   String get onDeviceWhySummaryOnPhone => 'Ringkasan juga dibuat di iPhone ini.';
@@ -13482,11 +13473,11 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get onDeviceWhyCloudIphone =>
-      'iPhone ini tidak dapat meringkas sendiri (perlu iPhone 15 Pro atau yang lebih baru). Transkrip dibuat di ponsel Anda, dan hanya teksnya yang dikirim ke Omi untuk diringkas. Ini tidak memakai jam langsung Anda.';
+      'iPhone ini tidak dapat meringkas sendiri (perlu iPhone 15 Pro atau yang lebih baru). Transkrip dibuat di ponsel Anda, dan hanya teksnya yang dikirim ke Omi untuk diringkas. Ini tidak dihitung ke dalam penggunaan Anda.';
 
   @override
   String get onDeviceWhyCloudPhone =>
-      'Ponsel ini tidak dapat meringkas sendiri. Transkrip dibuat di ponsel Anda, dan hanya teksnya yang dikirim ke Omi untuk diringkas. Ini tidak memakai jam langsung Anda.';
+      'Ponsel ini tidak dapat meringkas sendiri. Transkrip dibuat di ponsel Anda, dan hanya teksnya yang dikirim ke Omi untuk diringkas. Ini tidak dihitung ke dalam penggunaan Anda.';
 
   @override
   String get onDeviceRedoWithCloud => 'Ulangi dengan Omi Cloud';
@@ -13501,23 +13492,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get onDeviceKeepEverythingSubtitle => 'Hanya transkrip, tanpa ringkasan';
 
   @override
-  String get onDeviceLiveHours => 'Jam langsung';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return '$used dari $limit jam terpakai';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return 'Direset $date';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'Dapatkan Lebih Banyak Jam Langsung';
-
-  @override
-  String get onDeviceAfterLiveHours => 'Setelah jam langsung habis';
+  String get onDeviceAfterLiveHours => 'Saat Anda mencapai batas';
 
   @override
   String get onDeviceWhen => 'Kapan';
@@ -13532,10 +13507,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get onDeviceSummariesCloud => 'Oleh Omi Cloud';
 
   @override
-  String get onDeviceSaveLiveHours => 'Transkripsi di ponsel ini untuk menghemat jam langsung';
+  String get onDeviceSaveLiveHours => 'Selalu transkripsi di ponsel ini';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => 'Upgrade ke Pro untuk pemisahan pembicara dan akurasi lebih tinggi';
+  String get onDeviceSaveLiveHoursSubtitle => 'Menghemat penggunaan Anda. Tanpa label pembicara.';
 
   @override
   String get onDeviceOnThisPhone => 'Di ponsel ini';
@@ -13551,7 +13526,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModelMessage =>
-      'Rekaman akan menunggu di ponsel ini sampai Anda mengunduhnya lagi atau jam langsung kembali.';
+      'Rekaman akan menunggu di ponsel ini sampai Anda mengunduhnya lagi atau penggunaan Anda direset.';
 
   @override
   String get onDeviceRemove => 'Hapus';
@@ -13561,7 +13536,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get onDeviceFinishSetupBody =>
-      'Jam langsung bulan ini sudah habis. Omi masih merekam dan menyimpan audio di ponsel Anda. Unduh model suara dan Omi akan menyusul.';
+      'Anda telah mencapai batas bulan ini. Omi masih merekam dan menyimpan audio di ponsel Anda. Unduh model ucapan dan ia akan menyusul.';
 
   @override
   String onDeviceDownloadSize(String size) {
@@ -13570,10 +13545,10 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get onDeviceUnsupportedBody =>
-      'Ponsel ini belum dapat menjalankan model suara. Audio tetap tersimpan sampai jam langsung kembali atau Anda meningkatkan paket.';
+      'Ponsel ini belum dapat menjalankan model ucapan. Audio tetap tersimpan sampai penggunaan Anda direset atau Anda meningkatkan paket.';
 
   @override
-  String get onDeviceEntrySubtitle => 'Saat jam langsung habis, transkripsi di ponsel ini';
+  String get onDeviceEntrySubtitle => 'Saat Anda mencapai batas, transkripsi di ponsel ini';
 
   @override
   String get chatAppsChannelPlanRequired => 'Tersedia di Operator dan Architect';

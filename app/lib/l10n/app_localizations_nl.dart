@@ -5842,10 +5842,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get usingNativeIosSpeech => 'Gebruik van native iOS spraakherkenning';
 
   @override
-  String get noModelDownloadRequired =>
-      'De native spraakengine van je apparaat wordt gebruikt. Geen modeldownload vereist.';
-
-  @override
   String get modelReady => 'Model gereed';
 
   @override
@@ -5916,10 +5912,6 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get modelTooLargeWarning =>
       'Dit model is groot en kan de app laten crashen of zeer langzaam werken op mobiele apparaten.\n\nsmall of base wordt aanbevolen.';
-
-  @override
-  String get nativeEngineNoDownload =>
-      'De native spraakengine van je apparaat wordt gebruikt. Geen model download nodig.';
 
   @override
   String modelReadyWithName(String model) {
@@ -13313,14 +13305,14 @@ class AppLocalizationsNl extends AppLocalizations {
   String get syncDetailsCopy => 'Details kopiëren voor support';
 
   @override
-  String get onDeviceAtCapTitle => 'Je live-transcriptie van deze maand is op';
+  String get onDeviceAtCapTitle => 'Je hebt de limiet van deze maand bereikt';
 
   @override
   String get onDeviceAtCapBody => 'Omi neemt nog steeds op. Kies hoe de rest van deze maand wordt getranscribeerd.';
 
   @override
   String onDeviceLiveHoursReturn(String date) {
-    return 'Live-uren komen terug op $date.';
+    return 'Je gebruik wordt gereset op $date.';
   }
 
   @override
@@ -13330,8 +13322,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get onDeviceIncluded => 'Inbegrepen';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'Draait terwijl je telefoon oplaadt, dus kost nauwelijks batterij. Transcripties verschijnen nadat je de lader aansluit.';
+  String get onDeviceOptionChargingBody => 'Draait terwijl je telefoon oplaadt.';
 
   @override
   String get onDeviceUpgradeBody => 'Upgrade naar Pro voor sprekeronderscheiding en hogere nauwkeurigheid';
@@ -13347,7 +13338,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get onDeviceSetupBody =>
-      'Omi downloadt eenmalig een spraakmodel. Daarna worden je opnames hier ter plekke omgezet in tekst, zonder je live-uren te gebruiken.';
+      'Omi downloadt een spraakmodel één keer. Daarna worden je opnamen hier omgezet in tekst, zonder mee te tellen voor je gebruik.';
 
   @override
   String get onDeviceSpeechModel => 'Spraakmodel';
@@ -13408,7 +13399,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get onDeviceScheduleHeadline => 'Wanneer moet Omi transcriberen?';
 
   @override
-  String get onDeviceScheduleBody => 'Transcriberen in batches bespaart batterij. Je kunt dit altijd wijzigen.';
+  String get onDeviceScheduleBody => 'Je kunt dit op elk moment wijzigen.';
 
   @override
   String get onDeviceScheduleCharging => 'Tijdens het opladen';
@@ -13494,11 +13485,11 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get onDeviceWhyLiveHoursUsed =>
-      'Je hebt de live-uren van deze maand opgebruikt, dus Omi heeft dit gesprek op deze telefoon getranscribeerd.';
+      'Je hebt de limiet van deze maand bereikt, dus Omi heeft dit op je telefoon getranscribeerd.';
 
   @override
   String get onDeviceWhySavingLiveHours =>
-      'Je hebt ervoor gekozen om op deze telefoon te transcriberen om live-uren te besparen.';
+      'Je koos ervoor om op deze telefoon te transcriberen om gebruik te besparen.';
 
   @override
   String get onDeviceWhySummaryOnPhone => 'De samenvatting is ook op deze iPhone geschreven.';
@@ -13511,11 +13502,11 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get onDeviceWhyCloudIphone =>
-      'Deze iPhone kan niet zelf samenvatten (daarvoor is een iPhone 15 Pro of nieuwer nodig). De transcriptie is op je telefoon gemaakt en alleen de tekst is naar Omi gestuurd om samen te vatten. Dit kost geen live-uren.';
+      'Deze iPhone kan niet zelf samenvatten (daarvoor is een iPhone 15 Pro of nieuwer nodig). De transcriptie is op je telefoon gemaakt en alleen de tekst is naar Omi gestuurd om samen te vatten. Het telt niet mee voor je gebruik.';
 
   @override
   String get onDeviceWhyCloudPhone =>
-      'Deze telefoon kan niet zelf samenvatten. De transcriptie is op je telefoon gemaakt en alleen de tekst is naar Omi gestuurd om samen te vatten. Dit kost geen live-uren.';
+      'Deze telefoon kan niet zelf samenvatten. De transcriptie is op je telefoon gemaakt en alleen de tekst is naar Omi gestuurd om samen te vatten. Het telt niet mee voor je gebruik.';
 
   @override
   String get onDeviceRedoWithCloud => 'Opnieuw met Omi Cloud';
@@ -13530,23 +13521,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get onDeviceKeepEverythingSubtitle => 'Alleen transcripties, geen samenvattingen';
 
   @override
-  String get onDeviceLiveHours => 'Live-uren';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return '$used van $limit uur gebruikt';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return 'Wordt gereset op $date';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'Meer live-uren krijgen';
-
-  @override
-  String get onDeviceAfterLiveHours => 'Als de live-uren op zijn';
+  String get onDeviceAfterLiveHours => 'Wanneer je je limiet bereikt';
 
   @override
   String get onDeviceWhen => 'Wanneer';
@@ -13561,10 +13536,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get onDeviceSummariesCloud => 'Door Omi Cloud';
 
   @override
-  String get onDeviceSaveLiveHours => 'Transcriberen op deze telefoon om live-uren te besparen';
+  String get onDeviceSaveLiveHours => 'Altijd transcriberen op deze telefoon';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => 'Upgrade naar Pro voor sprekeronderscheiding en hogere nauwkeurigheid';
+  String get onDeviceSaveLiveHoursSubtitle => 'Bespaart je gebruik. Geen sprekerslabels.';
 
   @override
   String get onDeviceOnThisPhone => 'Op deze telefoon';
@@ -13580,7 +13555,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModelMessage =>
-      'Opnames wachten op deze telefoon tot je het opnieuw downloadt of je live-uren terugkomen.';
+      'Opnamen wachten op deze telefoon tot je het opnieuw downloadt of je gebruik wordt gereset.';
 
   @override
   String get onDeviceRemove => 'Verwijderen';
@@ -13590,7 +13565,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get onDeviceFinishSetupBody =>
-      'Je hebt de live-uren van deze maand opgebruikt. Omi neemt nog steeds op en slaat audio op je telefoon op. Download het spraakmodel en het werkt de achterstand weg.';
+      'Je hebt de limiet van deze maand bereikt. Omi neemt nog steeds op en bewaart audio op je telefoon. Download het spraakmodel en het haalt de achterstand in.';
 
   @override
   String onDeviceDownloadSize(String size) {
@@ -13599,10 +13574,10 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get onDeviceUnsupportedBody =>
-      'Deze telefoon kan het spraakmodel nog niet draaien. Audio blijft bewaard tot je live-uren terugkomen of je upgradet.';
+      'Deze telefoon kan het spraakmodel nog niet draaien. Audio blijft bewaard tot je gebruik wordt gereset of je upgradet.';
 
   @override
-  String get onDeviceEntrySubtitle => 'Als de live-uren op zijn, transcriberen op deze telefoon';
+  String get onDeviceEntrySubtitle => 'Transcribeer op deze telefoon wanneer je je limiet bereikt';
 
   @override
   String get chatAppsChannelPlanRequired => 'Beschikbaar met Operator en Architect';

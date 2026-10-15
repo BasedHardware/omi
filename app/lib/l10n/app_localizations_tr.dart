@@ -5838,9 +5838,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get usingNativeIosSpeech => 'Yerel iOS Konuşma Tanıma Kullanılıyor';
 
   @override
-  String get noModelDownloadRequired => 'Cihazınızın yerel konuşma motoru kullanılacak. Model indirmesi gerekmiyor.';
-
-  @override
   String get modelReady => 'Model Hazır';
 
   @override
@@ -5911,9 +5908,6 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get modelTooLargeWarning =>
       'Bu model büyük ve mobil cihazlarda uygulamanın çökmesine veya çok yavaş çalışmasına neden olabilir.\n\nsmall veya base önerilir.';
-
-  @override
-  String get nativeEngineNoDownload => 'Cihazınızın yerel konuşma motoru kullanılacak. Model indirmesi gerekli değil.';
 
   @override
   String modelReadyWithName(String model) {
@@ -13290,7 +13284,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get syncDetailsCopy => 'Destek için ayrıntıları kopyala';
 
   @override
-  String get onDeviceAtCapTitle => 'Bu ayın canlı transkripsiyonunu kullandınız';
+  String get onDeviceAtCapTitle => 'Bu ayın sınırına ulaştınız';
 
   @override
   String get onDeviceAtCapBody =>
@@ -13298,7 +13292,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String onDeviceLiveHoursReturn(String date) {
-    return 'Canlı saatler $date tarihinde yenilenir.';
+    return 'Kullanımınız $date tarihinde sıfırlanır.';
   }
 
   @override
@@ -13308,8 +13302,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onDeviceIncluded => 'Dahil';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'Telefonunuz şarj olurken çalışır, bu yüzden pili neredeyse hiç kullanmaz. Transkriptler şarja taktıktan sonra görünür.';
+  String get onDeviceOptionChargingBody => 'Telefonunuz şarj olurken çalışır.';
 
   @override
   String get onDeviceUpgradeBody => 'Konuşmacı ayrımı ve daha yüksek doğruluk için Pro\'ya yükseltin';
@@ -13325,7 +13318,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onDeviceSetupBody =>
-      'Omi bir konuşma modelini bir kez indirir. Ardından kayıtlarınız canlı saatlerinizi kullanmadan doğrudan burada metne dönüştürülür.';
+      'Omi konuşma modelini bir kez indirir. Bundan sonra kayıtlarınız tam burada metne dönüşür ve kullanımınıza sayılmaz.';
 
   @override
   String get onDeviceSpeechModel => 'Konuşma modeli';
@@ -13386,8 +13379,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onDeviceScheduleHeadline => 'Omi ne zaman yazıya döksün?';
 
   @override
-  String get onDeviceScheduleBody =>
-      'Toplu halde yazıya dökmek pil tasarrufu sağlar. Bunu istediğiniz zaman değiştirebilirsiniz.';
+  String get onDeviceScheduleBody => 'Bunu istediğiniz zaman değiştirebilirsiniz.';
 
   @override
   String get onDeviceScheduleCharging => 'Şarj olurken';
@@ -13470,11 +13462,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onDeviceWhyPhoneTitle => 'Bu neden telefonunuzda yapıldı';
 
   @override
-  String get onDeviceWhyLiveHoursUsed =>
-      'Bu ayın canlı saatlerini kullandınız, bu yüzden Omi bu konuşmayı bu telefonda yazıya döktü.';
+  String get onDeviceWhyLiveHoursUsed => 'Bu ayın sınırına ulaştınız, bu yüzden Omi bunu telefonunuzda yazıya döktü.';
 
   @override
-  String get onDeviceWhySavingLiveHours => 'Canlı saatlerden tasarruf etmek için bu telefonda yazıya dökmeyi seçtiniz.';
+  String get onDeviceWhySavingLiveHours => 'Kullanımınızı korumak için bu telefonda yazıya dökmeyi seçtiniz.';
 
   @override
   String get onDeviceWhySummaryOnPhone => 'Özet de bu iPhone\'da yazıldı.';
@@ -13487,11 +13478,11 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onDeviceWhyCloudIphone =>
-      'Bu iPhone kendi başına özetleyemez (bunun için iPhone 15 Pro veya daha yenisi gerekir). Transkript telefonunuzda oluşturuldu ve özetlenmesi için Omi\'ye yalnızca metni gönderildi. Canlı saatlerinizi kullanmaz.';
+      'Bu iPhone kendi başına özetleyemez (bunun için iPhone 15 Pro veya daha yenisi gerekir). Transkript telefonunuzda oluşturuldu ve özetlenmesi için Omi\'ye yalnızca metni gönderildi. Kullanımınıza sayılmaz.';
 
   @override
   String get onDeviceWhyCloudPhone =>
-      'Bu telefon kendi başına özetleyemez. Transkript telefonunuzda oluşturuldu ve özetlenmesi için Omi\'ye yalnızca metni gönderildi. Canlı saatlerinizi kullanmaz.';
+      'Bu telefon kendi başına özetleyemez. Transkript telefonunuzda oluşturuldu ve özetlenmesi için Omi\'ye yalnızca metni gönderildi. Kullanımınıza sayılmaz.';
 
   @override
   String get onDeviceRedoWithCloud => 'Omi Cloud ile Yeniden Yap';
@@ -13506,23 +13497,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onDeviceKeepEverythingSubtitle => 'Yalnızca transkriptler, özet yok';
 
   @override
-  String get onDeviceLiveHours => 'Canlı saatler';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return '$used/$limit saat kullanıldı';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return '$date tarihinde sıfırlanır';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'Daha Fazla Canlı Saat Al';
-
-  @override
-  String get onDeviceAfterLiveHours => 'Canlı saatler bittikten sonra';
+  String get onDeviceAfterLiveHours => 'Sınırınıza ulaştığınızda';
 
   @override
   String get onDeviceWhen => 'Ne zaman';
@@ -13537,10 +13512,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onDeviceSummariesCloud => 'Omi Cloud ile';
 
   @override
-  String get onDeviceSaveLiveHours => 'Canlı saatlerden tasarruf için bu telefonda yazıya dök';
+  String get onDeviceSaveLiveHours => 'Her zaman bu telefonda yazıya dök';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => 'Konuşmacı ayrımı ve daha yüksek doğruluk için Pro\'ya yükseltin';
+  String get onDeviceSaveLiveHoursSubtitle => 'Kullanımınızı korur. Konuşmacı etiketleri yok.';
 
   @override
   String get onDeviceOnThisPhone => 'Bu telefonda';
@@ -13556,7 +13531,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModelMessage =>
-      'Kayıtlar, modeli yeniden indirene veya canlı saatler yenilenene kadar bu telefonda bekler.';
+      'Kayıtlar, yeniden indirene veya kullanımınız sıfırlanana kadar bu telefonda bekler.';
 
   @override
   String get onDeviceRemove => 'Kaldır';
@@ -13566,7 +13541,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onDeviceFinishSetupBody =>
-      'Bu ayın canlı saatlerini kullandınız. Omi hâlâ kayıt yapıyor ve sesi telefonunuza kaydediyor. Konuşma modelini indirin, birikenleri yetiştirsin.';
+      'Bu ayın sınırına ulaştınız. Omi hâlâ telefonunuzda ses kaydedip saklıyor. Konuşma modelini indirin, geride kalanı tamamlar.';
 
   @override
   String onDeviceDownloadSize(String size) {
@@ -13575,10 +13550,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onDeviceUnsupportedBody =>
-      'Bu telefon henüz konuşma modelini çalıştıramıyor. Ses, canlı saatler yenilenene veya planınızı yükseltene kadar kayıtlı kalır.';
+      'Bu telefon konuşma modelini henüz çalıştıramıyor. Kullanımınız sıfırlanana veya yükseltme yapana kadar ses kayıtlı kalır.';
 
   @override
-  String get onDeviceEntrySubtitle => 'Canlı saatler bitince bu telefonda yazıya dök';
+  String get onDeviceEntrySubtitle => 'Sınırınıza ulaştığınızda bu telefonda yazıya dökün';
 
   @override
   String get chatAppsChannelPlanRequired => 'Operator ve Architect planlarında kullanılabilir';

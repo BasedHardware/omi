@@ -5836,9 +5836,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get usingNativeIosSpeech => 'Sử dụng Nhận dạng giọng nói iOS gốc';
 
   @override
-  String get noModelDownloadRequired => 'Không cần tải mô hình';
-
-  @override
   String get modelReady => 'Mô hình sẵn sàng';
 
   @override
@@ -5909,10 +5906,6 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get modelTooLargeWarning =>
       'Mô hình này lớn và có thể khiến ứng dụng bị treo hoặc chạy rất chậm trên thiết bị di động.\n\nKhuyến nghị sử dụng small hoặc base.';
-
-  @override
-  String get nativeEngineNoDownload =>
-      'Công cụ giọng nói gốc của thiết bị sẽ được sử dụng. Không cần tải xuống mô hình.';
 
   @override
   String modelReadyWithName(String model) {
@@ -13275,14 +13268,14 @@ class AppLocalizationsVi extends AppLocalizations {
   String get syncDetailsCopy => 'Sao chép chi tiết cho bộ phận hỗ trợ';
 
   @override
-  String get onDeviceAtCapTitle => 'Bạn đã dùng hết phiên âm trực tiếp của tháng này';
+  String get onDeviceAtCapTitle => 'Bạn đã đạt giới hạn của tháng này';
 
   @override
   String get onDeviceAtCapBody => 'Omi vẫn đang ghi âm. Hãy chọn cách phiên âm cho thời gian còn lại của tháng.';
 
   @override
   String onDeviceLiveHoursReturn(String date) {
-    return 'Giờ trực tiếp sẽ có lại vào $date.';
+    return 'Mức sử dụng của bạn được đặt lại vào $date.';
   }
 
   @override
@@ -13292,8 +13285,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onDeviceIncluded => 'Đã bao gồm';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'Chạy khi điện thoại đang sạc nên hầu như không tốn pin. Bản ghi sẽ xuất hiện sau khi bạn cắm sạc.';
+  String get onDeviceOptionChargingBody => 'Chạy khi điện thoại đang sạc.';
 
   @override
   String get onDeviceUpgradeBody => 'Nâng cấp lên Pro để phân biệt người nói và tăng độ chính xác';
@@ -13308,7 +13300,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onDeviceSetupBody =>
-      'Omi tải mô hình giọng nói một lần. Sau đó, bản ghi âm của bạn được chuyển thành văn bản ngay tại đây, không dùng giờ trực tiếp.';
+      'Omi tải mô hình giọng nói một lần. Sau đó, bản ghi của bạn được chuyển thành chữ ngay tại đây, không tính vào mức sử dụng.';
 
   @override
   String get onDeviceSpeechModel => 'Mô hình giọng nói';
@@ -13369,7 +13361,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onDeviceScheduleHeadline => 'Omi nên phiên âm khi nào?';
 
   @override
-  String get onDeviceScheduleBody => 'Phiên âm theo đợt giúp tiết kiệm pin. Bạn có thể thay đổi bất cứ lúc nào.';
+  String get onDeviceScheduleBody => 'Bạn có thể thay đổi bất cứ lúc nào.';
 
   @override
   String get onDeviceScheduleCharging => 'Khi đang sạc';
@@ -13453,10 +13445,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onDeviceWhyLiveHoursUsed =>
-      'Bạn đã dùng hết giờ trực tiếp của tháng này, nên Omi đã phiên âm cuộc trò chuyện này trên điện thoại này.';
+      'Bạn đã đạt giới hạn tháng này, nên Omi đã chuyển lời trên điện thoại của bạn.';
 
   @override
-  String get onDeviceWhySavingLiveHours => 'Bạn đã chọn phiên âm trên điện thoại này để tiết kiệm giờ trực tiếp.';
+  String get onDeviceWhySavingLiveHours => 'Bạn đã chọn chuyển lời trên điện thoại này để tiết kiệm mức sử dụng.';
 
   @override
   String get onDeviceWhySummaryOnPhone => 'Bản tóm tắt cũng được viết trên iPhone này.';
@@ -13469,11 +13461,11 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onDeviceWhyCloudIphone =>
-      'iPhone này không thể tự tóm tắt (cần iPhone 15 Pro trở lên). Bản ghi được tạo trên điện thoại của bạn và chỉ phần văn bản được gửi đến Omi để tóm tắt. Việc này không dùng giờ trực tiếp của bạn.';
+      'iPhone này không thể tự tóm tắt (cần iPhone 15 Pro trở lên). Bản ghi được tạo trên điện thoại của bạn và chỉ phần văn bản được gửi đến Omi để tóm tắt. Việc này không tính vào mức sử dụng của bạn.';
 
   @override
   String get onDeviceWhyCloudPhone =>
-      'Điện thoại này không thể tự tóm tắt. Bản ghi được tạo trên điện thoại của bạn và chỉ phần văn bản được gửi đến Omi để tóm tắt. Việc này không dùng giờ trực tiếp của bạn.';
+      'Điện thoại này không thể tự tóm tắt. Bản ghi được tạo trên điện thoại của bạn và chỉ phần văn bản được gửi đến Omi để tóm tắt. Việc này không tính vào mức sử dụng của bạn.';
 
   @override
   String get onDeviceRedoWithCloud => 'Làm lại với Omi Cloud';
@@ -13488,23 +13480,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onDeviceKeepEverythingSubtitle => 'Chỉ bản ghi, không có tóm tắt';
 
   @override
-  String get onDeviceLiveHours => 'Giờ trực tiếp';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return 'Đã dùng $used/$limit giờ';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return 'Đặt lại vào $date';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'Thêm giờ trực tiếp';
-
-  @override
-  String get onDeviceAfterLiveHours => 'Sau khi hết giờ trực tiếp';
+  String get onDeviceAfterLiveHours => 'Khi bạn đạt giới hạn';
 
   @override
   String get onDeviceWhen => 'Khi nào';
@@ -13519,10 +13495,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onDeviceSummariesCloud => 'Bởi Omi Cloud';
 
   @override
-  String get onDeviceSaveLiveHours => 'Phiên âm trên điện thoại này để tiết kiệm giờ trực tiếp';
+  String get onDeviceSaveLiveHours => 'Luôn chuyển lời trên điện thoại này';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => 'Nâng cấp lên Pro để phân biệt người nói và tăng độ chính xác';
+  String get onDeviceSaveLiveHoursSubtitle => 'Tiết kiệm mức sử dụng. Không có nhãn người nói.';
 
   @override
   String get onDeviceOnThisPhone => 'Trên điện thoại này';
@@ -13538,7 +13514,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModelMessage =>
-      'Bản ghi âm sẽ chờ trên điện thoại này cho đến khi bạn tải lại hoặc có lại giờ trực tiếp.';
+      'Bản ghi sẽ chờ trên điện thoại này cho đến khi bạn tải lại hoặc mức sử dụng được đặt lại.';
 
   @override
   String get onDeviceRemove => 'Xóa';
@@ -13548,7 +13524,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onDeviceFinishSetupBody =>
-      'Bạn đã dùng hết giờ trực tiếp của tháng này. Omi vẫn đang ghi âm và lưu âm thanh trên điện thoại của bạn. Hãy tải mô hình giọng nói để xử lý bù.';
+      'Bạn đã đạt giới hạn tháng này. Omi vẫn đang ghi và lưu âm thanh trên điện thoại của bạn. Tải mô hình giọng nói và nó sẽ bắt kịp.';
 
   @override
   String onDeviceDownloadSize(String size) {
@@ -13557,10 +13533,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onDeviceUnsupportedBody =>
-      'Điện thoại này chưa chạy được mô hình giọng nói. Âm thanh vẫn được lưu cho đến khi có lại giờ trực tiếp hoặc bạn nâng cấp.';
+      'Điện thoại này chưa chạy được mô hình giọng nói. Âm thanh được giữ cho đến khi mức sử dụng được đặt lại hoặc bạn nâng cấp.';
 
   @override
-  String get onDeviceEntrySubtitle => 'Khi hết giờ trực tiếp, phiên âm trên điện thoại này';
+  String get onDeviceEntrySubtitle => 'Khi đạt giới hạn, chuyển lời trên điện thoại này';
 
   @override
   String get chatAppsChannelPlanRequired => 'Có trên gói Operator và Architect';

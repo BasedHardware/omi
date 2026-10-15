@@ -5877,10 +5877,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get usingNativeIosSpeech => 'Gumagamit ng Native iOS Speech Recognition';
 
   @override
-  String get noModelDownloadRequired =>
-      'Ang native speech engine ng iyong device ay gagamitin. Walang model download na kailangan.';
-
-  @override
   String get modelReady => 'Model Ready';
 
   @override
@@ -5952,10 +5948,6 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get modelTooLargeWarning =>
       'Ang model na ito ay malaki at maaaring mag-crash sa app o tumatakbo ng napakabagal sa mobile devices.\n\n\"small\" o \"base\" ang inirerekomenda.';
-
-  @override
-  String get nativeEngineNoDownload =>
-      'Ang native speech engine ng iyong device ay gagamitin. Walang model download na kailangan.';
 
   @override
   String modelReadyWithName(String model) {
@@ -13382,7 +13374,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get syncDetailsCopy => 'Kopyahin ang mga detalye para sa support';
 
   @override
-  String get onDeviceAtCapTitle => 'Nagamit mo na ang live transcription ngayong buwan';
+  String get onDeviceAtCapTitle => 'Naabot mo na ang limitasyon ngayong buwan';
 
   @override
   String get onDeviceAtCapBody =>
@@ -13390,7 +13382,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String onDeviceLiveHoursReturn(String date) {
-    return 'Babalik ang live hours sa $date.';
+    return 'Nare-reset ang paggamit mo sa $date.';
   }
 
   @override
@@ -13400,8 +13392,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get onDeviceIncluded => 'Kasama';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'Tumatakbo habang nagcha-charge ang phone mo, kaya halos hindi nito nagagalaw ang baterya. Lalabas ang mga transcript pagkatapos mong mag-charge.';
+  String get onDeviceOptionChargingBody => 'Tumatakbo habang nagcha-charge ang telepono.';
 
   @override
   String get onDeviceUpgradeBody =>
@@ -13418,7 +13409,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onDeviceSetupBody =>
-      'Isang beses lang ida-download ng Omi ang speech model. Pagkatapos noon, gagawing text ang mga recording mo dito mismo, nang hindi gumagamit ng live hours.';
+      'Nagda-download ang Omi ng speech model nang isang beses. Pagkatapos, nagiging text ang mga recording mo dito mismo, nang hindi binibilang sa paggamit mo.';
 
   @override
   String get onDeviceSpeechModel => 'Speech model';
@@ -13479,8 +13470,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get onDeviceScheduleHeadline => 'Kailan dapat mag-transcribe ang Omi?';
 
   @override
-  String get onDeviceScheduleBody =>
-      'Nakakatipid sa baterya ang pag-transcribe nang paisa-isang batch. Mababago mo ito anumang oras.';
+  String get onDeviceScheduleBody => 'Maaari mo itong baguhin anumang oras.';
 
   @override
   String get onDeviceScheduleCharging => 'Habang nagcha-charge';
@@ -13566,10 +13556,10 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onDeviceWhyLiveHoursUsed =>
-      'Nagamit mo na ang live hours ngayong buwan, kaya na-transcribe ng Omi ang usapang ito sa phone na ito.';
+      'Naabot mo na ang limitasyon ngayong buwan, kaya ni-transcribe ito ng Omi sa telepono mo.';
 
   @override
-  String get onDeviceWhySavingLiveHours => 'Pinili mong mag-transcribe sa phone na ito para makatipid ng live hours.';
+  String get onDeviceWhySavingLiveHours => 'Pinili mong mag-transcribe sa teleponong ito para makatipid sa paggamit.';
 
   @override
   String get onDeviceWhySummaryOnPhone => 'Sa iPhone na ito rin isinulat ang buod.';
@@ -13582,11 +13572,11 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onDeviceWhyCloudIphone =>
-      'Hindi kayang mag-buod ng iPhone na ito nang mag-isa (kailangan nito ng iPhone 15 Pro o mas bago). Ginawa ang transcript sa phone mo, at ang text lang nito ang ipinadala sa Omi para ibuod. Hindi nito ginagamit ang live hours mo.';
+      'Hindi kayang mag-buod ng iPhone na ito nang mag-isa (kailangan nito ng iPhone 15 Pro o mas bago). Ginawa ang transcript sa phone mo, at ang text lang nito ang ipinadala sa Omi para ibuod. Hindi ito binibilang sa paggamit mo.';
 
   @override
   String get onDeviceWhyCloudPhone =>
-      'Hindi kayang mag-buod ng phone na ito nang mag-isa. Ginawa ang transcript sa phone mo, at ang text lang nito ang ipinadala sa Omi para ibuod. Hindi nito ginagamit ang live hours mo.';
+      'Hindi kayang mag-buod ng phone na ito nang mag-isa. Ginawa ang transcript sa phone mo, at ang text lang nito ang ipinadala sa Omi para ibuod. Hindi ito binibilang sa paggamit mo.';
 
   @override
   String get onDeviceRedoWithCloud => 'Ulitin gamit ang Omi Cloud';
@@ -13602,23 +13592,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get onDeviceKeepEverythingSubtitle => 'Mga transcript lang, walang buod';
 
   @override
-  String get onDeviceLiveHours => 'Live hours';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return '$used sa $limit oras ang nagamit';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return 'Magre-reset sa $date';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'Kumuha ng Mas Maraming Live Hours';
-
-  @override
-  String get onDeviceAfterLiveHours => 'Kapag naubos ang live hours';
+  String get onDeviceAfterLiveHours => 'Kapag naabot mo ang limitasyon';
 
   @override
   String get onDeviceWhen => 'Kailan';
@@ -13633,11 +13607,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get onDeviceSummariesCloud => 'Sa Omi Cloud';
 
   @override
-  String get onDeviceSaveLiveHours => 'Mag-transcribe sa phone na ito para makatipid ng live hours';
+  String get onDeviceSaveLiveHours => 'Palaging i-transcribe sa teleponong ito';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'Mag-upgrade sa Pro para sa paghihiwalay ng mga nagsasalita at mas mataas na katumpakan';
+  String get onDeviceSaveLiveHoursSubtitle => 'Nakakatipid sa paggamit. Walang label ng nagsasalita.';
 
   @override
   String get onDeviceOnThisPhone => 'Sa phone na ito';
@@ -13653,7 +13626,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModelMessage =>
-      'Maghihintay ang mga recording sa phone na ito hanggang i-download mo ulit ito o bumalik ang live hours.';
+      'Maghihintay ang mga recording sa teleponong ito hanggang i-download mo itong muli o ma-reset ang paggamit mo.';
 
   @override
   String get onDeviceRemove => 'Alisin';
@@ -13663,7 +13636,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onDeviceFinishSetupBody =>
-      'Nagamit mo na ang live hours ngayong buwan. Nagre-record pa rin ang Omi at nagse-save ng audio sa phone mo. I-download ang speech model at hahabol ito.';
+      'Naabot mo na ang limitasyon ngayong buwan. Nagre-record at nagse-save pa rin ng audio ang Omi sa telepono mo. I-download ang speech model at huhabol ito.';
 
   @override
   String onDeviceDownloadSize(String size) {
@@ -13672,10 +13645,10 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onDeviceUnsupportedBody =>
-      'Hindi pa kayang patakbuhin ng phone na ito ang speech model. Mananatiling naka-save ang audio hanggang bumalik ang live hours o mag-upgrade ka.';
+      'Hindi pa kayang patakbuhin ng teleponong ito ang speech model. Nananatiling naka-save ang audio hanggang ma-reset ang paggamit mo o mag-upgrade ka.';
 
   @override
-  String get onDeviceEntrySubtitle => 'Kapag naubos ang live hours, mag-transcribe sa phone na ito';
+  String get onDeviceEntrySubtitle => 'Kapag naabot mo ang limitasyon, i-transcribe sa teleponong ito';
 
   @override
   String get chatAppsChannelPlanRequired => 'Available sa Operator at Architect';

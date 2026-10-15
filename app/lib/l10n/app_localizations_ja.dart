@@ -5738,9 +5738,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get usingNativeIosSpeech => 'iOSネイティブ音声認識を使用';
 
   @override
-  String get noModelDownloadRequired => 'デバイスのネイティブ音声エンジンが使用されます。モデルのダウンロードは不要です。';
-
-  @override
   String get modelReady => 'モデル準備完了';
 
   @override
@@ -5808,9 +5805,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get modelTooLargeWarning => 'このモデルは大きく、モバイルデバイスでアプリがクラッシュしたり非常に遅くなる可能性があります。\n\nsmallまたはbaseを推奨します。';
-
-  @override
-  String get nativeEngineNoDownload => 'デバイスのネイティブ音声エンジンが使用されます。モデルのダウンロードは不要です。';
 
   @override
   String modelReadyWithName(String model) {
@@ -13091,14 +13085,14 @@ class AppLocalizationsJa extends AppLocalizations {
   String get syncDetailsCopy => 'サポート用に詳細をコピー';
 
   @override
-  String get onDeviceAtCapTitle => '今月のライブ文字起こしを使い切りました';
+  String get onDeviceAtCapTitle => '今月の上限に達しました';
 
   @override
   String get onDeviceAtCapBody => 'Omiは録音を続けています。今月の残りの文字起こし方法を選んでください。';
 
   @override
   String onDeviceLiveHoursReturn(String date) {
-    return 'ライブ時間は$dateに戻ります。';
+    return '使用量は$dateにリセットされます。';
   }
 
   @override
@@ -13108,7 +13102,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onDeviceIncluded => '追加料金なし';
 
   @override
-  String get onDeviceOptionChargingBody => '充電中に動作するので、バッテリーはほとんど消費しません。充電器につなぐと文字起こしが表示されます。';
+  String get onDeviceOptionChargingBody => '充電中に動作します。';
 
   @override
   String get onDeviceUpgradeBody => '話者の分離と精度向上のためにProにアップグレード';
@@ -13122,7 +13116,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get onDeviceSetupBody => 'Omiは音声モデルを一度だけダウンロードします。その後は、ライブ時間を使わずに、録音をこの端末上でテキストに変換します。';
+  String get onDeviceSetupBody => 'Omiは音声モデルを一度だけダウンロードします。その後は、使用量に数えずに、録音をこの端末上でテキストに変換します。';
 
   @override
   String get onDeviceSpeechModel => '音声モデル';
@@ -13183,7 +13177,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onDeviceScheduleHeadline => 'Omiはいつ文字起こししますか？';
 
   @override
-  String get onDeviceScheduleBody => 'まとめて文字起こしするとバッテリーを節約できます。いつでも変更できます。';
+  String get onDeviceScheduleBody => 'いつでも変更できます。';
 
   @override
   String get onDeviceScheduleCharging => '充電中';
@@ -13264,10 +13258,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onDeviceWhyPhoneTitle => 'スマホで処理された理由';
 
   @override
-  String get onDeviceWhyLiveHoursUsed => '今月のライブ時間を使い切ったため、Omiはこの会話をこのスマホで文字起こししました。';
+  String get onDeviceWhyLiveHoursUsed => '今月の上限に達したため、Omiはこれをスマホ上で文字起こししました。';
 
   @override
-  String get onDeviceWhySavingLiveHours => 'ライブ時間を節約するため、このスマホでの文字起こしを選択しています。';
+  String get onDeviceWhySavingLiveHours => '使用量を節約するため、このスマホで文字起こしする設定にしています。';
 
   @override
   String get onDeviceWhySummaryOnPhone => '要約もこのiPhoneで作成されました。';
@@ -13280,10 +13274,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get onDeviceWhyCloudIphone =>
-      'このiPhoneは単独で要約できません（iPhone 15 Pro以降が必要です）。文字起こしはスマホで行われ、要約のためにテキストのみがOmiに送信されました。ライブ時間は消費しません。';
+      'このiPhoneは単独で要約できません（iPhone 15 Pro以降が必要です）。文字起こしはスマホで行われ、要約のためにテキストのみがOmiに送信されました。使用量には数えません。';
 
   @override
-  String get onDeviceWhyCloudPhone => 'このスマホは単独で要約できません。文字起こしはスマホで行われ、要約のためにテキストのみがOmiに送信されました。ライブ時間は消費しません。';
+  String get onDeviceWhyCloudPhone => 'このスマホは単独で要約できません。文字起こしはスマホで行われ、要約のためにテキストのみがOmiに送信されました。使用量には数えません。';
 
   @override
   String get onDeviceRedoWithCloud => 'Omi Cloudでやり直す';
@@ -13298,23 +13292,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onDeviceKeepEverythingSubtitle => '文字起こしのみ、要約なし';
 
   @override
-  String get onDeviceLiveHours => 'ライブ時間';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return '$used/$limit時間使用';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return '$dateにリセット';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'ライブ時間を追加';
-
-  @override
-  String get onDeviceAfterLiveHours => 'ライブ時間を使い切った後';
+  String get onDeviceAfterLiveHours => '上限に達したとき';
 
   @override
   String get onDeviceWhen => 'タイミング';
@@ -13329,10 +13307,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onDeviceSummariesCloud => 'Omi Cloudで';
 
   @override
-  String get onDeviceSaveLiveHours => 'このスマホで文字起こししてライブ時間を節約';
+  String get onDeviceSaveLiveHours => '常にこのスマホで文字起こし';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => '話者の分離と精度向上のためにProにアップグレード';
+  String get onDeviceSaveLiveHoursSubtitle => '使用量を節約します。話者ラベルはありません。';
 
   @override
   String get onDeviceOnThisPhone => 'このスマホ';
@@ -13347,7 +13325,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onDeviceRemoveModelTitle => '音声モデルを削除しますか？';
 
   @override
-  String get onDeviceRemoveModelMessage => '再ダウンロードするかライブ時間が戻るまで、録音はこのスマホで待機します。';
+  String get onDeviceRemoveModelMessage => 'もう一度ダウンロードするか、使用量がリセットされるまで、録音はこのスマホで待機します。';
 
   @override
   String get onDeviceRemove => '削除';
@@ -13356,7 +13334,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onDeviceFinishSetupTitle => 'セットアップを完了して文字起こしを表示';
 
   @override
-  String get onDeviceFinishSetupBody => '今月のライブ時間を使い切りました。Omiは録音を続け、音声をスマホに保存しています。音声モデルをダウンロードすると、たまった分を処理します。';
+  String get onDeviceFinishSetupBody => '今月の上限に達しました。Omiは引き続きこのスマホに音声を録音・保存しています。音声モデルをダウンロードすれば、追いついて文字起こしします。';
 
   @override
   String onDeviceDownloadSize(String size) {
@@ -13364,10 +13342,10 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get onDeviceUnsupportedBody => 'このスマホではまだ音声モデルを実行できません。ライブ時間が戻るかアップグレードするまで、音声は保存されます。';
+  String get onDeviceUnsupportedBody => 'このスマホはまだ音声モデルを実行できません。使用量がリセットされるか、アップグレードするまで音声は保存されたままです。';
 
   @override
-  String get onDeviceEntrySubtitle => 'ライブ時間を使い切ったら、このスマホで文字起こし';
+  String get onDeviceEntrySubtitle => '上限に達したら、このスマホで文字起こし';
 
   @override
   String get chatAppsChannelPlanRequired => 'OperatorとArchitectで利用できます';

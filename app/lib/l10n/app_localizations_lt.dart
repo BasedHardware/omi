@@ -5829,10 +5829,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get usingNativeIosSpeech => 'Naudojamas vietinis iOS kalbos atpažinimas';
 
   @override
-  String get noModelDownloadRequired =>
-      'Bus naudojamas jūsų įrenginio kalbos variklis. Modelio atsisiuntimas nereikalingas.';
-
-  @override
   String get modelReady => 'Modelis paruoštas';
 
   @override
@@ -5903,10 +5899,6 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get modelTooLargeWarning =>
       'Šis modelis yra didelis ir gali sukelti programos užstrigimą arba labai lėtą veikimą mobiliuosiuose įrenginiuose.\n\nRekomenduojama small arba base.';
-
-  @override
-  String get nativeEngineNoDownload =>
-      'Bus naudojamas jūsų įrenginio vietinis kalbos variklis. Modelio atsisiuntimas nereikalingas.';
 
   @override
   String modelReadyWithName(String model) {
@@ -13301,14 +13293,14 @@ class AppLocalizationsLt extends AppLocalizations {
   String get syncDetailsCopy => 'Kopijuoti informaciją palaikymo komandai';
 
   @override
-  String get onDeviceAtCapTitle => 'Šio mėnesio tiesioginę transkripciją išnaudojote';
+  String get onDeviceAtCapTitle => 'Pasiekėte šio mėnesio limitą';
 
   @override
   String get onDeviceAtCapBody => 'Omi vis dar įrašinėja. Pasirinkite, kaip bus transkribuojama likusi mėnesio dalis.';
 
   @override
   String onDeviceLiveHoursReturn(String date) {
-    return 'Tiesioginės valandos grįš $date.';
+    return 'Jūsų naudojimas atnaujinamas $date.';
   }
 
   @override
@@ -13318,8 +13310,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get onDeviceIncluded => 'Įskaičiuota';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'Veikia, kol telefonas kraunasi, todėl beveik neeikvoja baterijos. Transkripcijos atsiras prijungus kroviklį.';
+  String get onDeviceOptionChargingBody => 'Veikia, kol telefonas kraunasi.';
 
   @override
   String get onDeviceUpgradeBody => 'Pereikite į Pro, kad būtų atskirti kalbėtojai ir padidėtų tikslumas';
@@ -13334,7 +13325,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get onDeviceSetupBody =>
-      'Omi vieną kartą atsisiunčia kalbos modelį. Po to jūsų įrašai paverčiami tekstu čia pat, nenaudojant tiesioginių valandų.';
+      'Omi vieną kartą atsisiunčia kalbos modelį. Po to įrašai čia pat virsta tekstu ir neįskaičiuojami į naudojimą.';
 
   @override
   String get onDeviceSpeechModel => 'Kalbos modelis';
@@ -13395,7 +13386,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get onDeviceScheduleHeadline => 'Kada Omi turėtų transkribuoti?';
 
   @override
-  String get onDeviceScheduleBody => 'Transkribuojant paketais taupoma baterija. Tai galite bet kada pakeisti.';
+  String get onDeviceScheduleBody => 'Tai galite pakeisti bet kada.';
 
   @override
   String get onDeviceScheduleCharging => 'Kraunantis';
@@ -13478,12 +13469,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get onDeviceWhyPhoneTitle => 'Kodėl tai atlikta jūsų telefone';
 
   @override
-  String get onDeviceWhyLiveHoursUsed =>
-      'Išnaudojote šio mėnesio tiesiogines valandas, todėl Omi transkribavo šį pokalbį šiame telefone.';
+  String get onDeviceWhyLiveHoursUsed => 'Pasiekėte šio mėnesio limitą, todėl Omi tai transkribavo jūsų telefone.';
 
   @override
-  String get onDeviceWhySavingLiveHours =>
-      'Pasirinkote transkribuoti šiame telefone, kad sutaupytumėte tiesioginių valandų.';
+  String get onDeviceWhySavingLiveHours => 'Pasirinkote transkripciją šiame telefone, kad sutaupytumėte naudojimą.';
 
   @override
   String get onDeviceWhySummaryOnPhone => 'Santrauka taip pat parašyta šiame iPhone.';
@@ -13496,11 +13485,11 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get onDeviceWhyCloudIphone =>
-      'Šis iPhone negali pats sukurti santraukos (tam reikia iPhone 15 Pro ar naujesnio). Transkripcija sukurta jūsų telefone, o santraukai sudaryti į Omi išsiųstas tik jos tekstas. Tiesioginės valandos nenaudojamos.';
+      'Šis iPhone negali pats sukurti santraukos (tam reikia iPhone 15 Pro ar naujesnio). Transkripcija sukurta jūsų telefone, o santraukai sudaryti į Omi išsiųstas tik jos tekstas. Tai neįskaičiuojama į naudojimą.';
 
   @override
   String get onDeviceWhyCloudPhone =>
-      'Šis telefonas negali pats sukurti santraukos. Transkripcija sukurta jūsų telefone, o santraukai sudaryti į Omi išsiųstas tik jos tekstas. Tiesioginės valandos nenaudojamos.';
+      'Šis telefonas negali pats sukurti santraukos. Transkripcija sukurta jūsų telefone, o santraukai sudaryti į Omi išsiųstas tik jos tekstas. Tai neįskaičiuojama į naudojimą.';
 
   @override
   String get onDeviceRedoWithCloud => 'Perdaryti su Omi Cloud';
@@ -13515,23 +13504,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get onDeviceKeepEverythingSubtitle => 'Tik transkripcijos, be santraukų';
 
   @override
-  String get onDeviceLiveHours => 'Tiesioginės valandos';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return 'Išnaudota $used iš $limit val.';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return 'Atsinaujina $date';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'Gauti daugiau tiesioginių valandų';
-
-  @override
-  String get onDeviceAfterLiveHours => 'Kai baigiasi tiesioginės valandos';
+  String get onDeviceAfterLiveHours => 'Kai pasiekiate limitą';
 
   @override
   String get onDeviceWhen => 'Kada';
@@ -13546,10 +13519,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get onDeviceSummariesCloud => 'Naudojant Omi Cloud';
 
   @override
-  String get onDeviceSaveLiveHours => 'Transkribuoti šiame telefone, kad sutaupytumėte tiesioginių valandų';
+  String get onDeviceSaveLiveHours => 'Visada transkribuoti šiame telefone';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => 'Pereikite į Pro, kad būtų atskirti kalbėtojai ir padidėtų tikslumas';
+  String get onDeviceSaveLiveHoursSubtitle => 'Taupo naudojimą. Be kalbėtojų žymų.';
 
   @override
   String get onDeviceOnThisPhone => 'Šiame telefone';
@@ -13565,7 +13538,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModelMessage =>
-      'Įrašai lauks šiame telefone, kol vėl jį atsisiųsite arba grįš tiesioginės valandos.';
+      'Įrašai lauks šiame telefone, kol vėl jį atsisiųsite arba naudojimas bus atnaujintas.';
 
   @override
   String get onDeviceRemove => 'Pašalinti';
@@ -13575,7 +13548,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get onDeviceFinishSetupBody =>
-      'Išnaudojote šio mėnesio tiesiogines valandas. Omi vis dar įrašinėja ir saugo garsą jūsų telefone. Atsisiųskite kalbos modelį ir jis viską pasivys.';
+      'Pasiekėte šio mėnesio limitą. Omi vis dar įrašinėja ir saugo garsą jūsų telefone. Atsisiųskite kalbos modelį ir jis pasivys.';
 
   @override
   String onDeviceDownloadSize(String size) {
@@ -13584,10 +13557,10 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get onDeviceUnsupportedBody =>
-      'Šis telefonas dar negali paleisti kalbos modelio. Garsas lieka išsaugotas, kol grįš tiesioginės valandos arba atnaujinsite planą.';
+      'Šis telefonas dar negali paleisti kalbos modelio. Garsas lieka išsaugotas, kol naudojimas bus atnaujintas arba atnaujinsite planą.';
 
   @override
-  String get onDeviceEntrySubtitle => 'Kai baigiasi tiesioginės valandos, transkribuoti šiame telefone';
+  String get onDeviceEntrySubtitle => 'Pasiekus limitą, transkribuokite šiame telefone';
 
   @override
   String get chatAppsChannelPlanRequired => 'Prieinama su Operator ir Architect';

@@ -5783,9 +5783,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get usingNativeIosSpeech => 'שימוש בזיהוי דיבור iOS מקומי';
 
   @override
-  String get noModelDownloadRequired => 'מנוע הדיבור המקומי של המכשיר שלך יהיה בשימוש. הורדת דגם אינה נדרשת.';
-
-  @override
   String get modelReady => 'דגם מוכן';
 
   @override
@@ -5854,9 +5851,6 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String get modelTooLargeWarning =>
       'דגם זה גדול ועלול להתרסק או לרוץ לאט מאוד במכשירים ניידים.\n\n\"small\" או \"base\" מומלץ.';
-
-  @override
-  String get nativeEngineNoDownload => 'מנוע הדיבור המקומי של המכשיר שלך יהיה בשימוש. הורדת דגם אינה נדרשת.';
 
   @override
   String modelReadyWithName(String model) {
@@ -13184,14 +13178,14 @@ class AppLocalizationsHe extends AppLocalizations {
   String get syncDetailsCopy => 'העתקת פרטים לתמיכה';
 
   @override
-  String get onDeviceAtCapTitle => 'ניצלת את התמלול החי של החודש';
+  String get onDeviceAtCapTitle => 'הגעת למכסה של החודש';
 
   @override
   String get onDeviceAtCapBody => 'Omi עדיין מקליט. בחר איך לתמלל את שאר החודש.';
 
   @override
   String onDeviceLiveHoursReturn(String date) {
-    return 'השעות החיות יחזרו ב-$date.';
+    return 'השימוש שלך מתאפס ב-$date.';
   }
 
   @override
@@ -13201,8 +13195,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onDeviceIncluded => 'כלול';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'פועל בזמן שהטלפון בטעינה, כך שכמעט לא צורך סוללה. התמלולים יופיעו אחרי שתחבר לטעינה.';
+  String get onDeviceOptionChargingBody => 'פועל בזמן שהטלפון נטען.';
 
   @override
   String get onDeviceUpgradeBody => 'שדרגו ל-Pro להפרדה בין דוברים ולדיוק גבוה יותר';
@@ -13217,7 +13210,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get onDeviceSetupBody =>
-      'Omi מוריד מודל דיבור פעם אחת. לאחר מכן ההקלטות שלך הופכות לטקסט כאן, בלי להשתמש בשעות החיות שלך.';
+      'Omi מוריד מודל דיבור פעם אחת. אחר כך ההקלטות שלך הופכות לטקסט ממש כאן, בלי להיכלל בשימוש שלך.';
 
   @override
   String get onDeviceSpeechModel => 'מודל דיבור';
@@ -13278,7 +13271,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onDeviceScheduleHeadline => 'מתי Omi צריך לתמלל?';
 
   @override
-  String get onDeviceScheduleBody => 'תמלול באצוות חוסך סוללה. אפשר לשנות זאת בכל עת.';
+  String get onDeviceScheduleBody => 'אפשר לשנות את זה בכל עת.';
 
   @override
   String get onDeviceScheduleCharging => 'בזמן טעינה';
@@ -13360,10 +13353,10 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onDeviceWhyPhoneTitle => 'למה זה נעשה בטלפון שלך';
 
   @override
-  String get onDeviceWhyLiveHoursUsed => 'ניצלת את השעות החיות של החודש, ולכן Omi תמלל את השיחה הזו בטלפון הזה.';
+  String get onDeviceWhyLiveHoursUsed => 'הגעת למכסה של החודש, ולכן Omi תמלל את זה בטלפון שלך.';
 
   @override
-  String get onDeviceWhySavingLiveHours => 'בחרת לתמלל בטלפון הזה כדי לחסוך שעות חיות.';
+  String get onDeviceWhySavingLiveHours => 'בחרת לתמלל בטלפון הזה כדי לחסוך שימוש.';
 
   @override
   String get onDeviceWhySummaryOnPhone => 'גם הסיכום נכתב ב-iPhone הזה.';
@@ -13376,11 +13369,11 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get onDeviceWhyCloudIphone =>
-      'ה-iPhone הזה לא יכול לסכם בעצמו (נדרש iPhone 15 Pro ואילך). התמלול נעשה בטלפון שלך, ורק הטקסט שלו נשלח ל-Omi לסיכום. זה לא צורך את השעות החיות שלך.';
+      'ה-iPhone הזה לא יכול לסכם בעצמו (נדרש iPhone 15 Pro ואילך). התמלול נעשה בטלפון שלך, ורק הטקסט שלו נשלח ל-Omi לסיכום. זה לא נכלל בשימוש שלך.';
 
   @override
   String get onDeviceWhyCloudPhone =>
-      'הטלפון הזה לא יכול לסכם בעצמו. התמלול נעשה בטלפון שלך, ורק הטקסט שלו נשלח ל-Omi לסיכום. זה לא צורך את השעות החיות שלך.';
+      'הטלפון הזה לא יכול לסכם בעצמו. התמלול נעשה בטלפון שלך, ורק הטקסט שלו נשלח ל-Omi לסיכום. זה לא נכלל בשימוש שלך.';
 
   @override
   String get onDeviceRedoWithCloud => 'ביצוע מחדש עם Omi Cloud';
@@ -13395,23 +13388,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onDeviceKeepEverythingSubtitle => 'תמלולים בלבד, בלי סיכומים';
 
   @override
-  String get onDeviceLiveHours => 'שעות חיות';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return 'נוצלו $used מתוך $limit שעות';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return 'מתאפס ב-$date';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'קבלת שעות חיות נוספות';
-
-  @override
-  String get onDeviceAfterLiveHours => 'אחרי שהשעות החיות נגמרות';
+  String get onDeviceAfterLiveHours => 'כשמגיעים למכסה';
 
   @override
   String get onDeviceWhen => 'מתי';
@@ -13426,10 +13403,10 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onDeviceSummariesCloud => 'על ידי Omi Cloud';
 
   @override
-  String get onDeviceSaveLiveHours => 'תמלול בטלפון הזה כדי לחסוך שעות חיות';
+  String get onDeviceSaveLiveHours => 'תמיד לתמלל בטלפון הזה';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => 'שדרגו ל-Pro להפרדה בין דוברים ולדיוק גבוה יותר';
+  String get onDeviceSaveLiveHoursSubtitle => 'חוסך את השימוש. בלי תוויות דוברים.';
 
   @override
   String get onDeviceOnThisPhone => 'בטלפון הזה';
@@ -13444,7 +13421,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onDeviceRemoveModelTitle => 'להסיר את מודל הדיבור?';
 
   @override
-  String get onDeviceRemoveModelMessage => 'ההקלטות ימתינו בטלפון הזה עד שתוריד אותו שוב או שהשעות החיות יחזרו.';
+  String get onDeviceRemoveModelMessage => 'ההקלטות ימתינו בטלפון הזה עד שתורידו אותו שוב או עד שהשימוש יתאפס.';
 
   @override
   String get onDeviceRemove => 'הסרה';
@@ -13454,7 +13431,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get onDeviceFinishSetupBody =>
-      'ניצלת את השעות החיות של החודש. Omi עדיין מקליט ושומר את האודיו בטלפון שלך. הורד את מודל הדיבור והוא ישלים את הפער.';
+      'הגעת למכסה של החודש. Omi עדיין מקליט ושומר שמע בטלפון שלך. הורידו את מודל הדיבור והוא ישלים את הפער.';
 
   @override
   String onDeviceDownloadSize(String size) {
@@ -13463,10 +13440,10 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get onDeviceUnsupportedBody =>
-      'הטלפון הזה עדיין לא יכול להריץ את מודל הדיבור. האודיו נשאר שמור עד שהשעות החיות יחזרו או שתשדרג.';
+      'הטלפון הזה עדיין לא יכול להריץ את מודל הדיבור. השמע נשאר שמור עד שהשימוש יתאפס או שתשדרגו.';
 
   @override
-  String get onDeviceEntrySubtitle => 'כשהשעות החיות נגמרות, לתמלל בטלפון הזה';
+  String get onDeviceEntrySubtitle => 'כשמגיעים למכסה, תמלל בטלפון הזה';
 
   @override
   String get chatAppsChannelPlanRequired => 'זמין ב-Operator וב-Architect';

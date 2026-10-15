@@ -2,14 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/models/local_recording.dart';
+import 'package:omi/models/plan_storefront.dart';
 import 'package:omi/pages/on_device/on_device_components.dart';
 import 'package:omi/pages/on_device/on_device_queue_banner.dart';
 import 'package:omi/pages/on_device/on_device_schedule_page.dart';
 import 'package:omi/pages/on_device/on_device_setup_page.dart';
+import 'package:omi/pages/settings/widgets/plans/contextual_plans.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
@@ -17,46 +18,52 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
-/// The month's live-hours meter, as the settings page shows it.
-@immutable
-class OnDeviceLiveHours {
-  const OnDeviceLiveHours({required this.usedSeconds, required this.limitSeconds, required this.resetsOn});
-
-  final int usedSeconds;
-  final int limitSeconds;
-  final DateTime resetsOn;
-
-  /// Live hours are metered per UTC calendar month, so they come back on the 1st. Returned as a
-  /// calendar date (local midnight) so it displays as the 1st in every time zone.
-  static DateTime nextReset(DateTime now) {
-    final utc = now.toUtc();
-    return DateTime(utc.year, utc.month + 1, 1);
-  }
+/// Shared usage resets on the 1st of the next UTC month when the backend date is unknown.
+/// Returned as a calendar date (local midnight) so it displays as the 1st in every time zone.
+DateTime onDeviceUsageResetsOn(DateTime now) {
+  final utc = now.toUtc();
+  return DateTime(utc.year, utc.month + 1, 1);
 }
 
 /// Settings › Transcription › On-Device Transcription, reading the app's providers.
-class OnDeviceSettingsPage extends StatelessWidget {
-  const OnDeviceSettingsPage({super.key});
+class OnDeviceSettingsPage extends StatefulWidget {
+  const OnDeviceSettingsPage({super.key, this.controller, this.loadUsage});
+
+  final OnDeviceTranscriptionController? controller;
+  final Future<StorefrontUsage?> Function(String locale)? loadUsage;
+
+  @override
+  State<OnDeviceSettingsPage> createState() => _OnDeviceSettingsPageState();
+}
+
+class _OnDeviceSettingsPageState extends State<OnDeviceSettingsPage> {
+  StorefrontUsage? _usage;
+  Future<void>? _loading;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loading ??= _load();
+  }
+
+  Future<void> _load() async {
+    final usage = await (widget.loadUsage ?? loadOnDeviceUsage)(context.l10n.localeName);
+    if (mounted) setState(() => _usage = usage);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final usage = context.watch<UsageProvider>();
-    final subscription = usage.subscription;
+    final subscription = context.watch<UsageProvider>().subscription;
     final recordings =
         context.watch<LocalRecordingsProvider>().recordings.where((r) => r.state == LocalRecordingState.pending);
     return OnDeviceSettingsView(
-      liveHours: subscription == null || subscription.transcriptionSecondsLimit <= 0
-          ? null
-          : OnDeviceLiveHours(
-              usedSeconds: subscription.transcriptionSecondsUsed,
-              limitSeconds: subscription.transcriptionSecondsLimit,
-              resetsOn: OnDeviceLiveHours.nextReset(DateTime.now()),
-            ),
-      showSaveLiveHours: subscription?.subscription.plan.isPaid ?? false,
+      usage: _usage,
+      showSaveUsage: subscription?.subscription.plan.isPaid ?? false,
       pendingSeconds: recordings.fold<int>(0, (sum, r) => sum + r.seconds) +
-          OnDeviceTranscriptionController.instance.pendingSeconds,
+          (widget.controller ?? OnDeviceTranscriptionController.instance).pendingSeconds,
       pendingBytes: recordings.fold(0, (sum, r) => sum + r.sizeBytes),
-      onGetMoreLiveHours: () => openOnDeviceUpgrade(context),
+      onGetMoreUsage: () => openOnDeviceUpgrade(context),
+      controller: widget.controller,
     );
   }
 }
@@ -64,21 +71,22 @@ class OnDeviceSettingsPage extends StatelessWidget {
 class OnDeviceSettingsView extends StatelessWidget {
   const OnDeviceSettingsView({
     super.key,
-    required this.liveHours,
-    required this.showSaveLiveHours,
+    required this.usage,
+    required this.showSaveUsage,
     required this.pendingSeconds,
     required this.pendingBytes,
-    required this.onGetMoreLiveHours,
+    required this.onGetMoreUsage,
     this.controller,
   });
 
-  final OnDeviceLiveHours? liveHours;
+  /// Backend usage payload. The meter and the get-more label are its strings; absent means no meter.
+  final StorefrontUsage? usage;
 
-  /// Paid plans can transcribe on the phone before live hours run out, to save them.
-  final bool showSaveLiveHours;
+  /// Paid plans can transcribe on the phone before the shared budget runs out.
+  final bool showSaveUsage;
   final int pendingSeconds;
   final int pendingBytes;
-  final VoidCallback onGetMoreLiveHours;
+  final VoidCallback onGetMoreUsage;
   final OnDeviceTranscriptionController? controller;
 
   @override
@@ -92,23 +100,27 @@ class OnDeviceSettingsView extends StatelessWidget {
         builder: (context, _) {
           final settings = controller.settings;
           final status = controller.model.status;
-          final hours = liveHours;
+          final meter = usage;
+          final meterLine = meter?.meterLine;
+          final showMeter = meter != null && meterLine != null && meterLine.isNotEmpty;
+          final moreLabel = meter?.moreLabel;
+          final showMore = moreLabel != null && moreLabel.isNotEmpty;
           return ListView(
             padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.xxl),
             children: [
-              if (hours != null) ...[
-                OmiSettingsGroup(
-                  header: l10n.onDeviceLiveHours,
-                  children: [
-                    _LiveHoursMeter(hours: hours),
-                    OmiSettingsRow(
-                      key: const Key('on_device_settings_more_hours'),
-                      leading: const Icon(Icons.bolt),
-                      title: l10n.onDeviceGetMoreLiveHours,
-                      onTap: onGetMoreLiveHours,
-                    ),
-                  ],
-                ),
+              if (showMeter || showMore) ...[
+                if (showMeter) StorefrontUsageMeter(usage: meter),
+                if (showMore)
+                  OmiSettingsGroup(
+                    children: [
+                      OmiSettingsRow(
+                        key: const Key('on_device_settings_more_usage'),
+                        leading: const Icon(Icons.bolt),
+                        title: moreLabel,
+                        onTap: onGetMoreUsage,
+                      ),
+                    ],
+                  ),
                 const SizedBox(height: OmiSpacing.lg),
               ],
               OmiSettingsGroup(
@@ -119,7 +131,15 @@ class OnDeviceSettingsView extends StatelessWidget {
                     leading: Icon(onDevicePhoneIcon),
                     title: l10n.onDeviceTranscribeOnPhone,
                     value: settings.enabled,
-                    onChanged: (value) => controller.updateSettings(settings.copyWith(enabled: value)),
+                    onChanged: (value) {
+                      unawaited(() async {
+                        await controller.updateSettings(settings.copyWith(enabled: value));
+                        if (!context.mounted || !value || !controller.model.isOsManaged) return;
+                        if (!controller.model.status.isInstalled && controller.model.status.isSupported) {
+                          await openOnDeviceSetup(context, controller: this.controller);
+                        }
+                      }());
+                    },
                   ),
                   if (settings.enabled) ...[
                     OmiSettingsRow(
@@ -150,7 +170,7 @@ class OnDeviceSettingsView extends StatelessWidget {
                   ],
                 ],
               ),
-              if (showSaveLiveHours) ...[
+              if (showSaveUsage) ...[
                 const SizedBox(height: OmiSpacing.lg),
                 OmiSettingsGroup(
                   children: [
@@ -168,17 +188,16 @@ class OnDeviceSettingsView extends StatelessWidget {
               OmiSettingsGroup(
                 header: l10n.onDeviceOnThisPhone,
                 children: [
-                  OmiSettingsRow(
-                    key: const Key('on_device_settings_model'),
-                    leading: const Icon(Icons.graphic_eq),
-                    title: l10n.onDeviceSpeechModel,
-                    value: controller.model.isOsManaged && status.isInstalled
-                        ? l10n.noModelDownloadRequired
-                        : onDeviceModelStatusLabel(l10n, status, wifiOnly: settings.wifiOnlyDownload),
-                    onTap: status.isSupported && !status.isInstalled
-                        ? () => unawaited(routeToPage(context, OnDeviceSetupPage(controller: this.controller)))
-                        : null,
-                  ),
+                  if (!controller.model.isOsManaged)
+                    OmiSettingsRow(
+                      key: const Key('on_device_settings_model'),
+                      leading: const Icon(Icons.graphic_eq),
+                      title: l10n.onDeviceSpeechModel,
+                      value: onDeviceModelStatusLabel(l10n, status, wifiOnly: settings.wifiOnlyDownload),
+                      onTap: status.isSupported && !status.isInstalled
+                          ? () => unawaited(openOnDeviceSetup(context, controller: this.controller))
+                          : null,
+                    ),
                   OmiSettingsRow(
                     leading: const Icon(Icons.schedule),
                     title: l10n.onDeviceWaitingToTranscribe,
@@ -217,45 +236,6 @@ class OnDeviceSettingsView extends StatelessWidget {
       destructive: true,
     );
     if (confirmed) await controller.model.remove();
-  }
-}
-
-class _LiveHoursMeter extends StatelessWidget {
-  const _LiveHoursMeter({required this.hours});
-
-  final OnDeviceLiveHours hours;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    final format = NumberFormat.decimalPattern(l10n.localeName)..maximumFractionDigits = 1;
-    String asHours(int seconds) => format.format(seconds / 3600);
-    final ratio = hours.limitSeconds > 0 ? hours.usedSeconds / hours.limitSeconds : 0.0;
-    return Padding(
-      padding: const EdgeInsets.all(OmiSpacing.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  l10n.onDeviceLiveHoursUsed(asHours(hours.usedSeconds), asHours(hours.limitSeconds)),
-                  style: OmiType.body,
-                ),
-              ),
-              const SizedBox(width: OmiSpacing.xs),
-              Text(
-                l10n.onDeviceResets(OmiDateFormat.of(context).date(hours.resetsOn)),
-                style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-              ),
-            ],
-          ),
-          const SizedBox(height: OmiSpacing.sm),
-          OnDeviceProgressBar(value: ratio),
-        ],
-      ),
-    );
   }
 }
 

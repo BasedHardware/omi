@@ -5859,10 +5859,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get usingNativeIosSpeech => 'Natív iOS beszédfelismerés használata';
 
   @override
-  String get noModelDownloadRequired =>
-      'Készüléke natív beszédfelismerő motorja lesz használva. Nincs szükség modell letöltésére.';
-
-  @override
   String get modelReady => 'Modell kész';
 
   @override
@@ -5933,10 +5929,6 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get modelTooLargeWarning =>
       'Ez a modell nagy, és az alkalmazás összeomlását vagy nagyon lassú működését okozhatja mobileszközökön.\n\nA small vagy base ajánlott.';
-
-  @override
-  String get nativeEngineNoDownload =>
-      'Az eszközöd natív beszédmotorja lesz használva. Nem szükséges modell letöltése.';
 
   @override
   String modelReadyWithName(String model) {
@@ -13329,7 +13321,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get syncDetailsCopy => 'Részletek másolása az ügyfélszolgálatnak';
 
   @override
-  String get onDeviceAtCapTitle => 'Elhasználtad az e havi élő átírást';
+  String get onDeviceAtCapTitle => 'Elérte a havi keretet';
 
   @override
   String get onDeviceAtCapBody =>
@@ -13337,7 +13329,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String onDeviceLiveHoursReturn(String date) {
-    return 'Az élő órák ekkor térnek vissza: $date.';
+    return 'A használat $date napján nullázódik.';
   }
 
   @override
@@ -13347,8 +13339,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get onDeviceIncluded => 'Benne van';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'Töltés közben fut, így alig terheli az akkumulátort. Az átiratok a töltő csatlakoztatása után jelennek meg.';
+  String get onDeviceOptionChargingBody => 'A telefon töltése közben fut.';
 
   @override
   String get onDeviceUpgradeBody => 'Válts Pro-ra a beszélők elkülönítéséhez és a nagyobb pontosságért';
@@ -13363,7 +13354,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onDeviceSetupBody =>
-      'Az Omi egyszer letölt egy beszédmodellt. Ezután a felvételeid itt helyben alakulnak szöveggé, az élő órák felhasználása nélkül.';
+      'Az Omi egyszer tölti le a beszédmodellt. Utána a felvételek itt, a helyszínen válnak szöveggé, anélkül hogy beleszámítanának a használatba.';
 
   @override
   String get onDeviceSpeechModel => 'Beszédmodell';
@@ -13424,7 +13415,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get onDeviceScheduleHeadline => 'Mikor írjon át az Omi?';
 
   @override
-  String get onDeviceScheduleBody => 'A kötegelt átírás kíméli az akkumulátort. Ezt bármikor módosíthatod.';
+  String get onDeviceScheduleBody => 'Ezt bármikor módosíthatja.';
 
   @override
   String get onDeviceScheduleCharging => 'Töltés közben';
@@ -13510,11 +13501,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get onDeviceWhyPhoneTitle => 'Miért a telefonodon készült';
 
   @override
-  String get onDeviceWhyLiveHoursUsed =>
-      'Elhasználtad az e havi élő órákat, ezért az Omi ezen a telefonon írta át ezt a beszélgetést.';
+  String get onDeviceWhyLiveHoursUsed => 'Elérte a havi keretet, ezért az Omi a telefonján írta át.';
 
   @override
-  String get onDeviceWhySavingLiveHours => 'Úgy döntöttél, hogy ezen a telefonon írsz át, hogy élő órákat spórolj.';
+  String get onDeviceWhySavingLiveHours => 'Úgy döntött, hogy ezen a telefonon írja át, hogy kímélje a használatot.';
 
   @override
   String get onDeviceWhySummaryOnPhone => 'Az összefoglaló is ezen az iPhone-on készült.';
@@ -13527,11 +13517,11 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onDeviceWhyCloudIphone =>
-      'Ez az iPhone önállóan nem tud összefoglalni (ehhez iPhone 15 Pro vagy újabb kell). Az átirat a telefonodon készült, és csak a szövegét küldtük el az Ominak összefoglalásra. Ez nem használ élő órákat.';
+      'Ez az iPhone önállóan nem tud összefoglalni (ehhez iPhone 15 Pro vagy újabb kell). Az átirat a telefonodon készült, és csak a szövegét küldtük el az Ominak összefoglalásra. Nem számít bele a használatba.';
 
   @override
   String get onDeviceWhyCloudPhone =>
-      'Ez a telefon önállóan nem tud összefoglalni. Az átirat a telefonodon készült, és csak a szövegét küldtük el az Ominak összefoglalásra. Ez nem használ élő órákat.';
+      'Ez a telefon önállóan nem tud összefoglalni. Az átirat a telefonodon készült, és csak a szövegét küldtük el az Ominak összefoglalásra. Nem számít bele a használatba.';
 
   @override
   String get onDeviceRedoWithCloud => 'Újra az Omi Clouddal';
@@ -13546,23 +13536,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get onDeviceKeepEverythingSubtitle => 'Csak átiratok, összefoglalók nélkül';
 
   @override
-  String get onDeviceLiveHours => 'Élő órák';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return '$used/$limit óra felhasználva';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return 'Visszaáll: $date';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'Több élő óra';
-
-  @override
-  String get onDeviceAfterLiveHours => 'Ha elfogynak az élő órák';
+  String get onDeviceAfterLiveHours => 'Amikor eléri a keretét';
 
   @override
   String get onDeviceWhen => 'Mikor';
@@ -13577,10 +13551,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get onDeviceSummariesCloud => 'Omi Clouddal';
 
   @override
-  String get onDeviceSaveLiveHours => 'Átírás ezen a telefonon az élő órák spórolásához';
+  String get onDeviceSaveLiveHours => 'Mindig ezen a telefonon írja át';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => 'Válts Pro-ra a beszélők elkülönítéséhez és a nagyobb pontosságért';
+  String get onDeviceSaveLiveHoursSubtitle => 'Kíméli a használatot. Nincs beszélőfelirat.';
 
   @override
   String get onDeviceOnThisPhone => 'Ezen a telefonon';
@@ -13596,7 +13570,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModelMessage =>
-      'A felvételek ezen a telefonon várakoznak, amíg újra le nem töltöd, vagy vissza nem térnek az élő órák.';
+      'A felvételek ezen a telefonon várnak, amíg újra le nem tölti, vagy a használat nullázódik.';
 
   @override
   String get onDeviceRemove => 'Eltávolítás';
@@ -13606,7 +13580,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onDeviceFinishSetupBody =>
-      'Elhasználtad az e havi élő órákat. Az Omi továbbra is rögzít, és a telefonodra menti a hangot. Töltsd le a beszédmodellt, és pótolja a lemaradást.';
+      'Elérte a havi keretet. Az Omi továbbra is rögzít és ment hangot a telefonján. Töltse le a beszédmodellt, és behozza a lemaradást.';
 
   @override
   String onDeviceDownloadSize(String size) {
@@ -13615,10 +13589,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onDeviceUnsupportedBody =>
-      'Ez a telefon még nem tudja futtatni a beszédmodellt. A hang mentve marad, amíg vissza nem térnek az élő órák, vagy amíg nem váltasz magasabb csomagra.';
+      'Ez a telefon még nem tudja futtatni a beszédmodellt. A hang mentve marad, amíg a használat nullázódik, vagy amíg nem frissít.';
 
   @override
-  String get onDeviceEntrySubtitle => 'Ha elfogynak az élő órák, átírás ezen a telefonon';
+  String get onDeviceEntrySubtitle => 'Ha eléri a keretét, írja át ezen a telefonon';
 
   @override
   String get chatAppsChannelPlanRequired => 'Elérhető az Operator és Architect csomagban';

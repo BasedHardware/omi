@@ -5827,9 +5827,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get usingNativeIosSpeech => 'استفاده از شناخت گفتار بومی iOS';
 
   @override
-  String get noModelDownloadRequired => 'موتور گفتار بومی دستگاه شما استفاده خواهد شد. بدون دانلود مدل مورد نیاز.';
-
-  @override
   String get modelReady => 'مدل آماده است';
 
   @override
@@ -5900,9 +5897,6 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get modelTooLargeWarning =>
       'این مدل بزرگ است و ممکن است برنامه را سقوط دهد یا بسیار آهسته اجرا شود.\n\n\"small\" یا \"base\" توصیه می شود.';
-
-  @override
-  String get nativeEngineNoDownload => 'موتور گفتار بومی دستگاه شما استفاده خواهد شد. بدون دانلود مدل مورد نیاز.';
 
   @override
   String modelReadyWithName(String model) {
@@ -13272,14 +13266,14 @@ class AppLocalizationsFa extends AppLocalizations {
   String get syncDetailsCopy => 'کپی جزئیات برای پشتیبانی';
 
   @override
-  String get onDeviceAtCapTitle => 'رونویسی زندهٔ این ماه را مصرف کرده‌اید';
+  String get onDeviceAtCapTitle => 'به سقف این ماه رسیده‌اید';
 
   @override
   String get onDeviceAtCapBody => 'Omi همچنان در حال ضبط است. انتخاب کنید بقیهٔ این ماه چطور رونویسی شود.';
 
   @override
   String onDeviceLiveHoursReturn(String date) {
-    return 'ساعت‌های زنده در $date برمی‌گردند.';
+    return 'مصرف شما در $date بازنشانی می‌شود.';
   }
 
   @override
@@ -13289,8 +13283,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get onDeviceIncluded => 'شامل';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'هنگام شارژ گوشی اجرا می‌شود، پس تقریباً باتری مصرف نمی‌کند. رونوشت‌ها پس از وصل‌کردن شارژر نمایش داده می‌شوند.';
+  String get onDeviceOptionChargingBody => 'هنگام شارژ شدن گوشی اجرا می‌شود.';
 
   @override
   String get onDeviceUpgradeBody => 'برای تفکیک گویندگان و دقت بیشتر به Pro ارتقا دهید';
@@ -13305,7 +13298,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onDeviceSetupBody =>
-      'Omi یک بار مدل گفتار را دانلود می‌کند. پس از آن، ضبط‌های شما همین‌جا به متن تبدیل می‌شوند، بدون مصرف ساعت‌های زنده.';
+      'Omi یک‌بار مدل گفتار را دانلود می‌کند. بعد از آن ضبط‌های شما همین‌جا به متن تبدیل می‌شوند، بدون اینکه در مصرف شما حساب شوند.';
 
   @override
   String get onDeviceSpeechModel => 'مدل گفتار';
@@ -13366,8 +13359,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get onDeviceScheduleHeadline => 'Omi چه زمانی رونویسی کند؟';
 
   @override
-  String get onDeviceScheduleBody =>
-      'رونویسی دسته‌ای در مصرف باتری صرفه‌جویی می‌کند. هر زمان بخواهید می‌توانید این را تغییر دهید.';
+  String get onDeviceScheduleBody => 'هر زمان می‌توانید این را تغییر دهید.';
 
   @override
   String get onDeviceScheduleCharging => 'هنگام شارژ';
@@ -13449,11 +13441,10 @@ class AppLocalizationsFa extends AppLocalizations {
   String get onDeviceWhyPhoneTitle => 'چرا این کار روی گوشی شما انجام شد';
 
   @override
-  String get onDeviceWhyLiveHoursUsed =>
-      'ساعت‌های زندهٔ این ماه را مصرف کرده‌اید، پس Omi این گفت‌وگو را روی همین گوشی رونویسی کرد.';
+  String get onDeviceWhyLiveHoursUsed => 'به سقف این ماه رسیدید، بنابراین Omi این را روی گوشی شما رونویسی کرد.';
 
   @override
-  String get onDeviceWhySavingLiveHours => 'شما رونویسی روی همین گوشی را برای صرفه‌جویی در ساعت‌های زنده انتخاب کردید.';
+  String get onDeviceWhySavingLiveHours => 'رونویسی روی این گوشی را انتخاب کردید تا مصرف ذخیره شود.';
 
   @override
   String get onDeviceWhySummaryOnPhone => 'خلاصه هم روی همین iPhone نوشته شد.';
@@ -13466,11 +13457,11 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onDeviceWhyCloudIphone =>
-      'این iPhone به‌تنهایی نمی‌تواند خلاصه بنویسد (برای این کار iPhone 15 Pro یا جدیدتر لازم است). رونوشت روی گوشی شما ساخته شد و فقط متن آن برای خلاصه‌سازی به Omi ارسال شد. این کار از ساعت‌های زندهٔ شما کم نمی‌کند.';
+      'این iPhone به‌تنهایی نمی‌تواند خلاصه بنویسد (برای این کار iPhone 15 Pro یا جدیدتر لازم است). رونوشت روی گوشی شما ساخته شد و فقط متن آن برای خلاصه‌سازی به Omi ارسال شد. در مصرف شما حساب نمی‌شود.';
 
   @override
   String get onDeviceWhyCloudPhone =>
-      'این گوشی به‌تنهایی نمی‌تواند خلاصه بنویسد. رونوشت روی گوشی شما ساخته شد و فقط متن آن برای خلاصه‌سازی به Omi ارسال شد. این کار از ساعت‌های زندهٔ شما کم نمی‌کند.';
+      'این گوشی به‌تنهایی نمی‌تواند خلاصه بنویسد. رونوشت روی گوشی شما ساخته شد و فقط متن آن برای خلاصه‌سازی به Omi ارسال شد. در مصرف شما حساب نمی‌شود.';
 
   @override
   String get onDeviceRedoWithCloud => 'انجام دوباره با Omi Cloud';
@@ -13485,23 +13476,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get onDeviceKeepEverythingSubtitle => 'فقط رونوشت، بدون خلاصه';
 
   @override
-  String get onDeviceLiveHours => 'ساعت‌های زنده';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return '$used از $limit ساعت مصرف شده';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return 'تمدید در $date';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'دریافت ساعت‌های زندهٔ بیشتر';
-
-  @override
-  String get onDeviceAfterLiveHours => 'پس از تمام شدن ساعت‌های زنده';
+  String get onDeviceAfterLiveHours => 'وقتی به سقف خود می‌رسید';
 
   @override
   String get onDeviceWhen => 'زمان';
@@ -13516,10 +13491,10 @@ class AppLocalizationsFa extends AppLocalizations {
   String get onDeviceSummariesCloud => 'توسط Omi Cloud';
 
   @override
-  String get onDeviceSaveLiveHours => 'رونویسی روی همین گوشی برای صرفه‌جویی در ساعت‌های زنده';
+  String get onDeviceSaveLiveHours => 'همیشه روی این گوشی رونویسی کن';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => 'برای تفکیک گویندگان و دقت بیشتر به Pro ارتقا دهید';
+  String get onDeviceSaveLiveHoursSubtitle => 'مصرف را ذخیره می‌کند. بدون برچسب گوینده.';
 
   @override
   String get onDeviceOnThisPhone => 'روی همین گوشی';
@@ -13535,7 +13510,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModelMessage =>
-      'ضبط‌ها روی همین گوشی منتظر می‌مانند تا دوباره آن را دانلود کنید یا ساعت‌های زنده برگردند.';
+      'ضبط‌ها روی این گوشی می‌مانند تا دوباره آن را دانلود کنید یا مصرف شما بازنشانی شود.';
 
   @override
   String get onDeviceRemove => 'حذف';
@@ -13545,7 +13520,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onDeviceFinishSetupBody =>
-      'ساعت‌های زندهٔ این ماه را مصرف کرده‌اید. Omi همچنان ضبط می‌کند و صدا را روی گوشی شما ذخیره می‌کند. مدل گفتار را دانلود کنید تا عقب‌ماندگی جبران شود.';
+      'به سقف این ماه رسیده‌اید. Omi همچنان صدا را روی گوشی شما ضبط و ذخیره می‌کند. مدل گفتار را دانلود کنید تا عقب‌ماندگی را جبران کند.';
 
   @override
   String onDeviceDownloadSize(String size) {
@@ -13554,10 +13529,10 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onDeviceUnsupportedBody =>
-      'این گوشی هنوز نمی‌تواند مدل گفتار را اجرا کند. صدا ذخیره می‌ماند تا ساعت‌های زنده برگردند یا اشتراک خود را ارتقا دهید.';
+      'این گوشی هنوز نمی‌تواند مدل گفتار را اجرا کند. صدا ذخیره می‌ماند تا مصرف شما بازنشانی شود یا ارتقا دهید.';
 
   @override
-  String get onDeviceEntrySubtitle => 'وقتی ساعت‌های زنده تمام شد، روی همین گوشی رونویسی شود';
+  String get onDeviceEntrySubtitle => 'وقتی به سقف رسیدید، روی این گوشی رونویسی کنید';
 
   @override
   String get chatAppsChannelPlanRequired => 'در Operator و Architect در دسترس است';

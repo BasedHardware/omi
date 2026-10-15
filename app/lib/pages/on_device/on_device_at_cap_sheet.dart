@@ -7,7 +7,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 
 enum OnDeviceAtCapChoice { transcribeOnPhone, upgrade }
 
-/// Offered once when the month's live hours run out: keep going on the phone (included) or
+/// Offered once when this month's usage limit is reached: keep going on the phone (included) or
 /// upgrade. Returns the reader's choice, or null when they close the sheet. Recording continues
 /// either way.
 Future<OnDeviceAtCapChoice?> showOnDeviceAtCapSheet(BuildContext context,
@@ -31,7 +31,7 @@ class OnDeviceAtCapSheet extends StatefulWidget {
   final GeneratedStorefrontCapChoice? copy;
   final ValueChanged<bool>? onDontAskAgain;
 
-  /// When live hours reset; the sentence is left out when unknown.
+  /// When usage resets; the sentence is left out when unknown.
   final DateTime? liveHoursReturnOn;
 
   @override

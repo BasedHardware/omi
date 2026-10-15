@@ -81,7 +81,7 @@ class OnDeviceProvenanceSection extends StatelessWidget {
       case OnDeviceSummaryOrigin.none:
         why = '$reason ${l10n.onDeviceWhyNoSummary}';
       case OnDeviceSummaryOrigin.cloud:
-        why = l10n.onDeviceWhyCloudPhone;
+        why = onDeviceIsIphone ? l10n.onDeviceWhyCloudIphone : l10n.onDeviceWhyCloudPhone;
     }
     final settings = controller.settings;
     return Padding(

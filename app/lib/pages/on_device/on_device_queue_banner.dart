@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/plan_storefront_api.dart';
 import 'package:omi/models/local_recording.dart';
+import 'package:omi/models/plan_storefront.dart';
 import 'package:omi/pages/on_device/on_device_components.dart';
 import 'package:omi/pages/on_device/on_device_setup_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
@@ -19,8 +22,18 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
-/// Opens the usage page with the plans sheet: the one place live hours are bought.
+/// Opens the plans sheet for the shared usage budget.
 void openOnDeviceUpgrade(BuildContext context) => unawaited(_openOnDeviceUpgrade(context));
+
+/// The storefront `usage` object. Null when the sheet is off or the payload is not the shared
+/// budget. The client never invents hours from a local counter.
+Future<StorefrontUsage?> loadOnDeviceUsage(String locale) async {
+  final result = await PlanStorefrontApi().load(source: 'on_device_overflow', trigger: 'usage_budget', locale: locale);
+  if (result is! ApiSuccess<PlanStorefront>) return null;
+  final usage = result.data.usage;
+  if (usage == null || usage.kind != 'usage_budget') return null;
+  return usage;
+}
 
 Future<void> _openOnDeviceUpgrade(BuildContext context) async {
   if (await openContextualPlans(context, source: 'on_device_overflow', trigger: 'usage_budget')) return;
@@ -43,11 +56,24 @@ class OnDeviceQueueBanner extends StatefulWidget {
 class _OnDeviceQueueBannerState extends State<OnDeviceQueueBanner> {
   OnDeviceTranscriptionController get _controller => widget.controller ?? OnDeviceTranscriptionController.instance;
   int _evaluatedSeconds = -1;
+  String? _moreLabel;
+  Future<void>? _usageLoad;
 
   @override
   void initState() {
     super.initState();
     unawaited(_controller.ensureLoaded());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _usageLoad ??= _loadUsage();
+  }
+
+  Future<void> _loadUsage() async {
+    final usage = await loadOnDeviceUsage(context.l10n.localeName);
+    if (mounted) setState(() => _moreLabel = usage?.moreLabel);
   }
 
   @override
@@ -73,14 +99,9 @@ class _OnDeviceQueueBannerState extends State<OnDeviceQueueBanner> {
           controller: _controller,
           pendingSeconds: pendingSeconds,
           atCap: atCap,
-          onSetUp: () {
-            final model = _controller.model;
-            if (model.status.phase != OnDeviceModelPhase.downloading) {
-              unawaited(model.download(wifiOnly: _controller.settings.wifiOnlyDownload));
-            }
-            unawaited(routeToPage(context, OnDeviceSetupPage(controller: widget.controller)));
-          },
-          onGetMoreLiveHours: () => openOnDeviceUpgrade(context),
+          onSetUp: () => unawaited(openOnDeviceSetup(context, controller: widget.controller)),
+          moreLabel: _moreLabel,
+          onGetMoreUsage: () => openOnDeviceUpgrade(context),
         );
       },
     );
@@ -90,8 +111,9 @@ class _OnDeviceQueueBannerState extends State<OnDeviceQueueBanner> {
 /// The banner's content for a given state; [OnDeviceQueueBanner] supplies the inputs.
 ///
 /// - Model ready and on-device on: "3h 20m waiting to transcribe", why it is waiting, Transcribe Now.
-/// - No model yet (on, or live hours used): finish setup, with the download size.
-/// - This phone cannot run the model and live hours are used: audio stays saved; upgrade.
+/// - No model yet (on, or the usage limit is reached): finish setup, with the download size.
+/// - OS-managed speech assets still installing: progress only.
+/// - This phone cannot run the model and the limit is reached: audio stays saved; open plans.
 class OnDeviceQueueBannerView extends StatelessWidget {
   const OnDeviceQueueBannerView({
     super.key,
@@ -99,14 +121,18 @@ class OnDeviceQueueBannerView extends StatelessWidget {
     required this.pendingSeconds,
     required this.atCap,
     required this.onSetUp,
-    required this.onGetMoreLiveHours,
+    required this.onGetMoreUsage,
+    this.moreLabel,
   });
 
   final OnDeviceTranscriptionController controller;
   final int pendingSeconds;
   final bool atCap;
   final VoidCallback onSetUp;
-  final VoidCallback onGetMoreLiveHours;
+  final VoidCallback onGetMoreUsage;
+
+  /// Backend-owned label for the plans row. Hidden when the storefront did not send one.
+  final String? moreLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -117,6 +143,9 @@ class OnDeviceQueueBannerView extends StatelessWidget {
       return atCap ? _unsupported(context) : const SizedBox.shrink();
     }
     if (!status.isInstalled) {
+      if (controller.model.isOsManaged) {
+        return settings.enabled || atCap ? _OsAssetProgress(controller: controller) : const SizedBox.shrink();
+      }
       return settings.enabled || atCap ? _finishSetup(context, status) : const SizedBox.shrink();
     }
     return settings.enabled ? _waiting(context, settings) : const SizedBox.shrink();
@@ -237,13 +266,14 @@ class OnDeviceQueueBannerView extends StatelessWidget {
             expand: true,
             onPressed: onSetUp,
           ),
-        OmiButton.tertiary(
-          key: const Key('on_device_finish_setup_upgrade'),
-          label: l10n.onDeviceGetMoreLiveHours,
-          size: OmiButtonSize.compact,
-          expand: true,
-          onPressed: onGetMoreLiveHours,
-        ),
+        if (moreLabel != null && moreLabel!.isNotEmpty)
+          OmiButton.tertiary(
+            key: const Key('on_device_finish_setup_upgrade'),
+            label: moreLabel!,
+            size: OmiButtonSize.compact,
+            expand: true,
+            onPressed: onGetMoreUsage,
+          ),
       ],
     );
   }
@@ -256,20 +286,78 @@ class OnDeviceQueueBannerView extends StatelessWidget {
         _title(Icons.graphic_eq, l10n.onDeviceQueueWaiting(_duration(context))),
         _body(l10n.onDeviceUnsupportedBody),
         const SizedBox(height: OmiSpacing.sm),
-        OmiButton.secondary(
-          key: const Key('on_device_unsupported_upgrade'),
-          label: l10n.onDeviceGetMoreLiveHours,
-          size: OmiButtonSize.compact,
-          expand: true,
-          onPressed: onGetMoreLiveHours,
-        ),
+        if (moreLabel != null && moreLabel!.isNotEmpty)
+          OmiButton.secondary(
+            key: const Key('on_device_unsupported_upgrade'),
+            label: moreLabel!,
+            size: OmiButtonSize.compact,
+            expand: true,
+            onPressed: onGetMoreUsage,
+          ),
       ],
     );
   }
 }
 
+/// Progress only, while iOS installs speech assets. No explanation.
+class _OsAssetProgress extends StatefulWidget {
+  const _OsAssetProgress({required this.controller});
+
+  final OnDeviceTranscriptionController controller;
+
+  @override
+  State<_OsAssetProgress> createState() => _OsAssetProgressState();
+}
+
+class _OsAssetProgressState extends State<_OsAssetProgress> {
+  @override
+  void initState() {
+    super.initState();
+    final model = widget.controller.model;
+    if (!model.status.isInstalled && model.status.phase != OnDeviceModelPhase.downloading) {
+      unawaited(model.download(wifiOnly: false));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: widget.controller.model,
+      builder: (context, _) {
+        final status = widget.controller.model.status;
+        final l10n = context.l10n;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, 0),
+          child: Container(
+            key: const Key('on_device_asset_progress'),
+            padding: const EdgeInsets.all(OmiSpacing.md),
+            decoration: BoxDecoration(
+              color: OmiColors.surface1,
+              borderRadius: OmiRadius.lgAll,
+              border: Border.all(color: OmiColors.border, width: 0.5),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (status.phase == OnDeviceModelPhase.downloading) ...[
+                  OnDeviceProgressBar(value: status.progress),
+                  const SizedBox(height: OmiSpacing.xs),
+                ],
+                Text(
+                  onDeviceModelStatusLabel(l10n, status, wifiOnly: false),
+                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// The status line of a recording waiting on this phone, or null when the on-device flag is off
-/// or on-device transcription does not apply (not chosen and live hours remain).
+/// or on-device transcription does not apply (not chosen and usage remains).
 Widget? onDeviceRecordingChip(BuildContext context, OnDeviceTranscriptionController controller, {required bool atCap}) {
   if (!controller.isActive) return null;
   final l10n = context.l10n;

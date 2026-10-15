@@ -5830,10 +5830,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get usingNativeIosSpeech => 'Använder inbyggd iOS-taligenkänning';
 
   @override
-  String get noModelDownloadRequired =>
-      'Din enhets inbyggda talmotor kommer att användas. Ingen modellnedladdning krävs.';
-
-  @override
   String get modelReady => 'Modellen är redo';
 
   @override
@@ -5902,10 +5898,6 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get modelTooLargeWarning =>
       'Denna modell är stor och kan få appen att krascha eller köra mycket långsamt på mobila enheter.\n\nsmall eller base rekommenderas.';
-
-  @override
-  String get nativeEngineNoDownload =>
-      'Din enhets inbyggda talmotor kommer att användas. Ingen modellnedladdning krävs.';
 
   @override
   String modelReadyWithName(String model) {
@@ -13282,14 +13274,14 @@ class AppLocalizationsSv extends AppLocalizations {
   String get syncDetailsCopy => 'Kopiera information för support';
 
   @override
-  String get onDeviceAtCapTitle => 'Du har använt månadens livetranskribering';
+  String get onDeviceAtCapTitle => 'Du har nått den här månadens gräns';
 
   @override
   String get onDeviceAtCapBody => 'Omi spelar fortfarande in. Välj hur resten av månaden ska transkriberas.';
 
   @override
   String onDeviceLiveHoursReturn(String date) {
-    return 'Livetimmarna kommer tillbaka $date.';
+    return 'Din användning nollställs $date.';
   }
 
   @override
@@ -13299,8 +13291,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get onDeviceIncluded => 'Ingår';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'Körs medan telefonen laddas, så batteriet påverkas knappt. Transkriptionerna visas när du har satt i laddaren.';
+  String get onDeviceOptionChargingBody => 'Körs medan telefonen laddas.';
 
   @override
   String get onDeviceUpgradeBody => 'Uppgradera till Pro för talarseparering och högre precision';
@@ -13316,7 +13307,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get onDeviceSetupBody =>
-      'Omi laddar ner en talmodell en gång. Sedan omvandlas dina inspelningar till text direkt här, utan att använda dina livetimmar.';
+      'Omi laddar ner en talmodell en gång. Därefter blir dina inspelningar text här, utan att räknas mot din användning.';
 
   @override
   String get onDeviceSpeechModel => 'Talmodell';
@@ -13377,7 +13368,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get onDeviceScheduleHeadline => 'När ska Omi transkribera?';
 
   @override
-  String get onDeviceScheduleBody => 'Att transkribera i omgångar sparar batteri. Du kan ändra detta när som helst.';
+  String get onDeviceScheduleBody => 'Du kan ändra detta när som helst.';
 
   @override
   String get onDeviceScheduleCharging => 'Vid laddning';
@@ -13462,11 +13453,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get onDeviceWhyPhoneTitle => 'Varför detta gjordes på din telefon';
 
   @override
-  String get onDeviceWhyLiveHoursUsed =>
-      'Du har använt månadens livetimmar, så Omi transkriberade samtalet på den här telefonen.';
+  String get onDeviceWhyLiveHoursUsed => 'Du nådde den här månadens gräns, så Omi transkriberade detta på din telefon.';
 
   @override
-  String get onDeviceWhySavingLiveHours => 'Du valde att transkribera på den här telefonen för att spara livetimmar.';
+  String get onDeviceWhySavingLiveHours => 'Du valde att transkribera på den här telefonen för att spara användning.';
 
   @override
   String get onDeviceWhySummaryOnPhone => 'Sammanfattningen skrevs också på den här iPhonen.';
@@ -13479,11 +13469,11 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get onDeviceWhyCloudIphone =>
-      'Den här iPhonen kan inte sammanfatta på egen hand (det kräver iPhone 15 Pro eller senare). Transkriptionen gjordes på din telefon och bara texten skickades till Omi för sammanfattning. Det använder inte dina livetimmar.';
+      'Den här iPhonen kan inte sammanfatta på egen hand (det kräver iPhone 15 Pro eller senare). Transkriptionen gjordes på din telefon och bara texten skickades till Omi för sammanfattning. Det räknas inte mot din användning.';
 
   @override
   String get onDeviceWhyCloudPhone =>
-      'Den här telefonen kan inte sammanfatta på egen hand. Transkriptionen gjordes på din telefon och bara texten skickades till Omi för sammanfattning. Det använder inte dina livetimmar.';
+      'Den här telefonen kan inte sammanfatta på egen hand. Transkriptionen gjordes på din telefon och bara texten skickades till Omi för sammanfattning. Det räknas inte mot din användning.';
 
   @override
   String get onDeviceRedoWithCloud => 'Gör om med Omi Cloud';
@@ -13498,23 +13488,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get onDeviceKeepEverythingSubtitle => 'Bara transkriptioner, inga sammanfattningar';
 
   @override
-  String get onDeviceLiveHours => 'Livetimmar';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return '$used av $limit timmar använda';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return 'Återställs $date';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'Få fler livetimmar';
-
-  @override
-  String get onDeviceAfterLiveHours => 'När livetimmarna tar slut';
+  String get onDeviceAfterLiveHours => 'När du når din gräns';
 
   @override
   String get onDeviceWhen => 'När';
@@ -13529,10 +13503,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get onDeviceSummariesCloud => 'Av Omi Cloud';
 
   @override
-  String get onDeviceSaveLiveHours => 'Transkribera på den här telefonen för att spara livetimmar';
+  String get onDeviceSaveLiveHours => 'Transkribera alltid på den här telefonen';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => 'Uppgradera till Pro för talarseparering och högre precision';
+  String get onDeviceSaveLiveHoursSubtitle => 'Sparar din användning. Inga talaretiketter.';
 
   @override
   String get onDeviceOnThisPhone => 'På den här telefonen';
@@ -13548,7 +13522,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModelMessage =>
-      'Inspelningarna väntar på den här telefonen tills du laddar ner den igen eller livetimmarna kommer tillbaka.';
+      'Inspelningar väntar på den här telefonen tills du laddar ner den igen eller din användning nollställs.';
 
   @override
   String get onDeviceRemove => 'Ta bort';
@@ -13558,7 +13532,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get onDeviceFinishSetupBody =>
-      'Du har använt månadens livetimmar. Omi spelar fortfarande in och sparar ljud på telefonen. Ladda ner talmodellen så kommer den ikapp.';
+      'Du har nått den här månadens gräns. Omi spelar fortfarande in och sparar ljud på din telefon. Ladda ner talmodellen så kommer den ikapp.';
 
   @override
   String onDeviceDownloadSize(String size) {
@@ -13567,10 +13541,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get onDeviceUnsupportedBody =>
-      'Den här telefonen kan inte köra talmodellen än. Ljudet förblir sparat tills livetimmarna kommer tillbaka eller du uppgraderar.';
+      'Den här telefonen kan inte köra talmodellen än. Ljudet förblir sparat tills din användning nollställs eller du uppgraderar.';
 
   @override
-  String get onDeviceEntrySubtitle => 'Transkribera på den här telefonen när livetimmarna tar slut';
+  String get onDeviceEntrySubtitle => 'När du når gränsen, transkribera på den här telefonen';
 
   @override
   String get chatAppsChannelPlanRequired => 'Tillgängligt med Operator och Architect';

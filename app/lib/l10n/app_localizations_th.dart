@@ -5796,9 +5796,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get usingNativeIosSpeech => 'ใช้การรู้จำเสียง iOS แบบเนทีฟ';
 
   @override
-  String get noModelDownloadRequired => 'จะใช้เอนจินเสียงดั้งเดิมของอุปกรณ์ ไม่ต้องดาวน์โหลดโมเดล';
-
-  @override
   String get modelReady => 'โมเดลพร้อมใช้งาน';
 
   @override
@@ -5868,9 +5865,6 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get modelTooLargeWarning =>
       'โมเดลนี้มีขนาดใหญ่และอาจทำให้แอปหยุดทำงานหรือทำงานช้ามากบนอุปกรณ์มือถือ\n\nแนะนำให้ใช้ small หรือ base';
-
-  @override
-  String get nativeEngineNoDownload => 'จะใช้เอนจินเสียงแบบเนทีฟของอุปกรณ์ ไม่ต้องดาวน์โหลดโมเดล';
 
   @override
   String modelReadyWithName(String model) {
@@ -13211,14 +13205,14 @@ class AppLocalizationsTh extends AppLocalizations {
   String get syncDetailsCopy => 'คัดลอกรายละเอียดสำหรับฝ่ายสนับสนุน';
 
   @override
-  String get onDeviceAtCapTitle => 'คุณใช้การถอดเสียงแบบสดของเดือนนี้หมดแล้ว';
+  String get onDeviceAtCapTitle => 'คุณใช้ถึงขีดจำกัดของเดือนนี้แล้ว';
 
   @override
   String get onDeviceAtCapBody => 'Omi ยังคงบันทึกอยู่ เลือกวิธีถอดเสียงสำหรับช่วงที่เหลือของเดือนนี้';
 
   @override
   String onDeviceLiveHoursReturn(String date) {
-    return 'ชั่วโมงแบบสดจะกลับมาในวันที่ $date';
+    return 'การใช้งานของคุณจะรีเซ็ตในวันที่ $date';
   }
 
   @override
@@ -13228,8 +13222,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onDeviceIncluded => 'รวมอยู่แล้ว';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'ทำงานขณะชาร์จโทรศัพท์ จึงแทบไม่ใช้แบตเตอรี่ บันทึกคำพูดจะแสดงหลังจากเสียบชาร์จ';
+  String get onDeviceOptionChargingBody => 'ทำงานขณะที่โทรศัพท์กำลังชาร์จ';
 
   @override
   String get onDeviceUpgradeBody => 'อัปเกรดเป็น Pro เพื่อแยกผู้พูดและเพิ่มความแม่นยำ';
@@ -13244,7 +13237,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get onDeviceSetupBody =>
-      'Omi จะดาวน์โหลดโมเดลเสียงพูดเพียงครั้งเดียว หลังจากนั้นการบันทึกของคุณจะถูกแปลงเป็นข้อความบนเครื่องนี้เลย โดยไม่ใช้ชั่วโมงแบบสด';
+      'Omi ดาวน์โหลดโมเดลเสียงครั้งเดียว หลังจากนั้นไฟล์บันทึกของคุณจะถูกแปลงเป็นข้อความที่นี่ โดยไม่นับรวมในการใช้งาน';
 
   @override
   String get onDeviceSpeechModel => 'โมเดลเสียงพูด';
@@ -13305,7 +13298,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onDeviceScheduleHeadline => 'ให้ Omi ถอดเสียงเมื่อไร';
 
   @override
-  String get onDeviceScheduleBody => 'การถอดเสียงเป็นชุดช่วยประหยัดแบตเตอรี่ คุณเปลี่ยนได้ทุกเมื่อ';
+  String get onDeviceScheduleBody => 'คุณเปลี่ยนได้ทุกเมื่อ';
 
   @override
   String get onDeviceScheduleCharging => 'ขณะชาร์จ';
@@ -13387,11 +13380,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onDeviceWhyPhoneTitle => 'ทำไมจึงทำบนโทรศัพท์ของคุณ';
 
   @override
-  String get onDeviceWhyLiveHoursUsed =>
-      'คุณใช้ชั่วโมงแบบสดของเดือนนี้หมดแล้ว Omi จึงถอดเสียงบทสนทนานี้บนโทรศัพท์เครื่องนี้';
+  String get onDeviceWhyLiveHoursUsed => 'คุณถึงขีดจำกัดของเดือนนี้แล้ว ดังนั้น Omi จึงถอดความนี้บนโทรศัพท์ของคุณ';
 
   @override
-  String get onDeviceWhySavingLiveHours => 'คุณเลือกถอดเสียงบนโทรศัพท์เครื่องนี้เพื่อประหยัดชั่วโมงแบบสด';
+  String get onDeviceWhySavingLiveHours => 'คุณเลือกถอดความบนโทรศัพท์เครื่องนี้เพื่อประหยัดการใช้งาน';
 
   @override
   String get onDeviceWhySummaryOnPhone => 'สรุปนี้เขียนบน iPhone เครื่องนี้ด้วย';
@@ -13404,11 +13396,11 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get onDeviceWhyCloudIphone =>
-      'iPhone เครื่องนี้สรุปเองไม่ได้ (ต้องใช้ iPhone 15 Pro ขึ้นไป) บันทึกคำพูดสร้างบนโทรศัพท์ของคุณ และส่งเฉพาะข้อความไปให้ Omi สรุป ไม่ใช้ชั่วโมงแบบสดของคุณ';
+      'iPhone เครื่องนี้สรุปเองไม่ได้ (ต้องใช้ iPhone 15 Pro ขึ้นไป) บันทึกคำพูดสร้างบนโทรศัพท์ของคุณ และส่งเฉพาะข้อความไปให้ Omi สรุป ไม่นับรวมในการใช้งานของคุณ';
 
   @override
   String get onDeviceWhyCloudPhone =>
-      'โทรศัพท์เครื่องนี้สรุปเองไม่ได้ บันทึกคำพูดสร้างบนโทรศัพท์ของคุณ และส่งเฉพาะข้อความไปให้ Omi สรุป ไม่ใช้ชั่วโมงแบบสดของคุณ';
+      'โทรศัพท์เครื่องนี้สรุปเองไม่ได้ บันทึกคำพูดสร้างบนโทรศัพท์ของคุณ และส่งเฉพาะข้อความไปให้ Omi สรุป ไม่นับรวมในการใช้งานของคุณ';
 
   @override
   String get onDeviceRedoWithCloud => 'ทำใหม่ด้วย Omi Cloud';
@@ -13423,23 +13415,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onDeviceKeepEverythingSubtitle => 'เฉพาะบันทึกคำพูด ไม่มีสรุป';
 
   @override
-  String get onDeviceLiveHours => 'ชั่วโมงแบบสด';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return 'ใช้ไป $used จาก $limit ชั่วโมง';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return 'รีเซ็ตวันที่ $date';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'รับชั่วโมงแบบสดเพิ่ม';
-
-  @override
-  String get onDeviceAfterLiveHours => 'หลังจากชั่วโมงแบบสดหมด';
+  String get onDeviceAfterLiveHours => 'เมื่อคุณถึงขีดจำกัด';
 
   @override
   String get onDeviceWhen => 'เมื่อไร';
@@ -13454,10 +13430,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onDeviceSummariesCloud => 'โดย Omi Cloud';
 
   @override
-  String get onDeviceSaveLiveHours => 'ถอดเสียงบนโทรศัพท์เครื่องนี้เพื่อประหยัดชั่วโมงแบบสด';
+  String get onDeviceSaveLiveHours => 'ถอดความบนโทรศัพท์เครื่องนี้เสมอ';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => 'อัปเกรดเป็น Pro เพื่อแยกผู้พูดและเพิ่มความแม่นยำ';
+  String get onDeviceSaveLiveHoursSubtitle => 'ประหยัดการใช้งาน ไม่มีป้ายชื่อผู้พูด';
 
   @override
   String get onDeviceOnThisPhone => 'บนโทรศัพท์เครื่องนี้';
@@ -13473,7 +13449,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModelMessage =>
-      'การบันทึกจะรออยู่บนโทรศัพท์เครื่องนี้จนกว่าคุณจะดาวน์โหลดอีกครั้งหรือชั่วโมงแบบสดกลับมา';
+      'ไฟล์บันทึกจะรออยู่บนโทรศัพท์เครื่องนี้จนกว่าคุณจะดาวน์โหลดอีกครั้งหรือการใช้งานรีเซ็ต';
 
   @override
   String get onDeviceRemove => 'ลบ';
@@ -13483,7 +13459,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get onDeviceFinishSetupBody =>
-      'คุณใช้ชั่วโมงแบบสดของเดือนนี้หมดแล้ว Omi ยังคงบันทึกและเก็บเสียงไว้บนโทรศัพท์ของคุณ ดาวน์โหลดโมเดลเสียงพูดแล้วระบบจะถอดเสียงส่วนที่ค้างให้';
+      'คุณถึงขีดจำกัดของเดือนนี้แล้ว Omi ยังบันทึกและเก็บบันทึกเสียงไว้บนโทรศัพท์ของคุณ ดาวน์โหลดโมเดลเสียง แล้วมันจะตามงานที่ค้างให้ทัน';
 
   @override
   String onDeviceDownloadSize(String size) {
@@ -13492,10 +13468,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get onDeviceUnsupportedBody =>
-      'โทรศัพท์เครื่องนี้ยังใช้โมเดลเสียงพูดไม่ได้ เสียงจะถูกเก็บไว้จนกว่าชั่วโมงแบบสดจะกลับมาหรือคุณอัปเกรด';
+      'โทรศัพท์เครื่องนี้ยังรันโมเดลเสียงไม่ได้ เสียงจะถูกเก็บไว้จนกว่าการใช้งานจะรีเซ็ตหรือคุณอัปเกรด';
 
   @override
-  String get onDeviceEntrySubtitle => 'เมื่อชั่วโมงแบบสดหมด ให้ถอดเสียงบนโทรศัพท์เครื่องนี้';
+  String get onDeviceEntrySubtitle => 'เมื่อถึงขีดจำกัด ให้ถอดความบนโทรศัพท์เครื่องนี้';
 
   @override
   String get chatAppsChannelPlanRequired => 'ใช้ได้ในแพ็กเกจ Operator และ Architect';

@@ -3,9 +3,11 @@ import 'package:omi/services/on_device/phone_power_source.dart';
 
 /// An [OnDeviceModel] whose status the test sets directly; records calls.
 class FakeOnDeviceModel extends OnDeviceModel {
-  FakeOnDeviceModel([OnDeviceModelStatus? status])
+  FakeOnDeviceModel([OnDeviceModelStatus? status, this.engine])
       : _status = status ?? const OnDeviceModelStatus(phase: OnDeviceModelPhase.installed);
 
+  @override
+  final String? engine;
   OnDeviceModelStatus _status;
   int downloads = 0;
   bool? lastWifiOnly;

@@ -5830,10 +5830,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get usingNativeIosSpeech => 'Käytetään iOS:n natiivia puheentunnistusta';
 
   @override
-  String get noModelDownloadRequired =>
-      'Laitteesi natiivi puheentunnistusmoottori on käytössä. Mallin lataus ei ole tarpeen.';
-
-  @override
   String get modelReady => 'Malli valmis';
 
   @override
@@ -5904,9 +5900,6 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get modelTooLargeWarning =>
       'Tämä malli on suuri ja voi aiheuttaa sovelluksen kaatumisen tai erittäin hitaan toiminnan mobiililaitteissa.\n\nSuositellaan small tai base.';
-
-  @override
-  String get nativeEngineNoDownload => 'Käytetään laitteesi natiivia puhe-moottoria. Mallin latausta ei tarvita.';
 
   @override
   String modelReadyWithName(String model) {
@@ -13282,14 +13275,14 @@ class AppLocalizationsFi extends AppLocalizations {
   String get syncDetailsCopy => 'Kopioi tiedot tukea varten';
 
   @override
-  String get onDeviceAtCapTitle => 'Tämän kuun live-litterointi on käytetty';
+  String get onDeviceAtCapTitle => 'Olet saavuttanut tämän kuun rajan';
 
   @override
   String get onDeviceAtCapBody => 'Omi tallentaa edelleen. Valitse, miten loppukuun tallenteet litteroidaan.';
 
   @override
   String onDeviceLiveHoursReturn(String date) {
-    return 'Live-tunnit palautuvat $date.';
+    return 'Käyttösi nollautuu $date.';
   }
 
   @override
@@ -13299,8 +13292,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get onDeviceIncluded => 'Sisältyy';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'Toimii puhelimen latautuessa, joten akkua kuluu tuskin lainkaan. Litteroinnit näkyvät, kun kytket laturin.';
+  String get onDeviceOptionChargingBody => 'Toimii, kun puhelin latautuu.';
 
   @override
   String get onDeviceUpgradeBody => 'Päivitä Pro-versioon puhujien erottelua ja parempaa tarkkuutta varten';
@@ -13316,7 +13308,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get onDeviceSetupBody =>
-      'Omi lataa puhemallin kerran. Sen jälkeen tallenteesi muutetaan tekstiksi suoraan täällä käyttämättä live-tuntejasi.';
+      'Omi lataa puhemallin kerran. Sen jälkeen tallenteesi muutetaan tekstiksi täällä, eikä se laske käyttöösi.';
 
   @override
   String get onDeviceSpeechModel => 'Puhemalli';
@@ -13377,7 +13369,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get onDeviceScheduleHeadline => 'Milloin Omin pitäisi litteroida?';
 
   @override
-  String get onDeviceScheduleBody => 'Litterointi erissä säästää akkua. Voit muuttaa tätä milloin tahansa.';
+  String get onDeviceScheduleBody => 'Voit muuttaa tätä milloin tahansa.';
 
   @override
   String get onDeviceScheduleCharging => 'Latauksen aikana';
@@ -13460,11 +13452,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get onDeviceWhyPhoneTitle => 'Miksi tämä tehtiin puhelimellasi';
 
   @override
-  String get onDeviceWhyLiveHoursUsed =>
-      'Olet käyttänyt tämän kuun live-tunnit, joten Omi litteroi tämän keskustelun tällä puhelimella.';
+  String get onDeviceWhyLiveHoursUsed => 'Saavutit tämän kuun rajan, joten Omi litteroi tämän puhelimellasi.';
 
   @override
-  String get onDeviceWhySavingLiveHours => 'Valitsit litteroinnin tällä puhelimella säästääksesi live-tunteja.';
+  String get onDeviceWhySavingLiveHours => 'Valitsit litteroinnin tällä puhelimella säästääksesi käyttöä.';
 
   @override
   String get onDeviceWhySummaryOnPhone => 'Myös yhteenveto tehtiin tällä iPhonella.';
@@ -13477,11 +13468,11 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get onDeviceWhyCloudIphone =>
-      'Tämä iPhone ei pysty tekemään yhteenvetoja itse (se vaatii iPhone 15 Pron tai uudemman). Litterointi tehtiin puhelimellasi, ja vain sen teksti lähetettiin Omille yhteenvetoa varten. Se ei kuluta live-tuntejasi.';
+      'Tämä iPhone ei pysty tekemään yhteenvetoja itse (se vaatii iPhone 15 Pron tai uudemman). Litterointi tehtiin puhelimellasi, ja vain sen teksti lähetettiin Omille yhteenvetoa varten. Se ei laske käyttöösi.';
 
   @override
   String get onDeviceWhyCloudPhone =>
-      'Tämä puhelin ei pysty tekemään yhteenvetoja itse. Litterointi tehtiin puhelimellasi, ja vain sen teksti lähetettiin Omille yhteenvetoa varten. Se ei kuluta live-tuntejasi.';
+      'Tämä puhelin ei pysty tekemään yhteenvetoja itse. Litterointi tehtiin puhelimellasi, ja vain sen teksti lähetettiin Omille yhteenvetoa varten. Se ei laske käyttöösi.';
 
   @override
   String get onDeviceRedoWithCloud => 'Tee uudelleen Omi Cloudissa';
@@ -13496,23 +13487,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get onDeviceKeepEverythingSubtitle => 'Vain litteroinnit, ei yhteenvetoja';
 
   @override
-  String get onDeviceLiveHours => 'Live-tunnit';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return '$used/$limit tuntia käytetty';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return 'Nollautuu $date';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'Hanki lisää live-tunteja';
-
-  @override
-  String get onDeviceAfterLiveHours => 'Kun live-tunnit loppuvat';
+  String get onDeviceAfterLiveHours => 'Kun saavutat rajasi';
 
   @override
   String get onDeviceWhen => 'Milloin';
@@ -13527,10 +13502,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get onDeviceSummariesCloud => 'Omi Cloudissa';
 
   @override
-  String get onDeviceSaveLiveHours => 'Litteroi tällä puhelimella säästääksesi live-tunteja';
+  String get onDeviceSaveLiveHours => 'Litteroi aina tällä puhelimella';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => 'Päivitä Pro-versioon puhujien erottelua ja parempaa tarkkuutta varten';
+  String get onDeviceSaveLiveHoursSubtitle => 'Säästää käyttöäsi. Ei puhujamerkintöjä.';
 
   @override
   String get onDeviceOnThisPhone => 'Tällä puhelimella';
@@ -13546,7 +13521,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModelMessage =>
-      'Tallenteet odottavat tällä puhelimella, kunnes lataat mallin uudelleen tai live-tunnit palautuvat.';
+      'Tallenteet odottavat tällä puhelimella, kunnes lataat sen uudelleen tai käyttösi nollautuu.';
 
   @override
   String get onDeviceRemove => 'Poista';
@@ -13556,7 +13531,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get onDeviceFinishSetupBody =>
-      'Olet käyttänyt tämän kuun live-tunnit. Omi tallentaa edelleen ja säilyttää äänen puhelimessasi. Lataa puhemalli, niin litteroinnit saadaan ajan tasalle.';
+      'Olet saavuttanut tämän kuun rajan. Omi tallentaa yhä ääntä puhelimeesi. Lataa puhemalli, niin se kirii kiinni.';
 
   @override
   String onDeviceDownloadSize(String size) {
@@ -13565,10 +13540,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get onDeviceUnsupportedBody =>
-      'Tämä puhelin ei vielä pysty käyttämään puhemallia. Ääni säilyy tallessa, kunnes live-tunnit palautuvat tai päivität tilauksesi.';
+      'Tämä puhelin ei vielä pysty ajamaan puhemallia. Ääni pysyy tallessa, kunnes käyttösi nollautuu tai päivität.';
 
   @override
-  String get onDeviceEntrySubtitle => 'Kun live-tunnit loppuvat, litteroi tällä puhelimella';
+  String get onDeviceEntrySubtitle => 'Kun saavutat rajasi, litteroi tällä puhelimella';
 
   @override
   String get chatAppsChannelPlanRequired => 'Saatavilla Operator- ja Architect-tilauksissa';

@@ -5856,10 +5856,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get usingNativeIosSpeech => 'Utilizarea recunoașterii vocale native iOS';
 
   @override
-  String get noModelDownloadRequired =>
-      'Se va utiliza motorul de vorbire nativ al dispozitivului. Nu este necesară descărcarea unui model.';
-
-  @override
   String get modelReady => 'Model pregătit';
 
   @override
@@ -5931,10 +5927,6 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get modelTooLargeWarning =>
       'Acest model este mare și poate cauza blocarea aplicației sau rulare foarte lentă pe dispozitivele mobile.\n\nsmall sau base este recomandat.';
-
-  @override
-  String get nativeEngineNoDownload =>
-      'Motorul vocal nativ al dispozitivului va fi folosit. Nu este necesară descărcarea modelului.';
 
   @override
   String modelReadyWithName(String model) {
@@ -13332,14 +13324,14 @@ class AppLocalizationsRo extends AppLocalizations {
   String get syncDetailsCopy => 'Copiază detaliile pentru asistență';
 
   @override
-  String get onDeviceAtCapTitle => 'Ai folosit transcrierea live din această lună';
+  String get onDeviceAtCapTitle => 'Ai atins limita lunii acesteia';
 
   @override
   String get onDeviceAtCapBody => 'Omi încă înregistrează. Alege cum va fi transcris restul lunii.';
 
   @override
   String onDeviceLiveHoursReturn(String date) {
-    return 'Orele live revin pe $date.';
+    return 'Utilizarea se resetează pe $date.';
   }
 
   @override
@@ -13349,8 +13341,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get onDeviceIncluded => 'Inclus';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'Rulează în timp ce telefonul se încarcă, deci aproape nu consumă bateria. Transcrierile apar după ce conectezi încărcătorul.';
+  String get onDeviceOptionChargingBody => 'Rulează în timp ce telefonul se încarcă.';
 
   @override
   String get onDeviceUpgradeBody => 'Treci la Pro pentru separarea vorbitorilor și o precizie mai mare';
@@ -13365,7 +13356,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get onDeviceSetupBody =>
-      'Omi descarcă o singură dată un model de vorbire. După aceea, înregistrările tale sunt transformate în text chiar aici, fără să folosească orele live.';
+      'Omi descarcă un model de vorbire o singură dată. După aceea, înregistrările tale sunt transformate în text chiar aici, fără să conteze la utilizare.';
 
   @override
   String get onDeviceSpeechModel => 'Model de vorbire';
@@ -13427,7 +13418,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get onDeviceScheduleHeadline => 'Când ar trebui să transcrie Omi?';
 
   @override
-  String get onDeviceScheduleBody => 'Transcrierea în loturi economisește bateria. Poți schimba asta oricând.';
+  String get onDeviceScheduleBody => 'Poți schimba oricând.';
 
   @override
   String get onDeviceScheduleCharging => 'În timpul încărcării';
@@ -13513,10 +13504,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get onDeviceWhyLiveHoursUsed =>
-      'Ai folosit orele live din această lună, așa că Omi a transcris această conversație pe acest telefon.';
+      'Ai atins limita lunii acesteia, așa că Omi a transcris asta pe telefonul tău.';
 
   @override
-  String get onDeviceWhySavingLiveHours => 'Ai ales să transcrii pe acest telefon ca să economisești ore live.';
+  String get onDeviceWhySavingLiveHours => 'Ai ales să transcrii pe acest telefon ca să economisești utilizarea.';
 
   @override
   String get onDeviceWhySummaryOnPhone => 'Rezumatul a fost scris tot pe acest iPhone.';
@@ -13529,11 +13520,11 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get onDeviceWhyCloudIphone =>
-      'Acest iPhone nu poate face singur rezumate (e nevoie de un iPhone 15 Pro sau mai nou). Transcrierea a fost făcută pe telefonul tău și doar textul ei a fost trimis la Omi pentru rezumat. Nu folosește orele tale live.';
+      'Acest iPhone nu poate face singur rezumate (e nevoie de un iPhone 15 Pro sau mai nou). Transcrierea a fost făcută pe telefonul tău și doar textul ei a fost trimis la Omi pentru rezumat. Nu se socotește la utilizare.';
 
   @override
   String get onDeviceWhyCloudPhone =>
-      'Acest telefon nu poate face singur rezumate. Transcrierea a fost făcută pe telefonul tău și doar textul ei a fost trimis la Omi pentru rezumat. Nu folosește orele tale live.';
+      'Acest telefon nu poate face singur rezumate. Transcrierea a fost făcută pe telefonul tău și doar textul ei a fost trimis la Omi pentru rezumat. Nu se socotește la utilizare.';
 
   @override
   String get onDeviceRedoWithCloud => 'Refă cu Omi Cloud';
@@ -13548,23 +13539,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get onDeviceKeepEverythingSubtitle => 'Doar transcrieri, fără rezumate';
 
   @override
-  String get onDeviceLiveHours => 'Ore live';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return '$used din $limit ore folosite';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return 'Se resetează pe $date';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'Obține mai multe ore live';
-
-  @override
-  String get onDeviceAfterLiveHours => 'După ce se termină orele live';
+  String get onDeviceAfterLiveHours => 'Când atingi limita';
 
   @override
   String get onDeviceWhen => 'Când';
@@ -13579,10 +13554,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get onDeviceSummariesCloud => 'De Omi Cloud';
 
   @override
-  String get onDeviceSaveLiveHours => 'Transcrie pe acest telefon pentru a economisi ore live';
+  String get onDeviceSaveLiveHours => 'Transcrie întotdeauna pe acest telefon';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => 'Treci la Pro pentru separarea vorbitorilor și o precizie mai mare';
+  String get onDeviceSaveLiveHoursSubtitle => 'Economisește utilizarea. Fără etichete de vorbitori.';
 
   @override
   String get onDeviceOnThisPhone => 'Pe acest telefon';
@@ -13598,7 +13573,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModelMessage =>
-      'Înregistrările vor aștepta pe acest telefon până îl descarci din nou sau până revin orele live.';
+      'Înregistrările vor aștepta pe acest telefon până îl descarci din nou sau utilizarea se resetează.';
 
   @override
   String get onDeviceRemove => 'Elimină';
@@ -13608,7 +13583,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get onDeviceFinishSetupBody =>
-      'Ai folosit orele live din această lună. Omi încă înregistrează și salvează audio pe telefonul tău. Descarcă modelul de vorbire și va recupera totul.';
+      'Ai atins limita lunii acesteia. Omi încă înregistrează și salvează audio pe telefonul tău. Descarcă modelul de vorbire și va recupera.';
 
   @override
   String onDeviceDownloadSize(String size) {
@@ -13617,10 +13592,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get onDeviceUnsupportedBody =>
-      'Acest telefon nu poate rula încă modelul de vorbire. Audio rămâne salvat până revin orele live sau până faci upgrade.';
+      'Acest telefon nu poate rula încă modelul de vorbire. Audio rămâne salvat până se resetează utilizarea sau faci upgrade.';
 
   @override
-  String get onDeviceEntrySubtitle => 'Când se termină orele live, transcrie pe acest telefon';
+  String get onDeviceEntrySubtitle => 'Când atingi limita, transcrie pe acest telefon';
 
   @override
   String get chatAppsChannelPlanRequired => 'Disponibil cu Operator și Architect';

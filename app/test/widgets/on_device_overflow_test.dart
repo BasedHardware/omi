@@ -15,6 +15,7 @@ import 'package:omi/pages/on_device/on_device_queue_banner.dart';
 import 'package:omi/pages/on_device/on_device_schedule_page.dart';
 import 'package:omi/pages/on_device/on_device_settings_page.dart';
 import 'package:omi/pages/on_device/on_device_setup_page.dart';
+import 'package:omi/models/plan_storefront.dart';
 import 'package:omi/services/on_device/on_device_model.dart';
 import 'package:omi/services/on_device/on_device_provenance.dart';
 import 'package:omi/services/on_device/on_device_schedule_policy.dart';
@@ -74,9 +75,9 @@ void main() {
               padding: const EdgeInsets.all(20),
               child: OnDeviceAtCapSheet(copy: copy, onDontAskAgain: (value) => dontAsk = value, onContinue: (_) {})));
       expect(find.text(copy.title), findsOneWidget);
+      expect(copy.title, l10n.onDeviceAtCapTitle);
       expect(find.text(copy.body), findsOneWidget);
       expect(find.text(copy.onDeviceUpgradeLine), findsOneWidget);
-      expect(find.text(l10n.onDeviceAtCapTitle), findsNothing);
       await _tap(tester, find.byType(CheckboxListTile));
       await tester.pumpAndSettle();
       expect(dontAsk, true);
@@ -115,7 +116,8 @@ void main() {
           pendingSeconds: pendingSeconds,
           atCap: atCap,
           onSetUp: onSetUp ?? () {},
-          onGetMoreLiveHours: onUpgrade ?? () {},
+          moreLabel: 'Get more usage',
+          onGetMoreUsage: onUpgrade ?? () {},
         ),
       );
     }
@@ -174,7 +176,21 @@ void main() {
       expect(find.byKey(const Key('on_device_finish_setup_banner')), findsOneWidget);
     });
 
-    testWidgets('unsupported phone: only at cap, offering more live hours', (tester) async {
+    testWidgets('OS-managed asset install is progress only', (tester) async {
+      final model = FakeOnDeviceModel(
+        const OnDeviceModelStatus(phase: OnDeviceModelPhase.downloading, progress: 0.4),
+        'speech_analyzer',
+      );
+      final controller = OnDeviceTranscriptionController(model: model, power: const UnknownPhonePowerSource())
+        ..debugActivate();
+      await pumpBanner(tester, controller);
+      expect(find.byKey(const Key('on_device_asset_progress')), findsOneWidget);
+      expect(find.text(l10n.onDeviceFinishSetupBody), findsNothing);
+      expect(find.text(l10n.onDeviceDownloadingPercent(40)), findsOneWidget);
+      expect(find.byKey(const Key('on_device_finish_setup_banner')), findsNothing);
+    });
+
+    testWidgets('unsupported phone: only at cap, offering more usage', (tester) async {
       final controller = _controller(status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.unsupported));
       await pumpBanner(tester, controller, atCap: false);
       expect(find.byKey(const Key('on_device_unsupported_banner')), findsNothing);
@@ -317,11 +333,17 @@ void main() {
         tester,
         OnDeviceSettingsView(
           controller: controller,
-          liveHours: OnDeviceLiveHours(usedSeconds: 360000, limitSeconds: 360000, resetsOn: DateTime(2026, 11, 1)),
-          showSaveLiveHours: true,
+          usage: const StorefrontUsage(
+            kind: 'usage_budget',
+            percent: 80,
+            resetLabel: 'resets Nov 1',
+            meterLine: '80% used · about 3 hours of recording left · resets Nov 1',
+            moreLabel: 'Get more usage',
+          ),
+          showSaveUsage: true,
           pendingSeconds: 12000,
           pendingBytes: 180 * 1024 * 1024,
-          onGetMoreLiveHours: () {},
+          onGetMoreUsage: () {},
         ),
         page: true,
       );
@@ -330,8 +352,8 @@ void main() {
 
     testWidgets('shows the meter, schedule, model and waiting audio', (tester) async {
       await pumpSettings(tester);
-      expect(find.text(l10n.onDeviceLiveHoursUsed('100', '100')), findsOneWidget);
-      expect(find.text(l10n.onDeviceResets('Nov 1, 2026')), findsOneWidget);
+      expect(find.text('80% used · about 3 hours of recording left · resets Nov 1'), findsOneWidget);
+      expect(find.text('Get more usage'), findsOneWidget);
       expect(find.text(l10n.onDeviceScheduleCharging), findsOneWidget);
       expect(find.text(l10n.onDeviceSummariesCloud), findsOneWidget);
       await tester.scrollUntilVisible(find.text(l10n.onDeviceMegabytes('180')), 200);
@@ -358,6 +380,28 @@ void main() {
       await tester.pumpAndSettle();
       expect((controller.model as FakeOnDeviceModel).removals, 1);
       expect(find.byKey(const Key('on_device_settings_remove')), findsNothing);
+    });
+
+    testWidgets('hides the speech model row when the engine is OS-managed', (tester) async {
+      final controller = OnDeviceTranscriptionController(
+        model: FakeOnDeviceModel(const OnDeviceModelStatus(phase: OnDeviceModelPhase.installed), 'speech_analyzer'),
+        power: const UnknownPhonePowerSource(),
+      )..debugActivate(settings: const OnDeviceSettings(enabled: true));
+      await _pump(
+        tester,
+        OnDeviceSettingsView(
+          controller: controller,
+          usage: const StorefrontUsage(kind: 'usage_budget', percent: 40, meterLine: '40% used · resets Nov 1'),
+          showSaveUsage: true,
+          pendingSeconds: 0,
+          pendingBytes: 0,
+          onGetMoreUsage: () {},
+        ),
+        page: true,
+      );
+      expect(find.byKey(const Key('on_device_settings_model')), findsNothing);
+      expect(find.byKey(const Key('on_device_settings_remove')), findsNothing);
+      expect(find.text(l10n.onDeviceSaveLiveHours), findsOneWidget);
     });
   });
 }

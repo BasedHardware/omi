@@ -5732,9 +5732,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get usingNativeIosSpeech => '使用原生 iOS 语音识别';
 
   @override
-  String get noModelDownloadRequired => '将使用您设备的原生语音引擎。无需下载模型。';
-
-  @override
   String get modelReady => '模型就绪';
 
   @override
@@ -5802,9 +5799,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get modelTooLargeWarning => '此模型较大，可能导致应用在移动设备上崩溃或运行非常缓慢。\n\n建议使用 small 或 base。';
-
-  @override
-  String get nativeEngineNoDownload => '将使用您设备的原生语音引擎。无需下载模型。';
 
   @override
   String modelReadyWithName(String model) {
@@ -13072,14 +13066,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncDetailsCopy => '复制详情以供支持团队使用';
 
   @override
-  String get onDeviceAtCapTitle => '本月的实时转录时长已用完';
+  String get onDeviceAtCapTitle => '你已达到本月的用量上限';
 
   @override
   String get onDeviceAtCapBody => 'Omi 仍在录音。请选择本月剩余时间的转录方式。';
 
   @override
   String onDeviceLiveHoursReturn(String date) {
-    return '实时时长将于 $date 恢复。';
+    return '你的用量将于 $date 重置。';
   }
 
   @override
@@ -13089,7 +13083,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onDeviceIncluded => '已包含';
 
   @override
-  String get onDeviceOptionChargingBody => '在手机充电时运行，几乎不耗电。接上充电器后即可看到文字记录。';
+  String get onDeviceOptionChargingBody => '在手机充电时运行。';
 
   @override
   String get onDeviceUpgradeBody => '升级到 Pro，获得说话人分离和更高准确度';
@@ -13103,7 +13097,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get onDeviceSetupBody => 'Omi 只需下载一次语音模型。之后，你的录音会直接在本机转为文字，不占用实时时长。';
+  String get onDeviceSetupBody => 'Omi 只需下载一次语音模型。之后，你的录音会直接在本机转为文字，不计入用量。';
 
   @override
   String get onDeviceSpeechModel => '语音模型';
@@ -13164,7 +13158,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onDeviceScheduleHeadline => 'Omi 应在何时转录？';
 
   @override
-  String get onDeviceScheduleBody => '分批转录更省电。你可以随时更改。';
+  String get onDeviceScheduleBody => '你可以随时更改。';
 
   @override
   String get onDeviceScheduleCharging => '充电时';
@@ -13245,10 +13239,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onDeviceWhyPhoneTitle => '为什么在你的手机上处理';
 
   @override
-  String get onDeviceWhyLiveHoursUsed => '你本月的实时时长已用完，因此 Omi 在本机转录了这段对话。';
+  String get onDeviceWhyLiveHoursUsed => '你已达到本月上限，所以 Omi 在你的手机上转录了这段内容。';
 
   @override
-  String get onDeviceWhySavingLiveHours => '你选择了在本机转录以节省实时时长。';
+  String get onDeviceWhySavingLiveHours => '你选择在本机转录以节省用量。';
 
   @override
   String get onDeviceWhySummaryOnPhone => '摘要也是在本 iPhone 上生成的，所有内容都未离开设备。';
@@ -13261,10 +13255,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get onDeviceWhyCloudIphone =>
-      '这台 iPhone 无法自行生成摘要（需要 iPhone 15 Pro 或更新机型）。文字记录在你的手机上生成，仅将其文本发送给 Omi 生成摘要。不占用你的实时时长。';
+      '这台 iPhone 无法自行生成摘要（需要 iPhone 15 Pro 或更新机型）。文字记录在你的手机上生成，仅将其文本发送给 Omi 生成摘要。不计入你的用量。';
 
   @override
-  String get onDeviceWhyCloudPhone => '这部手机无法自行生成摘要。文字记录在你的手机上生成，仅将其文本发送给 Omi 生成摘要。不占用你的实时时长。';
+  String get onDeviceWhyCloudPhone => '这部手机无法自行生成摘要。文字记录在你的手机上生成，仅将其文本发送给 Omi 生成摘要。不计入你的用量。';
 
   @override
   String get onDeviceRedoWithCloud => '用 Omi Cloud 重新处理';
@@ -13279,23 +13273,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onDeviceKeepEverythingSubtitle => '仅文字记录，不生成摘要';
 
   @override
-  String get onDeviceLiveHours => '实时时长';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return '已用 $used/$limit 小时';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return '$date 重置';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => '获取更多实时时长';
-
-  @override
-  String get onDeviceAfterLiveHours => '实时时长用完后';
+  String get onDeviceAfterLiveHours => '达到用量上限时';
 
   @override
   String get onDeviceWhen => '时间';
@@ -13310,10 +13288,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onDeviceSummariesCloud => '由 Omi Cloud 生成';
 
   @override
-  String get onDeviceSaveLiveHours => '在本机转录以节省实时时长';
+  String get onDeviceSaveLiveHours => '始终在本机转录';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => '升级到 Pro，获得说话人分离和更高准确度';
+  String get onDeviceSaveLiveHoursSubtitle => '节省用量。没有说话人标签。';
 
   @override
   String get onDeviceOnThisPhone => '本机';
@@ -13328,7 +13306,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onDeviceRemoveModelTitle => '要移除语音模型吗？';
 
   @override
-  String get onDeviceRemoveModelMessage => '录音将保留在本机等待，直到你重新下载模型或实时时长恢复。';
+  String get onDeviceRemoveModelMessage => '录音会留在这台手机上，直到你再次下载，或用量重置。';
 
   @override
   String get onDeviceRemove => '移除';
@@ -13337,7 +13315,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onDeviceFinishSetupTitle => '完成设置即可查看文字记录';
 
   @override
-  String get onDeviceFinishSetupBody => '你本月的实时时长已用完。Omi 仍在录音并将音频保存在你的手机上。下载语音模型后即可补齐转录。';
+  String get onDeviceFinishSetupBody => '你已达到本月上限。Omi 仍在你的手机上录音并保存音频。下载语音模型后，它会补上之前的内容。';
 
   @override
   String onDeviceDownloadSize(String size) {
@@ -13345,10 +13323,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get onDeviceUnsupportedBody => '本机暂时无法运行语音模型。音频会一直保存，直到实时时长恢复或你升级套餐。';
+  String get onDeviceUnsupportedBody => '这台手机还不能运行语音模型。音频会一直保存，直到用量重置或你升级。';
 
   @override
-  String get onDeviceEntrySubtitle => '实时时长用完后，在本机转录';
+  String get onDeviceEntrySubtitle => '达到用量上限后，在本机转录';
 
   @override
   String get chatAppsChannelPlanRequired => 'Operator 和 Architect 套餐可用';

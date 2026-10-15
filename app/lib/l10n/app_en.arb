@@ -7126,10 +7126,6 @@
     "@usingNativeIosSpeech": {
         "description": "Label for iOS native speech recognition"
     },
-    "noModelDownloadRequired": "Your device's native speech engine will be used. No model download required.",
-    "@noModelDownloadRequired": {
-        "description": "Info about iOS native speech"
-    },
     "modelReady": "Model Ready",
     "@modelReady": {
         "description": "Status when model is downloaded"
@@ -7228,10 +7224,6 @@
     "modelTooLargeWarning": "This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.",
     "@modelTooLargeWarning": {
         "description": "Warning about large model sizes"
-    },
-    "nativeEngineNoDownload": "Your devices native speech engine will be used. No model download required.",
-    "@nativeEngineNoDownload": {
-        "description": "Description of iOS native speech recognition"
     },
     "modelReadyWithName": "Model Ready ({model})",
     "@modelReadyWithName": {
@@ -15961,17 +15953,17 @@
     "@syncDetailsCopy": {
         "description": "Sync details button that copies the diagnostics text to the clipboard."
     },
-    "onDeviceAtCapTitle": "You've used this month's live transcription",
+    "onDeviceAtCapTitle": "You've reached this month's limit",
     "@onDeviceAtCapTitle": {
-        "description": "Title of the sheet shown when the monthly live transcription hours run out"
+        "description": "Title of the sheet shown when this month's usage limit is reached"
     },
     "onDeviceAtCapBody": "Omi is still recording. Choose how the rest of this month gets transcribed.",
     "@onDeviceAtCapBody": {
         "description": "Body of the live-hours-used sheet"
     },
-    "onDeviceLiveHoursReturn": "Live hours come back {date}.",
+    "onDeviceLiveHoursReturn": "Your usage resets {date}.",
     "@onDeviceLiveHoursReturn": {
-        "description": "Sentence saying when monthly live transcription hours reset; date is a formatted date like 'Nov 1'",
+        "description": "Sentence saying when monthly usage resets; date is a formatted date like 'Nov 1'",
         "placeholders": {
             "date": {
                 "type": "String"
@@ -15986,9 +15978,9 @@
     "@onDeviceIncluded": {
         "description": "Small badge: this option costs nothing extra"
     },
-    "onDeviceOptionChargingBody": "Runs while your phone charges, so it barely touches the battery. Transcripts show up after you plug in.",
+    "onDeviceOptionChargingBody": "Runs while your phone charges.",
     "@onDeviceOptionChargingBody": {
-        "description": "Explains the on-phone transcription option"
+        "description": "Explains the on-phone transcription option that runs while the phone charges"
     },
     "onDeviceUpgradeBody": "Upgrade to Pro for speaker separation and higher accuracy",
     "@onDeviceUpgradeBody": {
@@ -15996,7 +15988,7 @@
     },
     "onDeviceAtCapFooter": "Nothing is lost either way. You can change this in Settings › Transcription.",
     "@onDeviceAtCapFooter": {
-        "description": "Footer under the live-hours-used sheet; 'Settings › Transcription' is a menu path"
+        "description": "Footer under the usage-limit sheet; 'Settings › Transcription' is a menu path"
     },
     "onDeviceStepOf": "Step {step} of {total}",
     "@onDeviceStepOf": {
@@ -16010,9 +16002,9 @@
             }
         }
     },
-    "onDeviceSetupBody": "Omi downloads a speech model once. After that, your recordings are turned into text right here, without using your live hours.",
+    "onDeviceSetupBody": "Omi downloads a speech model once. After that, your recordings are turned into text right here, without counting toward your usage.",
     "@onDeviceSetupBody": {
-        "description": "Explains on-device transcription setup"
+        "description": "Explains the one-time speech model download and that on-phone transcription does not count toward usage"
     },
     "onDeviceSpeechModel": "Speech model",
     "@onDeviceSpeechModel": {
@@ -16103,9 +16095,9 @@
     "@onDeviceScheduleHeadline": {
         "description": "Heading of the schedule screen"
     },
-    "onDeviceScheduleBody": "Transcribing in batches saves battery. You can change this anytime.",
+    "onDeviceScheduleBody": "You can change this anytime.",
     "@onDeviceScheduleBody": {
-        "description": "Explains the schedule choice"
+        "description": "Short note that the transcription schedule can be changed anytime"
     },
     "onDeviceScheduleCharging": "While charging",
     "@onDeviceScheduleCharging": {
@@ -16218,13 +16210,13 @@
     "@onDeviceWhyPhoneTitle": {
         "description": "Heading of an explanation box"
     },
-    "onDeviceWhyLiveHoursUsed": "You've used this month's live hours, so Omi transcribed this conversation on this phone.",
+    "onDeviceWhyLiveHoursUsed": "You reached this month's limit, so Omi transcribed this on your phone.",
     "@onDeviceWhyLiveHoursUsed": {
-        "description": "Explanation: on-phone transcription because monthly hours ran out"
+        "description": "Why a conversation was transcribed on the phone after the usage limit was reached"
     },
-    "onDeviceWhySavingLiveHours": "You chose to transcribe on this phone to save live hours.",
+    "onDeviceWhySavingLiveHours": "You chose to transcribe on this phone to save your usage.",
     "@onDeviceWhySavingLiveHours": {
-        "description": "Explanation: on-phone transcription by the user's choice"
+        "description": "Why a conversation was transcribed on the phone to save usage"
     },
     "onDeviceWhySummaryOnPhone": "The summary was written on this iPhone too.",
     "@onDeviceWhySummaryOnPhone": {
@@ -16238,13 +16230,13 @@
     "@onDeviceWhyCloudTitle": {
         "description": "Heading of an explanation box"
     },
-    "onDeviceWhyCloudIphone": "This iPhone can't summarize on its own (that needs an iPhone 15 Pro or later). The transcript was made on your phone, and only its text was sent to Omi to summarize. It doesn't use your live hours.",
+    "onDeviceWhyCloudIphone": "This iPhone can't summarize on its own (that needs an iPhone 15 Pro or later). The transcript was made on your phone, and only its text was sent to Omi to summarize. It doesn't count toward your usage.",
     "@onDeviceWhyCloudIphone": {
-        "description": "Explanation: cloud summary on an older iPhone"
+        "description": "Why a summary used the cloud on an iPhone that cannot summarize on device; it does not count toward usage"
     },
-    "onDeviceWhyCloudPhone": "This phone can't summarize on its own. The transcript was made on your phone, and only its text was sent to Omi to summarize. It doesn't use your live hours.",
+    "onDeviceWhyCloudPhone": "This phone can't summarize on its own. The transcript was made on your phone, and only its text was sent to Omi to summarize. It doesn't count toward your usage.",
     "@onDeviceWhyCloudPhone": {
-        "description": "Explanation: cloud summary on a phone without an on-device model"
+        "description": "Why a summary used the cloud on a phone that cannot summarize on device; it does not count toward usage"
     },
     "onDeviceRedoWithCloud": "Redo with Omi Cloud",
     "@onDeviceRedoWithCloud": {
@@ -16262,38 +16254,9 @@
     "@onDeviceKeepEverythingSubtitle": {
         "description": "Subtitle of the keep-everything setting"
     },
-    "onDeviceLiveHours": "Live hours",
-    "@onDeviceLiveHours": {
-        "description": "Monthly hours of live cloud transcription in the user's plan"
-    },
-    "onDeviceLiveHoursUsed": "{used} of {limit} hours used",
-    "@onDeviceLiveHoursUsed": {
-        "description": "Live hours used this month",
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
-    "onDeviceResets": "Resets {date}",
-    "@onDeviceResets": {
-        "description": "When the monthly allowance resets; date is like 'Nov 1'",
-        "placeholders": {
-            "date": {
-                "type": "String"
-            }
-        }
-    },
-    "onDeviceGetMoreLiveHours": "Get More Live Hours",
-    "@onDeviceGetMoreLiveHours": {
-        "description": "Button/row: upgrade the plan for more live hours"
-    },
-    "onDeviceAfterLiveHours": "After live hours run out",
+    "onDeviceAfterLiveHours": "When you reach your limit",
     "@onDeviceAfterLiveHours": {
-        "description": "Settings section header"
+        "description": "Settings section header for what happens when the usage limit is reached"
     },
     "onDeviceWhen": "When",
     "@onDeviceWhen": {
@@ -16311,13 +16274,13 @@
     "@onDeviceSummariesCloud": {
         "description": "Value: summaries are made by Omi's cloud"
     },
-    "onDeviceSaveLiveHours": "Transcribe on this phone to save live hours",
+    "onDeviceSaveLiveHours": "Always transcribe on this phone",
     "@onDeviceSaveLiveHours": {
-        "description": "Setting for paid users: use on-phone transcription even before hours run out"
+        "description": "Setting title: always transcribe on this phone"
     },
-    "onDeviceSaveLiveHoursSubtitle": "Upgrade to Pro for speaker separation and higher accuracy",
+    "onDeviceSaveLiveHoursSubtitle": "Saves your usage. No speaker labels.",
     "@onDeviceSaveLiveHoursSubtitle": {
-        "description": "Subtitle of the save-live-hours setting"
+        "description": "Explains that on-phone transcription saves usage and has no speaker labels"
     },
     "onDeviceOnThisPhone": "On this phone",
     "@onDeviceOnThisPhone": {
@@ -16335,9 +16298,9 @@
     "@onDeviceRemoveModelTitle": {
         "description": "Confirmation dialog title"
     },
-    "onDeviceRemoveModelMessage": "Recordings will wait on this phone until you download it again or live hours come back.",
+    "onDeviceRemoveModelMessage": "Recordings will wait on this phone until you download it again or your usage resets.",
     "@onDeviceRemoveModelMessage": {
-        "description": "Confirmation dialog message for removing the speech model"
+        "description": "Warning that recordings wait until the model is downloaded again or usage resets"
     },
     "onDeviceRemove": "Remove",
     "@onDeviceRemove": {
@@ -16347,9 +16310,9 @@
     "@onDeviceFinishSetupTitle": {
         "description": "Banner title when recordings are waiting for the speech model"
     },
-    "onDeviceFinishSetupBody": "You've used this month's live hours. Omi is still recording and saving audio on your phone. Download the speech model and it will catch up.",
+    "onDeviceFinishSetupBody": "You've reached this month's limit. Omi is still recording and saving audio on your phone. Download the speech model and it will catch up.",
     "@onDeviceFinishSetupBody": {
-        "description": "Banner body when recordings are waiting for the speech model"
+        "description": "Explains recordings are waiting because the usage limit was reached"
     },
     "onDeviceDownloadSize": "{size} download",
     "@onDeviceDownloadSize": {
@@ -16360,13 +16323,13 @@
             }
         }
     },
-    "onDeviceUnsupportedBody": "This phone can't run the speech model yet. Audio stays saved until live hours come back or you upgrade.",
+    "onDeviceUnsupportedBody": "This phone can't run the speech model yet. Audio stays saved until your usage resets or you upgrade.",
     "@onDeviceUnsupportedBody": {
-        "description": "Banner body when the phone cannot run the speech model"
+        "description": "Explains audio stays saved until usage resets or the plan is upgraded"
     },
-    "onDeviceEntrySubtitle": "When live hours run out, transcribe on this phone",
+    "onDeviceEntrySubtitle": "When you reach your limit, transcribe on this phone",
     "@onDeviceEntrySubtitle": {
-        "description": "Subtitle of the settings entry for on-device transcription"
+        "description": "Settings subtitle: transcribe on this phone when the usage limit is reached"
     },
     "chatAppsChannelPlanRequired": "Available on Operator and Architect",
     "@chatAppsChannelPlanRequired": {

@@ -5851,10 +5851,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get usingNativeIosSpeech => 'ಸ್ಥಳೀಯ iOS ಭಾಷಣ ಗುರುತನೆ ಬಳಸುವುದು';
 
   @override
-  String get noModelDownloadRequired =>
-      'ನಿಮ್ಮ ಸಾಧನದ ಸ್ಥಳೀಯ ಭಾಷಣ ಇಂಜಿನ್ ಬಳಸಲಾಗುವುದು. ಯಾವುದೇ ಮಾದರಿ ಡೌನ್‌ಲೋಡ್ ಅಗತ್ಯವಿಲ್ಲ.';
-
-  @override
   String get modelReady => 'ಮಾದರಿ ತಯಾರ';
 
   @override
@@ -5925,9 +5921,6 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get modelTooLargeWarning =>
       'ಈ ಮಾದರಿ ಗುರುತ್ವವಾಗಿದೆ ಮತ್ತು ಸಂಭವವಾಗಿ ಅಪ್ಲಿಕೇಶನ್ ಅದೃಶ್ಯ ಮಾಡುವುದು ಅಥವಾ ಮೊಬೈಲ್ ಸಾಧನಗಳಲ್ಲಿ ಬಹಳ ನಿಧಾನವಾಗಿ ಚಲಾಯಿಸುವುದು.\n\n\"small\" ಅಥವಾ \"base\" ಶಿಫಾರಸುಮಾಡಲಾಗುತ್ತದೆ.';
-
-  @override
-  String get nativeEngineNoDownload => 'ನಿಮ್ಮ ಸಾಧನದ ಸ್ಥಳೀಯ ಭಾಷಣ ಇಂಜಿನ್ ಬಳಸಲಾಗುವುದು. ಯಾವುದೇ ಮಾದರಿ ಡೌನ್‌ಲೋಡ್ ಅಗತ್ಯವಿಲ್ಲ.';
 
   @override
   String modelReadyWithName(String model) {
@@ -13316,7 +13309,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get syncDetailsCopy => 'ಬೆಂಬಲಕ್ಕಾಗಿ ವಿವರಗಳನ್ನು ನಕಲಿಸಿ';
 
   @override
-  String get onDeviceAtCapTitle => 'ಈ ತಿಂಗಳ ಲೈವ್ ಪ್ರತಿಲೇಖನವನ್ನು ನೀವು ಬಳಸಿದ್ದೀರಿ';
+  String get onDeviceAtCapTitle => 'ನೀವು ಈ ತಿಂಗಳ ಮಿತಿಯನ್ನು ತಲುಪಿದ್ದೀರಿ';
 
   @override
   String get onDeviceAtCapBody =>
@@ -13324,7 +13317,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String onDeviceLiveHoursReturn(String date) {
-    return 'ಲೈವ್ ಗಂಟೆಗಳು $date ರಂದು ಮರಳುತ್ತವೆ.';
+    return 'ನಿಮ್ಮ ಬಳಕೆ $date ರಂದು ಮರುಹೊಂದಿಸಲಾಗುತ್ತದೆ.';
   }
 
   @override
@@ -13334,8 +13327,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get onDeviceIncluded => 'ಒಳಗೊಂಡಿದೆ';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'ಫೋನ್ ಚಾರ್ಜ್ ಆಗುತ್ತಿರುವಾಗ ಚಲಿಸುತ್ತದೆ, ಆದ್ದರಿಂದ ಬ್ಯಾಟರಿ ಬಹುತೇಕ ಖರ್ಚಾಗುವುದಿಲ್ಲ. ಚಾರ್ಜರ್ ಸಂಪರ್ಕಿಸಿದ ನಂತರ ಪ್ರತಿಲಿಪಿಗಳು ಕಾಣಿಸುತ್ತವೆ.';
+  String get onDeviceOptionChargingBody => 'ಫೋನ್ ಚಾರ್ಜ್ ಆಗುವಾಗ ಚಾಲನೆಯಲ್ಲಿರುತ್ತದೆ.';
 
   @override
   String get onDeviceUpgradeBody => 'ಮಾತನಾಡುವವರನ್ನು ಪ್ರತ್ಯೇಕಿಸಲು ಮತ್ತು ಹೆಚ್ಚಿನ ನಿಖರತೆಗಾಗಿ Pro ಗೆ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
@@ -13351,7 +13343,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get onDeviceSetupBody =>
-      'Omi ಒಂದು ಬಾರಿ ಸ್ಪೀಚ್ ಮಾದರಿಯನ್ನು ಡೌನ್‌ಲೋಡ್ ಮಾಡುತ್ತದೆ. ಅದರ ನಂತರ, ನಿಮ್ಮ ಲೈವ್ ಗಂಟೆಗಳನ್ನು ಬಳಸದೆ ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇಲ್ಲಿಯೇ ಪಠ್ಯವಾಗಿ ಬದಲಾಗುತ್ತವೆ.';
+      'Omi ಒಮ್ಮೆ ಸ್ಪೀಚ್ ಮಾದರಿಯನ್ನು ಡೌನ್‌ಲೋಡ್ ಮಾಡುತ್ತದೆ. ನಂತರ ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇಲ್ಲಿಯೇ ಪಠ್ಯವಾಗಿ ಬದಲಾಗುತ್ತವೆ, ನಿಮ್ಮ ಬಳಕೆಯಲ್ಲಿ ಲೆಕ್ಕವಿಲ್ಲದೆ.';
 
   @override
   String get onDeviceSpeechModel => 'ಸ್ಪೀಚ್ ಮಾದರಿ';
@@ -13412,8 +13404,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get onDeviceScheduleHeadline => 'Omi ಯಾವಾಗ ಪ್ರತಿಲೇಖಿಸಬೇಕು?';
 
   @override
-  String get onDeviceScheduleBody =>
-      'ಗುಂಪುಗಳಲ್ಲಿ ಪ್ರತಿಲೇಖಿಸುವುದರಿಂದ ಬ್ಯಾಟರಿ ಉಳಿಯುತ್ತದೆ. ಇದನ್ನು ಯಾವಾಗ ಬೇಕಾದರೂ ಬದಲಾಯಿಸಬಹುದು.';
+  String get onDeviceScheduleBody => 'ಇದನ್ನು ಯಾವಾಗ ಬೇಕಾದರೂ ಬದಲಾಯಿಸಬಹುದು.';
 
   @override
   String get onDeviceScheduleCharging => 'ಚಾರ್ಜ್ ಆಗುವಾಗ';
@@ -13500,11 +13491,10 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get onDeviceWhyLiveHoursUsed =>
-      'ನೀವು ಈ ತಿಂಗಳ ಲೈವ್ ಗಂಟೆಗಳನ್ನು ಬಳಸಿದ್ದೀರಿ, ಆದ್ದರಿಂದ Omi ಈ ಸಂಭಾಷಣೆಯನ್ನು ಈ ಫೋನ್‌ನಲ್ಲಿ ಪ್ರತಿಲೇಖಿಸಿದೆ.';
+      'ನೀವು ಈ ತಿಂಗಳ ಮಿತಿಯನ್ನು ತಲುಪಿದ್ದೀರಿ, ಆದ್ದರಿಂದ Omi ಇದನ್ನು ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಲಿಪ್ಯಂತರ ಮಾಡಿದೆ.';
 
   @override
-  String get onDeviceWhySavingLiveHours =>
-      'ಲೈವ್ ಗಂಟೆಗಳನ್ನು ಉಳಿಸಲು ನೀವು ಈ ಫೋನ್‌ನಲ್ಲಿ ಪ್ರತಿಲೇಖಿಸುವುದನ್ನು ಆಯ್ಕೆಮಾಡಿದ್ದೀರಿ.';
+  String get onDeviceWhySavingLiveHours => 'ಬಳಕೆಯನ್ನು ಉಳಿಸಲು ಈ ಫೋನ್‌ನಲ್ಲಿ ಲಿಪ್ಯಂತರ ಮಾಡಲು ನೀವು ಆಯ್ಕೆ ಮಾಡಿದ್ದೀರಿ.';
 
   @override
   String get onDeviceWhySummaryOnPhone => 'ಸಾರಾಂಶವನ್ನೂ ಈ iPhone ನಲ್ಲೇ ಬರೆಯಲಾಗಿದೆ.';
@@ -13517,11 +13507,11 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get onDeviceWhyCloudIphone =>
-      'ಈ iPhone ಸ್ವತಃ ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ (ಅದಕ್ಕೆ iPhone 15 Pro ಅಥವಾ ನಂತರದ ಮಾದರಿ ಬೇಕು). ಪ್ರತಿಲಿಪಿಯನ್ನು ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಮಾಡಲಾಗಿದೆ, ಮತ್ತು ಸಾರಾಂಶಕ್ಕಾಗಿ ಅದರ ಪಠ್ಯವನ್ನು ಮಾತ್ರ Omi ಗೆ ಕಳುಹಿಸಲಾಗಿದೆ. ಇದು ನಿಮ್ಮ ಲೈವ್ ಗಂಟೆಗಳನ್ನು ಬಳಸುವುದಿಲ್ಲ.';
+      'ಈ iPhone ಸ್ವತಃ ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ (ಅದಕ್ಕೆ iPhone 15 Pro ಅಥವಾ ನಂತರದ ಮಾದರಿ ಬೇಕು). ಪ್ರತಿಲಿಪಿಯನ್ನು ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಮಾಡಲಾಗಿದೆ, ಮತ್ತು ಸಾರಾಂಶಕ್ಕಾಗಿ ಅದರ ಪಠ್ಯವನ್ನು ಮಾತ್ರ Omi ಗೆ ಕಳುಹಿಸಲಾಗಿದೆ. ಇದು ನಿಮ್ಮ ಬಳಕೆಯಲ್ಲಿ ಲೆಕ್ಕವಾಗುವುದಿಲ್ಲ.';
 
   @override
   String get onDeviceWhyCloudPhone =>
-      'ಈ ಫೋನ್ ಸ್ವತಃ ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ. ಪ್ರತಿಲಿಪಿಯನ್ನು ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಮಾಡಲಾಗಿದೆ, ಮತ್ತು ಸಾರಾಂಶಕ್ಕಾಗಿ ಅದರ ಪಠ್ಯವನ್ನು ಮಾತ್ರ Omi ಗೆ ಕಳುಹಿಸಲಾಗಿದೆ. ಇದು ನಿಮ್ಮ ಲೈವ್ ಗಂಟೆಗಳನ್ನು ಬಳಸುವುದಿಲ್ಲ.';
+      'ಈ ಫೋನ್ ಸ್ವತಃ ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ. ಪ್ರತಿಲಿಪಿಯನ್ನು ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಮಾಡಲಾಗಿದೆ, ಮತ್ತು ಸಾರಾಂಶಕ್ಕಾಗಿ ಅದರ ಪಠ್ಯವನ್ನು ಮಾತ್ರ Omi ಗೆ ಕಳುಹಿಸಲಾಗಿದೆ. ಇದು ನಿಮ್ಮ ಬಳಕೆಯಲ್ಲಿ ಲೆಕ್ಕವಾಗುವುದಿಲ್ಲ.';
 
   @override
   String get onDeviceRedoWithCloud => 'Omi Cloud ಮೂಲಕ ಮತ್ತೆ ಮಾಡಿ';
@@ -13536,23 +13526,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get onDeviceKeepEverythingSubtitle => 'ಪ್ರತಿಲಿಪಿಗಳು ಮಾತ್ರ, ಸಾರಾಂಶಗಳಿಲ್ಲ';
 
   @override
-  String get onDeviceLiveHours => 'ಲೈವ್ ಗಂಟೆಗಳು';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return '$used/$limit ಗಂಟೆಗಳು ಬಳಕೆಯಾಗಿವೆ';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return '$date ರಂದು ಮರುಹೊಂದಿಸುತ್ತದೆ';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'ಹೆಚ್ಚು ಲೈವ್ ಗಂಟೆಗಳನ್ನು ಪಡೆಯಿರಿ';
-
-  @override
-  String get onDeviceAfterLiveHours => 'ಲೈವ್ ಗಂಟೆಗಳು ಮುಗಿದ ನಂತರ';
+  String get onDeviceAfterLiveHours => 'ನಿಮ್ಮ ಮಿತಿಯನ್ನು ತಲುಪಿದಾಗ';
 
   @override
   String get onDeviceWhen => 'ಯಾವಾಗ';
@@ -13567,11 +13541,10 @@ class AppLocalizationsKn extends AppLocalizations {
   String get onDeviceSummariesCloud => 'Omi Cloud ಮೂಲಕ';
 
   @override
-  String get onDeviceSaveLiveHours => 'ಲೈವ್ ಗಂಟೆಗಳನ್ನು ಉಳಿಸಲು ಈ ಫೋನ್‌ನಲ್ಲಿ ಪ್ರತಿಲೇಖಿಸಿ';
+  String get onDeviceSaveLiveHours => 'ಯಾವಾಗಲೂ ಈ ಫೋನ್‌ನಲ್ಲಿ ಲಿಪ್ಯಂತರ ಮಾಡಿ';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'ಮಾತನಾಡುವವರನ್ನು ಪ್ರತ್ಯೇಕಿಸಲು ಮತ್ತು ಹೆಚ್ಚಿನ ನಿಖರತೆಗಾಗಿ Pro ಗೆ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
+  String get onDeviceSaveLiveHoursSubtitle => 'ನಿಮ್ಮ ಬಳಕೆಯನ್ನು ಉಳಿಸುತ್ತದೆ. ಮಾತನಾಡುವವರ ಲೇಬಲ್ ಇಲ್ಲ.';
 
   @override
   String get onDeviceOnThisPhone => 'ಈ ಫೋನ್‌ನಲ್ಲಿ';
@@ -13587,7 +13560,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModelMessage =>
-      'ನೀವು ಅದನ್ನು ಮತ್ತೆ ಡೌನ್‌ಲೋಡ್ ಮಾಡುವವರೆಗೆ ಅಥವಾ ಲೈವ್ ಗಂಟೆಗಳು ಮರಳುವವರೆಗೆ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಈ ಫೋನ್‌ನಲ್ಲಿ ಕಾಯುತ್ತವೆ.';
+      'ನೀವು ಅದನ್ನು ಮತ್ತೆ ಡೌನ್‌ಲೋಡ್ ಮಾಡುವವರೆಗೆ ಅಥವಾ ನಿಮ್ಮ ಬಳಕೆ ಮರುಹೊಂದುವವರೆಗೆ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಈ ಫೋನ್‌ನಲ್ಲಿ ಕಾಯುತ್ತವೆ.';
 
   @override
   String get onDeviceRemove => 'ತೆಗೆದುಹಾಕಿ';
@@ -13597,7 +13570,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get onDeviceFinishSetupBody =>
-      'ನೀವು ಈ ತಿಂಗಳ ಲೈವ್ ಗಂಟೆಗಳನ್ನು ಬಳಸಿದ್ದೀರಿ. Omi ಇನ್ನೂ ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತಿದೆ ಮತ್ತು ಆಡಿಯೋವನ್ನು ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಉಳಿಸುತ್ತಿದೆ. ಸ್ಪೀಚ್ ಮಾದರಿಯನ್ನು ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ, ಬಾಕಿ ಕೆಲಸ ಪೂರ್ಣಗೊಳ್ಳುತ್ತದೆ.';
+      'ನೀವು ಈ ತಿಂಗಳ ಮಿತಿಯನ್ನು ತಲುಪಿದ್ದೀರಿ. Omi ಇನ್ನೂ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಆಡಿಯೊವನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಿ ಉಳಿಸುತ್ತಿದೆ. ಸ್ಪೀಚ್ ಮಾದರಿಯನ್ನು ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ, ಅದು ಸರಿದೂಗಿಸುತ್ತದೆ.';
 
   @override
   String onDeviceDownloadSize(String size) {
@@ -13606,10 +13579,10 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get onDeviceUnsupportedBody =>
-      'ಈ ಫೋನ್ ಇನ್ನೂ ಸ್ಪೀಚ್ ಮಾದರಿಯನ್ನು ಚಲಾಯಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ. ಲೈವ್ ಗಂಟೆಗಳು ಮರಳುವವರೆಗೆ ಅಥವಾ ನೀವು ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡುವವರೆಗೆ ಆಡಿಯೋ ಉಳಿಸಲ್ಪಟ್ಟಿರುತ್ತದೆ.';
+      'ಈ ಫೋನ್ ಇನ್ನೂ ಸ್ಪೀಚ್ ಮಾದರಿಯನ್ನು ಚಲಾಯಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ. ನಿಮ್ಮ ಬಳಕೆ ಮರುಹೊಂದುವವರೆಗೆ ಅಥವಾ ನೀವು ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡುವವರೆಗೆ ಆಡಿಯೊ ಉಳಿಸಲಾಗುತ್ತದೆ.';
 
   @override
-  String get onDeviceEntrySubtitle => 'ಲೈವ್ ಗಂಟೆಗಳು ಮುಗಿದಾಗ, ಈ ಫೋನ್‌ನಲ್ಲಿ ಪ್ರತಿಲೇಖಿಸಿ';
+  String get onDeviceEntrySubtitle => 'ಮಿತಿ ತಲುಪಿದಾಗ ಈ ಫೋನ್‌ನಲ್ಲಿ ಲಿಪ್ಯಂತರ ಮಾಡಿ';
 
   @override
   String get chatAppsChannelPlanRequired => 'Operator ಮತ್ತು Architect ನಲ್ಲಿ ಲಭ್ಯವಿದೆ';

@@ -5824,10 +5824,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get usingNativeIosSpeech => 'Kasutatakse iOS-i natiivset kõnetuvastust';
 
   @override
-  String get noModelDownloadRequired =>
-      'Kasutatakse teie seadme algset kõnemootorit. Mudeli allalaadimine pole vajalik.';
-
-  @override
   String get modelReady => 'Mudel on valmis';
 
   @override
@@ -5898,10 +5894,6 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get modelTooLargeWarning =>
       'See mudel on suur ja võib põhjustada rakenduse krahhi või väga aeglase töö mobiilseadmetes.\n\nSoovitatav on small või base.';
-
-  @override
-  String get nativeEngineNoDownload =>
-      'Kasutatakse teie seadme natiivset kõnemootorit. Mudeli allalaadimine pole vajalik.';
 
   @override
   String modelReadyWithName(String model) {
@@ -13271,14 +13263,14 @@ class AppLocalizationsEt extends AppLocalizations {
   String get syncDetailsCopy => 'Kopeeri üksikasjad klienditoele';
 
   @override
-  String get onDeviceAtCapTitle => 'Selle kuu reaalajas transkriptsioon on ära kasutatud';
+  String get onDeviceAtCapTitle => 'Oled jõudnud selle kuu limiidini';
 
   @override
   String get onDeviceAtCapBody => 'Omi salvestab endiselt. Valige, kuidas ülejäänud kuu transkribeeritakse.';
 
   @override
   String onDeviceLiveHoursReturn(String date) {
-    return 'Reaalajas tunnid taastuvad $date.';
+    return 'Sinu kasutus lähtestatakse $date.';
   }
 
   @override
@@ -13288,8 +13280,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onDeviceIncluded => 'Hinnas';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'Töötab telefoni laadimise ajal, nii et aku peaaegu ei kulu. Transkriptsioonid ilmuvad pärast laadijasse ühendamist.';
+  String get onDeviceOptionChargingBody => 'Töötab, kui telefon laeb.';
 
   @override
   String get onDeviceUpgradeBody => 'Mine üle Pro-le kõnelejate eristamiseks ja suurema täpsuse saamiseks';
@@ -13305,7 +13296,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get onDeviceSetupBody =>
-      'Omi laadib kõnemudeli alla ühe korra. Seejärel muudetakse teie salvestised tekstiks otse siin, ilma reaalajas tunde kulutamata.';
+      'Omi laadib kõnemudeli alla ühe korra. Pärast seda muudetakse sinu salvestused siinsamas tekstiks, ilma et need kasutuse hulka läheksid.';
 
   @override
   String get onDeviceSpeechModel => 'Kõnemudel';
@@ -13366,7 +13357,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onDeviceScheduleHeadline => 'Millal peaks Omi transkribeerima?';
 
   @override
-  String get onDeviceScheduleBody => 'Partiidena transkribeerimine säästab akut. Saate seda igal ajal muuta.';
+  String get onDeviceScheduleBody => 'Saad seda igal ajal muuta.';
 
   @override
   String get onDeviceScheduleCharging => 'Laadimise ajal';
@@ -13450,11 +13441,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onDeviceWhyPhoneTitle => 'Miks seda tehti teie telefonis';
 
   @override
-  String get onDeviceWhyLiveHoursUsed =>
-      'Olete selle kuu reaalajas tunnid ära kasutanud, seega transkribeeris Omi selle vestluse selles telefonis.';
+  String get onDeviceWhyLiveHoursUsed => 'Jõudsid selle kuu limiidini, seega transkribeeris Omi selle sinu telefonis.';
 
   @override
-  String get onDeviceWhySavingLiveHours => 'Valisite reaalajas tundide säästmiseks transkribeerimise selles telefonis.';
+  String get onDeviceWhySavingLiveHours => 'Valisid selles telefonis transkribeerimise, et kasutust säästa.';
 
   @override
   String get onDeviceWhySummaryOnPhone => 'Ka kokkuvõte koostati selles iPhone\'is.';
@@ -13467,11 +13457,11 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get onDeviceWhyCloudIphone =>
-      'See iPhone ei suuda ise kokkuvõtteid teha (selleks on vaja iPhone 15 Pro või uuemat). Transkriptsioon tehti teie telefonis ja kokkuvõtte jaoks saadeti Omile ainult selle tekst. See ei kuluta teie reaalajas tunde.';
+      'See iPhone ei suuda ise kokkuvõtteid teha (selleks on vaja iPhone 15 Pro või uuemat). Transkriptsioon tehti teie telefonis ja kokkuvõtte jaoks saadeti Omile ainult selle tekst. See ei lähe sinu kasutuse hulka.';
 
   @override
   String get onDeviceWhyCloudPhone =>
-      'See telefon ei suuda ise kokkuvõtteid teha. Transkriptsioon tehti teie telefonis ja kokkuvõtte jaoks saadeti Omile ainult selle tekst. See ei kuluta teie reaalajas tunde.';
+      'See telefon ei suuda ise kokkuvõtteid teha. Transkriptsioon tehti teie telefonis ja kokkuvõtte jaoks saadeti Omile ainult selle tekst. See ei lähe sinu kasutuse hulka.';
 
   @override
   String get onDeviceRedoWithCloud => 'Tee uuesti Omi Cloudiga';
@@ -13486,23 +13476,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onDeviceKeepEverythingSubtitle => 'Ainult transkriptsioonid, kokkuvõtteid pole';
 
   @override
-  String get onDeviceLiveHours => 'Reaalajas tunnid';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return '$used tundi $limit-st kasutatud';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return 'Lähtestub $date';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'Hangi rohkem reaalajas tunde';
-
-  @override
-  String get onDeviceAfterLiveHours => 'Kui reaalajas tunnid saavad otsa';
+  String get onDeviceAfterLiveHours => 'Kui jõuad oma limiidini';
 
   @override
   String get onDeviceWhen => 'Millal';
@@ -13517,10 +13491,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onDeviceSummariesCloud => 'Omi Cloudi abil';
 
   @override
-  String get onDeviceSaveLiveHours => 'Transkribeeri selles telefonis, et säästa reaalajas tunde';
+  String get onDeviceSaveLiveHours => 'Transkribeeri alati selles telefonis';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => 'Mine üle Pro-le kõnelejate eristamiseks ja suurema täpsuse saamiseks';
+  String get onDeviceSaveLiveHoursSubtitle => 'Säästab kasutust. Kõneleja silte pole.';
 
   @override
   String get onDeviceOnThisPhone => 'Selles telefonis';
@@ -13536,7 +13510,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModelMessage =>
-      'Salvestised ootavad selles telefonis, kuni laadite mudeli uuesti alla või reaalajas tunnid taastuvad.';
+      'Salvestused ootavad selles telefonis, kuni laed selle uuesti alla või sinu kasutus lähtestatakse.';
 
   @override
   String get onDeviceRemove => 'Eemalda';
@@ -13546,7 +13520,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get onDeviceFinishSetupBody =>
-      'Olete selle kuu reaalajas tunnid ära kasutanud. Omi salvestab endiselt ja hoiab heli teie telefonis. Laadige kõnemudel alla ja see teeb kõik järele.';
+      'Oled jõudnud selle kuu limiidini. Omi salvestab heli endiselt sinu telefoni. Laadi kõnemudel alla ja see jõuab järele.';
 
   @override
   String onDeviceDownloadSize(String size) {
@@ -13555,10 +13529,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get onDeviceUnsupportedBody =>
-      'See telefon ei suuda veel kõnemudelit käitada. Heli jääb salvestatuks, kuni reaalajas tunnid taastuvad või te paketti uuendate.';
+      'See telefon ei saa kõnemudelit veel käitada. Heli jääb salvestatuks, kuni sinu kasutus lähtestatakse või täiendad.';
 
   @override
-  String get onDeviceEntrySubtitle => 'Kui reaalajas tunnid saavad otsa, transkribeeri selles telefonis';
+  String get onDeviceEntrySubtitle => 'Kui jõuad limiidini, transkribeeri selles telefonis';
 
   @override
   String get chatAppsChannelPlanRequired => 'Saadaval paketiga Operator ja Architect';

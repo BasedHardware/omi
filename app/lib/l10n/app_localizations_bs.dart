@@ -5838,10 +5838,6 @@ class AppLocalizationsBs extends AppLocalizations {
   String get usingNativeIosSpeech => 'Korištenje nativnog iOS prepoznavanja govora';
 
   @override
-  String get noModelDownloadRequired =>
-      'Koristiće se ugrađeni motor za govore vašeg uređaja. Preuzimanje modela nije potrebno.';
-
-  @override
   String get modelReady => 'Model je spreman';
 
   @override
@@ -5912,10 +5908,6 @@ class AppLocalizationsBs extends AppLocalizations {
   @override
   String get modelTooLargeWarning =>
       'Ovaj model je velik i može uzrokovati pad aplikacije ili vrlo sporo pokretanje na mobilnim uređajima.\n\nPreporučuje se \"small\" ili \"base\".';
-
-  @override
-  String get nativeEngineNoDownload =>
-      'Koristiće se ugrađeni motor za govore vašeg uređaja. Preuzimanje modela nije potrebno.';
 
   @override
   String modelReadyWithName(String model) {
@@ -13307,14 +13299,14 @@ class AppLocalizationsBs extends AppLocalizations {
   String get syncDetailsCopy => 'Kopiraj detalje za podršku';
 
   @override
-  String get onDeviceAtCapTitle => 'Iskoristili ste ovomjesečni prepis uživo';
+  String get onDeviceAtCapTitle => 'Dostigli ste ovomjesečno ograničenje';
 
   @override
   String get onDeviceAtCapBody => 'Omi i dalje snima. Odaberite kako će se prepisivati ostatak mjeseca.';
 
   @override
   String onDeviceLiveHoursReturn(String date) {
-    return 'Sati prepisa uživo vraćaju se $date.';
+    return 'Vaše korištenje se resetuje $date.';
   }
 
   @override
@@ -13324,8 +13316,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onDeviceIncluded => 'Uključeno';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'Radi dok se telefon puni, pa gotovo ne troši bateriju. Prepisi se pojave nakon što ga priključite na punjač.';
+  String get onDeviceOptionChargingBody => 'Radi dok se telefon puni.';
 
   @override
   String get onDeviceUpgradeBody => 'Nadogradite na Pro za razdvajanje govornika i veću preciznost';
@@ -13340,7 +13331,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get onDeviceSetupBody =>
-      'Omi jednom preuzima govorni model. Nakon toga se vaši snimci pretvaraju u tekst upravo ovdje, bez trošenja sati prepisa uživo.';
+      'Omi jednom preuzima govorni model. Nakon toga se vaši snimci pretvaraju u tekst ovdje, bez uračunavanja u korištenje.';
 
   @override
   String get onDeviceSpeechModel => 'Govorni model';
@@ -13401,7 +13392,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onDeviceScheduleHeadline => 'Kada da Omi prepisuje?';
 
   @override
-  String get onDeviceScheduleBody => 'Prepisivanje u serijama štedi bateriju. Ovo možete promijeniti bilo kada.';
+  String get onDeviceScheduleBody => 'Ovo možete promijeniti bilo kada.';
 
   @override
   String get onDeviceScheduleCharging => 'Tokom punjenja';
@@ -13485,10 +13476,10 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get onDeviceWhyLiveHoursUsed =>
-      'Iskoristili ste ovomjesečne sate prepisa uživo, pa je Omi prepisao ovaj razgovor na ovom telefonu.';
+      'Dostigli ste ovomjesečno ograničenje, pa je Omi ovo transkribovao na vašem telefonu.';
 
   @override
-  String get onDeviceWhySavingLiveHours => 'Odabrali ste prepisivanje na ovom telefonu da uštedite sate prepisa uživo.';
+  String get onDeviceWhySavingLiveHours => 'Odabrali ste transkripciju na ovom telefonu da uštedite korištenje.';
 
   @override
   String get onDeviceWhySummaryOnPhone => 'Sažetak je također napravljen na ovom iPhoneu.';
@@ -13501,11 +13492,11 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get onDeviceWhyCloudIphone =>
-      'Ovaj iPhone ne može sam praviti sažetke (za to je potreban iPhone 15 Pro ili noviji). Prepis je napravljen na vašem telefonu, a Omiju je radi sažimanja poslan samo njegov tekst. Ne troši vaše sate prepisa uživo.';
+      'Ovaj iPhone ne može sam praviti sažetke (za to je potreban iPhone 15 Pro ili noviji). Prepis je napravljen na vašem telefonu, a Omiju je radi sažimanja poslan samo njegov tekst. Ne uračunava se u vaše korištenje.';
 
   @override
   String get onDeviceWhyCloudPhone =>
-      'Ovaj telefon ne može sam praviti sažetke. Prepis je napravljen na vašem telefonu, a Omiju je radi sažimanja poslan samo njegov tekst. Ne troši vaše sate prepisa uživo.';
+      'Ovaj telefon ne može sam praviti sažetke. Prepis je napravljen na vašem telefonu, a Omiju je radi sažimanja poslan samo njegov tekst. Ne uračunava se u vaše korištenje.';
 
   @override
   String get onDeviceRedoWithCloud => 'Ponovi s Omi Cloud';
@@ -13520,23 +13511,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onDeviceKeepEverythingSubtitle => 'Samo prepisi, bez sažetaka';
 
   @override
-  String get onDeviceLiveHours => 'Sati prepisa uživo';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return 'Iskorišteno $used od $limit sati';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return 'Obnavlja se $date';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'Dobij više sati';
-
-  @override
-  String get onDeviceAfterLiveHours => 'Kada se potroše sati prepisa uživo';
+  String get onDeviceAfterLiveHours => 'Kada dostignete svoje ograničenje';
 
   @override
   String get onDeviceWhen => 'Kada';
@@ -13551,10 +13526,10 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onDeviceSummariesCloud => 'Putem Omi Cloud';
 
   @override
-  String get onDeviceSaveLiveHours => 'Prepisuj na ovom telefonu radi uštede sati prepisa uživo';
+  String get onDeviceSaveLiveHours => 'Uvijek transkribuj na ovom telefonu';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => 'Nadogradite na Pro za razdvajanje govornika i veću preciznost';
+  String get onDeviceSaveLiveHoursSubtitle => 'Štedi vaše korištenje. Bez oznaka govornika.';
 
   @override
   String get onDeviceOnThisPhone => 'Na ovom telefonu';
@@ -13570,7 +13545,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModelMessage =>
-      'Snimci će čekati na ovom telefonu dok ga ponovo ne preuzmete ili se ne vrate sati prepisa uživo.';
+      'Snimci će čekati na ovom telefonu dok ga ponovo ne preuzmete ili dok se korištenje ne resetuje.';
 
   @override
   String get onDeviceRemove => 'Ukloni';
@@ -13580,7 +13555,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get onDeviceFinishSetupBody =>
-      'Iskoristili ste ovomjesečne sate prepisa uživo. Omi i dalje snima i čuva zvuk na vašem telefonu. Preuzmite govorni model i on će sve sustići.';
+      'Dostigli ste ovomjesečno ograničenje. Omi i dalje snima i čuva zvuk na vašem telefonu. Preuzmite govorni model i on će sustići.';
 
   @override
   String onDeviceDownloadSize(String size) {
@@ -13589,10 +13564,10 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get onDeviceUnsupportedBody =>
-      'Ovaj telefon još ne može pokrenuti govorni model. Zvuk ostaje sačuvan dok se ne vrate sati prepisa uživo ili dok ne nadogradite paket.';
+      'Ovaj telefon još ne može pokrenuti govorni model. Zvuk ostaje sačuvan dok se korištenje ne resetuje ili dok ne nadogradite.';
 
   @override
-  String get onDeviceEntrySubtitle => 'Kada se potroše sati prepisa uživo, prepisuj na ovom telefonu';
+  String get onDeviceEntrySubtitle => 'Kada dostignete ograničenje, transkribujte na ovom telefonu';
 
   @override
   String get chatAppsChannelPlanRequired => 'Dostupno uz Operator i Architect';

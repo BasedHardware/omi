@@ -5826,10 +5826,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get usingNativeIosSpeech => 'Používanie natívneho rozpoznávania reči iOS';
 
   @override
-  String get noModelDownloadRequired =>
-      'Použije sa natívny hlasový engine vášho zariadenia. Nie je potrebné sťahovať model.';
-
-  @override
   String get modelReady => 'Model pripravený';
 
   @override
@@ -5900,10 +5896,6 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get modelTooLargeWarning =>
       'Tento model je veľký a môže spôsobiť pád aplikácie alebo veľmi pomalý beh na mobilných zariadeniach.\n\nOdporúča sa small alebo base.';
-
-  @override
-  String get nativeEngineNoDownload =>
-      'Bude použitý natívny hlasový engine vášho zariadenia. Nie je potrebné sťahovať model.';
 
   @override
   String modelReadyWithName(String model) {
@@ -13273,14 +13265,14 @@ class AppLocalizationsSk extends AppLocalizations {
   String get syncDetailsCopy => 'Kopírovať podrobnosti pre podporu';
 
   @override
-  String get onDeviceAtCapTitle => 'Živý prepis na tento mesiac ste vyčerpali';
+  String get onDeviceAtCapTitle => 'Dosiahli ste limit tohto mesiaca';
 
   @override
   String get onDeviceAtCapBody => 'Omi stále nahráva. Vyberte, ako sa prepíše zvyšok mesiaca.';
 
   @override
   String onDeviceLiveHoursReturn(String date) {
-    return 'Hodiny živého prepisu sa obnovia $date.';
+    return 'Vaše využitie sa obnoví $date.';
   }
 
   @override
@@ -13290,8 +13282,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get onDeviceIncluded => 'V cene';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'Beží počas nabíjania telefónu, takže takmer nemíňa batériu. Prepisy sa zobrazia po pripojení nabíjačky.';
+  String get onDeviceOptionChargingBody => 'Beží, kým sa telefón nabíja.';
 
   @override
   String get onDeviceUpgradeBody => 'Prejdite na Pro na rozlíšenie hovoriacich a vyššiu presnosť';
@@ -13306,7 +13297,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get onDeviceSetupBody =>
-      'Omi raz stiahne rečový model. Potom sa vaše nahrávky menia na text priamo tu, bez míňania hodín živého prepisu.';
+      'Omi raz stiahne rečový model. Potom sa vaše nahrávky premenia na text priamo tu a nezapočítajú sa do využitia.';
 
   @override
   String get onDeviceSpeechModel => 'Rečový model';
@@ -13367,7 +13358,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get onDeviceScheduleHeadline => 'Kedy má Omi prepisovať?';
 
   @override
-  String get onDeviceScheduleBody => 'Prepisovanie v dávkach šetrí batériu. Môžete to kedykoľvek zmeniť.';
+  String get onDeviceScheduleBody => 'Toto môžete kedykoľvek zmeniť.';
 
   @override
   String get onDeviceScheduleCharging => 'Počas nabíjania';
@@ -13451,12 +13442,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get onDeviceWhyPhoneTitle => 'Prečo sa to spracovalo vo vašom telefóne';
 
   @override
-  String get onDeviceWhyLiveHoursUsed =>
-      'Vyčerpali ste hodiny živého prepisu na tento mesiac, takže Omi prepísal tento rozhovor v tomto telefóne.';
+  String get onDeviceWhyLiveHoursUsed => 'Dosiahli ste limit tohto mesiaca, preto to Omi prepísal na vašom telefóne.';
 
   @override
-  String get onDeviceWhySavingLiveHours =>
-      'Rozhodli ste sa prepisovať v tomto telefóne, aby ste ušetrili hodiny živého prepisu.';
+  String get onDeviceWhySavingLiveHours => 'Rozhodli ste sa prepisovať na tomto telefóne, aby ste ušetrili využitie.';
 
   @override
   String get onDeviceWhySummaryOnPhone => 'Aj zhrnutie vzniklo v tomto iPhone.';
@@ -13469,11 +13458,11 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get onDeviceWhyCloudIphone =>
-      'Tento iPhone nedokáže sám vytvárať zhrnutia (vyžaduje to iPhone 15 Pro alebo novší). Prepis vznikol vo vašom telefóne a do Omi sa na zhrnutie odoslal iba jeho text. Nemíňa to vaše hodiny živého prepisu.';
+      'Tento iPhone nedokáže sám vytvárať zhrnutia (vyžaduje to iPhone 15 Pro alebo novší). Prepis vznikol vo vašom telefóne a do Omi sa na zhrnutie odoslal iba jeho text. Nezapočítava sa to do využitia.';
 
   @override
   String get onDeviceWhyCloudPhone =>
-      'Tento telefón nedokáže sám vytvárať zhrnutia. Prepis vznikol vo vašom telefóne a do Omi sa na zhrnutie odoslal iba jeho text. Nemíňa to vaše hodiny živého prepisu.';
+      'Tento telefón nedokáže sám vytvárať zhrnutia. Prepis vznikol vo vašom telefóne a do Omi sa na zhrnutie odoslal iba jeho text. Nezapočítava sa to do využitia.';
 
   @override
   String get onDeviceRedoWithCloud => 'Prerobiť cez Omi Cloud';
@@ -13488,23 +13477,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get onDeviceKeepEverythingSubtitle => 'Iba prepisy, žiadne zhrnutia';
 
   @override
-  String get onDeviceLiveHours => 'Hodiny živého prepisu';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return 'Využité $used z $limit hodín';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return 'Obnoví sa $date';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'Získať viac hodín živého prepisu';
-
-  @override
-  String get onDeviceAfterLiveHours => 'Po vyčerpaní hodín živého prepisu';
+  String get onDeviceAfterLiveHours => 'Keď dosiahnete svoj limit';
 
   @override
   String get onDeviceWhen => 'Kedy';
@@ -13519,10 +13492,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get onDeviceSummariesCloud => 'Cez Omi Cloud';
 
   @override
-  String get onDeviceSaveLiveHours => 'Prepisovať v tomto telefóne a šetriť hodiny živého prepisu';
+  String get onDeviceSaveLiveHours => 'Vždy prepisovať na tomto telefóne';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => 'Prejdite na Pro na rozlíšenie hovoriacich a vyššiu presnosť';
+  String get onDeviceSaveLiveHoursSubtitle => 'Šetrí využitie. Bez označenia hovoriacich.';
 
   @override
   String get onDeviceOnThisPhone => 'V tomto telefóne';
@@ -13538,7 +13511,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModelMessage =>
-      'Nahrávky budú čakať v tomto telefóne, kým ho znova nestiahnete alebo sa neobnovia hodiny živého prepisu.';
+      'Nahrávky počkajú na tomto telefóne, kým ho znova nestiahnete alebo sa využitie neobnoví.';
 
   @override
   String get onDeviceRemove => 'Odstrániť';
@@ -13548,7 +13521,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get onDeviceFinishSetupBody =>
-      'Vyčerpali ste hodiny živého prepisu na tento mesiac. Omi stále nahráva a ukladá zvuk vo vašom telefóne. Stiahnite rečový model a všetko dobehne.';
+      'Dosiahli ste limit tohto mesiaca. Omi stále nahráva a ukladá zvuk na vašom telefóne. Stiahnite rečový model a dobehne to.';
 
   @override
   String onDeviceDownloadSize(String size) {
@@ -13557,10 +13530,10 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get onDeviceUnsupportedBody =>
-      'Tento telefón zatiaľ nedokáže spustiť rečový model. Zvuk zostáva uložený, kým sa neobnovia hodiny živého prepisu alebo neprejdete na vyšší plán.';
+      'Tento telefón zatiaľ nedokáže spustiť rečový model. Zvuk zostane uložený, kým sa využitie neobnoví alebo neupgradujete.';
 
   @override
-  String get onDeviceEntrySubtitle => 'Keď sa minú hodiny živého prepisu, prepisovať v tomto telefóne';
+  String get onDeviceEntrySubtitle => 'Keď dosiahnete limit, prepisujte na tomto telefóne';
 
   @override
   String get chatAppsChannelPlanRequired => 'K dispozícii v Operator a Architect';

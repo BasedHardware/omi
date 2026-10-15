@@ -5840,10 +5840,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get usingNativeIosSpeech => 'Tiek izmantota vietējā iOS runas atpazīšana';
 
   @override
-  String get noModelDownloadRequired =>
-      'Tiks izmantots jūsu ierīces sākotnējais runas dzinējs. Modeļa lejupielāde nav nepieciešama.';
-
-  @override
   String get modelReady => 'Modelis gatavs';
 
   @override
@@ -5914,10 +5910,6 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get modelTooLargeWarning =>
       'Šis modelis ir liels un var izraisīt lietotnes avāriju vai ļoti lēnu darbību mobilajās ierīcēs.\n\nIeteicams small vai base.';
-
-  @override
-  String get nativeEngineNoDownload =>
-      'Tiks izmantots jūsu ierīces vietējais runas dzinējs. Modeļa lejupielāde nav nepieciešama.';
 
   @override
   String modelReadyWithName(String model) {
@@ -13306,14 +13298,14 @@ class AppLocalizationsLv extends AppLocalizations {
   String get syncDetailsCopy => 'Kopēt informāciju atbalstam';
 
   @override
-  String get onDeviceAtCapTitle => 'Šī mēneša tiešraides transkripcija ir izlietota';
+  String get onDeviceAtCapTitle => 'Jūs esat sasniedzis šī mēneša limitu';
 
   @override
   String get onDeviceAtCapBody => 'Omi joprojām ieraksta. Izvēlieties, kā transkribēt atlikušo mēneša daļu.';
 
   @override
   String onDeviceLiveHoursReturn(String date) {
-    return 'Tiešraides stundas atgriezīsies $date.';
+    return 'Jūsu lietojums tiek atiestatīts $date.';
   }
 
   @override
@@ -13323,8 +13315,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onDeviceIncluded => 'Iekļauts';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'Darbojas, kamēr tālrunis lādējas, tāpēc gandrīz netērē akumulatoru. Transkripcijas parādās pēc lādētāja pievienošanas.';
+  String get onDeviceOptionChargingBody => 'Darbojas, kamēr tālrunis uzlādējas.';
 
   @override
   String get onDeviceUpgradeBody => 'Pārejiet uz Pro runātāju nošķiršanai un augstākai precizitātei';
@@ -13339,7 +13330,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get onDeviceSetupBody =>
-      'Omi vienreiz lejupielādē runas modeli. Pēc tam jūsu ieraksti tiek pārvērsti tekstā tepat, neizmantojot tiešraides stundas.';
+      'Omi vienreiz lejupielādē runas modeli. Pēc tam ieraksti tiek pārvērsti tekstā tieši šeit, neieskaitot tos lietojumā.';
 
   @override
   String get onDeviceSpeechModel => 'Runas modelis';
@@ -13400,7 +13391,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onDeviceScheduleHeadline => 'Kad Omi jātranskribē?';
 
   @override
-  String get onDeviceScheduleBody => 'Transkribēšana partijās taupa akumulatoru. To var mainīt jebkurā laikā.';
+  String get onDeviceScheduleBody => 'To var mainīt jebkurā laikā.';
 
   @override
   String get onDeviceScheduleCharging => 'Lādēšanas laikā';
@@ -13484,11 +13475,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onDeviceWhyPhoneTitle => 'Kāpēc tas tika veikts jūsu tālrunī';
 
   @override
-  String get onDeviceWhyLiveHoursUsed =>
-      'Šī mēneša tiešraides stundas ir izlietotas, tāpēc Omi transkribēja šo sarunu šajā tālrunī.';
+  String get onDeviceWhyLiveHoursUsed => 'Jūs sasniedzāt šī mēneša limitu, tāpēc Omi to transkribēja jūsu tālrunī.';
 
   @override
-  String get onDeviceWhySavingLiveHours => 'Jūs izvēlējāties transkribēt šajā tālrunī, lai taupītu tiešraides stundas.';
+  String get onDeviceWhySavingLiveHours => 'Izvēlējāties transkribēt šajā tālrunī, lai ietaupītu lietojumu.';
 
   @override
   String get onDeviceWhySummaryOnPhone => 'Arī kopsavilkums tika uzrakstīts šajā iPhone.';
@@ -13501,11 +13491,11 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get onDeviceWhyCloudIphone =>
-      'Šis iPhone pats nevar izveidot kopsavilkumu (tam nepieciešams iPhone 15 Pro vai jaunāks). Transkripcija tika izveidota jūsu tālrunī, un uz Omi kopsavilkumam tika nosūtīts tikai tās teksts. Tiešraides stundas netiek izmantotas.';
+      'Šis iPhone pats nevar izveidot kopsavilkumu (tam nepieciešams iPhone 15 Pro vai jaunāks). Transkripcija tika izveidota jūsu tālrunī, un uz Omi kopsavilkumam tika nosūtīts tikai tās teksts. Tas netiek ieskaitīts lietojumā.';
 
   @override
   String get onDeviceWhyCloudPhone =>
-      'Šis tālrunis pats nevar izveidot kopsavilkumu. Transkripcija tika izveidota jūsu tālrunī, un uz Omi kopsavilkumam tika nosūtīts tikai tās teksts. Tiešraides stundas netiek izmantotas.';
+      'Šis tālrunis pats nevar izveidot kopsavilkumu. Transkripcija tika izveidota jūsu tālrunī, un uz Omi kopsavilkumam tika nosūtīts tikai tās teksts. Tas netiek ieskaitīts lietojumā.';
 
   @override
   String get onDeviceRedoWithCloud => 'Pārtaisīt ar Omi Cloud';
@@ -13520,23 +13510,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onDeviceKeepEverythingSubtitle => 'Tikai transkripcijas, bez kopsavilkumiem';
 
   @override
-  String get onDeviceLiveHours => 'Tiešraides stundas';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return 'Izmantotas $used no $limit stundām';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return 'Atjaunojas $date';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'Iegūt vairāk tiešraides stundu';
-
-  @override
-  String get onDeviceAfterLiveHours => 'Kad tiešraides stundas beigušās';
+  String get onDeviceAfterLiveHours => 'Kad sasniedzat limitu';
 
   @override
   String get onDeviceWhen => 'Kad';
@@ -13551,10 +13525,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onDeviceSummariesCloud => 'Ar Omi Cloud';
 
   @override
-  String get onDeviceSaveLiveHours => 'Transkribēt šajā tālrunī, lai taupītu tiešraides stundas';
+  String get onDeviceSaveLiveHours => 'Vienmēr transkribēt šajā tālrunī';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => 'Pārejiet uz Pro runātāju nošķiršanai un augstākai precizitātei';
+  String get onDeviceSaveLiveHoursSubtitle => 'Ietaupa lietojumu. Bez runātāju atzīmēm.';
 
   @override
   String get onDeviceOnThisPhone => 'Šajā tālrunī';
@@ -13570,7 +13544,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModelMessage =>
-      'Ieraksti gaidīs šajā tālrunī, līdz to atkal lejupielādēsiet vai atgriezīsies tiešraides stundas.';
+      'Ieraksti gaidīs šajā tālrunī, līdz to lejupielādēsiet vēlreiz vai lietojums tiks atiestatīts.';
 
   @override
   String get onDeviceRemove => 'Noņemt';
@@ -13580,7 +13554,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get onDeviceFinishSetupBody =>
-      'Šī mēneša tiešraides stundas ir izlietotas. Omi joprojām ieraksta un saglabā audio jūsu tālrunī. Lejupielādējiet runas modeli, un tas panāks nokavēto.';
+      'Jūs esat sasniedzis šī mēneša limitu. Omi joprojām ieraksta un saglabā audio jūsu tālrunī. Lejupielādējiet runas modeli, un tas panāks.';
 
   @override
   String onDeviceDownloadSize(String size) {
@@ -13589,10 +13563,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get onDeviceUnsupportedBody =>
-      'Šis tālrunis vēl nevar darbināt runas modeli. Audio paliek saglabāts, līdz atgriežas tiešraides stundas vai jūs jaunināt plānu.';
+      'Šis tālrunis vēl nevar palaist runas modeli. Audio paliek saglabāts, līdz lietojums tiek atiestatīts vai jūs veicat jauninājumu.';
 
   @override
-  String get onDeviceEntrySubtitle => 'Kad tiešraides stundas beigušās, transkribēt šajā tālrunī';
+  String get onDeviceEntrySubtitle => 'Kad sasniedzat limitu, transkribējiet šajā tālrunī';
 
   @override
   String get chatAppsChannelPlanRequired => 'Pieejams ar Operator un Architect';

@@ -705,7 +705,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // On-device transcription after live hours run out; nothing while its flag is off.
+                  // On-device transcription after the usage limit is reached; nothing while its flag is off.
                   const OnDeviceSettingsEntry(),
                   _buildSourceSelector(),
                   const SizedBox(height: OmiSpacing.xl),
@@ -1214,7 +1214,6 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             ),
           ),
           const SizedBox(height: OmiSpacing.sm),
-          TranscriptionHelpText(context.l10n.nativeEngineNoDownload),
           FutureBuilder(
             future: OnDeviceAppleProvider.readiness(_currentLanguage),
             builder: (context, snapshot) {

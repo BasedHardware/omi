@@ -22,7 +22,6 @@ import 'package:omi/services/experiments/on_device_overflow_gate.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/ui/ui.dart';
-import 'package:omi/utils/other/temp.dart';
 
 /// Prompt id of the plans sheet offered when the Plus meter runs low.
 const String kFreemiumPlansPromptId = 'freemium-plans';
@@ -86,7 +85,7 @@ class FreemiumSwitchHandler {
     );
   }
 
-  /// With the on-device flag on and live hours used up, offers transcribing on this phone before
+  /// With the on-device flag on and this month's usage limit reached, offers transcribing on this phone before
   /// the plans sheet. Returns true when it handled the prompt.
   Future<bool> _offerOnDevice(BuildContext context) async {
     if (!context.read<UsageProvider>().isOutOfCredits || !await OnDeviceOverflowGate.read()) return false;
@@ -113,7 +112,7 @@ class FreemiumSwitchHandler {
     }
     var dontAskAgain = false;
     final choice = await showOnDeviceAtCapSheet(context,
-        liveHoursReturnOn: OnDeviceLiveHours.nextReset(DateTime.now()),
+        liveHoursReturnOn: onDeviceUsageResetsOn(DateTime.now()),
         copy: copy,
         onDontAskAgain: (value) => dontAskAgain = value);
     if (!context.mounted || choice == null) return true;
@@ -126,7 +125,7 @@ class FreemiumSwitchHandler {
       case OnDeviceAtCapChoice.transcribeOnPhone:
         await controller.updateSettings(controller.settings.copyWith(enabled: true));
         if (context.mounted && !controller.model.status.isInstalled) {
-          await routeToPage(context, const OnDeviceSetupPage());
+          await openOnDeviceSetup(context);
         }
       case OnDeviceAtCapChoice.upgrade:
         if (copy != null) {

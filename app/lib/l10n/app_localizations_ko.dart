@@ -5739,9 +5739,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get usingNativeIosSpeech => '기본 iOS 음성 인식 사용';
 
   @override
-  String get noModelDownloadRequired => '기기의 기본 음성 엔진이 사용됩니다. 모델 다운로드가 필요하지 않습니다.';
-
-  @override
   String get modelReady => '모델 준비 완료';
 
   @override
@@ -5809,9 +5806,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get modelTooLargeWarning => '이 모델은 크고 모바일 기기에서 앱이 충돌하거나 매우 느리게 실행될 수 있습니다.\n\nsmall 또는 base를 권장합니다.';
-
-  @override
-  String get nativeEngineNoDownload => '기기의 기본 음성 엔진이 사용됩니다. 모델 다운로드가 필요 없습니다.';
 
   @override
   String modelReadyWithName(String model) {
@@ -13096,14 +13090,14 @@ class AppLocalizationsKo extends AppLocalizations {
   String get syncDetailsCopy => '지원팀용 상세 정보 복사';
 
   @override
-  String get onDeviceAtCapTitle => '이번 달 실시간 음성 변환을 모두 사용했어요';
+  String get onDeviceAtCapTitle => '이번 달 한도에 도달했어요';
 
   @override
   String get onDeviceAtCapBody => 'Omi는 계속 녹음 중이에요. 이번 달 남은 기간의 변환 방식을 선택하세요.';
 
   @override
   String onDeviceLiveHoursReturn(String date) {
-    return '실시간 시간은 $date에 다시 충전돼요.';
+    return '사용량은 $date에 초기화돼요.';
   }
 
   @override
@@ -13113,7 +13107,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onDeviceIncluded => '포함';
 
   @override
-  String get onDeviceOptionChargingBody => '휴대폰이 충전되는 동안 실행되므로 배터리를 거의 사용하지 않아요. 충전기를 연결하면 텍스트가 표시돼요.';
+  String get onDeviceOptionChargingBody => '휴대폰이 충전되는 동안 실행돼요.';
 
   @override
   String get onDeviceUpgradeBody => '화자 분리와 더 높은 정확도를 위해 Pro로 업그레이드하세요';
@@ -13127,7 +13121,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get onDeviceSetupBody => 'Omi가 음성 모델을 한 번만 다운로드해요. 그 후에는 실시간 시간을 쓰지 않고 이 기기에서 바로 녹음을 텍스트로 변환해요.';
+  String get onDeviceSetupBody => 'Omi가 음성 모델을 한 번만 다운로드해요. 그 후에는 사용량에 포함되지 않고 이 기기에서 바로 녹음을 텍스트로 변환해요.';
 
   @override
   String get onDeviceSpeechModel => '음성 모델';
@@ -13188,7 +13182,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onDeviceScheduleHeadline => 'Omi가 언제 변환할까요?';
 
   @override
-  String get onDeviceScheduleBody => '모아서 변환하면 배터리를 아낄 수 있어요. 언제든지 변경할 수 있어요.';
+  String get onDeviceScheduleBody => '언제든지 변경할 수 있어요.';
 
   @override
   String get onDeviceScheduleCharging => '충전 중';
@@ -13269,10 +13263,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onDeviceWhyPhoneTitle => '휴대폰에서 처리된 이유';
 
   @override
-  String get onDeviceWhyLiveHoursUsed => '이번 달 실시간 시간을 모두 사용해서 Omi가 이 대화를 이 휴대폰에서 변환했어요.';
+  String get onDeviceWhyLiveHoursUsed => '이번 달 한도에 도달해서 Omi가 휴대폰에서 이 내용을 변환했어요.';
 
   @override
-  String get onDeviceWhySavingLiveHours => '실시간 시간을 아끼기 위해 이 휴대폰에서 변환하도록 선택하셨어요.';
+  String get onDeviceWhySavingLiveHours => '사용량을 아끼려고 이 휴대폰에서 변환하도록 선택했어요.';
 
   @override
   String get onDeviceWhySummaryOnPhone => '요약도 이 iPhone에서 작성됐어요.';
@@ -13285,11 +13279,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onDeviceWhyCloudIphone =>
-      '이 iPhone은 자체적으로 요약할 수 없어요(iPhone 15 Pro 이상 필요). 변환은 휴대폰에서 이루어졌고, 요약을 위해 텍스트만 Omi로 전송됐어요. 실시간 시간은 사용하지 않아요.';
+      '이 iPhone은 자체적으로 요약할 수 없어요(iPhone 15 Pro 이상 필요). 변환은 휴대폰에서 이루어졌고, 요약을 위해 텍스트만 Omi로 전송됐어요. 사용량에 포함되지 않아요.';
 
   @override
-  String get onDeviceWhyCloudPhone =>
-      '이 휴대폰은 자체적으로 요약할 수 없어요. 변환은 휴대폰에서 이루어졌고, 요약을 위해 텍스트만 Omi로 전송됐어요. 실시간 시간은 사용하지 않아요.';
+  String get onDeviceWhyCloudPhone => '이 휴대폰은 자체적으로 요약할 수 없어요. 변환은 휴대폰에서 이루어졌고, 요약을 위해 텍스트만 Omi로 전송됐어요. 사용량에 포함되지 않아요.';
 
   @override
   String get onDeviceRedoWithCloud => 'Omi Cloud로 다시 하기';
@@ -13304,23 +13297,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onDeviceKeepEverythingSubtitle => '텍스트만, 요약 없음';
 
   @override
-  String get onDeviceLiveHours => '실시간 시간';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return '$used/$limit시간 사용';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return '$date에 초기화';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => '실시간 시간 더 받기';
-
-  @override
-  String get onDeviceAfterLiveHours => '실시간 시간을 다 쓴 후';
+  String get onDeviceAfterLiveHours => '한도에 도달하면';
 
   @override
   String get onDeviceWhen => '시점';
@@ -13335,10 +13312,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onDeviceSummariesCloud => 'Omi Cloud에서';
 
   @override
-  String get onDeviceSaveLiveHours => '실시간 시간을 아끼려면 이 휴대폰에서 변환';
+  String get onDeviceSaveLiveHours => '항상 이 휴대폰에서 변환';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => '화자 분리와 더 높은 정확도를 위해 Pro로 업그레이드하세요';
+  String get onDeviceSaveLiveHoursSubtitle => '사용량을 아껴요. 화자 표시는 없어요.';
 
   @override
   String get onDeviceOnThisPhone => '이 휴대폰';
@@ -13353,7 +13330,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onDeviceRemoveModelTitle => '음성 모델을 삭제할까요?';
 
   @override
-  String get onDeviceRemoveModelMessage => '다시 다운로드하거나 실시간 시간이 충전될 때까지 녹음은 이 휴대폰에서 대기해요.';
+  String get onDeviceRemoveModelMessage => '다시 다운로드하거나 사용량이 초기화될 때까지 녹음은 이 휴대폰에서 기다려요.';
 
   @override
   String get onDeviceRemove => '삭제';
@@ -13362,8 +13339,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onDeviceFinishSetupTitle => '설정을 완료하고 텍스트를 확인하세요';
 
   @override
-  String get onDeviceFinishSetupBody =>
-      '이번 달 실시간 시간을 모두 사용했어요. Omi는 계속 녹음하고 오디오를 휴대폰에 저장하고 있어요. 음성 모델을 다운로드하면 밀린 분량을 처리해요.';
+  String get onDeviceFinishSetupBody => '이번 달 한도에 도달했어요. Omi는 계속 휴대폰에 오디오를 녹음하고 저장하고 있어요. 음성 모델을 다운로드하면 밀린 부분을 따라잡아요.';
 
   @override
   String onDeviceDownloadSize(String size) {
@@ -13371,10 +13347,10 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get onDeviceUnsupportedBody => '이 휴대폰은 아직 음성 모델을 실행할 수 없어요. 실시간 시간이 충전되거나 업그레이드할 때까지 오디오는 저장돼요.';
+  String get onDeviceUnsupportedBody => '이 휴대폰은 아직 음성 모델을 실행할 수 없어요. 사용량이 초기화되거나 업그레이드할 때까지 오디오는 저장돼 있어요.';
 
   @override
-  String get onDeviceEntrySubtitle => '실시간 시간을 다 쓰면 이 휴대폰에서 변환';
+  String get onDeviceEntrySubtitle => '한도에 도달하면 이 휴대폰에서 변환';
 
   @override
   String get chatAppsChannelPlanRequired => 'Operator 및 Architect에서 사용 가능';
