@@ -496,6 +496,7 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     // What is recording and how it is going: the same summary the details sheet shows.
     final summary = summarizeLiveCapture(l10n, capture);
     final paired = context.select<DeviceProvider, BtDevice?>((d) => d.pairedDevice);
+    final pendantConnecting = context.select<DeviceProvider, bool>((d) => d.isConnecting);
     final dropped = _trackPendantDrop(capture, connected: device != null, paired: paired != null);
     final pendantBatch = summary != null && summary.batch && !summary.isPhone;
 
@@ -559,8 +560,8 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
       );
     } else if (dropped && paired != null) {
       // The pendant dropped mid-capture: say so here (it reconnects on its own) instead of a card.
-      final connecting = context.select<DeviceProvider, bool>((d) => d.isConnecting);
-      final status = '${l10n.disconnected} · ${connecting ? l10n.reconnecting : l10n.capturePendantDisconnectedShort}';
+      final status =
+          '${l10n.disconnected} · ${pendantConnecting ? l10n.reconnecting : l10n.capturePendantDisconnectedShort}';
       pill = HomeControlSurface(
         key: const ValueKey('home_record_pill_dropped'),
         semanticsLabel: '${paired.name}, $status',
