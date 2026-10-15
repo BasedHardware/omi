@@ -575,6 +575,28 @@ void main() {
       }
     });
 
+    testWidgets('a phone recording reconnecting on its own says so in the pill, not in a card', (tester) async {
+      await pump(tester, const HomeRecordButton(),
+          device: _Device(connected: false, paired: false), capture: _Capture(_Live.phone, interrupted: true));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const ValueKey('home_record_pill_stop')), findsOneWidget);
+      expect(find.textContaining(en.reconnecting), findsOneWidget);
+      expect(find.textContaining(en.listening), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+
+      await pump(tester, const ConversationCaptureWidget(showsCall: true, deviceStatusInBottomBar: true),
+          device: _Device(connected: false, paired: false), capture: _Capture(_Live.phone, interrupted: true));
+      expect(find.byType(LiveCaptureCard), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+
+      // The OS holding the microphone needs the person: the card stays.
+      await pump(tester, const ConversationCaptureWidget(showsCall: true, deviceStatusInBottomBar: true),
+          device: _Device(connected: false, paired: false),
+          capture: _Capture(_Live.phone, interrupted: true, callActive: true));
+      expect(find.byType(LiveCaptureCard), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+
     testWidgets('the pendant pill shows the newest words too', (tester) async {
       await pump(tester, const HomeRecordButton(), capture: _Capture(_Live.pendant), device: _Device(paired: true));
       await tester.pump(const Duration(milliseconds: 300));

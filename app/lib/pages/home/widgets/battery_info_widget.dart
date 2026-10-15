@@ -423,7 +423,11 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     if (phoneRecording) {
       void stop() => _startRecording(context);
       final paused = capture.isPhoneMicPaused || capture.isPaused;
-      final status = paused ? l10n.paused : l10n.listening;
+      // Capture recovering on its own (not a call holding the mic): the pill says so, instead of a
+      // separate Reconnecting card above the list.
+      final reconnecting =
+          !paused && capture.recordingState == RecordingState.interrupted && !capture.isCallActive;
+      final status = paused ? l10n.paused : (reconnecting ? l10n.reconnecting : l10n.listening);
       // Transcribe Later has no live transcript to open: the whole pill stops it.
       final batch = capture.isPhoneMicBatchRecording;
       pill = HomeControlSurface(
@@ -442,7 +446,7 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
         child: HomeLivePillContent(
           status: status,
           lastLine: batch ? null : capture.segments.lastOrNull?.text,
-          live: !paused,
+          live: !paused && !reconnecting,
           stopping: _stopping,
           onStop: stop,
         ),

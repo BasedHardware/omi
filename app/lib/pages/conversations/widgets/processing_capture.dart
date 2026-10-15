@@ -204,13 +204,16 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     return source != null && source != 'phone' && !provider.isPaused && provider.terminalTranscriptionFailure == null;
   }
 
-  /// The phone is recording without trouble: Home's bottom bar shows it (status, newest words, the
-  /// live transcript on tap, Stop), so no card — including the moment it is starting, or the old
-  /// card flashes before the bar takes over. It stays for paused, the microphone taken or
-  /// recovering, and transcription that has failed.
+  /// The phone is recording, or reconnecting on its own: Home's bottom bar shows it (status —
+  /// Listening or Reconnecting… — newest words, the live transcript on tap, Stop), so no card,
+  /// including the moment it is starting, or the old card flashes before the bar takes over. It
+  /// stays for what needs the person: paused, the microphone taken by a call, and transcription
+  /// that has failed.
   static bool _phoneJustListening(CaptureProvider provider) {
+    final recovering = provider.recordingState == RecordingState.interrupted && !provider.isCallActive;
     return (provider.recordingState == RecordingState.record ||
-            provider.recordingState == RecordingState.initialising) &&
+            provider.recordingState == RecordingState.initialising ||
+            recovering) &&
         !provider.isPaused &&
         !provider.isPhoneMicPaused &&
         provider.terminalTranscriptionFailure == null;
