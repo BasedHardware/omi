@@ -15,8 +15,11 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
+import 'package:omi/models/sync_state.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/providers/speaker_tag_prompts_provider.dart';
+import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/wals/wal.dart' show Wal;
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:provider/provider.dart';
@@ -61,6 +64,26 @@ class _InertPhoneCallProvider extends ChangeNotifier implements PhoneCallProvide
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// Home's Offline Sync status card reads the sync pipeline; the C3 contract
+/// exercises conversation phases with nothing in flight, so the card hides.
+class _InertSyncProvider extends ChangeNotifier implements SyncProvider {
+  @override
+  SyncState get syncState => const SyncState();
+  @override
+  bool get isSyncing => false;
+  @override
+  List<Wal> get allWals => const [];
+  @override
+  List<Wal> get uploadedWals => const [];
+  @override
+  bool get isRateLimited => false;
+  @override
+  ({int doneSeconds, int totalSeconds, bool tracked}) get offlineServerProcessingSeconds =>
+      (doneSeconds: 0, totalSeconds: 0, tracked: false);
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 /// Builder-owned fixture composition only: supply inert explicit collaborators
 /// around the real ConversationsPage and this exact real provider. Never replace
 /// its build method, use an offstage decoy, or construct default CaptureProvider.
@@ -101,6 +124,7 @@ Future<Widget> buildTypedConversationScreen(ConversationProvider provider) async
         ChangeNotifierProvider<PhoneCallProvider>.value(value: phone),
         ChangeNotifierProvider<CaptureProvider>.value(value: capture),
         ChangeNotifierProvider<SpeakerTagPromptsProvider>.value(value: speakerTagPrompts),
+        ChangeNotifierProvider<SyncProvider>.value(value: _InertSyncProvider()),
       ],
       child: const Scaffold(
         body: ConversationsPage(requestInitialLoad: false, loadRecaps: _noRecaps),
