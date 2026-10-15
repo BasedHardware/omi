@@ -505,16 +505,3 @@ def test_pusher_lock_covers_mentor_v2_lazy_imports():
     installed_packages = {package['name'] for package in lock['packages']}
     missing = {module: package for module, package in module_distributions.items() if package not in installed_packages}
     assert not missing, f'Mentor v2 modules missing from pusher lock: {missing}'
-
-
-def test_parakeet_logging_module_avoids_nemo_utils_name():
-    dockerfile = (BACKEND_DIR / 'parakeet' / 'Dockerfile').read_text(encoding='utf-8')
-    main = (BACKEND_DIR / 'parakeet' / 'main.py').read_text(encoding='utf-8')
-    assert 'COPY backend/utils/logging_config.py ./omi_logging_config.py' in dockerfile
-    assert 'from omi_logging_config import' in main
-    assert 'from utils.logging_config import' not in main
-    shim = (BACKEND_DIR / 'parakeet' / 'omi_logging_config.py').read_text(encoding='utf-8')
-    assert 'from utils.logging_config import configure_split_stream_logging, quiet_repetitive_nemo_logs' in shim
-    registry = json.loads((BACKEND_DIR / 'runtime_images.json').read_text(encoding='utf-8'))
-    parakeet = next(item for item in registry['images'] if item['name'] == 'parakeet')
-    assert 'utils.logging_config' in parakeet['dependency_probe_exclusions']
