@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Omi Unlimited</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#fff; --ink:#0b0b0c; --text2:#5a5b62; --text3:#8c8d94; --panel:#f4f4f6; --line:#0000001a; --star:#faae01; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; overflow:hidden; background:var(--bg); color:var(--ink); font-family:Manrope,-apple-system,BlinkMacSystemFont,system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+  button { font:inherit; color:inherit; }
+
+  /* The app draws its own close button over the top-left corner; this X sits right under it. */
+  .close { position:fixed; z-index:30; top:calc(env(safe-area-inset-top) + 4px); left:4px; width:48px; height:48px; border:0; background:none; padding:12px; }
+  .close svg { width:24px; height:24px; display:block; }
+  .wordmark { position:fixed; z-index:20; top:calc(env(safe-area-inset-top) + 14px); left:50%; transform:translateX(-50%); height:24px; }
+
+  .pages { position:fixed; inset:0; overflow:hidden; }
+  .step { position:absolute; inset:0; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:calc(env(safe-area-inset-top) + 64px) 24px 200px; transition:transform .35s cubic-bezier(.4,0,.2,1), opacity .35s; }
+  .step.later { transform:translateX(100%); }
+  .step.earlier { transform:translateX(-30%); opacity:0; pointer-events:none; }
+  .step[data-step="2"] { padding-bottom:330px; }
+  h1 { margin:0; font-size:30px; line-height:1.08; letter-spacing:-1px; font-weight:800; text-align:center; }
+  .lede { margin:10px 0 0; text-align:center; font-size:16px; line-height:1.45; color:var(--text2); }
+
+  /* Omi dot logo, used as the shape behind the phones */
+  .dots { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); }
+  .phone { position:absolute; border-radius:30px; border:5px solid #111; background:#111; overflow:hidden; box-shadow:0 18px 40px rgba(0,0,0,.25); }
+  .phone img { display:block; width:100%; }
+
+  .hero { position:relative; height:430px; margin-top:22px; }
+  .hero .dots { width:370px; height:370px; }
+  .hero .p1 { width:128px; left:calc(50% - 132px); top:58px; transform:rotate(-8deg); }
+  .hero .p2 { width:134px; left:calc(50% + 4px); top:80px; transform:rotate(6deg); }
+  .hero .pendant { position:absolute; width:104px; left:calc(50% - 52px); bottom:-6px; filter:drop-shadow(0 14px 18px rgba(0,0,0,.35)); }
+
+  .slides { display:flex; overflow-x:auto; scroll-snap-type:x mandatory; margin:0 -24px; scrollbar-width:none; }
+  .slides::-webkit-scrollbar { display:none; }
+  .slide { flex:0 0 100%; scroll-snap-align:center; padding:0 24px; }
+  .slide .caption { text-align:center; font-size:20px; font-weight:600; letter-spacing:-.3px; margin:14px 0 0; }
+  .slide .sub { text-align:center; font-size:14px; color:var(--text2); margin:4px 0 0; }
+  .slide .stage { position:relative; height:400px; margin-top:12px; }
+  .slide .dots { width:320px; height:320px; }
+  .slide .phone { width:182px; left:calc(50% - 91px); top:6px; }
+  .indicators { display:flex; justify-content:center; gap:8px; margin-top:0; }
+  .slide .stage { margin-bottom:0; } .slide { padding-bottom:28px; }
+  .indicators span { width:7px; height:7px; border-radius:50%; background:#d4d4d8; transition:all .2s; }
+  .indicators span.on { background:var(--ink); width:18px; border-radius:4px; }
+
+  .device { display:block; width:64px; height:80px; object-fit:contain; margin:0 auto 10px; }
+  .accolades { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:20px; }
+  .accolade { display:flex; align-items:center; justify-content:center; gap:6px; height:70px; border:1px solid var(--line); border-radius:16px; background:linear-gradient(180deg,#fafafa,#f2f2f4); }
+  .accolade img { height:44px; }
+  .accolade div { text-align:center; font-size:15px; line-height:1.2; font-weight:700; }
+  .accolade small { display:block; font-size:12px; font-weight:500; color:var(--text2); }
+  .review { margin-top:12px; border:1px solid var(--line); border-radius:16px; padding:14px 16px; }
+  .review .stars { color:var(--star); letter-spacing:2px; font-size:16px; }
+  .review q { display:block; margin-top:6px; font-size:16px; font-weight:700; quotes:"“" "”"; }
+  .review .who { margin-top:6px; font-size:13px; color:var(--text2); }
+
+  footer { position:fixed; z-index:20; left:0; right:0; bottom:0; background:var(--bg); padding:12px 16px max(28px, env(safe-area-inset-bottom)); }
+  footer::before { content:""; position:absolute; top:-40px; left:0; right:0; height:40px; background:linear-gradient(180deg,#ffffff00,#fff); pointer-events:none; }
+  .promise { display:flex; align-items:center; justify-content:center; gap:8px; font-size:15px; font-weight:600; padding:4px 0 12px; }
+  .promise svg { width:18px; height:18px; }
+  .plans { display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
+  .plan { position:relative; display:flex; align-items:center; justify-content:space-between; width:100%; min-height:64px; padding:10px 16px; border:1.5px solid var(--line); border-radius:16px; background:#fff; text-align:left; cursor:pointer; }
+  .plan.selected { border:2px solid var(--ink); padding:9.5px 15.5px; }
+  .plan .name { display:block; font-size:17px; font-weight:700; }
+  .plan .sub { display:block; font-size:14px; color:var(--text2); margin-top:2px; }
+  .plan .per { font-size:16px; font-weight:600; }
+  .plan .badge { position:absolute; top:-11px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff; font-size:11px; font-weight:800; letter-spacing:.6px; padding:3px 10px; border-radius:7px; white-space:nowrap; }
+  .cta { width:100%; height:60px; border:0; border-radius:999px; background:var(--ink); color:#fff; font-size:18px; font-weight:700; }
+  .cta:disabled { opacity:.35; }
+  .fine { padding-top:10px; text-align:center; font-size:12px; font-weight:500; color:var(--text3); }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+  <button class="close" id="free" type="button" aria-label="Use Free Plan">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="#0b0b0c" stroke-width="2.2" stroke-linecap="round"/></svg>
+  </button>
+  <img class="wordmark" src="/omi-wordmark.png" alt="omi">
+
+  <div class="pages">
+  <!-- 1: the promise, with the device -->
+  <section class="step" data-step="0">
+    <h1>Never forget a conversation again.</h1>
+    <div class="hero">
+      <svg class="dots" viewBox="0 0 200 200" aria-hidden="true"></svg>
+      <div class="phone p1"><img src="/app-home.webp" alt=""></div>
+      <div class="phone p2"><img src="/app-summary.webp" alt=""></div>
+      <img class="pendant" src="/omi-pendant-front.webp" alt="">
+    </div>
+  </section>
+
+  <!-- 2: what you get -->
+  <section class="step later" data-step="1">
+    <h1>What you get</h1>
+    <div class="slides" id="slides">
+      <div class="slide">
+        <p class="caption">Every conversation, saved</p>
+        <p class="sub">Record without limits. No monthly cap.</p>
+        <div class="stage"><svg class="dots" viewBox="0 0 200 200" aria-hidden="true"></svg><div class="phone"><img src="/app-home.webp" alt=""></div></div>
+      </div>
+      <div class="slide">
+        <p class="caption">Notes that write themselves</p>
+        <p class="sub">A summary after every conversation.</p>
+        <div class="stage"><svg class="dots" viewBox="0 0 200 200" aria-hidden="true"></svg><div class="phone"><img src="/app-summary.webp" alt=""></div></div>
+      </div>
+      <div class="slide">
+        <p class="caption">To-dos, caught for you</p>
+        <p class="sub">Action items land in your tasks.</p>
+        <div class="stage"><svg class="dots" viewBox="0 0 200 200" aria-hidden="true"></svg><div class="phone"><img src="/app-tasks.webp" alt=""></div></div>
+      </div>
+    </div>
+    <div class="indicators" id="indicators"><span class="on"></span><span></span><span></span></div>
+  </section>
+
+  <!-- 3: plans, with the device -->
+  <section class="step later" data-step="2">
+    <img class="device" src="/omi-pendant-front.webp" alt="">
+    <h1>Unlock Omi Unlimited</h1>
+    <p class="lede">Unlimited recording, summaries, and up to 1,000 questions a month.</p>
+    <div class="accolades">
+      <div class="accolade"><img src="/laurel-left.svg" alt=""><div>300K+<small>professionals</small></div><img src="/laurel-right.svg" alt=""></div>
+      <div class="accolade"><img src="/laurel-left.svg" alt=""><div>25+<small>languages</small></div><img src="/laurel-right.svg" alt=""></div>
+    </div>
+    <div class="review">
+      <div class="stars">★★★★★</div>
+      <q>Absolutely the best buy of 2024.</q>
+      <div class="who">Salman Mian, VP of Sales, Salesforce</div>
+    </div>
+  </section>
+
+  </div>
+
+  <footer>
+    <div class="plans hidden" id="plans">
+      <button class="plan" id="yearly" data-interval="year" type="button">
+        <span class="badge hidden" id="yearly-badge"></span>
+        <span><span class="name">Annual plan</span><span class="sub" id="yearly-sub"></span></span>
+        <span class="per" id="yearly-per"></span>
+      </button>
+      <button class="plan" id="monthly" data-interval="month" type="button">
+        <span><span class="name">Monthly plan</span><span class="sub" id="monthly-sub"></span></span>
+        <span class="per" id="monthly-per"></span>
+      </button>
+    </div>
+    <div class="promise" id="promise">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#0b0b0c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      No commitment, cancel anytime
+    </div>
+    <button class="cta" id="cta" type="button">Continue</button>
+    <div class="fine hidden" id="fine">Billed today. Renews automatically. Cancel anytime.</div>
+  </footer>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  var step = 0, selected = 'year';
+  function $(id) { return document.getElementById(id); }
+  function send(msg) {
+    var channel = window.OmiPaywall;
+    if (channel && channel.postMessage) channel.postMessage(JSON.stringify(msg));
+    else console.log('[OmiPaywall]', JSON.stringify(msg));
+  }
+  function money(minor, currency) {
+    try { return new Intl.NumberFormat(q.get('locale') || 'en-US', { style: 'currency', currency: (currency || 'usd').toUpperCase() }).format(minor / 100); }
+    catch (e) { return '$' + (minor / 100).toFixed(2); }
+  }
+
+  // The Omi dot logo: eight dots on a ring.
+  var dots = '';
+  for (var i = 0; i < 8; i++) {
+    var a = (i / 8) * Math.PI * 2 - Math.PI / 2;
+    dots += '<circle cx="' + (100 + 74 * Math.cos(a)).toFixed(1) + '" cy="' + (100 + 74 * Math.sin(a)).toFixed(1) + '" r="19" fill="#0b0b0c"/>';
+  }
+  document.querySelectorAll('svg.dots').forEach(function (svg) { svg.innerHTML = dots; });
+
+  // Prices come from the app (the plan catalog), never from this page.
+  var year = q.get('year_amount') ? parseInt(q.get('year_amount'), 10) : null;
+  var month = q.get('month_amount') ? parseInt(q.get('month_amount'), 10) : null;
+  var yc = q.get('year_currency'), mc = q.get('month_currency');
+  if (year != null) {
+    $('yearly-sub').textContent = money(year, yc) + '/year';
+    $('yearly-per').textContent = money(Math.round(year / 12), yc) + '/mo';
+    if (month) {
+      var pct = Math.round((1 - year / (month * 12)) * 100);
+      if (pct > 0) { $('yearly-badge').textContent = 'SAVE ' + pct + '%'; $('yearly-badge').classList.remove('hidden'); }
+    }
+  } else { $('yearly').classList.add('hidden'); selected = 'month'; }
+  if (month != null) {
+    $('monthly-sub').textContent = money(month, mc) + '/month';
+    $('monthly-per').textContent = money(month, mc) + '/mo';
+  } else $('monthly').classList.add('hidden');
+  var noPlans = year == null && month == null;
+
+  function render() {
+    document.querySelectorAll('.step').forEach(function (el) {
+      var n = parseInt(el.dataset.step, 10);
+      el.classList.toggle('earlier', n < step);
+      el.classList.toggle('later', n > step);
+    });
+    var last = step === 2;
+    $('plans').classList.toggle('hidden', !last);
+    $('fine').classList.toggle('hidden', !last);
+    $('promise').classList.toggle('hidden', last);
+    $('cta').disabled = last && noPlans;
+    if (last && noPlans) $('fine').textContent = 'Unable to load plans';
+    ['yearly', 'monthly'].forEach(function (id) {
+      var el = $(id);
+      el.classList.toggle('selected', el.dataset.interval === selected);
+    });
+  }
+
+  // Slide indicators follow the swipe.
+  var slides = $('slides');
+  slides.addEventListener('scroll', function () {
+    var i = Math.round(slides.scrollLeft / slides.clientWidth);
+    Array.prototype.forEach.call($('indicators').children, function (dot, j) { dot.classList.toggle('on', j === i); });
+  }, { passive: true });
+
+  ['yearly', 'monthly'].forEach(function (id) {
+    $(id).addEventListener('click', function () { selected = this.dataset.interval; render(); });
+  });
+  $('cta').addEventListener('click', function () {
+    if (step < 2) { step++; render(); return; }
+    this.disabled = true;
+    send({ type: 'checkout', interval: selected });
+  });
+  $('free').addEventListener('click', function () { send({ type: 'free' }); });
+  window.OmiPaywallHost = {
+    onCheckout: function () { $('cta').disabled = false; },
+    onRestore: function () {}
+  };
+  render();
+  send({ type: 'ready' });
+})();
+</script>
+</body>
+</html>
