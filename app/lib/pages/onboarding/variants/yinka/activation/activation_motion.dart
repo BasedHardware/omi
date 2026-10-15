@@ -602,7 +602,7 @@ class _SummaryRevealState extends State<SummaryReveal> with SingleTickerProvider
         final sweep = ((v - 0.55) / 0.45).clamp(0.0, 1.0);
         // The blur only runs during the 450 ms entrance; once settled the card is drawn plain.
         final Widget settled = appear >= 1
-            ? child
+            ? child!
             : ImageFiltered(
                 // omi-perf-allow: blur-filter -- one-shot entrance of a single card, gone when appear == 1; never in a list
                 imageFilter: ImageFilter.blur(sigmaX: 12 * (1 - appear), sigmaY: 12 * (1 - appear)),

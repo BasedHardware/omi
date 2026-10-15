@@ -17,14 +17,21 @@ def channel_policy(channel):
         policies = json.loads(raw)
         row = policies.get(channel, {})
         cohort = row.get('cohort', [])
-        plans = row.get('plans', ['operator', 'architect'] if channel == 'imessage' else None)
+        plans = row.get(
+            'plans',
+            None if row.get('seat_cap') == 'off' else ['operator', 'architect'] if channel == 'imessage' else None,
+        )
         cap = row.get('seat_cap', 180 if channel == 'imessage' else None)
-        if channel == 'imessage' and (plans is None or cap is None):
+        if cap == 'off':
+            cap = None
+        if channel == 'imessage' and (row.get('seat_cap') != 'off' and (plans is None or cap is None)):
             raise ValueError('iMessage requires a plan set and seat cap')
         if not isinstance(row.get('enabled'), bool) or not (
             cohort == '*' or isinstance(cohort, list) and all(isinstance(v, str) for v in cohort)
         ):
             raise ValueError('Invalid policy')
+        if channel == 'imessage' and 'plans' in row and plans is None:
+            raise ValueError('Invalid plans')
         if plans is not None and (not isinstance(plans, list) or not all(isinstance(v, str) for v in plans)):
             raise ValueError('Invalid plans')
         if cap is not None and (type(cap) is not int or cap < 0):
