@@ -61,9 +61,7 @@ def create_meeting(uid: str, meeting_data: Dict[str, Any]) -> str:
 
     # Concurrent calendar syncs for the same user contend on the transaction —
     # a bare db.transaction() abandons on Aborted. Bounded equal-jitter retry.
-    run_with_transaction_contention_retry(
-        db.transaction, upsert, operation_name='calendar_meeting_create'
-    )
+    run_with_transaction_contention_retry(db.transaction, upsert, operation_name='calendar_meeting_create')
     return meeting_id
 
 
