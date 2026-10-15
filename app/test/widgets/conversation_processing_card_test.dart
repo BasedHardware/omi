@@ -253,6 +253,31 @@ void main() {
       expect(find.byKey(const Key('conversation_processing_card')), findsNothing);
     });
 
+    testWidgets('hides when only local-only (on-device STT) recordings remain', (tester) async {
+      // On-device STT never uploads these, so a card claiming they are ready
+      // to sync could never clear. They stay visible where they belong: the
+      // conversations themselves.
+      final localOnly = _wal('local-only', 30, WalStatus.miss)..onDeviceOnly = true;
+      final sync = _FakeSync(wals: [localOnly]);
+
+      await _pump(tester, sync, multiFile: true);
+
+      expect(find.byKey(const Key('conversation_processing_card')), findsNothing);
+    });
+
+    testWidgets('counts only syncable recordings in the ready amount', (tester) async {
+      SharedPreferencesUtil().autoSyncOfflineRecordings = false;
+      final sync = _FakeSync(wals: [
+        _wal('ready', 45, WalStatus.miss),
+        _wal('local-only', 30, WalStatus.miss)..onDeviceOnly = true,
+      ]);
+
+      await _pump(tester, sync, multiFile: true);
+
+      // 45m, not 1h 15m: the local-only recording is not waiting on a sync.
+      expect(find.text('45m ready to sync'), findsOneWidget);
+    });
+
     testWidgets('tapping opens the Offline Sync page the device settings open', (tester) async {
       final sync = _FakeSync(wals: [_wal('processing', 40, WalStatus.uploaded)]);
 
@@ -286,8 +311,9 @@ void main() {
       expect(find.byTooltip('Manage Storage'), findsOneWidget);
     });
 
-    testWidgets('tapping shows the device settings\' v2 alert when storage is unsupported', (tester) async {
-      final sync = _FakeSync(wals: [_wal('processing', 40, WalStatus.uploaded)]);
+    testWidgets('tapping shows the v2 alert when device-resident work has no storage support', (tester) async {
+      final pending = _wal('pending', 40, WalStatus.miss)..storage = WalStorage.sdcard;
+      final sync = _FakeSync(wals: [pending]);
 
       await _pump(tester, sync, multiFile: true, extras: [
         ChangeNotifierProvider<UserProvider>(create: (_) => UserProvider()),
@@ -300,6 +326,25 @@ void main() {
       // The device settings' alert, not a pushed Offline Sync page.
       expect(find.text('Offline Sync unavailable'), findsOneWidget);
       expect(find.text('Offline Sync'), findsNothing);
+    });
+
+    testWidgets('tapping opens the sync page with no device when only phone/server work remains', (tester) async {
+      // The pendant can be disconnected — even storage-less: phone WALs and
+      // server jobs need no connected device, so the card must not strand that
+      // work behind the "Offline Sync unavailable" alert.
+      final sync = _FakeSync(wals: [_wal('processing', 40, WalStatus.uploaded)]);
+
+      await _pump(tester, sync, multiFile: true, extras: [
+        ChangeNotifierProvider<UserProvider>(create: (_) => UserProvider()),
+        ChangeNotifierProvider<DeviceProvider>(create: (_) => _Device(storageSupport: false)),
+      ]);
+
+      await tester.tap(find.byKey(const Key('conversation_processing_card')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      // The multi-file page's status-card link; the single-file page has none.
+      expect(find.text('Sync details'), findsOneWidget);
     });
 
     testWidgets('names what needs the user before anything else', (tester) async {

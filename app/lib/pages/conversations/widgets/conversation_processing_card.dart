@@ -77,11 +77,13 @@ class _ConversationProcessingCardState extends State<ConversationProcessingCard>
   /// the server refused (too old, unreadable, retries exhausted) are surfaced
   /// by the attention copy below while anything actionable is still up, then
   /// handled on the Offline Sync page; they do not keep a card up on their
-  /// own forever.
+  /// own forever. Local-only recordings (`onDeviceOnly`, on-device STT) never
+  /// join a cloud drain — neither automatically nor on a manual sync — so they
+  /// must not hold a card that can never clear.
   bool _shouldShow(SyncProvider p) {
     if (p.uploadedWals.isNotEmpty || p.syncState.isProcessing) return true;
     return p.allWals.any(
-      (w) => w.status == WalStatus.miss && _isForwardMoving(w.syncDisplayState),
+      (w) => w.status == WalStatus.miss && !w.onDeviceOnly && _isForwardMoving(w.syncDisplayState),
     );
   }
 
@@ -98,10 +100,15 @@ class _ConversationProcessingCardState extends State<ConversationProcessingCard>
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () {
-                // The device settings' gate, key for key: without device-storage
-                // support there is no Offline Sync screen to open, only the
-                // explanation of why (device_settings' _openOfflineSync).
-                if (!context.read<DeviceProvider>().isDeviceStorageSupport) {
+                // The device settings' gate, key for key — but only for work
+                // that actually lives on the device: a storage-less pendant
+                // cannot hand audio over, so there is no Offline Sync screen
+                // to open for it. Phone-side WALs and uploaded server jobs
+                // need no connected device; the sync pages render and process
+                // them on their own, so the card never strands that work
+                // behind the "Offline Sync unavailable" alert.
+                final hasDeviceWork = p.allWals.any((w) => w.status == WalStatus.miss && walIsOnDevice(w));
+                if (hasDeviceWork && !context.read<DeviceProvider>().isDeviceStorageSupport) {
                   showOmiAlert(
                     context,
                     title: context.l10n.v2Undetected,
@@ -171,7 +178,7 @@ class _ConversationProcessingCardState extends State<ConversationProcessingCard>
         barFraction = s.progress > 0 ? s.progress : null;
       } else if (s.phase == SyncPhase.waitingForInternet) {
         title = l.syncCardWaitingInternet;
-        titleColor = Colors.orangeAccent;
+        titleColor = OmiColors.warning;
         barFraction = known ? step.fraction : 0;
       } else {
         subtitle = known
@@ -186,7 +193,7 @@ class _ConversationProcessingCardState extends State<ConversationProcessingCard>
       if (barStep != step.step) barFraction = 0;
     } else if (p.isRateLimited) {
       title = syncCooldownTitle(p.rateLimitReason, l);
-      titleColor = Colors.orangeAccent;
+      titleColor = OmiColors.warning;
     } else if (isActive || p.uploadedWals.isNotEmpty) {
       // Uploads finished; the server is turning them into conversations.
       final job = p.offlineServerProcessingSeconds;
@@ -204,9 +211,12 @@ class _ConversationProcessingCardState extends State<ConversationProcessingCard>
         title = l.syncCardNeedsAttention(
           groupRecordingBlocks(attentionWals).length,
         );
-        titleColor = Colors.orangeAccent;
+        titleColor = OmiColors.warning;
       } else {
-        final readyWals = p.allWals.where((w) => w.status == WalStatus.miss && walIsSyncable(w)).toList();
+        // Local-only recordings never sync, so they are not "ready to sync"
+        // either; counting them would overstate the amount forever.
+        final readyWals =
+            p.allWals.where((w) => w.status == WalStatus.miss && !w.onDeviceOnly && walIsSyncable(w)).toList();
         final seconds = walSeconds(readyWals);
         title = seconds > 0
             ? l.syncCardReadyAmount(dur(seconds))
