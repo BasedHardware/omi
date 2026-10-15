@@ -339,10 +339,29 @@ def list_memory_updated_or_created_index(
         memories_ref = memories_ref.where(filter=FieldFilter('created_at', '>=', start_date))
     if end_date:
         memories_ref = memories_ref.where(filter=FieldFilter('created_at', '<=', end_date))
-    candidate_limit = max(1, min(int(limit) + max(int(offset), 0), _MEMORY_LIST_CANDIDATE_WINDOW_MAX))
-    candidate_docs = _stream_memory_list_index_window(memories_ref, 'updated_at', candidate_limit, budget=budget)
-    candidate_docs.extend(_stream_memory_list_index_window(memories_ref, 'created_at', candidate_limit, budget=budget))
-    memories = _merge_memory_list_index_docs(candidate_docs, include_invalidated=include_invalidated)
+    # Raw windows under-count visible rows: every rejected/invalidated
+    # row inside a window costs the page a visible slot, and callers read
+    # a short page as end-of-data (#21708 — same class as #12714, which
+    # fixed it for scoring_desc). Grow the window until the page is full
+    # or BOTH ordered streams are exhausted; a page with nothing hidden
+    # still costs exactly one pass.
+    needed = max(0, int(offset)) + max(1, int(limit))
+    candidate_limit = min(needed, _MEMORY_LIST_CANDIDATE_WINDOW_MAX)
+    memories: List[Dict[str, Any]] = []
+    while True:
+        updated_docs = _stream_memory_list_index_window(
+            memories_ref, 'updated_at', candidate_limit, budget=budget)
+        created_docs = _stream_memory_list_index_window(
+            memories_ref, 'created_at', candidate_limit, budget=budget)
+        memories = _merge_memory_list_index_docs(
+            updated_docs + created_docs, include_invalidated=include_invalidated)
+        if len(memories) >= needed:
+            break
+        if len(updated_docs) < candidate_limit and len(created_docs) < candidate_limit:
+            break  # both streams exhausted — the page really is this size
+        if candidate_limit >= _MEMORY_LIST_CANDIDATE_WINDOW_MAX:
+            break
+        candidate_limit = min(candidate_limit * 2, _MEMORY_LIST_CANDIDATE_WINDOW_MAX)
     return memories[max(0, int(offset)) : max(0, int(offset)) + max(1, int(limit))]
 
 
