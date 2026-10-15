@@ -9,6 +9,13 @@ from tests.support.firestore_query_drivers import DriverEntry, CoveredByEntry
 def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
+        CoveredByEntry(
+            'database.batch_pipeline_staging.reap',
+            covered_by=('database.batch_pipeline_staging.unsettled',),
+            reason='thin orchestration delegates the sole query to unsettled; sum counts transaction results',
+            expect_observed=False,
+            body_digest='39b0e41ad13a7bc50bb8f987b6f78d11253663fd15baf39ca6663fb9f1fde377',
+        ),
         DriverEntry(
             'database.batch_pipeline_staging.unsettled',
             domains={'namespace': namespaces},
