@@ -106,6 +106,7 @@ def lifecycle_store(monkeypatch):
         return locked
 
     monkeypatch.setattr(conversations_db, 'db', store)
+    monkeypatch.setattr(lifecycle_service.status_transitions_db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(conversations_db.firestore, 'transactional', transactional)
     return store
 

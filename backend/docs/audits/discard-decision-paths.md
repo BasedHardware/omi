@@ -63,6 +63,7 @@ New outcomes use `omi_conversation_relevance_decision_total` with distinct trigg
 verdict, deciding tier, and closed terminal reason labels imported by `utils/metrics.py` from
 `utils/conversation_relevance_labels.py`.
 Recovery degradation and size exhaustion also use the shared fallback emitter.
+Terminal discards and document-ceiling failures invalidate people-stats and refresh search after successful transaction return; aborted attempts publish no observer effects.
 Counters emitted in transactions count attempts, so contention retries can repeat
 an increment; these are not exactly-once row counts.
 

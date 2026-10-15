@@ -18,6 +18,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from config.listen_quiet_finalization import enabled as quiet_finalization_enabled
 from database import conversations as conversations_db
+from database.conversation_terminal_effects import refresh_terminal_visibility_after_commit
 from database import recording_sessions as recording_sessions_db
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database._client import document_id_from_seed, get_firestore_client
@@ -1372,6 +1373,7 @@ def _mark_finalization_dead_letter_txn(
     return True
 
 
+@refresh_terminal_visibility_after_commit
 def mark_finalization_dead_letter(
     job_id: str,
     dispatch_generation: int,
@@ -1382,10 +1384,9 @@ def mark_finalization_dead_letter(
     firestore_client: Any = None,
 ) -> bool:
     client = _client(firestore_client)
-    transaction = client.transaction()
     transactional = firestore.transactional(_mark_finalization_dead_letter_txn)
     return transactional(
-        transaction,
+        client.transaction(),
         _job_ref(client, job_id),
         dispatch_generation,
         lease_epoch,
@@ -2329,14 +2330,14 @@ def _complete_unstampable_orphan_conversation_txn(
     return True
 
 
+@refresh_terminal_visibility_after_commit
 def complete_unstampable_orphan_conversation(
     uid: str, conversation_id: str, *, stale_after: timedelta, firestore_client: Any = None
 ) -> bool:
     """Terminalize a legacy orphan that is too large to accept the admission fence."""
     client = _client(firestore_client)
-    transaction = client.transaction()
     transactional = firestore.transactional(_complete_unstampable_orphan_conversation_txn)
-    return transactional(transaction, _conversation_ref(client, uid, conversation_id), _now() - stale_after)
+    return transactional(client.transaction(), _conversation_ref(client, uid, conversation_id), _now() - stale_after)
 
 
 def _complete_orphan_conversation_txn(
@@ -2384,15 +2385,15 @@ def _complete_orphan_conversation_txn(
     return True
 
 
+@refresh_terminal_visibility_after_commit
 def complete_orphan_conversation(
     uid: str, conversation_id: str, *, expected_admitted_at: datetime | None, firestore_client: Any = None
 ) -> bool:
     """Close one crash orphan through the generation/ownership fence."""
     client = _client(firestore_client)
-    transaction = client.transaction()
     transactional = firestore.transactional(_complete_orphan_conversation_txn)
     return transactional(
-        transaction,
+        client.transaction(),
         _conversation_ref(client, uid, conversation_id),
         expected_admitted_at,
         _now(),
@@ -2710,6 +2711,7 @@ def _abandon_byok_finalization_job_txn(
     return _byok_abandonment('abandoned', 'closed')
 
 
+@refresh_terminal_visibility_after_commit
 def abandon_byok_finalization_job(
     job_id: str,
     *,
@@ -2722,10 +2724,9 @@ def abandon_byok_finalization_job(
     """Close one unownable BYOK job through its generation/ownership fence."""
     client = _client(firestore_client)
     now = _now()
-    transaction = client.transaction()
     transactional = firestore.transactional(_abandon_byok_finalization_job_txn)
     return transactional(
-        transaction,
+        client.transaction(),
         _job_ref(client, job_id),
         expected_status,
         expected_dispatch_generation,

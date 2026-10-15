@@ -28,6 +28,7 @@ from types import SimpleNamespace
 from typing import Any, Callable, Mapping
 
 from database import conversations as conversations_db
+from database.conversation_terminal_effects import stage_terminal_visibility_refresh
 from utils.conversations.deterministic_minimum import deterministic_minimum_title
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 from utils.conversations.recovery import structured_has_protected_content
@@ -210,6 +211,8 @@ def with_terminal_relevance(
             reason='other',
             outcome='degraded',
         )
+    if decision['verdict'] == 'discard':
+        stage_terminal_visibility_refresh(uid, getattr(conversation_ref, 'id', conversation.get('id', '')))
     record_conversation_relevance(
         trigger=decision['trigger'],
         verdict=decision['verdict'],
@@ -239,6 +242,10 @@ def fit_document_limit(
         {**conversation, **base_update}, path if isinstance(path, str) else None
     )
     if required_size > FIRESTORE_MAX_DOCUMENT_BYTES:
+        stage_terminal_visibility_refresh(
+            uid_from_conversation_path(path if isinstance(path, str) else '') or '',
+            getattr(conversation_ref, 'id', ''),
+        )
         from utils.observability.fallback import record_fallback
 
         record_fallback(
