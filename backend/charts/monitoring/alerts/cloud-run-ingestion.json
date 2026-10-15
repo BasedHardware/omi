@@ -258,7 +258,7 @@
     ],
     "updated": "2026-08-21T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -401,7 +401,7 @@
     ],
     "updated": "2026-08-21T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {

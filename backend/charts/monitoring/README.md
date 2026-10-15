@@ -71,15 +71,16 @@ alert history is retained.
 ## Dead-man
 
 Cloud Monitoring owns **Prod Grafana external health** and **Prod Grafana dead-man:
-health failing for 5 minutes**, declared in
+health failing for 5 minutes** (stable legacy resource name), declared in
 [`grafana-deadman.json`](../../deploy/monitoring/grafana-deadman.json). It GETs
 `https://monitor.omi.me/api/health` over validated HTTPS every 60 seconds from
 USA, Europe and Asia Pacific, with a 10-second request timeout and exactly HTTP
 200 accepted. The policy scopes `uptime_check/check_passed` to the assigned check
-ID; more than one failing checker location for 300 seconds pages (60-second
+ID; more than one failing checker location for 120 seconds pages (60-second
 next-older alignment, count-false reduction grouped by check ID, count > 1).
 Detection also includes Monitoring ingestion/evaluation latency. This tests endpoint health, not end-to-end notification delivery or all
-rule evaluations, and no samples are not treated as a failed HTTP check.
+rule evaluations, and no samples are not treated as a failed HTTP check. The legacy
+display name remains unchanged so reconciliation updates the existing policy instead of creating a second one.
 
 Before merge/deployment, create the repo or `prod` Environment variable
 `MONITORING_DEADMAN_NOTIFICATION_CHANNELS` containing comma-separated full
@@ -188,7 +189,7 @@ Backend-listen, pusher, and llm-gateway require bearer token auth via the `metri
 
 **3. Cloud Run GMP sidecar -> Cloud Monitoring -> isolated Stackdriver exporter**
 
-Used by: Cloud Run `backend`, `desktop-backend`, sync services, and `notifications-job` (after their deployments). The sidecar scrapes an unauthenticated loopback-only listener on port 9090; the public port 8080 `/metrics` route remains bearer protected. The isolated exporter is intentionally separate from the 1-second load-balancer exporter so per-instance application series are read from the Cloud Monitoring API only every 30 seconds.
+Used by: Cloud Run `backend`, `desktop-backend`, sync services, and `notifications-job` (after their deployments). The sidecar scrapes loopback port 9090; public `/metrics` remains bearer protected. The exporter bridge is temporary: Cloud Run metrics will be queried directly from GMP after at least 24 hours of accepted shadow comparisons.
 
 ### Custom Scrape Jobs (prod)
 
@@ -201,8 +202,8 @@ These are the `additionalScrapeConfigs` and ServiceMonitor targets. Built-in kub
 | `llm-gateway-metrics` | llm-gateway pods `/metrics:8080` | 15s | Bearer token |
 | `dg_engine_metrics` | DG engine pods in `prod-omi-dg-self-hosted` | 2s | None |
 | `gpu-metrics` | all pods in `gke-managed-system` (includes DCGM exporter) | 1s | None |
-| `prometheus-stackdriver-metrics` | Load-balancer Stackdriver exporter in `prod-omi-monitoring` | 1s | None |
-| `cloud-run-application-metrics` | `prometheus.googleapis.com/omi_*` for Cloud Run `backend`, `desktop-backend`, sync services, and `notifications-job` via isolated exporter | 30s | None |
+| `prometheus-stackdriver-metrics` | Load-balancer/Firestore Stackdriver exporter in `prod-omi-monitoring` | 60s | None |
+| `cloud-run-application-metrics` | `prometheus.googleapis.com/omi_*` for Cloud Run `backend`, `desktop-backend`, sync services, and `notifications-job` via isolated exporter | 60s | None |
 | ServiceMonitor: `parakeet` | parakeet pods `/metrics:9091` | 15s | None |
 
 For llm-gateway streams, `llm_gateway_requests_total{outcome="success"}` is emitted only after the provider's
@@ -269,8 +270,8 @@ Parakeet adapter rules are defined in the parakeet chart's `values.yaml` and are
 
 Bridges GCP Cloud Monitoring into Prometheus. Two releases share the existing Workload Identity service account (`prod-omi-prom-stackdriver-gsa`):
 
-- `prod-omi-prometheus-stackdriver-exporter` keeps the latency-sensitive load-balancer prefixes at the existing 1-second Prometheus scrape interval.
-- `prod-omi-cloud-run-metrics-exporter` reads only `prometheus.googleapis.com/omi_*`, filtered to the Cloud Run monitored-resource namespaces `backend`, `desktop-backend`, `backend-sync`, `backend-sync-backfill`, and `notifications-job`; Prometheus scrapes this release every 30 seconds.
+- `prod-omi-prometheus-stackdriver-exporter` exposes LB and Firestore metrics sampled by Google every 60 seconds; the production scrape is 60 seconds. HPA rate windows remain five minutes.
+- `prod-omi-cloud-run-metrics-exporter` reads only `prometheus.googleapis.com/omi_*`, filtered to the Cloud Run monitored-resource namespaces `backend`, `desktop-backend`, `backend-sync`, `backend-sync-backfill`, and `notifications-job`; Prometheus scrapes this release every 60 seconds.
 
 The application exporter is separate to prevent Cloud Monitoring API read cost from multiplying every per-instance application series by the legacy 1-second scrape rate. Stackdriver exporter exposes normalized names such as `stackdriver_prometheus_target_prometheus_googleapis_com_<metric>_<type>`; retain the `service_name` and `instance` labels and aggregate counters across instances in PromQL.
 
@@ -879,32 +880,25 @@ backend/charts/monitoring/
 
 ### Alert Rules as Code
 
-Move alert rules from Grafana UI into version-controlled config. Two options:
+Grafana is the production alert plane. Maintain `alerts/*.json` and the identical
+combined `alert-rules.json`; do not add native Prometheus alerts. Production Helm
+values disable chart alerting groups while preserving all 81 recording rules.
+Alertmanager remains installed until Loki ruler and any other consumers are
+proven retired; zero notification counters do not prove zero consumers.
 
-**Option A: PrometheusRule CRDs (recommended for metric-based alerts)**
-```yaml
-apiVersion: monitoring.coreos.com/v1
-kind: PrometheusRule
-metadata:
-  name: parakeet-alerts
-  labels:
-    release: prod-omi-kube-prometheus-stack
-spec:
-  groups:
-    - name: parakeet
-      rules:
-        - alert: ParakeetHighGPUUtil
-          expr: avg(DCGM_FI_DEV_GPU_UTIL{container="parakeet"}) > 90
-          for: 5m
-          labels:
-            severity: warning
-          annotations:
-            summary: "Parakeet GPU utilization above 90% for 5m"
-```
+Two datasource canaries cover local Prometheus and Cloud Monitoring, with
+`execErrState=Alerting` and `noDataState=Alerting`, routed directly to Telegram.
+Business rules use `KeepLast` on query errors, preserving existing no-data policy
+and any firing state. Four active rules retain their fingerprinted admission debt
+and `Error` policy; these still produce extra datasource-error alerts until their
+missing/unsupported metrics and pending-period debt are resolved. No claim of
+exactly one page per outage is made while those exceptions remain.
 
-**Option B: Grafana provisioning YAML (for log-based or multi-datasource alerts)**
-
-Place alert YAML in the `alerts/` directory and configure Grafana sidecar to load from it.
+The Cloud Logging plugin does not support Grafana-managed alerting. A synthetic
+raw-log alert would be a permanent error, not a health canary; use bounded
+log-based metrics through Cloud Monitoring for alert signals. Loki rules remain
+paused pending the separate log-plane migration. The external deadman covers
+Grafana availability independently; it cannot prove query-path or delivery health.
 
 ### Metrics Contract
 
@@ -1088,51 +1082,45 @@ helm rollback "$PROD_RELEASE" <pre-apply-revision> \
   --wait --timeout 10m
 ```
 
-#### Monitoring node-pool resize runbook (4 vCPU; owner: lead — not automated)
+#### Prometheus replica placement and acceptance
 
-The monitoring pool `monitoring-pool` is `e2-highmem-2`, zonal
-`us-central1-a`, labeled `env=prod,service=monitoring`, no taints,
-autoscaling 1–10 with 2 nodes live. ~592k head series and sustained 1.5–2.2
-core Prometheus load do not fit two 1930m-allocatable nodes; the durable fix
-is a 4-vCPU replacement pool. `e2-highmem-4` doubles both CPU and memory
-(Prometheus previously OOM-killed replaying 2.56M head series at the 4Gi
-limit); `e2-standard-4` is the CPU-only alternative. Grafana's and
-Prometheus's `standard-rwo` PVCs are zonal to `us-central1-a`, so the
-replacement pool must stay in that single zone or the PVCs cannot reattach.
+The 2026-10-15 read-only inventory found two `e2-highmem-4` monitoring nodes,
+both in `us-central1-a`. Each has about 28Gi allocatable memory; observed usage
+was about 4Gi/8Gi and Prometheus used about 3.6Gi with an 8Gi limit. Values request
+two replicas, require different hostnames, prefer different zones, and keep one
+replica available during voluntary evictions. The existing 100Gi `standard-rwo`
+PVC is zonal to `us-central1-a`; replica 1 gets its own retained claim. Existing
+80GB retention-size and 10-day retention are preserved.
 
-```bash
-gcloud container node-pools create monitoring-pool-v2 \
-  --cluster=prod-omi-gke --location=us-central1 \
-  --machine-type=e2-highmem-4 --num-nodes=2 \
-  --node-locations=us-central1-a \
-  --node-labels=env=prod,service=monitoring \
-  --disk-type=pd-balanced --disk-size=100GB \
-  --enable-autoscaling --min-nodes=1 --max-nodes=10 \
-  --location-policy=BALANCED
-```
+Stage 1 pins the existing Service to replica 0 while the new TSDB warms.
+Current alert sources include seven-day lookbacks; readiness alone is not
+query parity. After at least seven days and accepted per-replica alert-query
+comparisons, a separate change restores the native Service selector. Full
+10-day dashboard history requires ten days. Only after unpinning does this
+tolerate one pod/node loss. It does not survive loss of zone a. Required zone separation needs an eligible monitoring
+node in another zone before changing the preference to a requirement. No PVC
+migration/deletion or pool expansion is included. Recheck node capacity and
+placement before apply; these are dated measurements, not deployment receipts.
 
-Then, off-peak, drain the old pool node by node and delete it once the
-monitoring workloads have moved (same labels select them; there are no
-taints to replicate):
+Grafana and the HPA adapter retain the existing Prometheus ClusterIP. After
+unpinning it selects ready replicas and balances TCP connections; keep-alive can pin a client to one
+replica, and a failed in-flight request is not retried by the Service. No query
+fans out to both replicas, so no Thanos deduplication is needed for this setup.
+The replicas scrape independently and do not share a TSDB.
 
-```bash
-for NODE in $(kubectl --context "$PROD_CONTEXT" get nodes \
-    -l cloud.google.com/gke-nodepool=monitoring-pool -o name); do
-  kubectl --context "$PROD_CONTEXT" cordon "$NODE"
-  kubectl --context "$PROD_CONTEXT" drain "$NODE" \
-    --ignore-daemonsets --delete-emptydir-data --timeout=30m
-done
-gcloud container node-pools delete monitoring-pool \
-  --cluster=prod-omi-gke --location=us-central1 --quiet
-```
+Both exporters collect inline on each scrape. Two Prometheus replicas mean two
+Cloud Monitoring reads per scrape interval: the Stackdriver change reduces the
+aggregate request cadence from 1/s to 2/min, while Cloud Run bridge reads double
+at unchanged 60s cadence. Measure actual ListTimeSeries units before claiming
+savings; the GMP cutover removes that remaining bridge cost.
 
-The drain evicts Grafana and Prometheus; their PVCs reattach in the same
-zone. Prometheus restarts and replays its WAL (~700k–980k head series) —
-during replay the adapter serves stale custom metrics and the
-pusher/listen/parakeet/VAD/diarizer HPAs freeze, so run this off-peak (see
-the WAL-replay note under the prod deploy commands). The Loki memcached
-caches restart cold. If a PodDisruptionBudget blocks a drain, inspect the
-PDB before forcing with `--disable-eviction`.
+Before apply, record the live Helm revision with a parent identity allowed to
+read Helm release Secrets and compare the complete pinned-chart manifest with
+live objects. The read-only lane cannot inspect Helm release history. Existing
+default-value drift must be reconciled or explicitly preserved before applying
+`--reset-values`; a values-only diff is insufficient. After both replicas are
+ready and query history accepted, parent must authorize any single-replica restart exercise, observe rule
+health and HPA API responses throughout it, and retain the new PVC on rollback.
 
 **Dev** (note: kube-prometheus-stack release name is `dev-kube-prometheus-stack`, not `dev-omi-kube-prometheus-stack`):
 ```bash
