@@ -6,7 +6,7 @@ from typing import Any
 from database._client import get_firestore_client
 from google.cloud.firestore_v1 import transactional
 
-from database.account_deletion_marker import _validate_uid
+from database.account_deletion_marker import validate_uid as _validate_uid
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 
 

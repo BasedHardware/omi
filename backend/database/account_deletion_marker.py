@@ -19,7 +19,7 @@ ACCOUNT_DELETION_COLLECTION = "account_deletions"
 _UID_MAX_LENGTH = 128
 
 
-def _validate_uid(uid: str) -> str:
+def validate_uid(uid: str) -> str:
     """Return *uid* if it is a safe Firestore document id, else raise ValueError.
 
     ``document(uid)`` treats a ``/`` or ``\\`` as a path separator and rejects a
@@ -56,7 +56,11 @@ def account_deletion_collection(*, firestore_client: Any | None = None) -> Any:
 
 
 def account_deletion_document(uid: str, *, firestore_client: Any | None = None) -> Any:
-    return account_deletion_collection(firestore_client=firestore_client).document(_validate_uid(uid))
+    return account_deletion_collection(firestore_client=firestore_client).document(validate_uid(uid))
+
+
+# Back-compat alias — the validator shipped private; callers keep working.
+_validate_uid = validate_uid
 
 
 def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = None) -> str | None:
