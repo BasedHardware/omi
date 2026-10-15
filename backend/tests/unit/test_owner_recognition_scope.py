@@ -219,3 +219,62 @@ def test_all_automatic_sources_still_renumber():
     merged = _merge_rows([a, b])
     by_text = {s['text']: s['speaker_id'] for s in merged}
     assert by_text['x'] == 0 and by_text['y'] == 1
+
+
+def test_tagged_source_at_sentinel_neighbour_skips_the_sentinel():
+    """A reserved id next to OMI_SPEAKER_ID_SENTINEL must not absorb it.
+
+    The tagged source owns 98, so the allocator's floor lands at 99 — the
+    sentinel reserved for the Omi device voice. Re-numbering must jump straight
+    to 100: handing the device sentinel to a merged provider voice makes that
+    speaker resolve as the device everywhere the sentinel is checked.
+    """
+    tagged = _conv('A', 0, [_voice('alice', 98, speaker_label_source='manual', person_id='p-alice')])
+    auto = _conv('B', 3600, [_voice('stranger', 0)])
+    merged = _merge_rows([tagged, auto])
+    by_text = {s['text']: s['speaker_id'] for s in merged}
+    assert by_text['alice'] == 98
+    assert by_text['stranger'] == 100
+    assert 99 not in by_text.values()
+
+
+def test_carried_label_source_keeps_ids_while_donor_is_renumbered():
+    """``carried`` is the receipt-migration spelling of manual authority.
+
+    A carried label keeps its own numbers (here 0, bound to the person_id the
+    receipt will migrate onto), while the automatic donor must be renumbered
+    past it. Pre-fix the carried label disabled renumbering globally, so the
+    donor kept provider-local 0 and collided with the carried voice.
+    """
+    carried = _conv('A', 0, [_voice('alice', 0, speaker_label_source='carried', person_id='p-alice')])
+    auto = _conv('B', 3600, [_voice('stranger', 0)])
+    merged = _merge_rows([carried, auto])
+    by_text = {s['text']: s['speaker_id'] for s in merged}
+    assert by_text['alice'] == 0
+    assert by_text['stranger'] == 1
+    assert merged[0].get('person_id') == 'p-alice'
+
+
+def test_receipt_only_source_at_sentinel_rekey_excludes_the_sentinel():
+    """The receipt scan must reserve real ids but never treat 99 as owned.
+
+    hydrate_receipt() advances the floor per key; a receipt entry for the
+    device sentinel (99) must not count as an owned voice, otherwise the first
+    renumbered donor would start at 100 for no reason (or, worse, a receipt
+    that only maps the sentinel would reserve nothing real but block id 99 in a
+    way no source owns). Real ids in the same receipt still reserve.
+    """
+    receipt_only = _conv(
+        'A', 0, [_voice('alice', 0)],
+        manual_speaker_assignments={'speakers': {'0': {'person_id': 'p-alice'}, '99': {'person_id': 'omi'}}},
+    )
+    auto = _conv('B', 3600, [_voice('stranger', 0)])
+    merged = _merge_rows([receipt_only, auto])
+    by_text = {s['text']: s['speaker_id'] for s in merged}
+    assert by_text['alice'] == 0
+    # hydrate_receipt() skips the '99' key, so the floor comes only from the
+    # owned id 0: the donor renumbered to 1. Had 99 been reserved as a real
+    # voice, the donor would start at 100; had 0 gone unreserved, the donor
+    # would collide with alice at 0.
+    assert by_text['stranger'] == 1
+    assert 99 not in by_text.values()
