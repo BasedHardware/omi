@@ -16,6 +16,7 @@ flows to the mix path).
 
 import asyncio
 from types import MethodType, SimpleNamespace
+from unittest.mock import AsyncMock
 
 import routers.listen.receiver as receiver
 
@@ -28,8 +29,11 @@ def _make_receiver(audio_bytes_send):
             request=SimpleNamespace(codec='pcm', sample_rate=TARGET_SAMPLE_RATE, websocket=None),
             use_custom_stt=True,
             audio_bytes_send=audio_bytes_send,
-            state=SimpleNamespace(last_audio_received_time=0.0, first_audio_byte_timestamp=1.0),
+            state=SimpleNamespace(
+                current_conversation_id=None, last_audio_received_time=0.0, first_audio_byte_timestamp=1.0
+            ),
         ),
+        raw_archive=SimpleNamespace(append=AsyncMock()),
         channel_id_to_index={0: 0, 1: 1},
         multi_opus_decoders=[None, None],
         stt_sockets_multi=[None, None],

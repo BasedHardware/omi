@@ -58,3 +58,42 @@ final class SpeechDeadline<Value> {
         complete(await onTimeout())
     }
 }
+
+/// Shared by the real channel and hermetic native tests. A fallback is only
+/// selected after its own permission/availability check, never assumed ready.
+@MainActor
+struct LocalSpeechReadiness {
+    let engine: String
+    let status: String
+    var ready: Bool { status == "ready" }
+    var wire: [String: String] { ["engine": engine, "status": status] }
+}
+
+@MainActor
+struct LocalSpeechUnavailable: Error {
+    let readiness: LocalSpeechReadiness
+}
+
+@MainActor
+struct SpeechFallbackCoordinator {
+    let analyzerReady: () async -> Bool
+    let legacyReady: () async -> LocalSpeechReadiness
+    let analyze: () async throws -> String
+    let legacy: () async throws -> String
+
+    func readiness(preferAnalyzer: Bool) async -> LocalSpeechReadiness {
+        if preferAnalyzer, await analyzerReady() {
+            return LocalSpeechReadiness(engine: "speech_analyzer", status: "ready")
+        }
+        return await legacyReady()
+    }
+
+    func transcribe(preferAnalyzer: Bool) async throws -> String {
+        if preferAnalyzer, await analyzerReady() {
+            do { return try await analyze() } catch { /* Check the fallback before using it. */ }
+        }
+        let readiness = await legacyReady()
+        guard readiness.ready else { throw LocalSpeechUnavailable(readiness: readiness) }
+        return try await legacy()
+    }
+}

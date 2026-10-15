@@ -1030,6 +1030,13 @@ enum SpeechAnalyzerTranscription {
     /// Installs the model for `locale` if it is not already on the device.
     /// Concurrent callers wait on the same download.
     static func ensureModel(for locale: Locale) async throws {
+        // This app keeps one locale reservation; OS-installed assets remain OS-owned.
+        for previous in await AssetInventory.reservedLocales where previous.identifier(.bcp47) != locale.identifier(.bcp47) {
+            installTasks[previous.identifier(.bcp47)]?.cancel()
+            installTasks[previous.identifier(.bcp47)] = nil
+            _ = await AssetInventory.release(reservedLocale: previous)
+        }
+        _ = try await AssetInventory.reserve(locale: locale)
         if await isInstalled(locale) { return }
         let key = locale.identifier(.bcp47)
         let task: Task<Void, Error>
@@ -1054,11 +1061,10 @@ enum SpeechAnalyzerTranscription {
 
     /// Whether transcription can run for `language`: the locale is supported
     /// and its model is installed, or finishes installing within
-    /// `installWait`. A download still running after that counts as available
-    /// too; it continues in the background and transcribe() waits for it.
-    /// Only a failed download (no network, unsupported locale) reports false.
+    /// `installWait`. A pending install continues, but reports not ready.
+    /// The caller can offer setup/retry while captured audio stays retained.
     static func isAvailable(language: String, installWait: Double = 8) async -> Bool {
-        guard let locale = await locale(for: language) else {
+        guard SpeechTranscriber.isAvailable, let locale = await locale(for: language) else {
             NSLog("[SpeechAnalyzer] no supported locale for language %@", language)
             return false
         }
@@ -1066,22 +1072,21 @@ enum SpeechAnalyzerTranscription {
         return await SpeechDeadline.run(seconds: installWait, operation: {
             do {
                 try await ensureModel(for: locale)
-                return true
+                return await isInstalled(locale)
             } catch {
                 NSLog("[SpeechAnalyzer] model install failed for %@: %@", locale.identifier(.bcp47), error.localizedDescription)
                 return false
             }
         }, onTimeout: {
-            // The shared download keeps running; only this availability waiter
-            // has a deadline. A later transcription shares the same download.
-            true
+            // The shared install continues, but readiness must not claim success.
+            false
         })
     }
 
     /// Transcribes a whole audio file (the Dart side writes 16 kHz mono WAV
     /// clips) and returns the text, empty when no speech was recognized.
     static func transcribe(fileURL: URL, language: String) async throws -> String {
-        guard let locale = await locale(for: language) else {
+        guard SpeechTranscriber.isAvailable, let locale = await locale(for: language) else {
             throw TranscriptionError.unsupportedLanguage(language)
         }
         let installed: Result<Void, Error> = await SpeechDeadline.run(seconds: 20, operation: {
@@ -1135,51 +1140,70 @@ enum SpeechAnalyzerTranscription {
 class SpeechRecognitionHandler: NSObject {
     
     func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        if call.method == "transcribe" {
-            guard let args = call.arguments as? [String: Any],
-                  let path = args["filePath"] as? String else {
-                result(FlutterError(code: "INVALID_ARGS", message: "Missing arguments", details: nil))
-                return
-            }
-            
-            let language = args["language"] as? String ?? "en-US"
-            if #available(iOS 26, *) {
-                // SpeechAnalyzer needs no Dictation setting; fall back to
-                // SFSpeechRecognizer only if it cannot handle this clip.
-                Task {
-                    do {
-                        let text = try await SpeechAnalyzerTranscription.transcribe(
-                            fileURL: URL(fileURLWithPath: path), language: language)
-                        DispatchQueue.main.async { result(text) }
-                    } catch {
-                        NSLog("[SpeechAnalyzer] transcribe failed, falling back to SFSpeechRecognizer: %@", error.localizedDescription)
-                        DispatchQueue.main.async {
-                            self.transcribe(filePath: path, language: language, result: result)
-                        }
+        let args = call.arguments as? [String: Any] ?? [:]
+        let language = args["language"] as? String ?? "en-US"
+        let preferAnalyzer = args["useSpeechAnalyzer"] as? Bool != false
+        Task { @MainActor in
+            let coordinator = coordinator(language: language, path: args["filePath"] as? String)
+            switch call.method {
+            case "onDeviceAvailable", "readiness", "prepareSpeech":
+                var readiness = await coordinator.readiness(preferAnalyzer: preferAnalyzer)
+                if call.method == "prepareSpeech", readiness.status == "permission_required" {
+                    _ = await withCheckedContinuation { continuation in
+                        SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
                     }
+                    readiness = await coordinator.readiness(preferAnalyzer: preferAnalyzer)
                 }
-                return
-            }
-            transcribe(filePath: path, language: language, result: result)
-        } else if call.method == "onDeviceAvailable" {
-            let args = call.arguments as? [String: Any]
-            let language = args?["language"] as? String ?? "en-US"
-            if #available(iOS 26, *) {
-                Task {
-                    if await SpeechAnalyzerTranscription.isAvailable(language: language) {
-                        DispatchQueue.main.async { result(true) }
-                    } else {
-                        DispatchQueue.main.async {
-                            self.probeOnDeviceRecognition(language: language, result: result)
-                        }
-                    }
+                result(call.method == "onDeviceAvailable" ? readiness.ready : readiness.wire)
+            case "transcribe":
+                guard args["filePath"] is String else {
+                    result(FlutterError(code: "INVALID_ARGS", message: "Missing audio file", details: nil)); return
                 }
-                return
+                do { result(try await coordinator.transcribe(preferAnalyzer: preferAnalyzer)) }
+                catch let error as LocalSpeechUnavailable {
+                    let status = error.readiness.status
+                    result(FlutterError(code: status == "permission_required" || status == "permission_denied" ? "UNAUTHORIZED" : "UNAVAILABLE",
+                        message: "Selected local speech engine needs setup", details: error.readiness.wire))
+                } catch { result(FlutterError(code: "RECOGNITION_ERROR", message: error.localizedDescription, details: nil)) }
+            default: result(FlutterMethodNotImplemented)
             }
-            probeOnDeviceRecognition(language: language, result: result)
-        } else {
-            result(FlutterMethodNotImplemented)
         }
+    }
+
+    @MainActor
+    private func coordinator(language: String, path: String?) -> SpeechFallbackCoordinator {
+        SpeechFallbackCoordinator(analyzerReady: {
+            if #available(iOS 26, *) { return await SpeechAnalyzerTranscription.isAvailable(language: language) }
+            return false
+        }, legacyReady: {
+            let permission = SFSpeechRecognizer.authorizationStatus()
+            if permission != .authorized {
+                return LocalSpeechReadiness(engine: "sfspeech", status: permission == .notDetermined ? "permission_required" : "permission_denied")
+            }
+            let available: Bool = await withCheckedContinuation { continuation in
+                self.probeOnDeviceRecognition(language: language) { value in
+                    continuation.resume(returning: value as? Bool ?? false)
+                }
+            }
+            return LocalSpeechReadiness(engine: "sfspeech", status: available ? "ready" : "unavailable")
+        }, analyze: {
+            if #available(iOS 26, *), let path {
+                return try await SpeechAnalyzerTranscription.transcribe(fileURL: URL(fileURLWithPath: path), language: language)
+            }
+            throw LocalSpeechUnavailable(readiness: LocalSpeechReadiness(engine: "speech_analyzer", status: "unavailable"))
+        }, legacy: {
+            guard let path else { throw LocalSpeechUnavailable(readiness: LocalSpeechReadiness(engine: "sfspeech", status: "unavailable")) }
+            return try await withCheckedThrowingContinuation { continuation in
+                self.transcribe(filePath: path, language: language) { value in
+                    if let error = value as? FlutterError {
+                        if error.code == "UNAUTHORIZED" || error.code == "UNAVAILABLE" {
+                            continuation.resume(throwing: LocalSpeechUnavailable(readiness:
+                                LocalSpeechReadiness(engine: "sfspeech", status: error.code == "UNAUTHORIZED" ? "permission_denied" : "unavailable")))
+                        } else { continuation.resume(throwing: NSError(domain: error.code, code: 1)) }
+                    } else { continuation.resume(returning: value as? String ?? "") }
+                }
+            }
+        })
     }
 
     /// Resolve the app's language setting to a locale whose recognizer can run
@@ -1230,7 +1254,7 @@ class SpeechRecognitionHandler: NSObject {
             return
         }
         guard let silence = SpeechRecognitionHandler.writeSilentWav(seconds: 0.6) else {
-            result(true) // Could not build a probe clip; do not block the fallback on that.
+            result(false) // Unknown readiness is not a working recognizer.
             return
         }
 
@@ -1265,7 +1289,7 @@ class SpeechRecognitionHandler: NSObject {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
             guard !finished else { return }
-            finish(true) // Slow but not failing; let the real request decide.
+            finish(false) // A timed-out probe cannot attest readiness.
         }
     }
 

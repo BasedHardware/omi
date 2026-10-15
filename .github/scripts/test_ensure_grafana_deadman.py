@@ -64,7 +64,7 @@ class EnsureGrafanaDeadmanTests(unittest.TestCase):
     def ensure(self, channels=CHANNEL):
         return ensure_deadman(project=PROJECT, notification_channels=channels, api=self.api)
 
-    def test_creates_health_check_and_scoped_five_minute_policy(self):
+    def test_creates_health_check_and_scoped_two_minute_policy(self):
         check, policy = self.ensure()
         c = self.api.resources[check]
         self.assertEqual(c['monitoredResource']['labels'], {'host': 'monitor.omi.me', 'project_id': PROJECT})
@@ -78,7 +78,7 @@ class EnsureGrafanaDeadmanTests(unittest.TestCase):
         threshold = p['conditions'][0]['conditionThreshold']
         self.assertIn('metric.label.check_id="123"', threshold['filter'])
         self.assertIn('monitoring.googleapis.com/uptime_check/check_passed', threshold['filter'])
-        self.assertEqual(threshold['duration'], '300s')
+        self.assertEqual(threshold['duration'], '120s')
         self.assertEqual(threshold['comparison'], 'COMPARISON_GT')
         self.assertEqual(threshold['thresholdValue'], 1)
         self.assertEqual(threshold['trigger'], {'count': 1})

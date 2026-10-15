@@ -1,8 +1,5 @@
 ## GKE manages the Kubernetes control plane; these customer-cluster scrape
 ## targets do not exist and their default "down" alerts would page forever.
-## Component `enabled: false` already gates the whole PrometheusRule group in
-## kube-prometheus-stack, so no separate `defaultRules.disabled` entries —
-## flipping enabled back on must restore the alert automatically.
 kubeProxy:
   enabled: false
 kubeScheduler:
@@ -28,8 +25,43 @@ kubelet:
         sourceLabels: [__name__]
         regex: prober_probe_duration_seconds_(bucket|sum|count)
 
+# Grafana owns alert evaluation. In pinned chart 75.15.1 these groups contain
+# only alerts. Keep defaultRules.create and every recording-rule group enabled;
+# all 81 recording rules used by bundled dashboards/downstream queries remain.
+defaultRules:
+  rules:
+    alertmanager: false
+    configReloaders: false
+    etcd: false
+    general: false
+    kubeApiserverSlos: false
+    kubeControllerManager: false
+    kubeProxy: false
+    kubeSchedulerAlerting: false
+    kubeStateMetrics: false
+    kubernetesApps: false
+    kubernetesResources: false
+    kubernetesStorage: false
+    kubernetesSystem: false
+    network: false
+    nodeExporterAlerting: false
+    prometheus: false
+    prometheusOperator: false
+
+# Native Prometheus alerts are disabled above; Grafana routes directly to
+# Telegram/Instatus. Live Loki 3.5.2 has no Alertmanager URL (empty means no
+# notifier destinations), so the legacy Alertmanager has no remaining producer.
+# Its live data volume is emptyDir; no Alertmanager PVC exists.
+alertmanager:
+  enabled: false
+
 grafana:
   enabled: true
+  sidecar:
+    datasources:
+      alertmanager:
+        enabled: false
+  # Do not prune existing SQLite datasource records during this retirement.
   # 2026-10-14: Grafana ran with no requests/limits (BestEffort) on the ~1.93
   # allocatable-core monitoring node while Prometheus sustained 1.5-2.2 cores
   # and pinned it for hours, so kubelet probes and Grafana's own HTTP server
@@ -119,14 +151,30 @@ prometheusOperator:
 
 prometheus:
   enabled: true
+  # Stage 1: keep query traffic on the existing history while replica 1 warms.
+  # Chart 75.15.1 has no Service selector override; extraManifests below owns
+  # the SAME Service identity. Restore the native Service in a separate change
+  # only after >=7d continuous history and per-replica active-query parity.
+  service:
+    enabled: false
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
   prometheusSpec:
+    replicas: 2
+    # Custom affinity below combines required node separation and preferred zone
+    # separation. The existing monitoring-pool has only us-central1-a nodes;
+    # required zone anti-affinity would leave replica 1 Pending.
+    podAntiAffinity: ""
     secrets:
       - metrics-scrape-token
     persistentVolumeClaimRetentionPolicy:
       whenDeleted: Retain
-      whenScaled: Delete
+      whenScaled: Retain
     # Define metrics retention period
     retention: 10d
+    # Preserve the live cap within the existing 100Gi PVC.
+    retentionSize: 80GB
     resources:
       requests:
         cpu: "1"
@@ -307,7 +355,10 @@ prometheus:
           - source_labels: [__meta_kubernetes_pod_name]
             target_label: pod
       - job_name: prometheus-stackdriver-metrics
-        scrape_interval: 1s
+        # LB and Firestore source metrics resolve at 60s. HPA rate/average
+        # windows are 5m; Firestore alert windows are 1h/6h. The exporter's
+        # 3m query interval and 1m offset remain unchanged for ingestion lag.
+        scrape_interval: 60s
         metrics_path: /metrics
         scheme: http
         kubernetes_sd_configs:
@@ -369,6 +420,21 @@ prometheus:
             regex: "omi_.*_created"
             action: drop
     affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: prometheus
+                operator.prometheus.io/name: prod-omi-kube-prometheus-s-prometheus
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: topology.kubernetes.io/zone
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: prometheus
+                  operator.prometheus.io/name: prod-omi-kube-prometheus-s-prometheus
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
           nodeSelectorTerms:
@@ -389,3 +455,60 @@ kube-state-metrics:
 
 nodeExporter:
   enabled: true
+
+# Temporary warm-up pin. Helm matches kind/name/namespace, so moving the native
+# Service into extraManifests preserves its ClusterIP and both consumer URLs.
+# Stage 2 removes both temporary Services AND restores prometheus.service.enabled: true.
+extraManifests:
+  prometheusWarmupService: |
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: {{ template "kube-prometheus-stack.fullname" . }}-prometheus
+      namespace: {{ template "kube-prometheus-stack.namespace" . }}
+      labels:
+        app: {{ template "kube-prometheus-stack.name" . }}-prometheus
+        # Query routing is pinned; self-scrapes use the unpinned Service below.
+        self-monitor: "false"
+        {{- include "kube-prometheus-stack.labels" . | nindent 4 }}
+    spec:
+      type: ClusterIP
+      ports:
+        - name: {{ .Values.prometheus.prometheusSpec.portName }}
+          port: 9090
+          targetPort: 9090
+        - name: reloader-web
+          appProtocol: http
+          port: 8080
+          targetPort: reloader-web
+      publishNotReadyAddresses: false
+      sessionAffinity: None
+      selector:
+        app.kubernetes.io/name: prometheus
+        operator.prometheus.io/name: {{ template "kube-prometheus-stack.prometheus.crname" . }}
+        statefulset.kubernetes.io/pod-name: prometheus-prod-omi-kube-prometheus-s-prometheus-0
+
+  prometheusSelfMonitorService: |
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: {{ template "kube-prometheus-stack.fullname" . }}-prometheus-selfmonitor
+      namespace: {{ template "kube-prometheus-stack.namespace" . }}
+      labels:
+        app: {{ template "kube-prometheus-stack.name" . }}-prometheus
+        self-monitor: "true"
+        {{- include "kube-prometheus-stack.labels" . | nindent 4 }}
+    spec:
+      type: ClusterIP
+      ports:
+        - name: {{ .Values.prometheus.prometheusSpec.portName }}
+          port: 9090
+          targetPort: 9090
+        - name: reloader-web
+          appProtocol: http
+          port: 8080
+          targetPort: reloader-web
+      publishNotReadyAddresses: false
+      selector:
+        app.kubernetes.io/name: prometheus
+        operator.prometheus.io/name: {{ template "kube-prometheus-stack.prometheus.crname" . }}

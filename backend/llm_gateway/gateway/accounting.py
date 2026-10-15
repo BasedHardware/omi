@@ -87,6 +87,7 @@ class ProviderResponseMetadata:
     traffic_type: str | None = None
     # Raw receipt validity is consumed only by v2; legacy normalization is unchanged.
     billable_usage_complete: bool = False
+    token_usage_complete: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -104,6 +105,7 @@ class ProviderAttempt:
     provider_response_id: str | None = None
     actual_model_version: str | None = None
     traffic_type: str | None = None
+    billable_usage_complete: bool = False
 
 
 @dataclass
@@ -143,6 +145,11 @@ class AttemptTrace:
             provider_response_id=response_metadata.provider_response_id,
             actual_model_version=response_metadata.actual_model_version,
             traffic_type=response_metadata.traffic_type,
+            billable_usage_complete=(
+                response_metadata.token_usage_complete
+                if response_metadata.token_usage_complete is not None
+                else response_metadata.billable_usage_complete
+            ),
         )
         self.attempts.append(attempt)
         return attempt
@@ -478,6 +485,20 @@ def vertex_usage_from_response(response: Mapping[str, Any]) -> ProviderResponseM
             tool_use_prompt_tokens=tool_use,
             total_tokens=total,
             cache_status=cache_status,
+        ),
+        token_usage_complete=(
+            type(raw.get('promptTokenCount')) is int
+            and raw['promptTokenCount'] >= 0
+            and type(raw.get('candidatesTokenCount')) is int
+            and raw['candidatesTokenCount'] >= 0
+            and (
+                'thoughtsTokenCount' not in raw
+                or (type(raw['thoughtsTokenCount']) is int and raw['thoughtsTokenCount'] >= 0)
+            )
+            and (
+                'toolUsePromptTokenCount' not in raw
+                or (type(raw['toolUsePromptTokenCount']) is int and raw['toolUsePromptTokenCount'] >= 0)
+            )
         ),
         provider_response_id=_string_or_none(response.get('responseId')),
         actual_model_version=_string_or_none(response.get('modelVersion')),

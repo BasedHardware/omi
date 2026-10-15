@@ -1,3 +1,6 @@
+import 'package:omi/models/custom_stt_config.dart';
+import 'package:omi/models/stt_provider.dart';
+import 'package:omi/services/capture/local_stt_custody.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -57,6 +60,7 @@ void main() {
       },
     );
 
+    await WalFileManager.init();
     listener = _MockListener();
     sync = LocalWalSyncImpl(listener);
   });
@@ -66,6 +70,83 @@ void main() {
     SyncRateLimiter.instance.clockForTesting = null;
     SyncJobPoller.instance.resetForTesting();
   });
+
+  for (final origin in [WalStorage.sdcard, WalStorage.flashPage]) {
+    for (final legacyStamp in [false, true]) {
+      test(
+          'historical $origin (legacy=$legacyStamp) import while local remains uploadable after route change and explicit retry',
+          () async {
+        final directory = await Directory.systemTemp.createTemp('historical-import');
+        addTearDown(() => directory.delete(recursive: true));
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+            const MethodChannel('plugins.flutter.io/path_provider'), (_) async => directory.path);
+        var uploads = 0;
+        var accept = false;
+        final persisted = <Map<String, dynamic>>[];
+        final local = LocalWalSyncImpl(_MockListener(),
+            loadWals: () async => [],
+            persistWals: (wals) async {
+              persisted.clear();
+              persisted.addAll(wals.map((w) => w.toJson()));
+            },
+            uploadGate: SyncUploadGate(
+                limiter: SyncRateLimiter.instance,
+                fairUseStatusLoader: () async => null,
+                uploader: (files,
+                    {onUploadProgress,
+                    conversationId,
+                    captureEvidence,
+                    recordingSessionId,
+                    audioStartSeconds,
+                    audioEndSeconds,
+                    claimLiveCapture = false,
+                    geolocation}) async {
+                  uploads++;
+                  if (!accept) throw StateError('synthetic refused upload');
+                  return UploadFilesResult.queued('historical-job');
+                }));
+        addTearDown(local.stop);
+        LocalSttCustody.selectedLocalRoute = true;
+        addTearDown(() => LocalSttCustody.selectedLocalRoute = false);
+        local.start();
+        await local.walReady;
+        const name = 'historical_audio.bin';
+        await File('${directory.path}/$name').writeAsBytes([1, 2, 3]);
+        final imported = Wal(
+            timerStart: 100,
+            codec: BleAudioCodec.pcm16,
+            seconds: 1,
+            storage: WalStorage.disk,
+            originalStorage: origin,
+            onDeviceOnly: legacyStamp,
+            filePath: name,
+            status: WalStatus.miss);
+        final historical = legacyStamp ? Wal.fromJson(imported.toJson()) : imported;
+        await local.addExternalWal(historical, admittedGeneration: local.sessionGeneration);
+        expect(historical.onDeviceOnly, isFalse);
+        LocalSttCustody.selectedLocalRoute = false;
+        expect(isAutoUploadEligible(historical), isTrue);
+        await local.syncAll();
+        expect(uploads, 1);
+        accept = true;
+        await local.syncWal(wal: historical);
+        expect(uploads, 2, reason: 'explicit retry reaches the real uploader after a refused upload');
+        expect(historical.status, WalStatus.uploaded);
+        expect(persisted.single['on_device_only'], isFalse);
+        // Repair a pre-fix persisted stamp without weakening recording-time local consent.
+        final old = historical.toJson()..['on_device_only'] = true;
+        old.remove('captured_on_device_only');
+        final repaired = Wal.fromJson(old);
+        expect(repaired.onDeviceOnly, isFalse);
+        expect(repaired.toJson()['on_device_only'], isFalse);
+        old['captured_on_device_only'] = true;
+        expect(Wal.fromJson(old).onDeviceOnly, isTrue);
+        old.remove('original_storage');
+        old.remove('captured_on_device_only');
+        expect(Wal.fromJson(old).onDeviceOnly, isTrue, reason: 'legacy phone-local custody is preserved');
+      });
+    }
+  }
 
   group('onFrameCaptured', () {
     test('adds frame with synced=false', () {
@@ -175,6 +256,36 @@ void main() {
   });
 
   group('markFrameSynced', () {
+    test('local enqueue is not a receipt: audio persists phone-only and cannot cloud-upload', () async {
+      LocalSttCustody.selectedLocalRoute = true;
+      await SharedPreferencesUtil()
+          .saveCustomSttConfig(const CustomSttConfig(provider: SttProvider.onDeviceWhisper, sendRawAudioToOmi: false));
+      addTearDown(() async {
+        LocalSttCustody.selectedLocalRoute = false;
+        await SharedPreferencesUtil().saveCustomSttConfig(CustomSttConfig.defaultConfig);
+      });
+      await sync.onAudioCodecChanged(BleAudioCodec.pcm16);
+      sync.setDeviceInfo('phone', 'Phone');
+      for (var i = 0; i < 100; i++) {
+        final key = FrameSyncKey([i]);
+        sync.onFrameCaptured(WalFrame(payload: List<int>.filled(320, i), syncKey: key));
+        sync.markFrameSynced(key);
+      }
+      expect(sync.testFrameSynced, everyElement(false));
+      await sync.finalizeCurrentSession();
+      LocalSttCustody.selectedLocalRoute = false;
+      final wals = await sync.getAllWals();
+      expect(wals, isNotEmpty);
+      for (final wal in wals) {
+        expect(wal.onDeviceOnly, isTrue);
+        expect(wal.capturedOnDeviceOnly, isTrue);
+        expect(isAutoUploadEligible(wal), isFalse);
+        expect(await sync.syncWal(wal: wal), isNull);
+        expect(Wal.fromJson(wal.toJson()).onDeviceOnly, isTrue);
+        expect(await sync.hasDurableWal(wal, admittedGeneration: sync.sessionGeneration), isTrue);
+      }
+    });
+
     test('marks matching frame as synced', () {
       final key = FrameSyncKey([0x10, 0x20, 0x30]);
       sync.onFrameCaptured(WalFrame(payload: [1], syncKey: key));

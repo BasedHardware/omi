@@ -232,3 +232,93 @@ def test_generated_dart_wire_models_cover_contract():
     assert 'voiceLearningState' in people_dart
     assert 'class GeneratedVoiceMatch' in people_dart
     assert 'class GeneratedVoiceMatchesResponse' in people_dart
+
+
+def test_reject_route_rejects_unsafe_conversation_id(client):
+    # Separator/traversal ids must never reach document(). A percent-encoded
+    # '/' decodes into a path break and 404s at route matching; single-segment
+    # unsafe ids (dots, backslash, whitespace, oversize) are the pattern's 422.
+    for bad in ('a%5Cb', 'a b', 'x' * 200):
+        response = client.post(f'/v1/conversations/{bad}/speakers/3/reject', json={'kind': 'not_me'})
+        assert response.status_code == 422, (bad, response.status_code)
+    # '..' is path-normalized by the client and a decoded '/' splits the
+    # segment — neither reaches the handler; both 404 instead of touching a doc.
+    for unroutable in ('a%2Fb', '..'):
+        resp = client.post(f'/v1/conversations/{unroutable}/speakers/3/reject', json={'kind': 'not_me'})
+        assert resp.status_code in (404, 422), unroutable
+
+
+def test_reject_route_bounds_speaker_id(client):
+    response = client.post('/v1/conversations/conv1/speakers/2000000/reject', json={'kind': 'not_me'})
+    assert response.status_code == 422
+    response = client.post('/v1/conversations/conv1/speakers/-1/reject', json={'kind': 'not_me'})
+    assert response.status_code == 422
+
+
+def test_reject_route_rejects_unsafe_body_person_id(client):
+    # person_id is only honored for kind='not_person' (the model validator
+    # nulls it otherwise), so the guard is exercised on that kind.
+    for bad in ('a/b', '../x', 'a\\b', ' padded ', 'x' * 200):
+        response = client.post(
+            '/v1/conversations/conv1/speakers/3/reject', json={'kind': 'not_person', 'person_id': bad}
+        )
+        assert response.status_code == 400, (bad, response.status_code)
+        assert response.json()['detail'] == 'invalid person_id'
+
+
+def test_reject_route_conflict_returns_sanitized_409(client, monkeypatch):
+    def raise_conflict(*args, **kwargs):
+        raise ValueError('internal invariant detail that must not leak')
+
+    monkeypatch.setattr(conversations_db, 'assign_conversation_speaker', raise_conflict)
+    response = client.post('/v1/conversations/conv1/speakers/3/reject', json={'kind': 'not_me'})
+    assert response.status_code == 409
+    assert 'internal invariant detail' not in json.dumps(response.json())
+
+
+def test_reject_route_unexpected_error_returns_sanitized_500(client, monkeypatch):
+    def raise_boom(*args, **kwargs):
+        raise RuntimeError('firestore internal: projects/x/databases/y')
+
+    monkeypatch.setattr(conversations_db, 'assign_conversation_speaker', raise_boom)
+    response = client.post('/v1/conversations/conv1/speakers/3/reject', json={'kind': 'not_me'})
+    assert response.status_code == 500
+    assert 'projects/x' not in json.dumps(response.json())
+
+
+def test_reject_route_lookup_miss_returns_sanitized_404(client, monkeypatch):
+    def raise_lookup(*args, **kwargs):
+        raise LookupError('stored doc shape detail')
+
+    monkeypatch.setattr(conversations_db, 'assign_conversation_speaker', raise_lookup)
+    response = client.post('/v1/conversations/conv1/speakers/3/reject', json={'kind': 'not_me'})
+    assert response.status_code == 404
+    assert 'stored doc shape' not in json.dumps(response.json())
+
+
+def test_voice_matches_rejects_unsafe_person_id(client):
+    for bad in ('a b', 'a%5Cb', 'x' * 200):
+        assert client.get(f'/v1/users/people/{bad}/voice-matches').status_code == 422
+    for unroutable in ('..', 'a%2Fb'):
+        assert client.get(f'/v1/users/people/{unroutable}/voice-matches').status_code in (404, 422)
+
+
+def test_voice_matches_unexpected_error_returns_sanitized_500(client, monkeypatch):
+    async def raise_boom(uid, pid):
+        raise RuntimeError('pinecone namespace users/u1 detail')
+
+    monkeypatch.setattr(speaker_labels_router, 'find_person_voice_matches', raise_boom)
+    response = client.get('/v1/users/people/p1/voice-matches')
+    assert response.status_code == 500
+    assert 'pinecone' not in json.dumps(response.json())
+
+
+def test_generated_ids_fit_the_doc_id_pattern():
+    """Legacy compatibility pin for the review question: conversation and person
+    ids are uuid4 hex+dash, always inside [A-Za-z0-9_-]{1,128}."""
+    import uuid
+    import re as _re
+
+    pattern = _re.compile(speaker_labels_router._DOC_ID_PATTERN)
+    for _ in range(1000):
+        assert pattern.fullmatch(str(uuid.uuid4()))

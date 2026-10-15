@@ -12450,6 +12450,15 @@ class AppLocalizationsHu extends AppLocalizations {
   String get reviewRecentChanges => 'Legutóbbi módosítások';
 
   @override
+  String get reviewChangeAfter => 'Utána';
+
+  @override
+  String get reviewChangeBefore => 'Előtte';
+
+  @override
+  String get reviewChangeRemoved => 'Eltávolítva az aktív listáról';
+
+  @override
   String get reviewChangesIntro =>
       'Mit módosított az Omi magától az elmúlt 30 napban. Vond vissza, ami rossznak tűnik.';
 
@@ -13344,4 +13353,128 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get chatAppsWaitlistJoined => 'Fent vagy a várólistán. Szólunk, ha lesz hely.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Minden kész, $name';
+  }
+
+  @override
+  String get onboardingActDemoSummary =>
+      'Ebéd Sammel, aki júniusban Lisszabonba költözik. Péntekig el akarod küldeni a prezentációt a csapatnak, és hazafelé tejet venni.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Péntekig elküldeni a prezentációt a csapatnak';
+
+  @override
+  String get onboardingActDemoTask2 => 'Hazafelé tejet venni';
+
+  @override
+  String get onboardingActDemoTitle => 'Ebéd Sammel';
+
+  @override
+  String get onboardingActDictateBody => 'Mondd a magad módján. A többit az Omi intézi.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Csak beszélj. Az Omid figyel.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Most ebédeltem Sammel, júniusban Lisszabonba költözik! Emlékeztess, hogy péntekig küldjem el a prezentációt a csapatnak, és hazafelé vegyek tejet.';
+
+  @override
+  String get onboardingActDictateHint => 'Ha végeztél, koppints a pipára';
+
+  @override
+  String get onboardingActDictateTitle => 'Meséld el az Ominak a napod';
+
+  @override
+  String get onboardingActIntro => 'Próbáljuk ki az Omit.';
+
+  @override
+  String get onboardingActJustNow => 'Épp most';
+
+  @override
+  String get onboardingActMicAllow => 'Mikrofon engedélyezése';
+
+  @override
+  String get onboardingActMicBody => 'Hogy az Omi halljon, amikor beszélsz hozzá.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Az Omi még nem küld hangot. Egyelőre használd a telefonodat.';
+
+  @override
+  String get onboardingActMicTitle => 'Az Ominak kell a mikrofonod';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Nem halljuk az Omit. Ellenőrizd, hogy be van-e kapcsolva és közel van-e.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Még nem hallunk. Próbálj kicsit hangosabban beszélni.';
+
+  @override
+  String get onboardingActNotesLabel => 'A napod röviden';
+
+  @override
+  String get onboardingActPhoneMic => 'Telefon mikrofonja';
+
+  @override
+  String get onboardingActRateTitle => 'Tetszik eddig az Omi?';
+
+  @override
+  String get onboardingActRemembers => 'Az Omi emlékszik helyetted';
+
+  @override
+  String get onboardingActSavedToTasks => 'Mentve a teendőid közé';
+
+  @override
+  String get onboardingActTasksLabel => 'Az Omi kiszúrta a teendőidet';
+
+  @override
+  String get onboardingActWriting => 'Összefoglalás…';
+
+  @override
+  String get onboardingActYourWords => 'Ezt mondtad';
+
+  @override
+  String get onboardingConnectOmi => 'Omi csatlakoztatása';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Koppints az Omidra a csatlakozáshoz.';
+
+  @override
+  String get onboardingNoOmiYet => 'Még nincs meg az Omid?';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Még nem rendeltem';
+
+  @override
+  String get onboardingOmiOrdered => 'Már megrendeltem';
+
+  @override
+  String get onboardingPermissionTapToFix => 'Koppints a javításhoz';
+
+  @override
+  String get homePendingTitle => 'Beszélgetések úton';
+
+  @override
+  String get homePendingCatchingUp => 'Korábbi hang feldolgozása';
+
+  @override
+  String get onTheWayTitle => 'Úton';
+
+  @override
+  String get onTheWayAlmostReady => 'Majdnem kész';
+
+  @override
+  String get activityEmpty => 'Még nincs tevékenység';
+
+  @override
+  String get activityNewSemantics => 'Tevékenység, új elemek';
+
+  @override
+  String get activityLoadFailed => 'Nem sikerült betölteni az összes tevékenységet';
+
+  @override
+  String get activityNewItem => 'Új';
 }

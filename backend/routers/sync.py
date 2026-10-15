@@ -7,6 +7,7 @@ import shutil
 import threading
 import time
 import uuid as _uuid
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
@@ -55,6 +56,7 @@ from utils.other import endpoints as auth
 from utils.account_cutover.access import should_skip_background_account_mutation
 from utils.other.storage import (
     archive_mobile_batch_raw_files,
+    link_archive_captures,
     get_playback_artifact_signed_url,
     upload_playback_artifact,
     mark_playback_unavailable,
@@ -100,6 +102,7 @@ from utils.metrics import (
     OMI_SYNC_JOB_POLL_REQUESTS_TOTAL,
     OMI_SYNC_JOB_POLL_THROTTLED_TOTAL,
     OMI_SYNC_LANE_JOBS_TOTAL,
+    OMI_SYNC_LANE_ADMISSIONS_TOTAL,
     OMI_SYNC_QUEUE_WAIT_SECONDS,
     OMI_SYNC_RECORDING_AGE_SECONDS,
 )
@@ -167,8 +170,8 @@ from utils.sync.capture_manifest import (
     manifest_claims_match_paths,
     verify_capture_manifest,
 )
-from utils.sync.lanes import SyncLane, classify_sync_lane
-from utils.sync import backfill_cutover, stage as sync_stage, uid_sequencer
+from utils.sync.lanes import CaptureTimeTrust, SyncLane, classify_sync_lane
+from utils.sync import backfill_cutover, legacy_fresh, stage as sync_stage, uid_sequencer
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
 
 logger = logging.getLogger(__name__)
@@ -643,6 +646,17 @@ async def sync_local_files(
     try:
         try:
             paths = await run_blocking(sync_executor, retrieve_file_paths, files, uid)
+            archive_paths = await run_blocking(
+                sync_executor,
+                archive_mobile_batch_raw_files,
+                uid,
+                paths,
+                {
+                    'app_version': client_device_context.app_version,
+                    'firmware': request.headers.get('x-omi-firmware-version'),
+                    'device_model': request.headers.get('x-omi-device-model'),
+                },
+            )
             wav_paths = await run_blocking(sync_executor, decode_files_to_wav, paths)
         except HTTPException as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail, headers=_V1_DEPRECATION_HEADERS)
@@ -815,6 +829,15 @@ async def sync_local_files(
             except Exception as e:
                 logger.error(f'sync: DG usage record error for {uid}: {e}')
 
+        if archive_paths:
+            await run_blocking(
+                storage_executor,
+                link_archive_captures,
+                uid,
+                archive_paths,
+                sorted(set(response['new_memories']) | set(response['updated_memories'])),
+            )
+
         # Build JSON-serializable response
         result = {
             'new_memories': sorted(response['new_memories']),
@@ -904,6 +927,8 @@ async def sync_local_files_v2(
     x_cloud_trace_context: Optional[str] = Header(None, alias='X-Cloud-Trace-Context'),
     x_omi_sync_capture_manifest: Optional[str] = Header(None, alias='X-Omi-Sync-Capture-Manifest'),
     x_omi_capture_evidence: Optional[str] = Header(None, alias='X-Omi-Capture-Evidence', include_in_schema=False),
+    x_omi_firmware_version: Optional[str] = Header(None, alias='X-Omi-Firmware-Version'),
+    x_omi_device_model: Optional[str] = Header(None, alias='X-Omi-Device-Model'),
     x_omi_conversation_geolocation: Optional[str] = Header(None, alias='X-Omi-Conversation-Geolocation'),
 ):
     """
@@ -962,7 +987,35 @@ async def sync_local_files_v2(
     lane_decision = classify_sync_lane(
         filenames,
         client_device_id=client_device_context.client_device_id if has_server_capture_proof else None,
+        allow_legacy_fresh=legacy_fresh.enabled_for(uid),
     )
+    if lane_decision.reason == 'recent_legacy_capture':
+        lane_decision = await run_blocking(db_executor, legacy_fresh.admit, uid, lane_decision, [f.size for f in files])
+    # Fresh is optional for LEGACY uploads: a live-only refusal must preserve
+    # their existing backfill acceptance. Resolve before recording the final lane.
+    fresh_refused = False
+    retry_after = None
+    if lane_decision.lane == SyncLane.FRESH:
+        hard_restricted, retry_after = await run_blocking(critical_executor, get_hard_restriction_status, uid)
+        refusal_reason = None
+        if hard_restricted:
+            refusal_reason = 'legacy_fresh_hard_restricted'
+        elif await run_blocking(db_executor, is_daily_audio_ceiling_exceeded, uid):
+            logger.info('sync_v2: daily audio ceiling reached uid=%s', uid)
+            refusal_reason = 'legacy_fresh_daily_ceiling'
+            retry_after = retry_after_until_next_utc_day()
+        if refusal_reason:
+            if lane_decision.trust == CaptureTimeTrust.LEGACY:
+                lane_decision = replace(lane_decision, lane=SyncLane.BACKFILL, reason=refusal_reason)
+            else:
+                fresh_refused = True
+
+    try:
+        OMI_SYNC_LANE_ADMISSIONS_TOTAL.labels(
+            lane=lane_decision.lane.value, trust=lane_decision.trust.value, reason=lane_decision.reason
+        ).inc()
+    except Exception:
+        pass
     logger.info(
         'sync_lane_admission uid=%s device_hash=%s platform=%s app_version=%s lane=%s trust=%s age_seconds=%s reason=%s',
         uid,
@@ -999,31 +1052,16 @@ async def sync_local_files_v2(
     except Exception:
         pass
 
-    # Live restrictions apply only to the realtime/fresh domain. Historical
-    # recovery has independent admission and spend caps below.
-    if lane_decision.lane == SyncLane.FRESH:
-        hard_restricted, retry_after = await run_blocking(critical_executor, get_hard_restriction_status, uid)
-        if hard_restricted:
-            return await _fair_use_restriction_response(
-                uid=uid,
-                retry_after=retry_after,
-                client_platform=client_device_context.platform,
-                device_hash=client_device_context.device_hash,
-                app_version=client_device_context.app_version,
-                request_id=x_request_id if isinstance(x_request_id, str) else None,
-                cloud_trace_context=x_cloud_trace_context if isinstance(x_cloud_trace_context, str) else None,
-            )
-        if await run_blocking(db_executor, is_daily_audio_ceiling_exceeded, uid):
-            logger.info('sync_v2: daily audio ceiling reached uid=%s', uid)
-            return await _fair_use_restriction_response(
-                uid=uid,
-                retry_after=retry_after_until_next_utc_day(),
-                client_platform=client_device_context.platform,
-                device_hash=client_device_context.device_hash,
-                app_version=client_device_context.app_version,
-                request_id=x_request_id if isinstance(x_request_id, str) else None,
-                cloud_trace_context=x_cloud_trace_context if isinstance(x_cloud_trace_context, str) else None,
-            )
+    if fresh_refused:
+        return await _fair_use_restriction_response(
+            uid=uid,
+            retry_after=retry_after,
+            client_platform=client_device_context.platform,
+            device_hash=client_device_context.device_hash,
+            app_version=client_device_context.app_version,
+            request_id=x_request_id if isinstance(x_request_id, str) else None,
+            cloud_trace_context=x_cloud_trace_context if isinstance(x_cloud_trace_context, str) else None,
+        )
 
     # A lookup failure must not durably lock: unlike gating the live listen socket, nothing
     # routinely re-checks is_locked later, so a transient blip would paywall it forever (#15232).
@@ -1074,7 +1112,19 @@ async def sync_local_files_v2(
 
         # Keep original bytes before any 202, content-cache hit, decode or VAD.
         # An archive failure leaves the client responsible for retrying its WAL.
-        await run_blocking(sync_executor, archive_mobile_batch_raw_files, uid, paths)
+        archive_paths = await run_blocking(
+            sync_executor,
+            archive_mobile_batch_raw_files,
+            uid,
+            paths,
+            {
+                'app_version': client_device_context.app_version,
+                'firmware': x_omi_firmware_version if isinstance(x_omi_firmware_version, str) else None,
+                'device_model': x_omi_device_model if isinstance(x_omi_device_model, str) else None,
+                'conversation_id': conversation_id if isinstance(conversation_id, str) else None,
+                'sync_job_id': job_id,
+            },
+        )
 
         content_id = await run_blocking(sync_executor, compute_sync_content_id, uid, paths)
 
@@ -1252,6 +1302,7 @@ async def sync_local_files_v2(
                 'job_id': job_id,
                 'uid': uid,
                 'raw_blob_paths': owned_paths,
+                **({'raw_capture_paths': archive_paths} if archive_paths else {}),
                 **({'capture_evidence_claims': capture_claims} if capture_claims else {}),
                 'source': source.value,
                 'should_lock': should_lock,
@@ -1505,6 +1556,7 @@ async def sync_local_files_v2(
                             inline_run_lock_token=inline_run_lock_token,
                             content_run_bound=ledger_fence_active,
                             ledger_fence_active=ledger_fence_active,
+                            **({'raw_capture_paths': archive_paths} if archive_paths else {}),
                             **({'capture_evidence_claims': capture_claims} if capture_claims else {}),
                             recording_session_id=recording_session_id,
                             audio_start_seconds=audio_start_seconds,
@@ -1767,7 +1819,35 @@ async def _maintain_uid_sequencer_lease(
 @router.post('/v2/sync-backfill-sequencer/sweep', include_in_schema=False)
 async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     outcomes = await run_blocking(db_executor, uid_sequencer.sweep)
+    from utils.sync import reprocess
+
+    if reprocess.owns_runtime():
+        try:
+            repair = await run_blocking(db_executor, reprocess.sweep)
+        except Exception as error:
+            logger.error('event=sync_reprocess action=sweep outcome=error exception_type=%s', type(error).__name__)
+            repair = {'repaired': 0, 'error': 1}
+        outcomes['reprocess_repaired'] = repair['repaired']
+        outcomes['reprocess_repair_errors'] = repair['error']
     return JSONResponse(status_code=500 if outcomes.get('error') else 200, content={'outcomes': outcomes})
+
+
+async def _run_sync_reprocess(payload: dict):
+    from utils.sync import reprocess
+    from utils.sync.pipeline import _reprocess_conversation_after_update
+
+    # Dev services share the production Firestore project. Never consume its
+    # obligations outside production (except the explicitly bound emulator).
+    if not reprocess.owns_runtime():
+        return JSONResponse(status_code=200, content={'status': 'foreign_runtime'})
+    if set(payload) != {'kind', 'key', 'task_token'} or not all(
+        isinstance(payload.get(field), str) and payload[field] for field in ('key', 'task_token')
+    ):
+        return JSONResponse(status_code=400, content={'status': 'invalid_payload'})
+    status = await run_blocking(
+        sync_executor, reprocess.run, payload['key'], payload['task_token'], _reprocess_conversation_after_update
+    )
+    return JSONResponse(status_code=503 if status == 'busy' else 200, content={'status': status})
 
 
 @router.post('/v2/sync-backfill-sequencer/wake', include_in_schema=False)
@@ -1797,6 +1877,10 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         payload = await request.json()
     except Exception:
         return await _run_sync_job_body(request, task_retry_count)
+    # Reuse the authenticated worker's 1500s timeout and audience. A distinct
+    # payload kind cannot be confused with a transcription job or its lease.
+    if isinstance(payload, dict) and payload.get('kind') == 'sync_reprocess':
+        return await _run_sync_reprocess(payload)
     epoch = payload.get('sequencer_epoch') if isinstance(payload, dict) else None
     if uid_sequencer.foreign_delivery(payload):
         return JSONResponse(status_code=200, content={'status': 'foreign_stage'})
@@ -1944,6 +2028,16 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
         )
         client_device_id = payload.get('client_device_id')
         client_platform = payload.get('client_platform')
+        raw_capture_paths = payload.get('raw_capture_paths') or []
+        if (
+            not isinstance(raw_capture_paths, list)
+            or len(raw_capture_paths) > 20
+            or any(
+                not isinstance(path, str) or not path.startswith((f'raw-sync/{uid}/', f'raw-mobile-batch/{uid}/'))
+                for path in raw_capture_paths
+            )
+        ):
+            raise HTTPException(status_code=400, detail='Invalid raw capture linkage')
         capture_claims = payload.get('capture_evidence_claims')
         if not isinstance(capture_claims, dict) or len(capture_claims) > 20:
             capture_claims = {}
@@ -2115,6 +2209,7 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
                 run_lock_token=lock_token if ledger_fence_active else None,
                 content_run_bound=ledger_fence_active,
                 ledger_fence_active=ledger_fence_active,
+                **({'raw_capture_paths': raw_capture_paths} if raw_capture_paths else {}),
                 **({'capture_evidence_claims': capture_claims} if capture_claims else {}),
                 recording_session_id=recording_session_id,
                 audio_start_seconds=audio_start_seconds,

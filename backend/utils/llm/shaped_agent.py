@@ -39,6 +39,7 @@ class Budget:
     tool_calls: int = 0
     deadline_seconds: float = 60.0
     tokens: int | None = None
+    graceful: bool = False
 
 
 @dataclass(frozen=True)
@@ -67,6 +68,11 @@ class Turn:
     tool_calls: tuple[Any, ...] = ()
     messages: tuple[Any, ...] = ()
     tokens: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    cached_tokens: int | None = None
+    accounted_tokens: int | None = None
+    cache_unreported_tokens: int = 0
 
 
 @dataclass
@@ -76,15 +82,25 @@ class LoopResult:
     turns: int
     tool_calls: int
     tokens: int = 0
+    accounted_tokens: int = 0
+
+
+@dataclass
+class LoopStop:
+    """A terminal tool (such as finish) ends the sanctioned loop without another turn."""
+
+    value: Any = None
+    messages: tuple[Any, ...] = ()
 
 
 async def run_loop(
     mount: Mount,
     evidence: list[Any],
     model_turn: Callable[[Mount, list[Any]], Awaitable[Turn]],
-    execute_tools: Callable[[tuple[Any, ...]], Awaitable[list[Any]]] | None = None,
+    execute_tools: Callable[[tuple[Any, ...]], Awaitable[list[Any] | LoopStop]] | None = None,
     *,
     explicit_cache: bool = False,
+    observe_turn: Callable[[Turn], Awaitable[None]] | None = None,
 ) -> LoopResult:
     """The only new model/tool loop. Adapters perform exactly one provider turn.
 
@@ -101,33 +117,56 @@ async def run_loop(
     messages = mount.messages(evidence, explicit_cache=explicit_cache)
     used = 0
     tokens = 0
+    accounted = 0
     value = None
-    async with asyncio.timeout(budget.deadline_seconds):
+    turns = 0
+
+    async def execute():
+        nonlocal turns, used, tokens, value, accounted
         for index in range(budget.turns):
             active_mount = (
                 mount
                 if budget.tokens is None
-                else replace(mount, budget=replace(budget, tokens=budget.tokens - tokens))
+                else replace(mount, budget=replace(budget, tokens=budget.tokens - accounted))
             )
             turn = await model_turn(active_mount, messages)
             if turn.tokens < 0:
                 raise ValueError("Invalid turn token usage")
+            turns = index + 1
             tokens += turn.tokens
-            if budget.tokens is not None and tokens > budget.tokens:
-                return LoopResult(None, "token_budget", index + 1, used, tokens)
+            charge = turn.tokens if turn.accounted_tokens is None else turn.accounted_tokens
+            if charge < turn.tokens:
+                raise ValueError('Invalid accounted token usage')
+            accounted += charge
+            if observe_turn is not None:
+                await observe_turn(turn)
+            if budget.tokens is not None and accounted > budget.tokens:
+                return LoopResult(turn.value, "token_budget", index + 1, used, tokens, accounted)
             value = turn.value
             if not turn.tool_calls:
-                return LoopResult(value, 'stopped', index + 1, used, tokens)
-            if budget.tokens is not None and tokens >= budget.tokens:
-                return LoopResult(None, 'token_budget', index + 1, used, tokens)
-            if index + 1 == budget.turns:
-                return LoopResult(value, 'turn_budget', index + 1, used, tokens)
+                return LoopResult(value, 'stopped', index + 1, used, tokens, accounted)
+            if budget.tokens is not None and accounted >= budget.tokens:
+                return LoopResult(None, 'token_budget', index + 1, used, tokens, accounted)
+            if index + 1 == budget.turns and not budget.graceful:
+                return LoopResult(value, 'turn_budget', index + 1, used, tokens, accounted)
             if not mount.tools or execute_tools is None or used + len(turn.tool_calls) > budget.tool_calls:
-                return LoopResult(value, 'tool_budget', index + 1, used, tokens)
+                return LoopResult(value, 'tool_budget', index + 1, used, tokens, accounted)
             used += len(turn.tool_calls)
             messages.extend(turn.messages)
-            messages.extend(await execute_tools(turn.tool_calls))
-    raise AssertionError('Unreachable loop exit')
+            tool_result = await execute_tools(turn.tool_calls)
+            if isinstance(tool_result, LoopStop):
+                messages.extend(tool_result.messages)
+                return LoopResult(tool_result.value, 'finished', turns, used, tokens, accounted)
+            messages.extend(tool_result)
+        return LoopResult(value, 'turn_budget', turns, used, tokens, accounted)
+
+    try:
+        async with asyncio.timeout(budget.deadline_seconds):
+            return await execute()
+    except TimeoutError:
+        if not budget.graceful:
+            raise
+        return LoopResult(value, 'deadline', turns, used, tokens, accounted)
 
 
 def serve_notes(uid: str | None, old: Callable[[], Any], new: Callable[[], Any]) -> Any:

@@ -12428,6 +12428,15 @@ class AppLocalizationsUk extends AppLocalizations {
   String get reviewRecentChanges => 'Нещодавні зміни';
 
   @override
+  String get reviewChangeAfter => 'Після';
+
+  @override
+  String get reviewChangeBefore => 'До';
+
+  @override
+  String get reviewChangeRemoved => 'Вилучено з активного списку';
+
+  @override
   String get reviewChangesIntro => 'Що Omi змінив сам за останні 30 днів. Скасуйте все, що виглядає неправильно.';
 
   @override
@@ -13322,4 +13331,128 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get chatAppsWaitlistJoined => 'Ви в списку очікування. Ми повідомимо, коли з\'явиться місце.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Усе готово, $name';
+  }
+
+  @override
+  String get onboardingActDemoSummary =>
+      'Обід із Сем, яка в червні переїжджає до Лісабона. Треба надіслати презентацію команді до пʼятниці й купити молоко дорогою додому.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Надіслати презентацію команді до п\'ятниці';
+
+  @override
+  String get onboardingActDemoTask2 => 'Купити молоко дорогою додому';
+
+  @override
+  String get onboardingActDemoTitle => 'Обід із Сем';
+
+  @override
+  String get onboardingActDictateBody => 'Кажіть по-своєму. Решту зробить Omi.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Просто говоріть. Omi слухає.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Щойно пообідав із Сем, у червні вона переїжджає до Лісабона! Нагадай надіслати презентацію команді до п\'ятниці й купити молоко дорогою додому.';
+
+  @override
+  String get onboardingActDictateHint => 'Торкніться галочки, коли закінчите';
+
+  @override
+  String get onboardingActDictateTitle => 'Розкажіть Omi про свій день';
+
+  @override
+  String get onboardingActIntro => 'Спробуймо Omi.';
+
+  @override
+  String get onboardingActJustNow => 'Щойно';
+
+  @override
+  String get onboardingActMicAllow => 'Дозволити мікрофон';
+
+  @override
+  String get onboardingActMicBody => 'Щоб Omi чув вас, коли ви з ним говорите.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi ще не передає звук. Поки що скористайтеся телефоном.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi потрібен мікрофон';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Omi не чути. Перевірте, що він увімкнений і поруч.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Поки вас не чути. Спробуйте говорити трохи голосніше.';
+
+  @override
+  String get onboardingActNotesLabel => 'Ваш день коротко';
+
+  @override
+  String get onboardingActPhoneMic => 'Мікрофон телефона';
+
+  @override
+  String get onboardingActRateTitle => 'Подобається Omi?';
+
+  @override
+  String get onboardingActRemembers => 'Omi пам\'ятає, щоб вам не доводилося';
+
+  @override
+  String get onboardingActSavedToTasks => 'Збережено у ваші завдання';
+
+  @override
+  String get onboardingActTasksLabel => 'Omi помітив ваші справи';
+
+  @override
+  String get onboardingActWriting => 'Підсумовуємо…';
+
+  @override
+  String get onboardingActYourWords => 'Ось що ви сказали';
+
+  @override
+  String get onboardingConnectOmi => 'Підключіть Omi';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Торкніться Omi, щоб підключити.';
+
+  @override
+  String get onboardingNoOmiYet => 'Ще немає Omi?';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Ще не замовив';
+
+  @override
+  String get onboardingOmiOrdered => 'Я вже замовив';
+
+  @override
+  String get onboardingPermissionTapToFix => 'Торкніться, щоб виправити';
+
+  @override
+  String get homePendingTitle => 'Розмови в дорозі';
+
+  @override
+  String get homePendingCatchingUp => 'Обробляємо попереднє аудіо';
+
+  @override
+  String get onTheWayTitle => 'У дорозі';
+
+  @override
+  String get onTheWayAlmostReady => 'Майже готово';
+
+  @override
+  String get activityEmpty => 'Поки немає активності';
+
+  @override
+  String get activityNewSemantics => 'Активність, нові елементи';
+
+  @override
+  String get activityLoadFailed => 'Не вдалося завантажити всю активність';
+
+  @override
+  String get activityNewItem => 'Нове';
 }

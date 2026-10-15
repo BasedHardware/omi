@@ -18,6 +18,7 @@ import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/integrations/google_calendar_service.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/wal_sync_upload.dart';
 
@@ -114,16 +115,29 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
   if (response == null) return (items: <ServerConversation>[], ok: false, truncated: false);
   if (response.statusCode == 200) {
-    // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
-    var body = utf8.decode(response.bodyBytes);
-    var memories = (jsonDecode(body) as List<dynamic>)
-        .map((conversation) => ServerConversation.fromJson(conversation as Map<String, dynamic>))
-        .toList();
+    final bodyBytes = response.bodyBytes;
+    // Unlocked rows carry full transcripts, so a page can be megabytes; parse
+    // it off the UI isolate (this runs on resume, right as the user scrolls).
+    final memories = await offUiIsolate(
+        () => parseConversationListBody(jsonDecode(utf8.decode(bodyBytes)) as List<dynamic>),
+        size: bodyBytes.length,
+        threshold: conversationListBackgroundParseBytes,
+        debugName: 'conversation_list_parse');
     Logger.debug('getConversations length: ${memories.length}');
     return (items: memories, ok: true, truncated: isOmiListTruncated(response));
   }
   Logger.debug('getConversations error ${response.statusCode}');
   return (items: <ServerConversation>[], ok: false, truncated: false);
+}
+
+/// Response bodies at or above this size are parsed on a background isolate.
+@visibleForTesting
+int conversationListBackgroundParseBytes = 64 * 1024;
+
+/// Maps a decoded list body (decode the UTF-8 bytes first so multi-byte
+/// characters survive) into conversations.
+List<ServerConversation> parseConversationListBody(List<dynamic> decoded) {
+  return decoded.map((conversation) => ServerConversation.fromJson(conversation as Map<String, dynamic>)).toList();
 }
 
 bool hasSpeakerReceiptSummaryCapability(Map<String, String> headers) => headers['x-omi-speaker-receipt-summary'] == '1';

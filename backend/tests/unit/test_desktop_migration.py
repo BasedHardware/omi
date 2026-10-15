@@ -63,6 +63,10 @@ def _ensure_package_path(name, path):
 # ---------------------------------------------------------------------------
 # Stub heavy dependencies before any production imports
 # ---------------------------------------------------------------------------
+# The pure Dream policy depends on the shared registry, which is unavailable
+# once this legacy fixture replaces the utils package with its narrow stub.
+import config.dream_agent  # noqa: F401
+
 for module_prefix in [
     "database",
     "models",

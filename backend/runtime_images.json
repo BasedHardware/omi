@@ -263,7 +263,8 @@
             "smoke_prelude": "from pyannote.audio import Model, Pipeline; Model.from_pretrained = Pipeline.from_pretrained = lambda *a, **k: (_ for _ in ()).throw(RuntimeError('model loading is forbidden during import smoke')); from runtime_smoke import run_smoke; run_smoke()",
             "dependency_probe_smoke": true,
             "dependency_probe_exclusions": {
-                "utils.stt.diarization_turns": "First-party module the Dockerfile copies from backend/utils/stt into /app; the -I probe cannot see /app, so it is not an installed dependency."
+                "utils.stt.diarization_turns": "First-party module the Dockerfile copies from backend/utils/stt into /app; the -I probe cannot see /app, so it is not an installed dependency.",
+                "utils.logging_config": "First-party module the Dockerfile copies from backend/utils into /app; the -I probe cannot see /app, so it is not an installed dependency."
             },
             "pull_request_smoke": false
         },
@@ -277,6 +278,9 @@
             "entrypoints": ["main"],
             "image_import_smoke": false,
             "dependency_probe_smoke": true,
+            "dependency_probe_exclusions": {
+                "utils.logging_config": "The parakeet checkout shim omi_logging_config.py re-exports this module. The image overwrites that shim with logging_config.py because the NeMo image already binds the name utils, and the -I probe cannot see /app."
+            },
             "pull_request_smoke": false
         },
         {

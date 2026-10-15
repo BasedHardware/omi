@@ -4,7 +4,8 @@ import asyncio
 import logging
 import os
 
-from utils.executors import start_background_task
+from utils.executors import start_background_task, run_blocking, sync_executor
+from utils.messaging.adapters.decoder import MediaDecoderUnavailable, get_media_decoder
 
 logger = logging.getLogger(__name__)
 
@@ -73,10 +74,17 @@ async def recover_pending(gateways, stop, *, interval=30):
             continue
 
 
-def start_adapters(register):
-    gateways = tuple(register(adapter.channel, adapter) for adapter in configured_adapters())
-    if not gateways:
+async def start_adapters(register):
+    adapters = configured_adapters()
+    if not adapters:
         return None
+    # Probe once so a broken image is loud at startup. It must not take the whole API down:
+    # text turns keep working, and voice notes get the typed decode reply.
+    try:
+        await run_blocking(sync_executor, get_media_decoder)
+    except MediaDecoderUnavailable:
+        logger.error('Messaging audio decoder unavailable at startup; voice notes will be declined')
+    gateways = tuple(register(adapter.channel, adapter) for adapter in adapters)
     stop = asyncio.Event()
     task = start_background_task(recover_pending(gateways, stop), name='messaging-pending-recovery')
     return stop, task

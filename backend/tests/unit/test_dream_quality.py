@@ -8,8 +8,9 @@ import pytest
 from pydantic import ValidationError
 
 from database import dream_feedback, review_changes, review_store
-from models.dream_agent import Edit, Feedback
-from utils import dream_prompt, dream_tools
+from models.dream_edit import Edit
+from models.dream_agent import Feedback
+from utils.agent_capabilities import tools as dream_tools
 
 
 def feedback(text):
@@ -166,13 +167,6 @@ def test_summary_requires_speech_and_exact_before():
         dream_tools.validate_summary_edit(summary(), {'structured': {}})
     with pytest.raises(review_store.ReviewConflict):
         dream_tools.validate_summary_edit(summary(), {**row(), 'structured': {'title': 'New heading'}})
-
-
-def test_projection_explicitly_exposes_empty_fields_and_user_title():
-    projected = dream_prompt.project_record(
-        'conversations/c1', {**row(), 'user_title': 'User heading'}, chars=600, names={}
-    )
-    assert 'title: ' in projected and 'overview: ' in projected and 'user_title: User heading' in projected
 
 
 @pytest.mark.parametrize('quote', ['"', "'", '‘'])

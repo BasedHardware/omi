@@ -13,11 +13,13 @@ class OmiLockedPreview extends StatelessWidget {
     required this.child,
     required this.label,
     required this.onPressed,
+    this.status,
     this.interactive = false,
   });
 
   final Widget child;
   final String label;
+  final String? status;
   final FutureOr<void> Function() onPressed;
 
   /// Lets gestures reach the obscured [child] (for example a row's long-press menu or swipe). The
@@ -26,44 +28,55 @@ class OmiLockedPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: OmiRadius.xlAll,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          ExcludeSemantics(
-            child: IgnorePointer(
-              ignoring: !interactive,
-              // Filter only this card's content, not the scrolling backdrop.
-              child: ImageFiltered(
-                imageFilter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-                // This obscured content is decorative. The readable action below
-                // keeps the user's text scale and determines its own height.
-                child: MediaQuery.withNoTextScaling(child: child),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      // Child recognizers retain row long-press/swipe; gaps use the guarded action.
+      onTap: () => onPressed(),
+      child: ClipRRect(
+        borderRadius: OmiRadius.xlAll,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            ExcludeSemantics(
+              child: IgnorePointer(
+                ignoring: !interactive,
+                // Filter only this card's content, not the scrolling backdrop.
+                child: ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+                  // This obscured content is decorative. The readable action below
+                  // keeps the user's text scale and determines its own height.
+                  child: MediaQuery.withNoTextScaling(child: child),
+                ),
               ),
             ),
-          ),
-          Positioned.fill(
-            child: IgnorePointer(
-              ignoring: interactive,
-              child: ColoredBox(
-                key: const Key('locked_preview_tint'),
-                color: OmiColors.surface1.withValues(alpha: 0.65),
+            Positioned.fill(
+              child: IgnorePointer(
+                ignoring: interactive,
+                child: ColoredBox(
+                  key: const Key('locked_preview_tint'),
+                  color: OmiColors.surface1.withValues(alpha: 0.65),
+                ),
               ),
             ),
-          ),
-          // Non-positioned so the action can also determine the card's height.
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
-            child: OmiButton.tertiary(
-              key: const Key('locked_preview_action'),
-              label: label,
-              icon: Icons.lock_outline,
-              size: OmiButtonSize.compact,
-              onPressed: onPressed,
+            // Non-positioned so the action can also determine the card's height.
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (status != null) Text(status!, style: OmiType.subhead),
+                  OmiButton.tertiary(
+                    key: const Key('locked_preview_action'),
+                    label: label,
+                    icon: Icons.hourglass_empty,
+                    size: OmiButtonSize.compact,
+                    onPressed: onPressed,
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
