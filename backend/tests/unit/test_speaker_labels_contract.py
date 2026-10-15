@@ -199,6 +199,22 @@ def test_app_client_openapi_covers_contract():
     assert '/v1/users/people/{person_id}/voice-matches' in paths
     assert 'get' in paths['/v1/users/people/{person_id}/voice-matches']
 
+    reject_parameters = {
+        parameter['name']: parameter['schema']
+        for parameter in paths['/v1/conversations/{conversation_id}/speakers/{speaker_id}/reject']['post']['parameters']
+    }
+    assert reject_parameters['conversation_id']['type'] == 'string'
+    assert not {'pattern', 'minLength', 'maxLength'} & reject_parameters['conversation_id'].keys()
+    assert reject_parameters['speaker_id']['type'] == 'integer'
+    assert not {'minimum', 'maximum'} & reject_parameters['speaker_id'].keys()
+
+    person_parameters = {
+        parameter['name']: parameter['schema']
+        for parameter in paths['/v1/users/people/{person_id}/voice-matches']['get']['parameters']
+    }
+    assert person_parameters['person_id']['type'] == 'string'
+    assert not {'pattern', 'minLength', 'maxLength'} & person_parameters['person_id'].keys()
+
     components = spec['components']['schemas']
     segment_props = components['TranscriptSegment']['properties']
     assert 'speaker_label_source' in segment_props

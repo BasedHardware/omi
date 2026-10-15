@@ -1345,7 +1345,7 @@ async def sync_local_files_v2(
                     registered = await run_blocking(db_executor, sync_backfill_sequencer.is_registered, uid, job_id)
                     if not registered:
                         # A fast worker may have consumed the last pending
-                        # document and removed its owner before this read.
+                        # document and cleared its active owner before this read.
                         observed_job = await run_blocking(db_executor, get_sync_job, job_id)
                         registered = bool(observed_job and observed_job.get('status') in TERMINAL_STATUSES)
                     if not registered:
@@ -1894,14 +1894,14 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         ):
             legacy_job = await run_blocking(db_executor, get_sync_job, payload['job_id'])
             sequencer_on = uid_sequencer.enabled()
-            owner = (
+            owner_job_id = (
                 await run_blocking(db_executor, sync_backfill_sequencer.get_owner, payload['uid'])
                 if legacy_job and legacy_job.get('status') == 'queued' and not sequencer_on
                 else {}
-            )
+            ).get('active_job_id')
             pending = (
                 await run_blocking(db_executor, sync_backfill_sequencer.has_pending, payload['uid'])
-                if legacy_job and legacy_job.get('status') == 'queued' and not sequencer_on and not owner
+                if legacy_job and legacy_job.get('status') == 'queued' and not sequencer_on and not owner_job_id
                 else False
             )
             if legacy_job and legacy_job.get('status') == 'processing':
@@ -1921,7 +1921,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                         payload['job_id'],
                         backfill_cutover.uid_hash(payload['uid']),
                     )
-            if legacy_job and legacy_job.get('status') == 'queued' and (sequencer_on or owner or pending):
+            if legacy_job and legacy_job.get('status') == 'queued' and (sequencer_on or owner_job_id or pending):
                 marked = await run_blocking(
                     db_executor, update_sync_job, payload['job_id'], {'dispatch_mode': 'sequenced'}
                 )
