@@ -79,6 +79,7 @@ def test_dedup_claim_lease_and_content_erasure(store):
 @pytest.fixture
 def local_api(store, monkeypatch):
     from fastapi import FastAPI
+    from fastapi.routing import APIRoute
     from fastapi.testclient import TestClient
     from routers import messaging
     from utils.messaging.gateway import Gateway
@@ -92,8 +93,10 @@ def local_api(store, monkeypatch):
     app.include_router(messaging.router)
     app.dependency_overrides[messaging.get_current_user_uid] = lambda: 'u'
     # The mint dependency has a rate-limit wrapper; override that exact route dependency.
-    mint = next(r for r in app.routes if getattr(r, 'path', '') == '/v1/messaging/link-proofs')
-    app.dependency_overrides[mint.dependant.dependencies[0].call] = lambda: 'u'
+    mint = next(r for r in app.routes if isinstance(r, APIRoute) and r.path == '/v1/messaging/link-proofs')
+    mint_dependency = mint.dependant.dependencies[0].call
+    assert mint_dependency is not None
+    app.dependency_overrides[mint_dependency] = lambda: 'u'
     with TestClient(app) as client:
         yield client, gateway, adapter
 
@@ -120,3 +123,55 @@ def test_app_routes_and_signature_webhook_with_real_local_store(local_api):
     assert client.get('/v1/messaging/links').json()['links'][0]['visible_in_app']
     assert client.delete('/v1/messaging/links/' + links[0]['id']).status_code == 200
     assert client.get('/v1/messaging/links').json()['links'] == []
+
+
+def test_album_atomic_coalescing_dedup_fifo_and_late_part(store):
+    from dataclasses import replace
+    from utils.messaging.contracts import InboundAttachment
+
+    adapter = LoopbackAdapter()
+    message = replace(
+        adapter.parse(adapter.signed()[0])[0],
+        channel='telegram',
+        provider='telegram',
+        media_group_id='group',
+        attachments=(InboundAttachment('file', 'photo.jpg', 'image/jpeg'),),
+    )
+    second = replace(message, provider_message_id='second', text='Second caption')
+    first_path = store.enqueue(message)
+    assert store.enqueue(second) == first_path
+    assert store.enqueue(message) is None
+    assert store.claim_next(first_path) is None
+    now = datetime.now(timezone.utc) + timedelta(seconds=4)
+    first_claim = store.claim_next(first_path, now=now)
+    assert first_claim is not None
+    path, payload = first_claim
+    assert path == first_path and len(payload['attachments']) == 2
+    assert 'Second caption' in payload['text']
+    assert store.claim_next(path, now=now) is None
+    late = replace(message, provider_message_id='late')
+    late_path = store.enqueue(late)
+    assert late_path != path and store.claim_next(late_path, now=now) is None
+    store.complete(path)
+    assert store.enqueue(second) is None
+    late_claim = store.claim_next(late_path, now=now)
+    assert late_claim is not None and late_claim[1]['provider_message_id'] == 'late'
+    store.complete(late_path)
+    assert not store.pending(message)
+
+
+def test_no_cap_imessage_redemption_never_reads_capacity(store, monkeypatch):
+    from dataclasses import replace
+
+    monkeypatch.setenv('OMI_MESSAGING_CHANNEL_POLICY', '{"imessage":{"enabled":true,"cohort":["u"],"seat_cap":"off"}}')
+
+    def capacity(*args):
+        raise AssertionError('No seat counter read permitted')
+
+    monkeypatch.setattr(store, 'capacity', capacity)
+    message = replace(LoopbackAdapter().parse(LoopbackAdapter().signed()[0])[0], channel='imessage', provider='linq')
+    proof = store.mint('u', 'imessage', 'linq', 'code')['proof']
+    link = store.consume(proof, message)
+    store.assert_link_capacity(message, link)
+    store.unlink('u', key(message.channel, message.provider, message.external_user_id))
+    assert store.lookup(message) is None

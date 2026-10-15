@@ -249,8 +249,9 @@ cannot use re-entry to bypass expiry, link revocation or channel reply windows.
 `get_user_valid_subscription(..., provision=False)` authority fail closed. Admission uses
 `is_paid_plan(subscription.plan)` for every paid catalog plan, rather than copying billing
 or expiry logic. Basic/free and expired subscriptions are rejected by the existing
-subscription authority. Production config enables only David's exact uid on Cloud Run
-`backend`; other services and environments retain their default-off behavior.
+subscription authority. Production config enables all valid paid users on Telegram and only David's exact
+uid on iMessage, on Cloud Run `backend`; other services and environments retain
+their default-off behavior.
 
 The knowledge-base README's “no implementation authorized” and undecided defaults are
 superseded by this brief. Its early calendar-off policy is also superseded: channels
@@ -297,8 +298,8 @@ Generic `Open in Omi` navigation is removed; iMessage attaches item-specific nav
 
 ### Stacked messages and iMessage item previews
 
-Each distinct fresh user message is a separate FIFO turn, including trivial pings;
-this implementation does not coalesce questions or fold pings. Duplicate provider
+Each distinct fresh user message is a separate FIFO turn, including trivial pings. Telegram media albums alone coalesce in a bounded durable
+debounce; questions and pings remain distinct. Duplicate provider
 messages are deduplicated, and pendings over thirty minutes old are retired with one guarded resend-notice attempt. Admission atomically writes the encrypted inbox row and a content-free
 per-chat newest-inbound pointer. Late older webhooks and duplicates cannot move the
 pointer backward; Telegram message IDs break ties in its one-second provider clock
@@ -344,8 +345,32 @@ and [rich link previews](https://docs.linqapp.com/channel/imessage/guides/messag
 
 `OMI_MESSAGING_CHANNEL_POLICY` overrides legacy uid admission per channel. Telegram's
 `cohort:"*"` admits all valid paid plans; iMessage defaults to Operator/Architect and
-180 distinct linked users. Cohorts, plans and seat caps are configurable. Atomic link
+180 distinct linked users. Cohorts, plans and seat caps are configurable. Explicit `seat_cap:"off"` retains
+legacy all-paid admission without capacity IO; prod uses it for David-only iMessage. Atomic link
 redemption and per-user member records own seat accounting; unlink/deletion release the
 last member link. Legacy env-only deployments behave as before. Optional cached remote
 channel switches, shared Redis Telegram pacing, typed waitlist errors, retention jobs
 and metric/alert deployment steps are in the [runbook](runbooks/messaging-channels.md#paid-launch-preparation-and-seat-operations).
+
+
+## Inbound modality matrix (Brief S)
+
+| Type | Telegram before → after | iMessage before → after |
+| --- | --- | --- |
+| Voice / audio files | OGG passed encoded / audio omitted → decoded PCM + STT | `voice_memo` encoded; audio `media` rejected → MIME/extension detection + decoded PCM + STT |
+| Photos / HEIC / HEIF | JPEG photo → JPEG/photo documents; HEIC → converted JPEG | JPEG/PNG; HEIC rejected → oriented JPEG conversion |
+| Photo albums | Separate turns → one durable debounced turn | Multiple parts → one turn (retained) |
+| Video / round video | Omitted → audio-track STT | File upload rejected → audio-track STT |
+| PDF / text / CSV | Existing uploader → retained | Existing uploader → retained |
+| DOCX / XLSX / PPTX | Existing supported uploader → explicitly advertised/tested | Existing supported uploader → explicitly advertised/tested |
+| Location / venue | Empty turn → bounded text evidence | Unknown part → text evidence when supplied as location |
+| Contact / vCard | Omitted/rejected → bounded text evidence | vCard rejected → bounded text evidence |
+| Sticker / GIF / emoji-only | Empty/model turn → lightweight acknowledgement | Unsupported/model turn → GIF/emoji/tagged-sticker acknowledgement; unmarked Linq stickers remain images |
+| Quoted replies | No quote context → bounded quote evidence | No quote context → bounded same-session accepted-event resolution |
+| Reactions / polls / dice / games / payments / services | Empty/model turn → silently ignored | Non-message events ignored; unknown parts → explicit ignore or supported-format reply |
+| Unsupported attachment | Generic worker apology → one specific supported-format reply | Generic worker apology → one specific supported-format reply |
+
+Limits, incident evidence, exact prod policy, and manual launch steps are in the
+[runbook](runbooks/messaging-channels.md#approved-all-paid-telegram-configuration-brief-s).
+No client binary or app code change is required; PostHog entry visibility must be
+expanded by the operator for the paid Telegram audience.

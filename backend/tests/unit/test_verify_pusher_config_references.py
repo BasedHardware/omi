@@ -188,6 +188,17 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert preflight.direct_pusher_bindings(deployment) == expected
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
+        "AUDIO_ARCHIVE_LIVE_ENABLED": "false",
+        "AUDIO_ARCHIVE_READ_ENABLED": "false",
+        "AUDIO_ARCHIVE_STOP_PCM_ENABLED": "false",
+        "AUDIO_ARCHIVE_SYNC_ENABLED": "false",
+        "AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED": "false",
+        "AUDIO_ARCHIVE_COALESCE_ENABLED": "false",
+        "AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED": "false",
+        "AUDIO_ARCHIVE_PERCENT": "0",
+        "AUDIO_ARCHIVE_UID_ALLOWLIST": "",
+        "BUCKET_AUDIO_DERIVED": "",
+        "AUDIO_MERGE_WORKER_URL": "",
         "ACTION_ITEM_REFRESH_PRESERVE_ENABLED": "true",
         "AUDIO_TIMELINE_SPANS": "false",
         "BUCKET_SCREEN_FRAMES": "based-hardware-dev-screen-frames",

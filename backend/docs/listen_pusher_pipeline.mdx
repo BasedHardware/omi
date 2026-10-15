@@ -4718,6 +4718,28 @@ programming and caller reachability before deploying.
 Caller deploy order, route requirements and independent rollback are documented
 in [the Gateway caller runbook](internal-gateway-callers.md).
 
+### As-captured archive trial
+
+The default-off `AUDIO_ARCHIVE_*` cohort captures original live Opus packets
+before they are transformed for STT/pusher, using the same
+`omi-wal-uint32le-opus-v1` container and shared canonical writer as the mobile
+Standard archive. Live packs are owner/conversation/hour/channel bounded at
+16 MiB; non-Opus PCM uses lossless FLAC. v1/v2 offline intake archives original
+uploaded files before decode and acceptance. Raw metadata records unknown
+legacy provenance explicitly; storage consent never authorizes training.
+
+PCM remains available in dual-write. READ prefers complete, checksum-verified
+raw spans; STOP_PCM skips a batch only when committed raw reconstructs every
+PCM range, verified by capture-PCM hash or byte-identical decode. Missing spans,
+checksum failures or identity mismatches keep today's
+path. Rollback STOP_PCM first; retain READ for raw-only history until verified
+PCM regeneration. Archive tail flushing runs after STT drain, outside its deadline.
+Regional cache routing never relocates canonical capture. Account and conversation
+deletion purge live and noncurrent generations across configured buckets.
+
+The [archive runbook](runbooks/sync-ingest-archive.md) owns flag phases, bucket
+provisioning, C023 estimates, playback/byte/deletion canaries and David's
+≤5%/≥12h ramp. No live deployment or deletion is part of this change.
 ### Recent LEGACY offline-sync admission
 
 V2 resolves identity from `X-App-Platform` + `X-Device-Id-Hash`, but grants
