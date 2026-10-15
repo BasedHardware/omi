@@ -290,15 +290,18 @@ class DeadlinedStreamingResponse(StreamingResponse):
                     return
                 except* ResponseDeadline:
                     pass
+            if finished:
+                return
             telemetry.fail_request(outcome='provider_timeout', status_code=504, retryable=False, phase='body')
             if await _drain(task):
                 # Headers may be committed. The final error send is bounded too.
                 async with asyncio.timeout(CANCEL_GRACE_SECONDS):
                     await expired_response()
         except (asyncio.CancelledError, ClientDisconnect):
-            telemetry.fail_request(
-                outcome='client_cancelled', status_code=499, retryable=False, phase='client_disconnect'
-            )
+            if not finished:
+                telemetry.fail_request(
+                    outcome='client_cancelled', status_code=499, retryable=False, phase='client_disconnect'
+                )
             raise
         except TimeoutError:
             pass
@@ -368,7 +371,7 @@ class DesktopProxyDeadlineMiddleware:
                     disconnected = True
                 except* ResponseDeadline:
                     expired = True
-                if disconnected:
+                if disconnected and not finished:
                     override = dict(
                         outcome='client_cancelled', status_code=499, retryable=False, phase='client_disconnect'
                     )
@@ -412,12 +415,13 @@ class DesktopProxyDeadlineMiddleware:
                         except (OSError, RuntimeError):
                             pass
         except (asyncio.CancelledError, ClientDisconnect):
-            override = dict(outcome='client_cancelled', status_code=499, retryable=False, phase='client_disconnect')
+            if not finished:
+                override = dict(outcome='client_cancelled', status_code=499, retryable=False, phase='client_disconnect')
             raise
         except TimeoutError:
             pass
         except Exception:
-            if override is None:
+            if override is None and not finished:
                 override = dict(outcome='internal_error', status_code=500, retryable=False, phase=telemetry.phase)
             raise
         finally:

@@ -874,3 +874,68 @@ async def test_simultaneous_success_and_disconnect_preserves_provider_not_reques
     assert build_managed_attempt_event(attempts[0]).as_dict()['outcome'] == 'success'
     events = terminals(capsys)
     assert [(e['outcome'], e['status_code'], e['upstream_status']) for e in events] == [('client_cancelled', 499, 200)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('outer', [False, True])
+@pytest.mark.parametrize('cancel', [False, True])
+async def test_completed_delivery_survives_cleanup_cancellation(monkeypatch, capsys, outer, cancel):
+    from starlette.background import BackgroundTask
+    from utils.llm import desktop_gemini_telemetry as tm
+    from utils.llm.managed_spend_ledger import build_managed_attempt_event
+
+    monkeypatch.setattr(lifetime, 'REQUEST_TIMEOUT_SECONDS', 0.2)
+    monkeypatch.setattr(lifetime, 'CANCEL_GRACE_SECONDS', 0.02)
+    attempts = []
+    monkeypatch.setattr(tm, 'schedule_managed_attempt', attempts.append)
+    delivered, cleanup_started = asyncio.Event(), asyncio.Event()
+
+    async def cleanup():
+        cleanup_started.set()
+        await asyncio.Event().wait()
+
+    scope = {
+        'type': 'http',
+        'asgi': {'spec_version': '2.4'},
+        'method': 'POST',
+        'path': '/v1/proxy/gemini/models/gemini-2.5-flash:generateContent',
+        'headers': [],
+    }
+    state = tm.get_proxy_telemetry(Request(scope), streaming=not outer)
+    state.uid = 'synthetic-user'
+    state.defer_terminal = True
+    state.request_deadline = asyncio.get_running_loop().time() + 0.2
+    state.phase = 'body'
+    state.note_dispatch(tm.UpstreamRoute('https://provider.invalid', {}, {}, 'ai_studio', 'server', 'us'))
+    state.complete(outcome='success', status_code=200, retryable=False, upstream_status=200, phase='body')
+
+    async def chunks():
+        yield b'success'
+
+    async def app(scope, receive, send):
+        await Response(b'success', background=BackgroundTask(cleanup))(scope, receive, send)
+
+    owner = (
+        lifetime.DesktopProxyDeadlineMiddleware(app)
+        if outer
+        else lifetime.DeadlinedStreamingResponse(StreamingResponse(chunks(), background=BackgroundTask(cleanup)), state)
+    )
+
+    async def send(message):
+        if message['type'] == 'http.response.body' and not message.get('more_body', False):
+            delivered.set()
+
+    task = asyncio.create_task(owner(scope, body_then_wait(), send))
+    await asyncio.wait_for(delivered.wait(), timeout=3)
+    await asyncio.wait_for(cleanup_started.wait(), timeout=3)
+    if cancel:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    else:
+        await asyncio.wait_for(task, timeout=3)
+    if not outer:
+        state.flush_terminal()
+    assert [(e['outcome'], e['status_code']) for e in terminals(capsys)] == [('success', 200)]
+    assert len(attempts) == 1
+    assert build_managed_attempt_event(attempts[0]).as_dict()['outcome'] == 'success'
