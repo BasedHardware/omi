@@ -955,7 +955,7 @@ def test_gateway_config_inventory_and_promotion_contract():
 
 def test_public_shared_chat_route_policy_and_openapi_contract_are_explicit():
     with (BACKEND_DIR / 'route_policy_manifest.yaml').open(encoding='utf-8') as handle:
-        manifest = yaml.safe_load(handle)
+        manifest = yaml.load(handle, Loader=yaml.CSafeLoader)
     route = next(
         entry
         for entry in manifest['routes']
