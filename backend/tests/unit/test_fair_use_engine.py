@@ -166,12 +166,12 @@ class TestRecordSpeechMs:
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     def test_cutoff_boundary_zrangebyscore_args(self):
-        """zrangebyscore is called with inclusive range [0, cutoff_ts] for pruning."""
+        """Pruning fetches an inclusive, bounded stale-member batch."""
         import time
 
         pipe = MagicMock()
         _mock_redis.pipeline.return_value = pipe
-        _mock_redis.zrangebyscore.return_value = []
+        _mock_redis.zrangebyscore.return_value = [b'old-minute-1', b'old-minute-2']
         fair_use_mod.record_speech_ms('user1', 5000)
         # Verify zrangebyscore was called with correct cutoff
         zrange_call = _mock_redis.zrangebyscore.call_args
@@ -179,14 +179,15 @@ class TestRecordSpeechMs:
         # Args: (zset_key, min_score=0, max_score=cutoff_ts)
         _key, min_score, max_score = zrange_call[0]
         assert min_score == 0
+        assert zrange_call.kwargs == {'start': 0, 'num': 128}
         # cutoff = now - RETENTION; max_score should be close to that
         expected_cutoff = int(time.time()) - fair_use_mod.FAIR_USE_REDIS_RETENTION_SECONDS
         assert abs(max_score - expected_cutoff) <= 2  # within 2s tolerance
-        # zremrangebyscore in pipe uses same range (inclusive upper bound)
-        zrem_calls = [c for c in pipe.zremrangebyscore.call_args_list]
-        assert len(zrem_calls) == 1
-        assert zrem_calls[0][0][1] == 0  # min
-        assert abs(zrem_calls[0][0][2] - expected_cutoff) <= 2  # max
+        assert pipe.zrem.call_args_list == [
+            ((fair_use_mod._redis_key('user1', 'realtime'), b'old-minute-1'),),
+            ((fair_use_mod._redis_key('user1', 'realtime'), b'old-minute-2'),),
+        ]
+        assert pipe.hdel.call_args.args[1:] == ('old-minute-1', 'old-minute-2')
 
 
 class TestGetRollingSpeechMs:

@@ -137,9 +137,9 @@ def test_set_generic_cache_uses_atomic_ex(fake_redis: _FakeRedis) -> None:
     assert redis_db.get_generic_cache("apps:marketplace") == {"ok": True}
 
 
-def test_set_generic_cache_without_ttl_omits_ex(fake_redis: _FakeRedis) -> None:
-    redis_db.set_generic_cache("apps:no-ttl", {"ok": True})
-    assert fake_redis.set_calls[0]['ex'] is None
+def test_set_generic_cache_requires_ttl(fake_redis: _FakeRedis) -> None:
+    assert redis_db.set_generic_cache("apps:no-ttl", {"ok": True}) is None
+    assert fake_redis.set_calls == []
     assert fake_redis.expire_calls == []
 
 

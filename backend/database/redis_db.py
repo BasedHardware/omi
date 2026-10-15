@@ -168,12 +168,13 @@ def get_generic_cache(path: str) -> Any:
 
 
 @try_catch_decorator
-def set_generic_cache(path: str, data: object, ttl: Optional[int] = None) -> None:
+def set_generic_cache(path: str, data: object, ttl: int) -> None:
+    """Write a generic cache entry with an explicitly selected TTL."""
     key = base64.b64encode(f'{path}'.encode('utf-8'))
     key = key.decode('utf-8')
 
     payload = json.dumps(data, default=str)
-    _cache_set_fail_open(f'cache:{key}', payload, ttl or None)
+    _cache_set_fail_open(f'cache:{key}', payload, ttl)
 
 
 @try_catch_decorator
