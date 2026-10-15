@@ -14649,4 +14649,28 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'ಬಿಡು';
+
+  @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get turnOnOff => 'Turn On/Off';
+
+  @override
+  String get askQuestion => 'Ask Question';
+
+  @override
+  String get longPressPowerWarning => 'Long press powers the device on/off and cannot be customized.';
 }
