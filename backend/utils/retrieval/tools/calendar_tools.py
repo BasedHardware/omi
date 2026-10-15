@@ -601,15 +601,20 @@ async def get_calendar_events_tool(
             # If search_query is provided, use single API call (server-side filtering is efficient)
             # Otherwise, for large date ranges (>30 days), use iterative search
             if search_query:
-                # With search_query, Google Calendar API filters server-side, so we can search entire range at once
+                # Server-side filtering means one call covers the whole
+                # widened window — but orderBy=startTime is ascending, so
+                # asking for `max_results` keeps the OLDEST matches and
+                # drops the recent ones the user asked about (#21573).
+                # Fetch the API bound and keep the most recent.
                 logger.info(f"📅 search_query provided, using single API call for {days_range} day range")
-                events = await get_google_calendar_events(
+                all_matches = await get_google_calendar_events(
                     access_token=access_token,
                     time_min=time_min,
                     time_max=time_max,
-                    max_results=max_results,
+                    max_results=250,
                     search_query=search_query,
                 )
+                events = all_matches[-max_results:] if len(all_matches) > max_results else all_matches
             elif days_range > 30:
                 logger.info(
                     f"📅 Large date range ({days_range} days), using iterative search starting from most recent"
@@ -618,43 +623,74 @@ async def get_calendar_events_tool(
                 assert time_min is not None
                 assert time_max is not None
 
-                # Start with last 30 days, then expand backwards month by month
+                # Walk direction follows the question (#21710): a range
+                # reaching into the future wants the SOONEST events —
+                # windows advance forward from time_min. A historical range
+                # wants the most recent — windows step back from time_max.
+                # 'now' drifts between the caller's ISO string and this
+                # check — a range starting today counts as future-facing.
+                future_range = (
+                    time_min is not None
+                    and time_min >= datetime.now(timezone.utc) - timedelta(days=1)
+                )
+
                 all_events: List[Dict[str, Any]] = []
-                search_end = time_max
                 months_back = 0
-                max_months = 6  # Don't search more than 6 months back
+                max_months = 6  # bound the walk either direction
 
-                while months_back < max_months and len(all_events) < max_results:
-                    # Calculate search window: go back 30 days from current end
-                    search_start = search_end - timedelta(days=30)
+                if future_range:
+                    window_start = time_min
+                    while months_back < max_months and len(all_events) < max_results:
+                        window_end = min(window_start + timedelta(days=30), time_max)
+                        logger.info(
+                            f"📅 Searching window {months_back + 1}: {window_start.strftime('%Y-%m-%d')} to {window_end.strftime('%Y-%m-%d')}"
+                        )
+                        window_events = await get_google_calendar_events(
+                            access_token=access_token,
+                            time_min=window_start,
+                            time_max=window_end,
+                            max_results=max_results,
+                            search_query=search_query,
+                        )
+                        all_events.extend(window_events)
+                        if window_end >= time_max or len(all_events) >= max_results:
+                            break
+                        window_start = window_end
+                        months_back += 1
+                else:
+                    # Start with last 30 days, then expand backwards month by month
+                    search_end = time_max
+                    while months_back < max_months and len(all_events) < max_results:
+                        # Calculate search window: go back 30 days from current end
+                        search_start = search_end - timedelta(days=30)
 
-                    # Don't go before the original time_min
-                    if time_min and search_start < time_min:
-                        search_start = time_min
+                        # Don't go before the original time_min
+                        if time_min and search_start < time_min:
+                            search_start = time_min
 
-                    logger.info(
-                        f"📅 Searching window {months_back + 1}: {search_start.strftime('%Y-%m-%d')} to {search_end.strftime('%Y-%m-%d')}"
-                    )
+                        logger.info(
+                            f"📅 Searching window {months_back + 1}: {search_start.strftime('%Y-%m-%d')} to {search_end.strftime('%Y-%m-%d')}"
+                        )
 
-                    # Fetch events for this window
-                    window_events = await get_google_calendar_events(
-                        access_token=access_token,
-                        time_min=search_start,
-                        time_max=search_end,
-                        max_results=max_results,  # Fetch enough for this window
-                        search_query=search_query,
-                    )
+                        # Fetch events for this window
+                        window_events = await get_google_calendar_events(
+                            access_token=access_token,
+                            time_min=search_start,
+                            time_max=search_end,
+                            max_results=max_results,  # Fetch enough for this window
+                            search_query=search_query,
+                        )
 
-                    # Add events to our collection (they're already sorted chronologically)
-                    all_events.extend(window_events)
+                        # Add events to our collection (they're already sorted chronologically)
+                        all_events.extend(window_events)
 
-                    # If we've reached the original time_min or got enough events, stop
-                    if (time_min and search_start <= time_min) or len(all_events) >= max_results:
-                        break
+                        # If we've reached the original time_min or got enough events, stop
+                        if (time_min and search_start <= time_min) or len(all_events) >= max_results:
+                            break
 
-                    # Move search window backwards
-                    search_end = search_start
-                    months_back += 1
+                        # Move search window backwards
+                        search_end = search_start
+                        months_back += 1
 
                 # Sort all events by start time (most recent first) and take max_results
                 events_with_time: List[Tuple[datetime, Dict[str, Any]]] = []
