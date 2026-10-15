@@ -23,6 +23,8 @@ MONITORING = Path(__file__).resolve().parents[1] / 'charts/monitoring'
 MAPPINGS = MONITORING / 'gmp-shadow-mappings.json'
 BRIDGE = 'cloud-run-application-metrics'
 MANAGED_URL = 'https://monitoring.googleapis.com/v1/projects/based-hardware/location/global/prometheus'
+GRAFANA_LOCAL_URL = 'https://monitor.omi.me/api/datasources/proxy/uid/prometheus'
+GRAFANA_MANAGED_URL = 'https://monitor.omi.me/api/datasources/proxy/uid/gmp-cloud-run'
 
 
 class Unproven(ValueError):
@@ -188,10 +190,12 @@ def query_range(base, expr, start, end, step, token=None):
     parsed = urllib.parse.urlparse(base)
     if parsed.scheme not in ('http', 'https') or parsed.username or parsed.password:
         raise Unproven('invalid endpoint')
-    if parsed.hostname == 'api.omi.me':
+    if (parsed.hostname or '').rstrip('.') == 'api.omi.me':
         raise Unproven('production application endpoint forbidden')
     if parsed.scheme != 'https' and parsed.hostname not in ('127.0.0.1', 'localhost', '::1'):
         raise Unproven('plaintext endpoints require loopback port-forward')
+    if token and base.rstrip('/') not in (MANAGED_URL, GRAFANA_LOCAL_URL, GRAFANA_MANAGED_URL):
+        raise Unproven('credentialed query requires an approved monitoring endpoint')
     params = urllib.parse.urlencode({'query': expr, 'start': start, 'end': end, 'step': step})
     request = urllib.request.Request(base.rstrip('/') + '/api/v1/query_range?' + params)
     if token:
@@ -235,6 +239,10 @@ def kube_query_range(context, expr, start, end, step):
 def run(args):
     if args.gcloud_token and args.managed_url.rstrip('/') != MANAGED_URL:
         raise Unproven('gcloud credentials require the fixed production Google Monitoring endpoint')
+    if args.managed_token_env and (args.gcloud_token or args.managed_url.rstrip('/') != GRAFANA_MANAGED_URL):
+        raise Unproven('managed token requires the fixed production Grafana GMP proxy')
+    if args.local_token_env and (not args.local_url or args.local_url.rstrip('/') != GRAFANA_LOCAL_URL):
+        raise Unproven('local token requires the fixed production Grafana Prometheus proxy')
     mappings = json.loads(Path(args.mappings).read_text())['mappings']
     if args.ids:
         ids = set(args.ids.split(','))
@@ -257,11 +265,16 @@ def run(args):
             if mapping.get('blocked_reason'):
                 raise Unproven(mapping['blocked_reason'])
             token = os.environ.get(args.managed_token_env) if args.managed_token_env else None
+            if args.managed_token_env and not token:
+                raise Unproven('managed token environment is empty')
             if args.gcloud_token:
                 proc = subprocess.run(['gcloud', 'auth', 'print-access-token'], capture_output=True, text=True)
                 if proc.returncode or not proc.stdout.strip():
                     raise Unproven('gcloud read-only credential unavailable')
                 token = proc.stdout.strip()
+            local_token = os.environ.get(args.local_token_env) if args.local_token_env else None
+            if args.local_token_env and not local_token:
+                raise Unproven('local token environment is empty')
             if args.kube_context:
                 left = kube_query_range(args.kube_context, mapping['local_query'], start, end, args.step)
             else:
@@ -271,7 +284,7 @@ def run(args):
                     start,
                     end,
                     args.step,
-                    os.environ.get(args.local_token_env) if args.local_token_env else None,
+                    local_token,
                 )
             right = query_range(args.managed_url, mapping['managed_query'], start, end, args.step, token)
             row.update(

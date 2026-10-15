@@ -195,6 +195,9 @@ python3 backend/scripts/monitoring_gmp_shadow.py \
   --output /tmp/gmp-frontend-shadow.json
 ```
 
+Credentialed URLs are fixed to the production Grafana GMP/Prometheus proxy UIDs;
+`--gcloud-token` is fixed to Google's project endpoint. Custom URLs accept no token.
+
 Keep the GMP canary healthy over the observation window, including credential
 renewal. Direct Google API comparisons alone do not prove the frontend path.
 
