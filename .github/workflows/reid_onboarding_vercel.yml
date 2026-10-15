@@ -57,6 +57,9 @@ jobs:
           node-version: 22
 
       - name: Deploy to Vercel production
+        # Explicit bash enables pipefail, so a failed upload fails the step
+        # instead of being masked by tee.
+        shell: bash
         working-directory: prototypes/device_first_onboarding/build/web
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
