@@ -66,7 +66,8 @@ def test_update_goal_valid_alias_patch_still_writes():
 def test_patch_goal_contradicting_alias_answers_422():
     body = GoalUpdate.model_validate({"min_value": 30})
     with patch.object(
-        goals_router.goals_db, "update_goal",
+        goals_router.goals_db,
+        "update_goal",
         side_effect=goals_db.GoalValidationError("metric min must not exceed max"),
     ):
         with pytest.raises(HTTPException) as exc:

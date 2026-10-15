@@ -586,7 +586,7 @@ def _metric_validation_message(exc: ValidationError) -> str:
         msg = errors[0].get('msg') or ''
         # Pydantic prefixes custom ValueError messages with 'Value error, '.
         if msg.startswith('Value error, '):
-            msg = msg[len('Value error, '):]
+            msg = msg[len('Value error, ') :]
         if msg:
             return msg
     return 'Invalid goal metric'
