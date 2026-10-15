@@ -85,8 +85,44 @@ class BeeDeviceConnection extends CustomDeviceConnection {
 
   @override
   Map<String, dynamic>? parseBatteryResponse(List<int> payload) {
-    if (payload.length < 2) return null;
-    return {'level': payload[0], 'is_charging': payload[1] != 0};
+    if (payload.length == 2) {
+      return {'level': payload[0], 'is_charging': payload[1] != 0};
+    }
+    if (payload.length != 3) return null;
+
+    // Frontier replies contain uint16 LE millivolts followed by a charging state,
+    // not a percentage. Keep the older two-byte Pioneer format above.
+    final millivolts = payload[0] | (payload[1] << 8);
+    if (millivolts < 2500 || millivolts > 5000) return null;
+
+    // Bee Frontier voltage/percentage calibration, linearly interpolated.
+    const curve = [
+      (3300, 0),
+      (3500, 3),
+      (3605, 8),
+      (3710, 15),
+      (3783, 30),
+      (3848, 50),
+      (3932, 62),
+      (4075, 78),
+      (4200, 88),
+      (4300, 96),
+      (4350, 100),
+    ];
+    var level = curve.last.$2;
+    if (millivolts <= curve.first.$1) {
+      level = curve.first.$2;
+    } else {
+      for (var i = 1; i < curve.length; i++) {
+        final (upperMv, upperLevel) = curve[i];
+        if (millivolts <= upperMv) {
+          final (lowerMv, lowerLevel) = curve[i - 1];
+          level = (lowerLevel + (millivolts - lowerMv) * (upperLevel - lowerLevel) / (upperMv - lowerMv)).round();
+          break;
+        }
+      }
+    }
+    return {'level': level, 'is_charging': payload[2] == 1};
   }
 
   @override
