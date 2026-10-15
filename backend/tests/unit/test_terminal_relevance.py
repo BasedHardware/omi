@@ -248,3 +248,15 @@ def test_repaired_prior_keep_reasons_have_distinct_metric_labels(reason):
     before = counter._value.get()
     record_conversation_relevance(**labels)
     assert counter._value.get() == before + 1
+
+
+@pytest.mark.parametrize('restored', [False, True])
+def test_incomplete_recovery_keep_retains_capture_preservation_provenance(restored):
+    row = {
+        'relevance_decision': {'trigger': 'server_recovery', 'verdict': 'keep'},
+        'sync_relevance_user_kept': restored,
+    }
+    decision = terminal_decision(row, path='lifecycle_terminal')
+    assert valid_decision(decision)
+    assert decision['trigger'] == 'server_recovery'
+    assert decision['verdict'] == 'keep'

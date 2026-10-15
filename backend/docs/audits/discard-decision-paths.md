@@ -40,7 +40,9 @@ threshold, recovery feature flag, client, or deletion contract changes.
 `utils/conversations/terminal_relevance.py` validates existing records, preserves
 valid prior decisions and rule KEEP outcomes, and supplies a total decision.
 Malformed prior keep records are repaired conservatively without reversing their
-positive evidence, including rule and calendar keeps.
+positive evidence, including rule and calendar keeps. Repair retains a recognized
+prior trigger, since `server_recovery` provenance also fences capture-byte
+preservation during persistence.
 Terminal recovery strictly decodes the held transcript snapshot before using
 `deterministic_relevance`. Ambiguous/substantive text stays kept with a bounded,
 path-specific policy reason; reminders and substantial-length rules retain their
@@ -82,7 +84,9 @@ an increment; these are not exactly-once row counts.
   `test_oversized_in_progress_close.py`: leases/generation fences and actual terminal writes.
 - `test_conversation_lifecycle_contract.py`: real lifecycle creation/import and
   existing missing/deleted-row persistence fences; `test_sync_cross_job_assignment.py`:
-  real intake survivor promotion records a keep.
+  real intake survivor promotion records a keep. `test_recovery_discard_pipeline.py`
+  exercises encoded capture preservation, corruption, restores and raced edits
+  through the real recovery/dead-letter writers with explicit terminal decisions.
 - `test_chat_first_e2e_fixture.py`: fixed local/offline identities cannot be selected in production, and actual fixture seeding stores its explicit keep decision.
 - The full relevance, finalization, and selected sync/lifecycle suites exercise the
   normal decisions alongside these fallback paths. Test results belong in the

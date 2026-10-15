@@ -22,6 +22,7 @@ from tests.unit.fixtures.strict_firestore_transaction import (
 from utils import encryption
 from utils.conversations import finalizer, lifecycle
 from utils.conversations.recovery import raw_transcript_bytes
+from utils.conversations.terminal_relevance import valid_decision
 
 pc = importlib.import_module('utils.conversations.process_conversation')
 UID, CID, JOB = 'recovery-user', 'recovery-conversation', 'recovery-job'
@@ -295,7 +296,8 @@ async def test_decode_failure_preserves_blob_and_uses_existing_terminal_path(pip
     assert response == {'status': 'dead_letter'}
     assert row['transcript_segments'] == blob
     assert row['status'] == 'completed' and row['discarded'] is False
-    assert 'relevance_decision' not in row
+    assert valid_decision(row['relevance_decision'])
+    assert row['relevance_decision']['verdict'] == 'keep'
     assert pipeline.store.rows[JOB_PATH]['last_failure_code'] == 'recovery_structure_unavailable'
     assert counters['verified'] == 0 and counters['refused'] == 1
     output = capsys.readouterr().out
@@ -331,7 +333,8 @@ async def test_post_read_protection_refuses_discard_transactionally(pipeline, mo
     assert response == {'status': 'dead_letter'}
     assert row['status'] == 'completed' and row['discarded'] is False
     assert row['transcript_segments'] == blob
-    assert 'relevance_decision' not in row
+    assert valid_decision(row['relevance_decision'])
+    assert row['relevance_decision']['verdict'] == 'keep'
     for key, value in protection.items():
         if key == 'structured':
             # Protected content survives; an untitled row also gains the
@@ -355,7 +358,9 @@ async def test_restore_before_finalizer_read_never_decides_discard(pipeline, cap
     row = pipeline.store.rows[CONVERSATION_PATH]
     assert response == {'status': 'dead_letter'}  # kept minimum, existing terminal policy
     assert row['discarded'] is False and row['sync_relevance_user_kept'] is True
-    assert row['transcript_segments'] == blob and 'relevance_decision' not in row
+    assert row['transcript_segments'] == blob
+    assert valid_decision(row['relevance_decision'])
+    assert row['relevance_decision']['verdict'] == 'keep'
     assert pipeline.decisions and all(not decision.discard for decision in pipeline.decisions)
     assert counters['refused'] == 1 and 'verify_not_rich' not in capsys.readouterr().out
 
@@ -368,7 +373,9 @@ async def test_title_added_while_job_is_queued_remains_visible(pipeline, capsys)
     assert response == {'status': 'dead_letter'}
     assert row['status'] == 'completed' and row['discarded'] is False
     assert row['user_title'] == 'Title added after admission'
-    assert row['transcript_segments'] == blob and 'relevance_decision' not in row
+    assert row['transcript_segments'] == blob
+    assert valid_decision(row['relevance_decision'])
+    assert row['relevance_decision']['verdict'] == 'keep'
     assert counters['refused'] == 1 and 'verify_not_rich' not in capsys.readouterr().out
 
 
@@ -387,7 +394,9 @@ async def test_blob_corrupted_after_read_cannot_commit_discard(pipeline, monkeyp
     row = pipeline.store.rows[CONVERSATION_PATH]
     assert response == {'status': 'dead_letter'}
     assert row['status'] == 'completed' and row['discarded'] is False
-    assert row['transcript_segments'] == corrupted and 'relevance_decision' not in row
+    assert row['transcript_segments'] == corrupted
+    assert valid_decision(row['relevance_decision'])
+    assert row['relevance_decision']['verdict'] == 'keep'
     assert counters['refused'] == 1 and 'verify_not_rich' not in capsys.readouterr().out
 
 

@@ -74,6 +74,13 @@ def terminal_decision(
     discarded = bool(row.get('discarded'))
     if valid_decision(prior) and (prior['verdict'] == 'discard') == discarded:
         return dict(prior)
+    trigger = path
+    if not discarded and isinstance(prior, Mapping) and prior.get('verdict') == 'keep':
+        prior_trigger = prior.get('trigger')
+        if isinstance(prior_trigger, str) and prior_trigger in DECISION_TRIGGERS:
+            # Recovery persistence uses this provenance to preserve captured
+            # transcript/audio bytes. Repair missing fields without losing it.
+            trigger = prior_trigger
     verdict, tier, reason = 'keep', 'policy', f'{path}_default'
     if discarded:
         verdict, reason = 'discard', 'already_discarded'
@@ -129,7 +136,13 @@ def terminal_decision(
                 tier, reason = 'override', 'calendar_overlap'
             else:
                 verdict, tier, reason = 'discard', 'rule', rule
-    return {'verdict': verdict, 'decided_by': tier, 'reason': reason, 'trigger': path, 'rules_version': RULES_VERSION}
+    return {
+        'verdict': verdict,
+        'decided_by': tier,
+        'reason': reason,
+        'trigger': trigger,
+        'rules_version': RULES_VERSION,
+    }
 
 
 def _has_wake_word(texts: Sequence[str]) -> bool:
