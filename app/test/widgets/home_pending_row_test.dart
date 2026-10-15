@@ -39,7 +39,7 @@ class _FakeSync extends ChangeNotifier implements SyncProvider {
 
   @override
   SyncState get syncState => switch ((syncing, fetching, fetchingWithUploadPhase)) {
-        (true, _, _) => SyncState(status: SyncStatus.syncing, phase: SyncPhase.downloadingFromDevice),
+        (true, _, _) => const SyncState(status: SyncStatus.syncing, phase: SyncPhase.downloadingFromDevice),
         (_, true, _) => const SyncState(status: SyncStatus.fetchingConversations),
         (_, _, true) => const SyncState(status: SyncStatus.fetchingConversations, phase: SyncPhase.uploadingToCloud),
         _ => const SyncState(),
