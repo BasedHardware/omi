@@ -81,6 +81,10 @@ def _load_module_from_file(module_name, file_path):
 
 
 model_text = _load_module_from_file("utils.model_text", BACKEND_DIR / "utils" / "model_text.py")
+_load_module_from_file(
+    "utils.retrieval.tools.calendar_render",
+    BACKEND_DIR / "utils" / "retrieval" / "tools" / "calendar_render.py",
+)
 
 calendar_tools = _load_module_from_file(
     "utils.retrieval.tools.calendar_tools",
