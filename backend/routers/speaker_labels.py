@@ -1,9 +1,8 @@
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from database import conversations as conversations_db
 from database import voice_profiles as voice_profiles_db
@@ -22,6 +21,15 @@ router = APIRouter()
 # a path separator or traversal sequence would be read as a subcollection path by
 # document(). Restrict to a plain doc-id charset and bound the length.
 _DOC_ID_PATTERN = r'^[A-Za-z0-9_-]{1,128}$'
+_MAX_SPEAKER_ID = 1_000_000
+
+
+# Validated in the handlers, not with ``Path(pattern=..., ge=..., le=...)``: those
+# constraints land in the released App-client OpenAPI contract, where narrowing a
+# request parameter is a breaking change. The wire behaviour (422) is the same.
+def _require_doc_id(value: str, name: str) -> None:
+    if not re.fullmatch(_DOC_ID_PATTERN, value):
+        raise HTTPException(status_code=422, detail=f'invalid {name}')
 
 
 @router.post(
@@ -30,12 +38,15 @@ _DOC_ID_PATTERN = r'^[A-Za-z0-9_-]{1,128}$'
     tags=['conversations'],
 )
 def reject_speaker_label(
-    conversation_id: Annotated[str, Path(pattern=_DOC_ID_PATTERN)],
-    speaker_id: Annotated[int, Path(ge=0, le=1_000_000)],
+    conversation_id: str,
+    speaker_id: int,
     data: RejectSpeakerRequest,
     background_tasks: BackgroundTasks,
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    _require_doc_id(conversation_id, 'conversation_id')
+    if not 0 <= speaker_id <= _MAX_SPEAKER_ID:
+        raise HTTPException(status_code=422, detail='invalid speaker_id')
     # The request body's person_id flows into the same document() sink as the
     # path param; validate the exact value passed downstream — a padded or
     # separator-carrying id is rejected outright.
@@ -95,9 +106,10 @@ def reject_speaker_label(
 
 @router.get('/v1/users/people/{person_id}/voice-matches', response_model=VoiceMatchesResponse, tags=['v1'])
 async def get_person_voice_matches(
-    person_id: Annotated[str, Path(pattern=_DOC_ID_PATTERN)],
+    person_id: str,
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    _require_doc_id(person_id, 'person_id')
     try:
         return await find_person_voice_matches(uid, person_id)
     except LookupError as error:
