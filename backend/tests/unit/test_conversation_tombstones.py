@@ -75,6 +75,7 @@ def function(path, name, namespace):
 def store(monkeypatch):
     store = Store()
     monkeypatch.setattr(tombstones, 'db', store)
+    monkeypatch.setattr('database.batch_pipeline_purge.purge_batch_owner', MagicMock())
     store.rows['users/u/conversations/c'] = {
         'created_at': 'original-time',
         'external_data': {'from_segments_client_session_id': 'session', 'calendar_event': 'private'},
