@@ -4,38 +4,34 @@ import 'package:omi/backend/schema/review.dart';
 import 'package:omi/pages/review/widgets/recent_change_groups.dart';
 
 Map<String, dynamic> _json(String id, {String editKind = 'spelling', Map<String, dynamic>? diff, String? groupKey}) => {
-  'change_id': id,
-  'kind': 'other',
-  'edit_kind': editKind,
-  'title': 'Spelling',
-  'created_at': '2026-10-1${id.length % 5}T12:00:00Z',
-  'before': 'invented before',
-  'after': 'invented after',
-  'refs': [
-    {'type': 'conversation', 'id': 'conv-$id', 'label': 'Synthetic sync $id'},
-  ],
-  if (diff != null) 'diff': diff,
-  if (groupKey != null) 'group_key': groupKey,
-};
+      'change_id': id,
+      'kind': 'other',
+      'edit_kind': editKind,
+      'title': 'Spelling',
+      'created_at': '2026-10-1${id.length % 5}T12:00:00Z',
+      'before': 'invented before',
+      'after': 'invented after',
+      'refs': [
+        {'type': 'conversation', 'id': 'conv-$id', 'label': 'Synthetic sync $id'},
+      ],
+      if (diff != null) 'diff': diff,
+      if (groupKey != null) 'group_key': groupKey,
+    };
 
 void main() {
   group('diff parsing', () {
     test('additive diff and group_key survive the generated wire', () {
-      final raw = _json(
-        'a',
-        groupKey: 'term:zentrix',
-        diff: {
-          'target_label': 'Zentrix',
-          'field': 'transcript',
-          'before': 'zen tricks',
-          'after': 'Zentrix',
-          'context_before': 'We should ask ',
-          'context_after': ' about the pilot.',
-          'occurrences': 3,
-          'source_title': 'Synthetic pilot sync',
-          'source_started_at': '2026-10-12T09:00:00Z',
-        },
-      );
+      final raw = _json('a', groupKey: 'term:zentrix', diff: {
+        'target_label': 'Zentrix',
+        'field': 'transcript',
+        'before': 'zen tricks',
+        'after': 'Zentrix',
+        'context_before': 'We should ask ',
+        'context_after': ' about the pilot.',
+        'occurrences': 3,
+        'source_title': 'Synthetic pilot sync',
+        'source_started_at': '2026-10-12T09:00:00Z',
+      });
       final change = ReviewChange.fromGenerated(wire.GeneratedReviewChange.fromJson(raw), raw: raw);
       expect(change.groupKey, 'term:zentrix');
       expect(change.diff!.before, 'zen tricks');
@@ -84,12 +80,12 @@ void main() {
       expect(ReviewChange.fromJson({..._json('a'), 'diff': 'garbage'})!.diff, isNull);
       expect(ReviewChange.fromJson({..._json('a'), 'diff': <String, dynamic>{}})!.diff, isNull);
       expect(
-        ReviewChange.fromJson({
-          ..._json('a'),
-          'diff': {'occurrences': 'many'},
-        })!.diff,
-        isNull,
-      );
+          ReviewChange.fromJson({
+            ..._json('a'),
+            'diff': {'occurrences': 'many'}
+          })!
+              .diff,
+          isNull);
     });
   });
 
@@ -151,12 +147,7 @@ void main() {
 
     test('the reason is dropped when it only repeats the title', () {
       final repeated = ReviewChange(
-        changeId: 'a',
-        kind: ReviewChangeKind.other,
-        title: 'Same',
-        reason: 'Same',
-        createdAt: DateTime(2026),
-      );
+          changeId: 'a', kind: ReviewChangeKind.other, title: 'Same', reason: 'Same', createdAt: DateTime(2026));
       expect(recentChangeNote(repeated), isNull);
     });
   });

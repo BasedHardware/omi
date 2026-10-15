@@ -197,36 +197,28 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
         ),
       ];
       for (final MapEntry(key: section, value: groups) in _groups.entries) {
-        rows.add(
-          Padding(
-            padding: const EdgeInsets.only(top: OmiSpacing.sm),
-            child: ReviewSectionLabel(
-              key: ValueKey('recent_changes_section_${section.name}'),
-              label: _sectionLabel(context, section),
-            ),
-          ),
-        );
+        rows.add(Padding(
+          padding: const EdgeInsets.only(top: OmiSpacing.sm),
+          child: ReviewSectionLabel(
+              key: ValueKey('recent_changes_section_${section.name}'), label: _sectionLabel(context, section)),
+        ));
         for (final group in groups) {
-          rows.add(
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: RecentChangeRow(
-                group: group,
-                busy: group.changes.any((c) => _busy.contains(c.changeId)),
-                onOpen: () => _openGroup(group),
-                onToggleAll: () => _toggleGroup(group),
-                onOpenTask: () => _openTasks(context),
-              ),
+          rows.add(Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: RecentChangeRow(
+              group: group,
+              busy: group.changes.any((c) => _busy.contains(c.changeId)),
+              onOpen: () => _openGroup(group),
+              onToggleAll: () => _toggleGroup(group),
+              onOpenTask: () => _openTasks(context),
             ),
-          );
+          ));
         }
       }
       if (_cursor != null) {
-        rows.add(
-          Center(
-            child: OmiButton.tertiary(label: l10n.reviewShowMore, isLoading: _loadingMore, onPressed: _more),
-          ),
-        );
+        rows.add(Center(
+          child: OmiButton.tertiary(label: l10n.reviewShowMore, isLoading: _loadingMore, onPressed: _more),
+        ));
       }
       body = RefreshIndicator(
         onRefresh: _refresh,
@@ -260,11 +252,11 @@ String _sectionLabel(BuildContext context, RecentChangeSection section) {
 
 /// The glyph a change of [kind] wears wherever Omi's own changes are listed.
 IconData reviewChangeIcon(ReviewChangeKind kind) => switch (kind) {
-  ReviewChangeKind.rename => Icons.spellcheck,
-  ReviewChangeKind.mergeMemories => Icons.call_merge,
-  ReviewChangeKind.updatePerson => Icons.person_outline,
-  ReviewChangeKind.labelSpeaker => Icons.record_voice_over_outlined,
-  ReviewChangeKind.titleConversation => Icons.edit_outlined,
-  ReviewChangeKind.closeTask => Icons.task_alt,
-  ReviewChangeKind.other => Icons.auto_fix_high_outlined,
-};
+      ReviewChangeKind.rename => Icons.spellcheck,
+      ReviewChangeKind.mergeMemories => Icons.call_merge,
+      ReviewChangeKind.updatePerson => Icons.person_outline,
+      ReviewChangeKind.labelSpeaker => Icons.record_voice_over_outlined,
+      ReviewChangeKind.titleConversation => Icons.edit_outlined,
+      ReviewChangeKind.closeTask => Icons.task_alt,
+      ReviewChangeKind.other => Icons.auto_fix_high_outlined,
+    };

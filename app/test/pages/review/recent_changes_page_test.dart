@@ -8,27 +8,28 @@ import 'package:omi/ui/ui.dart';
 
 // Invented content only.
 ReviewChange _term(String id, String conversation, {int places = 1, bool undone = false, int day = 14}) => ReviewChange(
-  changeId: id,
-  kind: ReviewChangeKind.other,
-  editKind: 'transcript',
-  title: 'Edit transcript',
-  reason: 'Matches your contact',
-  before: 'whole segment that must not be shown',
-  after: 'whole corrected segment',
-  createdAt: DateTime.utc(2026, 10, day, 12),
-  groupKey: 'term:zentrix',
-  refs: [ReviewChangeRef(type: 'conversation', id: 'conv-$id', label: conversation)],
-  diff: ReviewChangeDiff(
-    before: 'zen tricks',
-    after: 'Zentrix',
-    occurrenceCount: places,
-    sourceTitle: conversation,
-    occurrences: const [
-      ReviewChangeOccurrence(contextBefore: 'Ask ', before: 'zen tricks', after: 'Zentrix', contextAfter: ' today.'),
-    ],
-  ),
-  undone: undone,
-);
+      changeId: id,
+      kind: ReviewChangeKind.other,
+      editKind: 'transcript',
+      title: 'Edit transcript',
+      reason: 'Matches your contact',
+      before: 'whole segment that must not be shown',
+      after: 'whole corrected segment',
+      createdAt: DateTime.utc(2026, 10, day, 12),
+      groupKey: 'term:zentrix',
+      refs: [ReviewChangeRef(type: 'conversation', id: 'conv-$id', label: conversation)],
+      diff: ReviewChangeDiff(
+        before: 'zen tricks',
+        after: 'Zentrix',
+        occurrenceCount: places,
+        sourceTitle: conversation,
+        occurrences: const [
+          ReviewChangeOccurrence(
+              contextBefore: 'Ask ', before: 'zen tricks', after: 'Zentrix', contextAfter: ' today.'),
+        ],
+      ),
+      undone: undone,
+    );
 
 final _memory = ReviewChange(
   changeId: 'memory-1',
@@ -81,22 +82,19 @@ Future<void> _pump(
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   OmiColors.active = OmiColors.forBrightness(Brightness.dark);
-  await tester.pumpWidget(
-    MaterialApp(
-      theme: buildOmiTheme(brightness: Brightness.dark),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: RecentChangesPage(
-        loadChanges: ({cursor}) async => ApiSuccess(ReviewChangesPage(changes: changes)),
-        setUndone:
-            setUndone ??
-            (id, {required undone}) async =>
-                ApiSuccess(changes.firstWhere((c) => c.changeId == id).copyWith(undone: undone)),
-        openConversation: openConversation ?? (_, __) {},
-        openTasks: openTasks ?? (_) {},
-      ),
+  await tester.pumpWidget(MaterialApp(
+    theme: buildOmiTheme(brightness: Brightness.dark),
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: RecentChangesPage(
+      loadChanges: ({cursor}) async => ApiSuccess(ReviewChangesPage(changes: changes)),
+      setUndone: setUndone ??
+          (id, {required undone}) async =>
+              ApiSuccess(changes.firstWhere((c) => c.changeId == id).copyWith(undone: undone)),
+      openConversation: openConversation ?? (_, __) {},
+      openTasks: openTasks ?? (_) {},
     ),
-  );
+  ));
   await tester.pumpAndSettle();
 }
 
@@ -166,14 +164,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(toggled, ['t2']);
     // The sheet follows the new state, and the page row now has one change left to undo.
-    expect(
-      find.descendant(of: find.byKey(const ValueKey('review_change_toggle_t2')), matching: find.text('Redo')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: find.byKey(const ValueKey('recent_change_toggle_t1')), matching: find.text('Undo')),
-      findsOneWidget,
-    );
+    expect(find.descendant(of: find.byKey(const ValueKey('review_change_toggle_t2')), matching: find.text('Redo')),
+        findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('recent_change_toggle_t1')), matching: find.text('Undo')),
+        findsOneWidget);
   });
 
   testWidgets('Undo all runs each undo in turn and reports partial failure', (tester) async {
@@ -183,23 +177,17 @@ void main() {
       _term('t3', 'Synthetic standup', day: 12),
     ];
     final calls = <String>[];
-    await _pump(
-      tester,
-      changes,
-      setUndone: (id, {required undone}) async {
-        calls.add(id);
-        if (id == 't2') return const ApiFailure(ApiProblem(ApiProblemKind.transport));
-        return ApiSuccess(changes.firstWhere((c) => c.changeId == id).copyWith(undone: undone));
-      },
-    );
+    await _pump(tester, changes, setUndone: (id, {required undone}) async {
+      calls.add(id);
+      if (id == 't2') return const ApiFailure(ApiProblem(ApiProblemKind.transport));
+      return ApiSuccess(changes.firstWhere((c) => c.changeId == id).copyWith(undone: undone));
+    });
     await tester.tap(find.text('Undo all'));
     await tester.pumpAndSettle();
     expect(calls, ['t1', 't2', 't3']);
     expect(find.text('Couldn’t undo 1 of 3. Try again.'), findsOneWidget);
     // One change is still applied, so the row offers a single Undo rather than Redo.
-    expect(
-      find.descendant(of: find.byKey(const ValueKey('recent_change_toggle_t1')), matching: find.text('Undo')),
-      findsOneWidget,
-    );
+    expect(find.descendant(of: find.byKey(const ValueKey('recent_change_toggle_t1')), matching: find.text('Undo')),
+        findsOneWidget);
   });
 }

@@ -20,22 +20,22 @@ Map<String, dynamic>? _map(Object? v) => v is Map<String, dynamic> ? v : null;
 enum ReviewItemKind { speaker, task, samePerson, spelling, agentProposal }
 
 ReviewItemKind? _kind(Object? v) => switch (v) {
-  'speaker' => ReviewItemKind.speaker,
-  'task' => ReviewItemKind.task,
-  'same_person' => ReviewItemKind.samePerson,
-  'spelling' => ReviewItemKind.spelling,
-  'agent_proposal' => ReviewItemKind.agentProposal,
-  _ => null,
-};
+      'speaker' => ReviewItemKind.speaker,
+      'task' => ReviewItemKind.task,
+      'same_person' => ReviewItemKind.samePerson,
+      'spelling' => ReviewItemKind.spelling,
+      'agent_proposal' => ReviewItemKind.agentProposal,
+      _ => null,
+    };
 
 enum EntityType { person, organization, project }
 
 EntityType? entityTypeFromWire(Object? v) => switch (v) {
-  'person' => EntityType.person,
-  'organization' => EntityType.organization,
-  'project' => EntityType.project,
-  _ => null,
-};
+      'person' => EntityType.person,
+      'organization' => EntityType.organization,
+      'project' => EntityType.project,
+      _ => null,
+    };
 
 class EntityRef {
   const EntityRef({required this.entityId, required this.type, required this.name});
@@ -229,10 +229,10 @@ class SpellingContextSegment {
   final bool isUser;
 
   static SpellingContextSegment fromJson(Map<String, dynamic> json) => SpellingContextSegment(
-    text: _str(json['text']) ?? '',
-    speakerLabel: _str(json['speaker_label']),
-    isUser: json['is_user'] == true,
-  );
+        text: _str(json['text']) ?? '',
+        speakerLabel: _str(json['speaker_label']),
+        isUser: json['is_user'] == true,
+      );
 }
 
 class SpellingContext {
@@ -328,8 +328,7 @@ class AgentProposalItem {
         before: (_str(edit['before']) ?? '').isEmpty
             ? _str(json['target_content']) ?? targetLabel
             : _str(edit['before']) ?? '',
-        after:
-            (_str(edit['after']) ?? '').isEmpty &&
+        after: (_str(edit['after']) ?? '').isEmpty &&
                 {'supersede_memory', 'merge_people', 'merge_tasks', 'merge_conversations'}.contains(kind)
             ? _str(json['other_content']) ?? _str(json['other_label']) ?? ''
             : _str(edit['after']) ?? '',
@@ -408,9 +407,9 @@ class ReviewItemsResponse {
   final int remainingToday;
 
   static ReviewItemsResponse fromJson(Map<String, dynamic> json) => ReviewItemsResponse(
-    items: _maps(json['items']).map(ReviewItem.fromJson).whereType<ReviewItem>().toList(growable: false),
-    remainingToday: _int(json['remaining_today']),
-  );
+        items: _maps(json['items']).map(ReviewItem.fromJson).whereType<ReviewItem>().toList(growable: false),
+        remainingToday: _int(json['remaining_today']),
+      );
 }
 
 enum TaskDismissReason { alreadyDone, notMine, notUseful }
@@ -433,9 +432,9 @@ class ReviewAnswer {
   });
 
   const ReviewAnswer.speaker({String? personId, String? newName, bool isMe = false})
-    : this._(speakerPersonId: personId, speakerNewName: newName, speakerIsMe: isMe);
+      : this._(speakerPersonId: personId, speakerNewName: newName, speakerIsMe: isMe);
   const ReviewAnswer.acceptTask({String? description, DateTime? dueAt, String? workstreamId})
-    : this._(taskAccept: true, taskDescription: description, taskDueAt: dueAt, taskWorkstreamId: workstreamId);
+      : this._(taskAccept: true, taskDescription: description, taskDueAt: dueAt, taskWorkstreamId: workstreamId);
   const ReviewAnswer.dismissTask([TaskDismissReason? reason]) : this._(taskAccept: false, taskDismissReason: reason);
   const ReviewAnswer.samePerson(bool same) : this._(samePerson: same);
   const ReviewAnswer.spelling(String value) : this._(spelling: value);
@@ -460,36 +459,36 @@ class ReviewAnswer {
     if (notSure) return {'not_sure': true};
     return switch (kind) {
       ReviewItemKind.speaker => {
-        'speaker': {'person_id': speakerPersonId, 'new_person_name': speakerNewName, 'is_me': speakerIsMe},
-        'not_sure': false,
-      },
-      ReviewItemKind.task => {
-        'task': {
-          'decision': taskAccept == true ? 'accept' : 'dismiss',
-          'dismiss_reason': switch (taskDismissReason) {
-            TaskDismissReason.alreadyDone => 'already_done',
-            TaskDismissReason.notMine => 'not_mine',
-            TaskDismissReason.notUseful => 'not_useful',
-            null => null,
-          },
-          'edited_description': taskDescription,
-          'due_at': taskDueAt?.toUtc().toIso8601String(),
-          'workstream_id': taskWorkstreamId,
+          'speaker': {'person_id': speakerPersonId, 'new_person_name': speakerNewName, 'is_me': speakerIsMe},
+          'not_sure': false,
         },
-        'not_sure': false,
-      },
+      ReviewItemKind.task => {
+          'task': {
+            'decision': taskAccept == true ? 'accept' : 'dismiss',
+            'dismiss_reason': switch (taskDismissReason) {
+              TaskDismissReason.alreadyDone => 'already_done',
+              TaskDismissReason.notMine => 'not_mine',
+              TaskDismissReason.notUseful => 'not_useful',
+              null => null,
+            },
+            'edited_description': taskDescription,
+            'due_at': taskDueAt?.toUtc().toIso8601String(),
+            'workstream_id': taskWorkstreamId,
+          },
+          'not_sure': false,
+        },
       ReviewItemKind.samePerson => {
-        'same_person': {'decision': samePerson == true ? 'yes' : 'no'},
-        'not_sure': false,
-      },
+          'same_person': {'decision': samePerson == true ? 'yes' : 'no'},
+          'not_sure': false,
+        },
       ReviewItemKind.spelling => {
-        'spelling': {'value': spelling},
-        'not_sure': false,
-      },
+          'spelling': {'value': spelling},
+          'not_sure': false,
+        },
       ReviewItemKind.agentProposal => {
-        'agent_proposal': {'decision': proposalAccept == true ? 'accept' : 'dismiss'},
-        'not_sure': false,
-      },
+          'agent_proposal': {'decision': proposalAccept == true ? 'accept' : 'dismiss'},
+          'not_sure': false,
+        },
     };
   }
 }
@@ -497,14 +496,14 @@ class ReviewAnswer {
 enum ReviewChangeKind { rename, mergeMemories, updatePerson, labelSpeaker, titleConversation, closeTask, other }
 
 ReviewChangeKind _changeKind(Object? v) => switch (v) {
-  'rename' => ReviewChangeKind.rename,
-  'merge_memories' => ReviewChangeKind.mergeMemories,
-  'update_person' => ReviewChangeKind.updatePerson,
-  'label_speaker' => ReviewChangeKind.labelSpeaker,
-  'title_conversation' => ReviewChangeKind.titleConversation,
-  'close_task' => ReviewChangeKind.closeTask,
-  _ => ReviewChangeKind.other,
-};
+      'rename' => ReviewChangeKind.rename,
+      'merge_memories' => ReviewChangeKind.mergeMemories,
+      'update_person' => ReviewChangeKind.updatePerson,
+      'label_speaker' => ReviewChangeKind.labelSpeaker,
+      'title_conversation' => ReviewChangeKind.titleConversation,
+      'close_task' => ReviewChangeKind.closeTask,
+      _ => ReviewChangeKind.other,
+    };
 
 class ReviewChangeRef {
   const ReviewChangeRef({required this.type, required this.id, required this.label});
@@ -537,12 +536,12 @@ class ReviewChangeOccurrence {
 String _text(Object? v) => v is String ? v : '';
 
 Map<String, dynamic> _withAdditive(Map<String, dynamic> generated, Object? raw) => {
-  ...generated,
-  if (raw is Map<String, dynamic>) ...{
-    for (final key in const ['diff', 'group_key'])
-      if (raw.containsKey(key)) key: raw[key],
-  },
-};
+      ...generated,
+      if (raw is Map<String, dynamic>) ...{
+        for (final key in const ['diff', 'group_key'])
+          if (raw.containsKey(key)) key: raw[key],
+      },
+    };
 
 /// The server-extracted change itself: what the text was, what it is now, and where. Every field
 /// is optional; journal rows written before the diff existed simply omit it.
@@ -580,9 +579,9 @@ class ReviewChangeDiff {
     final raw = json['occurrences'];
     final listed = raw is List
         ? _maps(raw)
-              .map((o) => ReviewChangeOccurrence.fromJson(o, before: before ?? '', after: after ?? ''))
-              .whereType<ReviewChangeOccurrence>()
-              .toList(growable: false)
+            .map((o) => ReviewChangeOccurrence.fromJson(o, before: before ?? '', after: after ?? ''))
+            .whereType<ReviewChangeOccurrence>()
+            .toList(growable: false)
         : const <ReviewChangeOccurrence>[];
     final top = ReviewChangeOccurrence.fromJson(json, before: before ?? '', after: after ?? '');
     final occurrences = listed.isNotEmpty ? listed : [if (top != null) top];
@@ -645,21 +644,21 @@ class ReviewChange {
   final String? groupKey;
 
   ReviewChange copyWith({bool? undone}) => ReviewChange(
-    changeId: changeId,
-    kind: kind,
-    title: title,
-    reason: reason,
-    snippet: snippet,
-    editKind: editKind,
-    before: before,
-    after: after,
-    context: context,
-    refs: refs,
-    createdAt: createdAt,
-    undone: undone ?? this.undone,
-    diff: diff,
-    groupKey: groupKey,
-  );
+        changeId: changeId,
+        kind: kind,
+        title: title,
+        reason: reason,
+        snippet: snippet,
+        editKind: editKind,
+        before: before,
+        after: after,
+        context: context,
+        refs: refs,
+        createdAt: createdAt,
+        undone: undone ?? this.undone,
+        diff: diff,
+        groupKey: groupKey,
+      );
 
   static ReviewChange? fromJson(Map<String, dynamic> json) {
     final id = _str(json['change_id']);
@@ -713,9 +712,9 @@ class ReviewChangesPage {
   final String? nextCursor;
 
   static ReviewChangesPage fromJson(Map<String, dynamic> json) => ReviewChangesPage(
-    changes: _maps(json['changes']).map(ReviewChange.fromJson).whereType<ReviewChange>().toList(growable: false),
-    nextCursor: _str(json['next_cursor']),
-  );
+        changes: _maps(json['changes']).map(ReviewChange.fromJson).whereType<ReviewChange>().toList(growable: false),
+        nextCursor: _str(json['next_cursor']),
+      );
 }
 
 enum FactSourceKind { conversation, chat, screen, user }
