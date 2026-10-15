@@ -4120,5 +4120,8 @@
     "consentAiProviders": "{providers} で処理されます。",
     "voiceProfileCardDismissed": "ボイスプロフィールは設定からいつでも設定できます。",
     "homeNewRecordingButton": "新規録音",
-    "chatWelcomeMessage": "こんにちは、Omiです。話した内容なら何でも聞いてください。誰が何を言ったか、何を約束したか、一日のまとめなど。タスクの追加や、覚えておくこともできます。"
+    "chatWelcomeMessage": "こんにちは、Omiです。話した内容なら何でも聞いてください。誰が何を言ったか、何を約束したか、一日のまとめなど。タスクの追加や、覚えておくこともできます。",
+    "onboardingStarterTaskAsk": "Omiに今日のことを聞いてみる",
+    "onboardingStarterTaskRecord": "Omiで会話を録音する",
+    "onboardingStarterTaskCheck": "このタスクにチェックして完了する"
 }

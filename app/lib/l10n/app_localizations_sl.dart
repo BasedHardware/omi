@@ -13451,4 +13451,13 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get chatWelcomeMessage =>
       'Živjo, sem Omi. Vprašaj me karkoli o tem, o čemer si govoril: kaj je kdo rekel, kaj si obljubil ali povzetek tvojega dne. Lahko tudi dodajam opravila in si zapomnim stvari namesto tebe.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Vprašaj Omi o svojem dnevu';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Posnemi pogovor z Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Odkljukaj to opravilo, da ga končaš';
 }

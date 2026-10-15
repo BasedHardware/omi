@@ -4120,5 +4120,8 @@
     "consentAiProviders": "Procesado con {providers}.",
     "voiceProfileCardDismissed": "Puedes configurar tu perfil de voz cuando quieras en Ajustes.",
     "homeNewRecordingButton": "Nueva grabación",
-    "chatWelcomeMessage": "Hola, soy Omi. Pregúntame lo que quieras sobre lo que has hablado: lo que dijo alguien, lo que prometiste o un resumen de tu día. También puedo añadir tareas y recordar cosas por ti."
+    "chatWelcomeMessage": "Hola, soy Omi. Pregúntame lo que quieras sobre lo que has hablado: lo que dijo alguien, lo que prometiste o un resumen de tu día. También puedo añadir tareas y recordar cosas por ti.",
+    "onboardingStarterTaskAsk": "Pregúntale a Omi por tu día",
+    "onboardingStarterTaskRecord": "Graba una conversación con Omi",
+    "onboardingStarterTaskCheck": "Marca esta tarea para completarla"
 }

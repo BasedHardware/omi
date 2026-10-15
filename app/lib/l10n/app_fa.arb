@@ -11546,5 +11546,8 @@
     "consentAiProviders": "پردازش با {providers}.",
     "voiceProfileCardDismissed": "هر زمان می‌توانید نمایه صدا را در تنظیمات راه‌اندازی کنید.",
     "homeNewRecordingButton": "ضبط جدید",
-    "chatWelcomeMessage": "سلام، من Omi هستم. هر چیزی درباره صحبت‌هایت بپرس: اینکه کسی چه گفت، چه قولی دادی یا خلاصه‌ای از روزت. می‌توانم کار هم اضافه کنم و چیزها را برایت به خاطر بسپارم."
+    "chatWelcomeMessage": "سلام، من Omi هستم. هر چیزی درباره صحبت‌هایت بپرس: اینکه کسی چه گفت، چه قولی دادی یا خلاصه‌ای از روزت. می‌توانم کار هم اضافه کنم و چیزها را برایت به خاطر بسپارم.",
+    "onboardingStarterTaskAsk": "از Omi درباره روزت بپرس",
+    "onboardingStarterTaskRecord": "یک گفتگو را با Omi ضبط کن",
+    "onboardingStarterTaskCheck": "این کار را تیک بزن تا تمام شود"
 }

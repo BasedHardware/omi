@@ -13415,4 +13415,13 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get chatWelcomeMessage =>
       'سلام، من Omi هستم. هر چیزی درباره صحبت‌هایت بپرس: اینکه کسی چه گفت، چه قولی دادی یا خلاصه‌ای از روزت. می‌توانم کار هم اضافه کنم و چیزها را برایت به خاطر بسپارم.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'از Omi درباره روزت بپرس';
+
+  @override
+  String get onboardingStarterTaskRecord => 'یک گفتگو را با Omi ضبط کن';
+
+  @override
+  String get onboardingStarterTaskCheck => 'این کار را تیک بزن تا تمام شود';
 }

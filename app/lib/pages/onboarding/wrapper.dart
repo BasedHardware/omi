@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'onboarding_step_telemetry.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -39,6 +41,10 @@ import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/home/widgets/home_tab_switcher.dart' show NewTasksDot;
+import 'package:omi/backend/http/api/action_items.dart' show createActionItem, tryGetActionItems;
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/core/app_shell.dart';
@@ -265,12 +271,42 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     SharedPreferencesUtil().remove(_resumeKey);
     _stepTelemetry.exit();
     _completeOnboardingTelemetry();
+    unawaited(_addStarterTasks(context.l10n));
     PlatformManager.instance.analytics.onboardingCompleted();
     PaintingBinding.instance.imageCache.clear();
     if (!paywallShown) await _maybeShowOnboardingPaywall();
     if (!mounted) return true;
     routeToPage(context, const HomePageWrapper(), replace: true);
     return true;
+  }
+
+  /// An empty Tasks tab teaches nothing: when onboarding produced no to-dos, add three starter tasks
+  /// that walk the person through Omi (once per account; never on a failed read, so nobody gets
+  /// them on top of real tasks). Every onboarding arm gets them, so the experiment stays fair.
+  static Future<void> _addStarterTasks(AppLocalizations l10n) async {
+    final key = 'onboarding/starterTasks/${SharedPreferencesUtil().uid}';
+    if (SharedPreferencesUtil().getBool(key)) return;
+    // The activation already showed real to-dos (they may still be saving): no starter tasks.
+    if (NewTasksDot.showing) {
+      SharedPreferencesUtil().saveBool(key, true);
+      return;
+    }
+    try {
+      final existing = await tryGetActionItems(limit: 1);
+      if (existing == null) return;
+      SharedPreferencesUtil().saveBool(key, true);
+      if (existing.actionItems.isNotEmpty) return;
+      for (final description in [
+        l10n.onboardingStarterTaskAsk,
+        l10n.onboardingStarterTaskRecord,
+        l10n.onboardingStarterTaskCheck,
+      ]) {
+        await createActionItem(description: description);
+      }
+      NewTasksDot.show();
+    } catch (e) {
+      Logger.debug('Starter tasks not added: $e');
+    }
   }
 
   /// The experiment's end-of-onboarding placement, when the payload turns it on: a variant shows its

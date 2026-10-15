@@ -11546,5 +11546,8 @@
     "consentAiProviders": "Obrađuje se pomoću {providers}.",
     "voiceProfileCardDismissed": "Glasovni profil možete postaviti bilo kada u Postavkama.",
     "homeNewRecordingButton": "Novo snimanje",
-    "chatWelcomeMessage": "Bok, ja sam Omi. Pitaj me bilo što o čemu si razgovarao: što je netko rekao, što si obećao ili sažetak tvog dana. Mogu i dodavati zadatke i pamtiti stvari za tebe."
+    "chatWelcomeMessage": "Bok, ja sam Omi. Pitaj me bilo što o čemu si razgovarao: što je netko rekao, što si obećao ili sažetak tvog dana. Mogu i dodavati zadatke i pamtiti stvari za tebe.",
+    "onboardingStarterTaskAsk": "Pitaj Omi o svom danu",
+    "onboardingStarterTaskRecord": "Snimi razgovor uz Omi",
+    "onboardingStarterTaskCheck": "Označi ovaj zadatak da ga završiš"
 }

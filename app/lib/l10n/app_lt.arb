@@ -4120,5 +4120,8 @@
     "consentAiProviders": "Apdorojama su {providers}.",
     "voiceProfileCardDismissed": "Balso profilį galite nustatyti bet kada nustatymuose.",
     "homeNewRecordingButton": "Naujas įrašas",
-    "chatWelcomeMessage": "Labas, aš Omi. Klausk manęs apie bet ką, apie ką kalbėjai: ką kas nors pasakė, ką pažadėjai ar tavo dienos santrauką. Taip pat galiu pridėti užduočių ir prisiminti dalykus už tave."
+    "chatWelcomeMessage": "Labas, aš Omi. Klausk manęs apie bet ką, apie ką kalbėjai: ką kas nors pasakė, ką pažadėjai ar tavo dienos santrauką. Taip pat galiu pridėti užduočių ir prisiminti dalykus už tave.",
+    "onboardingStarterTaskAsk": "Paklausk Omi apie savo dieną",
+    "onboardingStarterTaskRecord": "Įrašyk pokalbį su Omi",
+    "onboardingStarterTaskCheck": "Pažymėk šią užduotį kaip atliktą"
 }

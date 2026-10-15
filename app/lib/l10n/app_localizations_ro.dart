@@ -13475,4 +13475,13 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get chatWelcomeMessage =>
       'Salut, sunt Omi. Întreabă-mă orice despre ce ai vorbit: ce a spus cineva, ce ai promis sau un rezumat al zilei tale. Pot și să adaug sarcini și să țin minte lucruri pentru tine.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Întreabă-l pe Omi despre ziua ta';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Înregistrează o conversație cu Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Bifează această sarcină ca s-o finalizezi';
 }

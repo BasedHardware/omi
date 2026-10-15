@@ -4120,5 +4120,8 @@
     "consentAiProviders": "Käsittely: {providers}.",
     "voiceProfileCardDismissed": "Voit määrittää ääniprofiilin milloin tahansa asetuksissa.",
     "homeNewRecordingButton": "Uusi tallennus",
-    "chatWelcomeMessage": "Hei, olen Omi. Kysy minulta mitä tahansa siitä, mistä olet puhunut: mitä joku sanoi, mitä lupasit tai yhteenveto päivästäsi. Voin myös lisätä tehtäviä ja muistaa asioita puolestasi."
+    "chatWelcomeMessage": "Hei, olen Omi. Kysy minulta mitä tahansa siitä, mistä olet puhunut: mitä joku sanoi, mitä lupasit tai yhteenveto päivästäsi. Voin myös lisätä tehtäviä ja muistaa asioita puolestasi.",
+    "onboardingStarterTaskAsk": "Kysy Omilta päivästäsi",
+    "onboardingStarterTaskRecord": "Tallenna keskustelu Omilla",
+    "onboardingStarterTaskCheck": "Merkitse tämä tehtävä tehdyksi"
 }

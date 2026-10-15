@@ -13525,4 +13525,13 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get chatWelcomeMessage =>
       'Hi, ako si Omi. Itanong mo sa akin ang kahit ano tungkol sa mga napag-usapan mo: ang sinabi ng isang tao, ang ipinangako mo, o buod ng araw mo. Kaya ko ring magdagdag ng mga gawain at tandaan ang mga bagay para sa iyo.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Tanungin si Omi tungkol sa araw mo';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Mag-record ng usapan gamit ang Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Lagyan ng tsek ang gawaing ito para matapos';
 }

@@ -13504,4 +13504,13 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get chatWelcomeMessage =>
       'Γεια, είμαι το Omi. Ρώτα με οτιδήποτε έχεις συζητήσει: τι είπε κάποιος, τι υποσχέθηκες ή μια σύνοψη της μέρας σου. Μπορώ επίσης να προσθέτω εργασίες και να θυμάμαι πράγματα για σένα.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Ρώτα το Omi για τη μέρα σου';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Ηχογράφησε μια συζήτηση με το Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Σημείωσε αυτή την εργασία για να την ολοκληρώσεις';
 }

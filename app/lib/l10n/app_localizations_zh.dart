@@ -13211,4 +13211,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chatWelcomeMessage => '你好，我是 Omi。关于你聊过的任何事都可以问我：某人说了什么、你答应过什么，或者今天的总结。我还能帮你添加待办、记住重要的事。';
+
+  @override
+  String get onboardingStarterTaskAsk => '问问 Omi 你今天过得怎么样';
+
+  @override
+  String get onboardingStarterTaskRecord => '用 Omi 录一段对话';
+
+  @override
+  String get onboardingStarterTaskCheck => '勾选这项任务来完成它';
 }

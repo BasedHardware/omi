@@ -4155,5 +4155,8 @@
     "consentAiProviders": "Diproses dengan {providers}.",
     "voiceProfileCardDismissed": "Anda dapat mengatur Profil Suara kapan saja di Pengaturan.",
     "homeNewRecordingButton": "Rekaman Baru",
-    "chatWelcomeMessage": "Hai, aku Omi. Tanyakan apa saja tentang hal yang kamu bicarakan: apa yang dikatakan seseorang, apa yang kamu janjikan, atau ringkasan harimu. Aku juga bisa menambahkan tugas dan mengingat hal-hal untukmu."
+    "chatWelcomeMessage": "Hai, aku Omi. Tanyakan apa saja tentang hal yang kamu bicarakan: apa yang dikatakan seseorang, apa yang kamu janjikan, atau ringkasan harimu. Aku juga bisa menambahkan tugas dan mengingat hal-hal untukmu.",
+    "onboardingStarterTaskAsk": "Tanyakan harimu kepada Omi",
+    "onboardingStarterTaskRecord": "Rekam percakapan dengan Omi",
+    "onboardingStarterTaskCheck": "Centang tugas ini untuk menyelesaikannya"
 }

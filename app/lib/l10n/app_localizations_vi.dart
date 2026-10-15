@@ -13418,4 +13418,13 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get chatWelcomeMessage =>
       'Chào bạn, mình là Omi. Hỏi mình bất cứ điều gì bạn đã nói: ai đã nói gì, bạn đã hứa gì hay tóm tắt ngày của bạn. Mình cũng có thể thêm việc cần làm và ghi nhớ mọi thứ giúp bạn.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Hỏi Omi về ngày của bạn';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Ghi âm một cuộc trò chuyện với Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Đánh dấu việc này để hoàn thành';
 }

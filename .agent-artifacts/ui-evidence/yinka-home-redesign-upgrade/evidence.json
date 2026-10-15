@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-sign-in-pendant.png",
+      "platform": "mobile-ios",
+      "description": "Sign-in opens straight away with the Omi pendant (no Get started page); local test build shows one local sign-in button",
+      "captured_by": "agent",
+      "source": "manual"
+    },
+    {
+      "file": "002-mobile-ios-data-privacy-pendant.png",
+      "platform": "mobile-ios",
+      "description": "Data & Privacy: the Omi pendant, centred headline, Continue at the standard height",
+      "captured_by": "agent",
+      "source": "manual"
+    },
+    {
+      "file": "003-mobile-ios-home-tasks-dot.png",
+      "platform": "mobile-ios",
+      "description": "Home after onboarding: the first conversation and a dot on Tasks",
+      "captured_by": "agent",
+      "source": "manual"
+    },
+    {
+      "file": "004-mobile-ios-home-live-pill.png",
+      "platform": "mobile-ios",
+      "description": "Bottom-bar live pill while the phone records (local server without transcription, so Reconnecting also shows)",
+      "captured_by": "agent",
+      "source": "manual"
+    },
+    {
+      "file": "005-mobile-ios-chat-welcome.png",
+      "platform": "mobile-ios",
+      "description": "Omi's first chat message in an empty chat",
+      "captured_by": "agent",
+      "source": "manual"
+    },
+    {
+      "file": "006-mobile-ios-settings-upgrade.png",
+      "platform": "mobile-ios",
+      "description": "The paywall experiment's arm opening in place (Settings > Upgrade; the app-open re-ask opens the same paywall). Outline arm forced",
+      "captured_by": "agent",
+      "source": "manual"
+    }
+  ]
+}

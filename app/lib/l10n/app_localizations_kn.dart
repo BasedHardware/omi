@@ -13458,4 +13458,13 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get chatWelcomeMessage =>
       'ನಮಸ್ಕಾರ, ನಾನು Omi. ನೀವು ಮಾತನಾಡಿದ ಯಾವುದರ ಬಗ್ಗೆಯೂ ಕೇಳಿ: ಯಾರು ಏನು ಹೇಳಿದರು, ನೀವು ಏನು ಭರವಸೆ ನೀಡಿದ್ದೀರಿ ಅಥವಾ ನಿಮ್ಮ ದಿನದ ಸಾರಾಂಶ. ನಾನು ಕಾರ್ಯಗಳನ್ನು ಸೇರಿಸಬಹುದು ಮತ್ತು ನಿಮಗಾಗಿ ವಿಷಯಗಳನ್ನು ನೆನಪಿಟ್ಟುಕೊಳ್ಳಬಹುದು.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'ನಿಮ್ಮ ದಿನದ ಬಗ್ಗೆ Omi ಅನ್ನು ಕೇಳಿ';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Omi ಮೂಲಕ ಒಂದು ಸಂಭಾಷಣೆಯನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಿ';
+
+  @override
+  String get onboardingStarterTaskCheck => 'ಮುಗಿಸಲು ಈ ಕಾರ್ಯವನ್ನು ಟಿಕ್ ಮಾಡಿ';
 }

@@ -4120,5 +4120,8 @@
     "consentAiProviders": "Spracúva {providers}.",
     "voiceProfileCardDismissed": "Hlasový profil si môžete kedykoľvek nastaviť v Nastaveniach.",
     "homeNewRecordingButton": "Nový záznam",
-    "chatWelcomeMessage": "Ahoj, som Omi. Opýtaj sa ma na čokoľvek, o čom si hovoril: čo kto povedal, čo si sľúbil alebo zhrnutie tvojho dňa. Viem aj pridávať úlohy a pamätať si veci za teba."
+    "chatWelcomeMessage": "Ahoj, som Omi. Opýtaj sa ma na čokoľvek, o čom si hovoril: čo kto povedal, čo si sľúbil alebo zhrnutie tvojho dňa. Viem aj pridávať úlohy a pamätať si veci za teba.",
+    "onboardingStarterTaskAsk": "Opýtaj sa Omi na svoj deň",
+    "onboardingStarterTaskRecord": "Nahraj rozhovor s Omi",
+    "onboardingStarterTaskCheck": "Odškrtni túto úlohu a dokonči ju"
 }

@@ -13422,4 +13422,13 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get chatWelcomeMessage =>
       'Hei, jeg er Omi. Spør meg om alt du har snakket om: hva noen sa, hva du lovet, eller et sammendrag av dagen din. Jeg kan også legge til oppgaver og huske ting for deg.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Spør Omi om dagen din';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Ta opp en samtale med Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Kryss av denne oppgaven for å fullføre den';
 }

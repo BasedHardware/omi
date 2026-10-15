@@ -4216,5 +4216,8 @@
     "consentAiProviders": "Feldolgozás: {providers}.",
     "voiceProfileCardDismissed": "A hangprofilt bármikor beállíthatod a Beállításokban.",
     "homeNewRecordingButton": "Új felvétel",
-    "chatWelcomeMessage": "Szia, Omi vagyok. Kérdezz bármit arról, amiről beszéltél: mit mondott valaki, mit ígértél, vagy kérj összefoglalót a napodról. Feladatokat is fel tudok venni, és dolgokat is megjegyzek helyetted."
+    "chatWelcomeMessage": "Szia, Omi vagyok. Kérdezz bármit arról, amiről beszéltél: mit mondott valaki, mit ígértél, vagy kérj összefoglalót a napodról. Feladatokat is fel tudok venni, és dolgokat is megjegyzek helyetted.",
+    "onboardingStarterTaskAsk": "Kérdezd meg Omit a napodról",
+    "onboardingStarterTaskRecord": "Rögzíts egy beszélgetést az Omival",
+    "onboardingStarterTaskCheck": "Pipáld ki ezt a feladatot"
 }

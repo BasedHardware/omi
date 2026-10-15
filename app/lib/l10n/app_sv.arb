@@ -4120,5 +4120,8 @@
     "consentAiProviders": "Bearbetas med {providers}.",
     "voiceProfileCardDismissed": "Du kan ställa in din röstprofil när som helst i Inställningar.",
     "homeNewRecordingButton": "Ny inspelning",
-    "chatWelcomeMessage": "Hej, jag är Omi. Fråga mig om allt du har pratat om: vad någon sa, vad du lovade eller en sammanfattning av din dag. Jag kan också lägga till uppgifter och komma ihåg saker åt dig."
+    "chatWelcomeMessage": "Hej, jag är Omi. Fråga mig om allt du har pratat om: vad någon sa, vad du lovade eller en sammanfattning av din dag. Jag kan också lägga till uppgifter och komma ihåg saker åt dig.",
+    "onboardingStarterTaskAsk": "Fråga Omi om din dag",
+    "onboardingStarterTaskRecord": "Spela in ett samtal med Omi",
+    "onboardingStarterTaskCheck": "Bocka av den här uppgiften för att slutföra den"
 }

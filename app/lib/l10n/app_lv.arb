@@ -4120,5 +4120,8 @@
     "consentAiProviders": "Apstrādā {providers}.",
     "voiceProfileCardDismissed": "Balss profilu varat iestatīt jebkurā laikā iestatījumos.",
     "homeNewRecordingButton": "Jauns ieraksts",
-    "chatWelcomeMessage": "Sveiki, es esmu Omi. Jautā man jebko par to, par ko esi runājis: ko kāds teica, ko tu apsolīji vai kopsavilkumu par tavu dienu. Es varu arī pievienot uzdevumus un atcerēties lietas tavā vietā."
+    "chatWelcomeMessage": "Sveiki, es esmu Omi. Jautā man jebko par to, par ko esi runājis: ko kāds teica, ko tu apsolīji vai kopsavilkumu par tavu dienu. Es varu arī pievienot uzdevumus un atcerēties lietas tavā vietā.",
+    "onboardingStarterTaskAsk": "Pajautā Omi par savu dienu",
+    "onboardingStarterTaskRecord": "Ieraksti sarunu ar Omi",
+    "onboardingStarterTaskCheck": "Atzīmē šo uzdevumu, lai to pabeigtu"
 }

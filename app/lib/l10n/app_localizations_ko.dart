@@ -13237,4 +13237,13 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get chatWelcomeMessage =>
       '안녕하세요, Omi예요. 나눈 대화라면 무엇이든 물어보세요. 누가 무슨 말을 했는지, 무엇을 약속했는지, 하루 요약까지요. 할 일을 추가하고 기억해 둘 수도 있어요.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Omi에게 오늘 하루에 대해 물어보기';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Omi로 대화 녹음하기';
+
+  @override
+  String get onboardingStarterTaskCheck => '이 할 일을 체크해서 완료하기';
 }

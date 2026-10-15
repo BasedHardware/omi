@@ -13455,4 +13455,13 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get chatWelcomeMessage =>
       'Прывітанне, я Omi. Пытайцеся пра ўсё, пра што вы размаўлялі: што хтосьці сказаў, што вы паабяцалі, ці як прайшоў ваш дзень. Я таксама магу дадаваць задачы і запамінаць рэчы за вас.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Спытайце Omi пра свой дзень';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Запішыце размову з Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Адзначце гэтую задачу, каб завяршыць яе';
 }
