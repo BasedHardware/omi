@@ -1,3 +1,5 @@
+import { DESKTOP_HEALTH_EVENT_WEIGHT_SQL } from "./telemetry/desktop-health-sampling";
+
 export type ReliabilitySource = "chat" | "voice";
 export type ReliabilityChannel = "production" | "beta";
 
@@ -268,8 +270,8 @@ export function responseReliabilityQueries(days: number): {
         coalesce(nullIf(toString(properties.terminal_reason), ''), 'unknown') AS reason,
         coalesce(nullIf(toString(properties.route), ''), 'unknown') AS route,
         coalesce(nullIf(toString(properties.intent), ''), 'unknown') AS intent,
-        count() AS event_count,
-        sum(if(toString(properties.response_outcome) = 'success', toFloatOrZero(toString(properties.duration_ms)), 0)) AS duration_ms,
+        sum(${DESKTOP_HEALTH_EVENT_WEIGHT_SQL}) AS event_count,
+        sum(if(toString(properties.response_outcome) = 'success', toFloatOrZero(toString(properties.duration_ms)) * ${DESKTOP_HEALTH_EVENT_WEIGHT_SQL}, 0)) AS duration_ms,
         'physical_shortcut' AS source,
         distinct_id AS actor_id
       FROM events

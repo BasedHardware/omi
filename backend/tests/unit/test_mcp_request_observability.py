@@ -2,8 +2,7 @@
 
 Covers the 100% structured ``mcp_request`` log line (the PostHog-free request
 envelope), deterministic per-uid ``MCP Tool Call`` sampling, the daily
-``MCP Active`` Redis dedupe marker, the MCP-only ``POSTHOG_EVENTS_API_KEY``
-capture path, and the HTTP 400 contract for header-caused protocol errors.
+``MCP Active`` Redis dedupe marker, shared server capture, and the HTTP 400 contract for header-caused protocol errors.
 """
 
 import json
@@ -573,83 +572,6 @@ class TestMcpActiveLocalCache:
         assert redis.r.set.call_args.args[0].endswith(":20260729:u1")
 
 
-class TestPostHogKeyScoping:
-    """``POSTHOG_EVENTS_API_KEY`` is scoped to MCP events only: generic capture
-    keeps the project/legacy key resolution and rollout decisions never touch
-    the events key."""
-
-    def _reset(self, monkeypatch):
-        import utils.integration_telemetry as it
-
-        monkeypatch.setattr(it, "_posthog_client", None)
-        monkeypatch.setattr(it, "_posthog_disabled", False)
-        monkeypatch.setattr(mcp_analytics, "_mcp_events_client", None)
-        monkeypatch.setattr(mcp_analytics, "_mcp_events_client_disabled", False)
-        for name in ("POSTHOG_EVENTS_API_KEY", "POSTHOG_PROJECT_API_KEY", "POSTHOG_API_KEY"):
-            monkeypatch.delenv(name, raising=False)
-        return it
-
-    def test_generic_capture_prefers_project_key(self, monkeypatch):
-        it = self._reset(monkeypatch)
-        monkeypatch.setenv("POSTHOG_EVENTS_API_KEY", "events-key")
-        monkeypatch.setenv("POSTHOG_PROJECT_API_KEY", "project-key")
-        build = MagicMock(side_effect=lambda key: f"client:{key}")
-        monkeypatch.setattr(it, "_build_posthog_client", build)
-        assert it._get_posthog_client() == "client:project-key"
-
-    def test_generic_capture_falls_back_to_legacy_key(self, monkeypatch):
-        it = self._reset(monkeypatch)
-        monkeypatch.setenv("POSTHOG_API_KEY", "legacy-key")
-        build = MagicMock(side_effect=lambda key: f"client:{key}")
-        monkeypatch.setattr(it, "_build_posthog_client", build)
-        assert it._get_posthog_client() == "client:legacy-key"
-
-    def test_generic_capture_ignores_events_key(self, monkeypatch):
-        """A non-MCP event never captures through the events key."""
-        it = self._reset(monkeypatch)
-        monkeypatch.setenv("POSTHOG_EVENTS_API_KEY", "events-key")
-        build = MagicMock(side_effect=lambda key: f"client:{key}")
-        monkeypatch.setattr(it, "_build_posthog_client", build)
-        assert it._get_posthog_client() is None
-        build.assert_not_called()
-
-    def test_mcp_capture_uses_events_key(self, monkeypatch):
-        self._reset(monkeypatch)
-        monkeypatch.setenv("POSTHOG_EVENTS_API_KEY", "events-key")
-        monkeypatch.setenv("POSTHOG_PROJECT_API_KEY", "project-key")
-        fake = MagicMock()
-        build = MagicMock(return_value=fake)
-        monkeypatch.setattr(mcp_analytics, "_build_mcp_events_client", build)
-        mcp_analytics.emit_mcp_posthog_event("u", "MCP Tool Call", {"tool": "get_memories"})
-        build.assert_called_once_with("events-key")
-        fake.capture.assert_called_once_with(
-            distinct_id="u", event="MCP Tool Call", properties={"tool": "get_memories"}
-        )
-
-    def test_mcp_capture_falls_back_to_generic_emit(self, monkeypatch):
-        """Without the events key, MCP events route through generic capture."""
-        self._reset(monkeypatch)
-        monkeypatch.setenv("POSTHOG_PROJECT_API_KEY", "project-key")
-        generic = MagicMock()
-        monkeypatch.setattr(mcp_analytics, "emit_posthog_event", generic)
-        mcp_analytics.emit_mcp_posthog_event("u", "MCP Active", {"client_name": "other"})
-        generic.assert_called_once_with("u", "MCP Active", {"client_name": "other"})
-
-    def test_decision_code_is_project_key_only(self, monkeypatch):
-        """The dead decisions helper is gone; jit_rollout builds its own client
-        from POSTHOG_PROJECT_API_KEY and never reads the events key."""
-        import utils.integration_telemetry as it
-        import utils.jit_rollout as jr
-
-        assert not hasattr(it, "get_posthog_client_for_decisions")
-        self._reset(monkeypatch)
-        monkeypatch.setenv("POSTHOG_EVENTS_API_KEY", "events-key")
-        provider = jr.PostHogJITFlagProvider.__new__(jr.PostHogJITFlagProvider)
-        provider._timeout_seconds = 1
-        # Only the events key is present: no decision client may be built.
-        assert provider._build_client() is None
-
-
 class TestInitializeNegotiatedAnalytics:
     """With no header/_meta declaration, the analytics version follows the
     negotiated initialize result; request log and MCP Active stay in lockstep."""
@@ -738,3 +660,16 @@ class TestRequestToolDimension:
             )
         assert response.status_code == 200
         assert authed.request_log.call_args.kwargs["tool_name"] is None
+
+
+def test_flag_reads_never_use_shared_capture_aliases(monkeypatch):
+    from utils import jit_rollout, free_tier_cohort
+
+    monkeypatch.delenv('POSTHOG_PROJECT_API_KEY', raising=False)
+    monkeypatch.delenv('POSTHOG_API_KEY', raising=False)
+    monkeypatch.setenv('POSTHOG_EVENTS_API_KEY', 'phc_capture-only')
+    monkeypatch.setenv('POSTHOG_BILLING_API_KEY', 'phc_billing-only')
+    provider = jit_rollout.PostHogJITFlagProvider.__new__(jit_rollout.PostHogJITFlagProvider)
+    provider._timeout_seconds = 1
+    assert provider._build_client() is None
+    assert free_tier_cohort._build_posthog_client() is None

@@ -13407,4 +13407,28 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'दुरुस्त करण्यासाठी टॅप करा';
+
+  @override
+  String get homePendingTitle => 'संभाषणे येत आहेत';
+
+  @override
+  String get homePendingCatchingUp => 'आधीचा ऑडिओ प्रक्रिया होत आहे';
+
+  @override
+  String get onTheWayTitle => 'मार्गावर';
+
+  @override
+  String get onTheWayAlmostReady => 'जवळजवळ तयार';
+
+  @override
+  String get activityEmpty => 'अद्याप कोणतीही क्रिया नाही';
+
+  @override
+  String get activityNewSemantics => 'क्रिया, नवीन आयटम';
+
+  @override
+  String get activityLoadFailed => 'तुमची सर्व क्रिया लोड करता आली नाही';
+
+  @override
+  String get activityNewItem => 'नवीन';
 }
