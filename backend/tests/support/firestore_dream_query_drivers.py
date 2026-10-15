@@ -32,7 +32,7 @@ def finish_lease():
         'reservation_usd': 0.24,
         'budget_charge_usd': 0.24,
         'admission_refunded': False,
-        'max_usd_per_token': Caps().max_usd_per_token,
+        'max_usd_per_token': 0.00001,
         'spend_scope': 'user',
         'dirty_dropped': 0,
         'dirty_dropped_reported': 0,

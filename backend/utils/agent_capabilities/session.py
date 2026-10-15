@@ -104,10 +104,7 @@ class Session:
             else 0
         )
         remaining = (
-            self.limits.tokens
-            - self.limits.verification_tokens
-            - self.accounted_model_tokens
-            - self.counters['search_embedding_token_upper_bound']
+            self.limits.tokens - self.accounted_model_tokens - self.counters['search_embedding_token_upper_bound']
         )
         if embedding_ceiling > remaining:
             raise ValueError('agent_search_token_budget')
@@ -347,7 +344,7 @@ class Session:
                 turns=self.limits.turns,
                 tool_calls=self.limits.tools,
                 deadline_seconds=deadline_seconds,
-                tokens=self.limits.tokens - self.limits.verification_tokens,
+                tokens=self.limits.tokens,
                 graceful=True,
             ),
         )
@@ -369,6 +366,7 @@ class Session:
                 ensure_ascii=False,
             ),
         }
-        result = await run_loop(mount, [seed], model_turn, self.execute, observe_turn=observe_turn)
+        # Stable owner seed is the first user message. Later turns only append.
+        result = await run_loop(mount, [seed], model_turn, self.execute, explicit_cache=True, observe_turn=observe_turn)
         self.counters.update(turns=result.turns, tool_calls=result.tool_calls)
         return result

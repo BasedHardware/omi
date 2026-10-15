@@ -68,6 +68,7 @@ SCHEMA_GROUPS = {
             'ReviewAnswerReceipt',
             'ChangeRef',
             'ReviewChange',
+            'ReviewChangeDiff',
             'ReviewChangesResponse',
         ),
     },

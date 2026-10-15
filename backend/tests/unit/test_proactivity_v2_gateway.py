@@ -1,4 +1,5 @@
 from dataclasses import replace
+import json
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -16,6 +17,7 @@ from llm_gateway.gateway.accounting import (
 )
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.config_loader import load_gateway_config
+from llm_gateway.gateway.cache_policy import INTERNAL_POLICY
 from llm_gateway.gateway.credentials import build_omi_managed_credential_context
 from llm_gateway.gateway.errors import GatewayInvalidRequestError
 from llm_gateway.gateway.executor import ProviderRegistry, execute_chat_completion, execute_systemone
@@ -121,6 +123,114 @@ async def test_real_executor_reserves_settles_and_tags_same_event(store, gated, 
     row = store.rows[('users', 'u', 'proactivity_items', item['item_id'])]
     assert row['cost_status'] == 'estimated'
     assert row['estimated_cost_micro_usd'] == events[0]['estimated_cost_micro_usd']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('prefix', ['short synthetic system', 'synthetic prefix ' * 320])
+async def test_real_executor_cache_policy_preserves_text_budget_and_reserves_cache_writes(store, gated, prefix):
+    class Capture(Provider):
+        async def create_chat_completion(self, request, **kwargs):
+            self.request = request
+            return await super().create_chat_completion(request, **kwargs)
+
+    item = claim(store)
+    ctx = context(item)
+    route = resolve_chat_completion_route(
+        load_gateway_config(),
+        {
+            'model': 'omi:auto:proactive-notification',
+            'messages': [{'role': 'system', 'content': prefix}, {'role': 'user', 'content': 'synthetic'}],
+            'max_completion_tokens': 512,
+        },
+    )
+    provider = Capture()
+    with gate.attempt_scope(ctx):
+        await execute_chat_completion(
+            route,
+            build_omi_managed_credential_context(ServiceCaller(name='backend', user_uid='u')),
+            ProviderRegistry({'openai': provider}),
+            attempt_trace=AttemptTrace(),
+        )
+    assert provider.calls == 1
+    request = provider.request
+    assert request['prompt_cache_options'] == {'mode': 'explicit', 'ttl': '30m'}
+    if len(prefix) > 4096:
+        part = request['messages'][0]['content'][0]
+        assert part['text'] == prefix and part['prompt_cache_breakpoint'] == {'mode': 'explicit'}
+        assert request['prompt_cache_key'].startswith('gateway-')
+    envelope = gate.envelope_for(ctx, 'openai', 'gpt-6-luna', request)
+    payload = {key: value for key, value in request.items() if key != INTERNAL_POLICY}
+    input_bound = len(json.dumps(payload, separators=(',', ':'), ensure_ascii=False).encode()) + 4096
+    rates = gate.rate_card_for('openai', 'gpt-6-luna').effective_rates(input_bound)
+    assert rates.cache_write_micro_usd_per_million > rates.input_micro_usd_per_million
+    write_bound = input_bound * rates.cache_write_micro_usd_per_million
+    output_bound = request['max_completion_tokens'] * rates.output_micro_usd_per_million
+    assert envelope.worst_case_micro_usd >= (write_bound + output_bound + 999999) // 1000000
+    # Attribution is not provider input and cannot alter the bounded request hash.
+    request[INTERNAL_POLICY] = {'lane': 'synthetic-other-attribution'}
+    assert gate.envelope_for(ctx, 'openai', 'gpt-6-luna', request) == envelope
+
+
+@pytest.mark.parametrize(
+    'part',
+    [
+        {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,synthetic'}},
+        {'type': 'text', 'text': 'synthetic', 'fileData': {'fileUri': 'synthetic'}},
+        {'type': 'text', 'text': 'synthetic', 'prompt_cache_breakpoint': {'mode': 'unknown'}},
+    ],
+)
+def test_cache_text_parts_cannot_admit_media_or_unknown_fields(store, part):
+    ctx = context(claim(store))
+    with pytest.raises(ProactivityDenied, match='invalid_request'):
+        gate.envelope_for(
+            ctx,
+            'openai',
+            'gpt-6-luna',
+            {'messages': [{'role': 'user', 'content': [part]}], 'max_completion_tokens': 512},
+        )
+
+
+@pytest.mark.parametrize(
+    'cache_fields',
+    [
+        {'prompt_cache_options': {'mode': 'explicit', 'ttl': '1h'}},
+        {'prompt_cache_key': {'unexpected': 'object'}},
+    ],
+)
+def test_proactivity_refuses_unsupported_cache_contracts(store, cache_fields):
+    ctx = context(claim(store))
+    with pytest.raises(ProactivityDenied, match='invalid_request'):
+        gate.envelope_for(
+            ctx,
+            'openai',
+            'gpt-6-luna',
+            {'messages': [{'role': 'user', 'content': 'synthetic'}], 'max_completion_tokens': 512, **cache_fields},
+        )
+
+
+def test_cache_marked_text_still_obeys_the_producer_byte_bound(store):
+    ctx = context(claim(store))
+    with pytest.raises(ProactivityDenied, match='input_bound'):
+        gate.envelope_for(
+            ctx,
+            'openai',
+            'gpt-6-luna',
+            {
+                'messages': [
+                    {
+                        'role': 'system',
+                        'content': [
+                            {
+                                'type': 'text',
+                                'text': 'x' * producer_for(ctx.producer).max_request_bytes,
+                                'prompt_cache_breakpoint': {'mode': 'explicit'},
+                            }
+                        ],
+                    }
+                ],
+                'max_completion_tokens': 512,
+            },
+        )
 
 
 def test_usefulness_authenticated_attribution_and_lane_fence(store):

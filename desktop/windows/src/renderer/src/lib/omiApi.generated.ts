@@ -4324,6 +4324,7 @@ export interface ReviewChange {
   change_id: string;
   context?: SpellingContext | null;
   created_at: string;
+  diff?: ReviewChangeDiff | null;
   edit_kind?: string | null;
   kind: "rename" | "merge_memories" | "update_person" | "label_speaker" | "title_conversation" | "close_task" | "other";
   reason?: string | null;
@@ -4331,6 +4332,19 @@ export interface ReviewChange {
   snippet?: string | null;
   title: string;
   undone?: boolean;
+}
+
+export interface ReviewChangeDiff {
+  after?: string | null;
+  before?: string | null;
+  context_after?: string | null;
+  context_before?: string | null;
+  field?: string | null;
+  group_key?: string | null;
+  occurrences?: number | null;
+  source_started_at?: string | null;
+  source_title?: string | null;
+  target_label?: string | null;
 }
 
 export interface ReviewChangesResponse {
@@ -6654,6 +6668,7 @@ export interface OmiApiSchemas {
   "ReviewAnswerV2": ReviewAnswerV2;
   "ReviewAppRequest": ReviewAppRequest;
   "ReviewChange": ReviewChange;
+  "ReviewChangeDiff": ReviewChangeDiff;
   "ReviewChangesResponse": ReviewChangesResponse;
   "ReviewEvidence": ReviewEvidence;
   "ReviewItem": ReviewItem;
