@@ -151,11 +151,13 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           ],
         ),
         const SizedBox(height: OmiSpacing.xl),
-        // Plan stays one tap from the sheet (David, 2026-09-24); for Free and Plus its section adds
-        // the minutes meter and the Upgrade button.
+        // Plan stays one tap from the sheet (David, 2026-09-24); for Free and Plus it is a plan card
+        // with the minutes meter and the Upgrade button.
         OmiSettingsGroup(
           children: [
             SettingsPlanSection(
+              planName: planValue,
+              onOpen: () => _open(SettingsDestination.planAndUsage),
               row: _row(
                 SettingsDestination.planAndUsage,
                 key: 'settings_row_planAndUsage',

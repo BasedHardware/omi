@@ -4,28 +4,14 @@
     {
       "file": "001-mobile-ios-settings-before-light.png",
       "platform": "mobile-ios",
-      "description": "Settings sheet before (Free plan): full-width Upgrade, Referral with a NEW tag beside Plan, one long group of eight rows",
+      "description": "Settings sheet before (Free plan, widget-test render of #21711's head): full-width Upgrade, Referral with a NEW tag beside Plan, one long group of eight rows",
       "captured_by": "agent",
       "source": "manual"
     },
     {
       "file": "002-mobile-ios-settings-after-light.png",
       "platform": "mobile-ios",
-      "description": "Settings sheet after (Free plan): initial in the Account row, minutes and a compact Upgrade under the Plan title, Device (battery) / Recording / Notifications / Privacy first, Referral beside Help",
-      "captured_by": "agent",
-      "source": "manual"
-    },
-    {
-      "file": "003-mobile-ios-settings-before-dark.png",
-      "platform": "mobile-ios",
-      "description": "Settings sheet before, dark",
-      "captured_by": "agent",
-      "source": "manual"
-    },
-    {
-      "file": "004-mobile-ios-settings-after-dark.png",
-      "platform": "mobile-ios",
-      "description": "Settings sheet after, dark",
+      "description": "Settings sheet after, iOS simulator (Free plan, no device): plan card with the plan name large and a compact Upgrade, minutes meter; Account initial; Device (Disconnected) / Recording / Notifications / Privacy first",
       "captured_by": "agent",
       "source": "manual"
     }

@@ -9,16 +9,21 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// The Plan & Usage row on the Settings sheet, plus — for Free and Plus — this month's minutes and
-/// a compact Upgrade button beside them, so upgrading is one tap from Settings instead of two.
+/// Plan & Usage on the Settings sheet. For Free and Plus it is a plan card: the plan's name large
+/// with a compact Upgrade beside it, then this month's minutes as a meter and a line of text, so
+/// upgrading is one tap from Settings. Tapping the card outside the button opens the Plan & Usage
+/// page. Every other plan (and no subscription yet) keeps the plain row.
 class SettingsPlanSection extends StatelessWidget {
-  const SettingsPlanSection({super.key, required this.row});
+  const SettingsPlanSection({super.key, required this.row, required this.onOpen, this.planName});
 
-  /// The Plan & Usage row; tapping it still opens the Plan & Usage page.
+  /// The plain Plan & Usage row, shown when there is nothing to upgrade to.
   final Widget row;
 
-  /// Where an [OmiSettingsRow]'s title starts: its padding, the 24 pt icon column and the gap.
-  static const double _titleInset = OmiSpacing.md + 24 + OmiSpacing.md;
+  /// Opens the Plan & Usage page.
+  final VoidCallback onOpen;
+
+  /// The plan's display name ("Free", the Plus plan's name).
+  final String? planName;
 
   @override
   Widget build(BuildContext context) {
@@ -35,16 +40,14 @@ class SettingsPlanSection extends StatelessWidget {
     final ratio = hasLimit
         ? (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit).clamp(0.0, 1.0)
         : 0.0;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        row,
-        // Under the row and aligned with its title: this month's minutes with a compact Upgrade
-        // beside them, then the meter across the card, so the card reads as the plan rather than
-        // as a full-width button.
-        Padding(
-          padding: const EdgeInsets.fromLTRB(_titleInset, 0, OmiSpacing.md, OmiSpacing.md),
+    return Semantics(
+      key: const ValueKey('settings_row_planAndUsage'),
+      button: true,
+      label: l10n.planAndUsage,
+      child: InkWell(
+        onTap: onOpen,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.md, OmiSpacing.md, OmiSpacing.lg),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
@@ -52,12 +55,20 @@ class SettingsPlanSection extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                    child: hasLimit
-                        ? Text(
-                            l10n.minsUsedThisMonth(NumberFormat.decimalPattern(l10n.localeName).format(used), limit),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ExcludeSemantics(
+                          child: Text(
+                            l10n.planAndUsage,
                             style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-                          )
-                        : const SizedBox.shrink(),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        if (planName != null) Text(planName!, style: OmiType.title2),
+                      ],
+                    ),
                   ),
                   const SizedBox(width: OmiSpacing.md),
                   OmiButton(
@@ -69,19 +80,31 @@ class SettingsPlanSection extends StatelessWidget {
                 ],
               ),
               if (hasLimit) ...[
-                const SizedBox(height: OmiSpacing.sm),
+                const SizedBox(height: OmiSpacing.md),
                 LinearProgressIndicator(
                   value: ratio,
                   backgroundColor: OmiColors.surface3,
                   valueColor: AlwaysStoppedAnimation<Color>(ratio >= .8 ? OmiColors.warning : OmiColors.accent),
-                  minHeight: 4,
+                  minHeight: 6,
                   borderRadius: OmiRadius.pillAll,
+                ),
+                const SizedBox(height: OmiSpacing.xs),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        l10n.minsUsedThisMonth(NumberFormat.decimalPattern(l10n.localeName).format(used), limit),
+                        style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                      ),
+                    ),
+                    ExcludeSemantics(child: Icon(Icons.chevron_right, size: 20, color: OmiColors.textTertiary)),
+                  ],
                 ),
               ],
             ],
           ),
         ),
-      ],
+      ),
     );
   }
 }

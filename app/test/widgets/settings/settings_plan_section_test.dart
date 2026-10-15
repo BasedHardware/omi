@@ -7,8 +7,8 @@ import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/settings/widgets/settings_plan_section.dart';
 import 'package:omi/providers/usage_provider.dart';
 
-/// The Settings plan section adds this month's minutes and an Upgrade button under the Plan &
-/// Usage row for Free and Plus, and leaves the row alone for every other plan.
+/// The Settings plan section is a plan card (name, Upgrade, this month's minutes) for Free and Plus,
+/// and leaves the plain Plan & Usage row for every other plan.
 class _Usage extends ChangeNotifier implements UsageProvider {
   _Usage(this.subscription, {this.showSubscriptionUI = true});
 
@@ -33,6 +33,8 @@ UserSubscriptionResponse _response(PlanType plan, {int usedSeconds = 0, int limi
       insightsGainedLimit: 0,
     );
 
+void _noop() {}
+
 void main() {
   final en = lookupAppLocalizations(const Locale('en'));
   const row = Text('Plan row', key: ValueKey('plan_row'));
@@ -45,19 +47,38 @@ void main() {
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           locale: Locale('en'),
-          home: Scaffold(body: SettingsPlanSection(row: row)),
+          home: Scaffold(body: SettingsPlanSection(row: row, planName: 'Free', onOpen: _noop)),
         ),
       ),
     );
   }
 
-  testWidgets('Free shows minutes used and Upgrade', (tester) async {
+  testWidgets('Free is a plan card: name, minutes used and Upgrade, in place of the row', (tester) async {
     await pump(tester, _Usage(_response(PlanType.basic, usedSeconds: 240 * 60, limitSeconds: 300 * 60)));
 
-    expect(find.byKey(const ValueKey('plan_row')), findsOneWidget);
+    expect(find.byKey(const ValueKey('plan_row')), findsNothing);
+    expect(find.byKey(const ValueKey('settings_row_planAndUsage')), findsOneWidget);
+    expect(find.text('Free'), findsOneWidget);
     expect(find.text(en.minsUsedThisMonth('240', 300)), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
     expect(find.text(en.upgrade), findsOneWidget);
+  });
+
+  testWidgets('tapping the card outside Upgrade opens Plan & Usage', (tester) async {
+    var opened = 0;
+    await tester.pumpWidget(
+      ChangeNotifierProvider<UsageProvider>.value(
+        value: _Usage(_response(PlanType.basic, usedSeconds: 60, limitSeconds: 300 * 60)),
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          locale: const Locale('en'),
+          home: Scaffold(body: SettingsPlanSection(row: row, planName: 'Free', onOpen: () => opened++)),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Free'));
+    expect(opened, 1);
   });
 
   testWidgets('Plus offers Upgrade to Unlimited', (tester) async {
