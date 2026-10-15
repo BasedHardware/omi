@@ -9,15 +9,9 @@ so the traversal contract is pinned to production logic.
 
 import os
 import sys
-from unittest.mock import MagicMock
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
-
-for _name in ('google', 'google.cloud', 'google.cloud.firestore_v1', 'google.cloud.firestore'):
-    if _name not in sys.modules:
-        sys.modules[_name] = MagicMock()
-sys.modules['google.cloud.firestore_v1'].FieldFilter = object
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
