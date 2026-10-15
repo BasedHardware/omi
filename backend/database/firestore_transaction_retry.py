@@ -38,7 +38,6 @@ class FirestoreContentionExhausted(RuntimeError):
 # retryable contention/aborted status. ``grpc_status_code`` 10 is gRPC ABORTED.
 _CONTENSION_HTTP_CODES = frozenset({409})
 _CONTENSION_GRPC_CODES = frozenset({10})
-_MAX_JITTER_CLAIMS = 64
 
 
 def _contention_status_code(error: BaseException) -> bool:
@@ -106,10 +105,12 @@ def run_with_transaction_contention_retry(
 ) -> T:
     """Run a decorated Firestore transaction with bounded equal-jitter retry.
 
-    A new transaction is created for every outer attempt.  Only explicit
-    ``Aborted`` contention, including the SDK's exhausted-attempt wrapper, is
-    replayed.  Firestore aborts are atomic, so callers must keep all writes and
-    idempotency checks inside ``operation``.
+    A new transaction is created for every outer attempt.  Only contention is
+    replayed: an ``Aborted`` anywhere in the raised error's causal graph
+    (``__cause__``, ``__context__``, exception-group members) or a wrapped error
+    carrying HTTP 409 / gRPC-10 status — the same signals the SDK maps to
+    aborted transactions.  Firestore aborts are atomic, so callers must keep all
+    writes and idempotency checks inside ``operation``.
     """
 
     if not callable(transaction_factory):
