@@ -1,4 +1,3 @@
-import hashlib
 import logging
 import re
 import traceback
@@ -11,6 +10,7 @@ from database import voice_profiles as voice_profiles_db
 from models.conversation import Conversation
 from models.speaker_labels import RejectSpeakerRequest, VoiceMatchesResponse
 from utils.conversations.factory import deserialize_conversation
+from utils.log_sanitizer import hash_log_identifier
 from utils.other import endpoints as auth
 from utils.other.storage import delete_speech_profile_blob
 from utils.speaker_voice_matches import find_person_voice_matches
@@ -18,11 +18,6 @@ from utils.speaker_voice_matches import find_person_voice_matches
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-def _document_log_id(value: str) -> str:
-    """Correlate opaque IDs without interpreting or exposing their private text."""
-    return hashlib.sha256(value.encode('utf-8')).hexdigest()[:12]
 
 
 def _valid_document_id(value: str) -> bool:
@@ -77,7 +72,7 @@ def reject_speaker_label(
     except LookupError as error:
         logger.warning(
             'speaker label reject lookup miss conv_hash=%s speaker=%s: %s\n%s',
-            _document_log_id(conversation_id),
+            hash_log_identifier(conversation_id),
             speaker_id,
             type(error).__name__,
             ''.join(traceback.format_tb(error.__traceback__)),
@@ -88,7 +83,7 @@ def reject_speaker_label(
     except ValueError as error:
         logger.warning(
             'speaker label reject conflict conv_hash=%s speaker=%s: %s\n%s',
-            _document_log_id(conversation_id),
+            hash_log_identifier(conversation_id),
             speaker_id,
             type(error).__name__,
             ''.join(traceback.format_tb(error.__traceback__)),
@@ -98,7 +93,7 @@ def reject_speaker_label(
         # Keep stack locations without exception text, which can echo opaque IDs.
         logger.error(
             'speaker label reject failed conv_hash=%s speaker=%s uid=%s: %s\n%s',
-            _document_log_id(conversation_id),
+            hash_log_identifier(conversation_id),
             speaker_id,
             uid,
             type(error).__name__,
@@ -136,7 +131,7 @@ async def get_person_voice_matches(
     except Exception as error:
         logger.error(
             'person voice-matches failed person_hash=%s uid=%s: %s\n%s',
-            _document_log_id(person_id),
+            hash_log_identifier(person_id),
             uid,
             type(error).__name__,
             ''.join(traceback.format_tb(error.__traceback__)),

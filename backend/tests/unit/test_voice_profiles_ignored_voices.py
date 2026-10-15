@@ -1,5 +1,8 @@
 from datetime import datetime, timedelta, timezone
 
+import pytest
+from google.cloud.firestore_v1.field_path import FieldPath
+
 from database import conversations as conversations_db
 from database import voice_profiles as db
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -24,6 +27,42 @@ def test_ignored_voices_are_bounded(monkeypatch):
     for index in range(3):
         db.record_ignored_voice('u', f'c{index}', 0, NOW + timedelta(minutes=index), firestore_client=store)
     assert db.ignored_voice_keys(store.rows[STATE]) == {'c1:0', 'c2:0'}
+
+
+@pytest.mark.parametrize('conversation_id', ['x' * 1460, 'x' * 1500, 'é' * 750, '\\' * 750, '`' * 750])
+def test_maximum_document_ids_keep_bounded_marker_keys_and_restore(conversation_id):
+    store = StrictFirestore()
+    db.record_ignored_voice('u', conversation_id, 3, NOW, firestore_client=store)
+    db.record_ignored_voice('u', conversation_id, 3, NOW + timedelta(minutes=1), firestore_client=store)
+    markers = store.rows[STATE]['ignored_voices']
+    assert len(markers) == 1
+    key, entry = next(iter(markers.items()))
+    assert len(key.encode('utf-8')) <= 1500
+    assert len(FieldPath('ignored_voices', key, 'assignment_generation').to_api_repr().encode('utf-8')) <= 1500
+    assert key == db.ignored_voice_key(conversation_id, 3)
+    assert entry['conversation_id'] == conversation_id
+    assert entry['speaker_id'] == 3
+    assert db.ignored_voice_keys(store.rows[STATE]) == {key}
+    assert db.remove_ignored_voice('u', conversation_id, 3, [], firestore_client=store)
+    assert store.rows[STATE]['ignored_voices'] == {}
+
+
+def test_ignored_voice_key_preserves_existing_keys_at_field_byte_limit():
+    conversation_id = 'x' * 1459
+    assert db.ignored_voice_key(conversation_id, 3) == f'{conversation_id}:3'
+
+
+def test_restore_matches_original_entry_when_legacy_key_needs_new_encoding():
+    conversation_id = 'x' * 1465
+    legacy_key = f'{conversation_id}:3'
+    assert len(FieldPath('ignored_voices', legacy_key, 'conversation_id').to_api_repr().encode('utf-8')) == 1500
+    assert db.ignored_voice_key(conversation_id, 3) != legacy_key
+    store = StrictFirestore()
+    store.rows[STATE] = {
+        'ignored_voices': {legacy_key: {'conversation_id': conversation_id, 'speaker_id': 3, 'ignored_at': NOW}}
+    }
+    assert db.remove_ignored_voice('u', conversation_id, 3, [], firestore_client=store)
+    assert store.rows[STATE]['ignored_voices'] == {}
 
 
 def test_remove_ignored_voice_forgets_its_answers_only():

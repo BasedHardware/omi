@@ -1,9 +1,11 @@
 """Voice-profile preferences, tag-prompt pacing state, and owner voice confirmations."""
 
+import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from google.cloud import firestore
+from google.cloud.firestore_v1.field_path import FieldPath
 
 from utils.owner_voice_evidence import owner_base
 
@@ -215,7 +217,12 @@ IGNORED_VOICES_LIMIT = 200
 
 
 def ignored_voice_key(conversation_id: str, speaker_id: int) -> str:
-    return f'{conversation_id}:{speaker_id}'
+    key = f'{conversation_id}:{speaker_id}'
+    path = FieldPath('ignored_voices', key, 'assignment_generation').to_api_repr()
+    if len(path.encode('utf-8')) <= 1500:
+        return key
+    # A trailing colon cannot collide with an existing decimal speaker suffix.
+    return f'sha256:{hashlib.sha256(key.encode("utf-8")).hexdigest()}:'
 
 
 def ignored_voices(state: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -286,7 +293,18 @@ def remove_ignored_voice(
         snapshot = ref.get(transaction=transaction)
         state = snapshot.to_dict() or {}
         ignored = dict(state.get('ignored_voices') or {})
-        marker = ignored.pop(ignored_voice_key(conversation_id, speaker_id), None)
+        # Entry identity is independent of the historical map-key encoding.
+        marker_key = next(
+            (
+                key
+                for key, entry in ignored.items()
+                if isinstance(entry, dict)
+                and entry.get('conversation_id') == conversation_id
+                and entry.get('speaker_id') == speaker_id
+            ),
+            None,
+        )
+        marker = ignored.pop(marker_key, None)
         if marker is None:
             return False
         from database import conversations as conversations_db

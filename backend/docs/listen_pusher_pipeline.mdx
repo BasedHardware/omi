@@ -2250,8 +2250,8 @@ review and `omi_sync_speaker_reviewed_segments_total{outcome="confirmed|correcte
 count it. Retries see cleared provenance, and locked/deleted or failed writes emit
 nothing. Manual receipt overlays also clear stale automatic provenance. Legacy and
 text-only labels have unknown origin and are excluded. Metrics contain no IDs;
-review logs may contain user, conversation and segment IDs but no transcript or
-person name. This is a **segment-weighted, self-selected correction proxy**, not a
+review logs contain the user UID and bounded conversation/segment digests.
+This is a **segment-weighted, self-selected correction proxy**, not a
 false-accept rate: unreviewed labels have unknown correctness, crash-after-commit
 can lose events, and clients that replace metadata can reduce coverage. See
 [sync speaker evidence](sync_speaker_evidence.md) for the measured baseline and

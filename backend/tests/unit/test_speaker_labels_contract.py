@@ -9,7 +9,9 @@ C5: ``VoiceMatch``/``VoiceMatchesResponse`` + GET voice-matches route — cached
 from __future__ import annotations
 
 import json
+import logging
 import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import quote
 
@@ -17,9 +19,11 @@ import pytest
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
+from google.cloud.firestore_v1.field_path import FieldPath
 from pydantic import ValidationError
 
 from database import conversations as conversations_db
+from database import voice_profiles as voice_profiles_db
 from models.other import Person
 from models.speaker_labels import RejectSpeakerRequest, VoiceMatch, VoiceMatchesResponse
 from models.transcript_segment import TranscriptSegment
@@ -27,6 +31,7 @@ from routers import speaker_labels as speaker_labels_router
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.other import endpoints as auth
 from utils import speaker_voice_matches
+from utils.observability import speaker_identification as speaker_review
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 
@@ -362,6 +367,67 @@ def test_reject_route_lookup_miss_returns_sanitized_404(client, monkeypatch):
     response = client.post('/v1/conversations/conv1/speakers/3/reject', json={'kind': 'not_me'})
     assert response.status_code == 404
     assert 'stored doc shape' not in json.dumps(response.json())
+
+
+@pytest.mark.parametrize('document_id', ['私の記録\nprivate@local', 'x' * 1500, 'é' * 750, '\\' * 750, '`' * 750])
+@pytest.mark.parametrize('kind', ['not_me', 'not_a_person'])
+def test_successful_rejection_preserves_opaque_ids_with_safe_telemetry_and_markers(
+    client, monkeypatch, caplog, document_id, kind
+):
+    store = conversations_db.get_firestore_client()
+    now = datetime(2026, 10, 16, tzinfo=timezone.utc)
+    segment_id = 'segment.private@local'
+    path = ('users', UID, 'conversations', document_id)
+    store.rows[path] = {
+        'id': document_id,
+        'created_at': now,
+        'started_at': now,
+        'finished_at': now + timedelta(seconds=2),
+        'structured': {'title': 'Synthetic', 'overview': '', 'emoji': '', 'action_items': [], 'events': []},
+        'status': 'completed',
+        'transcript_segments': [
+            {
+                'id': segment_id,
+                'speaker_id': 3,
+                'speaker': 'SPEAKER_03',
+                'text': 'Synthetic speech',
+                'start': 0.0,
+                'end': 2.0,
+                'is_user': True,
+                'speaker_match_source': 'sync_embedding',
+                'speaker_label_source': 'auto',
+            }
+        ],
+    }
+    monkeypatch.setattr(conversations_db, 'invalidate_people_stats_cache', lambda *args: None)
+    monkeypatch.setattr(voice_profiles_db, 'get_firestore_client', lambda: store)
+    with caplog.at_level(logging.INFO):
+        response = client.post(
+            f'/v1/conversations/{quote(document_id, safe="")}/speakers/3/reject', json={'kind': kind}
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()['id'] == document_id
+    assert response.json()['transcript_segments'][0].get('speaker_match_source') is None
+    records = [record for record in caplog.records if record.name == speaker_review.logger.name]
+    assert len(records) == 1
+    message = records[0].getMessage()
+    assert re.search(r'conversation_hash=[0-9a-f]{12} segment_hash=[0-9a-f]{12}', message)
+    assert document_id not in message and segment_id not in message
+    assert 'private@local' not in message
+    for record in caplog.records:
+        if record.name.startswith(('database.', 'routers.', 'utils.')):
+            assert 'private@local' not in record.getMessage()
+    assert path in store.rows
+    if kind == 'not_a_person':
+        state = store.rows[('users', UID, 'speaker_tag_prompts', 'state')]
+        assert all(len(key.encode('utf-8')) <= 1500 for key in state['ignored_voices'])
+        assert all(
+            len(FieldPath('ignored_voices', key, 'assignment_generation').to_api_repr().encode('utf-8')) <= 1500
+            for key in state['ignored_voices']
+        )
+        entry = next(iter(state['ignored_voices'].values()))
+        assert entry['conversation_id'] == document_id and entry['speaker_id'] == 3
 
 
 @pytest.mark.parametrize('bad', ['a/b', '../x', '.', '..', '__reserved__', 'x' * 1501, 'é' * 751])
