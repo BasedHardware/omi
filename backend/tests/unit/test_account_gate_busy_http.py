@@ -163,6 +163,42 @@ def test_conversation_delete_route_maps_takeover_to_409(monkeypatch):
     from unittest.mock import MagicMock
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
+
+    # Earlier modules in this session may have replaced firebase_admin with an
+    # AutoMock stub that rejects attribute access; routers.conversations imports
+    # utils.notifications, which does `from firebase_admin import messaging, auth`.
+    import sys, types as _types
+
+    fb = sys.modules.get("firebase_admin")
+    if fb is not None and not hasattr(fb, "messaging"):
+        messaging_stub = _types.ModuleType("firebase_admin.messaging")
+
+        class _AnyMeta:
+            def __init__(self, *args, **kwargs):
+                pass
+
+        for _name in (
+            "AndroidConfig",
+            "AndroidNotification",
+            "APNSConfig",
+            "APNSPayload",
+            "Aps",
+            "ApsAlert",
+            "Messaging",
+            "MulticastMessage",
+            "Notification",
+            "TopicMessage",
+            "WebpushConfig",
+            "WebpushNotification",
+            "ConditionMessage",
+            "Message",
+        ):
+            setattr(messaging_stub, _name, _AnyMeta)
+        messaging_stub.send = lambda *a, **k: None
+        messaging_stub.send_each_for_multicast = lambda *a, **k: None
+        fb.messaging = messaging_stub
+        if not hasattr(fb, "auth"):
+            fb.auth = _types.ModuleType("firebase_admin.auth")
     from routers import conversations as conversation_routes
 
     service = MagicMock()
