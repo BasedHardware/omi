@@ -191,7 +191,6 @@ else:
     firebase_admin.initialize_app(options=_firebase_admin_options)  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 
 app = FastAPI()
-app.add_middleware(SyncUploadMetricsMiddleware)
 
 _local_storage_root = local_storage_root_from_env()
 if _local_storage_root is not None:
@@ -381,6 +380,7 @@ app.add_middleware(BYOKMiddleware)
 from database.firestore_tier_context import FirestoreTierMiddleware
 
 app.add_middleware(FirestoreTierMiddleware)
+app.add_middleware(SyncUploadMetricsMiddleware)
 
 
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring

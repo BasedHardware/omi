@@ -39,7 +39,7 @@ def enforce_limit(uid):
 
 
 async def read_summary(request):
-    if request.headers.get('content-encoding', 'identity') != 'identity':
+    if request.headers.get('content-encoding', 'identity').strip().lower() != 'identity':
         deny('invalid_schema', 415)
     declared = request.headers.get('content-length')
     if declared is not None:

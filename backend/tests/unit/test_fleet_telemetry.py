@@ -126,6 +126,7 @@ def test_rejected_request_does_not_increment_events(client):
 def test_histogram_conservation_and_cumulative_deltas(client):
     payload = summary()
     payload['histograms'] = [histogram()]
+    payload['counters'][0]['event'] = registry()['histograms'][payload['histograms'][0]['name']]['event']
     collector = fleet.FleetHistograms()
     h = payload['histograms'][0]
     for _ in range(2):
@@ -137,14 +138,16 @@ def test_histogram_conservation_and_cumulative_deltas(client):
     assert samples[-1].value == h['buckets'][-1]['count'] * 2
     assert not any(s.name.endswith('_sum') for s in samples)
     assert client.post('/v1/telemetry/fleet', json=payload).status_code == 200
-    for bad in ('decreasing', 'duplicate', 'edges'):
+    for bad in ('decreasing', 'duplicate', 'edges', 'missing_event'):
         invalid = copy.deepcopy(payload)
         if bad == 'decreasing':
             invalid['histograms'][0]['buckets'][0]['count'] = 999
         elif bad == 'duplicate':
             invalid['histograms'].append(copy.deepcopy(h))
-        else:
+        elif bad == 'edges':
             invalid['histograms'][0]['buckets'][0]['le'] = 123
+        else:
+            invalid['counters'] = []
         assert client.post('/v1/telemetry/fleet', json=invalid).status_code == 422
 
 
@@ -189,6 +192,9 @@ def test_unauthenticated_and_size_boundaries(client):
     for headers in ({}, {'content-length': '1'}):
         response = client.post('/v1/telemetry/fleet', content=b'x' * (MAX_BYTES + 1), headers=headers)
         assert response.status_code == 413
+    assert (
+        client.post('/v1/telemetry/fleet', json=summary(), headers={'content-encoding': 'Identity'}).status_code == 200
+    )
     assert client.post('/v1/telemetry/fleet', content=b'{').status_code == 422
     assert client.post('/v1/telemetry/fleet', content=b'{}', headers={'content-encoding': 'gzip'}).status_code == 415
 

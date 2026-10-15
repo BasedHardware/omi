@@ -9,6 +9,9 @@ import yaml
 from fastapi import FastAPI, Response
 from fastapi.testclient import TestClient
 
+from utils.byok import BYOKMiddleware
+from utils.other import endpoints
+import utils.byok as byok
 from utils.observability.fleet import UPLOADS
 from utils.observability.sync_upload import SyncUploadMetricsMiddleware
 
@@ -121,3 +124,23 @@ def test_unnamed_backfill_ingress_validates_then_gets_named_by_patcher():
     service['spec']['template']['spec']['containers'].append({'name': 'other'})
     with pytest.raises(ValueError, match='unambiguous'):
         module._ingress_literal_env(service, ingress_container_name='backend-1')
+
+
+def test_upload_metrics_include_byok_admission_rejection(monkeypatch):
+    monkeypatch.setattr(endpoints, 'verify_token', lambda token: 'local-only')
+    monkeypatch.setattr(byok, '_validated_byok_keys', lambda uid, keys: ({}, 'mismatch'))
+    app = FastAPI()
+    app.add_middleware(BYOKMiddleware)
+    app.add_middleware(SyncUploadMetricsMiddleware)
+    main = (ROOT / 'backend/main.py').read_text()
+    assert main.index('app.add_middleware(SyncUploadMetricsMiddleware)') > main.index(
+        'app.add_middleware(BYOKMiddleware)'
+    )
+    children = [UPLOADS.labels(outcome, 'unknown', 'unknown') for outcome in ('started', 'failed')]
+    before = [child._value.get() for child in children]
+    with TestClient(app) as client:
+        response = client.post(
+            '/v2/sync-local-files', headers={'Authorization': 'Bearer local', 'X-BYOK-OpenAI': 'local'}
+        )
+    assert response.status_code == 403
+    assert [child._value.get() for child in children] == [value + 1 for value in before]

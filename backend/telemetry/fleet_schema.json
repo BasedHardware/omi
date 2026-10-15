@@ -1,6 +1,176 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Omi fleet telemetry v1",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "histograms": {
+            "contains": {
+              "properties": {
+                "name": {
+                  "const": "mobile_render_duration_seconds"
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "counters": {
+            "contains": {
+              "properties": {
+                "event": {
+                  "const": "Mobile Render Observation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "histograms": {
+            "contains": {
+              "properties": {
+                "name": {
+                  "const": "screen_task_frame_duration_seconds"
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "counters": {
+            "contains": {
+              "properties": {
+                "event": {
+                  "const": "Screen Task Frame Terminal"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "histograms": {
+            "contains": {
+              "properties": {
+                "name": {
+                  "const": "wal_transcript_coverage_ratio"
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "counters": {
+            "contains": {
+              "properties": {
+                "event": {
+                  "const": "wal_transcript_coverage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "histograms": {
+            "contains": {
+              "properties": {
+                "name": {
+                  "const": "phone_battery_level_percent"
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "counters": {
+            "contains": {
+              "properties": {
+                "event": {
+                  "const": "Phone Battery Sample"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "histograms": {
+            "contains": {
+              "properties": {
+                "name": {
+                  "const": "device_battery_drain_percent_per_hour"
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "counters": {
+            "contains": {
+              "properties": {
+                "event": {
+                  "const": "Mobile Device Health Daily"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "histograms": {
+            "contains": {
+              "properties": {
+                "name": {
+                  "const": "app_startup_duration_seconds"
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "counters": {
+            "contains": {
+              "properties": {
+                "event": {
+                  "const": "App Startup Timing"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "type": "object",
   "properties": {
     "schema_version": {

@@ -71,8 +71,8 @@ edges are JSON numbers; the final edge is the string `"+Inf"`. Bucket counts
 are **cumulative within this window**, nondecreasing and including all samples
 in `+Inf`. Submit per-window bucket deltas, never lifetime totals or per-bin
 counts. Only include a histogram if its source actually measured that numeric
-quantity in the documented unit (seconds, percent, or ratio). Keep its event
-counter too. The server adds bucket counts atomically and exposes
+quantity in the documented unit (seconds, percent, or ratio). Include its associated event
+counter from the registry in the same summary; missing pairs are rejected. The server adds bucket counts atomically and exposes
 `omi_client_<name>_bucket{le,platform,build_channel}` and `_count`. There is no
 `_sum`: the payload contains no exact sum, so averages cannot be recovered.
 `histogram_quantile` remains available.

@@ -41,6 +41,13 @@ def schema(registry):
     return {
         '$schema': 'https://json-schema.org/draft/2020-12/schema',
         'title': 'Omi fleet telemetry v1',
+        'allOf': [
+            {
+                'if': {'properties': {'histograms': {'contains': {'properties': {'name': {'const': name}}}}}},
+                'then': {'properties': {'counters': {'contains': {'properties': {'event': {'const': spec['event']}}}}}},
+            }
+            for name, spec in registry['histograms'].items()
+        ],
         **obj(
             {
                 'schema_version': {'type': 'integer', 'const': 1},

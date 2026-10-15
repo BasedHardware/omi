@@ -32,7 +32,7 @@ def payload():
         'app_version': 'release-probe',
         'window_start': (now - timedelta(minutes=15)).isoformat(),
         'window_end': now.isoformat(),
-        'counters': [{'event': 'Device Connected', 'outcome': 'observed', 'count': 1}],
+        'counters': [{'event': 'App Startup Timing', 'outcome': 'observed', 'count': 1}],
         'histograms': [
             {
                 'name': 'app_startup_duration_seconds',
