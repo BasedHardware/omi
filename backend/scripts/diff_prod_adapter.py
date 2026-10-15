@@ -54,6 +54,24 @@ def expected_config(live):
         if rule[field] not in (before, after):
             raise ValueError(f'Unexpected live listen {field}: reconcile and review first')
         rule[field] = after
+    gpu_rules = [rule for rule in expected['externalRules'] if rule['name']['as'] == 'parakeet_gpu_utilization']
+    if len(gpu_rules) != 1:
+        raise ValueError('Unexpected live Parakeet GPU rule count: reconcile and review first')
+    gpu = gpu_rules[0]
+    gpu_changes = {
+        'seriesQuery': (
+            'DCGM_FI_DEV_GPU_UTIL{namespace!=""}',
+            'DCGM_FI_DEV_GPU_UTIL{container="parakeet",namespace!=""}',
+        ),
+        'metricsQuery': (
+            'avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{<<.LabelMatchers>>}[1m]))',
+            'avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{container="parakeet",<<.LabelMatchers>>}[1m]))',
+        ),
+    }
+    for field, (before, after) in gpu_changes.items():
+        if gpu.get(field) not in (before, after):
+            raise ValueError(f'Unexpected live Parakeet GPU {field}: reconcile and review first')
+        gpu[field] = after
     nllb = [rule for rule in expected['externalRules'] if rule['name']['as'] == NLLB_RULE['name']['as']]
     if nllb and nllb != [NLLB_RULE]:
         raise ValueError('Unexpected live NLLB rule: reconcile and review first')
