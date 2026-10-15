@@ -719,8 +719,12 @@ health and queries, and contact points. Do not reuse `GRAFANA_TOKEN` here; that
 secret belongs to the TV Cloud Run Grafana. The default invocation is the
 Pusher release gate: it fails closed unless the committed memory-admission
 and capture-outcome pager set is live and unpaused, Prometheus reports healthy,
-both Pusher and backend-listen scrape targets are currently healthy, and the
-exact Telegram receiver exists with resolve notifications enabled. After each
+both Pusher and backend-listen have a non-terminating scrape target and every such target is up, and the
+exact Telegram receiver exists with resolve notifications enabled. A target is terminating only when
+`kube_pod_deletion_timestamp` matches its namespace and pod; pusher and backend-listen share that join
+because both scrape jobs label `namespace`/`pod` and both Deployments drain for 120s plus a 15s preStop.
+A missing job, a down pod without that timestamp, or kube-state-metrics data that cannot confirm deletions
+still fails the gate. The check does not use `max(up)` and does not treat phase Running as terminating. After each
 rollout it additionally requires all three finalization telemetry families from
 both jobs; zero-valued labeled failure children are initialized at process
 startup so absence is unambiguously a source failure. Production repeats this
