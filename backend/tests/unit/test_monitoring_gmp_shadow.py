@@ -93,9 +93,10 @@ def test_mapping_names_are_explicit_and_custom_metrics_keep_source():
     assert all('cluster="__run__"' in r['managed_query'] for r in native)
 
 
-def test_never_query_production_application_endpoint():
+@pytest.mark.parametrize('base', ['https://api.omi.me', 'https://api.omi.me.', 'https://API.OMI.ME'])
+def test_never_query_production_application_endpoint(base):
     with pytest.raises(s.Unproven, match='forbidden'):
-        s.query_range('https://api.omi.me', 'up', 0, 86400, 300)
+        s.query_range(base, 'up', 0, 86400, 300)
 
 
 @pytest.mark.parametrize(
@@ -119,7 +120,7 @@ def test_redirect_cannot_forward_bearer_or_bypass_endpoint_checks(monkeypatch, l
     monkeypatch.setattr(s.urllib.request.HTTPSHandler, 'https_open', redirect)
     monkeypatch.setattr(s.urllib.request.HTTPHandler, 'http_open', no_plaintext)
     with pytest.raises(s.Unproven, match='302'):
-        s.query_range('https://monitoring.googleapis.com', 'up', 0, 86400, 300, token='dummy')
+        s.query_range(s.MANAGED_URL, 'up', 0, 86400, 300, token='dummy')
     assert len(seen) == 1
 
 
@@ -175,3 +176,54 @@ def test_gcloud_bearer_cannot_be_sent_to_a_custom_managed_endpoint(monkeypatch):
     monkeypatch.setattr(s.subprocess, 'run', forbidden)
     with pytest.raises(s.Unproven, match='fixed production Google Monitoring endpoint'):
         s.run(SimpleNamespace(gcloud_token=True, managed_url='https://other.example'))
+
+
+@pytest.mark.parametrize(
+    'base',
+    [
+        'https://other.example',
+        'http://127.0.0.1:19090',
+        'https://monitor.omi.me/api/datasources/proxy/uid/unreviewed',
+        'https://monitor.omi.me/api/datasources/proxy/uid/gmp-cloud-run?other=1',
+        'https://monitoring.googleapis.com',
+    ],
+)
+def test_initial_credentialed_url_is_rejected_before_transport(monkeypatch, base):
+    monkeypatch.setattr(s.urllib.request, 'build_opener', lambda *args: pytest.fail('must not build transport'))
+    with pytest.raises(s.Unproven, match='approved monitoring endpoint'):
+        s.query_range(base, 'up', 0, 86400, 300, token='dummy')
+
+
+@pytest.mark.parametrize('base', [s.MANAGED_URL, s.GRAFANA_LOCAL_URL, s.GRAFANA_MANAGED_URL])
+def test_approved_credentialed_endpoint_keeps_bearer_on_exact_origin_path(monkeypatch, base):
+    class Opener:
+        def open(self, request, timeout):
+            assert request.full_url.startswith(base + '/api/v1/query_range?')
+            assert request.get_header('Authorization') == 'Bearer dummy'
+            return io.StringIO(json.dumps(response()))
+
+    monkeypatch.setattr(s.urllib.request, 'build_opener', lambda *args: Opener())
+    assert s.query_range(base, 'up', 0, 86400, 300, token='dummy')['status'] == 'success'
+
+
+@pytest.mark.parametrize('mode', ['local', 'managed'])
+def test_env_credential_mode_is_bound_before_reading_credentials_or_mappings(monkeypatch, mode):
+    from types import SimpleNamespace
+
+    class ForbiddenEnvironment:
+        def get(self, *args):
+            pytest.fail('endpoint must be checked before reading credentials')
+
+    monkeypatch.setattr(s, 'os', SimpleNamespace(environ=ForbiddenEnvironment()))
+    monkeypatch.setattr(s.subprocess, 'run', lambda *a, **kw: pytest.fail('must not read gcloud credentials'))
+    args = SimpleNamespace(
+        gcloud_token=False, managed_url=s.MANAGED_URL, managed_token_env=None, local_token_env=None, local_url=None
+    )
+    if mode == 'managed':
+        args.managed_token_env = 'MONITOR_GRAFANA_TOKEN'
+        args.managed_url = 'https://other.example'
+    else:
+        args.local_token_env = 'MONITOR_GRAFANA_TOKEN'
+        args.local_url = 'https://other.example'
+    with pytest.raises(s.Unproven, match='fixed production Grafana'):
+        s.run(args)
