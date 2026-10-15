@@ -13434,15 +13434,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'Tapnite za popravilo';
 
   @override
-  String get consentShortMessage =>
-      'Omi z umetno inteligenco spremeni vaše pogovore v zapiske. Kadar koli jih lahko izbrišete.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'Obdelano z $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'Glasovni profil lahko kadar koli nastavite v Nastavitvah.';
 
   @override

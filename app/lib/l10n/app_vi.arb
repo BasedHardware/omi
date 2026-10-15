@@ -4116,8 +4116,6 @@
     "onboardingOmiNotOrdered": "Chưa đặt hàng",
     "onboardingOmiOrdered": "Tôi đã đặt hàng",
     "onboardingPermissionTapToFix": "Nhấn để khắc phục",
-    "consentShortMessage": "Omi dùng AI để biến các cuộc trò chuyện của bạn thành ghi chú. Bạn có thể xóa chúng bất cứ lúc nào.",
-    "consentAiProviders": "Được xử lý bằng {providers}.",
     "voiceProfileCardDismissed": "Bạn có thể thiết lập Hồ sơ giọng nói bất cứ lúc nào trong Cài đặt.",
     "homeNewRecordingButton": "Ghi âm mới",
     "chatWelcomeMessage": "Chào bạn, mình là Omi. Hỏi mình bất cứ điều gì bạn đã nói: ai đã nói gì, bạn đã hứa gì hay tóm tắt ngày của bạn. Mình cũng có thể thêm việc cần làm và ghi nhớ mọi thứ giúp bạn.",

@@ -13442,15 +13442,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'Dotknij, aby naprawić';
 
   @override
-  String get consentShortMessage =>
-      'Omi za pomocą AI zamienia Twoje rozmowy w notatki. Możesz je usunąć w każdej chwili.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'Przetwarzane przez $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'Profil głosowy możesz skonfigurować w każdej chwili w Ustawieniach.';
 
   @override

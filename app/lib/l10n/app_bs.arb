@@ -11542,8 +11542,6 @@
     "onboardingOmiNotOrdered": "Još nisam naručio/la",
     "onboardingOmiOrdered": "Naručio/la sam ga",
     "onboardingPermissionTapToFix": "Dodirnite da popravite",
-    "consentShortMessage": "Omi koristi AI da vaše razgovore pretvori u bilješke. Možete ih izbrisati bilo kada.",
-    "consentAiProviders": "Obrađuje se pomoću {providers}.",
     "voiceProfileCardDismissed": "Glasovni profil možete podesiti bilo kada u Postavkama.",
     "homeNewRecordingButton": "Novo snimanje",
     "chatWelcomeMessage": "Zdravo, ja sam Omi. Pitaj me bilo šta o čemu si pričao: šta je neko rekao, šta si obećao ili sažetak tvog dana. Mogu i dodavati zadatke i pamtiti stvari za tebe.",

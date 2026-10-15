@@ -13472,15 +13472,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'Toca per solucionar-ho';
 
   @override
-  String get consentShortMessage =>
-      'Omi fa servir la IA per convertir les teves converses en notes. Les pots esborrar quan vulguis.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'Processat amb $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'Pots configurar el perfil de veu quan vulguis a Configuració.';
 
   @override

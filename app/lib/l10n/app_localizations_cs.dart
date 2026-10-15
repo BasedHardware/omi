@@ -13405,14 +13405,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'Klepnutím opravíte';
 
   @override
-  String get consentShortMessage => 'Omi pomocí AI mění vaše konverzace v poznámky. Kdykoli je můžete smazat.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'Zpracovává $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'Hlasový profil můžete kdykoli nastavit v Nastavení.';
 
   @override

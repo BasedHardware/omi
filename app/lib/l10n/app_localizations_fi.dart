@@ -13408,15 +13408,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'Korjaa napauttamalla';
 
   @override
-  String get consentShortMessage =>
-      'Omi tekee keskusteluistasi muistiinpanoja tekoälyn avulla. Voit poistaa ne milloin tahansa.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'Käsittely: $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'Voit määrittää ääniprofiilin milloin tahansa asetuksissa.';
 
   @override

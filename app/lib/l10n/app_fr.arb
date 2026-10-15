@@ -4151,8 +4151,6 @@
     "onboardingOmiNotOrdered": "Pas encore commandé",
     "onboardingOmiOrdered": "Je l'ai commandé",
     "onboardingPermissionTapToFix": "Touchez pour corriger",
-    "consentShortMessage": "Omi utilise l'IA pour transformer vos conversations en notes. Vous pouvez les supprimer à tout moment.",
-    "consentAiProviders": "Traité avec {providers}.",
     "voiceProfileCardDismissed": "Vous pouvez configurer votre profil vocal à tout moment dans les Réglages.",
     "homeNewRecordingButton": "Nouvel enregistrement",
     "chatWelcomeMessage": "Salut, je suis Omi. Demandez-moi tout ce dont vous avez parlé : ce que quelqu'un a dit, ce que vous avez promis ou un résumé de votre journée. Je peux aussi ajouter des tâches et retenir des choses pour vous.",

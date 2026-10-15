@@ -13495,15 +13495,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'சரிசெய்ய தட்டவும்';
 
   @override
-  String get consentShortMessage =>
-      'Omi AI மூலம் உங்கள் உரையாடல்களைக் குறிப்புகளாக மாற்றுகிறது. எப்போது வேண்டுமானாலும் நீக்கலாம்.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return '$providers மூலம் செயலாக்கப்படுகிறது.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'அமைப்புகளில் எப்போது வேண்டுமானாலும் குரல் சுயவிவரத்தை அமைக்கலாம்.';
 
   @override

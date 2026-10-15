@@ -13401,15 +13401,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'Nhấn để khắc phục';
 
   @override
-  String get consentShortMessage =>
-      'Omi dùng AI để biến các cuộc trò chuyện của bạn thành ghi chú. Bạn có thể xóa chúng bất cứ lúc nào.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'Được xử lý bằng $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'Bạn có thể thiết lập Hồ sơ giọng nói bất cứ lúc nào trong Cài đặt.';
 
   @override

@@ -13509,15 +13509,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'Touchez pour corriger';
 
   @override
-  String get consentShortMessage =>
-      'Omi utilise l\'IA pour transformer vos conversations en notes. Vous pouvez les supprimer à tout moment.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'Traité avec $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'Vous pouvez configurer votre profil vocal à tout moment dans les Réglages.';
 
   @override

@@ -4116,8 +4116,6 @@
     "onboardingOmiNotOrdered": "Encara no l'he demanat",
     "onboardingOmiOrdered": "Ja l'he demanat",
     "onboardingPermissionTapToFix": "Toca per solucionar-ho",
-    "consentShortMessage": "Omi fa servir la IA per convertir les teves converses en notes. Les pots esborrar quan vulguis.",
-    "consentAiProviders": "Processat amb {providers}.",
     "voiceProfileCardDismissed": "Pots configurar el perfil de veu quan vulguis a Configuració.",
     "homeNewRecordingButton": "Nova gravació",
     "chatWelcomeMessage": "Hola, soc l'Omi. Pregunta'm qualsevol cosa del que has parlat: què va dir algú, què vas prometre o un resum del teu dia. També puc afegir tasques i recordar coses per tu.",

@@ -11542,8 +11542,6 @@
     "onboardingOmiNotOrdered": "Hindi pa naka-order",
     "onboardingOmiOrdered": "Na-order ko na",
     "onboardingPermissionTapToFix": "I-tap para ayusin",
-    "consentShortMessage": "Ginagamit ng Omi ang AI para gawing notes ang iyong mga usapan. Puwede mo itong burahin anumang oras.",
-    "consentAiProviders": "Pinoproseso gamit ang {providers}.",
     "voiceProfileCardDismissed": "Maaari mong i-set up ang Voice Profile anumang oras sa Settings.",
     "homeNewRecordingButton": "Bagong Recording",
     "chatWelcomeMessage": "Hi, ako si Omi. Itanong mo sa akin ang kahit ano tungkol sa mga napag-usapan mo: ang sinabi ng isang tao, ang ipinangako mo, o buod ng araw mo. Kaya ko ring magdagdag ng mga gawain at tandaan ang mga bagay para sa iyo.",

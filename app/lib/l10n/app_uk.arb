@@ -4116,8 +4116,6 @@
     "onboardingOmiNotOrdered": "Ще не замовив",
     "onboardingOmiOrdered": "Я вже замовив",
     "onboardingPermissionTapToFix": "Торкніться, щоб виправити",
-    "consentShortMessage": "Omi за допомогою ШІ перетворює ваші розмови на нотатки. Їх можна видалити будь-коли.",
-    "consentAiProviders": "Обробка: {providers}.",
     "voiceProfileCardDismissed": "Голосовий профіль можна налаштувати будь-коли в Налаштуваннях.",
     "homeNewRecordingButton": "Новий запис",
     "chatWelcomeMessage": "Привіт, я Omi. Питайте про все, про що ви говорили: що хтось сказав, що ви пообіцяли або як минув ваш день. Я також можу додавати завдання й запам'ятовувати важливе за вас.",

@@ -13438,15 +13438,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'Націсніце, каб выправіць';
 
   @override
-  String get consentShortMessage =>
-      'Omi з дапамогай ШІ ператварае вашы размовы ў нататкі. Іх можна выдаліць у любы момант.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'Апрацоўка: $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'Профіль голасу заўсёды можна наладзіць у Наладах.';
 
   @override

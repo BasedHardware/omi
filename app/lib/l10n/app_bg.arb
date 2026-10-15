@@ -4116,8 +4116,6 @@
     "onboardingOmiNotOrdered": "Още не съм поръчал",
     "onboardingOmiOrdered": "Поръчал съм го",
     "onboardingPermissionTapToFix": "Докоснете, за да поправите",
-    "consentShortMessage": "Omi използва ИИ, за да превърне разговорите ви в бележки. Можете да ги изтриете по всяко време.",
-    "consentAiProviders": "Обработва се с {providers}.",
     "voiceProfileCardDismissed": "Можете да настроите гласовия профил по всяко време от Настройки.",
     "homeNewRecordingButton": "Нов запис",
     "chatWelcomeMessage": "Здравей, аз съм Omi. Питай ме за всичко, за което си говорил: какво е казал някой, какво си обещал или обобщение на деня ти. Мога и да добавям задачи и да запомням неща вместо теб.",

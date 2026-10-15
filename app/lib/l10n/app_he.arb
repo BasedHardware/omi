@@ -11542,8 +11542,6 @@
     "onboardingOmiNotOrdered": "עוד לא הזמנתי",
     "onboardingOmiOrdered": "הזמנתי",
     "onboardingPermissionTapToFix": "הקישו לתיקון",
-    "consentShortMessage": "Omi משתמש בבינה מלאכותית כדי להפוך את השיחות שלך להערות. אפשר למחוק אותן בכל עת.",
-    "consentAiProviders": "מעובד באמצעות {providers}.",
     "voiceProfileCardDismissed": "אפשר להגדיר פרופיל קולי בכל עת בהגדרות.",
     "homeNewRecordingButton": "הקלטה חדשה",
     "chatWelcomeMessage": "היי, אני Omi. שאל אותי כל דבר על מה שדיברת: מה מישהו אמר, מה הבטחת או סיכום של היום שלך. אני יכול גם להוסיף משימות ולזכור דברים בשבילך.",

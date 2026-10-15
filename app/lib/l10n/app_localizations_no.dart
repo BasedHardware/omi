@@ -13405,15 +13405,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'Trykk for å fikse';
 
   @override
-  String get consentShortMessage =>
-      'Omi bruker KI til å gjøre samtalene dine om til notater. Du kan slette dem når som helst.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'Behandles med $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'Du kan sette opp stemmeprofilen når som helst i Innstillinger.';
 
   @override

@@ -13464,15 +13464,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'Допрете за да поправите';
 
   @override
-  String get consentShortMessage =>
-      'Omi користи вештачка интелигенција за да ги претвори вашите разговори во белешки. Можете да ги избришете во секое време.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'Се обработува со $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'Гласовниот профил можете да го поставите во секое време во Поставки.';
 
   @override

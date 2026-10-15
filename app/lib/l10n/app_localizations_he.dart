@@ -13310,14 +13310,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'הקישו לתיקון';
 
   @override
-  String get consentShortMessage => 'Omi משתמש בבינה מלאכותית כדי להפוך את השיחות שלך להערות. אפשר למחוק אותן בכל עת.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'מעובד באמצעות $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'אפשר להגדיר פרופיל קולי בכל עת בהגדרות.';
 
   @override

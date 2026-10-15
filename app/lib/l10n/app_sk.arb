@@ -4116,8 +4116,6 @@
     "onboardingOmiNotOrdered": "Ešte neobjednané",
     "onboardingOmiOrdered": "Už som ho objednal/a",
     "onboardingPermissionTapToFix": "Ťuknutím opravíte",
-    "consentShortMessage": "Omi pomocou AI mení vaše konverzácie na poznámky. Kedykoľvek ich môžete vymazať.",
-    "consentAiProviders": "Spracúva {providers}.",
     "voiceProfileCardDismissed": "Hlasový profil si môžete kedykoľvek nastaviť v Nastaveniach.",
     "homeNewRecordingButton": "Nový záznam",
     "chatWelcomeMessage": "Ahoj, som Omi. Opýtaj sa ma na čokoľvek, o čom si hovoril: čo kto povedal, čo si sľúbil alebo zhrnutie tvojho dňa. Viem aj pridávať úlohy a pamätať si veci za teba.",

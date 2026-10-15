@@ -277,6 +277,9 @@ class $AssetsImagesGen {
   AssetGenImage get onboardingBg6 =>
       const AssetGenImage('assets/images/onboarding-bg-6.webp');
 
+  /// File path: assets/images/onboarding.mp4
+  String get onboarding => 'assets/images/onboarding.mp4';
+
   /// File path: assets/images/plaud_note_pin.webp
   AssetGenImage get plaudNotePin =>
       const AssetGenImage('assets/images/plaud_note_pin.webp');
@@ -391,6 +394,7 @@ class $AssetsImagesGen {
         onboardingBg51,
         onboardingBg52,
         onboardingBg6,
+        onboarding,
         plaudNotePin,
         raybanMeta,
         recordingGreenCircleIcon,
@@ -501,17 +505,7 @@ class $AssetsTestGen {
   List<String> get values => [ttsProgressiveProbe];
 }
 
-class $AssetsVideosGen {
-  const $AssetsVideosGen();
-
-  /// File path: assets/videos/onboarding_launch_loop.mp4
-  String get onboardingLaunchLoop => 'assets/videos/onboarding_launch_loop.mp4';
-
-  /// List of all assets
-  List<String> get values => [onboardingLaunchLoop];
-}
-
-class Assets {
+abstract final class Assets {
   static const $AssetsCompetitorLogosGen competitorLogos =
       $AssetsCompetitorLogosGen();
   static const $AssetsFontsGen fonts = $AssetsFontsGen();
@@ -520,7 +514,6 @@ class Assets {
       $AssetsIntegrationAppLogosGen();
   static const $AssetsModelsGen models = $AssetsModelsGen();
   static const $AssetsTestGen test = $AssetsTestGen();
-  static const $AssetsVideosGen videos = $AssetsVideosGen();
   static const String shorebird = 'shorebird.yaml';
 
   /// List of all assets

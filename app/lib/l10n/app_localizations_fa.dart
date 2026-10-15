@@ -13398,15 +13398,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'برای رفع ضربه بزنید';
 
   @override
-  String get consentShortMessage =>
-      'Omi با هوش مصنوعی گفتگوهای شما را به یادداشت تبدیل می‌کند. هر زمان بخواهید می‌توانید آن‌ها را حذف کنید.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'پردازش با $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'هر زمان می‌توانید نمایه صدا را در تنظیمات راه‌اندازی کنید.';
 
   @override

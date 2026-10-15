@@ -4116,8 +4116,6 @@
     "onboardingOmiNotOrdered": "Ikke bestilt ennå",
     "onboardingOmiOrdered": "Jeg har bestilt den",
     "onboardingPermissionTapToFix": "Trykk for å fikse",
-    "consentShortMessage": "Omi bruker KI til å gjøre samtalene dine om til notater. Du kan slette dem når som helst.",
-    "consentAiProviders": "Behandles med {providers}.",
     "voiceProfileCardDismissed": "Du kan sette opp stemmeprofilen når som helst i Innstillinger.",
     "homeNewRecordingButton": "Ny opptak",
     "chatWelcomeMessage": "Hei, jeg er Omi. Spør meg om alt du har snakket om: hva noen sa, hva du lovet, eller et sammendrag av dagen din. Jeg kan også legge til oppgaver og huske ting for deg.",

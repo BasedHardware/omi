@@ -13434,15 +13434,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'Ketik untuk membetulkan';
 
   @override
-  String get consentShortMessage =>
-      'Omi menggunakan AI untuk menukar perbualan anda kepada nota. Anda boleh memadamkannya bila-bila masa.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'Diproses dengan $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'Anda boleh menyediakan Profil Suara pada bila-bila masa dalam Tetapan.';
 
   @override

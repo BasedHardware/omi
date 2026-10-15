@@ -13433,15 +13433,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'Торкніться, щоб виправити';
 
   @override
-  String get consentShortMessage =>
-      'Omi за допомогою ШІ перетворює ваші розмови на нотатки. Їх можна видалити будь-коли.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'Обробка: $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'Голосовий профіль можна налаштувати будь-коли в Налаштуваннях.';
 
   @override

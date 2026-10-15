@@ -4116,8 +4116,6 @@
     "onboardingOmiNotOrdered": "Inte beställt än",
     "onboardingOmiOrdered": "Jag har beställt den",
     "onboardingPermissionTapToFix": "Tryck för att åtgärda",
-    "consentShortMessage": "Omi använder AI för att göra dina samtal till anteckningar. Du kan radera dem när som helst.",
-    "consentAiProviders": "Bearbetas med {providers}.",
     "voiceProfileCardDismissed": "Du kan ställa in din röstprofil när som helst i Inställningar.",
     "homeNewRecordingButton": "Ny inspelning",
     "chatWelcomeMessage": "Hej, jag är Omi. Fråga mig om allt du har pratat om: vad någon sa, vad du lovade eller en sammanfattning av din dag. Jag kan också lägga till uppgifter och komma ihåg saker åt dig.",

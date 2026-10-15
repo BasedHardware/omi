@@ -13487,15 +13487,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'Πατήστε για διόρθωση';
 
   @override
-  String get consentShortMessage =>
-      'Το Omi χρησιμοποιεί AI για να μετατρέπει τις συνομιλίες σου σε σημειώσεις. Μπορείς να τις διαγράψεις οποιαδήποτε στιγμή.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'Επεξεργασία μέσω $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'Μπορείτε να ρυθμίσετε το προφίλ φωνής ανά πάσα στιγμή από τις Ρυθμίσεις.';
 
   @override

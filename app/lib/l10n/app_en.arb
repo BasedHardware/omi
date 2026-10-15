@@ -16133,20 +16133,6 @@
     "@onboardingPermissionTapToFix": {
         "description": "Onboarding permissions: shown on a denied permission card; tapping opens Settings"
     },
-    "consentShortMessage": "Omi uses AI to turn your conversations into notes. You can delete them anytime.",
-    "@consentShortMessage": {
-        "description": "Onboarding data & privacy consent: one-line summary of storage and AI processing"
-    },
-    "consentAiProviders": "Processed with {providers}.",
-    "@consentAiProviders": {
-        "description": "Onboarding consent: names the third-party AI providers (brand names, not translated)",
-        "placeholders": {
-            "providers": {
-                "type": "String",
-                "example": "Deepgram, OpenAI"
-            }
-        }
-    },
     "voiceProfileCardDismissed": "You can set up Voice Profile anytime in Settings.",
     "@voiceProfileCardDismissed": {
         "description": "Toast after dismissing the Teach Omi your voice card on Home; points to Settings > Voice Profile."

@@ -13330,14 +13330,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'اضغط للإصلاح';
 
   @override
-  String get consentShortMessage => 'يستخدم Omi الذكاء الاصطناعي لتحويل محادثاتك إلى ملاحظات. يمكنك حذفها في أي وقت.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'تتم المعالجة بواسطة $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'يمكنك إعداد بصمة صوتك في أي وقت من الإعدادات.';
 
   @override

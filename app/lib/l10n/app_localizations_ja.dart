@@ -13215,14 +13215,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'タップして修正';
 
   @override
-  String get consentShortMessage => 'OmiはAIで会話をメモにまとめます。メモはいつでも削除できます。';
-
-  @override
-  String consentAiProviders(String providers) {
-    return '$providers で処理されます。';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'ボイスプロフィールは設定からいつでも設定できます。';
 
   @override

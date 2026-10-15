@@ -13455,15 +13455,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'Koppints a javításhoz';
 
   @override
-  String get consentShortMessage =>
-      'Az Omi mesterséges intelligenciával jegyzetekké alakítja a beszélgetéseidet. Bármikor törölheted őket.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'Feldolgozás: $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'A hangprofilt bármikor beállíthatod a Beállításokban.';
 
   @override

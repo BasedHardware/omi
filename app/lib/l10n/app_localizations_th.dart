@@ -13337,14 +13337,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'แตะเพื่อแก้ไข';
 
   @override
-  String get consentShortMessage => 'Omi ใช้ AI เปลี่ยนบทสนทนาของคุณเป็นโน้ต คุณลบได้ทุกเมื่อ';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'ประมวลผลด้วย $providers';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'คุณตั้งค่าโปรไฟล์เสียงได้ทุกเมื่อในการตั้งค่า';
 
   @override

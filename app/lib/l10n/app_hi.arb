@@ -4116,8 +4116,6 @@
     "onboardingOmiNotOrdered": "अभी ऑर्डर नहीं किया",
     "onboardingOmiOrdered": "मैंने ऑर्डर कर दिया है",
     "onboardingPermissionTapToFix": "ठीक करने के लिए टैप करें",
-    "consentShortMessage": "Omi AI की मदद से आपकी बातचीत को नोट्स में बदलता है। आप उन्हें कभी भी हटा सकते हैं।",
-    "consentAiProviders": "{providers} के साथ प्रोसेस किया जाता है।",
     "voiceProfileCardDismissed": "आप सेटिंग्स में कभी भी वॉइस प्रोफ़ाइल सेट कर सकते हैं।",
     "homeNewRecordingButton": "नई रिकॉर्डिंग",
     "chatWelcomeMessage": "नमस्ते, मैं Omi हूँ। आपने जिस बारे में बात की है, उसके बारे में कुछ भी पूछें: किसी ने क्या कहा, आपने क्या वादा किया, या आपके दिन का सारांश। मैं काम जोड़ सकता हूँ और आपके लिए चीज़ें याद भी रख सकता हूँ।",

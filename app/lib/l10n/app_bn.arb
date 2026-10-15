@@ -11542,8 +11542,6 @@
     "onboardingOmiNotOrdered": "এখনও অর্ডার করিনি",
     "onboardingOmiOrdered": "আমি অর্ডার করেছি",
     "onboardingPermissionTapToFix": "ঠিক করতে ট্যাপ করুন",
-    "consentShortMessage": "Omi AI ব্যবহার করে আপনার কথোপকথনকে নোটে পরিণত করে। যেকোনো সময় মুছে ফেলতে পারেন।",
-    "consentAiProviders": "{providers} দিয়ে প্রক্রিয়া করা হয়।",
     "voiceProfileCardDismissed": "সেটিংসে যেকোনো সময় ভয়েস প্রোফাইল সেট করতে পারেন।",
     "homeNewRecordingButton": "নতুন রেকর্ডিং",
     "chatWelcomeMessage": "হাই, আমি Omi। আপনি যা নিয়ে কথা বলেছেন তার যেকোনো কিছু জিজ্ঞেস করুন: কেউ কী বলেছে, আপনি কী প্রতিশ্রুতি দিয়েছেন, বা আপনার দিনের সারাংশ। আমি কাজ যোগ করতে এবং আপনার জন্য জিনিস মনে রাখতেও পারি।",

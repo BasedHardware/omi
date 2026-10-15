@@ -4116,8 +4116,6 @@
     "onboardingOmiNotOrdered": "لم أطلبه بعد",
     "onboardingOmiOrdered": "لقد طلبته",
     "onboardingPermissionTapToFix": "اضغط للإصلاح",
-    "consentShortMessage": "يستخدم Omi الذكاء الاصطناعي لتحويل محادثاتك إلى ملاحظات. يمكنك حذفها في أي وقت.",
-    "consentAiProviders": "تتم المعالجة بواسطة {providers}.",
     "voiceProfileCardDismissed": "يمكنك إعداد بصمة صوتك في أي وقت من الإعدادات.",
     "homeNewRecordingButton": "تسجيل جديد",
     "chatWelcomeMessage": "مرحبًا، أنا Omi. اسألني عن أي شيء تحدثت عنه: ما قاله شخص ما، أو ما وعدت به، أو ملخص يومك. يمكنني أيضًا إضافة مهام وتذكّر الأشياء لك.",

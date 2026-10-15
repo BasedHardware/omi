@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/home/page.dart';
+import 'package:omi/pages/onboarding/device_selection.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/providers/auth_provider.dart';
@@ -71,8 +72,7 @@ class _MobileAppState extends State<MobileApp> {
             },
           );
         } else {
-          // Signed out: straight to sign-in, the first onboarding step.
-          return const OnboardingWrapper();
+          return const DeviceSelectionPage();
         }
       },
     );

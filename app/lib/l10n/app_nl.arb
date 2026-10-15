@@ -4116,8 +4116,6 @@
     "onboardingOmiNotOrdered": "Nog niet besteld",
     "onboardingOmiOrdered": "Ik heb hem besteld",
     "onboardingPermissionTapToFix": "Tik om te herstellen",
-    "consentShortMessage": "Omi maakt met AI notities van je gesprekken. Je kunt ze altijd verwijderen.",
-    "consentAiProviders": "Verwerkt met {providers}.",
     "voiceProfileCardDismissed": "Je kunt je stemprofiel altijd instellen via Instellingen.",
     "homeNewRecordingButton": "Nieuwe opname",
     "chatWelcomeMessage": "Hoi, ik ben Omi. Vraag me alles over waar je het over hebt gehad: wat iemand zei, wat je beloofde of een samenvatting van je dag. Ik kan ook taken toevoegen en dingen voor je onthouden.",

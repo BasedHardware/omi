@@ -13442,14 +13442,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'ಸರಿಪಡಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ';
 
   @override
-  String get consentShortMessage => 'Omi AI ಬಳಸಿ ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳನ್ನು ಟಿಪ್ಪಣಿಗಳಾಗಿ ಮಾಡುತ್ತದೆ. ಯಾವಾಗ ಬೇಕಾದರೂ ಅಳಿಸಬಹುದು.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return '$providers ಮೂಲಕ ಸಂಸ್ಕರಿಸಲಾಗುತ್ತದೆ.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಯಾವಾಗ ಬೇಕಾದರೂ ಧ್ವನಿ ಪ್ರೊಫೈಲ್ ಹೊಂದಿಸಬಹುದು.';
 
   @override

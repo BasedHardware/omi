@@ -11542,8 +11542,6 @@
     "onboardingOmiNotOrdered": "هنوز سفارش نداده‌ام",
     "onboardingOmiOrdered": "سفارش داده‌ام",
     "onboardingPermissionTapToFix": "برای رفع ضربه بزنید",
-    "consentShortMessage": "Omi با هوش مصنوعی گفتگوهای شما را به یادداشت تبدیل می‌کند. هر زمان بخواهید می‌توانید آن‌ها را حذف کنید.",
-    "consentAiProviders": "پردازش با {providers}.",
     "voiceProfileCardDismissed": "هر زمان می‌توانید نمایه صدا را در تنظیمات راه‌اندازی کنید.",
     "homeNewRecordingButton": "ضبط جدید",
     "chatWelcomeMessage": "سلام، من Omi هستم. هر چیزی درباره صحبت‌هایت بپرس: اینکه کسی چه گفت، چه قولی دادی یا خلاصه‌ای از روزت. می‌توانم کار هم اضافه کنم و چیزها را برایت به خاطر بسپارم.",

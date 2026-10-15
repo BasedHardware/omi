@@ -4116,8 +4116,6 @@
     "onboardingOmiNotOrdered": "En ole vielä tilannut",
     "onboardingOmiOrdered": "Olen tilannut sen",
     "onboardingPermissionTapToFix": "Korjaa napauttamalla",
-    "consentShortMessage": "Omi tekee keskusteluistasi muistiinpanoja tekoälyn avulla. Voit poistaa ne milloin tahansa.",
-    "consentAiProviders": "Käsittely: {providers}.",
     "voiceProfileCardDismissed": "Voit määrittää ääniprofiilin milloin tahansa asetuksissa.",
     "homeNewRecordingButton": "Uusi tallennus",
     "chatWelcomeMessage": "Hei, olen Omi. Kysy minulta mitä tahansa siitä, mistä olet puhunut: mitä joku sanoi, mitä lupasit tai yhteenveto päivästäsi. Voin myös lisätä tehtäviä ja muistaa asioita puolestasi.",

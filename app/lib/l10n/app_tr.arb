@@ -4151,8 +4151,6 @@
     "onboardingOmiNotOrdered": "Henüz sipariş vermedim",
     "onboardingOmiOrdered": "Sipariş verdim",
     "onboardingPermissionTapToFix": "Düzeltmek için dokunun",
-    "consentShortMessage": "Omi, konuşmalarını yapay zekâ ile notlara dönüştürür. İstediğin zaman silebilirsin.",
-    "consentAiProviders": "{providers} ile işlenir.",
     "voiceProfileCardDismissed": "Ses profilini istediğin zaman Ayarlar'dan kurabilirsin.",
     "homeNewRecordingButton": "Yeni Kayıt",
     "chatWelcomeMessage": "Merhaba, ben Omi. Konuştuğun her şeyi bana sorabilirsin: birinin ne dediğini, ne söz verdiğini ya da gününün özetini. Görev de ekleyebilir ve senin için bir şeyleri hatırlayabilirim.",

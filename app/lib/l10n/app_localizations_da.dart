@@ -13390,15 +13390,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'Tryk for at rette';
 
   @override
-  String get consentShortMessage =>
-      'Omi bruger AI til at gøre dine samtaler til noter. Du kan slette dem når som helst.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'Behandles med $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'Du kan altid oprette din stemmeprofil under Indstillinger.';
 
   @override

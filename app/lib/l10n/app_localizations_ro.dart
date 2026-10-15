@@ -13458,15 +13458,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'Atinge pentru a remedia';
 
   @override
-  String get consentShortMessage =>
-      'Omi folosește AI pentru a transforma conversațiile tale în notițe. Le poți șterge oricând.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'Procesat cu $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'Poți configura profilul vocal oricând din Setări.';
 
   @override

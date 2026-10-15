@@ -13508,15 +13508,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'I-tap para ayusin';
 
   @override
-  String get consentShortMessage =>
-      'Ginagamit ng Omi ang AI para gawing notes ang iyong mga usapan. Puwede mo itong burahin anumang oras.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'Pinoproseso gamit ang $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'Maaari mong i-set up ang Voice Profile anumang oras sa Settings.';
 
   @override

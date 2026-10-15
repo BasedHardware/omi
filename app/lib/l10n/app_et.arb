@@ -4116,8 +4116,6 @@
     "onboardingOmiNotOrdered": "Pole veel tellinud",
     "onboardingOmiOrdered": "Olen selle tellinud",
     "onboardingPermissionTapToFix": "Puuduta parandamiseks",
-    "consentShortMessage": "Omi muudab tehisintellekti abil sinu vestlused märkmeteks. Saad need igal ajal kustutada.",
-    "consentAiProviders": "Töödeldakse teenustega {providers}.",
     "voiceProfileCardDismissed": "Häälprofiili saad seadistada igal ajal seadetes.",
     "homeNewRecordingButton": "Uus salvestus",
     "chatWelcomeMessage": "Tere, mina olen Omi. Küsi minult kõike, millest oled rääkinud: mida keegi ütles, mida sa lubasid või kokkuvõtet oma päevast. Saan ka ülesandeid lisada ja asju sinu eest meeles pidada.",

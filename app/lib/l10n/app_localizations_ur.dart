@@ -13417,15 +13417,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'ٹھیک کرنے کے لیے ٹیپ کریں';
 
   @override
-  String get consentShortMessage =>
-      'Omi AI کی مدد سے آپ کی گفتگو کو نوٹس میں بدلتا ہے۔ آپ انہیں کسی بھی وقت حذف کر سکتے ہیں۔';
-
-  @override
-  String consentAiProviders(String providers) {
-    return '$providers کے ذریعے پروسیس کیا جاتا ہے۔';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'آپ کسی بھی وقت سیٹنگز میں وائس پروفائل سیٹ کر سکتے ہیں۔';
 
   @override

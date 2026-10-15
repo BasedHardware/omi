@@ -11542,8 +11542,6 @@
     "onboardingOmiNotOrdered": "Še nisem naročil/a",
     "onboardingOmiOrdered": "Naročil/a sem ga",
     "onboardingPermissionTapToFix": "Tapnite za popravilo",
-    "consentShortMessage": "Omi z umetno inteligenco spremeni vaše pogovore v zapiske. Kadar koli jih lahko izbrišete.",
-    "consentAiProviders": "Obdelano z {providers}.",
     "voiceProfileCardDismissed": "Glasovni profil lahko kadar koli nastavite v Nastavitvah.",
     "homeNewRecordingButton": "Novo snemanje",
     "chatWelcomeMessage": "Živjo, sem Omi. Vprašaj me karkoli o tem, o čemer si govoril: kaj je kdo rekel, kaj si obljubil ali povzetek tvojega dne. Lahko tudi dodajam opravila in si zapomnim stvari namesto tebe.",

@@ -13397,15 +13397,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'Puuduta parandamiseks';
 
   @override
-  String get consentShortMessage =>
-      'Omi muudab tehisintellekti abil sinu vestlused märkmeteks. Saad need igal ajal kustutada.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'Töödeldakse teenustega $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'Häälprofiili saad seadistada igal ajal seadetes.';
 
   @override

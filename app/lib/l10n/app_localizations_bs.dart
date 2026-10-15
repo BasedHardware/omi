@@ -13433,15 +13433,6 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'Dodirnite da popravite';
 
   @override
-  String get consentShortMessage =>
-      'Omi koristi AI da vaše razgovore pretvori u bilješke. Možete ih izbrisati bilo kada.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'Obrađuje se pomoću $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'Glasovni profil možete podesiti bilo kada u Postavkama.';
 
   @override

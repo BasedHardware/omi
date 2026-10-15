@@ -4116,8 +4116,6 @@
     "onboardingOmiNotOrdered": "Încă nu am comandat",
     "onboardingOmiOrdered": "L-am comandat",
     "onboardingPermissionTapToFix": "Atinge pentru a remedia",
-    "consentShortMessage": "Omi folosește AI pentru a transforma conversațiile tale în notițe. Le poți șterge oricând.",
-    "consentAiProviders": "Procesat cu {providers}.",
     "voiceProfileCardDismissed": "Poți configura profilul vocal oricând din Setări.",
     "homeNewRecordingButton": "Înregistrare nouă",
     "chatWelcomeMessage": "Salut, sunt Omi. Întreabă-mă orice despre ce ai vorbit: ce a spus cineva, ce ai promis sau un rezumat al zilei tale. Pot și să adaug sarcini și să țin minte lucruri pentru tine.",

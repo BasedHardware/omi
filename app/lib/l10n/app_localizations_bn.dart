@@ -13400,14 +13400,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'ঠিক করতে ট্যাপ করুন';
 
   @override
-  String get consentShortMessage => 'Omi AI ব্যবহার করে আপনার কথোপকথনকে নোটে পরিণত করে। যেকোনো সময় মুছে ফেলতে পারেন।';
-
-  @override
-  String consentAiProviders(String providers) {
-    return '$providers দিয়ে প্রক্রিয়া করা হয়।';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'সেটিংসে যেকোনো সময় ভয়েস প্রোফাইল সেট করতে পারেন।';
 
   @override

@@ -13455,14 +13455,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'సరిచేయడానికి నొక్కండి';
 
   @override
-  String get consentShortMessage => 'Omi AI సహాయంతో మీ సంభాషణలను నోట్స్‌గా మారుస్తుంది. వాటిని ఎప్పుడైనా తొలగించవచ్చు.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return '$providers ద్వారా ప్రాసెస్ చేయబడుతుంది.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'సెట్టింగ్‌లలో ఎప్పుడైనా వాయిస్ ప్రొఫైల్ సెటప్ చేయవచ్చు.';
 
   @override

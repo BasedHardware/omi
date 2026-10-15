@@ -13221,14 +13221,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onboardingPermissionTapToFix => '탭하여 해결';
 
   @override
-  String get consentShortMessage => 'Omi는 AI로 대화를 메모로 정리합니다. 언제든지 삭제할 수 있습니다.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return '$providers(으)로 처리됩니다.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => '음성 프로필은 설정에서 언제든지 설정할 수 있어요.';
 
   @override

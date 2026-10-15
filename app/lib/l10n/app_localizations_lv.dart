@@ -13432,14 +13432,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'Pieskarieties, lai labotu';
 
   @override
-  String get consentShortMessage => 'Omi ar MI palīdzību pārvērš jūsu sarunas piezīmēs. Tās var izdzēst jebkurā laikā.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'Apstrādā $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'Balss profilu varat iestatīt jebkurā laikā iestatījumos.';
 
   @override

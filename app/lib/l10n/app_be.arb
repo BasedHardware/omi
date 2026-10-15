@@ -11542,8 +11542,6 @@
     "onboardingOmiNotOrdered": "Яшчэ не замовіў",
     "onboardingOmiOrdered": "Я ўжо замовіў",
     "onboardingPermissionTapToFix": "Націсніце, каб выправіць",
-    "consentShortMessage": "Omi з дапамогай ШІ ператварае вашы размовы ў нататкі. Іх можна выдаліць у любы момант.",
-    "consentAiProviders": "Апрацоўка: {providers}.",
     "voiceProfileCardDismissed": "Профіль голасу заўсёды можна наладзіць у Наладах.",
     "homeNewRecordingButton": "Новы запіс",
     "chatWelcomeMessage": "Прывітанне, я Omi. Пытайцеся пра ўсё, пра што вы размаўлялі: што хтосьці сказаў, што вы паабяцалі, ці як прайшоў ваш дзень. Я таксама магу дадаваць задачы і запамінаць рэчы за вас.",

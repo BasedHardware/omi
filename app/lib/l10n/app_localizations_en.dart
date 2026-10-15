@@ -13388,14 +13388,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'Tap to fix';
 
   @override
-  String get consentShortMessage => 'Omi uses AI to turn your conversations into notes. You can delete them anytime.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'Processed with $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'You can set up Voice Profile anytime in Settings.';
 
   @override

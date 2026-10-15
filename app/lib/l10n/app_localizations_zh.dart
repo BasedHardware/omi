@@ -13196,14 +13196,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onboardingPermissionTapToFix => '点按以修复';
 
   @override
-  String get consentShortMessage => 'Omi 用 AI 把你的对话整理成笔记。你可以随时删除。';
-
-  @override
-  String consentAiProviders(String providers) {
-    return '由 $providers 处理。';
-  }
-
-  @override
   String get voiceProfileCardDismissed => '你可以随时在设置中设置声音档案。';
 
   @override

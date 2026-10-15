@@ -13443,15 +13443,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'Toca para solucionarlo';
 
   @override
-  String get consentShortMessage =>
-      'Omi usa IA para convertir tus conversaciones en notas. Puedes eliminarlas cuando quieras.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'Procesado con $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'Puedes configurar tu perfil de voz cuando quieras en Ajustes.';
 
   @override

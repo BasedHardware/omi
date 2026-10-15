@@ -4116,8 +4116,6 @@
     "onboardingOmiNotOrdered": "まだ注文していません",
     "onboardingOmiOrdered": "注文済みです",
     "onboardingPermissionTapToFix": "タップして修正",
-    "consentShortMessage": "OmiはAIで会話をメモにまとめます。メモはいつでも削除できます。",
-    "consentAiProviders": "{providers} で処理されます。",
     "voiceProfileCardDismissed": "ボイスプロフィールは設定からいつでも設定できます。",
     "homeNewRecordingButton": "新規録音",
     "chatWelcomeMessage": "こんにちは、Omiです。話した内容なら何でも聞いてください。誰が何を言ったか、何を約束したか、一日のまとめなど。タスクの追加や、覚えておくこともできます。",

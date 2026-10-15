@@ -13449,15 +13449,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get onboardingPermissionTapToFix => 'Нажмите, чтобы исправить';
 
   @override
-  String get consentShortMessage =>
-      'Omi с помощью ИИ превращает ваши разговоры в заметки. Их можно удалить в любой момент.';
-
-  @override
-  String consentAiProviders(String providers) {
-    return 'Обработка: $providers.';
-  }
-
-  @override
   String get voiceProfileCardDismissed => 'Голосовой профиль можно настроить в любое время в Настройках.';
 
   @override
