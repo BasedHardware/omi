@@ -156,13 +156,12 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
     if (mounted) await _refresh();
   }
 
-  /// The detail page pops `{deleted: true, summaryId}` when the recap is deleted there: drop it here
-  /// and from Home's recap row instead of leaving a ghost.
+  /// The detail page pops `{deleted: true, summaryId}` when the recap is deleted there (and announces
+  /// it to Home's recap row itself): drop it here instead of leaving a ghost.
   Future<void> _openRecap(DailySummary summary) async {
     final result = await routeToPage(context, DailySummaryDetailPage(summaryId: summary.id, summary: summary));
     if (!mounted || result is! Map || result['deleted'] != true) return;
     final deletedId = result['summaryId'] as String? ?? summary.id;
-    announceRecapDeleted(deletedId);
     setState(() {
       _recaps = _recaps.where((r) => r.id != deletedId).toList();
       _rebuildItems();
@@ -200,6 +199,8 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
         color: OmiColors.onAccent,
         backgroundColor: OmiColors.accent,
         child: ListView(
+          // A short feed must still overscroll, or pull-to-refresh never arms on Android.
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.xxl),
           children: [
             if (_partial)

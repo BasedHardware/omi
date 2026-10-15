@@ -56,9 +56,25 @@ abstract final class SyncPendingWork {
   /// Recordings still on the device or the phone, waiting for or in a sync.
   static List<Wal> syncing(SyncProvider p) {
     final moved = movedIds(p);
-    return p.displaySortedWals
+    final pending = p.displaySortedWals
         .where((w) => isPendingWal(w) && !(walIsOnDevice(w) && moved.contains(w.id)))
         .toList(growable: false);
+    final sources = pending.where(walIsOnDevice).toList(growable: false);
+    if (sources.isEmpty) return pending;
+    // A device drain copies a recording to the phone piece by piece and keeps the source until the
+    // final clear. The source already stands for the whole recording, so its copied pieces would
+    // list the same audio twice.
+    return pending.where((w) => !_isPieceOfSource(w, sources)).toList(growable: false);
+  }
+
+  static bool _isPieceOfSource(Wal w, List<Wal> sources) {
+    if (walIsOnDevice(w) || w.originalStorage == null || w.originalStorage == WalStorage.disk) return false;
+    for (final src in sources) {
+      if (src.device != w.device) continue;
+      final end = src.timerStart + (src.seconds > 0 ? src.seconds : 0);
+      if (w.timerStart >= src.timerStart && w.timerStart <= end) return true;
+    }
+    return false;
   }
 
   static bool needsAttention(WalSyncDisplayState s) =>

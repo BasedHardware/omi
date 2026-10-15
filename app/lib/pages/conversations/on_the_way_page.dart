@@ -198,6 +198,7 @@ class _Group extends StatelessWidget {
           for (var i = 0; i < items.length; i++) ...[
             if (i > 0) Divider(height: 1, thickness: 1, indent: OmiSpacing.md, color: OmiColors.surface2),
             Semantics(
+              liveRegion: true,
               label: [
                 if (items[i].start != null) dates.time(items[i].start!),
                 if (items[i].seconds > 0) OmiDuration.compact(items[i].seconds, l),

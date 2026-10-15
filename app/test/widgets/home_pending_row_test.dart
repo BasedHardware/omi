@@ -13,6 +13,7 @@ import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
 import 'package:omi/pages/conversations/conversations_page.dart' show dateFilterIncludesToday;
 import 'package:omi/pages/conversations/on_the_way_page.dart';
+import 'package:omi/pages/conversations/sync_pending_work.dart';
 import 'package:omi/pages/conversations/widgets/home_pending_row.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -332,6 +333,31 @@ void main() {
           Wal(timerStart: 1060, codec: BleAudioCodec.opus, seconds: 60, status: WalStatus.miss, device: 'pendant');
       await _pumpPage(tester, _FakeSync(wals: [b, a]));
       expect(find.text('Waiting to sync'), findsOneWidget);
+    });
+
+    test('a device drain in progress lists the recording once, not its copied pieces too', () {
+      final source = Wal(
+          timerStart: 1000,
+          codec: BleAudioCodec.opus,
+          seconds: 600,
+          status: WalStatus.miss,
+          storage: WalStorage.sdcard,
+          device: 'pendant');
+      Wal piece(int start) => Wal(
+          timerStart: start,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+          originalStorage: WalStorage.sdcard,
+          device: 'pendant');
+      final phoneOnly =
+          Wal(timerStart: 5000, codec: BleAudioCodec.opus, seconds: 60, status: WalStatus.miss, device: 'pendant');
+      final ids = SyncPendingWork.syncing(_FakeSync(wals: [source, piece(1000), piece(1060), phoneOnly]))
+          .map((w) => w.timerStart)
+          .toList();
+      expect(ids, [5000, 1000]);
+      expect(SyncPendingWork.syncing(_FakeSync(wals: [source, piece(1000)])).single.storage, WalStorage.sdcard);
     });
 
     testWidgets('keeps refused recordings one tap away, on the Sync Details row', (tester) async {

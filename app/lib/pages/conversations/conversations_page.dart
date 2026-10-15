@@ -17,6 +17,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
+import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/backend/http/api_presentation.dart';
@@ -25,6 +26,7 @@ import 'package:omi/pages/conversations/widgets/conversations_group_widget.dart'
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/date_list_item.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
+import 'package:omi/pages/conversations/sync_pending_work.dart';
 import 'package:omi/pages/conversations/widgets/home_pending_row.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
@@ -310,9 +312,23 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   @override
   bool get wantKeepAlive => true;
 
+  /// Rebuilds Home at local midnight so the pending row moves under the new Today.
+  Timer? _dayTimer;
+
+  void _scheduleDayRollover() {
+    final now = DateTime.now();
+    final next = DateTime(now.year, now.month, now.day + 1);
+    _dayTimer = Timer(next.difference(now) + const Duration(seconds: 1), () {
+      if (!mounted) return;
+      setState(() {});
+      _scheduleDayRollover();
+    });
+  }
+
   @override
   void initState() {
     super.initState();
+    _scheduleDayRollover();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final conversationProvider = context.read<ConversationProvider>();
@@ -413,6 +429,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
   @override
   void dispose() {
+    _dayTimer?.cancel();
     for (final timer in _deferred) {
       timer.cancel();
     }
@@ -498,6 +515,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   Widget build(BuildContext context) {
     Logger.debug('building conversations page');
     super.build(context);
+    // Placing the pending row reads the clock: redo it whenever the row appears or goes away, not
+    // only when the conversation list changes.
+    context.select<SyncProvider, bool>(SyncPendingWork.shouldShow);
     return Selector2<ConversationProvider, LocalRecordingsProvider, _ConversationPageSnapshot>(
       selector: (_, conversationProvider, recordingsProvider) =>
           _conversationPageSnapshot(conversationProvider, recordingsProvider),
