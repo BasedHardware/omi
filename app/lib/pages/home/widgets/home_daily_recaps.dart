@@ -90,7 +90,7 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> with WidgetsBindingObs
     if (!mounted || generation != _generation) return;
     final items = result.items.where((r) => !_deletedIds.contains(r.id)).toList();
     // A new recap is the delight that lights Home's Activity bell.
-    if (result.ok) ActivitySeen.instance.observe(items.map((r) => r.createdAt));
+    if (result.ok) ActivitySeen.instance.observe(ActivitySeen.recapArrivals(items));
     setState(() {
       if (result.ok) _recaps = items;
       _loading = false;
@@ -155,7 +155,7 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> with WidgetsBindingObs
     if (!mounted) return;
     _deletedIds.add(id);
     setState(() => _recaps.removeWhere((s) => s.id == id));
-    ActivitySeen.instance.observe(_recaps.map((r) => r.createdAt));
+    ActivitySeen.instance.observe(ActivitySeen.recapArrivals(_recaps));
   }
 
   void _openAll() => routeToPage(context, const DailyRecapsPage());
