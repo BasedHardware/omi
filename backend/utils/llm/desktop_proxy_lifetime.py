@@ -114,6 +114,14 @@ async def cancel_on_disconnect(request: Request, awaitable: Awaitable[T]) -> T:
         await _drain(task, disconnect)
 
 
+def _deadline_outcome(phase: str) -> str:
+    if phase == 'upload':
+        return 'upload_timeout'
+    if phase in {'authorization', 'validation', 'reservation', 'metering', 'routing', 'credential'}:
+        return 'pre_provider_deadline'
+    return 'provider_timeout'
+
+
 def deadline_response(telemetry: Any, *, outcome: str, status: int = 504) -> JSONResponse:
     telemetry.complete(outcome=outcome, status_code=status, retryable=False, phase=telemetry.phase)
     return JSONResponse(
@@ -132,20 +140,30 @@ def deadline_response(telemetry: Any, *, outcome: str, status: int = 504) -> JSO
 
 async def run_request(request: Request, handler: Any, telemetry: Any):
     """Include upload, dependencies, admission, provider and buffered response reads."""
-    deadline = asyncio.get_running_loop().time() + REQUEST_TIMEOUT_SECONDS
+    deadline = getattr(telemetry, 'request_deadline', asyncio.get_running_loop().time() + REQUEST_TIMEOUT_SECONDS)
     telemetry.request_deadline = deadline
 
     async def work():
         telemetry.phase = 'upload'
         # Cache the bounded body before auth/admission so the disconnect reader
         # never competes with an upload reader, even while dependencies stall.
-        request._body = await read_body(request)
+        body = await read_body(request)
+        delivered = False
+
+        async def replay_body():
+            nonlocal delivered
+            if not delivered:
+                delivered = True
+                return {'type': 'http.request', 'body': body, 'more_body': False}
+            return await request.receive()
+
+        bounded_request = Request(request.scope, receive=replay_body)
         telemetry.phase = 'authorization'
 
         async def invoke():
             request.state.desktop_proxy_lifetime_active = True
             try:
-                return await handler(request)
+                return await handler(bounded_request)
             finally:
                 request.state.desktop_proxy_lifetime_active = False
 
@@ -155,16 +173,7 @@ async def run_request(request: Request, handler: Any, telemetry: Any):
     try:
         done, _ = await asyncio.wait((task,), timeout=max(0, deadline - asyncio.get_running_loop().time()))
         if not done:
-            outcome = (
-                'upload_timeout'
-                if telemetry.phase == 'upload'
-                else (
-                    'pre_provider_deadline'
-                    if telemetry.phase
-                    in {'authorization', 'validation', 'reservation', 'metering', 'routing', 'credential'}
-                    else 'provider_timeout'
-                )
-            )
+            outcome = _deadline_outcome(telemetry.phase)
             # Classify before cancellation reaches provider-specific finally/except
             # blocks, which otherwise mistake our deadline for client cancellation.
             return deadline_response(telemetry, outcome=outcome)
@@ -287,3 +296,124 @@ class DeadlinedStreamingResponse(StreamingResponse):
             pass
         finally:
             await _finish_stream(task, self.body_iterator)
+
+
+class DesktopProxyDeadlineMiddleware:
+    """Outermost Gemini-only ASGI owner, including BaseHTTPMiddleware sends."""
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        path = scope.get('path', '')
+        if (
+            scope['type'] != 'http'
+            or scope.get('method') != 'POST'
+            or not path.startswith(('/v1/proxy/gemini/', '/v1/proxy/gemini-stream/'))
+        ):
+            await self.app(scope, receive, send)
+            return
+        from utils.llm.desktop_gemini_telemetry import get_proxy_telemetry
+
+        telemetry = get_proxy_telemetry(Request(scope, receive), streaming='/gemini-stream/' in path)
+        telemetry.identify(path.split('/gemini-stream/' if '/gemini-stream/' in path else '/gemini/', 1)[-1])
+        telemetry.request_deadline = asyncio.get_running_loop().time() + REQUEST_TIMEOUT_SECONDS
+        telemetry.defer_terminal = True
+        telemetry.phase = 'authorization'
+        started = False
+        is_sse = False
+        fixed_length = False
+        finished = False
+        status = 500
+        override = None
+
+        class ResponseDeadline(Exception):
+            pass
+
+        async def guarded_send(message):
+            nonlocal started, status, is_sse, fixed_length, finished
+            if asyncio.get_running_loop().time() >= telemetry.request_deadline:
+                raise ResponseDeadline
+            if message['type'] == 'http.response.start':
+                started = True
+                status = message['status']
+                headers = dict(message.get('headers', []))
+                is_sse = b'text/event-stream' in headers.get(b'content-type', b'')
+                fixed_length = b'content-length' in headers
+            try:
+                await send(message)
+            except* OSError as errors:
+                raise ClientDisconnect from errors
+            if message['type'] == 'http.response.body' and not message.get('more_body', False):
+                finished = True
+
+        task = asyncio.create_task(self.app(scope, receive, guarded_send), name='desktop-gemini-asgi')
+        try:
+            remaining = max(0, telemetry.request_deadline - asyncio.get_running_loop().time())
+            done, _ = await asyncio.wait((task,), timeout=remaining)
+            if done:
+                expired = disconnected = False
+                try:
+                    await task
+                except* ClientDisconnect:
+                    disconnected = True
+                except* ResponseDeadline:
+                    expired = True
+                if disconnected:
+                    override = dict(
+                        outcome='client_cancelled', status_code=499, retryable=False, phase='client_disconnect'
+                    )
+                    return
+                if not expired:
+                    return
+            if finished:
+                return
+            phase = telemetry.phase
+            outcome = _deadline_outcome(phase)
+            override = dict(outcome=outcome, status_code=504, retryable=False, phase=phase)
+            if await _drain(task):
+                async with asyncio.timeout(CANCEL_GRACE_SECONDS):
+                    if not started:
+                        await deadline_response(telemetry, outcome=outcome)(scope, receive, send)
+                    elif not fixed_length:
+                        # A partially delivered fixed-length response must be
+                        # aborted, not completed with missing bytes.
+                        event = {
+                            'error': outcome,
+                            'phase': phase,
+                            'request_id': telemetry.request_id,
+                            'retryable': False,
+                        }
+                        try:
+                            await send(
+                                {
+                                    'type': 'http.response.body',
+                                    'body': (
+                                        ('\n\ndata: ' + json.dumps(event, separators=(',', ':')) + '\n\n').encode()
+                                        if is_sse
+                                        else b''
+                                    ),
+                                    'more_body': False,
+                                }
+                            )
+                        except (OSError, RuntimeError):
+                            pass
+        except (asyncio.CancelledError, ClientDisconnect):
+            override = dict(outcome='client_cancelled', status_code=499, retryable=False, phase='client_disconnect')
+            raise
+        except TimeoutError:
+            pass
+        except Exception:
+            if override is None:
+                override = dict(outcome='internal_error', status_code=500, retryable=False, phase=telemetry.phase)
+            raise
+        finally:
+            telemetry.flush_terminal(**(override or {}))
+            if not telemetry.completed:
+                telemetry.complete(
+                    outcome='success' if status < 400 else 'authorization_rejected',
+                    status_code=status,
+                    retryable=False,
+                    phase=telemetry.phase,
+                )
+            await _drain(task)

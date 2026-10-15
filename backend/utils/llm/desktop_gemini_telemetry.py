@@ -136,10 +136,13 @@ class ProxyTelemetry:
         self.cached_content_token_count: int | None = None
         self.thoughts_token_count: int | None = None
         self.traffic_type = 'unknown'
-        self.phase = 'validation'
+        self.phase: str = 'validation'
         self.shape = desktop_gemini_gateway.PayloadShape('unknown', 'unknown', 'unknown')
         self.started = time.monotonic()
+        self.request_deadline = self.started + desktop_proxy_lifetime.REQUEST_TIMEOUT_SECONDS
         self.completed = False
+        self.defer_terminal = False
+        self.pending_terminal: dict[str, Any] | None = None
         # Ledger attribution only. Never written to the log event above. One
         # invocation per request; one attempt per provider dispatch.
         self.uid: str | None = None
@@ -189,6 +192,31 @@ class ProxyTelemetry:
         if self.completed:
             return
         self.completed = True
+        values: dict[str, Any] = dict(
+            outcome=outcome, status_code=status_code, retryable=retryable, upstream_status=upstream_status, phase=phase
+        )
+        if self.defer_terminal:
+            self.pending_terminal = values
+            return
+        self._emit_terminal(**values)
+
+    def flush_terminal(self, **override: Any) -> None:
+        values = override or self.pending_terminal
+        self.pending_terminal = None
+        self.defer_terminal = False
+        if values is not None:
+            self.completed = False
+            self.complete(**values)
+
+    def _emit_terminal(
+        self,
+        *,
+        outcome: str,
+        status_code: int,
+        retryable: bool,
+        upstream_status: int | None = None,
+        phase: str | None = None,
+    ) -> None:
         phase = phase or self.phase
         event: dict[str, object] = {
             'severity': 'INFO' if 200 <= status_code < 400 else 'WARNING',

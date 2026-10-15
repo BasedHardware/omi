@@ -142,6 +142,7 @@ def lifetime_app(monkeypatch):
     monkeypatch.setattr(lifetime, 'UPLOAD_TIMEOUT_SECONDS', 0.05)
     app = FastAPI()
     app.add_middleware(BYOKMiddleware)
+    app.add_middleware(lifetime.DesktopProxyDeadlineMiddleware)
     app.include_router(desktop_proxy.router)
 
     async def identity():
@@ -272,6 +273,7 @@ async def test_provider_trickle_cannot_extend_route_deadline(lifetime_app, monke
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
 
         async def provider(*args, **kwargs):
+            kwargs['telemetry'].phase = 'gateway'
             telemetry = kwargs['telemetry']
             telemetry.phase = 'gateway'
             result = await client.post('https://provider.invalid/test')
@@ -319,6 +321,7 @@ async def test_route_disconnect_cancels_provider_once(lifetime_app, monkeypatch,
 @pytest.mark.asyncio
 async def test_completed_provider_emits_exactly_one_terminal(lifetime_app, monkeypatch, capsys):
     async def provider(*args, **kwargs):
+        kwargs['telemetry'].phase = 'gateway'
         telemetry = kwargs['telemetry']
         telemetry.complete(outcome='success', status_code=200, retryable=False, phase='gateway')
         return Response(b'{"candidates":[{"content":{"parts":[{"text":"ok"}]},"finishReason":"STOP"}]}')
@@ -366,6 +369,7 @@ async def test_platform_cancellation_has_one_terminal_and_drains_work(lifetime_a
     started, cancelled = asyncio.Event(), asyncio.Event()
 
     async def provider(*args, **kwargs):
+        kwargs['telemetry'].phase = 'gateway'
         started.set()
         try:
             await asyncio.Event().wait()
@@ -427,6 +431,7 @@ async def test_response_backpressure_cannot_hold_stream_open(lifetime_app, monke
             closed.set()
 
     async def provider(*args, **kwargs):
+        kwargs['telemetry'].phase = 'gateway'
         return StreamingResponse(chunks(), media_type='text/event-stream')
 
     monkeypatch.setattr(desktop_proxy, '_proxy_via_gateway', provider)
@@ -492,10 +497,12 @@ async def test_stream_cancel_before_iteration_emits_terminal(lifetime_app, monke
     app.user_middleware.clear()
 
     async def provider(*args, **kwargs):
+        kwargs['telemetry'].phase = 'gateway'
+
         async def chunks():
             yield b'data: {}\n\n'
 
-        return StreamingResponse(chunks())
+        return StreamingResponse(chunks(), media_type='text/event-stream')
 
     monkeypatch.setattr(desktop_proxy, '_proxy_via_gateway', provider)
 
@@ -554,11 +561,13 @@ async def test_stream_double_cancel_closes_suspended_iterator(monkeypatch):
 @pytest.mark.asyncio
 async def test_stream_timeout_starts_a_new_sse_frame(lifetime_app, monkeypatch, capsys):
     async def provider(*args, **kwargs):
+        kwargs['telemetry'].phase = 'gateway'
+
         async def chunks():
             yield b'data: {"partial"'
             await asyncio.Event().wait()
 
-        return StreamingResponse(chunks())
+        return StreamingResponse(chunks(), media_type='text/event-stream')
 
     monkeypatch.setattr(desktop_proxy, '_proxy_via_gateway', provider)
     messages = await call_asgi(lifetime_app, body_then_wait())
@@ -566,3 +575,118 @@ async def test_stream_timeout_starts_a_new_sse_frame(lifetime_app, monkeypatch, 
     frames = wire.split(b'\n\n')
     assert json.loads(frames[-2].removeprefix(b'data: '))['error'] == 'provider_timeout'
     assert [e['outcome'] for e in terminals(capsys)] == ['provider_timeout']
+
+
+@pytest.fixture
+def production_lifetime_app(lifetime_app):
+    import desktop_backend
+
+    app = desktop_backend._build_app()
+    app.dependency_overrides.update(lifetime_app.dependency_overrides)
+    return app
+
+
+@pytest.mark.asyncio
+async def test_production_stack_bounds_real_outward_send(production_lifetime_app, monkeypatch, capsys):
+    app = production_lifetime_app
+    assert app.user_middleware[0].cls is lifetime.DesktopProxyDeadlineMiddleware
+    assert any(m.cls is BYOKMiddleware for m in app.user_middleware)
+    monkeypatch.setattr(lifetime, 'CANCEL_GRACE_SECONDS', 0.01)
+    entered = asyncio.Event()
+
+    async def provider(*args, **kwargs):
+        kwargs['telemetry'].phase = 'gateway'
+        telemetry = kwargs['telemetry']
+        telemetry.phase = 'gateway'
+        telemetry.complete(outcome='success', status_code=200, retryable=False, phase='gateway')
+        return Response(b'{"candidates":[{"content":{"parts":[{"text":"ok"}]},"finishReason":"STOP"}]}')
+
+    monkeypatch.setattr(desktop_proxy, '_proxy_via_gateway', provider)
+
+    async def send(message):
+        if message['type'] == 'http.response.body':
+            entered.set()
+            await asyncio.Event().wait()
+
+    scope = {
+        'type': 'http',
+        'asgi': {'version': '3.0', 'spec_version': '2.4'},
+        'method': 'POST',
+        'path': '/v1/proxy/gemini/models/gemini-2.5-flash:generateContent',
+        'query_string': b'',
+        'headers': [],
+    }
+    task = asyncio.create_task(app(scope, body_then_wait(), send))
+    await entered.wait()
+    assert not terminals(capsys), 'provider success must wait for outward delivery'
+    done, _ = await asyncio.wait((task,), timeout=0.3)
+    assert task in done
+    await task
+    assert [e['outcome'] for e in terminals(capsys)] == ['provider_timeout']
+
+
+@pytest.mark.asyncio
+async def test_deadline_aborts_incomplete_content_length(production_lifetime_app, monkeypatch, capsys):
+    app = production_lifetime_app
+    monkeypatch.setattr(lifetime, 'CANCEL_GRACE_SECONDS', 0.01)
+
+    async def provider(*args, **kwargs):
+        kwargs['telemetry'].phase = 'gateway'
+        kwargs['telemetry'].complete(outcome='success', status_code=200, retryable=False, phase='gateway')
+        return Response(b'{"synthetic":"body"}')
+
+    monkeypatch.setattr(desktop_proxy, '_proxy_via_gateway', provider)
+    declared, body_calls = None, 0
+
+    async def send(message):
+        nonlocal declared, body_calls
+        if message['type'] == 'http.response.start':
+            declared = int(dict(message['headers'])[b'content-length'])
+        elif message['type'] == 'http.response.body':
+            body_calls += 1
+            if body_calls == 1:
+                await asyncio.Event().wait()
+            if not message.get('more_body', False) and len(message.get('body', b'')) < declared:
+                raise RuntimeError('Response content shorter than Content-Length')
+
+    scope = {
+        'type': 'http',
+        'asgi': {'version': '3.0', 'spec_version': '2.4'},
+        'method': 'POST',
+        'path': '/v1/proxy/gemini/models/gemini-2.5-flash:generateContent',
+        'query_string': b'',
+        'headers': [],
+    }
+    await app(scope, body_then_wait(), send)
+    assert body_calls == 1, 'do not send an invalid empty completion after fixed-length headers'
+    assert [e['outcome'] for e in terminals(capsys)] == ['provider_timeout']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('grouped', [False, True])
+async def test_production_send_disconnect_is_not_internal_error(production_lifetime_app, monkeypatch, capsys, grouped):
+    app = production_lifetime_app
+
+    async def provider(*args, **kwargs):
+        kwargs['telemetry'].phase = 'gateway'
+        kwargs['telemetry'].complete(outcome='success', status_code=200, retryable=False, phase='gateway')
+        return Response(b'{"synthetic":"body"}')
+
+    monkeypatch.setattr(desktop_proxy, '_proxy_via_gateway', provider)
+
+    async def send(message):
+        if message['type'] == 'http.response.body':
+            if grouped:
+                raise ExceptionGroup('synthetic disconnect', [OSError('synthetic socket closed')])
+            raise OSError('synthetic socket closed')
+
+    scope = {
+        'type': 'http',
+        'asgi': {'version': '3.0', 'spec_version': '2.4'},
+        'method': 'POST',
+        'path': '/v1/proxy/gemini/models/gemini-2.5-flash:generateContent',
+        'query_string': b'',
+        'headers': [],
+    }
+    await app(scope, body_then_wait(), send)
+    assert [e['outcome'] for e in terminals(capsys)] == ['client_cancelled']
