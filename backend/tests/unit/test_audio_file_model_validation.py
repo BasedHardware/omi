@@ -55,6 +55,27 @@ class TestAudioFileModelValidation(unittest.TestCase):
                 duration=10.0,
             )
 
+    def test_audio_file_boolean_chunk_timestamp_rejected(self):
+        with self.assertRaises(ValidationError):
+            AudioFile(
+                id="a1",
+                uid="u1",
+                conversation_id="c1",
+                chunk_timestamps=[True],
+                duration=10.0,
+            )
+
+    def test_audio_file_empty_provider_rejected(self):
+        with self.assertRaises(ValidationError):
+            AudioFile(
+                id="a1",
+                uid="u1",
+                conversation_id="c1",
+                chunk_timestamps=[0.0],
+                provider="",
+                duration=10.0,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

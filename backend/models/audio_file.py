@@ -44,6 +44,6 @@ class AudioFile(BaseModel):
         if not isinstance(v, list):
             raise ValueError('chunk_timestamps must be a list')
         for ts in v:
-            if not isinstance(ts, (int, float)) or ts < 0:
+            if isinstance(ts, bool) or not isinstance(ts, (int, float)) or ts < 0:
                 raise ValueError('chunk timestamp must be a non-negative number')
         return v
