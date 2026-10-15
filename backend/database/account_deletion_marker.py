@@ -19,7 +19,7 @@ ACCOUNT_DELETION_COLLECTION = "account_deletions"
 _UID_MAX_LENGTH = 128
 
 
-def validate_uid(uid: str) -> str:
+def validate_uid(uid: object) -> str:
     """Return *uid* if it is a safe Firestore document id, else raise ValueError.
 
     ``document(uid)`` treats a ``/`` or ``\\`` as a path separator and rejects a
