@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-admission-validator-broader-than-consumer",
+  "violated_contract": "A value admitted at a write boundary must be one every consumer of that field can use. When the boundary validates with one library or table and the consumers resolve with another (ZoneInfo at the request model, pytz in the scheduler and the readers), the two drift apart with no error at either end: the write succeeds, the consumer's query simply never selects the record or its resolver falls back, and the user sees silence, a wrong fallback, or a 5xx from the one reader that does not catch the resolver's exception.",
+  "canonical_prevention": "Name one authority for the field, the library or table the consumers actually resolve with, and validate at every write boundary (request models, sync-from-client paths, routes without a validator) through one shared predicate over that authority. A regression test pins the predicate's verdict independently of the host environment and asserts that a value the authority rejects is refused by the model validator, ignored by the sync path, and never forwarded to the schedule, while a value the authority accepts is admitted even where the other library would refuse it.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_time_zone_validation_matches_scheduler.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/models/other.py",
+    "backend/database/notifications.py",
+    "backend/utils/other/notifications.py"
+  ],
+  "status": "open"
+}
