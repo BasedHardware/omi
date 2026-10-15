@@ -72,6 +72,7 @@ describe("wall source and payload contracts", () => {
   });
   it("coalesces payload reads and invalidates at UTC midnight without restamping sources", async () => {
     const payload = await computeWall(sources(), now);
+    payload.metrics[0].value = 1;
     const compute = vi.fn(async () => payload);
     const [a, b] = await Promise.all([
       wallPayload(now, compute),
@@ -83,8 +84,9 @@ describe("wall source and payload contracts", () => {
     await wallPayload(new Date("2026-10-16T00:00Z"), compute);
     expect(compute).toHaveBeenCalledTimes(2);
   });
-  it("never presents current Stripe as a same-cutoff ARPMAU close", async () => {
+  it("labels current Stripe / completed MAU as a dimmed proxy, not a same-cutoff close", async () => {
     const s = sources();
+    s.query = async () => [[0, "macos", 10]];
     s.stripe = async () => ({
       usd: 1400,
       partial: false,
@@ -96,9 +98,14 @@ describe("wall source and payload contracts", () => {
     expect(wall.metrics.find((m) => m.id === "revenue.mrr")?.partial).toBe(
       true
     );
+    expect(wall.metrics.find((m) => m.id === "revenue.arpmau")).toMatchObject({
+      value: 140,
+      partial: true,
+      materialGap: true,
+    });
     expect(
-      wall.metrics.find((m) => m.id === "revenue.arpmau")?.value
-    ).toBeNull();
+      wall.metrics.find((m) => m.id === "revenue.arpmau")?.reason
+    ).toContain("cutoff mismatch");
   });
 });
 

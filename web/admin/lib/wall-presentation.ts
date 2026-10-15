@@ -42,7 +42,9 @@ export function wallPresentation(payload: WallPayload, now = new Date()) {
         ].includes(m.id)
       ? "daily"
       : "hourly";
-    m.stale = freshness(m.sourceRefreshedAt, m.dataThrough, cadence, now).stale;
+    m.stale =
+      Boolean(payload.cacheStale) ||
+      freshness(m.sourceRefreshedAt, m.dataThrough, cadence, now).stale;
     presented.push(m);
     const key = m.id.replaceAll(".", "_"),
       fixture = Boolean(m.fixture || m.reason?.includes("FIXTURE"));
@@ -113,16 +115,9 @@ export function wallPresentation(payload: WallPayload, now = new Date()) {
         ? `${m.split[p]!.toFixed(1)}%`
         : m.split[p]!.toLocaleString("en-US", { maximumFractionDigits: 0 })
     );
-    const missingReasons: Partial<Record<Metric["id"], string>> = {
-      "health.crash_free": "Crash coverage not verified",
-      "health.thumbs_positive": "Answer ratings source needed",
-      "revenue.payer_churn": "Payer history needed",
-      "revenue.activated_paid_30d": "Paid-account linkage needed",
-      "revenue.arpmau": "Same-date revenue source needed",
-      "revenue.mrr": "Plan revenue source needed",
-      "cost.gross_margin_pct": "Revenue and cost coverage needed",
-    };
-    const missingReason = missingReasons[m.id] || "Source data not available";
+    // The route's classified cause, rather than an ID-based generic substitute.
+    const missingReason =
+      m.reason?.split(";")[0] || "Source refresh receipt missing";
     let footnote = through ? `as of ${through}` : "Refresh time unavailable";
     if (cohortDate)
       footnote += ` · cohort ${cohortDate}${
@@ -140,6 +135,13 @@ export function wallPresentation(payload: WallPayload, now = new Date()) {
       footnote = `Coverage incomplete · ${
         through ? `as of ${through}` : "refresh pending"
       }`;
+    if (
+      m.id === "revenue.arpmau" &&
+      m.value != null &&
+      m.materialGap &&
+      !fixture
+    )
+      footnote = `Live MRR / MAU through ${through || "unknown"}`;
     if (m.id === "growth.true_new_7d" && !m.stale && m.value != null)
       footnote = `180-day lookback · ${
         through ? `as of ${through}` : "refresh pending"
