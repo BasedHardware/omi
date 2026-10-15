@@ -2,7 +2,9 @@
 
 import asyncio
 from copy import deepcopy
+import json
 from pathlib import Path
+import re
 from unittest.mock import AsyncMock
 
 import pytest
@@ -166,6 +168,57 @@ def test_failed_undo_does_not_poison_next_canary(canary, monkeypatch):
     monkeypatch.setattr(dream_canary.review_changes, 'set_undone', original)
     assert asyncio.run(dream_canary.check())['status'] == 'pass'
     assert not any(path[2:3] in [('review_changes',), ('review_do_not_redo',)] for path in db.rows)
+
+
+def test_operator_env_kill_skips_without_counting_a_failure(canary, monkeypatch):
+    db, lanes = canary
+    db.rows[('dream_canary_health', 'current')] = {'canary_failures': 2}
+    monkeypatch.setenv('DREAM_AGENT_ENABLED', 'false')
+    called = []
+    monkeypatch.setattr(dream_canary, 'seed', lambda uid: called.append(uid))
+    result = asyncio.run(dream_canary.check())
+    assert result == {
+        'status': 'skipped',
+        'stage': 'enqueue',
+        'error_type': 'disabled',
+        'consecutive_failures': 2,
+    }
+    assert called == [] and not lanes
+    assert db.rows[('dream_canary_health', 'current')]['canary_failures'] == 2
+
+
+def test_dynamic_kill_skips_without_counting_a_failure(canary, monkeypatch):
+    db, lanes = canary
+    db.rows[('dream_canary_health', 'current')] = {'canary_failures': 2}
+    monkeypatch.setattr('config.dream_control.allowed', lambda: False)
+    called = []
+    monkeypatch.setattr(dream_canary, 'seed', lambda uid: called.append(uid))
+    result = asyncio.run(dream_canary.check())
+    assert result['status'] == 'skipped' and result['error_type'] == 'disabled'
+    assert result['consecutive_failures'] == 2 and called == [] and not lanes
+    assert db.rows[('dream_canary_health', 'current')]['canary_failures'] == 2
+
+
+def test_missing_canary_uid_is_a_real_failure(canary, monkeypatch):
+    db, lanes = canary
+    monkeypatch.delenv('DREAM_AGENT_CANARY_UID')
+    result = asyncio.run(dream_canary.check())
+    assert result['status'] == 'fail' and result['stage'] == 'enqueue' and not lanes
+    assert result['consecutive_failures'] == 1
+    assert db.rows[('dream_canary_health', 'current')]['canary_failures'] == 1
+
+
+def test_canary_alert_counts_failures_and_ignores_skips():
+    metric = json.loads(
+        (Path(__file__).resolve().parents[2] / 'deploy/monitoring/dream-canary-failures.metric.json').read_text()
+    )
+    pattern = r'Dream canary status=fail .*consecutive_failures=([2-9]|[1-9][0-9]+)( |$)'
+    skipped = 'Dream canary status=skipped stage=enqueue error_type=disabled consecutive_failures=2'
+    failed = 'Dream canary status=fail stage=enqueue error_type=CanaryFailure consecutive_failures=2'
+    assert re.search(pattern, skipped) is None
+    assert re.search(pattern, failed)
+    assert pattern in metric['filter']
+    assert 'status=skipped' not in metric['filter']
 
 
 def test_canary_uses_scheduler_oidc_and_long_declared_deadline():

@@ -31,7 +31,14 @@ turn a shared session into an unbounded write loop.
 
 Tool schemas and uniform `collection/id#segment` refs live in `models/agent_tools.py`,
 `models/agent_edit.py` and `models/agent_refs.py`. New sessions canonicalize legacy `memories/` aliases to `memory_items/`; stored receipts remain readable. Search grants a ref; full read
-grants a record snapshot. Staging rechecks it and captures storage fences. Domain
+grants a record snapshot. Search debits only the hit payload the model receives
+(ref and snippet). Hydration that builds that snippet is bounded to the fields
+the snippet and filters need and does not consume the session read-byte budget.
+`read` is the call that debits a full record. A row that raises or resolves to
+nothing is skipped, counted, and reported as unavailable; it does not discard
+the rest of the page. History pages and seeds yield readable owner-visible
+records, paging past ids that no longer resolve. Legacy `memories` is the
+`memory_items` collection at the ref boundary. Staging rechecks the snapshot and captures storage fences. Domain
 writers recheck those fences in the transaction that journals the effect. Dream
 also checks its live owner lease and global kill switch inside that transaction.
 

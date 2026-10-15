@@ -143,13 +143,15 @@ class Session:
                 continue
             hits.append(hit)
         skipped_refs = list(dict.fromkeys(canonical_ref(ref) for ref in skipped_refs))
-        result = {**result, 'results': hits, 'skipped_refs': skipped_refs}
+        unavailable_refs = list(dict.fromkeys(canonical_ref(ref) for ref in result.get('unavailable_refs', [])))
+        result = {**result, 'results': hits, 'skipped_refs': skipped_refs, 'unavailable_refs': unavailable_refs}
         if skipped_refs:
             result.update(complete=False, truncated=True)
-        self.read_bytes += max(serialized_bytes(hits) if hits else 0, result.get('counts', {}).get('read_bytes', 0))
+        # Charge the payload the model sees. Hydration bytes are not model budget.
+        self.read_bytes += serialized_bytes(hits) if hits else 0
         # Reported candidates are seen refs too, so read can attempt an omitted
         # record individually (and return a byte-limit error, not unknown-ref).
-        for ref in [*(hit['ref'] for hit in hits), *skipped_refs]:
+        for ref in [*(hit['ref'] for hit in hits), *skipped_refs, *unavailable_refs]:
             base = base_ref(ref)
             if base not in self.known and len(self.known) >= 512:
                 raise ValueError('agent_reference_cap')

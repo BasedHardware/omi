@@ -3,11 +3,13 @@
 from hashlib import sha256
 
 from database._client import get_firestore_client
+from models.agent_refs import canonical_collection
 
 COLLECTIONS = ('conversations', 'action_items', 'people', 'memory_items')
 
 
 def history_collection(uid, collection, *, firestore_client=None):
+    collection = canonical_collection(collection)
     if collection not in COLLECTIONS:
         raise ValueError('dream_history_collection')
     database = firestore_client if firestore_client is not None else get_firestore_client()

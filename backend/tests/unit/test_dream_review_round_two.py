@@ -22,24 +22,35 @@ NOW = datetime(2026, 10, 15, 12, tzinfo=timezone.utc)
 def search_source(monkeypatch, rows):
     monkeypatch.setattr(search.dream_history, 'history_page', lambda *a, **kw: list(rows))
 
-    async def read(self, ref):
+    async def load(self, ref, request=None):
         return rows[ref.partition('/')[2]]
 
-    monkeypatch.setattr(search.OwnerSearch, 'read', read)
+    monkeypatch.setattr(search.OwnerSearch, 'read', load)
+    monkeypatch.setattr(search.OwnerSearch, 'hydrate', load)
     return search.OwnerSearch('synthetic-search-owner')
 
 
 @pytest.mark.asyncio
 async def test_search_keeps_fitting_hits_and_budget_after_oversized_hit(monkeypatch):
     small = {'content': 'Synthetic small fact.'}
-    source = search_source(monkeypatch, {'small': small, 'oversized': {'content': 'x' * 2000}})
-    session = Session('synthetic-search-owner', source, SessionLimits(read_bytes=400), {}, authority='user')
+    large = {'content': 'x' * 2000}
+    source = search_source(monkeypatch, {'small': small, 'oversized': large})
+    small_hit = {'ref': 'memory_items/small', 'snippet': small['content']}
+    record_cost = serialized_bytes({'memory_items/small': small})
+    session = Session(
+        'synthetic-search-owner',
+        source,
+        SessionLimits(read_bytes=2 + serialized_bytes([small_hit]) + record_cost),
+        {},
+        authority='user',
+    )
     result = await session.search(Search(collections=['memory_items']))
-    assert result['results'] == [{'ref': 'memory_items/small', 'snippet': small['content']}]
+    assert result['results'] == [small_hit]
     assert result['truncated'] is True and result['complete'] is False
     assert result['counts']['hydrated'] == 2
-    assert result['counts']['read_bytes'] == serialized_bytes(small)
-    assert session.read_bytes == 2 + max(serialized_bytes(result['results']), serialized_bytes(small))
+    assert result['counts']['read_bytes'] == serialized_bytes([small_hit])
+    assert session.read_bytes == 2 + serialized_bytes([small_hit])
+    assert session.read_bytes < serialized_bytes(large)
     assert result['skipped_refs'] == ['memory_items/oversized']
     assert session.known == {'memory_items/small', 'memory_items/oversized'}
     # The omitted hit did not exhaust the budget or hide the useful ref.
@@ -64,13 +75,16 @@ async def test_search_empty_truncation_does_not_charge_dropped_hit_or_control_en
 async def test_search_exact_data_budget_returns_hit_without_envelope_rejection(monkeypatch):
     row = {'content': 'x' * 300}
     source = search_source(monkeypatch, {'small': row})
+    hit = {'ref': 'memory_items/small', 'snippet': 'x' * 240}
     session = Session(
-        'synthetic-search-owner', source, SessionLimits(read_bytes=2 + serialized_bytes(row)), {}, authority='user'
+        'synthetic-search-owner', source, SessionLimits(read_bytes=2 + serialized_bytes([hit])), {}, authority='user'
     )
     result = await session.search(Search(collections=['memory_items']))
-    assert result['results'][0]['ref'] == 'memory_items/small'
+    assert result['results'] == [hit]
     assert result['complete'] is True and result['truncated'] is False
+    assert result['counts']['read_bytes'] == serialized_bytes([hit])
     assert session.read_bytes == session.limits.read_bytes
+    assert session.read_bytes < serialized_bytes(row)
 
 
 @pytest.mark.asyncio
@@ -111,7 +125,20 @@ async def test_lexical_page_scans_past_oversized_hit_and_preserves_it_before_adv
         return ['oversized', 'small', 'tail'] if kwargs['page'] == 1 else ['next']
 
     monkeypatch.setattr(search, 'keyword_search_conversation_ids', query)
-    session = Session('synthetic-search-owner', source, SessionLimits(read_bytes=500), {}, authority='user')
+    pair = [
+        {'ref': 'conversations/small', 'snippet': 'Synthetic small capture'},
+        {'ref': 'conversations/tail', 'snippet': 'Synthetic tail capture'},
+    ]
+    next_hit = {'ref': 'conversations/next', 'snippet': 'Synthetic next page'}
+    oversized_hit = {'ref': 'conversations/oversized', 'snippet': 'x' * 240}
+    assert serialized_bytes([oversized_hit]) > serialized_bytes(pair)
+    session = Session(
+        'synthetic-search-owner',
+        source,
+        SessionLimits(read_bytes=2 + serialized_bytes(pair) + serialized_bytes([next_hit])),
+        {},
+        authority='user',
+    )
     request = Search(query='Synthetic', collections=['conversations'], limit=3)
     result = await session.search(request)
     assert [hit['ref'] for hit in result['results']] == ['conversations/small', 'conversations/tail']
@@ -132,16 +159,21 @@ async def test_lexical_page_cursor_is_not_published_when_hydration_stops_early(m
     source = search_source(monkeypatch, {'oversized': {'content': 'x' * 2000}})
     monkeypatch.setattr(search, 'keyword_search_conversation_ids', lambda **kw: ['oversized', 'unavailable'])
 
-    async def read(self, ref):
+    fallbacks = []
+
+    async def load(self, ref, request=None):
         if ref.endswith('/unavailable'):
             raise RuntimeError('Synthetic unavailable capture')
         return {'content': 'x' * 2000}
 
-    monkeypatch.setattr(search.OwnerSearch, 'read', read)
-    monkeypatch.setattr(search, 'record_fallback', lambda **kw: None)
+    monkeypatch.setattr(search.OwnerSearch, 'read', load)
+    monkeypatch.setattr(search.OwnerSearch, 'hydrate', load)
+    monkeypatch.setattr(search, 'record_fallback', lambda **kw: fallbacks.append(kw))
     result = await source.search(Search(query='Synthetic', collections=['conversations'], limit=2), byte_budget=500)
-    assert result['cursors'] == {} and result['counts']['failed_paths'] == 1
-    assert result['skipped_refs'] == ['conversations/oversized'] and result['complete'] is False
+    assert result['counts']['failed_paths'] == 0 and fallbacks == []
+    assert result['unavailable_refs'] == ['conversations/unavailable']
+    assert result['results'][0]['ref'] == 'conversations/oversized'
+    assert result['cursors'] == {'conversations': 'lexical:2'} and result['complete'] is True
 
 
 @pytest.mark.asyncio
@@ -155,16 +187,25 @@ async def test_semantic_search_returns_small_tail_hits_and_reports_oversized_ref
     source = search_source(monkeypatch, rows)
     monkeypatch.setattr(search.vector_db, 'index', object())
     monkeypatch.setattr(search.vector_db, 'query_vectors', lambda *a, **kw: list(rows))
-    session = Session('synthetic-search-owner', source, SessionLimits(read_bytes=500), {}, authority='user')
+    pair = [
+        {'ref': 'conversations/small', 'snippet': 'Synthetic small capture'},
+        {'ref': 'conversations/tail', 'snippet': 'Synthetic tail capture'},
+    ]
+    oversized_hit = {'ref': 'conversations/oversized', 'snippet': 'x' * 240}
+    assert serialized_bytes([oversized_hit]) > serialized_bytes(pair)
+    session = Session(
+        'synthetic-search-owner', source, SessionLimits(read_bytes=2 + serialized_bytes(pair)), {}, authority='user'
+    )
     result = await session.search(Search(query='Synthetic', mode='semantic', collections=['conversations'], limit=4))
     assert [hit['ref'] for hit in result['results']] == ['conversations/small', 'conversations/tail']
     assert result['skipped_refs'] == ['conversations/oversized', 'conversations/oversized-again']
     assert result['counts']['hydrated'] == 4 and result['counts']['budget_exhausted'] == 2
-    assert result['counts']['read_bytes'] == sum(serialized_bytes(rows[key]) for key in ('small', 'tail'))
+    assert result['counts']['read_bytes'] == serialized_bytes(result['results'])
+    assert result['counts']['read_bytes'] < sum(serialized_bytes(row) for row in rows.values())
     assert result['cursors'] == {} and result['truncated'] is True and result['complete'] is False
     omitted = await session.read(Read(refs=result['skipped_refs']))
     assert all(error['code'] == 'agent_read_byte_budget' for error in omitted['errors'].values())
-    assert session.known == {'conversations/' + key for key in rows} and session.read_bytes <= 500
+    assert session.known == {'conversations/' + key for key in rows} and session.read_bytes <= session.limits.read_bytes
 
 
 @pytest.mark.asyncio
@@ -172,10 +213,11 @@ async def test_lexical_partial_page_does_not_advance_when_other_collection_used_
     source = search_source(monkeypatch, {'person': {'name': 'Synthetic person'}})
     monkeypatch.setattr(search, 'keyword_search_conversation_ids', lambda **kw: ['first', 'second', 'tail'])
 
-    async def read(self, ref):
+    async def load(self, ref, request=None):
         return {'name': 'Synthetic person'} if ref.startswith('people/') else {'content': 'Synthetic capture'}
 
-    monkeypatch.setattr(search.OwnerSearch, 'read', read)
+    monkeypatch.setattr(search.OwnerSearch, 'read', load)
+    monkeypatch.setattr(search.OwnerSearch, 'hydrate', load)
     session = Session('synthetic-search-owner', source, SessionLimits(read_bytes=500), {}, authority='user')
     result = await session.search(Search(query='Synthetic', collections=['people', 'conversations'], limit=3))
     assert len(result['results']) == 3

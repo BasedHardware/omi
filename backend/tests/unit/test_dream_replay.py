@@ -249,11 +249,12 @@ def test_hunt_finds_90_summary_typos_resubmits_and_applies_25_with_exact_undo(ru
 
     monkeypatch.setattr(dream_tools, 'proposal_record', lambda uid, ref, snapshot: lookup(ref))
 
-    async def read(source, ref):
+    async def read(source, ref, request=None):
         assert source.uid == UID
         return lookup(ref)
 
     monkeypatch.setattr(dream_search.OwnerSearch, 'read', read)
+    monkeypatch.setattr(dream_search.OwnerSearch, 'hydrate', read)
     monkeypatch.setattr(
         dream_seed,
         'load',
@@ -366,3 +367,151 @@ def test_hunt_finds_90_summary_typos_resubmits_and_applies_25_with_exact_undo(ru
     destination = os.getenv('DREAM_SYNTHETIC_REPLAY_RECEIPT')
     if destination:
         Path(destination).write_text(json.dumps(receipt, indent=2) + '\n')
+
+
+def test_heavy_budget_reads_past_large_and_unreadable_search_hits(runtime, monkeypatch):
+    # Nine ~100KB decoys would exhaust a heavy budget if search charged full rows.
+    # The editable capture is last and stays under one read call.
+    decoys = [f'decoy-{index}' for index in range(9)]
+    runtime.rows[('users', UID, 'people', 'right')] = {'id': 'right', 'name': 'Qorbi', 'is_user_created': True}
+    for key in decoys:
+        runtime.rows[('users', UID, 'conversations', key)] = {
+            'id': key,
+            'status': 'completed',
+            'created_at': NOW,
+            'structured': {'title': 'Synthetic decoy', 'overview': 'Synthetic decoy overview'},
+            'transcript_segments': [{'id': 'segment-one', 'text': 'x' * 100000, 'start': 0, 'end': 5, 'is_user': True}],
+        }
+    runtime.rows[('users', UID, 'conversations', 'target')] = {
+        'id': 'target',
+        'status': 'completed',
+        'created_at': NOW,
+        'structured': {
+            'title': 'Qorby workshop',
+            'overview': 'Qorby plans the invented workshop.',
+            'sections': [
+                {
+                    'heading': 'Qorby plan',
+                    'body_markdown': 'Qorby will draft the sample outline.',
+                    'source_segment_ids': ['segment-one'],
+                }
+            ],
+            'note_claims': [
+                {
+                    'target': '/sections/0/body_markdown',
+                    'text': 'Qorby will draft the sample outline.',
+                    'evidence_ids': ['unchanged-evidence-id'],
+                    'provenance': 'said',
+                }
+            ],
+        },
+        'transcript_segments': [
+            {
+                'id': 'segment-one',
+                'text': 'Qorbi is the confirmed spelling. Qorbi will draft the sample outline.',
+                'start': 0,
+                'end': 5,
+                'is_user': True,
+            }
+        ],
+    }
+    order = [*decoys, 'dead', 'raising', 'target']
+
+    def keyword(*, uid, query, limit, page, **kwargs):
+        assert uid == UID and query == 'Qorby' and page == 1
+        return order
+
+    monkeypatch.setattr(dream_search, 'keyword_search_conversation_ids', keyword)
+
+    def lookup(ref):
+        _collection, key = base_ref(ref).split('/', 1)
+        if key == 'raising':
+            raise RuntimeError('Synthetic unreadable capture')
+        row = runtime.rows.get(('users', UID, _collection, key))
+        return deepcopy(row) if row else None
+
+    monkeypatch.setattr(dream_tools, 'proposal_record', lambda uid, ref, snapshot: lookup(ref))
+
+    async def load(source, ref, request=None):
+        assert source.uid == UID
+        return lookup(ref)
+
+    monkeypatch.setattr(dream_search.OwnerSearch, 'read', load)
+    monkeypatch.setattr(dream_search.OwnerSearch, 'hydrate', load)
+    monkeypatch.setattr(
+        dream_seed,
+        'load',
+        lambda uid, caps: (
+            {'targets': [], 'vocabulary': [], 'confirmed_people': [{'ref': 'people/right', 'name': 'Qorbi'}]},
+            EvidenceRecords(),
+            [],
+            SessionLimits.for_size(91),
+        ),
+    )
+    step = 0
+
+    async def model(uid, lane, mount, messages):
+        nonlocal step
+        if lane != MAIN_LANE:
+            batch = json.loads(messages[-1]['content'].split('\n', 1)[1])
+            result = Turn(
+                value=VerificationBatch(
+                    decisions=[
+                        Verification(
+                            id=row['id'],
+                            agree=True,
+                            reason='Explicit correct spelling in speech and a confirmed profile',
+                        )
+                        for row in batch
+                    ]
+                )
+            )
+            return measured(result, mount, messages)
+        step += 1
+        if step == 1:
+            return measured(
+                tool_turn([call('search', {'query': 'Qorby', 'collections': ['conversations'], 'limit': 20})]),
+                mount,
+                messages,
+            )
+        if step == 2:
+            return measured(
+                tool_turn([call('read', {'refs': ['conversations/target', 'people/right']})]), mount, messages
+            )
+        return measured(
+            tool_turn(
+                [
+                    call(
+                        'propose_edit',
+                        {
+                            'edit': {
+                                'kind': 'spelling',
+                                'target': 'conversations/target',
+                                'before': 'Qorby',
+                                'after': 'Qorbi',
+                                'reason': 'Synthetic recurring summary typo',
+                                'evidence': ['conversations/target', 'people/right'],
+                                'value': 4,
+                            }
+                        },
+                    ),
+                    call('finish', {'summary': 'Corrected the synthetic summary.'}, 2),
+                ]
+            ),
+            mount,
+            messages,
+        )
+
+    report = asyncio.run(dream_agent.run_pass(UID, turn=model))
+    assert report['status'] == 'complete', str(report)
+    assert report['size_bucket'] == 'heavy'
+    assert report['tool_counts'].get('search', 0) >= 1 and report['tool_counts'].get('read', 0) >= 1
+    assert any(row['status'] == 'applied' for row in report['outcomes']), {
+        'outcomes': report.get('outcomes'),
+        'rejected': report.get('rejected'),
+        'read_bytes': report.get('read_bytes'),
+        'tool_counts': report.get('tool_counts'),
+    }
+    assert report['read_bytes'] < 80000
+    assert report['read_bytes'] < SessionLimits.for_size(91).read_bytes
+    assert runtime.rows[('users', UID, 'conversations', 'target')]['structured']['title'] == 'Qorbi workshop'
