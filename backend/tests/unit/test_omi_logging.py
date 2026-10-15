@@ -299,3 +299,21 @@ def test_surrogate_message_is_valid_utf8_json(monkeypatch):
     entry = json.loads(encoded.decode('utf-8'))
     assert entry['message'] == message
     assert entry['severity'] == 'WARNING'
+
+
+@pytest.mark.parametrize('policy,kept', [(None, False), ('platform', False), ('keep', True)])
+def test_cloud_run_access_override(monkeypatch, policy, kept):
+    monkeypatch.setenv('K_SERVICE', 'backend')
+    output = io.StringIO()
+    logs.configure_logging('backend', access_policy=policy, stdout=output)
+    logging.getLogger('uvicorn.access').info('%s %s %s %s %s', 'client', 'GET', '/request', '1.1', 200)
+    assert bool(output.getvalue()) is kept
+
+
+@pytest.mark.parametrize('parent', [b'00-' + b'b' * 32 + b'-0000000000000001-00', b'invalid', b''])
+def test_w3c_trace_takes_precedence_with_legacy_fallback(parent):
+    result = logs.trace_context({b'traceparent': parent, b'x-cloud-trace-context': b'a' * 32 + b'/42;o=1'})
+    expected = (
+        ('b' * 32, '0000000000000001', False) if parent.startswith(b'00-') else ('a' * 32, '000000000000002a', True)
+    )
+    assert result == expected

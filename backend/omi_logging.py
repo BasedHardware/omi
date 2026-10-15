@@ -35,14 +35,14 @@ NEMO_REPEATS = (
 
 def trace_context(headers: Mapping[bytes, bytes]) -> tuple[str, str, bool] | None:
     """Parse validated IDs only; never retain request URLs or other headers."""
-    cloud = headers.get(b'x-cloud-trace-context', b'').decode('ascii', errors='ignore')
-    match = re.fullmatch(r'([0-9a-fA-F]{32})/(\d{1,20})(?:;o=([01]))?', cloud)
-    if match and int(match[1], 16) and 0 < int(match[2]) < 2**64:
-        return match[1].lower(), f'{int(match[2]):016x}', match[3] == '1'
     parent = headers.get(b'traceparent', b'').decode('ascii', errors='ignore')
     match = re.fullmatch(r'00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})', parent)
     if match and int(match[1], 16) and int(match[2], 16):
         return match[1], match[2], bool(int(match[3], 16) & 1)
+    cloud = headers.get(b'x-cloud-trace-context', b'').decode('ascii', errors='ignore')
+    match = re.fullmatch(r'([0-9a-fA-F]{32})/(\d{1,20})(?:;o=([01]))?', cloud)
+    if match and int(match[1], 16) and 0 < int(match[2]) < 2**64:
+        return match[1].lower(), f'{int(match[2]):016x}', match[3] == '1'
     return None
 
 
@@ -211,10 +211,8 @@ def configure_logging(
         logger.setLevel(threshold)
     access = logging.getLogger('uvicorn.access')
     access.filters.clear()
-    off = (
-        cloud_run
-        or access_policy == 'platform'
-        or (access_policy is None and on_kubernetes and service in LB_LOGGED_SERVICES)
+    off = access_policy == 'platform' or (
+        access_policy is None and (cloud_run or (on_kubernetes and service in LB_LOGGED_SERVICES))
     )
     access.addFilter(AccessFilter(off))
     nemo = logging.getLogger('nemo_logger')
