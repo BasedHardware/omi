@@ -131,7 +131,9 @@ def test_concurrent_trace_context_and_exception_reset(monkeypatch):
     assert 'logging.googleapis.com/trace' not in entries['outside']
 
 
-@pytest.mark.parametrize('header', [b'bad', b'0' * 32 + b'/1', b'a' * 32 + b'/18446744073709551616'])
+@pytest.mark.parametrize(
+    'header', [b'bad', b'0' * 32 + b'/1', b'a' * 32 + b'/18446744073709551616', b'\xff' + b'a' * 32 + b'/42']
+)
 def test_invalid_trace_is_ignored(header):
     assert logs.trace_context({b'x-cloud-trace-context': header}) is None
 
@@ -310,7 +312,10 @@ def test_cloud_run_access_override(monkeypatch, policy, kept):
     assert bool(output.getvalue()) is kept
 
 
-@pytest.mark.parametrize('parent', [b'00-' + b'b' * 32 + b'-0000000000000001-00', b'invalid', b''])
+@pytest.mark.parametrize(
+    'parent',
+    [b'00-' + b'b' * 32 + b'-0000000000000001-00', b'invalid', b'', b'\xff00-' + b'b' * 32 + b'-0000000000000001-00'],
+)
 def test_w3c_trace_takes_precedence_with_legacy_fallback(parent):
     result = logs.trace_context({b'traceparent': parent, b'x-cloud-trace-context': b'a' * 32 + b'/42;o=1'})
     expected = (
