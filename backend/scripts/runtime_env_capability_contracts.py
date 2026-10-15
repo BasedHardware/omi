@@ -126,6 +126,22 @@ def _literal_env(service_config: ConfigDict) -> dict[str, str]:
     return literal
 
 
+def validate_voice_transcription_storage(env: str, env_config: ConfigDict) -> list[ValidationError]:
+    """Keep the voice upload route's staging bucket explicit in each environment."""
+    expected = {'dev': 'syncing-local-development', 'prod': 'syncing-local'}.get(env)
+    if expected is None:
+        return []
+    config = _service_config(env_config, 'cloud_run', 'backend') or {}
+    if _literal_env(config).get('BUCKET_TEMPORAL_SYNC_LOCAL') == expected:
+        return []
+    return [
+        ValidationError(
+            f'{env}/cloud_run/backend',
+            f'voice transcription requires literal BUCKET_TEMPORAL_SYNC_LOCAL={expected}',
+        )
+    ]
+
+
 def validate_conversation_finalization_capabilities(env: str, env_config: ConfigDict) -> list[ValidationError]:
     """Validate the explicit finalization host roster and its memory-write fence."""
 

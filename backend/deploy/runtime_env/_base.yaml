@@ -542,6 +542,7 @@ environment_shared:
             secret: MEMORY_V3_CURSOR_SECRET
             version: latest
         env:
+          BUCKET_TEMPORAL_SYNC_LOCAL: {value: syncing-local, category: storage_retention}
           AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}

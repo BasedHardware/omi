@@ -463,6 +463,7 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          BUCKET_TEMPORAL_SYNC_LOCAL: {value: syncing-local-development, category: storage_retention}
           REDIS_DB_PORT:
             value: '13151'
             category: service_discovery
