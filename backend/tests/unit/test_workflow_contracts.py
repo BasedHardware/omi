@@ -867,6 +867,79 @@ def test_firestore_readiness_gate_covers_every_backend_image_shipment():
     """Every backend-source image push/deploy needs the shared immutable gate."""
     policy = _workflow_policy()
     assert policy.repository_gate_violations(BACKEND_DIR.parent) == []
+    assert policy._yaml_document.cache_info().hits > 0
+
+
+def test_firestore_repository_scan_keeps_worker_workflow_in_scope():
+    policy = _workflow_policy()
+    worker_workflow = (BACKEND_DIR.parent / '.github/workflows/gcp_diarizer.yml').read_text(encoding='utf-8')
+
+    assert policy._workflow_policy_relevant(worker_workflow)
+
+
+def test_firestore_repository_scan_still_rejects_malformed_workflows(tmp_path):
+    policy = _workflow_policy()
+    repo = tmp_path / 'repo'
+    workflows = repo / '.github/workflows'
+    (repo / 'backend').mkdir(parents=True)
+    workflows.mkdir(parents=True)
+    (repo / 'backend/runtime_images.json').write_text('{"images": []}', encoding='utf-8')
+    (workflows / 'unrelated.yml').write_text('name: [', encoding='utf-8')
+
+    assert policy.repository_gate_violations(repo) == ['.github/workflows/unrelated.yml: workflow YAML must parse']
+
+
+def test_firestore_repository_scan_follows_local_image_builder_actions(tmp_path):
+    policy = _workflow_policy()
+    repo = tmp_path / 'repo'
+    (repo / 'backend').mkdir(parents=True)
+    action_dir = repo / '.github/actions/build-backend'
+    action_dir.mkdir(parents=True)
+    workflows = repo / '.github/workflows'
+    workflows.mkdir(parents=True)
+    (repo / 'backend/runtime_images.json').write_text(
+        json.dumps({'images': [{'dockerfile': 'backend/Dockerfile', 'name': 'backend'}]}), encoding='utf-8'
+    )
+    (action_dir / 'action.yml').write_text(
+        '''name: Build backend
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: docker build -f backend/Dockerfile -t gcr.io/project/backend:abc . && docker push gcr.io/project/backend:abc
+''',
+        encoding='utf-8',
+    )
+    (workflows / 'new-backend-builder.yml').write_text(
+        '''name: New backend builder
+on: workflow_dispatch
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ./.github/actions/build-backend
+''',
+        encoding='utf-8',
+    )
+
+    violations = policy.repository_gate_violations(repo)
+
+    assert any('new-backend-builder.yml:build:' in violation for violation in violations)
+    assert any('lacks an earlier successful Firestore readiness gate' in violation for violation in violations)
+
+
+def test_firestore_workflow_yaml_documents_are_parsed_once():
+    policy = _workflow_policy()
+    policy._yaml_document.cache_clear()
+    text = 'jobs: {}\n'
+
+    first = policy._yaml_document(text)
+    second = policy._yaml_document(text)
+
+    assert first == second == {'jobs': {}}
+    cache = policy._yaml_document.cache_info()
+    assert cache.misses == 1
+    assert cache.hits == 1
 
 
 def test_firestore_gate_policy_rejects_ungated_deploy_mutations():
