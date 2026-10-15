@@ -22,9 +22,7 @@ def test_cancel_drains_buffered_tail():
     async def go():
         q = asyncio.Queue()
         w = WhisperTranscriber(runner=_runner)
-        task = asyncio.create_task(
-            w.run(q, on_transcript=transcripts.append)
-        )
+        task = asyncio.create_task(w.run(q, on_transcript=transcripts.append))
         await q.put(b"\x01\x02" * 100)  # 200 bytes — under the 5s batch
         await asyncio.sleep(0.05)
         task.cancel()
@@ -41,9 +39,7 @@ def test_cancel_collects_inflight_batch():
     async def go():
         q = asyncio.Queue()
         w = WhisperTranscriber(runner=_runner)
-        task = asyncio.create_task(
-            w.run(q, on_transcript=transcripts.append)
-        )
+        task = asyncio.create_task(w.run(q, on_transcript=transcripts.append))
         # a full 5s batch — the runner is mid-flight when we cancel
         await q.put(b"\x00" * (16000 * 2 * 5))
         await asyncio.sleep(0.05)
