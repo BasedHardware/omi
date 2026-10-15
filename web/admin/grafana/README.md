@@ -276,3 +276,5 @@ Regularity statistics remain inside HogQL; no raw identities leave the aggregate
 This is a daily approximation of the threshold evidence. **Cross-day and separated
 burst regularity detection is deferred**; client names alone never establish intent.
 Activity metrics and derived MAU units carry the MCP schema-2 definition revision.
+
+Private monitor.omi.me cutover, JWT prerequisites and kiosk limits: [platform runbook](../../../backend/charts/monitoring/grafana/README.md).
