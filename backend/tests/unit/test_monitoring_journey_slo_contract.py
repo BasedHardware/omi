@@ -152,7 +152,7 @@ def test_slo_rules_use_exact_budget_and_two_independent_window_pairs(journey, se
         assert rule['for'] == {'critical': '2m', 'warning': '15m'}[severity]
     assert rule['keep_firing_for'] == '0s'
     assert rule['noDataState'] == 'NoData'  # absent SLI must never resolve healthy
-    assert rule['execErrState'] == 'Error'
+    assert rule['execErrState'] == 'KeepLast'  # datasource canary owns query-path outages
     assert rule['labels']['severity'] == severity
     assert rule['labels']['alert_identity'] == uid
     assert rule['notification_settings']['receiver'] == 'Omi - Services Alerting (Telegram)'
