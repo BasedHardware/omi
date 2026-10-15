@@ -151,3 +151,14 @@ def test_untrusted_block_cannot_be_closed_early():
     assert block.startswith('<untrusted source="gmail_snippet_">\n')
     assert block.endswith('\n</untrusted>')
     assert block.count('</untrusted>') == 1
+
+
+def test_truncation_note_with_unknown_total_never_invents_a_count():
+    assert truncation_note(shown=5, total=None, unit='app records', how_to_get_more='Narrow it.') == ''
+    note = truncation_note(shown=5, total=None, unit='app records', how_to_get_more='Narrow it.', cut=True)
+    assert note == '[Showing 5 app records; more were omitted, not absent. Narrow it.]'
+
+
+def test_for_config_reads_the_runnable_config():
+    assert DisplayClock.for_config({'configurable': {'user_timezone': 'Asia/Ho_Chi_Minh'}}) == HCM
+    assert DisplayClock.for_config(None) == DisplayClock.utc()

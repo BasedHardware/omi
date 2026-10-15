@@ -80,6 +80,12 @@ class DisplayClock:
             return cls.for_uid(uid)
         return cls.utc()
 
+    @classmethod
+    def for_config(cls, config: Any, uid: Optional[str] = None) -> 'DisplayClock':
+        """Resolve from a LangChain ``RunnableConfig`` (or ``None``) as chat tools receive it."""
+        configurable = config.get('configurable') if isinstance(config, Mapping) else None
+        return cls.for_turn(configurable if isinstance(configurable, Mapping) else None, uid)
+
     @property
     def is_utc(self) -> bool:
         return self.name == 'UTC'
@@ -209,12 +215,17 @@ def format_elapsed(seconds: Any) -> str:
     return f'+{hours}:{minutes:02d}:{secs:02d}'
 
 
-def truncation_note(*, shown: int, total: int, unit: str, how_to_get_more: str) -> str:
+def truncation_note(*, shown: int, total: Optional[int], unit: str, how_to_get_more: str, cut: bool = False) -> str:
     """Say what was dropped and how to get it. Every cut of model-facing evidence needs one.
 
     Without it the model treats a partial transcript or list as complete and reports absence.
-    Returns ``''`` when nothing was cut.
+    Pass ``total`` only when it is the true total. When it is unknown, pass ``total=None`` and
+    ``cut=True``; never invent a total. Returns ``''`` when nothing was cut.
     """
+    if total is None:
+        if not cut:
+            return ''
+        return f'[Showing {shown} {unit}; more were omitted, not absent. {how_to_get_more}]'
     if total <= shown:
         return ''
     return (
