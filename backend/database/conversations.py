@@ -1246,7 +1246,7 @@ def get_conversation(
 
 
 def get_conversation_raw_snapshot(
-    uid: str, conversation_id: str, *, firestore_client: Any = None
+    uid: str, conversation_id: str, *, firestore_client: Any = None, field_paths: Optional[List[str]] = None
 ) -> Optional[Dict[str, Any]]:
     """Return the stored conversation document with no read-path decoding.
 
@@ -1257,7 +1257,8 @@ def get_conversation_raw_snapshot(
     raw ``to_dict()`` snapshot only.
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    snapshot = client.collection('users').document(uid).collection('conversations').document(conversation_id).get()
+    ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+    snapshot = ref.get() if field_paths is None else ref.get(field_paths=field_paths)
     if not getattr(snapshot, 'exists', False):
         return None
     return snapshot.to_dict()

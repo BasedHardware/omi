@@ -90,6 +90,10 @@ def _comparison_inputs():
     listen = live['externalRules'][0]
     listen['seriesQuery'] = 'backend_listen_active_ws_connections'
     listen['metricsQuery'] = 'avg(backend_listen_active_ws_connections{job="backend-listen-metrics"})'
+    # Captured pre-upgrade queries, independent of the candidate values above.
+    gpu = next(rule for rule in live['externalRules'] if rule['name']['as'] == 'parakeet_gpu_utilization')
+    gpu['seriesQuery'] = 'DCGM_FI_DEV_GPU_UTIL{namespace!=""}'
+    gpu['metricsQuery'] = 'avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{<<.LabelMatchers>>}[1m]))'
     deployment = {'kind': 'Deployment', 'spec': {'template': {'spec': {'containers': [{'args': ['--config=x']}]}}}}
     api = {
         'kind': 'APIService',
@@ -114,6 +118,40 @@ def _comparison_inputs():
 
 def test_diff_allows_only_canary_filter_nllb_rule_and_api_port_default():
     assert compare(*_comparison_inputs())[1] == []
+
+
+def test_diff_accepts_reviewed_unscoped_to_parakeet_gpu_queries():
+    inputs = _comparison_inputs()
+    live = yaml.safe_load(inputs[1]['data']['config.yaml'])
+    gpu = next(rule for rule in live['externalRules'] if rule['name']['as'] == 'parakeet_gpu_utilization')
+    assert gpu['seriesQuery'] == 'DCGM_FI_DEV_GPU_UTIL{namespace!=""}'
+    assert gpu['metricsQuery'] == 'avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{<<.LabelMatchers>>}[1m]))'
+    assert compare(*inputs)[1] == []
+    # The reviewed upgrade must never be admitted as an exact-live rollback.
+    assert compare(*inputs, allow_reviewed_changes=False)[1]
+
+
+@pytest.mark.parametrize('field', ['seriesQuery', 'metricsQuery'])
+def test_diff_rejects_unreviewed_live_parakeet_gpu_query(field):
+    _, cm, _, _ = _comparison_inputs()
+    live = yaml.safe_load(cm['data']['config.yaml'])
+    gpu = next(rule for rule in live['externalRules'] if rule['name']['as'] == 'parakeet_gpu_utilization')
+    gpu[field] = 'unreviewed'
+    with pytest.raises(ValueError, match='Unexpected live Parakeet GPU'):
+        expected_config(live)
+
+
+@pytest.mark.parametrize('change', ['missing', 'duplicate'])
+def test_diff_rejects_ambiguous_live_parakeet_gpu_rule(change):
+    _, cm, _, _ = _comparison_inputs()
+    live = yaml.safe_load(cm['data']['config.yaml'])
+    gpu = next(rule for rule in live['externalRules'] if rule['name']['as'] == 'parakeet_gpu_utilization')
+    if change == 'missing':
+        live['externalRules'].remove(gpu)
+    else:
+        live['externalRules'].append(copy.deepcopy(gpu))
+    with pytest.raises(ValueError, match='Unexpected live Parakeet GPU rule count'):
+        expected_config(live)
 
 
 def test_diff_accepts_reconciled_live_and_rule_reordering():

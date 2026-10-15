@@ -5,9 +5,14 @@ from models.person_confidence import evidence_count, MANUAL_LABELS, CARD_CONFIRM
 
 from database import dream_history, dream_store, review_store, users
 from config.dream_session import SessionLimits
+from models.agent_refs import canonical_ref
 from utils.agent_capabilities.evidence import EvidenceRecords
 from utils.agent_capabilities.session import serialized_bytes
 from utils.agent_capabilities.reads import read_record, unavailable_is_transient
+
+# A pile of deleted ids must not walk the dirty queue. Past this many examined
+# refs the seed page may be short.
+_SEED_SCAN_CAP = 64
 
 
 def load(uid, caps):
@@ -56,8 +61,23 @@ def load(uid, caps):
         ):
             append('confirmed_people', {'ref': 'people/' + snapshot.id, 'name': row.get('name', '')})
     dirty = [snapshot.to_dict() for snapshot in dream_store.dirty_refs(uid, limit=32, newest=False)]
-    for item in dirty:
-        append('targets', item['collection'] + '/' + item['id'])
+    readable = []
+    unavailable = {}
+    for item in dirty[:_SEED_SCAN_CAP]:
+        ref = canonical_ref(str(item.get('collection') or '') + '/' + str(item.get('id') or ''))
+        try:
+            row = read_record(uid, ref)
+        except Exception as error:
+            # Dead or unreadable dirty ids are not seeds. The session still sees
+            # which refs were skipped.
+            unavailable[ref] = unavailable_is_transient(error)
+            continue
+        if row is None:
+            unavailable[ref] = False
+            continue
+        if not append('targets', ref):
+            break
+        readable.append((ref, row))
     changes = (
         review_store.user(uid).collection('review_changes').order_by('created_at', direction='DESCENDING').limit(5)
     )
@@ -80,19 +100,10 @@ def load(uid, caps):
         if isinstance(notes, str) and len(notes) <= 2000:
             seed['previous_notes'] = notes
     records = EvidenceRecords()
-    unavailable = {}
     initial = 2 if limits.bucket in {'empty', 'light'} else 4 if limits.bucket == 'medium' else 8
-    for ref in seed['targets'][:initial]:
-        try:
-            row = read_record(uid, ref)
-            if row is None:
-                unavailable[ref] = False
-            if row and serialized_bytes(records) + serialized_bytes({ref: row}) <= min(16000, limits.read_bytes // 4):
-                records[ref] = row
-        except Exception as error:
-            # Search/read tools explicitly retry unavailable sources; never
-            # acknowledge an unread dirty version from seed construction.
-            unavailable[ref] = unavailable_is_transient(error)
+    for ref, row in readable[:initial]:
+        if serialized_bytes(records) + serialized_bytes({ref: row}) <= min(16000, limits.read_bytes // 4):
+            records[ref] = row
     seed['unavailable_targets'] = unavailable
     while serialized_bytes(seed) > ceiling:
         if seed['previous_notes']:

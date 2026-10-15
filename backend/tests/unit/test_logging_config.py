@@ -5,11 +5,14 @@ import pytest
 
 from utils.logging_config import (
     CloudRunAccessFilter,
+    NEMO_LOGGER_NAME,
+    RepetitiveNeMoMessageFilter,
     SuccessfulHealthAccessFilter,
     configure_health_access_logging,
     configure_split_stream_logging,
     NOISY_HTTP_CLIENT_LOGGERS,
     quiet_http_client_loggers,
+    quiet_repetitive_nemo_logs,
 )
 
 
@@ -147,6 +150,41 @@ def test_outside_cloud_run_access_records_are_kept(monkeypatch, value):
         configure_health_access_logging()
         assert not any(isinstance(item, CloudRunAccessFilter) for item in logger.filters)
         assert logger.filter(_access_record(200))
+    finally:
+        logger.filters[:] = saved_filters
+
+
+def _nemo_record(message: str, level: int = logging.INFO) -> logging.LogRecord:
+    return logging.LogRecord(NEMO_LOGGER_NAME, level, 'nemo.py', 1, message, (), None)
+
+
+def test_repetitive_nemo_messages_are_dropped_and_other_records_pass():
+    message_filter = RepetitiveNeMoMessageFilter()
+    dropped = (
+        'Timestamps requested, setting decoding timestamps to True. Capture them in Hypothesis object',
+        'The following configuration keys are ignored by Lhotse dataloader: use_start_end_token',
+        'You are using a non-tarred dataset and requested tokenization during data sampling (pretokenize=True).',
+    )
+    for message in dropped:
+        assert not message_filter.filter(_nemo_record(message, logging.WARNING))
+    assert message_filter.filter(_nemo_record('CUDA out of memory', logging.ERROR))
+    assert message_filter.filter(
+        _nemo_record("Option 'tarred_random_access' is deprecated and replaced.", logging.WARNING)
+    )
+    broken = logging.LogRecord(NEMO_LOGGER_NAME, logging.ERROR, 'nemo.py', 1, 'bad %s %s', ('only',), None)
+    assert message_filter.filter(broken)
+
+
+def test_quiet_repetitive_nemo_logs_installs_once_on_nemo_logger():
+    logger = logging.getLogger(NEMO_LOGGER_NAME)
+    saved_filters = list(logger.filters)
+    try:
+        logger.filters.clear()
+        quiet_repetitive_nemo_logs()
+        quiet_repetitive_nemo_logs()
+        assert sum(isinstance(item, RepetitiveNeMoMessageFilter) for item in logger.filters) == 1
+        assert not logger.filter(_nemo_record('Timestamps requested, setting decoding timestamps to True'))
+        assert logger.filter(_nemo_record('decoder failed to initialize', logging.ERROR))
     finally:
         logger.filters[:] = saved_filters
 

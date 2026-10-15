@@ -8,9 +8,16 @@ def base_ref(ref: str) -> str:
     return ref.partition('#')[0]
 
 
+def canonical_collection(collection: str) -> str:
+    """Legacy `memories` is the same owner collection as `memory_items`."""
+    return 'memory_items' if collection == 'memories' else collection
+
+
 def canonical_ref(ref: str) -> str:
     """New sessions use one memory ref spelling; stored legacy receipts still decode."""
-    return 'memory_items/' + ref.removeprefix('memories/') if ref.startswith('memories/') else ref
+    if ref.startswith('memories/'):
+        return 'memory_items/' + ref.removeprefix('memories/')
+    return ref
 
 
 def has_ref(ref: str, records) -> bool:

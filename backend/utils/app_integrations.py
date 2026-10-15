@@ -912,6 +912,7 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
             if response.status_code >= 200 and response.status_code < 300:
                 cb.record_success()
                 await run_blocking(db_executor, record_app_webhook_success, app.id)
+                logger.debug(f'trigger_realtime_audio_bytes {app.id} status: {response.status_code}')
             else:
                 cb.record_failure()
                 error_str = f'HTTP {response.status_code}'
@@ -919,7 +920,7 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
                     db_executor, record_app_webhook_failure, app.id, response.status_code, error_str
                 )
                 await run_blocking(db_executor, _handle_webhook_health_action, app.id, action, error_str)
-            logger.info(f'trigger_realtime_audio_bytes {app.id} status: {response.status_code}')
+                logger.warning(f'trigger_realtime_audio_bytes {app.id} status: {response.status_code}')
         except Exception as e:
             cb.record_failure()
             error_str = type(e).__name__
