@@ -223,6 +223,24 @@ def _expected_literal_env(state_path: Path, *, service_name: str) -> dict[str, s
     return expected
 
 
+def _apply_expected_env_overrides(expected: Mapping[str, str], overrides: list[str]) -> dict[str, str]:
+    """Replace rendered values that a deploy step deliberately overlays on this service.
+
+    The sync-backfill worker clones backend-sync's rendered contract and then
+    points SYNC_TASKS_* at itself, so its live literals legitimately differ
+    from the rendered state for exactly those keys. An override replaces or
+    adds an expected literal, so it can only make the check stricter for its
+    own key; every other key stays exactly as rendered.
+    """
+    result = dict(expected)
+    for raw in overrides:
+        name, sep, value = raw.partition('=')
+        if not sep or not name:
+            raise ValueError(f'expected env override {raw!r} must be NAME=VALUE')
+        result[name] = value
+    return result
+
+
 def _ingress_literal_env(service: Mapping[str, Any], *, ingress_container_name: str) -> dict[str, str]:
     try:
         containers = service['spec']['template']['spec']['containers']
@@ -733,7 +751,10 @@ def attach_job_sidecar(args: argparse.Namespace) -> None:
 
 
 def attach_sidecar(args: argparse.Namespace) -> None:
-    expected_env = _expected_literal_env(args.expected_env_state, service_name=args.service)
+    expected_env = _apply_expected_env_overrides(
+        _expected_literal_env(args.expected_env_state, service_name=args.service),
+        getattr(args, 'expected_env_override', None) or [],
+    )
     export = _run(
         [
             'gcloud',
@@ -1047,6 +1068,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--config', type=Path)
     parser.add_argument('--config-secret', default='cloud-run-gmp-config')
     parser.add_argument('--expected-env-state', type=Path)
+    parser.add_argument('--expected-env-override', action='append', default=[], metavar='NAME=VALUE')
     parser.add_argument('--tag', default='')
     parser.add_argument(
         '--desktop-backend-liveness-probe',

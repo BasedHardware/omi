@@ -994,3 +994,97 @@ def test_detach_cli_propagates_gcloud_failures(monkeypatch, phase):
     monkeypatch.setattr(module, '_run', fake_run)
     with pytest.raises(RuntimeError, match='PERMISSION_DENIED'):
         module.detach_job_sidecar(SimpleNamespace(service='notifications-job', project='test', region='us-central1'))
+
+
+def _backfill_export(handler_url: str) -> dict:
+    return {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {
+                            'name': 'backend-1',
+                            'env': [
+                                {'name': 'SYNC_TASKS_QUEUE', 'value': 'sync-backfill'},
+                                {'name': 'SYNC_TASKS_HANDLER_URL', 'value': handler_url},
+                                {'name': 'SAFE', 'value': 'kept'},
+                            ],
+                        }
+                    ]
+                }
+            }
+        }
+    }
+
+
+def test_backfill_worker_overlay_overrides_only_the_named_rendered_keys():
+    module = _load_module()
+    rendered = {
+        'SYNC_TASKS_QUEUE': 'sync-jobs',
+        'SYNC_TASKS_HANDLER_URL': 'https://backend-sync-x.a.run.app/v2/sync-jobs/run',
+        'SAFE': 'kept',
+    }
+    backfill = 'https://backend-sync-backfill-1.us-central1.run.app/v2/sync-jobs/run'
+    expected = module._apply_expected_env_overrides(
+        rendered, ['SYNC_TASKS_QUEUE=sync-backfill', f'SYNC_TASKS_HANDLER_URL={backfill}']
+    )
+    assert rendered['SYNC_TASKS_QUEUE'] == 'sync-jobs'
+    module._validate_expected_literal_env(
+        _backfill_export(backfill),
+        expected=expected,
+        ingress_container_name='backend-1',
+        phase='exported base revision',
+    )
+    # Without the overlay the backfill worker's legitimate self-routing is reported as drift.
+    with pytest.raises(ValueError, match='SYNC_TASKS_(QUEUE|HANDLER_URL) mismatch'):
+        module._validate_expected_literal_env(
+            _backfill_export(backfill),
+            expected=rendered,
+            ingress_container_name='backend-1',
+            phase='exported base revision',
+        )
+
+
+def test_backfill_worker_overlay_keeps_other_keys_strict():
+    module = _load_module()
+    backfill = 'https://backend-sync-backfill-1.us-central1.run.app/v2/sync-jobs/run'
+    expected = module._apply_expected_env_overrides(
+        {'SYNC_TASKS_QUEUE': 'sync-jobs', 'SYNC_TASKS_HANDLER_URL': 'x', 'SAFE': 'other'},
+        ['SYNC_TASKS_QUEUE=sync-backfill', f'SYNC_TASKS_HANDLER_URL={backfill}'],
+    )
+    with pytest.raises(ValueError, match="SAFE mismatch"):
+        module._validate_expected_literal_env(
+            _backfill_export(backfill),
+            expected=expected,
+            ingress_container_name='backend-1',
+            phase='exported base revision',
+        )
+    # An overlay naming the wrong value still fails closed.
+    wrong = module._apply_expected_env_overrides(
+        {'SYNC_TASKS_HANDLER_URL': 'x'}, ['SYNC_TASKS_HANDLER_URL=https://other']
+    )
+    with pytest.raises(ValueError, match='SYNC_TASKS_HANDLER_URL mismatch'):
+        module._validate_expected_literal_env(
+            _backfill_export(backfill),
+            expected=wrong,
+            ingress_container_name='backend-1',
+            phase='exported base revision',
+        )
+
+
+@pytest.mark.parametrize('raw', ['NOEQUALS', '=value'])
+def test_expected_env_override_requires_name_equals_value(raw):
+    module = _load_module()
+    with pytest.raises(ValueError, match='NAME=VALUE'):
+        module._apply_expected_env_overrides({}, [raw])
+
+
+def test_deploy_action_overlays_backfill_self_url_for_the_gmp_check():
+    action = (SCRIPT.parents[2] / '.github/actions/deploy-backend-stack/action.yml').read_text(encoding='utf-8')
+    assert 'SYNC_BACKFILL_URL: ${{ steps.sync-backfill.outputs.service_url }}' in action
+    for key in (
+        'SYNC_TASKS_QUEUE=sync-backfill',
+        'SYNC_TASKS_HANDLER_URL=$SYNC_BACKFILL_URL',
+        'SYNC_TASKS_OIDC_AUDIENCE=$SYNC_BACKFILL_URL',
+    ):
+        assert f'--expected-env-override="{key}' in action

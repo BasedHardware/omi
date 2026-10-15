@@ -818,8 +818,10 @@ runs:
       shell: bash
       env:
         GMP_CANDIDATE_TAG: ${{ inputs.deploy_profile == 'auto-dev' && inputs.candidate_tag || '' }}
+        SYNC_BACKFILL_URL: ${{ steps.sync-backfill.outputs.service_url }}
       run: |
         set -euo pipefail
+        test -n "$SYNC_BACKFILL_URL"
         for service in backend-sync backend-sync-backfill backend-integration; do
           ingress=backend-1
           if [[ "$service" == backend-integration ]]; then ingress=backend-integration; fi
@@ -833,6 +835,14 @@ runs:
             --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sidecar.yaml"
             --expected-env-state="$RUNNER_TEMP/backend-runtime-env-state.json"
           )
+          if [[ "$service" == backend-sync-backfill ]]; then
+            # The sync-backfill-lifecycle worker overlay points these at the worker itself.
+            args+=(
+              --expected-env-override="SYNC_TASKS_QUEUE=sync-backfill"
+              --expected-env-override="SYNC_TASKS_HANDLER_URL=$SYNC_BACKFILL_URL/v2/sync-jobs/run"
+              --expected-env-override="SYNC_TASKS_OIDC_AUDIENCE=$SYNC_BACKFILL_URL/v2/sync-jobs/run"
+            )
+          fi
           if [[ -n "$GMP_CANDIDATE_TAG" ]]; then args+=(--tag="$GMP_CANDIDATE_TAG"); fi
           python3 "$DEPLOY_CONTROL_SCRIPTS/attach_cloud_run_gmp_sidecar.py" "${args[@]}"
         done
