@@ -57,6 +57,9 @@ jobs:
   provision:
     needs: validate
     runs-on: ubuntu-latest
+    # Ungated, main-only environments that hold each Grafana's MONITOR_GRAFANA_TOKEN.
+    # Without one, the job reads the repo-level secret, which is the dev token.
+    environment: monitoring-${{ matrix.environment }}
     strategy:
       matrix:
         include:
