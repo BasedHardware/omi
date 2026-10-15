@@ -221,3 +221,37 @@ def test_silent_backfill_never_uses_rule_discard_or_quiet_minimum(monkeypatch, i
         )
     assert not discarded and structured.overview == expected.overview
     notes.assert_called_once()
+@pytest.mark.parametrize('text_source', ['audio', 'message', 'other'])
+def test_external_text_paths_record_explicit_policy(isolated_processing_module, text_source):
+    pc = isolated_processing_module
+    conversation = pc.ExternalIntegrationCreateConversation(
+        text='Imported useful content',
+        started_at=NOW,
+        finished_at=NOW,
+        text_source=getattr(pc.ExternalIntegrationConversationSource, text_source),
+        source=ConversationSource.workflow,
+    )
+    decisions = []
+    notes = Structured(title='Integration note')
+    with (
+        patch.object(pc, 'rich_notes_inputs', return_value=(None, None, False, [])),
+        patch.object(pc, 'build_conversation_prompt_prefix', return_value='prefix'),
+        patch.object(pc, 'conversation_known_spellings', return_value=[]),
+        patch.object(pc, '_fetch_dedup_candidates_for_query', return_value=[]),
+        patch.object(pc, 'get_conversation_notes', return_value=notes),
+        patch.object(pc, 'get_message_structure', return_value=notes),
+        patch.object(pc, 'summarize_experience_text', return_value=notes),
+        patch.object(pc, 'validate_structured_source_segment_ids'),
+    ):
+        structured, discarded = pc._get_structured(
+            'uid',
+            'en',
+            conversation,
+            relevance_observer=decisions.append,
+        )
+    assert structured.title == 'Integration note'
+    assert discarded is False
+    assert len(decisions) == 1
+    assert decisions[0].verdict == 'keep'
+    assert decisions[0].decided_by == 'policy'
+    assert decisions[0].reason == 'external_text_default'

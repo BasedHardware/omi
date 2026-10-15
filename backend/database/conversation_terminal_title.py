@@ -1,4 +1,4 @@
-"""Deterministic titles for rows a server terminal moves into the default list.
+"""Relevance decisions and deterministic titles for server failure terminals.
 
 Every terminal that closes a ``processing`` conversation as kept and visible
 (finalization dead-letter, BYOK abandonment, crash-orphan recovery) must leave
@@ -17,7 +17,7 @@ non-transactional read that cannot fail the terminal write.
 A terminal must always be able to commit. The title and retry marker only ever
 grow the document, so they are added only when the estimated post-write size
 stays under Firestore's 1 MiB ceiling; a row at the ceiling still terminalizes
-with the pre-existing status-only write.
+outside the default list with a shrinking failed-status write when the mandatory decision cannot fit.
 """
 
 from __future__ import annotations
@@ -31,6 +31,9 @@ from database import conversations as conversations_db
 from utils.conversations.deterministic_minimum import deterministic_minimum_title
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 from utils.conversations.recovery import structured_has_protected_content
+from utils.conversations.terminal_relevance import terminal_decision, valid_decision
+from utils.conversations.terminal_calendar import calendar_retains
+from utils.metrics import record_conversation_relevance
 
 # Terminal failure codes after which a user reprocess can still succeed: the
 # retry budget ran out on a provider, parser or worker failure. Deliberately
@@ -111,6 +114,9 @@ def kept_row_terminal_update(
     conversation_ref: Any,
     base_update: Mapping[str, Any],
     time_zone_for_uid: Callable[[str], str | None] | None,
+    *,
+    path: str = 'orphan_terminal',
+    transaction: Any = None,
 ) -> dict[str, Any]:
     """``base_update`` plus the deterministic title when the document can hold it.
 
@@ -118,6 +124,9 @@ def kept_row_terminal_update(
     """
     texts, _decoded = transcript_texts(uid, conversation)
     extras = _title_update(uid, conversation, texts, time_zone_for_uid)
+    base_update = with_terminal_relevance(
+        uid, conversation, base_update, texts, _decoded, path, conversation_ref, transaction
+    )
     return fit_document_limit(conversation, conversation_ref, base_update, extras)
 
 
@@ -129,10 +138,11 @@ def dead_letter_conversation_updates(
     failure_code: str,
     time_zone_for_uid: Callable[[str], str | None] | None,
 ) -> dict[str, Any]:
-    """Close a still-bound ``processing`` row as a visible, titled conversation.
+    """Close a still-bound row with relevance and an optional deterministic title.
 
-    Matches BYOK abandonment and orphan recovery (``completed``, kept), and
-    also gives an untitled row its deterministic title.
+    Content-free audio can be discarded by rule with calendar/photo protection;
+    ambiguous content stays kept. A full document that cannot hold a decision
+    fails outside the default list instead of publishing an undecided keep.
 
     ``summary_retryable=True`` is written only when a user reprocess can
     succeed: the retry budget ran out on a transient failure, the summarizer
@@ -149,13 +159,64 @@ def dead_letter_conversation_updates(
         # The API model needs a structured map even to return the row.
         base['structured'] = {'title': '', 'overview': ''}
     extras = _title_update(uid, conversation, texts, time_zone_for_uid)
+    described_photo = False
     if (
         failure_code in SUMMARY_RETRYABLE_FAILURE_CODES
         and not had_summary
-        and (texts or _has_described_photo(conversation, conversation_ref, transaction))
+        and (texts or (described_photo := _has_described_photo(conversation, conversation_ref, transaction)))
     ):
         extras['summary_retryable'] = True
+    base = with_terminal_relevance(
+        uid,
+        {**conversation, 'has_photos': True} if described_photo else conversation,
+        base,
+        texts,
+        _decoded,
+        'dead_letter',
+        conversation_ref,
+        transaction,
+    )
     return fit_document_limit(conversation, conversation_ref, base, extras)
+
+
+def with_terminal_relevance(
+    uid: str,
+    conversation: Mapping[str, Any],
+    base: Mapping[str, Any],
+    texts: list[str],
+    decoded: bool,
+    path: str,
+    conversation_ref: Any,
+    transaction: Any,
+) -> dict[str, Any]:
+    decision = terminal_decision(
+        conversation,
+        path=path,
+        texts=texts,
+        decoded=decoded,
+        assess=True,
+        calendar_retains=lambda: calendar_retains(uid, conversation),
+        photos_retain=lambda: _has_described_photo(
+            conversation, conversation_ref, transaction, accept_undescribed=True
+        ),
+    )
+    if not valid_decision(conversation.get('relevance_decision')):
+        from utils.observability.fallback import record_fallback
+
+        record_fallback(
+            component='conversation_relevance',
+            from_mode='none',
+            to_mode='deterministic',
+            reason='other',
+            outcome='degraded',
+        )
+    record_conversation_relevance(
+        trigger=decision['trigger'],
+        verdict=decision['verdict'],
+        decided_by=decision['decided_by'],
+        reason=decision['reason'],
+    )
+    return {**base, 'discarded': decision['verdict'] == 'discard', 'relevance_decision': decision}
 
 
 def fit_document_limit(
@@ -171,6 +232,19 @@ def fit_document_limit(
     oversized update aborts the whole transaction and would strand the row on
     ``processing``, so they are dropped rather than risk that.
     """
+    # A decision is mandatory. At the actual ceiling, fail outside the default
+    # processing/completed list rather than expose an undecided keep or trim content.
+    path = getattr(conversation_ref, 'path', None)
+    required_size = estimate_firestore_document_bytes(
+        {**conversation, **base_update}, path if isinstance(path, str) else None
+    )
+    if required_size > FIRESTORE_MAX_DOCUMENT_BYTES:
+        from utils.observability.fallback import record_fallback
+
+        record_fallback(
+            component='conversation_relevance', from_mode='none', to_mode='none', reason='other', outcome='exhausted'
+        )
+        return {'status': 'failed'}
     combined = {**base_update, **extras}
     if not extras:
         return combined
@@ -182,15 +256,19 @@ def fit_document_limit(
     return combined
 
 
-def _has_described_photo(conversation: Mapping[str, Any], conversation_ref: Any, transaction: Any) -> bool:
+def _has_described_photo(
+    conversation: Mapping[str, Any], conversation_ref: Any, transaction: Any, *, accept_undescribed: bool = False
+) -> bool:
     """Whether the summarizer would receive at least one photo description."""
     inline = conversation.get('photos')
-    if isinstance(inline, list) and any(_described(photo) for photo in inline):
+    if isinstance(inline, list) and any(accept_undescribed or _described(photo) for photo in inline):
         return True
     # Photo docs live in the child collection; probe a bounded prefix inside
     # this transaction's snapshot. `has_photos` alone proves no description.
     photos = conversation_ref.collection('photos').limit(PHOTO_DESCRIPTION_PROBE_LIMIT)
     for snapshot in photos.stream(transaction=transaction):
+        if accept_undescribed:
+            return True
         to_dict = getattr(snapshot, 'to_dict', None)
         if callable(to_dict) and _described(to_dict()):
             return True

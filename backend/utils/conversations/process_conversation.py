@@ -407,6 +407,10 @@ def _get_structured(
             conversation.source == ConversationSource.workflow
             or conversation.source == ConversationSource.external_integration
         ):
+            if relevance_observer is not None:
+                # Text integrations bypass transcript relevance intentionally;
+                # record that authorized policy instead of an empty verdict.
+                relevance_observer(RelevanceDecision('keep', 'policy', 'external_text_default', trigger))
             ext_conv = conversation
             started_at = cast(datetime, ext_conv.started_at)
             if ext_conv.text_source == ExternalIntegrationConversationSource.audio:

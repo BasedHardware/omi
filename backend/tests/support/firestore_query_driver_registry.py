@@ -2851,7 +2851,7 @@ _add(
         'database.conversation_terminal_title.dead_letter_conversation_updates',
         base={
             'uid': UID,
-            'conversation': {'transcript_segments': []},
+            'conversation': {'source': 'omi', 'transcript_segments': []},
             'conversation_ref': ref_document(f'users/{UID}/conversations/conv-1'),
             'transaction': ref_transaction(),
             'failure_code': 'processing_failed',
@@ -2865,6 +2865,36 @@ _add(
         covered_by=('database.conversation_terminal_title.dead_letter_conversation_updates',),
         reason='photo-description probe streams the photos subcollection inside the caller transaction '
         'when a retryable failure row has no transcript text',
+    )
+)
+
+_add(
+    DriverEntry(
+        'database.conversation_terminal_title.kept_row_terminal_update',
+        base={
+            'uid': UID,
+            'conversation': {'source': 'omi', 'transcript_segments': []},
+            'conversation_ref': ref_document(f'users/{UID}/conversations/conv-1'),
+            'base_update': {'status': 'completed'},
+            'time_zone_for_uid': None,
+        },
+        domains={'path': ['orphan_terminal', 'byok_abandoned', 'oversized_terminal']},
+        neutrals={'transaction': (ref_transaction(), 'snapshot fence; does not change the photo query shape')},
+    )
+)
+_add(
+    DriverEntry(
+        'database.conversation_terminal_title.with_terminal_relevance',
+        base={
+            'uid': UID,
+            'conversation': {'source': 'omi'},
+            'base': {'status': 'completed'},
+            'texts': [],
+            'decoded': True,
+            'path': 'dead_letter',
+            'conversation_ref': ref_document(f'users/{UID}/conversations/conv-1'),
+            'transaction': ref_transaction(),
+        },
     )
 )
 

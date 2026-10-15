@@ -119,6 +119,7 @@ def _conversation(extra: dict | None = None, *, child_photos: list[dict] | None 
         'conversation-1',
         {
             'status': 'processing',
+            'source': 'omi',
             'discarded': False,
             'finalization_job_id': 'job-1',
             'finalization_revision': 3,
@@ -430,8 +431,10 @@ def test_dead_letter_at_the_document_limit_still_terminalizes_without_growth():
     patch = _dead_letter(conversation)
     patch.pop('_zone_calls')
 
-    # Exactly the pre-existing status-only terminal: nothing that grows the document.
-    assert patch == {'status': 'completed', 'discarded': False, 'finalization_status': 'dead_letter'}
+    # Title is optional, but the decision must survive the headroom guard.
+    assert patch['status'] == 'completed'
+    assert patch['relevance_decision']['reason'] == 'dead_letter_default'
+    assert 'structured' not in patch
 
 
 def test_dead_letter_with_room_below_the_limit_keeps_title_and_retry():
@@ -452,7 +455,9 @@ def test_orphan_at_the_document_limit_still_terminalizes_without_growth():
     transaction = _Transaction()
 
     assert jobs._complete_orphan_conversation_txn(transaction, orphan, admitted, _NOW, _UID) is True
-    assert transaction.updates == [(orphan, {'status': 'completed'})]
+    assert transaction.updates[0][0] is orphan
+    assert transaction.updates[0][1]['status'] == 'completed'
+    assert transaction.updates[0][1]['relevance_decision']['reason'] == 'orphan_terminal_default'
 
 
 def _reference_size(value) -> int:
@@ -525,7 +530,7 @@ def test_many_action_item_maps_near_the_limit_drop_the_title():
     patch = _dead_letter(near_limit)
     patch.pop('_zone_calls')
 
-    assert patch == {'status': 'completed', 'discarded': False, 'finalization_status': 'dead_letter'}
+    assert patch == {'status': 'failed'}
     after = {**near_limit.data, **patch}
     assert _reference_document_size(after, near_limit.path) <= terminal_title.FIRESTORE_MAX_DOCUMENT_BYTES
 
@@ -547,3 +552,28 @@ def test_attention_read_after_a_terminal_write_is_rejected():
             'final_attempt_failed',
             _NOW,
         )
+def test_legacy_undescribed_child_photo_blocks_new_terminal_discard(monkeypatch):
+    monkeypatch.setattr(terminal_title, 'calendar_retains', lambda *_: False)
+    conversation = _conversation(
+        {'transcript_segments': _segments('Huh?'), 'has_photos': False}, child_photos=[{'description': ''}]
+    )
+    patch = _dead_letter(conversation)
+    assert patch['discarded'] is False
+    assert patch['relevance_decision']['verdict'] == 'keep'
+
+
+def test_terminal_rule_discard_is_atomic_with_job_dead_letter(monkeypatch):
+    monkeypatch.setattr(terminal_title, 'calendar_retains', lambda *_: False)
+    conversation = _conversation({'transcript_segments': _segments('Huh?'), 'relevance_decision': {}})
+    patch = _dead_letter(conversation)
+    assert patch['status'] == 'completed'
+    assert patch['finalization_status'] == 'dead_letter'
+    assert patch['discarded'] is True
+    assert patch['relevance_decision']['reason'] == 'filler_only'
+
+
+def test_calendar_overlap_blocks_terminal_rule_discard(monkeypatch):
+    monkeypatch.setattr(terminal_title, 'calendar_retains', lambda *_: True)
+    patch = _dead_letter(_conversation({'transcript_segments': _segments('Huh?')}))
+    assert patch['discarded'] is False
+    assert patch['relevance_decision']['reason'] == 'calendar_overlap'

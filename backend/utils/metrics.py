@@ -468,6 +468,16 @@ CONVERSATION_RELEVANCE_LABELS = {
             'merge',
             'sync_intake',
             'smart_merge',
+            'server_recovery',
+            'dead_letter',
+            'byok_abandoned',
+            'orphan_terminal',
+            'oversized_terminal',
+            'deferred_retry',
+            'user_restore',
+            'import',
+            'external_text',
+            'lifecycle_terminal',
         }
     ),
     'verdict': frozenset({'keep', 'discard'}),
@@ -485,6 +495,44 @@ CONVERSATION_RELEVANCE_DECISION_TOTAL = Counter(
     ['trigger', 'verdict', 'decided_by', 'reason'],
 )
 
+# Terminal defaults have a closed vocabulary, independent of exception text.
+_RELEVANCE_TERMINAL_TRIGGERS = frozenset(
+    {
+        'dead_letter',
+        'byok_abandoned',
+        'orphan_terminal',
+        'oversized_terminal',
+        'deferred_retry',
+        'sync_intake',
+        'user_restore',
+        'import',
+        'external_text',
+        'lifecycle_terminal',
+    }
+)
+_RELEVANCE_TERMINAL_REASONS = frozenset(
+    {
+        'dead_letter_default',
+        'byok_abandoned_default',
+        'orphan_terminal_default',
+        'oversized_terminal_default',
+        'deferred_retry_default',
+        'sync_intake_default',
+        'user_restore_default',
+        'import_default',
+        'external_text_default',
+        'lifecycle_terminal_default',
+        'already_discarded',
+        'restored',
+        'calendar_overlap',
+        'empty_transcript',
+        'filler_only',
+        'no_content_words',
+        'mic_check',
+        'explicit_reminder',
+        'substantial_length',
+    }
+)
 _RELEVANCE_REASON = re.compile(r'^[a-z][a-z0-9_]{0,39}$')
 
 
@@ -495,7 +543,12 @@ def record_conversation_relevance(*, trigger: str, verdict: str, decided_by: str
             name: value if value in CONVERSATION_RELEVANCE_LABELS[name] else 'other'
             for name, value in (('trigger', trigger), ('verdict', verdict), ('decided_by', decided_by))
         }
-        labels['reason'] = reason if _RELEVANCE_REASON.match(reason) else 'other'
+        allowed_reason = (
+            reason in _RELEVANCE_TERMINAL_REASONS
+            if trigger in _RELEVANCE_TERMINAL_TRIGGERS
+            else bool(_RELEVANCE_REASON.match(reason))
+        )
+        labels['reason'] = reason if allowed_reason else 'other'
         CONVERSATION_RELEVANCE_DECISION_TOTAL.labels(**labels).inc()
     except Exception:
         pass

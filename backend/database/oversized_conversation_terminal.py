@@ -62,7 +62,15 @@ def _complete_oversized_in_progress_conversation_txn(
     estimated = estimate_firestore_document_bytes(data, path if isinstance(path, str) else None)
     if estimated + TERMINAL_SIZE_HEADROOM_BYTES < FIRESTORE_MAX_DOCUMENT_BYTES:
         return 'below_ceiling'
-    terminal = kept_row_terminal_update(uid, data, conversation_ref, {'status': 'completed'}, time_zone_for_uid)
+    terminal = kept_row_terminal_update(
+        uid,
+        data,
+        conversation_ref,
+        {'status': 'completed'},
+        time_zone_for_uid,
+        path='oversized_terminal',
+        transaction=transaction,
+    )
     transaction.update(conversation_ref, terminal)
     return 'closed'
 

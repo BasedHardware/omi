@@ -22,6 +22,7 @@ from config import merge_ancestry
 import config.speaker_match_scores as match_scores
 from utils.conversations.fragment_visibility import is_rule_discard_decision, is_user_curated
 from utils.conversations.relevance import sync_intake_decision
+from utils.conversations.terminal_relevance import stamp_terminal_decision
 from utils.conversations.smart_merge_policy import user_managed as _policy_user_managed
 from utils.conversations.relevance_rules import deterministic_relevance
 from utils.batch_pipeline.live_projection import replace_record
@@ -611,6 +612,7 @@ def assign_in_transaction(
             result['relevance_decision'] = sync_intake_decision(rule)
         elif is_rule_discard_decision(result.get('relevance_decision')):
             result['relevance_decision'] = None
+        stamp_terminal_decision(result, path='sync_intake')
         result['is_locked'] = bool(incoming.get('is_locked'))
         result['private_cloud_sync_enabled'] = any(
             row.get('private_cloud_sync_enabled') for row in [incoming, *records]

@@ -18,7 +18,7 @@ class _PhotoCollection:
         self.has_photo = has_photo
 
     def limit(self, count: int):
-        assert count == 1
+        assert count in (1, 64)
         return self
 
     def stream(self, transaction=None):
@@ -987,6 +987,13 @@ def test_final_attempt_atomically_closes_its_bound_processing_conversation():
                 'status': 'completed',
                 'discarded': False,
                 'finalization_status': 'dead_letter',
+                'relevance_decision': {
+                    'verdict': 'keep',
+                    'decided_by': 'policy',
+                    'reason': 'dead_letter_default',
+                    'trigger': 'dead_letter',
+                    'rules_version': 1,
+                },
             },
         ),
     ]
@@ -1717,7 +1724,9 @@ def test_complete_orphan_completes_only_an_unchanged_orphan_generation():
     completed = jobs._complete_orphan_conversation_txn(transaction, orphan, admitted, now)
 
     assert completed is True
-    assert transaction.updates == [(orphan, {'status': 'completed'})]
+    assert transaction.updates[0][0] is orphan
+    assert transaction.updates[0][1]['status'] == 'completed'
+    assert transaction.updates[0][1]['relevance_decision']['reason'] == 'orphan_terminal_default'
 
 
 def test_complete_orphan_gives_an_untitled_row_its_deterministic_title():
@@ -1741,6 +1750,14 @@ def test_complete_orphan_gives_an_untitled_row_its_deterministic_title():
             {
                 'status': 'completed',
                 'structured': {'title': 'Call the plumber tomorrow.', 'overview': '', 'category': 'other'},
+                'discarded': False,
+                'relevance_decision': {
+                    'verdict': 'keep',
+                    'decided_by': 'policy',
+                    'reason': 'orphan_terminal_default',
+                    'trigger': 'orphan_terminal',
+                    'rules_version': 1,
+                },
             },
         )
     ]
@@ -1838,10 +1855,12 @@ def test_recover_deferred_processing_failure_atomically_rearms_retry():
     assert jobs._recover_deferred_processing_failure_txn(transaction, completed) is True
     assert jobs._recover_deferred_processing_failure_txn(transaction, already_deferred) is False
     assert jobs._recover_deferred_processing_failure_txn(transaction, discarded) is False
-    assert transaction.updates == [
-        (processing, {'status': 'completed', 'deferred': True}),
-        (completed, {'status': 'completed', 'deferred': True}),
-    ]
+    for (ref, patch), expected in zip(transaction.updates, (processing, completed)):
+        assert ref is expected
+        assert patch['status'] == 'completed'
+        assert patch['deferred'] is True
+        assert patch['relevance_decision']['reason'] == 'deferred_retry_default'
+    assert len(transaction.updates) == 2
 
 
 def test_advance_cursor_succeeds_when_generation_matches():

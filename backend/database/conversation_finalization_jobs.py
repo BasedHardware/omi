@@ -17,6 +17,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from config.listen_quiet_finalization import enabled as quiet_finalization_enabled
+from utils.conversations.terminal_relevance import stamp_terminal_decision
 from database import conversations as conversations_db
 from database import recording_sessions as recording_sessions_db
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
@@ -2321,7 +2322,17 @@ def _complete_unstampable_orphan_conversation_txn(
     last_written = _parse_timestamp(getattr(snapshot, 'update_time', None))
     if last_written is None or last_written > stale_before:
         return False
-    transaction.update(conversation_ref, {'status': 'completed'})
+    uid = _uid_from_conversation_path(str(getattr(conversation_ref, 'path', '') or ''))
+    terminal = kept_row_terminal_update(
+        uid or '',
+        data,
+        conversation_ref,
+        {'status': 'completed'},
+        None,
+        path='oversized_terminal',
+        transaction=transaction,
+    )
+    transaction.update(conversation_ref, terminal)
     return True
 
 
@@ -2373,8 +2384,9 @@ def _complete_orphan_conversation_txn(
         return False
     uid = uid or _uid_from_conversation_path(str(getattr(conversation_ref, 'path', '') or ''))
     terminal: dict[str, Any] = {'status': 'completed'}
-    if uid:
-        terminal = kept_row_terminal_update(uid, data, conversation_ref, terminal, time_zone_for_uid)
+    terminal = kept_row_terminal_update(
+        uid or '', data, conversation_ref, terminal, time_zone_for_uid, transaction=transaction
+    )
     transaction.update(conversation_ref, terminal)
     return True
 
@@ -2461,7 +2473,9 @@ def _recover_deferred_processing_failure_txn(transaction: Any, conversation_ref:
         or data.get('deferred') is not False
     ):
         return False
-    transaction.update(conversation_ref, {'status': 'completed', 'deferred': True})
+    terminal = {**data, 'status': 'completed', 'deferred': True}
+    stamp_terminal_decision(terminal, path='deferred_retry')
+    transaction.update(conversation_ref, {key: terminal[key] for key in ('status', 'deferred', 'relevance_decision')})
     return True
 
 
@@ -2666,7 +2680,15 @@ def _abandon_byok_finalization_job_txn(
     # Pure decode of the snapshot already held; no transactional read after a write.
     terminal: dict[str, Any] = {'status': 'completed', 'finalization_status': 'dead_letter'}
     if closes_conversation and isinstance(uid, str) and isinstance(conversation, Mapping):
-        terminal = kept_row_terminal_update(uid, conversation, conversation_ref, terminal, time_zone_for_uid)
+        terminal = kept_row_terminal_update(
+            uid,
+            conversation,
+            conversation_ref,
+            terminal,
+            time_zone_for_uid,
+            path='byok_abandoned',
+            transaction=transaction,
+        )
 
     transaction.update(
         job_ref,

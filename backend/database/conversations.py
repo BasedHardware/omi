@@ -2679,7 +2679,23 @@ def link_duplicate_capture(uid: str, primary: Any, secondary: Any, overlap: dict
 def transition_conversation_status(uid: str, conversation_id: str, status: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.update({'status': status})
+
+    @firestore.transactional
+    def _transition(transaction):
+        snapshot = conversation_ref.get(transaction=transaction)
+        if not snapshot.exists:
+            return
+        current = snapshot.to_dict() or {}
+        updates = {'status': status}
+        if getattr(status, 'value', status) == 'completed':
+            from utils.conversations.terminal_relevance import stamp_terminal_decision
+
+            result = {**current, **updates}
+            stamp_terminal_decision(result, path='lifecycle_terminal')
+            updates['relevance_decision'] = result['relevance_decision']
+        transaction.update(conversation_ref, updates)
+
+    run_transactional(db, _transition)
     invalidate_people_stats_cache(uid)
 
 
@@ -2728,6 +2744,12 @@ def claim_conversation_status(
                     uid, current, extra_updates, transcript_corrections=corrections
                 )
             )
+        if claimed_status == ConversationStatus.completed:
+            from utils.conversations.terminal_relevance import stamp_terminal_decision
+
+            result = {**current, **updates}
+            stamp_terminal_decision(result, path='lifecycle_terminal')
+            updates['relevance_decision'] = result['relevance_decision']
         transaction.update(conversation_ref, updates)
         return True
 
@@ -2842,6 +2864,13 @@ def restore_conversation_from_discarded(uid: str, conversation_id: str):
             # Restored-from-Jev stays countable after reassessment replaces
             # relevance_decision; the marker is written once and never cleared.
             updates['jev_discard_restored'] = True
+        # Only metadata: the existing tombstone fence and user restore state
+        # remain authoritative. Legacy restores must carry the user's verdict.
+        from utils.conversations.terminal_relevance import stamp_terminal_decision
+
+        restored = {**current, **updates}
+        stamp_terminal_decision(restored, path='user_restore')
+        updates['relevance_decision'] = restored['relevance_decision']
         transaction.update(conversation_ref, updates)
         return True
 
