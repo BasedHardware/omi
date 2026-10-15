@@ -138,7 +138,7 @@ predeploy traffic revisions before dispatch. After promotion, observe 15+
 minutes and compare 5xx and container startup/restart signals to the preceding
 24–48 hours. Query GMP `sum by(outcome,platform,build_channel)
 (rate(omi_sync_upload_total[5m]))` and verify series originate from sync. A live
-sidecar or `up=1` alone is insufficient evidence of ingestion. The existing dev transcription-candidate probe also sends one counter/histogram
+sidecar or `up=1` alone is insufficient evidence of ingestion. The existing manual dev transcription-candidate probe also sends one counter/histogram
 summary using its short-lived release-probe token, after checking the candidate
 URL against the dev service. A shared-UID 429 is reported, not amplified.
 Test authenticated summaries only locally/dev; an unauthenticated fleet POST may check 401 in prod.

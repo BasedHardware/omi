@@ -948,6 +948,7 @@ runs:
       if: ${{ inputs.deploy_profile == 'manual' && inputs.environment == 'development' }}
       uses: ./.deploy-workflow-source/.github/actions/transcription-release-candidate-probe
       with:
+        probe_fleet: 'true'
         candidate_api_url: ${{ steps.transcription-candidate.outputs.url }}
         project_id: ${{ inputs.project_id }}
         firebase_auth_project_id: based-hardware
