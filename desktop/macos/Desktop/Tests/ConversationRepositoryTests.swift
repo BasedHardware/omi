@@ -102,24 +102,31 @@ final class ConversationRepositoryTests: XCTestCase {
   }
 
   func testLoadMoreAdjustsNextPageOffsetWhenVisibleRowRemoved() async {
-    let firstPage = (0..<50).map { index in
+    let allConversations = (0..<51).map { index in
       makeConversation(id: "conversation-\(index)", title: "Conversation \(index)", revision: 100 - Double(index))
     }
-    let second = makeConversation(id: "second", title: "Older", revision: 1)
-    let remote = FakeConversationRemote(listResult: .success(firstPage), countResult: .success(51))
+    let remote = FakeConversationRemote()
+    remote.pagedConversations = allConversations
     let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
 
     await repository.load(query: .all, includeCache: false)
+    XCTAssertEqual(repository.conversations.count, 50)
+    XCTAssertEqual(repository.conversations.first?.id, "conversation-0")
+
+    remote.pagedConversations?.removeAll { $0.id == "conversation-0" }
     repository.remove(id: "conversation-0")
 
-    remote.listResult = .success([second])
     await repository.loadMore()
 
     XCTAssertEqual(remote.listRequests.map(\.offset), [0, 49])
+    XCTAssertEqual(repository.conversations.count, 50)
+    XCTAssertEqual(repository.conversations.last?.id, "conversation-50")
+    XCTAssertFalse(repository.conversations.contains { $0.id == "conversation-0" })
+    XCTAssertTrue(repository.conversations.contains { $0.id == "conversation-50" })
   }
 
   func testLoadMoreAdjustsNextPageOffsetWhenVisibleRowNoLongerMatchesQuery() async {
-    let firstPage = (0..<50).map { index in
+    let allConversations = (0..<51).map { index in
       makeConversation(
         id: "conversation-\(index)",
         title: "Conversation \(index)",
@@ -127,18 +134,31 @@ final class ConversationRepositoryTests: XCTestCase {
         revision: 100 - Double(index)
       )
     }
-    let second = makeConversation(id: "second", title: "Older", starred: true, revision: 1)
-    let remote = FakeConversationRemote(listResult: .success(firstPage), countResult: .success(51))
+    let remote = FakeConversationRemote()
+    remote.pagedConversations = allConversations
     let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
 
     await repository.load(query: .starred, includeCache: false)
+    XCTAssertEqual(repository.conversations.count, 50)
+
+    if let idx = remote.pagedConversations?.firstIndex(where: { $0.id == "conversation-0" }) {
+      remote.pagedConversations?[idx] = makeConversation(
+        id: "conversation-0",
+        title: "Conversation 0",
+        starred: false,
+        revision: 101
+      )
+    }
     let unstarred = makeConversation(id: "conversation-0", title: "Conversation 0", starred: false, revision: 101)
     repository.replace(unstarred)
 
-    remote.listResult = .success([second])
     await repository.loadMore()
 
     XCTAssertEqual(remote.listRequests.map(\.offset), [0, 49])
+    XCTAssertEqual(repository.conversations.count, 50)
+    XCTAssertEqual(repository.conversations.last?.id, "conversation-50")
+    XCTAssertFalse(repository.conversations.contains { $0.id == "conversation-0" })
+    XCTAssertTrue(repository.conversations.contains { $0.id == "conversation-50" })
   }
 
   func testLoadMoreRemainsAvailableWhenServerCountFailsOverCachedCount() async {
@@ -957,6 +977,7 @@ private enum TestFailure: Error {
 
 @MainActor
 private final class FakeConversationRemote: ConversationRemoteDataSource {
+  var pagedConversations: [ServerConversation]?
   var listResult: Result<[ServerConversation], Error>
   var countResult: Result<Int, Error>
   var detailResult: Result<ServerConversation, Error>
@@ -996,10 +1017,35 @@ private final class FakeConversationRemote: ConversationRemoteDataSource {
 
   func list(query: ConversationListQuery, offset: Int, limit: Int) async throws -> [ServerConversation] {
     listRequests.append((offset: offset, limit: limit))
+    if let pagedConversations {
+      let matching: [ServerConversation]
+      switch query {
+      case .all:
+        matching = pagedConversations
+      case .starred:
+        matching = pagedConversations.filter { $0.starred }
+      case .folder(let folderId):
+        matching = pagedConversations.filter { $0.folderId == folderId }
+      }
+      guard offset < matching.count else { return [] }
+      return Array(matching.dropFirst(offset).prefix(limit))
+    }
     if let listHandler { return try await listHandler(query) }
     return try listResult.get()
   }
-  func count(query: ConversationListQuery) async throws -> Int { try countResult.get() }
+  func count(query: ConversationListQuery) async throws -> Int {
+    if let pagedConversations {
+      switch query {
+      case .all:
+        return pagedConversations.count
+      case .starred:
+        return pagedConversations.filter { $0.starred }.count
+      case .folder(let folderId):
+        return pagedConversations.filter { $0.folderId == folderId }.count
+      }
+    }
+    return try countResult.get()
+  }
   func detail(id: String) async throws -> ServerConversation {
     if let detailHandler { return try await detailHandler(id) }
     return try detailResult.get()
