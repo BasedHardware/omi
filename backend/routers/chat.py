@@ -120,6 +120,7 @@ from utils.voice_duration_limiter import (
     settle_reserved_duration,
     record_actual_duration,
 )
+from utils.stt.failure_diagnostics import transcription_failure_categories
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 import logging
 
@@ -156,12 +157,11 @@ class TranscriptionErrorResponse(BaseModel):
     detail: TranscriptionErrorDetail
 
 
-def _transcription_http_error(failure: TranscriptionFailure) -> HTTPException:
+def _transcription_http_error(failure: TranscriptionFailure, error: BaseException | None = None) -> HTTPException:
+    stage, kind = transcription_failure_categories(error if error is not None else failure)
     logger.warning(
-        'Transcription request failed: outcome=%s provider=%s retryable=%s',
-        failure.outcome.value,
-        failure.provider,
-        failure.retryable,
+        f'Transcription request failed: outcome={failure.outcome.value} provider={failure.provider} '
+        f'retryable={failure.retryable} stage={stage} error_kind={kind}'
     )
     return HTTPException(status_code=failure.status_code, detail=failure.as_detail())
 
@@ -475,12 +475,12 @@ def create_voice_message_stream(
             retryable=False,
         )
         _record_preparation_failure(failure)
-        raise _transcription_http_error(failure) from error
+        raise _transcription_http_error(failure, error=error) from error
     except Exception as error:
         failure = failure_from_exception(error, provider=stt_provider)
         _record_preparation_failure(failure)
         _cleanup_temp_voice_wavs(paths + wav_paths, uid)
-        raise _transcription_http_error(failure) from error
+        raise _transcription_http_error(failure, error=error) from error
 
     # process
     async def generate_stream():
@@ -586,7 +586,7 @@ async def transcribe_voice_message(
                     provider=None,
                     retryable=False,
                 )
-                raise _transcription_http_error(failure) from error
+                raise _transcription_http_error(failure, error=error) from error
             if parsed_content_length > _MAX_PCM_BODY_BYTES:
                 raise HTTPException(status_code=413, detail=f'Body too large (max {_MAX_PCM_BODY_BYTES} bytes)')
 
@@ -694,7 +694,7 @@ async def transcribe_voice_message(
         except Exception as error:
             failure = failure_from_exception(error, provider=stt_provider)
             attempt.finish(failure.outcome)
-            raise _transcription_http_error(failure) from error
+            raise _transcription_http_error(failure, error=error) from error
         finally:
             if not attempt.finished:
                 attempt.finish(TranscriptionOutcome.UPSTREAM_ERROR)
@@ -845,14 +845,14 @@ async def transcribe_voice_message(
             _record_multipart_preparation_failure(failure)
         else:
             attempt.finish(failure.outcome)
-        raise _transcription_http_error(failure) from error
+        raise _transcription_http_error(failure, error=error) from error
     except Exception as error:
         failure = failure_from_exception(error, provider=stt_provider)
         if attempt is None:
             _record_multipart_preparation_failure(failure)
         else:
             attempt.finish(failure.outcome)
-        raise _transcription_http_error(failure) from error
+        raise _transcription_http_error(failure, error=error) from error
     finally:
         if attempt is not None and not attempt.finished:
             attempt.finish(TranscriptionOutcome.UPSTREAM_ERROR)
