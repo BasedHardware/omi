@@ -144,8 +144,8 @@ entry platform and include the full denominator. Rates do not add across splits:
 the split numerators and denominators do. Missing sources remain null.
 
 The board uses core stat and time-series panels, with Infinity as its only
-external plugin. Native stat reduction includes string fields for the three
-split cells; native config-from-data mappings dim stale/partial headline values.
+external plugin. Native stat reduction includes the fixed macOS / Mobile / Other
+split line; native config-from-data mappings dim stale/partial headline values.
 This supports Grafana 13.1.3 without an HTML sanitizer override or another panel
 plugin. Full reasons, source watermarks and versions are in the diagnostics table.
 MAU keeps two completed 30-day periods to stay within PostHog's query budget;

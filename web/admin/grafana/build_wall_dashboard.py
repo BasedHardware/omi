@@ -45,7 +45,7 @@ def build_wall_board():
         w = 5 if col < 4 else 4
         add({"type": "text", "title": "", "gridPos": {"x": x, "y": 0, "w": w, "h": 2}, "options": {"mode": "markdown", "content": f"## {heading}"}})
         for row, mid in enumerate(ids):
-            y = 2 + row * 10
+            y = 2 + row * 9
             key = mid.replace(".", "_")
             unit = "percent" if mid in RATE_IDS else "currencyUSD" if mid.startswith("cost.") or mid.startswith("revenue.") and mid != "revenue.hardware_units_week" else "short"
             scope = "Entry" if mid in RATE_IDS and mid.startswith(("activation.", "retention.")) and mid != "retention.established_week" else "All" if mid.startswith(("revenue.", "cost.")) else "Active"
@@ -66,16 +66,16 @@ def build_wall_board():
             delta_panel=stat("",3,1,[("delta", "vs prior complete", "number")],14,{"unit":"percent","decimals":1,"color":{"mode":"thresholds"},"thresholds":{"mode":"absolute","steps":steps}})
             delta_panel["options"]["textMode"]="value_and_name"
             add(delta_panel)
-            split_panel=stat("",4,2,[("splitRow","macOS / Mobile / Other","string")],12)
+            split_panel=stat("",4,1,[("splitRow","macOS / Mobile / Other","string")],12)
             split_panel["options"]["textMode"]="value"
             add(split_panel)
-            add(stat("",6,1,[("footnote","Coverage","string")],11))
-            add({**common,"type":"timeseries","title":"","gridPos":{"x":x,"y":y+7,"w":w,"h":2},"targets":[target(key,[("date","Date","timestamp"),("value","Complete periods","number")],True)],
+            add(stat("",5,1,[("footnote","Coverage","string")],11))
+            add({**common,"type":"timeseries","title":"","gridPos":{"x":x,"y":y+6,"w":w,"h":2},"targets":[target(key,[("date","Date","timestamp"),("value","Complete periods","number")],True)],
                  "transparent":True,"timeFrom": "60d" if mid=="engagement.mau" else "6d" if mid.startswith("engagement.") else "42d", "hideTimeOverride":True, "timeShift":"37d" if mid in {"retention.if_activated","retention.recovery"} else "7d" if mid.startswith("activation.") else "2d" if mid=="retention.day1_return" else None, "fieldConfig":{"defaults":{"unit":unit,"color":{"mode":"fixed","fixedColor":"#60a5fa"},"custom":{"drawStyle":"line","lineWidth":2,"fillOpacity":8,"axisPlacement":"hidden","showPoints":"never","spanNulls":False}},"overrides":[]},"options":{"legend":{"showLegend":False},"tooltip":{"mode":"single"}}})
         x += w
     # Full metadata table keeps operational diagnostics below the wall.
     add({"type":"table","title":"Diagnostics · definitions, coverage and source watermarks", "datasource":DS,
-         "gridPos":{"x":0,"y":64,"w":24,"h":12},"targets":[{"refId":"A","datasource":DS,"type":"json","source":"url","format":"table","parser":"backend","url":URL,"root_selector":"metrics","columns":[{"selector":f,"text":f,"type":"string"} for f in ['id','status','reason','numerator','denominator','windowStart','windowEnd','dataThrough','sourceRefreshedAt','definitionVersion']]}],"options":{"showHeader":True}})
+         "gridPos":{"x":0,"y":58,"w":24,"h":12},"targets":[{"refId":"A","datasource":DS,"type":"json","source":"url","format":"table","parser":"backend","url":URL,"root_selector":"metrics","columns":[{"selector":f,"text":f,"type":"string"} for f in ['id','status','reason','numerator','denominator','windowStart','windowEnd','dataThrough','sourceRefreshedAt','definitionVersion']]}],"options":{"showHeader":True}})
     return {"uid":"omi-tv-v2","title":"Omi TV v2 · Direction A","schemaVersion":39,"version":1,"timezone":"utc","refresh":"15m","editable":True,"tags":["omi-tv","v2"],"time":{"from":"now-180d","to":"now/d"},"templating":{"list":[]},"annotations":{"list":[]},"panels":panels,
             "description":"Direction A. Complete UTC periods; proxy/partial/null coverage stays visible. Blue better, orange worse, grey flat. Monetary splits unavailable. Legacy boards are unchanged.","links":[]}
 
