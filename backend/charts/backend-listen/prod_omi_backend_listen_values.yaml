@@ -552,6 +552,10 @@ env:
     value: "http://172.16.160.20/nllb"
   - name: TRANSLATION_SERVICE_MODELS
     value: "nllb,gemini"
+  - name: TRANSLATION_CACHE_TTL
+    value: "86400"
+  - name: TRANSLATION_NEGATIVE_CACHE_TTL
+    value: "21600"
   - name: TRANSLATION_DEMAND_SHADOW_ENABLED
     value: "false"
   - name: TRANSLATION_DEMAND_GATE_ENABLED

@@ -177,6 +177,46 @@ class TestConversationsToStringTimezone:
         assert "15 Jan 2026 at 10:00 UTC" in result
 
 
+class TestConversationsToStringEventTimes:
+    """structured.events[].start must render in the user's tz with a label.
+
+    The Events line used to str() the raw stored datetime ('2026-09-26 07:18:00+00:00'),
+    an unlabelled UTC wall clock on an otherwise tz-labelled card. The chat model read it
+    as the local a.m. time and stated the wrong time of day for the event (reported as
+    'event was in the morning, actually in the afternoon', UTC+7). Same contract as the
+    Started/Finished lines: user-local wall clock + tz label, with duration stated as a
+    bare number so a clock pair can never be misread as start-to-end times.
+    """
+
+    def _make_event_conversation(self):
+        from models.structured import Event
+
+        conv = _make_conversation()
+        conv.structured.events = [
+            Event(
+                title="Grokbot demo",
+                description="",
+                start=datetime(2026, 9, 26, 7, 18, tzinfo=timezone.utc),
+                duration=130,
+            )
+        ]
+        return conv
+
+    def test_event_start_converts_to_user_tz_with_label(self):
+        conv = self._make_event_conversation()
+        result = conversations_to_string([conv], tz="Asia/Ho_Chi_Minh")
+        assert "14:18 Asia/Ho_Chi_Minh" in result
+        assert "07:18" not in result
+        # Duration is a bare number, not a second clock pair.
+        assert "duration: 130 minutes" in result
+
+    def test_event_start_defaults_to_utc_label(self):
+        conv = self._make_event_conversation()
+        result = conversations_to_string([conv])
+        assert "07:18 UTC" in result
+        assert "+00:00" not in result
+
+
 def _make_naive_conversation(created, started, finished):
     """A Conversation whose timestamps are timezone-naive (as stored for many rows)."""
     return Conversation(

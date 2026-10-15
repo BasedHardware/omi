@@ -28,6 +28,7 @@ real failure.
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import re
@@ -435,6 +436,73 @@ def review_submission_for_version(asc: Callable[..., object], version_id: str) -
     raise TrainError(f"no completed review submission contains App Store version {version_id}")
 
 
+_PEM_BLOCK = re.compile(r"-----BEGIN ([A-Z ]+)-----(.*?)-----END \1-----", re.DOTALL)
+
+
+def _normalize_pem(raw: str) -> str:
+    """Rebuild a well-formed PEM from the key text CI hands us.
+
+    Codemagic's publishing CLI accepts the integration key in shapes neither
+    cryptography nor `openssl dgst` will parse: newlines escaped as a literal
+    backslash-n, folded to spaces, surrounding quotes, or a bare base64 body
+    with no armor. Re-armor whatever is there as 64-column PKCS#8 PEM.
+    """
+    text = raw.strip().strip("\"'").replace("\\r\\n", "\n").replace("\\n", "\n").replace("\r\n", "\n")
+    match = _PEM_BLOCK.search(text)
+    if match is None:
+        # A whole .p8 file base64-encoded once more (a common way to store it in CI).
+        try:
+            decoded = base64.b64decode(re.sub(r"\s+", "", text), validate=True).decode("ascii")
+        except (ValueError, UnicodeDecodeError):
+            decoded = ""
+        if "-----BEGIN" in decoded:
+            return _normalize_pem(decoded)
+    label, body = (match.group(1), match.group(2)) if match else ("PRIVATE KEY", text)
+    body = re.sub(r"\s+", "", body)
+    if not body or not re.fullmatch(r"[A-Za-z0-9+/=]+", body):
+        raise TrainError("App Store Connect private key is not PEM or base64 (shape: " + _pem_shape(raw) + ")")
+    lines = [body[i : i + 64] for i in range(0, len(body), 64)]
+    return f"-----BEGIN {label}-----\n" + "\n".join(lines) + f"\n-----END {label}-----\n"
+
+
+def _resolve_key_ref(raw: str) -> str:
+    """Follow a Codemagic CLI key reference to the key itself.
+
+    The codemagic_v4 integration sets APP_STORE_CONNECT_PRIVATE_KEY to a
+    reference, not key text: `@file:<path>` or `@env:<VAR>` (the convention of
+    codemagic-cli-tools, which the publishing step resolves). Seen live
+    2026-10-15 as a 72-character single-line value.
+    """
+    value = raw.strip()
+    if value.startswith("@file:"):
+        path = os.path.expanduser(value[len("@file:") :])
+        try:
+            with open(path, encoding="utf-8") as handle:
+                return handle.read()
+        except OSError as exc:
+            raise TrainError(f"App Store Connect key reference @file: is unreadable ({type(exc).__name__})") from exc
+    if value.startswith("@env:"):
+        name = value[len("@env:") :]
+        resolved = os.environ.get(name, "")
+        if not resolved:
+            raise TrainError(f"App Store Connect key reference @env:{name} is empty")
+        return _resolve_key_ref(resolved)
+    return raw
+
+
+def _pem_shape(raw: str) -> str:
+    """Non-secret description of the key text, for a diagnosable failure line."""
+    armored = "-----BEGIN" in raw
+    newlines = raw.count(chr(10))
+    escaped = raw.count(chr(92) + "n")
+    quoted = raw[:1] in ('"', "'")
+    ref = next((scheme for scheme in ("@file", "@env") if raw.strip().startswith(scheme + ":")), "none")
+    return (
+        f"len={len(raw)} ref={ref} armored={armored} newlines={newlines} "
+        f"escaped_newlines={escaped} quoted={quoted}"
+    )
+
+
 def _asc_rest_token() -> str:
     """ES256 JWT for the App Store Connect REST API (kid must be a JWT header)."""
     import base64
@@ -444,6 +512,8 @@ def _asc_rest_token() -> str:
     pem = os.environ.get("APP_STORE_CONNECT_PRIVATE_KEY", "")
     if not (issuer and key_id and pem):
         raise TrainError("missing App Store Connect credential for REST lookup")
+    log(f"App Store Connect key text: {_pem_shape(pem)}")
+    pem = _normalize_pem(_resolve_key_ref(pem))
     header = {"alg": "ES256", "kid": key_id, "typ": "JWT"}
     now = int(time.time())
     claims = {"iss": issuer, "iat": now, "exp": now + 1200, "aud": "appstoreconnect-v1"}
@@ -484,8 +554,10 @@ def _asc_rest_token() -> str:
             )
             der = result.stdout
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as cli_exc:
+            stderr = getattr(cli_exc, "stderr", b"") or b""
+            detail = stderr.decode("utf-8", "replace").strip().splitlines()[:3] if isinstance(stderr, bytes) else []
             raise TrainError(
-                f"could not sign the App Store Connect REST token (cryptography: {exc}; openssl: {cli_exc})"
+                f"could not sign the App Store Connect REST token (cryptography: {exc}; openssl: {cli_exc} {detail})"
             ) from cli_exc
         finally:
             os.unlink(key_file.name)

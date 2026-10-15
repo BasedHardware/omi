@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-released-path-contract-narrowing",
+  "violated_contract": "An existing released route must continue accepting its published opaque path IDs and integer shapes; new arbitrary character or numeric bounds cannot silently narrow v1 while the checked-in OpenAPI snapshot remains stale.",
+  "canonical_prevention": "Preserve the released path shapes and owner-scoped domain lookups. Validate actual storage address validity before I/O, rather than assuming historical IDs match a new UUID-like charset. Generate snapshots and run compatibility checks together; pin both valid opaque legacy IDs and malformed-address rejection in route tests. New intentionally narrower contracts require versioned endpoints.",
+  "canonical_prevention_artifact": [
+    "backend/scripts/check_app_client_openapi_compatibility.py",
+    "backend/tests/unit/test_speaker_labels_contract.py"
+  ],
+  "evidence_prs": [21635],
+  "scope_hints": ["backend/routers/speaker_labels.py", "backend/tests/unit/test_speaker_labels_contract.py"],
+  "status": "open"
+}

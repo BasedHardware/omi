@@ -1,9 +1,8 @@
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from database import conversations as conversations_db
 from database import voice_profiles as voice_profiles_db
@@ -18,10 +17,21 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Firestore document ids used as path parameters: a caller-controlled value with
-# a path separator or traversal sequence would be read as a subcollection path by
-# document(). Restrict to a plain doc-id charset and bound the length.
-_DOC_ID_PATTERN = r'^[A-Za-z0-9_-]{1,128}$'
+
+def _valid_document_id(value: str) -> bool:
+    # Preserve opaque legacy IDs. Only exclude invalid Firestore addresses;
+    # arbitrary charset/128-char bounds narrow the released v1 contract.
+    reserved = re.fullmatch(r'__.*__', value) is not None and re.fullmatch(r'__id[0-9]+__', value) is None
+    try:
+        return (
+            not reserved
+            and bool(value)
+            and '/' not in value
+            and value not in ('.', '..')
+            and len(value.encode('utf-8')) <= 1500
+        )
+    except UnicodeEncodeError:
+        return False
 
 
 @router.post(
@@ -30,16 +40,15 @@ _DOC_ID_PATTERN = r'^[A-Za-z0-9_-]{1,128}$'
     tags=['conversations'],
 )
 def reject_speaker_label(
-    conversation_id: Annotated[str, Path(pattern=_DOC_ID_PATTERN)],
-    speaker_id: Annotated[int, Path(ge=0, le=1_000_000)],
+    conversation_id: str,
+    speaker_id: int,
     data: RejectSpeakerRequest,
     background_tasks: BackgroundTasks,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    # The request body's person_id flows into the same document() sink as the
-    # path param; validate the exact value passed downstream — a padded or
-    # separator-carrying id is rejected outright.
-    if data.person_id is not None and not re.fullmatch(_DOC_ID_PATTERN, data.person_id):
+    if not _valid_document_id(conversation_id):
+        raise HTTPException(status_code=422, detail='invalid conversation_id')
+    if data.person_id is not None and not _valid_document_id(data.person_id):
         raise HTTPException(status_code=400, detail='invalid person_id')
     try:
         raw, resolved, removed, _before = conversations_db.assign_conversation_speaker(
@@ -95,9 +104,11 @@ def reject_speaker_label(
 
 @router.get('/v1/users/people/{person_id}/voice-matches', response_model=VoiceMatchesResponse, tags=['v1'])
 async def get_person_voice_matches(
-    person_id: Annotated[str, Path(pattern=_DOC_ID_PATTERN)],
+    person_id: str,
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    if not _valid_document_id(person_id):
+        raise HTTPException(status_code=422, detail='invalid person_id')
     try:
         return await find_person_voice_matches(uid, person_id)
     except LookupError as error:

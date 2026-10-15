@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -1165,6 +1166,89 @@ class MainTests(unittest.TestCase):
                 self.assertEqual(train.main(["--platform", "ios", "--date", "2026-10-06"]), 0)
         ios.assert_called_once()
         android.assert_not_called()
+
+
+class AscKeyNormalizationTest(unittest.TestCase):
+    """The REST signer must read the integration key in every shape CI stores it in.
+
+    Live 2026-10-15: on the Codemagic train both cryptography and `openssl dgst`
+    rejected the key text the same machine's publishing CLI accepts, so the
+    iOS replace path failed closed with an approved-but-unreleased version stuck.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        # Apple's .p8 is PKCS#8 ("BEGIN PRIVATE KEY") on P-256.
+        cls.pem = subprocess.run(
+            ["openssl", "genpkey", "-algorithm", "EC", "-pkeyopt", "ec_paramgen_curve:P-256"],
+            capture_output=True,
+            check=True,
+            text=True,
+        ).stdout
+
+    def _signs_with_openssl(self, pem: str) -> bool:
+        with tempfile.NamedTemporaryFile("w", suffix=".pem", delete=False) as key_file:
+            key_file.write(pem)
+        try:
+            result = subprocess.run(
+                ["openssl", "dgst", "-sha256", "-sign", key_file.name], input=b"payload", capture_output=True
+            )
+            return result.returncode == 0 and len(result.stdout) > 8
+        finally:
+            Path(key_file.name).unlink()
+
+    def test_every_stored_shape_signs(self):
+        import base64
+
+        body = "".join(line for line in self.pem.splitlines() if "-----" not in line)
+        shapes = {
+            "as-is": self.pem,
+            "escaped newlines": self.pem.replace("\n", "\\n"),
+            "folded to spaces": self.pem.replace("\n", " "),
+            "quoted": '"' + self.pem.replace("\n", "\\n") + '"',
+            "bare base64 body": body,
+            "base64 of the .p8 file": base64.b64encode(self.pem.encode()).decode(),
+            "crlf": self.pem.replace("\n", "\r\n"),
+        }
+        self.assertTrue(self._signs_with_openssl(self.pem))
+        for name, text in shapes.items():
+            with self.subTest(shape=name):
+                self.assertTrue(self._signs_with_openssl(train._normalize_pem(text)), name)
+
+    def test_codemagic_key_references_resolve_to_a_signing_key(self):
+        # Live 2026-10-15: the codemagic_v4 integration's variable was a 72-character
+        # single-line reference, not key text.
+        with tempfile.NamedTemporaryFile("w", suffix=".p8", delete=False) as key_file:
+            key_file.write(self.pem)
+        try:
+            ref = "@file:" + key_file.name
+            self.assertIn("ref=@file", train._pem_shape(ref))
+            self.assertTrue(self._signs_with_openssl(train._normalize_pem(train._resolve_key_ref(ref))))
+            with unittest.mock.patch.dict(train.os.environ, {"CM_ASC_KEY": ref}):
+                resolved = train._resolve_key_ref("@env:CM_ASC_KEY")
+            self.assertTrue(self._signs_with_openssl(train._normalize_pem(resolved)))
+        finally:
+            Path(key_file.name).unlink()
+        self.assertEqual(train._resolve_key_ref(self.pem), self.pem)
+
+    def test_unreadable_key_reference_fails_closed(self):
+        with self.assertRaises(train.TrainError):
+            train._resolve_key_ref("@file:/nonexistent/AuthKey.p8")
+        with unittest.mock.patch.dict(train.os.environ, {}, clear=False):
+            with self.assertRaises(train.TrainError):
+                train._resolve_key_ref("@env:OMI_DEFINITELY_UNSET_KEY")
+
+    def test_garbage_fails_closed_without_echoing_the_key(self):
+        with self.assertRaises(train.TrainError) as ctx:
+            train._normalize_pem("not a key at all!")
+        self.assertIn("len=", str(ctx.exception))
+        self.assertNotIn("not a key", str(ctx.exception))
+
+    def test_shape_never_contains_key_material(self):
+        shape = train._pem_shape(self.pem)
+        body = "".join(line for line in self.pem.splitlines() if "-----" not in line)
+        self.assertNotIn(body[:16], shape)
+        self.assertIn("armored=True", shape)
 
 
 if __name__ == "__main__":

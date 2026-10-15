@@ -135,12 +135,12 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
     final changesFailed = changes is ApiFailure<ReviewChangesPage> && changes.problem.kind != ApiProblemKind.notFound;
     final anyFailed = !recaps.ok || changesFailed;
     if (recaps.ok) {
-      _seen.observe(recaps.items.map((r) => r.createdAt));
+      _seen.observe(ActivitySeen.recapArrivals(recaps.items));
       // Through the newest recap shown, too: a server clock ahead of the phone's must not leave a
       // recap already seen lighting the bell. Recaps that arrive after this load are still news.
       var through = _shownThrough != null && _shownThrough!.isAfter(startedAt) ? _shownThrough! : startedAt;
-      for (final r in recaps.items) {
-        if (r.createdAt.isAfter(through)) through = r.createdAt;
+      for (final at in ActivitySeen.recapArrivals(recaps.items)) {
+        if (at.isAfter(through)) through = at;
       }
       _shownThrough = through;
     }
@@ -178,11 +178,14 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
       _recaps = _recaps.where((r) => r.id != deletedId).toList();
       _rebuildItems();
     });
-    _seen.observe(_recaps.map((r) => r.createdAt));
+    _seen.observe(ActivitySeen.recapArrivals(_recaps));
   }
 
   bool _isNew(_ActivityItem item) =>
-      item is _RecapItem && _previousVisitMs > 0 && item.at.millisecondsSinceEpoch > _previousVisitMs;
+      item is _RecapItem &&
+      item.summary.createdAtKnown &&
+      _previousVisitMs > 0 &&
+      item.at.millisecondsSinceEpoch > _previousVisitMs;
 
   @override
   Widget build(BuildContext context) {
