@@ -18,7 +18,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 import database.action_items as action_items_db
 
-
 UID = "u1"
 ITEM_ID = "item-1"
 ORIGINAL = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -100,9 +99,7 @@ def test_update_linked_branch_preserves_completed_at(monkeypatch):
     txn.update.side_effect = lambda ref, data: txn_writes.append(data)
     monkeypatch.setattr(action_items_db, "run_with_transaction_contention_retry", lambda t, fn, **kw: fn(txn))
 
-    action_items_db.update_action_item(
-        UID, ITEM_ID, {"completed": True, "completed_at": REPLAY, "goal_id": "g0"}
-    )
+    action_items_db.update_action_item(UID, ITEM_ID, {"completed": True, "completed_at": REPLAY, "goal_id": "g0"})
 
     assert txn_writes and txn_writes[-1]["completed_at"] == ORIGINAL
 
