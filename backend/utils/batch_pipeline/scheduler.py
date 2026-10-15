@@ -217,7 +217,7 @@ class Scheduler:
         for state in ('leased', 'retry'):
             for segment_id in self.store.due(state, now, limit):
 
-                def commit(tx):
+                def commit(tx: Transaction) -> str | None:
                     job = tx.get('jobs', segment_id)
                     if job.get('state') == 'leased' and job['lease_until'] <= now:
                         _defer(job, now, 'lease_expired')
@@ -228,7 +228,7 @@ class Scheduler:
                         _append(tx, control, job)
                         event = 'retry'
                     else:
-                        return False
+                        return None
                     tx.put('jobs', segment_id, job)
                     return event
 
