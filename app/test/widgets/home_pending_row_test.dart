@@ -382,6 +382,17 @@ void main() {
       expect(find.textContaining('·'), findsOneWidget);
     });
 
+    test('the catching-up check is answered once per WAL list, not per progress tick', () {
+      final wals = [_wal('long', 40, WalStatus.miss)];
+      final sync = _FakeSync(wals: wals);
+      expect(SyncPendingWork.isLargeBacklog(sync), isTrue);
+      // Same list, same answer, even though nothing re-scans it.
+      wals.first.seconds = 60;
+      expect(SyncPendingWork.isLargeBacklog(sync), isTrue);
+      // A new list, as SyncProvider publishes on any status change, is read afresh.
+      expect(SyncPendingWork.isLargeBacklog(_FakeSync(wals: [...wals])), isFalse);
+    });
+
     test('a device drain counts its audio once toward catching up', () {
       final source = Wal(
           timerStart: 1000,
