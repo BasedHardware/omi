@@ -19,10 +19,11 @@ from config.batch_pipeline_providers import provider_config
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_store import FirestoreStore
 from diarizer.batch_pipeline import is_fatal_cuda_error
-from diarizer.batch_pipeline_startup import load_worker, synchronize_gpu
+from diarizer.batch_pipeline_startup import ChainMemoryProbe, load_worker, synchronize_gpu
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.capacity import PoolCapacity
 from utils.batch_pipeline.metrics import QueueMetrics
+from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.scheduler import Scheduler
 from utils.executors import shutdown_executors
@@ -44,23 +45,43 @@ class RuntimeState:
 
 class SynchronizedWorker:
     def __init__(
-        self, worker: Any, synchronize: Callable[[], None] = synchronize_gpu, on_fatal: Callable[[], None] | None = None
+        self,
+        worker: Any,
+        synchronize: Callable[[], None] = synchronize_gpu,
+        on_fatal: Callable[[], None] | None = None,
+        memory_probe: Any = None,
     ):
         self.worker = worker
         self.synchronize = synchronize
         self.on_fatal = on_fatal
+        self.memory_probe = memory_probe
+        self._unavailable = False
 
     def process_batch(self, items):
+        if self._unavailable:
+            raise FatalGpuError('GPU chain unavailable; restart required')
         try:
+            baseline = self.memory_probe.begin() if self.memory_probe else None
             try:
                 return self.worker.process_batch(items)
             finally:
                 # Python completion is not CUDA completion. Never publish before
                 # quiescence, even for a dedicated GPU with no live reservation.
                 self.synchronize()
+                if self.memory_probe:
+                    sample = self.memory_probe.finish(baseline)
+                    logger.info(
+                        'event=batch_chain_memory items=%d audio_seconds=%.3f sample=%s',
+                        len(items),
+                        sum(item.duration_seconds for item in items),
+                        sample,
+                    )
         except Exception as error:
-            if is_fatal_cuda_error(error) and self.on_fatal:
-                self.on_fatal()
+            if is_fatal_cuda_error(error):
+                self._unavailable = True
+                if self.on_fatal:
+                    self.on_fatal()
+                raise FatalGpuError('fatal CUDA error; restart GPU chain') from error
             raise
 
 
@@ -127,10 +148,14 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
         # Startup models off the event loop. Readiness remains closed until the
         # entire BF16 ASR / FP32 segmentation chain and graph policy are ready.
         worker = await asyncio.to_thread(load_worker, artifacts)
-        metrics = QueueMetrics(registry)
+        metrics = QueueMetrics(
+            registry,
+            worker_release=os.environ.get('BATCH_PIPELINE_WORKER_RELEASE', 'unscoped'),
+            namespace=os.environ.get('POD_NAMESPACE', 'unscoped'),
+        )
         pump = Pump(
             Scheduler(store, metrics=metrics, pool='batch'),
-            SynchronizedWorker(worker, on_fatal=fatal),
+            SynchronizedWorker(worker, on_fatal=fatal, memory_probe=ChainMemoryProbe()),
             metrics=metrics,
             batch_size=config.batch_size,
             capacity=lambda: PoolCapacity(

@@ -132,11 +132,15 @@ def test_supervision_drains_after_stop_before_readiness_closes():
     asyncio.run(check())
 
 
-def test_fatal_cuda_requests_restart_after_quiescence():
+@pytest.mark.parametrize('message', ['CUDA illegal memory access', 'CUDA out of memory', 'CUBLAS_STATUS_ALLOC_FAILED'])
+def test_fatal_cuda_requests_restart_after_quiescence(message):
     calls = []
-    worker = SimpleNamespace(process_batch=lambda _: (_ for _ in ()).throw(RuntimeError('CUDA illegal memory access')))
+    worker = SimpleNamespace(process_batch=lambda _: (_ for _ in ()).throw(RuntimeError(message)))
     wrapped = runtime.SynchronizedWorker(worker, lambda: calls.append('quiescent'), lambda: calls.append('restart'))
     with pytest.raises(RuntimeError):
+        wrapped.process_batch([])
+    assert calls == ['quiescent', 'restart']
+    with pytest.raises(runtime.FatalGpuError, match='restart required'):
         wrapped.process_batch([])
     assert calls == ['quiescent', 'restart']
 
@@ -229,3 +233,37 @@ def test_process_refuses_shared_live_before_model_startup(monkeypatch):
     monkeypatch.setattr(runtime, 'load_worker', lambda *a: pytest.fail('shared-live loaded local GPU models'))
     with pytest.raises(ValueError, match='dedicated'):
         asyncio.run(runtime.run_process(object(), object(), CollectorRegistry(), runtime.RuntimeState()))
+
+
+def test_memory_probe_spans_whole_chain_and_records_after_cuda_quiescence():
+    events = []
+    probe = SimpleNamespace(
+        begin=lambda: events.append('baseline') or {'baseline': 1},
+        finish=lambda baseline: events.append(('peak', baseline)) or {'host_process_peak_bytes': 100},
+    )
+    worker = SimpleNamespace(process_batch=lambda _: events.append('whole-chain') or ['result'])
+    wrapped = runtime.SynchronizedWorker(worker, lambda: events.append('cuda-idle'), memory_probe=probe)
+    assert wrapped.process_batch([]) == ['result']
+    assert events == ['baseline', 'whole-chain', 'cuda-idle', ('peak', {'baseline': 1})]
+
+
+def test_memory_probe_separates_host_and_device_peaks():
+    from diarizer.batch_pipeline_startup import ChainMemoryProbe
+
+    events = []
+    cuda = SimpleNamespace(
+        synchronize=lambda: events.append('idle'),
+        reset_peak_memory_stats=lambda: events.append('reset'),
+        memory_allocated=lambda: 10,
+        memory_reserved=lambda: 20,
+        max_memory_allocated=lambda: 30,
+        max_memory_reserved=lambda: 40,
+    )
+    probe = ChainMemoryProbe(cuda)
+    result = probe.finish(probe.begin())
+    assert events == ['idle', 'reset']
+    assert result['gpu_allocated_baseline_bytes'] == 10
+    assert result['gpu_reserved_baseline_bytes'] == 20
+    assert result['gpu_allocated_peak_bytes'] == 30
+    assert result['gpu_reserved_peak_bytes'] == 40
+    assert result['host_process_peak_bytes'] > 0

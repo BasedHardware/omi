@@ -8,6 +8,7 @@ callers must not substitute cached profile data for that transactional check.
 
 from dataclasses import dataclass
 import hashlib
+from io import BytesIO
 import json
 import os
 import re
@@ -17,15 +18,18 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from google.cloud.storage.retry import DEFAULT_RETRY
 
 from utils.batch_pipeline.contracts import WorkItem
 
 AUDIO_LIMIT = 7200 * 32000 + 4096
 RESULT_LIMIT = 8 * 1024 * 1024
 MAGIC = b'OMIBP1'
-# One resumable data request even at the maximum two-hour canonical WAV size.
-# GCS chunk sizes are multiples of 256KiB; no hidden per-chunk 60s budgets.
-UPLOAD_CHUNK_BYTES = ((AUDIO_LIMIT + len(MAGIC) + 28 + 262143) // 262144) * 262144
+# A one-hour PCM16 object is ~115 MB. Bound retransmission to 8 MiB chunks;
+# allow slow links and transient service failures without changing object name.
+UPLOAD_CHUNK_BYTES = 8 * 1024 * 1024
+UPLOAD_TIMEOUT = (10, 120)
+UPLOAD_RETRY = DEFAULT_RETRY.with_deadline(600)
 
 
 @dataclass(frozen=True)
@@ -110,12 +114,14 @@ class ArtifactStore:
             raise TimeoutError('artifact registration too old to begin upload')
         blob = self.bucket.blob(name)
         blob.chunk_size = UPLOAD_CHUNK_BYTES
-        blob.upload_from_string(
-            self._seal(item, kind, context, body),
+        # Omitting size forces the SDK's resumable path even for short captures.
+        # SDK retries reuse this stream/session and the one registered name.
+        blob.upload_from_file(
+            BytesIO(self._seal(item, kind, context, body)),
             content_type='application/octet-stream',
             if_generation_match=0,
-            timeout=(5, 20),
-            retry=None,
+            timeout=UPLOAD_TIMEOUT,
+            retry=UPLOAD_RETRY,
         )
         # An upload may succeed while deletion races it. Never return its URI
         # after revocation. Delete that exact version, never a newer object.

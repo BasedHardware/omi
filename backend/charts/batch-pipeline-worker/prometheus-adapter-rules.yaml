@@ -1,5 +1,5 @@
 # Merge under rules.external in the existing Prometheus Adapter configuration.
-# Relabel scraped app.kubernetes.io/instance to worker_release before ingestion.
+# Worker exports worker_release and Kubernetes namespace on age + freshness.
 # Preserve namespace + pod labels on both metrics. Empty/stale samples must be
 # unavailable (never replace with zero); HPA then retains capacity and alerts.
 external:

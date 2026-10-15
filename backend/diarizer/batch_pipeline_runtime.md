@@ -65,7 +65,8 @@ are accepted; arbitrary HTTPS URLs and unversioned reads are rejected. WAV and
 result payloads have size ceilings; GCS metadata is checked before download.
 Writes reserve a random create-only object name in D's durable deletion outbox
 **before** uploading. The adapter reauthorizes immediately before and after IO,
-disables hidden SDK retries, and refuses starting uploads if registration took
+uses bounded SDK retries under the same registered object name, and refuses
+starting uploads if registration took
 more than 30 seconds. Post-upload revocation deletes the exact generation and
 returns no URI. An ambiguous upload retains its reserved deletion reference.
 D's delayed erasure sweep covers deletion while an upload is still in flight;
@@ -96,7 +97,7 @@ accepted work; D arms cleanup only after successful projection.
 HPA uses A's **ready** age, separately targeting fresh 30s, recent 300s and deep
 3600s, with 300s downscale stabilization. Minimum one worker keeps the queue
 sampler alive; zero is rejected until an independent sampler exists. Enable
-PodMonitoring only where its CRD is installed. Its target-label mapping exports
+PodMonitoring only where its CRD is installed (it defaults on). The worker exports
 `worker_release`; a different collector must preserve the same label plus
 namespace and pod. Merge `prometheus-adapter-rules.yaml` into the existing
 adapter's external rules. That query excludes samples older than 60s without
@@ -109,3 +110,30 @@ GCS emulator (or an injected fake object client). The older filesystem
 `local_storage` harness has no generation preconditions and cannot substitute
 for the versioned artifact adapter. Never remove generation checks to make a
 local run pass, and never fall back from an emulator namespace to cloud data.
+
+### Fatal GPU recovery and memory qualification
+
+CUDA OOM (including torch `OutOfMemoryError` and cuBLAS allocation failure) fences
+the process just like illegal access. `FatalGpuError` must reach the pump's
+no-failure lease recovery path; never publish partial results from that flight.
+Restart under a retry lease without charging an attempt.
+
+Each synchronized full-chain flight logs `event=batch_chain_memory`: admitted
+audio seconds, CUDA allocated/reserved baselines and peaks in bytes, process
+lifetime host peak, and cgroup lifetime peak when the kernel exports it. CUDA
+peaks reset after models load and before decode/VAD/ASR/diarization/persistence;
+the receipt is emitted after CUDA synchronization. Host peaks include startup.
+For qualification run a synthetic one-hour unit with the intended model batch
+size and retain the GPU model/VRAM, exact image digest/config and receipt.
+Set the chart **host RAM** limit from the larger measured process/container peak
+with explicit headroom; CUDA peaks qualify device capacity separately. The
+current 24Gi host limit remains provisional until that dev receipt exists.
+
+PodMonitoring defaults on when the release is enabled. Queue age and freshness
+export the Kubernetes namespace and `worker_release` from the deployment.
+Autoscaling defaults off; verify fresh series and the external adapter before
+turning it on. Both fixed replicas and the HPA minimum must remain at least one.
+
+Staging uses resumable GCS uploads (including short captures), 8MiB chunks,
+10s connect/120s read timeout per request and a 600s retry budget per request.
+Retries retain the registered create-only object name and encrypted stream.

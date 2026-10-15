@@ -43,12 +43,14 @@ def enabled_arguments():
 def test_default_chart_has_no_resources_or_admission():
     values = yaml.safe_load((CHART / 'values.yaml').read_text())
     assert values['enabled'] is False and values['autoscaling']['minReplicas'] == 1
+    assert values['autoscaling']['enabled'] is False
+    assert values['podMonitoring']['enabled'] is True
     result = render()
     assert result.returncode == 0 and list(yaml.safe_load_all(result.stdout)) == []
 
 
 def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
-    result = render(*enabled_arguments())
+    result = render(*enabled_arguments(), '--set', 'autoscaling.enabled=true')
     assert result.returncode == 0, result.stderr
     manifests = {doc['kind']: doc for doc in yaml.safe_load_all(result.stdout) if doc}
     pod = manifests['Deployment']['spec']['template']['spec']
@@ -75,5 +77,20 @@ def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
 
 def test_enabled_chart_refuses_unpinned_image_and_unsampled_scale_to_zero():
     assert render('--set', 'enabled=true').returncode != 0
-    result = render(*enabled_arguments(), '--set', 'autoscaling.minReplicas=0')
+    result = render(*enabled_arguments(), '--set', 'autoscaling.enabled=true', '--set', 'autoscaling.minReplicas=0')
     assert result.returncode != 0 and 'independent sampler' in result.stderr
+
+
+def test_enabled_release_scrapes_but_waits_for_live_series_before_autoscaling():
+    result = render(*enabled_arguments())
+    assert result.returncode == 0, result.stderr
+    manifests = {doc['kind']: doc for doc in yaml.safe_load_all(result.stdout) if doc}
+    assert 'HorizontalPodAutoscaler' not in manifests
+    assert manifests['Deployment']['spec']['replicas'] == 1
+    monitor = manifests['PodMonitoring']['spec']
+    assert monitor['selector']['matchLabels']['app.kubernetes.io/instance'] == 'synthetic-worker'
+    assert monitor['endpoints'] == [{'port': 'http', 'path': '/metrics', 'interval': '15s'}]
+    env = {v['name']: v for v in manifests['Deployment']['spec']['template']['spec']['containers'][0]['env']}
+    assert env['BATCH_PIPELINE_WORKER_RELEASE']['value'] == 'synthetic-worker'
+    assert env['POD_NAMESPACE']['valueFrom']['fieldRef']['fieldPath'] == 'metadata.namespace'
+    assert render(*enabled_arguments(), '--set', 'replicaCount=0').returncode != 0

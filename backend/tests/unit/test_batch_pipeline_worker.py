@@ -254,14 +254,25 @@ def test_failure_reporting_callback_cannot_drop_healthy_sibling():
     assert [r.segment_id for r in worker.process_batch([item('bad'), item('good')])] == ['good']
 
 
-def test_fatal_cuda_fences_whole_worker_without_importing_models():
+@pytest.mark.parametrize(
+    'error',
+    [
+        RuntimeError('CUDA error: an illegal memory access was encountered'),
+        RuntimeError('CUDA out of memory. Tried to allocate 256 MiB'),
+        RuntimeError('CUDA error: out of memory'),
+        RuntimeError('CUBLAS_STATUS_ALLOC_FAILED when calling cublasCreate'),
+        type('OutOfMemoryError', (RuntimeError,), {})('allocation failed'),
+    ],
+)
+def test_fatal_cuda_fences_whole_worker_without_importing_models(error):
     class Poisoned:
         def transcribe_batch(self, samples):
-            raise RuntimeError('CUDA error: an illegal memory access was encountered')
+            raise error
 
     worker, *_ = setup_worker(words_providers={'parakeet': Poisoned()})
     with pytest.raises(RuntimeError, match='fatal CUDA'):
         worker.process_batch([item()])
+    assert worker.counts['failed'] == 0
     with pytest.raises(RuntimeError, match='restart required'):
         worker.process_batch([item('other')])
 

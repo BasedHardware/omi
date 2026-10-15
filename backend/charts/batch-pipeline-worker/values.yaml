@@ -25,7 +25,8 @@ resources:
     memory: 24Gi
     nvidia.com/gpu: "1"
 autoscaling:
-  enabled: true
+  # Enable only after scoped queue-age series and adapter are verified live.
+  enabled: false
   minReplicas: 1
   maxReplicas: 6
   # External metrics from the supplied Prometheus adapter rules must be installed
@@ -35,4 +36,4 @@ autoscaling:
     recent: 300
     deep: 3600
 podMonitoring:
-  enabled: false
+  enabled: true

@@ -1,4 +1,7 @@
 {{- if .Values.enabled }}
+{{- if lt (int .Values.replicaCount) 1 }}
+{{- fail "queue sampling runs in workers: replicaCount must be >=1" }}
+{{- end }}
 {{- if not (regexMatch "^sha256:[a-f0-9]{64}$" .Values.image.digest) }}
 {{- fail "image.digest must pin a qualified joint GPU image" }}
 {{- end }}
@@ -48,6 +51,10 @@ spec:
           ports:
             - {name: http, containerPort: 8080}
           env:
+            - {name: BATCH_PIPELINE_WORKER_RELEASE, value: {{ .Release.Name | quote }}}
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef: {fieldPath: metadata.namespace}
             - {name: BATCH_PIPELINE_WORKER_ENABLED, value: "true"}
             - {name: BATCH_PIPELINE_ENABLED, value: "false"}
             - {name: BATCH_PIPELINE_PERCENT, value: "0"}

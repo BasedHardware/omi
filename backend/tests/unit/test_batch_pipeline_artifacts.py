@@ -6,7 +6,14 @@ from types import SimpleNamespace
 from cryptography.exceptions import InvalidTag
 import pytest
 
-from utils.batch_pipeline.artifacts import ArtifactStore, ProtectionContext, RESULT_LIMIT, UPLOAD_CHUNK_BYTES
+from utils.batch_pipeline.artifacts import (
+    ArtifactStore,
+    ProtectionContext,
+    RESULT_LIMIT,
+    UPLOAD_CHUNK_BYTES,
+    UPLOAD_TIMEOUT,
+    UPLOAD_RETRY,
+)
 from utils.batch_pipeline.contracts import Priority, WorkItem
 
 
@@ -30,9 +37,11 @@ class ObjectClient:
                 self.generation = generation
                 self.size = None
 
-            def upload_from_string(self, body, **kw):
+            def upload_from_file(self, stream, **kw):
+                body = stream.read()
                 assert kw['if_generation_match'] == 0
-                assert kw['retry'] is None and kw['timeout'] == (5, 20)
+                assert kw['retry'] is UPLOAD_RETRY and kw['timeout'] == UPLOAD_TIMEOUT
+                assert 'size' not in kw  # SDK must choose resumable even for small objects
                 assert self.chunk_size == UPLOAD_CHUNK_BYTES and self.chunk_size % 262144 == 0
                 assert name not in client.objects
                 client.uploads += 1

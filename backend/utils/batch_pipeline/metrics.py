@@ -10,21 +10,27 @@ AGE_TARGETS = {Priority.FRESH: 30, Priority.RECENT: 300, Priority.DEEP: 3600}
 
 
 class QueueMetrics:
-    def __init__(self, registry: CollectorRegistry = REGISTRY):
+    def __init__(
+        self, registry: CollectorRegistry = REGISTRY, *, worker_release: str = 'unscoped', namespace: str = 'unscoped'
+    ):
+        self.scope = (worker_release, namespace)
         self.oldest_age = Gauge(
             'omi_batch_pipeline_oldest_age_seconds',
             'Oldest admitted uncommitted item age',
-            ['priority'],
+            ['priority', 'worker_release', 'namespace'],
             registry=registry,
         )
         self.ready_age = Gauge(
             'omi_batch_pipeline_ready_age_seconds',
             'Oldest item ready for GPU capacity',
-            ['priority'],
+            ['priority', 'worker_release', 'namespace'],
             registry=registry,
         )
         self.refreshed_at = Gauge(
-            'omi_batch_pipeline_metrics_refreshed_at_seconds', 'Last complete queue sample timestamp', registry=registry
+            'omi_batch_pipeline_metrics_refreshed_at_seconds',
+            'Last complete queue sample timestamp',
+            ['worker_release', 'namespace'],
+            registry=registry,
         )
         self.owner_wait = Histogram(
             'omi_batch_pipeline_owner_wait_seconds',
@@ -48,9 +54,11 @@ class QueueMetrics:
             ready = store.oldest(int(priority), ready_only=True)
             samples.append((priority, pending, ready))
         for priority, pending, ready in samples:
-            self.oldest_age.labels(LABELS[priority]).set(max(0.0, now - pending) if pending is not None else 0)
-            self.ready_age.labels(LABELS[priority]).set(max(0.0, now - ready) if ready is not None else 0)
-        self.refreshed_at.set(now)
+            self.oldest_age.labels(LABELS[priority], *self.scope).set(
+                max(0.0, now - pending) if pending is not None else 0
+            )
+            self.ready_age.labels(LABELS[priority], *self.scope).set(max(0.0, now - ready) if ready is not None else 0)
+        self.refreshed_at.labels(*self.scope).set(now)
 
     def record(self, event: str, *, wait_seconds: float | None = None) -> None:
         if event not in {'leased', 'completed', 'retry', 'lease_expired', 'dead', 'committed'}:

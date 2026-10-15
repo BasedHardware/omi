@@ -1,6 +1,9 @@
 """Lazy startup for the dedicated one-process/one-GPU chain."""
 
 import os
+from pathlib import Path
+import resource
+import sys
 
 try:
     import torch  # type: ignore[reportMissingImports]  # Optional GPU image dependency
@@ -55,3 +58,42 @@ def synchronize_gpu():
     if torch is None:
         raise RuntimeError('CUDA runtime unavailable')
     torch.cuda.synchronize()
+
+
+class ChainMemoryProbe:
+    """Full-flight CUDA peak plus process/container lifetime host peaks in bytes.
+
+    Reset CUDA counters only after models are resident, before the locked chain.
+    Host peaks intentionally include startup; the chart limit governs host RAM.
+    """
+
+    def __init__(self, cuda=None):
+        self.cuda = cuda if cuda is not None else (torch.cuda if torch is not None else None)
+
+    def begin(self):
+        if self.cuda is None:
+            raise RuntimeError('CUDA runtime unavailable for memory qualification')
+        self.cuda.synchronize()
+        self.cuda.reset_peak_memory_stats()
+        return {
+            'gpu_allocated_baseline_bytes': self.cuda.memory_allocated(),
+            'gpu_reserved_baseline_bytes': self.cuda.memory_reserved(),
+        }
+
+    def finish(self, baseline):
+        if self.cuda is None:
+            raise RuntimeError('CUDA runtime unavailable for memory qualification')
+        peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        result = {
+            **baseline,
+            'gpu_allocated_peak_bytes': self.cuda.max_memory_allocated(),
+            'gpu_reserved_peak_bytes': self.cuda.max_memory_reserved(),
+            'host_process_peak_bytes': int(peak if sys.platform == 'darwin' else peak * 1024),
+        }
+        for path in ('/sys/fs/cgroup/memory.peak', '/sys/fs/cgroup/memory/memory.max_usage_in_bytes'):
+            try:
+                result['host_container_peak_bytes'] = int(Path(path).read_text().strip())
+                break
+            except (OSError, ValueError):
+                continue
+        return result

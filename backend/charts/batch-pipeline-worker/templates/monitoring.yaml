@@ -8,10 +8,6 @@ spec:
     matchLabels:
       app.kubernetes.io/name: batch-pipeline-worker
       app.kubernetes.io/instance: {{ .Release.Name }}
-  targetLabels:
-    fromPod:
-      - from: app.kubernetes.io/instance
-        to: worker_release
   endpoints:
     - {port: http, path: /metrics, interval: 15s}
 {{- end }}

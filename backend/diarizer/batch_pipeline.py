@@ -14,6 +14,7 @@ from typing import Any, Callable, Mapping, Sequence
 from config.batch_pipeline_providers import ProviderConfig
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from utils.batch_pipeline.contracts import WorkItem, WorkResult
+from utils.batch_pipeline.errors import FatalGpuError
 
 SAMPLE_RATE = 16000
 _GPU_CHAIN_LOCK = threading.Lock()
@@ -25,6 +26,11 @@ def is_fatal_cuda_error(exc):
     # the model-free chain independent of that service's torch/NeMo imports.
     markers = (
         'worker cuda graph policy violated',
+        'cuda out of memory',
+        'cuda error: out of memory',
+        'cudaerrormemoryallocation',
+        'cublas_status_alloc_failed',
+        'cublas alloc failed',
         'device-side assert',
         'cudaerrorassert',
         'illegal memory access',
@@ -38,7 +44,11 @@ def is_fatal_cuda_error(exc):
     seen = set()
     while exc is not None and id(exc) not in seen:
         seen.add(id(exc))
-        if any(marker in str(exc).lower() for marker in markers) or type(exc).__name__ == 'AcceleratorError':
+        if (
+            any(marker in str(exc).lower() for marker in markers)
+            or type(exc).__name__ in {'AcceleratorError', 'OutOfMemoryError'}
+            or isinstance(exc, FatalGpuError)
+        ):
             return True
         exc = exc.__cause__ or exc.__context__
     return False
@@ -178,7 +188,7 @@ class PipelineWorker:
             raise ValueError('shared-live requires explicitly admitted capture spans, never conversation units')
         with self._lock:
             if self._unavailable:
-                raise RuntimeError('GPU chain unavailable; restart required')
+                raise FatalGpuError('GPU chain unavailable; restart required')
             results, group, seconds = [], [], 0
             # Bound decoded host memory to two audio-hours (~460 MB float32).
             for item in items:
@@ -197,7 +207,7 @@ class PipelineWorker:
             # Quarantine poisoned CUDA state without importing a second GPU owner.
             if is_fatal_cuda_error(exc):
                 self._unavailable = True
-                raise RuntimeError('fatal CUDA error; restart GPU chain') from exc
+                raise FatalGpuError('fatal CUDA error; restart GPU chain') from exc
             if item.segment_id not in failed:
                 failed.add(item.segment_id)
                 self.counts['failed'] += 1
