@@ -73,9 +73,11 @@ in `+Inf`. Submit per-window bucket deltas, never lifetime totals or per-bin
 counts. Only include a histogram if its source actually measured that numeric
 quantity in the documented unit (seconds, percent, or ratio). Include its associated event
 counter from the registry in the same summary; missing pairs are rejected. The server adds bucket counts atomically and exposes
-`omi_client_<name>_bucket{le,platform,build_channel}` and `_count`. There is no
-`_sum`: the payload contains no exact sum, so averages cannot be recovered.
-`histogram_quantile` remains available.
+`omi_client_<name>_bucket_total{le,platform,build_channel}` and `_count_total`
+as independent Prometheus counters. GMP drops a histogram family without
+a sum; these counters preserve every bucket without inventing that missing value.
+There is no `_sum`: the payload contains no exact sum, so averages cannot be recovered.
+`histogram_quantile` remains available using the cumulative `_bucket_total` counters.
 
 Transport is best effort: no durable event storage, deduplication, per-UID daily
 rollup, or exactly-once delivery is provided. Consume each local window once;
