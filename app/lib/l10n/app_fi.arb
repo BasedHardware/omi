@@ -4115,5 +4115,13 @@
     "onboardingNoOmiYet": "Eikö Omi ole vielä saapunut?",
     "onboardingOmiNotOrdered": "En ole vielä tilannut",
     "onboardingOmiOrdered": "Olen tilannut sen",
-    "onboardingPermissionTapToFix": "Korjaa napauttamalla"
+    "onboardingPermissionTapToFix": "Korjaa napauttamalla",
+    "homePendingTitle": "Keskusteluja tulossa",
+    "homePendingCatchingUp": "Käsitellään aiempaa ääntä",
+    "onTheWayTitle": "Tulossa",
+    "onTheWayAlmostReady": "Melkein valmis",
+    "activityEmpty": "Ei vielä toimintaa",
+    "activityNewSemantics": "Toiminta, uusia kohteita",
+    "activityLoadFailed": "Kaikkea toimintaa ei voitu ladata",
+    "activityNewItem": "Uusi"
 }

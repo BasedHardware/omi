@@ -4157,5 +4157,13 @@
     "onboardingNoOmiYet": "Har du ikke din Omi endnu?",
     "onboardingOmiNotOrdered": "Ikke bestilt endnu",
     "onboardingOmiOrdered": "Jeg har bestilt den",
-    "onboardingPermissionTapToFix": "Tryk for at rette"
+    "onboardingPermissionTapToFix": "Tryk for at rette",
+    "homePendingTitle": "Samtaler på vej",
+    "homePendingCatchingUp": "Indhenter tidligere lyd",
+    "onTheWayTitle": "På vej",
+    "onTheWayAlmostReady": "Næsten klar",
+    "activityEmpty": "Ingen aktivitet endnu",
+    "activityNewSemantics": "Aktivitet, nye elementer",
+    "activityLoadFailed": "Kunne ikke indlæse al din aktivitet",
+    "activityNewItem": "Ny"
 }

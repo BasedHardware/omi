@@ -13406,4 +13406,28 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Korjaa napauttamalla';
+
+  @override
+  String get homePendingTitle => 'Keskusteluja tulossa';
+
+  @override
+  String get homePendingCatchingUp => 'Käsitellään aiempaa ääntä';
+
+  @override
+  String get onTheWayTitle => 'Tulossa';
+
+  @override
+  String get onTheWayAlmostReady => 'Melkein valmis';
+
+  @override
+  String get activityEmpty => 'Ei vielä toimintaa';
+
+  @override
+  String get activityNewSemantics => 'Toiminta, uusia kohteita';
+
+  @override
+  String get activityLoadFailed => 'Kaikkea toimintaa ei voitu ladata';
+
+  @override
+  String get activityNewItem => 'Uusi';
 }
