@@ -4123,5 +4123,13 @@
     "chatWelcomeMessage": "Γεια, είμαι το Omi. Ρώτα με οτιδήποτε έχεις συζητήσει: τι είπε κάποιος, τι υποσχέθηκες ή μια σύνοψη της μέρας σου. Μπορώ επίσης να προσθέτω εργασίες και να θυμάμαι πράγματα για σένα.",
     "onboardingStarterTaskAsk": "Ρώτα το Omi για τη μέρα σου",
     "onboardingStarterTaskRecord": "Ηχογράφησε μια συζήτηση με το Omi",
-    "onboardingStarterTaskCheck": "Σημείωσε αυτή την εργασία για να την ολοκληρώσεις"
+    "onboardingStarterTaskCheck": "Σημείωσε αυτή την εργασία για να την ολοκληρώσεις",
+    "homePendingTitle": "Συνομιλίες καθ' οδόν",
+    "homePendingCatchingUp": "Επεξεργασία προηγούμενου ήχου",
+    "onTheWayTitle": "Καθ' οδόν",
+    "onTheWayAlmostReady": "Σχεδόν έτοιμο",
+    "activityEmpty": "Δεν υπάρχει δραστηριότητα ακόμα",
+    "activityNewSemantics": "Δραστηριότητα, νέα στοιχεία",
+    "activityLoadFailed": "Δεν ήταν δυνατή η φόρτωση όλης της δραστηριότητάς σας",
+    "activityNewItem": "Νέο"
 }

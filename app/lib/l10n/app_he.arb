@@ -11549,5 +11549,13 @@
     "chatWelcomeMessage": "היי, אני Omi. שאל אותי כל דבר על מה שדיברת: מה מישהו אמר, מה הבטחת או סיכום של היום שלך. אני יכול גם להוסיף משימות ולזכור דברים בשבילך.",
     "onboardingStarterTaskAsk": "שאל את Omi על היום שלך",
     "onboardingStarterTaskRecord": "הקלט שיחה עם Omi",
-    "onboardingStarterTaskCheck": "סמן משימה זו כדי לסיים אותה"
+    "onboardingStarterTaskCheck": "סמן משימה זו כדי לסיים אותה",
+    "homePendingTitle": "שיחות בדרך",
+    "homePendingCatchingUp": "משלימים אודיו קודם",
+    "onTheWayTitle": "בדרך",
+    "onTheWayAlmostReady": "כמעט מוכן",
+    "activityEmpty": "אין פעילות עדיין",
+    "activityNewSemantics": "פעילות, פריטים חדשים",
+    "activityLoadFailed": "לא ניתן היה לטעון את כל הפעילות שלך",
+    "activityNewItem": "חדש"
 }

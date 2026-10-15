@@ -4123,5 +4123,13 @@
     "chatWelcomeMessage": "Hai, saya Omi. Tanya saya apa sahaja tentang perkara yang anda bualkan: apa yang dikatakan seseorang, apa yang anda janjikan atau ringkasan hari anda. Saya juga boleh menambah tugasan dan mengingati sesuatu untuk anda.",
     "onboardingStarterTaskAsk": "Tanya Omi tentang hari anda",
     "onboardingStarterTaskRecord": "Rakam perbualan dengan Omi",
-    "onboardingStarterTaskCheck": "Tandakan tugasan ini untuk menyelesaikannya"
+    "onboardingStarterTaskCheck": "Tandakan tugasan ini untuk menyelesaikannya",
+    "homePendingTitle": "Perbualan sedang diproses",
+    "homePendingCatchingUp": "Mengejar audio terdahulu",
+    "onTheWayTitle": "Dalam perjalanan",
+    "onTheWayAlmostReady": "Hampir siap",
+    "activityEmpty": "Belum ada aktiviti",
+    "activityNewSemantics": "Aktiviti, item baharu",
+    "activityLoadFailed": "Tidak dapat memuatkan semua aktiviti anda",
+    "activityNewItem": "Baharu"
 }

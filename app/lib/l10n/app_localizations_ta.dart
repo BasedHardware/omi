@@ -13521,4 +13521,28 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get onboardingStarterTaskCheck => 'முடிக்க இந்தப் பணியைக் குறியிடுங்கள்';
+
+  @override
+  String get homePendingTitle => 'உரையாடல்கள் வருகின்றன';
+
+  @override
+  String get homePendingCatchingUp => 'முந்தைய ஆடியோ செயலாக்கப்படுகிறது';
+
+  @override
+  String get onTheWayTitle => 'வழியில்';
+
+  @override
+  String get onTheWayAlmostReady => 'கிட்டத்தட்ட தயார்';
+
+  @override
+  String get activityEmpty => 'இதுவரை எந்தச் செயல்பாடும் இல்லை';
+
+  @override
+  String get activityNewSemantics => 'செயல்பாடு, புதிய உருப்படிகள்';
+
+  @override
+  String get activityLoadFailed => 'உங்கள் எல்லா செயல்பாடுகளையும் ஏற்ற முடியவில்லை';
+
+  @override
+  String get activityNewItem => 'புதியது';
 }

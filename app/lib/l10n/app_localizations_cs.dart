@@ -13430,4 +13430,28 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get onboardingStarterTaskCheck => 'Odškrtni tento úkol a dokonči ho';
+
+  @override
+  String get homePendingTitle => 'Konverzace na cestě';
+
+  @override
+  String get homePendingCatchingUp => 'Zpracováváme dřívější zvuk';
+
+  @override
+  String get onTheWayTitle => 'Na cestě';
+
+  @override
+  String get onTheWayAlmostReady => 'Téměř hotovo';
+
+  @override
+  String get activityEmpty => 'Zatím žádná aktivita';
+
+  @override
+  String get activityNewSemantics => 'Aktivita, nové položky';
+
+  @override
+  String get activityLoadFailed => 'Nepodařilo se načíst celou vaši aktivitu';
+
+  @override
+  String get activityNewItem => 'Nové';
 }

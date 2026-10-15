@@ -13480,4 +13480,28 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get onboardingStarterTaskCheck => 'పూర్తి చేయడానికి ఈ పనిని టిక్ చేయండి';
+
+  @override
+  String get homePendingTitle => 'సంభాషణలు వస్తున్నాయి';
+
+  @override
+  String get homePendingCatchingUp => 'మునుపటి ఆడియో ప్రాసెస్ అవుతోంది';
+
+  @override
+  String get onTheWayTitle => 'మార్గంలో ఉంది';
+
+  @override
+  String get onTheWayAlmostReady => 'దాదాపు సిద్ధం';
+
+  @override
+  String get activityEmpty => 'ఇంకా కార్యాచరణ లేదు';
+
+  @override
+  String get activityNewSemantics => 'కార్యాచరణ, కొత్త అంశాలు';
+
+  @override
+  String get activityLoadFailed => 'మీ మొత్తం కార్యాచరణను లోడ్ చేయలేకపోయాం';
+
+  @override
+  String get activityNewItem => 'కొత్తది';
 }

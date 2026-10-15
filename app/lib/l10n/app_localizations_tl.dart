@@ -13534,4 +13534,28 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onboardingStarterTaskCheck => 'Lagyan ng tsek ang gawaing ito para matapos';
+
+  @override
+  String get homePendingTitle => 'Paparating na ang mga usapan';
+
+  @override
+  String get homePendingCatchingUp => 'Hinahabol ang naunang audio';
+
+  @override
+  String get onTheWayTitle => 'Paparating';
+
+  @override
+  String get onTheWayAlmostReady => 'Halos handa na';
+
+  @override
+  String get activityEmpty => 'Wala pang aktibidad';
+
+  @override
+  String get activityNewSemantics => 'Aktibidad, mga bagong item';
+
+  @override
+  String get activityLoadFailed => 'Hindi ma-load ang lahat ng iyong aktibidad';
+
+  @override
+  String get activityNewItem => 'Bago';
 }

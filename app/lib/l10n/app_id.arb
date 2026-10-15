@@ -4158,5 +4158,13 @@
     "chatWelcomeMessage": "Hai, aku Omi. Tanyakan apa saja tentang hal yang kamu bicarakan: apa yang dikatakan seseorang, apa yang kamu janjikan, atau ringkasan harimu. Aku juga bisa menambahkan tugas dan mengingat hal-hal untukmu.",
     "onboardingStarterTaskAsk": "Tanyakan harimu kepada Omi",
     "onboardingStarterTaskRecord": "Rekam percakapan dengan Omi",
-    "onboardingStarterTaskCheck": "Centang tugas ini untuk menyelesaikannya"
+    "onboardingStarterTaskCheck": "Centang tugas ini untuk menyelesaikannya",
+    "homePendingTitle": "Percakapan sedang diproses",
+    "homePendingCatchingUp": "Mengejar audio sebelumnya",
+    "onTheWayTitle": "Dalam perjalanan",
+    "onTheWayAlmostReady": "Hampir siap",
+    "activityEmpty": "Belum ada aktivitas",
+    "activityNewSemantics": "Aktivitas, item baru",
+    "activityLoadFailed": "Tidak dapat memuat semua aktivitas Anda",
+    "activityNewItem": "Baru"
 }

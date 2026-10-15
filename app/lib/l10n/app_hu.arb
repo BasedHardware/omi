@@ -4219,5 +4219,13 @@
     "chatWelcomeMessage": "Szia, Omi vagyok. Kérdezz bármit arról, amiről beszéltél: mit mondott valaki, mit ígértél, vagy kérj összefoglalót a napodról. Feladatokat is fel tudok venni, és dolgokat is megjegyzek helyetted.",
     "onboardingStarterTaskAsk": "Kérdezd meg Omit a napodról",
     "onboardingStarterTaskRecord": "Rögzíts egy beszélgetést az Omival",
-    "onboardingStarterTaskCheck": "Pipáld ki ezt a feladatot"
+    "onboardingStarterTaskCheck": "Pipáld ki ezt a feladatot",
+    "homePendingTitle": "Beszélgetések úton",
+    "homePendingCatchingUp": "Korábbi hang feldolgozása",
+    "onTheWayTitle": "Úton",
+    "onTheWayAlmostReady": "Majdnem kész",
+    "activityEmpty": "Még nincs tevékenység",
+    "activityNewSemantics": "Tevékenység, új elemek",
+    "activityLoadFailed": "Nem sikerült betölteni az összes tevékenységet",
+    "activityNewItem": "Új"
 }

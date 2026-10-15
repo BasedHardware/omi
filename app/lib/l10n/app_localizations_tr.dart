@@ -13442,4 +13442,28 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onboardingStarterTaskCheck => 'Bu görevi tamamlamak için işaretle';
+
+  @override
+  String get homePendingTitle => 'Konuşmalar yolda';
+
+  @override
+  String get homePendingCatchingUp => 'Önceki ses işleniyor';
+
+  @override
+  String get onTheWayTitle => 'Yolda';
+
+  @override
+  String get onTheWayAlmostReady => 'Neredeyse hazır';
+
+  @override
+  String get activityEmpty => 'Henüz etkinlik yok';
+
+  @override
+  String get activityNewSemantics => 'Etkinlik, yeni öğeler';
+
+  @override
+  String get activityLoadFailed => 'Etkinliğinizin tamamı yüklenemedi';
+
+  @override
+  String get activityNewItem => 'Yeni';
 }

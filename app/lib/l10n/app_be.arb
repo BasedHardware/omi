@@ -11549,5 +11549,13 @@
     "chatWelcomeMessage": "Прывітанне, я Omi. Пытайцеся пра ўсё, пра што вы размаўлялі: што хтосьці сказаў, што вы паабяцалі, ці як прайшоў ваш дзень. Я таксама магу дадаваць задачы і запамінаць рэчы за вас.",
     "onboardingStarterTaskAsk": "Спытайце Omi пра свой дзень",
     "onboardingStarterTaskRecord": "Запішыце размову з Omi",
-    "onboardingStarterTaskCheck": "Адзначце гэтую задачу, каб завяршыць яе"
+    "onboardingStarterTaskCheck": "Адзначце гэтую задачу, каб завяршыць яе",
+    "homePendingTitle": "Размовы ў дарозе",
+    "homePendingCatchingUp": "Апрацоўваем ранейшае аўдыя",
+    "onTheWayTitle": "У дарозе",
+    "onTheWayAlmostReady": "Амаль гатова",
+    "activityEmpty": "Пакуль няма актыўнасці",
+    "activityNewSemantics": "Актыўнасць, новыя элементы",
+    "activityLoadFailed": "Не ўдалося загрузіць усю вашу актыўнасць",
+    "activityNewItem": "Новае"
 }

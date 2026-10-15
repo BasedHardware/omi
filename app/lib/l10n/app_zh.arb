@@ -4123,5 +4123,13 @@
     "chatWelcomeMessage": "你好，我是 Omi。关于你聊过的任何事都可以问我：某人说了什么、你答应过什么，或者今天的总结。我还能帮你添加待办、记住重要的事。",
     "onboardingStarterTaskAsk": "问问 Omi 你今天过得怎么样",
     "onboardingStarterTaskRecord": "用 Omi 录一段对话",
-    "onboardingStarterTaskCheck": "勾选这项任务来完成它"
+    "onboardingStarterTaskCheck": "勾选这项任务来完成它",
+    "homePendingTitle": "对话正在生成",
+    "homePendingCatchingUp": "正在处理之前的音频",
+    "onTheWayTitle": "处理中",
+    "onTheWayAlmostReady": "即将完成",
+    "activityEmpty": "暂无活动",
+    "activityNewSemantics": "活动，有新内容",
+    "activityLoadFailed": "无法加载全部活动",
+    "activityNewItem": "新"
 }

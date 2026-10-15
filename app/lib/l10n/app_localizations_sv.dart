@@ -13434,4 +13434,28 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get onboardingStarterTaskCheck => 'Bocka av den här uppgiften för att slutföra den';
+
+  @override
+  String get homePendingTitle => 'Samtal på väg';
+
+  @override
+  String get homePendingCatchingUp => 'Kommer ikapp tidigare ljud';
+
+  @override
+  String get onTheWayTitle => 'På väg';
+
+  @override
+  String get onTheWayAlmostReady => 'Nästan klart';
+
+  @override
+  String get activityEmpty => 'Ingen aktivitet än';
+
+  @override
+  String get activityNewSemantics => 'Aktivitet, nya objekt';
+
+  @override
+  String get activityLoadFailed => 'Kunde inte läsa in all din aktivitet';
+
+  @override
+  String get activityNewItem => 'Ny';
 }

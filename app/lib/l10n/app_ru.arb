@@ -4158,5 +4158,13 @@
     "chatWelcomeMessage": "Привет, я Omi. Спрашивайте обо всём, о чём вы говорили: что сказал кто-то, что вы пообещали или как прошёл ваш день. Я также могу добавлять задачи и запоминать важное за вас.",
     "onboardingStarterTaskAsk": "Спросите Omi о своём дне",
     "onboardingStarterTaskRecord": "Запишите разговор с Omi",
-    "onboardingStarterTaskCheck": "Отметьте эту задачу, чтобы завершить её"
+    "onboardingStarterTaskCheck": "Отметьте эту задачу, чтобы завершить её",
+    "homePendingTitle": "Разговоры в пути",
+    "homePendingCatchingUp": "Обрабатываем более раннее аудио",
+    "onTheWayTitle": "В пути",
+    "onTheWayAlmostReady": "Почти готово",
+    "activityEmpty": "Пока нет активности",
+    "activityNewSemantics": "Активность, новые элементы",
+    "activityLoadFailed": "Не удалось загрузить всю активность",
+    "activityNewItem": "Новое"
 }

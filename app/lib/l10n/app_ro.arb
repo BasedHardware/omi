@@ -4123,5 +4123,13 @@
     "chatWelcomeMessage": "Salut, sunt Omi. Întreabă-mă orice despre ce ai vorbit: ce a spus cineva, ce ai promis sau un rezumat al zilei tale. Pot și să adaug sarcini și să țin minte lucruri pentru tine.",
     "onboardingStarterTaskAsk": "Întreabă-l pe Omi despre ziua ta",
     "onboardingStarterTaskRecord": "Înregistrează o conversație cu Omi",
-    "onboardingStarterTaskCheck": "Bifează această sarcină ca s-o finalizezi"
+    "onboardingStarterTaskCheck": "Bifează această sarcină ca s-o finalizezi",
+    "homePendingTitle": "Conversații pe drum",
+    "homePendingCatchingUp": "Recuperăm audio anterior",
+    "onTheWayTitle": "Pe drum",
+    "onTheWayAlmostReady": "Aproape gata",
+    "activityEmpty": "Nicio activitate încă",
+    "activityNewSemantics": "Activitate, elemente noi",
+    "activityLoadFailed": "Nu am putut încărca toată activitatea ta",
+    "activityNewItem": "Nou"
 }

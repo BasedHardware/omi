@@ -13500,4 +13500,28 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get onboardingStarterTaskCheck => 'Spunta questa attività per completarla';
+
+  @override
+  String get homePendingTitle => 'Conversazioni in arrivo';
+
+  @override
+  String get homePendingCatchingUp => 'Recupero dell\'audio precedente';
+
+  @override
+  String get onTheWayTitle => 'In arrivo';
+
+  @override
+  String get onTheWayAlmostReady => 'Quasi pronto';
+
+  @override
+  String get activityEmpty => 'Ancora nessuna attività';
+
+  @override
+  String get activityNewSemantics => 'Attività, nuovi elementi';
+
+  @override
+  String get activityLoadFailed => 'Impossibile caricare tutta la tua attività';
+
+  @override
+  String get activityNewItem => 'Nuovo';
 }

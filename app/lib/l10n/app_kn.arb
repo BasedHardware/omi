@@ -11549,5 +11549,13 @@
     "chatWelcomeMessage": "ನಮಸ್ಕಾರ, ನಾನು Omi. ನೀವು ಮಾತನಾಡಿದ ಯಾವುದರ ಬಗ್ಗೆಯೂ ಕೇಳಿ: ಯಾರು ಏನು ಹೇಳಿದರು, ನೀವು ಏನು ಭರವಸೆ ನೀಡಿದ್ದೀರಿ ಅಥವಾ ನಿಮ್ಮ ದಿನದ ಸಾರಾಂಶ. ನಾನು ಕಾರ್ಯಗಳನ್ನು ಸೇರಿಸಬಹುದು ಮತ್ತು ನಿಮಗಾಗಿ ವಿಷಯಗಳನ್ನು ನೆನಪಿಟ್ಟುಕೊಳ್ಳಬಹುದು.",
     "onboardingStarterTaskAsk": "ನಿಮ್ಮ ದಿನದ ಬಗ್ಗೆ Omi ಅನ್ನು ಕೇಳಿ",
     "onboardingStarterTaskRecord": "Omi ಮೂಲಕ ಒಂದು ಸಂಭಾಷಣೆಯನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಿ",
-    "onboardingStarterTaskCheck": "ಮುಗಿಸಲು ಈ ಕಾರ್ಯವನ್ನು ಟಿಕ್ ಮಾಡಿ"
+    "onboardingStarterTaskCheck": "ಮುಗಿಸಲು ಈ ಕಾರ್ಯವನ್ನು ಟಿಕ್ ಮಾಡಿ",
+    "homePendingTitle": "ಸಂಭಾಷಣೆಗಳು ಬರುತ್ತಿವೆ",
+    "homePendingCatchingUp": "ಹಿಂದಿನ ಆಡಿಯೊವನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲಾಗುತ್ತಿದೆ",
+    "onTheWayTitle": "ದಾರಿಯಲ್ಲಿದೆ",
+    "onTheWayAlmostReady": "ಬಹುತೇಕ ಸಿದ್ಧ",
+    "activityEmpty": "ಇನ್ನೂ ಯಾವುದೇ ಚಟುವಟಿಕೆ ಇಲ್ಲ",
+    "activityNewSemantics": "ಚಟುವಟಿಕೆ, ಹೊಸ ಐಟಂಗಳು",
+    "activityLoadFailed": "ನಿಮ್ಮ ಎಲ್ಲಾ ಚಟುವಟಿಕೆಯನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
+    "activityNewItem": "ಹೊಸದು"
 }

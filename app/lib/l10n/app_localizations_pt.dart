@@ -13453,4 +13453,28 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get onboardingStarterTaskCheck => 'Marque esta tarefa para concluí-la';
+
+  @override
+  String get homePendingTitle => 'Conversas a caminho';
+
+  @override
+  String get homePendingCatchingUp => 'Processando áudio anterior';
+
+  @override
+  String get onTheWayTitle => 'A caminho';
+
+  @override
+  String get onTheWayAlmostReady => 'Quase pronto';
+
+  @override
+  String get activityEmpty => 'Nenhuma atividade ainda';
+
+  @override
+  String get activityNewSemantics => 'Atividade, novos itens';
+
+  @override
+  String get activityLoadFailed => 'Não foi possível carregar toda a sua atividade';
+
+  @override
+  String get activityNewItem => 'Novo';
 }

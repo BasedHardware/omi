@@ -13513,4 +13513,28 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get onboardingStarterTaskCheck => 'Σημείωσε αυτή την εργασία για να την ολοκληρώσεις';
+
+  @override
+  String get homePendingTitle => 'Συνομιλίες καθ\' οδόν';
+
+  @override
+  String get homePendingCatchingUp => 'Επεξεργασία προηγούμενου ήχου';
+
+  @override
+  String get onTheWayTitle => 'Καθ\' οδόν';
+
+  @override
+  String get onTheWayAlmostReady => 'Σχεδόν έτοιμο';
+
+  @override
+  String get activityEmpty => 'Δεν υπάρχει δραστηριότητα ακόμα';
+
+  @override
+  String get activityNewSemantics => 'Δραστηριότητα, νέα στοιχεία';
+
+  @override
+  String get activityLoadFailed => 'Δεν ήταν δυνατή η φόρτωση όλης της δραστηριότητάς σας';
+
+  @override
+  String get activityNewItem => 'Νέο';
 }

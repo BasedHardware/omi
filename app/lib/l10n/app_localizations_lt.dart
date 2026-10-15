@@ -13453,4 +13453,28 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get onboardingStarterTaskCheck => 'Pažymėk šią užduotį kaip atliktą';
+
+  @override
+  String get homePendingTitle => 'Pokalbiai pakeliui';
+
+  @override
+  String get homePendingCatchingUp => 'Apdorojamas ankstesnis garsas';
+
+  @override
+  String get onTheWayTitle => 'Pakeliui';
+
+  @override
+  String get onTheWayAlmostReady => 'Beveik paruošta';
+
+  @override
+  String get activityEmpty => 'Veiklos dar nėra';
+
+  @override
+  String get activityNewSemantics => 'Veikla, nauji elementai';
+
+  @override
+  String get activityLoadFailed => 'Nepavyko įkelti visos jūsų veiklos';
+
+  @override
+  String get activityNewItem => 'Nauja';
 }

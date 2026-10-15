@@ -13410,4 +13410,28 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get onboardingStarterTaskCheck => 'इस काम को पूरा करने के लिए टिक करें';
+
+  @override
+  String get homePendingTitle => 'बातचीत आ रही हैं';
+
+  @override
+  String get homePendingCatchingUp => 'पहले का ऑडियो प्रोसेस हो रहा है';
+
+  @override
+  String get onTheWayTitle => 'रास्ते में';
+
+  @override
+  String get onTheWayAlmostReady => 'लगभग तैयार';
+
+  @override
+  String get activityEmpty => 'अभी तक कोई गतिविधि नहीं';
+
+  @override
+  String get activityNewSemantics => 'गतिविधि, नए आइटम';
+
+  @override
+  String get activityLoadFailed => 'आपकी पूरी गतिविधि लोड नहीं हो सकी';
+
+  @override
+  String get activityNewItem => 'नया';
 }

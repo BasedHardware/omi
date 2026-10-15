@@ -4123,5 +4123,13 @@
     "chatWelcomeMessage": "Hei, jeg er Omi. Spør meg om alt du har snakket om: hva noen sa, hva du lovet, eller et sammendrag av dagen din. Jeg kan også legge til oppgaver og huske ting for deg.",
     "onboardingStarterTaskAsk": "Spør Omi om dagen din",
     "onboardingStarterTaskRecord": "Ta opp en samtale med Omi",
-    "onboardingStarterTaskCheck": "Kryss av denne oppgaven for å fullføre den"
+    "onboardingStarterTaskCheck": "Kryss av denne oppgaven for å fullføre den",
+    "homePendingTitle": "Samtaler på vei",
+    "homePendingCatchingUp": "Tar igjen tidligere lyd",
+    "onTheWayTitle": "På vei",
+    "onTheWayAlmostReady": "Nesten klar",
+    "activityEmpty": "Ingen aktivitet ennå",
+    "activityNewSemantics": "Aktivitet, nye elementer",
+    "activityLoadFailed": "Kunne ikke laste inn all aktiviteten din",
+    "activityNewItem": "Ny"
 }

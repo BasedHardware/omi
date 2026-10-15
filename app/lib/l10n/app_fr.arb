@@ -4158,5 +4158,13 @@
     "chatWelcomeMessage": "Salut, je suis Omi. Demandez-moi tout ce dont vous avez parlé : ce que quelqu'un a dit, ce que vous avez promis ou un résumé de votre journée. Je peux aussi ajouter des tâches et retenir des choses pour vous.",
     "onboardingStarterTaskAsk": "Demandez à Omi comment s'est passée votre journée",
     "onboardingStarterTaskRecord": "Enregistrez une conversation avec Omi",
-    "onboardingStarterTaskCheck": "Cochez cette tâche pour la terminer"
+    "onboardingStarterTaskCheck": "Cochez cette tâche pour la terminer",
+    "homePendingTitle": "Conversations en route",
+    "homePendingCatchingUp": "Rattrapage de l'audio précédent",
+    "onTheWayTitle": "En route",
+    "onTheWayAlmostReady": "Presque prêt",
+    "activityEmpty": "Aucune activité pour l'instant",
+    "activityNewSemantics": "Activité, nouveaux éléments",
+    "activityLoadFailed": "Impossible de charger toute votre activité",
+    "activityNewItem": "Nouveau"
 }

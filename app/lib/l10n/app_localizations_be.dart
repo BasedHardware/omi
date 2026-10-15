@@ -13464,4 +13464,28 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get onboardingStarterTaskCheck => 'Адзначце гэтую задачу, каб завяршыць яе';
+
+  @override
+  String get homePendingTitle => 'Размовы ў дарозе';
+
+  @override
+  String get homePendingCatchingUp => 'Апрацоўваем ранейшае аўдыя';
+
+  @override
+  String get onTheWayTitle => 'У дарозе';
+
+  @override
+  String get onTheWayAlmostReady => 'Амаль гатова';
+
+  @override
+  String get activityEmpty => 'Пакуль няма актыўнасці';
+
+  @override
+  String get activityNewSemantics => 'Актыўнасць, новыя элементы';
+
+  @override
+  String get activityLoadFailed => 'Не ўдалося загрузіць усю вашу актыўнасць';
+
+  @override
+  String get activityNewItem => 'Новае';
 }

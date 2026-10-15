@@ -4123,5 +4123,13 @@
     "chatWelcomeMessage": "Hola, soc l'Omi. Pregunta'm qualsevol cosa del que has parlat: què va dir algú, què vas prometre o un resum del teu dia. També puc afegir tasques i recordar coses per tu.",
     "onboardingStarterTaskAsk": "Pregunta a l'Omi pel teu dia",
     "onboardingStarterTaskRecord": "Grava una conversa amb l'Omi",
-    "onboardingStarterTaskCheck": "Marca aquesta tasca per completar-la"
+    "onboardingStarterTaskCheck": "Marca aquesta tasca per completar-la",
+    "homePendingTitle": "Converses en camí",
+    "homePendingCatchingUp": "Posant al dia l'àudio anterior",
+    "onTheWayTitle": "En camí",
+    "onTheWayAlmostReady": "Gairebé a punt",
+    "activityEmpty": "Encara no hi ha activitat",
+    "activityNewSemantics": "Activitat, elements nous",
+    "activityLoadFailed": "No s'ha pogut carregar tota la teva activitat",
+    "activityNewItem": "Nou"
 }

@@ -4123,5 +4123,13 @@
     "chatWelcomeMessage": "नमस्ते, मैं Omi हूँ। आपने जिस बारे में बात की है, उसके बारे में कुछ भी पूछें: किसी ने क्या कहा, आपने क्या वादा किया, या आपके दिन का सारांश। मैं काम जोड़ सकता हूँ और आपके लिए चीज़ें याद भी रख सकता हूँ।",
     "onboardingStarterTaskAsk": "Omi से अपने दिन के बारे में पूछें",
     "onboardingStarterTaskRecord": "Omi से एक बातचीत रिकॉर्ड करें",
-    "onboardingStarterTaskCheck": "इस काम को पूरा करने के लिए टिक करें"
+    "onboardingStarterTaskCheck": "इस काम को पूरा करने के लिए टिक करें",
+    "homePendingTitle": "बातचीत आ रही हैं",
+    "homePendingCatchingUp": "पहले का ऑडियो प्रोसेस हो रहा है",
+    "onTheWayTitle": "रास्ते में",
+    "onTheWayAlmostReady": "लगभग तैयार",
+    "activityEmpty": "अभी तक कोई गतिविधि नहीं",
+    "activityNewSemantics": "गतिविधि, नए आइटम",
+    "activityLoadFailed": "आपकी पूरी गतिविधि लोड नहीं हो सकी",
+    "activityNewItem": "नया"
 }

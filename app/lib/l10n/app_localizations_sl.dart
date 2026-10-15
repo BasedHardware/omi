@@ -13460,4 +13460,28 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get onboardingStarterTaskCheck => 'Odkljukaj to opravilo, da ga končaš';
+
+  @override
+  String get homePendingTitle => 'Pogovori na poti';
+
+  @override
+  String get homePendingCatchingUp => 'Obdelujemo prejšnji zvok';
+
+  @override
+  String get onTheWayTitle => 'Na poti';
+
+  @override
+  String get onTheWayAlmostReady => 'Skoraj pripravljeno';
+
+  @override
+  String get activityEmpty => 'Še ni dejavnosti';
+
+  @override
+  String get activityNewSemantics => 'Dejavnost, novi elementi';
+
+  @override
+  String get activityLoadFailed => 'Ni bilo mogoče naložiti vse vaše dejavnosti';
+
+  @override
+  String get activityNewItem => 'Novo';
 }

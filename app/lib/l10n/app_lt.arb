@@ -4123,5 +4123,13 @@
     "chatWelcomeMessage": "Labas, aš Omi. Klausk manęs apie bet ką, apie ką kalbėjai: ką kas nors pasakė, ką pažadėjai ar tavo dienos santrauką. Taip pat galiu pridėti užduočių ir prisiminti dalykus už tave.",
     "onboardingStarterTaskAsk": "Paklausk Omi apie savo dieną",
     "onboardingStarterTaskRecord": "Įrašyk pokalbį su Omi",
-    "onboardingStarterTaskCheck": "Pažymėk šią užduotį kaip atliktą"
+    "onboardingStarterTaskCheck": "Pažymėk šią užduotį kaip atliktą",
+    "homePendingTitle": "Pokalbiai pakeliui",
+    "homePendingCatchingUp": "Apdorojamas ankstesnis garsas",
+    "onTheWayTitle": "Pakeliui",
+    "onTheWayAlmostReady": "Beveik paruošta",
+    "activityEmpty": "Veiklos dar nėra",
+    "activityNewSemantics": "Veikla, nauji elementai",
+    "activityLoadFailed": "Nepavyko įkelti visos jūsų veiklos",
+    "activityNewItem": "Nauja"
 }

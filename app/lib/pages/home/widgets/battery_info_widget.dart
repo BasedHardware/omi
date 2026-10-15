@@ -159,7 +159,12 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                     ),
                   ),
                   const SizedBox(width: 6.0),
-                  Text(status, style: OmiType.caption.copyWith(fontSize: 12, color: OmiColors.textSecondary)),
+                  Flexible(
+                    child: Text(status,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: OmiType.caption.copyWith(fontSize: 12, color: OmiColors.textSecondary)),
+                  ),
                 ],
               );
             } else {
@@ -178,9 +183,13 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                 children: [
                   // The asset is white; tint it so it shows on the light pill too.
                   Image.asset(Assets.images.logoTransparent.path, width: 16, height: 16, color: OmiColors.textPrimary),
-                  // The word stays on every page: the logo alone reads as a loading spinner.
+                  // The word stays on every page (the logo alone reads as a loading spinner); it gives
+                  // way with an ellipsis so the header fits narrow screens and large text.
                   const SizedBox(width: 6),
-                  Text(label, style: OmiType.caption.copyWith(fontSize: 12)),
+                  Flexible(
+                    child: Text(label,
+                        maxLines: 1, overflow: TextOverflow.ellipsis, style: OmiType.caption.copyWith(fontSize: 12)),
+                  ),
                 ],
               );
             }

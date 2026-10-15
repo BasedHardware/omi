@@ -4123,5 +4123,13 @@
     "chatWelcomeMessage": "Hei, olen Omi. Kysy minulta mitä tahansa siitä, mistä olet puhunut: mitä joku sanoi, mitä lupasit tai yhteenveto päivästäsi. Voin myös lisätä tehtäviä ja muistaa asioita puolestasi.",
     "onboardingStarterTaskAsk": "Kysy Omilta päivästäsi",
     "onboardingStarterTaskRecord": "Tallenna keskustelu Omilla",
-    "onboardingStarterTaskCheck": "Merkitse tämä tehtävä tehdyksi"
+    "onboardingStarterTaskCheck": "Merkitse tämä tehtävä tehdyksi",
+    "homePendingTitle": "Keskusteluja tulossa",
+    "homePendingCatchingUp": "Käsitellään aiempaa ääntä",
+    "onTheWayTitle": "Tulossa",
+    "onTheWayAlmostReady": "Melkein valmis",
+    "activityEmpty": "Ei vielä toimintaa",
+    "activityNewSemantics": "Toiminta, uusia kohteita",
+    "activityLoadFailed": "Kaikkea toimintaa ei voitu ladata",
+    "activityNewItem": "Uusi"
 }

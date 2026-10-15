@@ -13498,4 +13498,28 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get onboardingStarterTaskCheck => 'Marca aquesta tasca per completar-la';
+
+  @override
+  String get homePendingTitle => 'Converses en camí';
+
+  @override
+  String get homePendingCatchingUp => 'Posant al dia l\'àudio anterior';
+
+  @override
+  String get onTheWayTitle => 'En camí';
+
+  @override
+  String get onTheWayAlmostReady => 'Gairebé a punt';
+
+  @override
+  String get activityEmpty => 'Encara no hi ha activitat';
+
+  @override
+  String get activityNewSemantics => 'Activitat, elements nous';
+
+  @override
+  String get activityLoadFailed => 'No s\'ha pogut carregar tota la teva activitat';
+
+  @override
+  String get activityNewItem => 'Nou';
 }

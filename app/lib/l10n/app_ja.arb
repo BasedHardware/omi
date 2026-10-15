@@ -4123,5 +4123,13 @@
     "chatWelcomeMessage": "こんにちは、Omiです。話した内容なら何でも聞いてください。誰が何を言ったか、何を約束したか、一日のまとめなど。タスクの追加や、覚えておくこともできます。",
     "onboardingStarterTaskAsk": "Omiに今日のことを聞いてみる",
     "onboardingStarterTaskRecord": "Omiで会話を録音する",
-    "onboardingStarterTaskCheck": "このタスクにチェックして完了する"
+    "onboardingStarterTaskCheck": "このタスクにチェックして完了する",
+    "homePendingTitle": "会話を準備中",
+    "homePendingCatchingUp": "以前の音声を処理中",
+    "onTheWayTitle": "準備中",
+    "onTheWayAlmostReady": "まもなく完了",
+    "activityEmpty": "アクティビティはまだありません",
+    "activityNewSemantics": "アクティビティ、新着あり",
+    "activityLoadFailed": "アクティビティの一部を読み込めませんでした",
+    "activityNewItem": "新着"
 }

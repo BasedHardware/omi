@@ -13416,4 +13416,28 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get onboardingStarterTaskCheck => 'Sæt flueben ved denne opgave for at fuldføre den';
+
+  @override
+  String get homePendingTitle => 'Samtaler på vej';
+
+  @override
+  String get homePendingCatchingUp => 'Indhenter tidligere lyd';
+
+  @override
+  String get onTheWayTitle => 'På vej';
+
+  @override
+  String get onTheWayAlmostReady => 'Næsten klar';
+
+  @override
+  String get activityEmpty => 'Ingen aktivitet endnu';
+
+  @override
+  String get activityNewSemantics => 'Aktivitet, nye elementer';
+
+  @override
+  String get activityLoadFailed => 'Kunne ikke indlæse al din aktivitet';
+
+  @override
+  String get activityNewItem => 'Ny';
 }

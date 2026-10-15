@@ -13443,4 +13443,28 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get onboardingStarterTaskCheck => 'مکمل کرنے کے لیے اس کام پر نشان لگائیں';
+
+  @override
+  String get homePendingTitle => 'گفتگوئیں آ رہی ہیں';
+
+  @override
+  String get homePendingCatchingUp => 'پچھلی آڈیو پر کارروائی ہو رہی ہے';
+
+  @override
+  String get onTheWayTitle => 'راستے میں';
+
+  @override
+  String get onTheWayAlmostReady => 'تقریباً تیار';
+
+  @override
+  String get activityEmpty => 'ابھی تک کوئی سرگرمی نہیں';
+
+  @override
+  String get activityNewSemantics => 'سرگرمی، نئے آئٹمز';
+
+  @override
+  String get activityLoadFailed => 'آپ کی تمام سرگرمی لوڈ نہیں ہو سکی';
+
+  @override
+  String get activityNewItem => 'نیا';
 }

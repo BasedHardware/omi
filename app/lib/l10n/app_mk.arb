@@ -11549,5 +11549,13 @@
     "chatWelcomeMessage": "Здраво, јас сум Omi. Прашај ме било што за она за што си зборувал: што рекол некој, што си ветил или резиме на твојот ден. Можам и да додавам задачи и да паметам работи за тебе.",
     "onboardingStarterTaskAsk": "Прашај го Omi за твојот ден",
     "onboardingStarterTaskRecord": "Сними разговор со Omi",
-    "onboardingStarterTaskCheck": "Штиклирај ја оваа задача за да ја завршиш"
+    "onboardingStarterTaskCheck": "Штиклирај ја оваа задача за да ја завршиш",
+    "homePendingTitle": "Разговори на пат",
+    "homePendingCatchingUp": "Ги обработуваме претходните аудиозаписи",
+    "onTheWayTitle": "На пат",
+    "onTheWayAlmostReady": "Речиси готово",
+    "activityEmpty": "Сè уште нема активност",
+    "activityNewSemantics": "Активност, нови ставки",
+    "activityLoadFailed": "Не можевме да ја вчитаме целата ваша активност",
+    "activityNewItem": "Ново"
 }
