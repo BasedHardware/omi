@@ -169,6 +169,8 @@ def _sources(uid: str) -> list[tuple[ReviewItem | ReviewItemV2, dict, str]]:
     show_dream = dream_visible(uid)
     for proposal in store.list_proposals(uid):
         item = ReviewItemV2.model_validate(proposal['item'])
+        if store.proposal_record_is_dream_origin(uid, proposal) and not show_dream:
+            continue
         if (item.kind == 'agent_proposal' or item.agent_proposal) and not show_dream:
             continue
         if item.agent_proposal and not review_changes.agent_change_allowed(uid, proposal['source']['edit_key']):
@@ -214,6 +216,8 @@ def answer_item(uid: str, item_id: str, answer: ReviewAnswer | ReviewAnswerV2, *
     uncertain = answer.not_sure or bool(answer.same_person and answer.same_person.decision == 'not_sure')
     applied = False
     try:
+        if store.proposal_is_dream_origin(uid, item_id) and not dream_visible(uid):
+            raise store.ReviewConflict('Dream proposals are not available for this account')
         if uncertain:
             # Do not call speaker skip: it permanently marks that source answered.
             # Review stores an evidence version, permitting a new-evidence question.

@@ -170,6 +170,42 @@ class AdmissionDenied(Exception):
         super().__init__(reason)
 
 
+def _abandoned_usage(abandoned):
+    """Receipt for a lease that died after one or more settled turns.
+
+    Numeric ``cost_usd`` is present only when every receipt is priced. Otherwise
+    the run keeps the conservative ``budget_charge_usd`` and omits a dollar cost.
+    """
+    receipts = abandoned.get('turn_receipts') or []
+    tokens = 0
+    micros = 0
+    priced = bool(receipts)
+    for row in receipts:
+        if not isinstance(row, dict):
+            priced = False
+            continue
+        accounted = row.get('accounted_tokens', row.get('tokens', 0))
+        if type(accounted) is int and accounted >= 0:
+            tokens += accounted
+        else:
+            priced = False
+        micro = row.get('cost_micro_usd')
+        if row.get('cost_status') == 'priced' and type(micro) is int and micro >= 0:
+            micros += micro
+        else:
+            priced = False
+    charge = abandoned.get('budget_charge_usd', abandoned.get('reservation_usd', 0))
+    usage = {
+        'tokens': tokens,
+        'usage_unknown': not priced,
+        'cost_status': 'priced' if priced else 'unpriced',
+        'budget_charge_usd': float(charge),
+    }
+    if priced:
+        usage['cost_usd'] = micros / 1000000
+    return usage
+
+
 def acquire(
     uid,
     caps: Caps,
@@ -301,16 +337,20 @@ def acquire(
             lease, patch, denial = None, {}, exc.reason
         # All reads, including admission's dirty count, precede settlement writes.
         if old_spend is not None and isinstance(started, datetime):
+            usage = _abandoned_usage(abandoned)
             source = {
                 'status': 'failed',
                 'reason': 'abandoned',
-                'usage_unknown': True,
+                'usage_unknown': usage['usage_unknown'],
                 'size_bucket': bucket,
                 'abandoned': 1,
-                'tokens': 0,
+                'tokens': usage['tokens'],
                 'records_queued_after': queued_count,
-                'budget_charge_usd': float(abandoned['reservation_usd']),
+                'budget_charge_usd': usage['budget_charge_usd'],
+                'cost_status': usage['cost_status'],
             }
+            if 'cost_usd' in usage:
+                source['cost_usd'] = usage['cost_usd']
             run = owner.collection('dream_runs').document(abandoned['run_id'])
             tx.set(
                 run,
@@ -323,8 +363,9 @@ def acquire(
                     'success': False,
                     'records_read': 0,
                     'records_queued_after': queued_count,
-                    'tokens': 0,
-                    'cost_usd': 0,
+                    'tokens': usage['tokens'],
+                    'cost_status': usage['cost_status'],
+                    **({'cost_usd': usage['cost_usd']} if 'cost_usd' in usage else {}),
                 },
             )
             if old_spend.path != spend.path or lease is None:

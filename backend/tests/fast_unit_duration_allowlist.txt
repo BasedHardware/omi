@@ -415,3 +415,7 @@ tests/unit/test_client_telemetry.py::test_voice_actor_capacity_sharded_across_do
 tests/unit/test_account_gate_busy_http.py::test_conversation_delete_route_maps_takeover_to_409
 tests/unit/test_account_gate_busy_http.py::test_account_gate_cascade_purge_maps_fence_before_generic_failure[DestructiveGateTakeover]
 tests/unit/test_account_gate_busy_http.py
+# First reclaim in the file deep-copies the fake Firestore state and pays the cold
+# lazy import in its call phase under file isolation. Measured 0.29s quiet and
+# 0.31-0.32s beside another unit file (2026-10-15), straddling the 0.30s guard.
+tests/unit/test_dream_lease_reclamation.py::test_only_strictly_older_leases_are_reclaimed[1-bounded]
