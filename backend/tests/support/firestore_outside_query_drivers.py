@@ -20,7 +20,7 @@ DRIVERS: dict[str, DriverEntry] = {}
 COVERED_BY: dict[str, CoveredByEntry] = {}
 SKIPS: dict[str, SkipEntry] = {}
 BODY_DIGEST = {
-    'routers.fleet_telemetry.read_summary': '97e378dd52b5d22838ac0e3b864824d3081877eab2d11fdb9a74f1350048da8f',
+    'routers.fleet_telemetry.read_summary': '87301e7e85cb658ec21665d33e1dd2d7fb29a978daffd4292181d4cdeafd26ef',
     'parakeet.stream_handler._NemoRNNTStreamingDecoder.decode_pcm': '37cecadaf2adcc0650d318d4ac7adb316dade33610927e6ac663f9d386c9edd6',
     'routers.desktop_proxy._read_request_body': 'e71ed271b768274df479a8429ce363d1152a85073b59c8d034445bd8fc87c6b7',
     'utils.multipart._size_limited_stream': '9d743f14fb64633072a7b3e213236643e3bd74825c4bc73221f1fdbd867fc7b6',

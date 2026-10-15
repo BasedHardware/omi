@@ -111,8 +111,8 @@ any PostHog filter. No filtering, client changes or reader cutovers ship here.
 
 Worst-case application series **per scrape target**: 95 event/outcome pairs ×
 5 platforms × 3 channels × 2 (`_total`, `_created`) = 2,850; six histograms'
-54 bucket/count children × 15 = 810; upload 4 outcomes × 6 platforms × 4
-channels × 2 = 192; rejection 10 reasons × 2 = 20; total **3,872**.
+60 bucket/count children × 15 = 900; upload 4 outcomes × 6 platforms × 4
+channels × 2 = 192; rejection 10 reasons × 2 = 20; total **3,962**.
 The executable `max_series()` is authoritative and the test enforces <5,000.
 Only populated children are exposed; Cloud Run mandatory per-instance target
 labels multiply this bound across instances. Do not preinitialize all client
@@ -138,7 +138,9 @@ predeploy traffic revisions before dispatch. After promotion, observe 15+
 minutes and compare 5xx and container startup/restart signals to the preceding
 24–48 hours. Query GMP `sum by(outcome,platform,build_channel)
 (rate(omi_sync_upload_total[5m]))` and verify series originate from sync. A live
-sidecar or `up=1` alone is insufficient evidence of ingestion. Test authenticated
-summaries only locally/dev; an unauthenticated fleet POST may check 401 in prod.
+sidecar or `up=1` alone is insufficient evidence of ingestion. The existing dev transcription-candidate probe also sends one counter/histogram
+summary using its short-lived release-probe token, after checking the candidate
+URL against the dev service. A shared-UID 429 is reported, not amplified.
+Test authenticated summaries only locally/dev; an unauthenticated fleet POST may check 401 in prod.
 Rollback uses the recorded four-service traffic snapshot via the existing
 release workflow/runbook, preserving the previous images and collector config.

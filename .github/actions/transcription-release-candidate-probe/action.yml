@@ -87,3 +87,9 @@ runs:
         else
           python3 "$DEPLOY_CONTROL_SCRIPT_DIR/transcription_capability_probe.py" "${probe_args[@]}"
         fi
+        # Exercise this additive endpoint only when it exists in the admitted
+        # runtime source. Older-source replays retain their original probe.
+        if [[ "$PROBE_SECRET_PROJECT" == based-hardware-dev && -f backend/routers/fleet_telemetry.py ]]; then
+          python3 "$DEPLOY_CONTROL_SCRIPT_DIR/probe_dev_fleet_telemetry.py" \
+            --candidate-api-url "$CANDIDATE_API_URL" --bearer-token-file "$token_file"
+        fi

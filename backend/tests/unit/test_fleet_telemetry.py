@@ -51,7 +51,7 @@ def client(monkeypatch):
 
 def test_cardinality_and_generated_contract():
     assert json.loads((ROOT / 'fleet_schema.json').read_text()) == schema(registry())
-    assert max_series() == 3872
+    assert max_series() == 3962
     assert max_series() < 5000
     assert not set(registry()['server_observed_events']) & set(registry()['events'])
 
