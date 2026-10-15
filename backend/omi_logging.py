@@ -113,7 +113,7 @@ class JsonFormatter(logging.Formatter):
             'timestamp': datetime.datetime.fromtimestamp(record.created, datetime.timezone.utc).isoformat(),
             'logging.googleapis.com/labels': {'service': self.service, 'environment': self.environment},
         }
-        if record.exc_info:
+        if record.exc_info and record.levelno >= logging.ERROR:
             payload['@type'] = 'type.googleapis.com/google.devtools.clouderrorreporting.v1beta1.ReportedErrorEvent'
             payload['serviceContext'] = {'service': self.service}
         trace = _TRACE.get()

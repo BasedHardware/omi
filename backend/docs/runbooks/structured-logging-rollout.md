@@ -14,11 +14,20 @@ or W3C trace IDs through request handling. Set the project explicitly or through
 `GOOGLE_CLOUD_PROJECT`, `GCP_PROJECT`, or `GCLOUD_PROJECT`; trace resource names
 are omitted if no project is known. Set `OMI_ENV_STAGE` or pass `environment`.
 
+Executor adoption gate: `run_in_executor` does not inherit contextvars. Before
+switching Parakeet or another executor caller, capture a fresh
+`contextvars.copy_context()` per submission and dispatch
+`loop.run_in_executor(pool, context.run, function, *args)`; bind keyword arguments
+with `functools.partial`. Never reuse one context for concurrent submissions.
+Verify worker logs retain the request trace and unrelated work does not inherit
+it. Middleware alone does not provide thread or process context propagation;
+process workers require explicit validated trace metadata at their boundary.
+
 GCP runtime markers select one-line JSON on stdout. `OMI_LOG_FORMAT=json|text`
 overrides detection. Cloud text rollback retains the legacy stdout/stderr severity
 split; JSON is required for precise WARNING severity on GKE. Exceptions include
 the traceback in `message` and Error
-Reporting type/service fields. Local output defaults to readable text. Preserve
+Reporting type/service fields only at ERROR or above. Local output defaults to readable text. Preserve
 message strings while migrating so downstream filters retain their meaning.
 Unhandled exceptions retain their validated trace IDs for the outer Uvicorn log
 after request context resets. The requested level also constrains named loggers.

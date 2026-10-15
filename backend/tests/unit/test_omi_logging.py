@@ -1,6 +1,7 @@
 """Process-level logging contract, without application or vendor imports."""
 
 import asyncio
+import contextvars
 import io
 import json
 import logging
@@ -322,3 +323,41 @@ def test_w3c_trace_takes_precedence_with_legacy_fallback(parent):
         ('b' * 32, '0000000000000001', False) if parent.startswith(b'00-') else ('a' * 32, '000000000000002a', True)
     )
     assert result == expected
+
+
+@pytest.mark.parametrize('level', [logging.INFO, logging.WARNING, logging.ERROR, logging.CRITICAL])
+def test_only_errors_force_error_reporting(monkeypatch, level):
+    monkeypatch.setenv('OMI_LOG_FORMAT', 'json')
+    output = io.StringIO()
+    logs.configure_logging('test', stdout=output)
+    try:
+        raise ValueError('controlled')
+    except ValueError:
+        logging.log(level, 'diagnostic', exc_info=True)
+    entry = json.loads(output.getvalue())
+    assert 'Traceback' in entry['message']
+    assert ('@type' in entry) is (level >= logging.ERROR)
+    assert ('serviceContext' in entry) is (level >= logging.ERROR)
+    assert entry['severity'] == logging.getLevelName(level)
+
+
+def test_executor_adoption_copies_context_without_leaking(monkeypatch):
+    monkeypatch.setenv('OMI_LOG_FORMAT', 'json')
+    output = io.StringIO()
+    logs.configure_logging('parakeet', project='test-project', stdout=output)
+
+    async def app(scope, receive, send):
+        await asyncio.get_running_loop().run_in_executor(
+            None, contextvars.copy_context().run, logging.warning, 'worker'
+        )
+
+    async def run():
+        await logs.TraceContextMiddleware(app)(
+            {'type': 'http', 'headers': [(b'x-cloud-trace-context', b'a' * 32 + b'/42;o=1')]}, None, None
+        )
+        await asyncio.get_running_loop().run_in_executor(None, logging.warning, 'outside')
+
+    asyncio.run(run())
+    worker, outside = map(json.loads, output.getvalue().splitlines())
+    assert worker['logging.googleapis.com/trace'].endswith('/' + 'a' * 32)
+    assert 'logging.googleapis.com/trace' not in outside
