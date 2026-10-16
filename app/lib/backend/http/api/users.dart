@@ -46,28 +46,28 @@ enum MobileFeedbackReason {
 }
 
 String _mobileFeedbackKindValue(MobileFeedbackKind kind) => switch (kind) {
-      MobileFeedbackKind.summaryHelpfulness => 'summary_helpfulness',
-      MobileFeedbackKind.recordingQuality => 'recording_quality',
-    };
+  MobileFeedbackKind.summaryHelpfulness => 'summary_helpfulness',
+  MobileFeedbackKind.recordingQuality => 'recording_quality',
+};
 
 String _mobileFeedbackTargetKindValue(MobileFeedbackTargetKind kind) => switch (kind) {
-      MobileFeedbackTargetKind.conversation => 'conversation',
-      MobileFeedbackTargetKind.recording => 'recording',
-    };
+  MobileFeedbackTargetKind.conversation => 'conversation',
+  MobileFeedbackTargetKind.recording => 'recording',
+};
 
 String _mobileFeedbackReasonValue(MobileFeedbackReason reason) => switch (reason) {
-      MobileFeedbackReason.summaryInaccurate => 'summary_inaccurate',
-      MobileFeedbackReason.summaryIncomplete => 'summary_incomplete',
-      MobileFeedbackReason.summaryIrrelevant => 'summary_irrelevant',
-      MobileFeedbackReason.summaryWrongContext => 'summary_wrong_context',
-      MobileFeedbackReason.summaryOther => 'summary_other',
-      MobileFeedbackReason.recordingMissingAudio => 'recording_missing_audio',
-      MobileFeedbackReason.recordingPoorTranscription => 'recording_poor_transcription',
-      MobileFeedbackReason.recordingWrongSpeaker => 'recording_wrong_speaker',
-      MobileFeedbackReason.recordingDelayedOrStuck => 'recording_delayed_or_stuck',
-      MobileFeedbackReason.recordingFragmentedOrDuplicated => 'recording_fragmented_or_duplicated',
-      MobileFeedbackReason.recordingOther => 'recording_other',
-    };
+  MobileFeedbackReason.summaryInaccurate => 'summary_inaccurate',
+  MobileFeedbackReason.summaryIncomplete => 'summary_incomplete',
+  MobileFeedbackReason.summaryIrrelevant => 'summary_irrelevant',
+  MobileFeedbackReason.summaryWrongContext => 'summary_wrong_context',
+  MobileFeedbackReason.summaryOther => 'summary_other',
+  MobileFeedbackReason.recordingMissingAudio => 'recording_missing_audio',
+  MobileFeedbackReason.recordingPoorTranscription => 'recording_poor_transcription',
+  MobileFeedbackReason.recordingWrongSpeaker => 'recording_wrong_speaker',
+  MobileFeedbackReason.recordingDelayedOrStuck => 'recording_delayed_or_stuck',
+  MobileFeedbackReason.recordingFragmentedOrDuplicated => 'recording_fragmented_or_duplicated',
+  MobileFeedbackReason.recordingOther => 'recording_other',
+};
 
 /// Persist explicit, content-free mobile feedback through the idempotent
 /// feedback ledger. The caller can reuse [feedbackId] when retrying a 503.
@@ -113,15 +113,16 @@ class MobileFeedbackReceipt {
 
 /// Signature of [submitMobileFeedback]. Callers that surface the feedback flow
 /// accept an override of this shape so tests can observe the request path.
-typedef MobileFeedbackSubmit = Future<MobileFeedbackReceipt?> Function({
-  required MobileFeedbackKind kind,
-  required String targetId,
-  required int value,
-  MobileFeedbackReason? reason,
-  String? correlationId,
-  String? feedbackId,
-  required MobileFeedbackTargetKind targetKind,
-});
+typedef MobileFeedbackSubmit =
+    Future<MobileFeedbackReceipt?> Function({
+      required MobileFeedbackKind kind,
+      required String targetId,
+      required int value,
+      MobileFeedbackReason? reason,
+      String? correlationId,
+      String? feedbackId,
+      required MobileFeedbackTargetKind targetKind,
+    });
 
 Future<MobileFeedbackReceipt?> submitMobileFeedback({
   required MobileFeedbackKind kind,
@@ -761,11 +762,10 @@ Future<({List<DailySummary> items, bool ok})> getDailySummaries({int limit = 30,
   if (response == null || response.statusCode != 200) return (items: const <DailySummary>[], ok: false);
 
   try {
-    final raw = jsonDecode(response.body);
-    if (raw is! Map<String, dynamic> || raw['summaries'] is! List) {
+    final data = wire.GeneratedDailySummariesResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    if (data.summaries == null) {
       throw const FormatException('Invalid daily recap list response');
     }
-    final data = wire.GeneratedDailySummariesResponse.fromJson(raw);
     return (items: data.summaries?.map(DailySummary.fromGenerated).toList() ?? <DailySummary>[], ok: true);
   } catch (e) {
     Logger.debug('Error parsing daily summaries: $e');
@@ -963,14 +963,13 @@ Future<String?> exportUserDataToFile(
   Future<void>? abortTrigger,
   AuthSessionSnapshot? authorizationSnapshot,
   AuthService? authService,
-}) =>
-    export_user_data.exportUserDataToFile(
-      filePath,
-      onProgress: onProgress,
-      abortTrigger: abortTrigger,
-      authorizationSnapshot: authorizationSnapshot,
-      authService: authService,
-    );
+}) => export_user_data.exportUserDataToFile(
+  filePath,
+  onProgress: onProgress,
+  abortTrigger: abortTrigger,
+  authorizationSnapshot: authorizationSnapshot,
+  authService: authService,
+);
 
 Future<Map<String, dynamic>?> getFairUseStatus() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/fair-use/status', headers: {}, method: 'GET', body: '');
