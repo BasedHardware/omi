@@ -147,9 +147,21 @@ class TaskIntegrationsPage extends StatefulWidget {
 
 class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with WidgetsBindingObserver {
   TaskIntegrationApp? _pendingAuthApp;
-  bool _startingAuth = false;
   bool _selectingPending = false;
   ConnectionWait? _connectionWait;
+
+  /// Each selection owns everything it starts: the confirmation dialog, the
+  /// browser launch, polling and the default save. A newer selection, a
+  /// departed page or an account change retires it, so a late result from an
+  /// older attempt can never select an app the user has moved on from.
+  int _selectionAttempt = 0;
+
+  bool Function() _ownSelection({bool claim = false}) {
+    final attempt = claim ? ++_selectionAttempt : _selectionAttempt;
+    final uid = SharedPreferencesUtil().uid;
+    return () => mounted && _selectionAttempt == attempt && SharedPreferencesUtil().uid == uid;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -185,14 +197,13 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     await provider.loadFromBackend(forceRefresh: forceRefresh);
   }
 
-  void _waitForTaskConnection(TaskIntegrationApp pending) {
+  void _waitForTaskConnection(TaskIntegrationApp pending, bool Function() isCurrent) {
     if (_selectingPending) return;
     _connectionWait?.cancel();
     final provider = context.read<TaskIntegrationProvider>();
-    final uid = SharedPreferencesUtil().uid;
     late final ConnectionWait wait;
     wait = ConnectionWait(
-      isCurrent: () => mounted && SharedPreferencesUtil().uid == uid && _pendingAuthApp == pending,
+      isCurrent: () => isCurrent() && _pendingAuthApp == pending,
       probe: () async {
         await provider.loadFromBackend(forceRefresh: true, silent: true);
         if (provider.hasLoadError) return ConnectionProbe.failed;
@@ -202,12 +213,16 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     );
     _connectionWait = wait;
     unawaited(wait.start().then((outcome) async {
-      if (!mounted || !identical(_connectionWait, wait) || SharedPreferencesUtil().uid != uid) return;
+      if (!mounted || !isCurrent() || !identical(_connectionWait, wait)) return;
       if (outcome == ConnectionWaitOutcome.connected) {
         setState(() => _selectingPending = true);
-        final selected = await provider.setSelectedApp(pending);
-        if (mounted) setState(() => _selectingPending = false);
-        if (!mounted || SharedPreferencesUtil().uid != uid || !identical(_connectionWait, wait)) return;
+        final bool selected;
+        try {
+          selected = await provider.setSelectedApp(pending);
+        } finally {
+          if (mounted) setState(() => _selectingPending = false);
+        }
+        if (!mounted || !isCurrent() || !identical(_connectionWait, wait)) return;
         if (selected) {
           setState(() => _pendingAuthApp = null);
           OmiFeedback.confirm(context, context.l10n.connectedToApp(pending.displayName));
@@ -252,6 +267,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
       _showComingSoonDialog(app);
       return;
     }
+    final isCurrent = _ownSelection(claim: true);
     if (_pendingAuthApp != null && _pendingAuthApp != app) {
       _connectionWait?.cancel();
       _connectionWait = null;
@@ -263,13 +279,16 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
       final provider = context.read<TaskIntegrationProvider>();
       final remindersService = AppleRemindersService();
       final hasPermission = await remindersService.hasPermission();
+      if (!mounted || !isCurrent()) return;
       if (!hasPermission) {
         final granted = await remindersService.requestPermission();
+        if (!mounted || !isCurrent()) return;
         if (granted) {
           // Update the provider's cached permission status with the granted result
           await provider.updateAppleRemindersPermission(granted: true);
           // Save connected status to backend so auto-sync works
           await provider.saveConnectionDetails(app.key, {'connected': true});
+          if (!mounted || !isCurrent()) return;
           await provider.setSelectedApp(app);
           PlatformManager.instance.analytics.taskIntegrationEnabled(appName: app.key, success: true);
           Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key})');
@@ -287,6 +306,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
       }
       // Permission already granted - ensure backend knows it's connected
       await provider.saveConnectionDetails(app.key, {'connected': true});
+      if (!mounted || !isCurrent()) return;
       await provider.setSelectedApp(app);
       return;
     }
@@ -299,21 +319,19 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
       _ => (false, ({bool Function()? isCurrent}) async => false),
     };
     if (!authenticated) {
-      if (_startingAuth) return;
-      _startingAuth = true;
-      if (!await _showAuthDialog(app) || !mounted) {
-        _startingAuth = false;
-        return;
+      if (!await _showAuthDialog(app) || !mounted || !isCurrent()) return;
+      bool started;
+      try {
+        started = await (widget.authenticate?.call(app) ?? authenticate(isCurrent: isCurrent));
+      } catch (e) {
+        Logger.debug('Task integration authorization failed to start: $e');
+        started = false;
       }
-      final uid = SharedPreferencesUtil().uid;
-      final started = await (widget.authenticate?.call(app) ??
-          authenticate(isCurrent: () => mounted && SharedPreferencesUtil().uid == uid));
-      _startingAuth = false;
-      if (!mounted) return;
+      if (!mounted || !isCurrent()) return;
       if (started) {
         setState(() => _pendingAuthApp = app);
         OmiFeedback.info(context, context.l10n.completeAuthBrowser);
-        _waitForTaskConnection(app);
+        _waitForTaskConnection(app, isCurrent);
       } else {
         PlatformManager.instance.analytics.taskIntegrationAuthFailed(appName: app.key);
         OmiFeedback.error(context, context.l10n.failedToStartAppAuth(app.displayName));
@@ -323,7 +341,8 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
 
     // Save to backend via provider
     final saved = await context.read<TaskIntegrationProvider>().setSelectedApp(app);
-    if (!saved && mounted) OmiFeedback.error(context, context.l10n.connectionErrorDesc);
+    if (!mounted || !isCurrent()) return;
+    if (!saved) OmiFeedback.error(context, context.l10n.connectionErrorDesc);
 
     // Log app selection
     if (saved) Logger.debug('✓ Task integration selected: ${app.displayName} (${app.key})');
@@ -518,7 +537,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                             : context.l10n.completeAuthBrowser,
                     style: OmiType.subhead),
                 TextButton(
-                    onPressed: isLoading ? null : () => _waitForTaskConnection(_pendingAuthApp!),
+                    onPressed: isLoading ? null : () => _waitForTaskConnection(_pendingAuthApp!, _ownSelection()),
                     child: Text(context.l10n.tryAgain)),
               ],
               // App List

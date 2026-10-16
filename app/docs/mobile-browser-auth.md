@@ -28,7 +28,10 @@ statuses for other integrations. Task snapshots validate before cache adoption. 
 checks use that verdict, never the presence of a serialized access token.
 
 Task authorization keeps the prior default until the server confirms the new
-grant, then persists the selection. Failure to persist the default remains
+grant, then persists the selection. A selection owns its attempt from the
+confirmation dialog through launch, polling and save; choosing another app while
+an earlier authorization is still launching retires it (latest selection wins).
+A launch that throws reports failure and leaves no loading state behind. Failure to persist the default remains
 retryable. An unfinished browser flow shows instructions and a manual status
 check; it never becomes an endless spinner or a confirmed grant.
 
@@ -39,6 +42,8 @@ check; it never becomes an endless spinner or a confirmed grant.
 - [x] Terminal, retryable read failures preserve saved connection information.
 - [x] Fresh post-auth reads fence old reads and account changes.
 - [x] Task selection follows server-confirmed authorization.
+- [x] Latest task selection wins even while an older authorization is still
+      launching; late receipts after page or account changes do nothing.
 - [x] Hermetic production-widget, native-bridge and provider regressions.
 - [ ] Merge the fix and ship an Android store release (also validate iOS).
 - [ ] On Samsung S26 Ultra, complete referral Google signup and return to Omi.
@@ -79,8 +84,13 @@ remaining mobile and web client gaps:
   eligibility rejection or alter the desktop referral destination.
 
 Release requires the follow-up mobile AND web changes, plus #21355's web helper
-proxy/client together. Verify the Firebase/Google/Apple callback configuration in
-`web/app/docs/firebase-auth.md` from #21355 and perform a real Samsung sign-in.
+proxy/client together. As of 2026-10-16, #21355 is open (mergeable, CI green,
+no approval); its review notes that the callback configuration and a real
+provider round trip are not yet demonstrated. Roll out the web helper proxy and
+this client in one coordinated deploy, never this client alone. Verify the
+Firebase/Google/Apple callback configuration in `web/app/docs/firebase-auth.md`
+from #21355 and perform real Google and Apple sign-ins, including on Samsung
+S26 Ultra. Mocked and hermetic tests do not verify production sign-in.
 The unspecified general Try Again screen still requires the reporter's screen,
 version and integration names; this audit does not invent its cause or close the
 customer incident from code merge.
