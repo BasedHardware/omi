@@ -1542,7 +1542,6 @@
     "photos": "Fotoattēli",
     "rawData": "Neapstrādāti dati",
     "content": "Saturs",
-    "noContentToDisplay": "Nav satura, ko parādīt",
     "noSummary": "Nav kopsavilkuma",
     "updateOmiFirmware": "Atjaunināt Omi programmaparatūru",
     "anErrorOccurredTryAgain": "Radās kļūda. Lūdzu, mēģiniet vēlreiz.",
@@ -3167,7 +3166,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Pieskarieties ieraksta pogai, lai sāktu ierakstīšanu",
-    "processingTakingLonger": "Joprojām notiek — tas aizņem ilgāk nekā parasti.",
     "speechProfileEnrollmentPrompt": "Lai Omi zinātu, kura balss ir jūsu — runājiet par jebko aptuveni 5 sekundes.",
     "home": "Sākums",
     "failedToUpdateBaselineStatus": "Neizdevās atjaunināt šo atmiņu. Mēģiniet vēlreiz.",
@@ -4134,5 +4132,8 @@
     "activityEmpty": "Vēl nav aktivitātes",
     "activityNewSemantics": "Aktivitāte, jauni vienumi",
     "activityLoadFailed": "Neizdevās ielādēt visu jūsu aktivitāti",
-    "activityNewItem": "Jauns"
+    "activityNewItem": "Jauns",
+    "activityNeedsAttention": "Nepieciešama uzmanība",
+    "activityRetryAll": "Mēģināt visu vēlreiz",
+    "attentionSummaryFailed": "Šo sarunu neizdevās apkopot"
 }

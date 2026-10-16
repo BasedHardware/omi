@@ -9549,12 +9549,6 @@ abstract class AppLocalizations {
   /// **'Content'**
   String get content;
 
-  /// Message when there is no content available
-  ///
-  /// In en, this message translates to:
-  /// **'No content to display'**
-  String get noContentToDisplay;
-
   /// Message when no summary is available
   ///
   /// In en, this message translates to:
@@ -18267,12 +18261,6 @@ abstract class AppLocalizations {
   /// **'Speech-to-text isn\'t available right now. Check your internet connection and your device\'s speech recognition settings, then try again.'**
   String get speechToTextUnavailableDesc;
 
-  /// Shown on the homepage processing card after ~2 minutes with a Retry action (#5481).
-  ///
-  /// In en, this message translates to:
-  /// **'Still working — this is taking longer than usual.'**
-  String get processingTakingLonger;
-
   /// First-run onboarding instruction: why Omi needs a short voice sample and the approximate duration.
   ///
   /// In en, this message translates to:
@@ -23996,6 +23984,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'New'**
   String get activityNewItem;
+
+  /// Activity section header for work that could not finish and needs the user
+  ///
+  /// In en, this message translates to:
+  /// **'Needs attention'**
+  String get activityNeedsAttention;
+
+  /// Button in Activity's Needs attention section that retries every failed item once
+  ///
+  /// In en, this message translates to:
+  /// **'Retry all'**
+  String get activityRetryAll;
+
+  /// Needs attention row: the server gave up summarizing a conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t summarize this conversation'**
+  String get attentionSummaryFailed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

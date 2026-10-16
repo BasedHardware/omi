@@ -5022,9 +5022,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get content => 'Sisu';
 
   @override
-  String get noContentToDisplay => 'Sisu pole kuvamiseks';
-
-  @override
   String get noSummary => 'Kokkuvõte puudub';
 
   @override
@@ -9800,9 +9797,6 @@ class AppLocalizationsEt extends AppLocalizations {
       'Kõne tekstiks teisendamine pole praegu saadaval. Kontrolli internetiühendust ja seadme kõnetuvastuse seadeid ning proovi uuesti.';
 
   @override
-  String get processingTakingLonger => 'Ikka käimas — see võtab kauem aega kui tavaliselt.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Et Omi teaks, milline hääl on sinu oma — räägi ükskõik millest umbes 5 sekundit.';
 
@@ -13472,4 +13466,13 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Uus';
+
+  @override
+  String get activityNeedsAttention => 'Vajab tähelepanu';
+
+  @override
+  String get activityRetryAll => 'Proovi kõiki uuesti';
+
+  @override
+  String get attentionSummaryFailed => 'Seda vestlust ei õnnestunud kokku võtta';
 }

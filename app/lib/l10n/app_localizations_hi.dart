@@ -5002,9 +5002,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get content => 'सामग्री';
 
   @override
-  String get noContentToDisplay => 'दिखाने के लिए कोई सामग्री नहीं';
-
-  @override
   String get noSummary => 'कोई सारांश नहीं';
 
   @override
@@ -9790,9 +9787,6 @@ class AppLocalizationsHi extends AppLocalizations {
       'अभी बोली को टेक्स्ट में बदलना उपलब्ध नहीं है। अपना इंटरनेट कनेक्शन और डिवाइस की वाक् पहचान सेटिंग जाँचें, फिर दोबारा कोशिश करें।';
 
   @override
-  String get processingTakingLonger => 'अभी भी काम हो रहा है — इसमें सामान्य से ज़्यादा समय लग रहा है।';
-
-  @override
   String get speechProfileEnrollmentPrompt => 'ताकि Omi आपकी आवाज़ पहचान सके — किसी भी विषय पर लगभग 5 सेकंड बोलें।';
 
   @override
@@ -13459,4 +13453,13 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get activityNewItem => 'नया';
+
+  @override
+  String get activityNeedsAttention => 'ध्यान देने की ज़रूरत';
+
+  @override
+  String get activityRetryAll => 'सभी को फिर से आज़माएँ';
+
+  @override
+  String get attentionSummaryFailed => 'इस बातचीत का सारांश नहीं बन सका';
 }

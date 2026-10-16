@@ -5968,10 +5968,6 @@
     "@content": {
         "description": "Tab label for content"
     },
-    "noContentToDisplay": "Nema sadržaja za prikaz",
-    "@noContentToDisplay": {
-        "description": "Message when there is no content available"
-    },
     "noSummary": "Nema sažetka",
     "@noSummary": {
         "description": "Message when no summary is available"
@@ -10593,7 +10589,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Dodirnite gumb za snimanje za početak snimanja",
-    "processingTakingLonger": "Još traje — ovo traje duže nego inače.",
     "speechProfileEnrollmentPrompt": "Kako bi Omi znao koji je vaš glas — govorite oko 5 sekundi o bilo čemu.",
     "home": "Početna",
     "failedToUpdateBaselineStatus": "Nije moguće ažurirati ovu uspomenu. Pokušajte ponovo.",
@@ -11560,5 +11555,8 @@
     "activityEmpty": "Još nema aktivnosti",
     "activityNewSemantics": "Aktivnost, nove stavke",
     "activityLoadFailed": "Nismo mogli učitati svu vašu aktivnost",
-    "activityNewItem": "Novo"
+    "activityNewItem": "Novo",
+    "activityNeedsAttention": "Potrebna pažnja",
+    "activityRetryAll": "Pokušaj sve ponovno",
+    "attentionSummaryFailed": "Ovaj razgovor nije bilo moguće sažeti"
 }

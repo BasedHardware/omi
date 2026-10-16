@@ -1082,7 +1082,7 @@ environments:
               category: rollout
             SYNC_BACKFILL_UID_SEQUENCER:
               provisional: true
-              value: 'on'
+              value: 'off'
               category: rollout
             SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {value: 'false', category: rollout}
             SYNC_REPROCESS_COALESCE_ENABLED: {value: 'false', category: rollout}
@@ -1352,7 +1352,7 @@ environments:
               category: rollout
             SYNC_BACKFILL_UID_SEQUENCER:
               provisional: true
-              value: 'on'
+              value: 'off'
               category: rollout
             SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {value: 'false', category: rollout}
             SYNC_REPROCESS_COALESCE_ENABLED: {value: 'false', category: rollout}
@@ -3330,7 +3330,7 @@ environments:
               category: rollout
             SYNC_BACKFILL_UID_SEQUENCER:
               provisional: true
-              value: 'on'
+              value: 'off'
               category: rollout
             SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {value: 'true', category: rollout}
             SYNC_REPROCESS_COALESCE_ENABLED: {value: 'true', category: rollout}
@@ -3646,7 +3646,7 @@ environments:
               category: rollout
             SYNC_BACKFILL_UID_SEQUENCER:
               provisional: true
-              value: 'on'
+              value: 'off'
               category: rollout
             SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {value: 'true', category: rollout}
             SYNC_REPROCESS_COALESCE_ENABLED: {value: 'true', category: rollout}

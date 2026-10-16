@@ -1543,7 +1543,6 @@
     "photos": "写真",
     "rawData": "生データ",
     "content": "コンテンツ",
-    "noContentToDisplay": "表示するコンテンツがありません",
     "noSummary": "要約なし",
     "updateOmiFirmware": "Omiファームウェアを更新",
     "anErrorOccurredTryAgain": "エラーが発生しました。もう一度お試しください。",
@@ -3167,7 +3166,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "録音ボタンをタップして録音を開始",
-    "processingTakingLonger": "まだ処理中です。通常より時間がかかっています。",
     "speechProfileEnrollmentPrompt": "Omiがあなたの声を識別できるように、好きなことを5秒ほど話してください。",
     "home": "ホーム",
     "failedToUpdateBaselineStatus": "この記憶を更新できませんでした。もう一度お試しください。",
@@ -4134,5 +4132,8 @@
     "activityEmpty": "アクティビティはまだありません",
     "activityNewSemantics": "アクティビティ、新着あり",
     "activityLoadFailed": "アクティビティの一部を読み込めませんでした",
-    "activityNewItem": "新着"
+    "activityNewItem": "新着",
+    "activityNeedsAttention": "要対応",
+    "activityRetryAll": "すべて再試行",
+    "attentionSummaryFailed": "この会話を要約できませんでした"
 }

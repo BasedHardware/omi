@@ -5054,9 +5054,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get content => 'సামగ్రి';
 
   @override
-  String get noContentToDisplay => 'చూపించడానికి సామగ్రి లేదు';
-
-  @override
   String get noSummary => 'సారాంశం లేదు';
 
   @override
@@ -9858,9 +9855,6 @@ class AppLocalizationsTe extends AppLocalizations {
       'ప్రస్తుతం మాటలను వచనంగా మార్చే సదుపాయం అందుబాటులో లేదు. మీ ఇంటర్నెట్ కనెక్షన్ మరియు పరికరంలోని వాయిస్ గుర్తింపు సెట్టింగ్‌లను తనిఖీ చేసి, మళ్లీ ప్రయత్నించండి.';
 
   @override
-  String get processingTakingLonger => 'ఇంకా పని జరుగుతోంది — ఇది సాధారణం కంటే ఎక్కువ సమయం తీసుకుంటోంది.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Omi మీ గొంతును గుర్తించడానికి — ఏదైనా విషయం గురించి సుమారు 5 సెకన్లు మాట్లాడండి.';
 
@@ -13530,4 +13524,13 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get activityNewItem => 'కొత్తది';
+
+  @override
+  String get activityNeedsAttention => 'శ్రద్ధ అవసరం';
+
+  @override
+  String get activityRetryAll => 'అన్నింటినీ మళ్లీ ప్రయత్నించండి';
+
+  @override
+  String get attentionSummaryFailed => 'ఈ సంభాషణను సంగ్రహించలేకపోయాం';
 }

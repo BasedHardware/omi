@@ -5968,10 +5968,6 @@
     "@content": {
         "description": "Tab label for content"
     },
-    "noContentToDisplay": "אין תוכן להצגה",
-    "@noContentToDisplay": {
-        "description": "Message when there is no content available"
-    },
     "noSummary": "אין סיכום",
     "@noSummary": {
         "description": "Message when no summary is available"
@@ -10593,7 +10589,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "הקישו על כפתור ההקלטה כדי להתחיל להקליט",
-    "processingTakingLonger": "עדיין בעבודה — זה לוקח יותר זמן מהרגיל.",
     "speechProfileEnrollmentPrompt": "כדי ש-Omi יידע איזה קול הוא שלך — יש לדבר על כל נושא במשך כ-5 שניות.",
     "home": "בית",
     "failedToUpdateBaselineStatus": "לא ניתן לעדכן את הזיכרון הזה. נסה שוב.",
@@ -11560,5 +11555,8 @@
     "activityEmpty": "אין פעילות עדיין",
     "activityNewSemantics": "פעילות, פריטים חדשים",
     "activityLoadFailed": "לא ניתן היה לטעון את כל הפעילות שלך",
-    "activityNewItem": "חדש"
+    "activityNewItem": "חדש",
+    "activityNeedsAttention": "דורש תשומת לב",
+    "activityRetryAll": "נסה הכול שוב",
+    "attentionSummaryFailed": "לא ניתן היה לסכם את השיחה הזו"
 }
