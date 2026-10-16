@@ -11560,5 +11560,12 @@
     "activityEmpty": "இதுவரை எந்தச் செயல்பாடும் இல்லை",
     "activityNewSemantics": "செயல்பாடு, புதிய உருப்படிகள்",
     "activityLoadFailed": "உங்கள் எல்லா செயல்பாடுகளையும் ஏற்ற முடியவில்லை",
-    "activityNewItem": "புதியது"
+    "activityNewItem": "புதியது",
+    "thisWeek": "இந்த வாரம்",
+    "busiestDay": "மிகவும் பரபரப்பான நாள்",
+    "timeRecorded": "பதிவு செய்த நேரம்",
+    "peopleYouTalkedToMost": "நீங்கள் அதிகம் பேசியவர்கள்",
+    "recapPrevious": "முந்தையது: {value}",
+    "noRecapForPeriod": "இந்தக் காலத்தில் இன்னும் எதுவும் பதிவு செய்யப்படவில்லை",
+    "openTasks": "நிலுவையிலுள்ள பணிகள்"
 }

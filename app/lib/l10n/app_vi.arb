@@ -4134,5 +4134,12 @@
     "activityEmpty": "Chưa có hoạt động",
     "activityNewSemantics": "Hoạt động, mục mới",
     "activityLoadFailed": "Không thể tải toàn bộ hoạt động của bạn",
-    "activityNewItem": "Mới"
+    "activityNewItem": "Mới",
+    "thisWeek": "Tuần này",
+    "busiestDay": "Ngày bận rộn nhất",
+    "timeRecorded": "Thời gian ghi âm",
+    "peopleYouTalkedToMost": "Những người bạn trò chuyện nhiều nhất",
+    "recapPrevious": "Trước đó: {value}",
+    "noRecapForPeriod": "Chưa có gì được ghi âm trong khoảng thời gian này",
+    "openTasks": "Nhiệm vụ đang mở"
 }

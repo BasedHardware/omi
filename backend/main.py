@@ -89,6 +89,7 @@ from routers import (
     calendar_onboarding,
     imports,
     knowledge_graph,
+    recaps,
     wrapped,
     folders,
     search,
@@ -308,6 +309,7 @@ app.include_router(developer.router)
 app.include_router(developer_key.router)
 app.include_router(imports.router)
 app.include_router(wrapped.router)
+app.include_router(recaps.router)
 app.include_router(folders.router)
 app.include_router(search.router)
 app.include_router(knowledge_graph.router)

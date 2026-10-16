@@ -4134,5 +4134,12 @@
     "activityEmpty": "لا يوجد نشاط بعد",
     "activityNewSemantics": "النشاط، عناصر جديدة",
     "activityLoadFailed": "تعذّر تحميل كل نشاطك",
-    "activityNewItem": "جديد"
+    "activityNewItem": "جديد",
+    "thisWeek": "هذا الأسبوع",
+    "busiestDay": "اليوم الأكثر انشغالًا",
+    "timeRecorded": "مدة التسجيل",
+    "peopleYouTalkedToMost": "الأشخاص الذين تحدثت معهم أكثر",
+    "recapPrevious": "السابق: {value}",
+    "noRecapForPeriod": "لم يُسجَّل شيء في هذه الفترة بعد",
+    "openTasks": "المهام المفتوحة"
 }

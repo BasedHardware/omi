@@ -11560,5 +11560,12 @@
     "activityEmpty": "Још нема активности",
     "activityNewSemantics": "Активност, нове ставке",
     "activityLoadFailed": "Није могуће учитати сву вашу активност",
-    "activityNewItem": "Ново"
+    "activityNewItem": "Ново",
+    "thisWeek": "Ова недеља",
+    "busiestDay": "Најзаузетији дан",
+    "timeRecorded": "Снимљено време",
+    "peopleYouTalkedToMost": "Особе са којима сте највише разговарали",
+    "recapPrevious": "Претходно: {value}",
+    "noRecapForPeriod": "У овом периоду још ништа није снимљено",
+    "openTasks": "Отворени задаци"
 }

@@ -4134,5 +4134,12 @@
     "activityEmpty": "Belum ada aktiviti",
     "activityNewSemantics": "Aktiviti, item baharu",
     "activityLoadFailed": "Tidak dapat memuatkan semua aktiviti anda",
-    "activityNewItem": "Baharu"
+    "activityNewItem": "Baharu",
+    "thisWeek": "Minggu ini",
+    "busiestDay": "Hari paling sibuk",
+    "timeRecorded": "Masa dirakam",
+    "peopleYouTalkedToMost": "Orang yang paling kerap bercakap dengan anda",
+    "recapPrevious": "Sebelumnya: {value}",
+    "noRecapForPeriod": "Belum ada rakaman dalam tempoh ini",
+    "openTasks": "Tugas belum selesai"
 }

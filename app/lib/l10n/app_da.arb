@@ -4176,5 +4176,12 @@
     "activityEmpty": "Ingen aktivitet endnu",
     "activityNewSemantics": "Aktivitet, nye elementer",
     "activityLoadFailed": "Kunne ikke indlæse al din aktivitet",
-    "activityNewItem": "Ny"
+    "activityNewItem": "Ny",
+    "thisWeek": "Denne uge",
+    "busiestDay": "Travleste dag",
+    "timeRecorded": "Optaget tid",
+    "peopleYouTalkedToMost": "Dem, du talte mest med",
+    "recapPrevious": "Forrige: {value}",
+    "noRecapForPeriod": "Intet optaget i denne periode endnu",
+    "openTasks": "Åbne opgaver"
 }

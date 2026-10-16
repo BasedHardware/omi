@@ -4134,5 +4134,12 @@
     "activityEmpty": "Tegevusi veel pole",
     "activityNewSemantics": "Tegevus, uued üksused",
     "activityLoadFailed": "Kogu tegevust ei õnnestunud laadida",
-    "activityNewItem": "Uus"
+    "activityNewItem": "Uus",
+    "thisWeek": "See nädal",
+    "busiestDay": "Kõige tihedam päev",
+    "timeRecorded": "Salvestatud aeg",
+    "peopleYouTalkedToMost": "Inimesed, kellega rääkisid kõige rohkem",
+    "recapPrevious": "Eelmine: {value}",
+    "noRecapForPeriod": "Selles perioodis pole veel midagi salvestatud",
+    "openTasks": "Avatud ülesanded"
 }

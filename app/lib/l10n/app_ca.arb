@@ -4134,5 +4134,12 @@
     "activityEmpty": "Encara no hi ha activitat",
     "activityNewSemantics": "Activitat, elements nous",
     "activityLoadFailed": "No s'ha pogut carregar tota la teva activitat",
-    "activityNewItem": "Nou"
+    "activityNewItem": "Nou",
+    "thisWeek": "Aquesta setmana",
+    "busiestDay": "Dia més atrafegat",
+    "timeRecorded": "Temps enregistrat",
+    "peopleYouTalkedToMost": "Persones amb qui més has parlat",
+    "recapPrevious": "Anterior: {value}",
+    "noRecapForPeriod": "Encara no s'ha enregistrat res en aquest període",
+    "openTasks": "Tasques pendents"
 }

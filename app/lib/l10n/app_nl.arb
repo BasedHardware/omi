@@ -4134,5 +4134,12 @@
     "activityEmpty": "Nog geen activiteit",
     "activityNewSemantics": "Activiteit, nieuwe items",
     "activityLoadFailed": "Niet al je activiteit kon worden geladen",
-    "activityNewItem": "Nieuw"
+    "activityNewItem": "Nieuw",
+    "thisWeek": "Deze week",
+    "busiestDay": "Drukste dag",
+    "timeRecorded": "Opgenomen tijd",
+    "peopleYouTalkedToMost": "Met wie je het meest sprak",
+    "recapPrevious": "Vorige: {value}",
+    "noRecapForPeriod": "Nog niets opgenomen in deze periode",
+    "openTasks": "Openstaande taken"
 }

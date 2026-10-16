@@ -18,6 +18,7 @@ TARGETS = frozenset(
         'database.conversation_scan.iter_conversations',
         'database.conversation_scan.people_stats_scan',
         'database.conversation_scan.speaker_browse_scan',
+        'database.conversation_scan.recap_people_scan',
     }
 )
 
@@ -85,6 +86,13 @@ SCAN_PROFILES = (
         field_paths=[PEOPLE_STATS_FIELD_PATHS],
     ),
     _scan_profile(
+        'period-recap-people',
+        include_discarded=[True],
+        start_date=[FROZEN_NOW],
+        end_date=[FROZEN_LATER],
+        field_paths=[PEOPLE_STATS_FIELD_PATHS],
+    ),
+    _scan_profile(
         'speaker-search-fallback',
         include_discarded=[False, True],
         start_date=[None, FROZEN_NOW],
@@ -103,6 +111,7 @@ RECIPE_PROFILES = (
         start_date=[None, FROZEN_NOW],
         end_date=[None, FROZEN_LATER],
     ),
+    _scan_profile('period-recap-people-recipe', start_date=[FROZEN_NOW], end_date=[FROZEN_LATER]),
 )
 
 PHOTO_PROFILES = (
@@ -184,6 +193,7 @@ PROFILES = {
     'database.conversation_scan.iter_conversations': SCAN_PROFILES,
     'database.conversation_scan.people_stats_scan': (RECIPE_PROFILES[0],),
     'database.conversation_scan.speaker_browse_scan': (RECIPE_PROFILES[1],),
+    'database.conversation_scan.recap_people_scan': (RECIPE_PROFILES[2],),
 }
 
 

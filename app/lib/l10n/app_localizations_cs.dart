@@ -13480,4 +13480,27 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nové';
+
+  @override
+  String get thisWeek => 'Tento týden';
+
+  @override
+  String get busiestDay => 'Nejrušnější den';
+
+  @override
+  String get timeRecorded => 'Nahraný čas';
+
+  @override
+  String get peopleYouTalkedToMost => 'Lidé, se kterými jste mluvili nejvíc';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Předchozí: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'V tomto období zatím nic nahráno';
+
+  @override
+  String get openTasks => 'Otevřené úkoly';
 }

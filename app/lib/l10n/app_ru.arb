@@ -4169,5 +4169,12 @@
     "activityEmpty": "Пока нет активности",
     "activityNewSemantics": "Активность, новые элементы",
     "activityLoadFailed": "Не удалось загрузить всю активность",
-    "activityNewItem": "Новое"
+    "activityNewItem": "Новое",
+    "thisWeek": "Эта неделя",
+    "busiestDay": "Самый насыщенный день",
+    "timeRecorded": "Записанное время",
+    "peopleYouTalkedToMost": "С кем вы говорили больше всего",
+    "recapPrevious": "Ранее: {value}",
+    "noRecapForPeriod": "За этот период пока ничего не записано",
+    "openTasks": "Открытые задачи"
 }

@@ -11560,5 +11560,12 @@
     "activityEmpty": "אין פעילות עדיין",
     "activityNewSemantics": "פעילות, פריטים חדשים",
     "activityLoadFailed": "לא ניתן היה לטעון את כל הפעילות שלך",
-    "activityNewItem": "חדש"
+    "activityNewItem": "חדש",
+    "thisWeek": "השבוע",
+    "busiestDay": "היום העמוס ביותר",
+    "timeRecorded": "זמן מוקלט",
+    "peopleYouTalkedToMost": "האנשים שדיברת איתם הכי הרבה",
+    "recapPrevious": "קודם: {value}",
+    "noRecapForPeriod": "עדיין לא הוקלט דבר בתקופה הזו",
+    "openTasks": "משימות פתוחות"
 }

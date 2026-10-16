@@ -4134,5 +4134,12 @@
     "activityEmpty": "Ancora nessuna attività",
     "activityNewSemantics": "Attività, nuovi elementi",
     "activityLoadFailed": "Impossibile caricare tutta la tua attività",
-    "activityNewItem": "Nuovo"
+    "activityNewItem": "Nuovo",
+    "thisWeek": "Questa settimana",
+    "busiestDay": "Giorno più intenso",
+    "timeRecorded": "Tempo registrato",
+    "peopleYouTalkedToMost": "Le persone con cui hai parlato di più",
+    "recapPrevious": "Precedente: {value}",
+    "noRecapForPeriod": "Ancora nessuna registrazione in questo periodo",
+    "openTasks": "Attività aperte"
 }

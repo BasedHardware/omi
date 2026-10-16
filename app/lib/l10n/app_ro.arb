@@ -4134,5 +4134,12 @@
     "activityEmpty": "Nicio activitate încă",
     "activityNewSemantics": "Activitate, elemente noi",
     "activityLoadFailed": "Nu am putut încărca toată activitatea ta",
-    "activityNewItem": "Nou"
+    "activityNewItem": "Nou",
+    "thisWeek": "Săptămâna aceasta",
+    "busiestDay": "Cea mai aglomerată zi",
+    "timeRecorded": "Timp înregistrat",
+    "peopleYouTalkedToMost": "Persoanele cu care ai vorbit cel mai mult",
+    "recapPrevious": "Anterior: {value}",
+    "noRecapForPeriod": "Încă nu s-a înregistrat nimic în această perioadă",
+    "openTasks": "Sarcini deschise"
 }

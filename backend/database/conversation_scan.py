@@ -57,6 +57,10 @@ SPEAKER_BROWSE_BATCH = 50
 # The People-stats recipe pages the projected scan in 100-row reads.
 PEOPLE_STATS_BATCH = 100
 
+# A weekly/monthly recap ranks people over at most this many of the period's
+# newest conversations, through the People-stats projection.
+RECAP_PEOPLE_SCAN_CAP = 500
+
 # Fields the People-stats scan reads: visibility predicates (discarded,
 # deleted), the lock gate, both transcript encodings plus their protection
 # level, and the manual speaker-assignment receipt that rewrites person labels
@@ -240,3 +244,54 @@ def speaker_browse_scan(
         budget=budget,
         firestore_client=firestore_client,
     )
+
+
+def recap_people_scan(
+    uid: str,
+    *,
+    start_date: datetime,
+    end_date: datetime,
+    budget: ListReadBudget,
+    firestore_client: Any = None,
+) -> Iterator[Dict[str, Any]]:
+    """Read up to 500 visible period conversations, including legacy records.
+
+    Firestore's discarded equality filter excludes documents that predate that
+    field. Read all states under the request's raw-document budget, then apply
+    the visibility predicate before a row consumes the recap's sample allowance.
+    """
+    conversations = iter_conversations(
+        uid,
+        limit=CONVERSATION_SCAN_MAX_DOCUMENTS,
+        batch=PEOPLE_STATS_BATCH,
+        include_discarded=True,
+        start_date=start_date,
+        end_date=end_date,
+        field_paths=PEOPLE_STATS_FIELD_PATHS,
+        budget=budget,
+        firestore_client=firestore_client,
+    )
+
+    def _visible_rows() -> Iterator[Dict[str, Any]]:
+        visible = 0
+        scanned = 0
+        try:
+            for conversation in conversations:
+                scanned += 1
+                if not is_visible_conversation(conversation):
+                    continue
+                visible += 1
+                yield conversation
+                if visible >= RECAP_PEOPLE_SCAN_CAP:
+                    return
+            # The reader's fixed raw ceiling may end an exact-size stream before
+            # it checks the request budget again. That is still partial coverage.
+            if (scanned >= CONVERSATION_SCAN_MAX_DOCUMENTS or budget.remaining_documents == 0) and not budget.truncated:
+                budget.mark_exhausted('documents')
+                _record_scan_truncation()
+        finally:
+            close = getattr(conversations, 'close', None)
+            if callable(close):
+                close()
+
+    return _visible_rows()

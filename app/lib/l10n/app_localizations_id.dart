@@ -13488,4 +13488,27 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Baru';
+
+  @override
+  String get thisWeek => 'Minggu ini';
+
+  @override
+  String get busiestDay => 'Hari tersibuk';
+
+  @override
+  String get timeRecorded => 'Waktu terekam';
+
+  @override
+  String get peopleYouTalkedToMost => 'Orang yang paling sering Anda ajak bicara';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Sebelumnya: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'Belum ada yang terekam pada periode ini';
+
+  @override
+  String get openTasks => 'Tugas terbuka';
 }

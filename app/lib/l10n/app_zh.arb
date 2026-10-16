@@ -4134,5 +4134,12 @@
     "activityEmpty": "暂无活动",
     "activityNewSemantics": "活动，有新内容",
     "activityLoadFailed": "无法加载全部活动",
-    "activityNewItem": "新"
+    "activityNewItem": "新",
+    "thisWeek": "本周",
+    "busiestDay": "最忙碌的一天",
+    "timeRecorded": "录制时长",
+    "peopleYouTalkedToMost": "与你交谈最多的人",
+    "recapPrevious": "上一期：{value}",
+    "noRecapForPeriod": "此期间还没有任何录音",
+    "openTasks": "未完成的任务"
 }

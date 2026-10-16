@@ -11560,5 +11560,12 @@
     "activityEmpty": "ಇನ್ನೂ ಯಾವುದೇ ಚಟುವಟಿಕೆ ಇಲ್ಲ",
     "activityNewSemantics": "ಚಟುವಟಿಕೆ, ಹೊಸ ಐಟಂಗಳು",
     "activityLoadFailed": "ನಿಮ್ಮ ಎಲ್ಲಾ ಚಟುವಟಿಕೆಯನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
-    "activityNewItem": "ಹೊಸದು"
+    "activityNewItem": "ಹೊಸದು",
+    "thisWeek": "ಈ ವಾರ",
+    "busiestDay": "ಅತ್ಯಂತ ಬಿಡುವಿಲ್ಲದ ದಿನ",
+    "timeRecorded": "ದಾಖಲಾದ ಸಮಯ",
+    "peopleYouTalkedToMost": "ನೀವು ಹೆಚ್ಚು ಮಾತನಾಡಿದ ಜನರು",
+    "recapPrevious": "ಹಿಂದಿನದು: {value}",
+    "noRecapForPeriod": "ಈ ಅವಧಿಯಲ್ಲಿ ಇನ್ನೂ ಏನೂ ದಾಖಲಾಗಿಲ್ಲ",
+    "openTasks": "ಬಾಕಿ ಕಾರ್ಯಗಳು"
 }

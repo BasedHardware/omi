@@ -11560,5 +11560,12 @@
     "activityEmpty": "এখনও কোনো কার্যকলাপ নেই",
     "activityNewSemantics": "কার্যকলাপ, নতুন আইটেম",
     "activityLoadFailed": "আপনার সব কার্যকলাপ লোড করা যায়নি",
-    "activityNewItem": "নতুন"
+    "activityNewItem": "নতুন",
+    "thisWeek": "এই সপ্তাহ",
+    "busiestDay": "সবচেয়ে ব্যস্ত দিন",
+    "timeRecorded": "রেকর্ড করা সময়",
+    "peopleYouTalkedToMost": "যাদের সঙ্গে সবচেয়ে বেশি কথা বলেছেন",
+    "recapPrevious": "আগের: {value}",
+    "noRecapForPeriod": "এই সময়ে এখনো কিছু রেকর্ড হয়নি",
+    "openTasks": "বাকি কাজ"
 }

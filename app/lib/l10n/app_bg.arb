@@ -4134,5 +4134,12 @@
     "activityEmpty": "Все още няма активност",
     "activityNewSemantics": "Активност, нови елементи",
     "activityLoadFailed": "Не можахме да заредим цялата ви активност",
-    "activityNewItem": "Ново"
+    "activityNewItem": "Ново",
+    "thisWeek": "Тази седмица",
+    "busiestDay": "Най-натоварен ден",
+    "timeRecorded": "Записано време",
+    "peopleYouTalkedToMost": "Хората, с които говорихте най-много",
+    "recapPrevious": "Предишно: {value}",
+    "noRecapForPeriod": "Все още няма записи за този период",
+    "openTasks": "Отворени задачи"
 }

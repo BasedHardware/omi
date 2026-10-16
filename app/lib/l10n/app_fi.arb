@@ -4134,5 +4134,12 @@
     "activityEmpty": "Ei vielä toimintaa",
     "activityNewSemantics": "Toiminta, uusia kohteita",
     "activityLoadFailed": "Kaikkea toimintaa ei voitu ladata",
-    "activityNewItem": "Uusi"
+    "activityNewItem": "Uusi",
+    "thisWeek": "Tämä viikko",
+    "busiestDay": "Kiireisin päivä",
+    "timeRecorded": "Tallennettu aika",
+    "peopleYouTalkedToMost": "Ihmiset, joiden kanssa puhuit eniten",
+    "recapPrevious": "Edellinen: {value}",
+    "noRecapForPeriod": "Tältä jaksolta ei ole vielä tallenteita",
+    "openTasks": "Avoimet tehtävät"
 }

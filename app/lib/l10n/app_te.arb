@@ -11560,5 +11560,12 @@
     "activityEmpty": "ఇంకా కార్యాచరణ లేదు",
     "activityNewSemantics": "కార్యాచరణ, కొత్త అంశాలు",
     "activityLoadFailed": "మీ మొత్తం కార్యాచరణను లోడ్ చేయలేకపోయాం",
-    "activityNewItem": "కొత్తది"
+    "activityNewItem": "కొత్తది",
+    "thisWeek": "ఈ వారం",
+    "busiestDay": "అత్యంత బిజీగా ఉన్న రోజు",
+    "timeRecorded": "రికార్డ్ చేసిన సమయం",
+    "peopleYouTalkedToMost": "మీరు ఎక్కువగా మాట్లాడిన వ్యక్తులు",
+    "recapPrevious": "మునుపటి: {value}",
+    "noRecapForPeriod": "ఈ వ్యవధిలో ఇంకా ఏమీ రికార్డ్ కాలేదు",
+    "openTasks": "పెండింగ్ పనులు"
 }

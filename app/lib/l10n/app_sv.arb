@@ -4134,5 +4134,12 @@
     "activityEmpty": "Ingen aktivitet än",
     "activityNewSemantics": "Aktivitet, nya objekt",
     "activityLoadFailed": "Kunde inte läsa in all din aktivitet",
-    "activityNewItem": "Ny"
+    "activityNewItem": "Ny",
+    "thisWeek": "Den här veckan",
+    "busiestDay": "Den mest aktiva dagen",
+    "timeRecorded": "Inspelad tid",
+    "peopleYouTalkedToMost": "Personerna du pratade mest med",
+    "recapPrevious": "Föregående: {value}",
+    "noRecapForPeriod": "Inget inspelat under den här perioden än",
+    "openTasks": "Öppna uppgifter"
 }

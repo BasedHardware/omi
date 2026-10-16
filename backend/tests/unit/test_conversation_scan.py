@@ -346,6 +346,71 @@ def test_scan_stats_match_the_window_the_legacy_scan_covered():
     assert client.raw_reads == 1000
 
 
+def test_recap_scan_counts_legacy_rows_without_revealing_hidden_people():
+    legacy = _stored('legacy', 0, transcript_segments=_segments('legacy-person'))
+    legacy.pop('discarded')
+    docs = [
+        legacy,
+        _stored('discarded', 1, discarded=True, transcript_segments=_segments('discarded-person')),
+        _stored('deleted', 2, deleted=True, transcript_segments=_segments('deleted-person')),
+        _stored('locked', 3, is_locked=True, transcript_segments=_segments('locked-person')),
+    ]
+    budget = _budget()
+    client = _StrictClient(UID, docs)
+    stats = collect_people_stats(
+        conversation_scan.recap_people_scan(
+            UID, start_date=T0 - timedelta(days=1), end_date=T0, budget=budget, firestore_client=client
+        ),
+        scan_cap=conversation_scan.RECAP_PEOPLE_SCAN_CAP,
+        budget=budget,
+    )
+
+    assert set(stats) == {'legacy-person'}
+    assert stats['legacy-person']['conversation_count'] == 1
+    assert client.raw_reads == 4
+    assert not budget.truncated
+
+
+def test_recap_people_sample_fills_past_discarded_rows_and_closes_its_stream():
+    docs = [_stored(f'discarded-{i}', i, discarded=True) for i in range(101)]
+    docs += [_stored(f'visible-{i}', 101 + i) for i in range(501)]
+    budget = _budget()
+    client = _StrictClient(UID, docs)
+    stats = collect_people_stats(
+        conversation_scan.recap_people_scan(
+            UID, start_date=T0 - timedelta(days=1), end_date=T0, budget=budget, firestore_client=client
+        ),
+        scan_cap=conversation_scan.RECAP_PEOPLE_SCAN_CAP,
+        budget=budget,
+    )
+
+    assert stats['p1']['conversation_count'] == 500
+    assert client.raw_reads == 601
+    assert client.streams_abandoned == 1
+    assert not budget.truncated
+
+
+def test_recap_people_scan_reports_partial_when_discarded_rows_fill_raw_budget(monkeypatch):
+    # Exercise the exact-ceiling branch with a small allowance; the shared
+    # reader's 2,000-document limit has separate coverage below.
+    monkeypatch.setattr(conversation_scan, 'CONVERSATION_SCAN_MAX_DOCUMENTS', 20)
+    docs = [_stored(f'discarded-{i}', i, discarded=True) for i in range(20)]
+    docs += [_stored('visible', 20)]
+    budget = _budget(max_documents=20)
+    client = _StrictClient(UID, docs)
+    stats = collect_people_stats(
+        conversation_scan.recap_people_scan(
+            UID, start_date=T0 - timedelta(days=1), end_date=T0, budget=budget, firestore_client=client
+        ),
+        scan_cap=conversation_scan.RECAP_PEOPLE_SCAN_CAP,
+        budget=budget,
+    )
+
+    assert stats == {}
+    assert client.raw_reads == 20
+    assert budget.truncated and budget.exhaustion_reason == 'documents'
+
+
 # ---------------------------------------------------------------------------
 # Visibility, cursors, and budgets
 # ---------------------------------------------------------------------------
