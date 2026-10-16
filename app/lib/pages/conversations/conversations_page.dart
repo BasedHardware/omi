@@ -44,15 +44,7 @@ String _conversationDateRangeLabel(BuildContext context, DateTime start, DateTim
   return '${dates.date(start)} – ${dates.date(end)}';
 }
 
-enum _ConversationListRowKind {
-  topSpacer,
-  dateHeader,
-  processing,
-  pendingSync,
-  conversation,
-  recording,
-  groupSpacer,
-}
+enum _ConversationListRowKind { topSpacer, dateHeader, processing, pendingSync, conversation, recording, groupSpacer }
 
 typedef _ConversationListRow = ({
   _ConversationListRowKind kind,
@@ -247,21 +239,28 @@ bool dateFilterIncludesToday(DateTime? start, DateTime? end, DateTime now) {
       !today.isAfter(DateTime(end.year, end.month, end.day));
 }
 
-/// [rows] with Home's pending row placed right under today's header, or, with no today in the list,
-/// ahead of it carrying its own header. The row draws nothing while no recording is pending.
+/// [rows] with Home's pending row placed right under today's header. With no today in the list, the
+/// row opens Today itself, carrying its own header, and the day below becomes an ordinary group.
+/// Only for a visible row: it reshapes the top of the list.
 List<_ConversationListRow> _withPendingSyncRow(List<_ConversationListRow> rows, DateTime now) {
   if (rows.isEmpty) return rows;
   final today = DateTime(now.year, now.month, now.day);
   final header = rows.indexWhere((r) => r.kind == _ConversationListRowKind.dateHeader && r.date == today);
-  final row = (
-    kind: _ConversationListRowKind.pendingSync,
-    date: today,
-    isFirst: header < 0,
-    conversation: null,
-    recording: null,
-    conversationIndex: -1,
-  );
-  return [...rows.take(header + 1), row, ...rows.skip(header + 1)];
+  _ConversationListRow todayRow(_ConversationListRowKind kind, {bool isFirst = false}) =>
+      (kind: kind, date: today, isFirst: isFirst, conversation: null, recording: null, conversationIndex: -1);
+  if (header >= 0) {
+    return [...rows.take(header + 1), todayRow(_ConversationListRowKind.pendingSync), ...rows.skip(header + 1)];
+  }
+  // rows.first is the list's top spacer.
+  return [
+    rows.first,
+    todayRow(_ConversationListRowKind.pendingSync, isFirst: true),
+    todayRow(_ConversationListRowKind.groupSpacer),
+    for (final r in rows.skip(1))
+      r.kind == _ConversationListRowKind.dateHeader && r.isFirst
+          ? (kind: r.kind, date: r.date, isFirst: false, conversation: null, recording: null, conversationIndex: -1)
+          : r,
+  ];
 }
 
 bool _isLockedRow(List<_ConversationListRow> rows, int index) =>
@@ -438,23 +437,26 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     super.dispose();
   }
 
-  Widget _buildConversationShimmer() {
+  /// One day's skeleton. Without [showHeader] it continues a day already headed above it.
+  Widget _buildConversationShimmer({bool showHeader = true}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Date header shimmer
-          ShimmerWithTimeout(
-            baseColor: OmiColors.surface1,
-            highlightColor: OmiColors.surface3,
-            child: Container(
-              width: 100,
-              height: 16,
-              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(8)),
+          if (showHeader) ...[
+            // Date header shimmer
+            ShimmerWithTimeout(
+              baseColor: OmiColors.surface1,
+              highlightColor: OmiColors.surface3,
+              child: Container(
+                width: 100,
+                height: 16,
+                decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(8)),
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
+            const SizedBox(height: 12),
+          ],
           // Conversation items shimmer
           ...List.generate(
             3,
@@ -488,10 +490,12 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     return provider.showStarredOnly || provider.selectedFolderId != null || provider.selectedStartDate != null;
   }
 
-  Widget _buildLoadingShimmer() {
+  /// [continuesToday]: the pending row above already drew Today's header, so the first group is
+  /// Today's conversations still loading and draws no second header.
+  Widget _buildLoadingShimmer({required bool continuesToday}) {
     return SliverList(
       delegate: SliverChildBuilderDelegate(
-        (context, index) => _buildConversationShimmer(),
+        (context, index) => _buildConversationShimmer(showHeader: index > 0 || !continuesToday),
         childCount: 3, // Show 3 shimmer conversation groups
       ),
     );
@@ -516,9 +520,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   Widget build(BuildContext context) {
     Logger.debug('building conversations page');
     super.build(context);
-    // Placing the pending row reads the clock: redo it whenever the row appears or goes away, not
-    // only when the conversation list changes.
-    context.select<SyncProvider, bool>(SyncPendingWork.shouldShow);
+    // Placing the pending row reads the clock and reshapes the top of the list: redo it whenever the
+    // row appears or goes away, not only when the conversation list changes.
+    final pendingVisible = context.select<SyncProvider, bool>(SyncPendingWork.shouldShow);
     return Selector2<ConversationProvider, LocalRecordingsProvider, _ConversationPageSnapshot>(
       selector: (_, conversationProvider, recordingsProvider) =>
           _conversationPageSnapshot(conversationProvider, recordingsProvider),
@@ -572,10 +576,13 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         );
         // Recordings that are not conversations yet sit in Today, where they will land.
         // Speaker-scoped results are a search: the global pending row was never filtered by speaker.
-        final showPending = showRecordings &&
+        final showPending = pendingVisible &&
+            showRecordings &&
             convoProvider.selectedSpeakerId == null &&
             dateFilterIncludesToday(convoProvider.selectedStartDate, convoProvider.selectedEndDate, DateTime.now());
         final conversationRows = showPending ? _withPendingSyncRow(listRows, DateTime.now()) : listRows;
+        // No list yet (loading, empty, a status): the row opens Today itself, where the list's Today lands.
+        final pendingOpensToday = showPending && listRows.isEmpty;
 
         return RefreshIndicator(
           onRefresh: () async {
@@ -605,14 +612,17 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               // Review absorbs the voice prompts; the old card shows only while Review is off.
               const SliverToBoxAdapter(child: ReviewEntryCard(fallback: SpeakerTagPromptCard())),
               const SliverToBoxAdapter(child: CaptureRecoveryBanner()),
-              // With no list to sit in, the pending row brings its own Today header.
-              if (listRows.isEmpty && showPending)
-                const SliverToBoxAdapter(child: HomePendingRow(showTodayHeader: true)),
               SliverToBoxAdapter(
                 child: widget.loadRecaps == null
                     ? HomeDailyRecaps(key: _recapsKey)
                     : HomeDailyRecaps(key: _recapsKey, load: widget.loadRecaps!),
               ),
+              // Today is always below the recaps. With no list to sit in, the pending row brings its own
+              // Today header, spaced like the list's first day so nothing moves when the list arrives.
+              if (pendingOpensToday)
+                const SliverToBoxAdapter(
+                  child: Padding(padding: EdgeInsets.only(top: 10), child: HomePendingRow(showTodayHeader: true)),
+                ),
               // Typed HTTP status precedes empty/loading/hero so an outage is
               // never the new-account empty state. Unset (data) keeps production.
               if (showTypedStatus &&
@@ -668,7 +678,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   !hasRecordings &&
                   !hasProcessingConversations &&
                   isShowingConversationSkeleton)
-                _buildLoadingShimmer()
+                _buildLoadingShimmer(continuesToday: pendingOpensToday)
               else
                 SliverList(
                   delegate: SliverChildBuilderDelegate(childCount: conversationRows.length + 1, (context, index) {
