@@ -163,9 +163,10 @@ void main() {
     expect(messages, [l10n.resubscribeFirstToChangePlans]);
     expect(usage.sessions, isEmpty);
 
+    final periodEnd = DateTime.utc(2026, 11, 3).millisecondsSinceEpoch ~/ 1000;
     usage.sessionResult = {
       'status': 'reactivated',
-      'next_billing_date': DateTime.utc(2026, 11, 3).millisecondsSinceEpoch ~/ 1000,
+      'next_billing_date': periodEnd,
     };
     messages.clear();
     final renewed = await PaywallCheckout.start(
@@ -177,7 +178,7 @@ void main() {
       surface: messages.add,
     );
     expect(renewed, PaywallCheckoutOutcome.purchased);
-    final date = OmiDateFormat.of(pageContext).date(DateTime.utc(2026, 11, 3));
+    final date = OmiDateFormat.of(pageContext).date(DateTime.fromMillisecondsSinceEpoch(periodEnd * 1000));
     expect(messages.single, l10n.yourPlanWillRenewOn('Plus', date));
 
     usage.sessionError = Exception('stripe down');
