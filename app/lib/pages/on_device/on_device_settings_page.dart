@@ -116,14 +116,11 @@ class OnDeviceSettingsView extends StatelessWidget {
           final settings = controller.settings;
           final status = controller.model.status;
           final meter = usage;
-          final locale = Localizations.localeOf(context);
-          final meterLine = meter == null ? null : onDeviceMeterLine(meter, locale, l10n);
+          final meterLine = meter == null ? null : onDeviceMeterLine(meter);
           final showMeter = meter != null && meterLine != null && meterLine.isNotEmpty;
           final moreTitle = onDeviceMoreUsageTitle(
             plansSheetAvailable: plansSheetAvailable,
             moreLabel: meter?.moreLabel,
-            locale: locale,
-            l10n: l10n,
           );
           final showMore = moreTitle != null;
           final modelKnown = controller.model.engineResolved;

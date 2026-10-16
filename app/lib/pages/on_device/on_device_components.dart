@@ -10,34 +10,22 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// The copy names the iPhone on iOS ("Transcribed on this iPhone") and the phone elsewhere.
 bool get onDeviceIsIphone => defaultTargetPlatform == TargetPlatform.iOS;
 
-/// The storefront catalog ships English only. A non-English device uses app translations
-/// for the on-device meter and the get-more label. English keeps the backend strings.
-bool onDeviceUsesLocalizedCopy(Locale locale) => locale.languageCode.toLowerCase() != 'en';
-
-/// English renders [StorefrontUsage.meterLine]. Other locales build the same facts from
-/// [StorefrontUsage.percent], [StorefrontUsage.hoursLeft] and [StorefrontUsage.resetLabel].
-String? onDeviceMeterLine(StorefrontUsage usage, Locale locale, AppLocalizations l10n) {
+/// The plans sheet and this meter share the storefront catalog. The backend string is the
+/// only copy; the device locale is sent on the request that produced [usage].
+String? onDeviceMeterLine(StorefrontUsage usage) {
   final sent = usage.meterLine;
   if (sent == null || sent.isEmpty) return null;
-  if (!onDeviceUsesLocalizedCopy(locale)) return sent;
-  final percent = usage.percent;
-  final reset = usage.resetLabel;
-  if (percent == null || reset == null || reset.isEmpty) return sent;
-  final hours = usage.hoursLeft;
-  final shown = percent.round();
-  if (hours != null && hours > 0) return l10n.onDeviceMeterLineHours(shown, hours, reset);
-  return l10n.onDeviceMeterLineShort(shown, reset);
+  return sent;
 }
 
-/// Shown only when the plans sheet can open. Non-English devices use the app string.
+/// Shown only when the plans sheet can open. [moreLabel] is the catalog string for the
+/// locale the client already sent.
 String? onDeviceMoreUsageTitle({
   required bool plansSheetAvailable,
   required String? moreLabel,
-  required Locale locale,
-  required AppLocalizations l10n,
 }) {
   if (!plansSheetAvailable || moreLabel == null || moreLabel.trim().isEmpty) return null;
-  return onDeviceUsesLocalizedCopy(locale) ? l10n.onDeviceGetMoreUsage : moreLabel;
+  return moreLabel;
 }
 
 /// The glyph for "this phone", matching the platform.

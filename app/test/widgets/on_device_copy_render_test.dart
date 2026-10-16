@@ -273,17 +273,15 @@ void main() {
     expect(find.textContaining('hours of recording left'), findsNothing);
   });
 
-  testWidgets('spanish settings at 80 localize the meter', (tester) async {
-    final spanish = lookupAppLocalizations(const Locale('es'));
+  testWidgets('spanish settings at 80 show the backend meter', (tester) async {
     await shoot(
       tester,
       '27-settings-80-es.png',
       locale: const Locale('es'),
       home: settings(parakeetSettings()),
     );
-    expect(find.text(spanish.onDeviceMeterLineHours(80, 3, 'resets Nov 1')), findsOneWidget);
-    expect(find.textContaining('hours of recording left'), findsNothing);
-    expect(find.text(spanish.onDeviceGetMoreUsage), findsOneWidget);
+    expect(find.text('80% used · about 3 hours of recording left · resets Nov 1'), findsOneWidget);
+    expect(find.text('Get more usage'), findsOneWidget);
   });
 
   testWidgets('unsupported banner', (tester) async {

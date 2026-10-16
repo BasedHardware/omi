@@ -19,8 +19,24 @@ subscription, usage or price reads. Hidden callers receive
 `show_subscription_ui: false`, no tiers and no current plan. A lookup error does
 not expose the sheet.
 
-`locale` is accepted and falls back to `en`. Copy lives in
-`backend/config/storefront_copy_v1.json`.
+`locale` is a BCP 47 tag. Matching is exact, then the language subtag
+(`pt-BR` → `pt`, `zh-Hans` → `zh`). `nb` and `nn` use `no`. An unknown tag
+uses `en`. Each locale is merged key-by-key over `en`, so a missing key keeps
+the English string. Copy for every app locale lives in
+`backend/config/storefront_copy_v1.json`. `pro_gates` stay the identifiers
+`proactive_agent` and `screen_context`.
+
+Dates use Babel's `MMMd` skeleton (`1. Nov.` in German, `11月1日` in Japanese).
+English stays the shipped abbreviation (`Nov 1`). `resets {date}`, `/mo`, and
+`/yr` are catalog strings (`dates.resets`, `dates.period_month`,
+`dates.period_year`) and follow the locale. Counted phrases (months free, the
+under-6 per-day line, and the hours meter line) use Babel's CLDR plural
+category when that locale has a category map; otherwise they keep the one/many
+pair. `{per_day}` inside `hours_lines.plus` is still a bare integer, and that
+one sentence carries the hour-word for the count the plan actually shows.
+Currency and number formatting are unchanged: USD `$`, a trailing ISO code
+otherwise, thousands separators, and a trailing `.00` is dropped. Babel
+(`babel==2.18.0`) is the date and plural dependency.
 
 ## Schema
 
@@ -117,7 +133,8 @@ current card offers no prices, so a yearly subscriber is not shown a monthly
 price.
 
 `months_free` copy uses `1 month free` when the count is 1 and `{n} months free`
-otherwise, in both the yearly subline and `yearly_toggle_label`.
+otherwise, in both the yearly subline and `yearly_toggle_label`. A locale with
+`months_free_plural` selects the CLDR category for that count instead.
 
 Pro-only triggers recommend Pro, including for Free. Free budget and MCP-cap
 callers recommend Plus. Other paid callers below Pro recommend Pro. Architect

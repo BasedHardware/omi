@@ -111,7 +111,7 @@ void main() {
       expect(find.text(l10n.onDeviceAtCapBody), findsOneWidget);
     });
 
-    testWidgets('a non-english device uses the translated at-cap title', (tester) async {
+    testWidgets('a non-english device keeps the backend at-cap title', (tester) async {
       final copy = GeneratedStorefrontCapChoice.fromJson(
           jsonDecode(File('../backend/tests/fixtures/ladder_v1_at_cap.json').readAsStringSync()));
       final spanish = lookupAppLocalizations(const Locale('es'));
@@ -122,8 +122,8 @@ void main() {
         home: Scaffold(body: OnDeviceAtCapSheet(copy: copy, onContinue: (_) {})),
       ));
       await tester.pump();
-      expect(find.text(spanish.onDeviceAtCapTitle), findsOneWidget);
-      expect(find.text(copy.title), findsNothing);
+      expect(find.text(copy.title), findsOneWidget);
+      expect(find.text(spanish.onDeviceAtCapTitle), findsNothing);
     });
   });
 
@@ -520,8 +520,7 @@ void main() {
       expect(model.downloads, 1);
     });
 
-    testWidgets('a spanish device localizes the meter and get more usage', (tester) async {
-      final spanish = lookupAppLocalizations(const Locale('es'));
+    testWidgets('a spanish device shows the backend meter and get more usage', (tester) async {
       final controller = _controller();
       await tester.pumpWidget(MaterialApp(
         locale: const Locale('es'),
@@ -545,10 +544,8 @@ void main() {
         ),
       ));
       await tester.pump();
-      expect(find.text(spanish.onDeviceMeterLineHours(80, 3, 'resets Nov 1')), findsOneWidget);
-      expect(find.textContaining('hours of recording left'), findsNothing);
-      expect(find.text(spanish.onDeviceGetMoreUsage), findsOneWidget);
-      expect(find.text('Get more usage'), findsNothing);
+      expect(find.text('80% used · about 3 hours of recording left · resets Nov 1'), findsOneWidget);
+      expect(find.text('Get more usage'), findsOneWidget);
     });
 
     testWidgets('detection failure offers retry and hides the speech model', (tester) async {
@@ -685,13 +682,10 @@ void main() {
 
   group('queue banner plans sheet', () {
     test('get more usage stays hidden unless the plans sheet can open', () {
-      final spanish = lookupAppLocalizations(const Locale('es'));
       expect(
         onDeviceMoreUsageTitle(
           plansSheetAvailable: false,
           moreLabel: 'Get more usage',
-          locale: const Locale('en'),
-          l10n: l10n,
         ),
         isNull,
       );
@@ -699,19 +693,15 @@ void main() {
         onDeviceMoreUsageTitle(
           plansSheetAvailable: true,
           moreLabel: 'Get more usage',
-          locale: const Locale('en'),
-          l10n: l10n,
         ),
         'Get more usage',
       );
       expect(
         onDeviceMoreUsageTitle(
           plansSheetAvailable: true,
-          moreLabel: 'Get more usage',
-          locale: const Locale('es'),
-          l10n: spanish,
+          moreLabel: 'Obtén más uso',
         ),
-        spanish.onDeviceGetMoreUsage,
+        'Obtén más uso',
       );
     });
 
@@ -727,8 +717,6 @@ void main() {
           moreLabel: onDeviceMoreUsageTitle(
             plansSheetAvailable: false,
             moreLabel: 'Get more usage',
-            locale: const Locale('en'),
-            l10n: l10n,
           ),
           onGetMoreUsage: () {},
         ),

@@ -57,9 +57,7 @@ class _OnDeviceAtCapSheetState extends State<OnDeviceAtCapSheet> {
           Semantics(
             header: true,
             child: Text(
-              onDeviceUsesLocalizedCopy(Localizations.localeOf(context))
-                  ? l10n.onDeviceAtCapTitle
-                  : (widget.copy?.title ?? l10n.onDeviceAtCapTitle),
+              widget.copy?.title ?? l10n.onDeviceAtCapTitle,
               style: OmiType.title2,
             ),
           ),

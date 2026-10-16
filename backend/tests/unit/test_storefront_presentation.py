@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 from datetime import datetime, timezone
 from decimal import Decimal
 from itertools import product
@@ -22,10 +23,15 @@ from utils.storefront import (
     tier_action,
 )
 from utils.storefront_copy import (
+    _count_template,
+    _deep_merge,
+    _meter_hours_line,
+    copy_for,
     cta_label,
     current_line,
     load_copy,
     floor_to_nice,
+    format_date,
     format_money,
     hours_line,
     money,
@@ -948,7 +954,10 @@ def test_golden_storefront_scenarios():
         if name not in {'cancel_scheduled_plus', 'cancel_scheduled_pro'}
     )
     french = sheet_for('basic', locale='fr-FR', rows={}, bindings=[], recognized=[])
-    assert french.header == 'Choose your plan'
+    assert french.header == copy_for('fr')['headers']['default']
+    assert french.header != 'Choose your plan'
+    unknown = sheet_for('basic', locale='zz-ZZ', rows={}, bindings=[], recognized=[])
+    assert unknown.header == 'Choose your plan'
 
     GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
     for name in SCENARIOS:
@@ -1016,3 +1025,182 @@ def test_percent_rounding_never_offers_architect_before_cap():
     assert sheet.usage.percent == 99
     assert all(tier.plan_id != 'architect' for tier in sheet.tiers)
     assert sheet.header != "You've used all of this month's usage"
+
+
+_PLACEHOLDERS = re.compile(r'\{[a-z_]+\}')
+_PLUS_DAILY_UNIT = {
+    'ar': '3 ساعات',
+    'be': '3 гадзін',
+    'bn': '3 ঘণ্টা',
+    'bs': '3 sati',
+    'ca': '3 hores',
+    'cs': '3 hodin',
+    'da': '3 timer',
+    'lt': '3 valandų',
+    'lv': '3 stundas',
+    'mk': '3 часа',
+    'mr': '3 तास',
+    'ms': '3 jam',
+    'nl': '3 uur',
+    'no': '3 timer',
+    'pl': '3 godzin',
+    'te': '3 గంటలు',
+    'th': '3 ชั่วโมง',
+    'tl': '3 oras',
+    'tr': '3 saat',
+    'uk': '3 годин',
+    'ur': '3 گھنٹے',
+    'vi': '3 giờ',
+    'zh': '3 小时',
+}
+L10N_LOCALES = ('es', 'ja', 'ar', 'zh', 'de')
+L10N_SCENARIOS = ('free_settings', 'plus_budget80', 'pro_budget_cap', 'cancel_scheduled_plus')
+L10N_DIR = Path(__file__).resolve().parents[1] / 'fixtures' / 'storefront_v2_l10n'
+
+
+def _leaves(value, prefix=''):
+    if isinstance(value, dict):
+        for key, child in value.items():
+            yield from _leaves(child, f'{prefix}.{key}' if prefix else key)
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            yield from _leaves(child, f'{prefix}[{index}]')
+    else:
+        yield prefix, value
+
+
+def _l10n_sheet(name, locale):
+    rows, recognized = ladder_catalog()
+    common = {
+        'rows': rows,
+        'bindings': list(rows),
+        'recognized': recognized,
+        'period_end': PERIOD_END,
+        'locale': locale,
+    }
+    if name == 'free_settings':
+        return sheet_for(
+            'basic',
+            source='settings',
+            period_end=None,
+            rows=rows,
+            bindings=list(rows),
+            recognized=recognized,
+            locale=locale,
+        )
+    if name == 'plus_budget80':
+        return sheet_for('plus', price_id='price_plus_month', trigger='usage_budget', percent=80, **common)
+    if name == 'pro_budget_cap':
+        return sheet_for('operator', price_id='price_operator_month', trigger='usage_budget', percent=100, **common)
+    if name == 'cancel_scheduled_plus':
+        return sheet_for('plus', price_id='price_plus_month', cancel=True, source='settings', **common)
+    raise AssertionError(name)
+
+
+def test_every_locale_has_every_english_key_and_the_same_placeholders():
+    locales = load_copy()['locales']
+    english = dict(_leaves(locales['en']))
+    assert set(locales) >= set(L10N_LOCALES) | {'en'}
+    for code, text in locales.items():
+        got = dict(_leaves(text))
+        missing = set(english) - set(got)
+        assert not missing, (code, sorted(missing))
+        for key, value in english.items():
+            if isinstance(value, str):
+                assert set(_PLACEHOLDERS.findall(got[key])) == set(_PLACEHOLDERS.findall(value)), (code, key)
+        assert text['pro_gates'] == locales['en']['pro_gates']
+        focus = text['bullet_focus']
+        bullets = text['bullets']
+        for plan, items in bullets.items():
+            assert any(focus['mcp_marker'] in item for item in items), (code, plan)
+        for trigger in ('proactive_agent', 'screen_context'):
+            assert focus[trigger] in bullets['operator'], (code, trigger)
+        plus = text['hours_lines']['plus'].format(hours='100', per_day='3')
+        assert '3' in plus, code
+        if code in _PLUS_DAILY_UNIT:
+            assert _PLUS_DAILY_UNIT[code] in plus, (code, plus)
+
+
+def test_locale_matching_merges_over_english():
+    assert copy_for('pt-BR')['headers']['default'] == copy_for('pt')['headers']['default']
+    assert copy_for('zh-Hans')['headers']['default'] == copy_for('zh')['headers']['default']
+    assert copy_for('nb')['headers']['default'] == copy_for('no')['headers']['default']
+    assert copy_for('zz')['headers']['default'] == 'Choose your plan'
+    assert copy_for(None)['dates']['resets'] == 'resets {date}'
+    assert _deep_merge({'a': {'b': 1, 'c': 2}, 'd': [1]}, {'a': {'c': 9}}) == {'a': {'b': 1, 'c': 9}, 'd': [1]}
+    spanish = copy_for('es')
+    assert spanish['dates']['period_month'] == 'mes'
+    assert 'Choose your plan' not in spanish['headers']['default']
+
+
+def test_counted_lines_follow_cldr_plural_categories():
+    assert per_day_phrase(30, 'ar') == 'حوالي 1 ساعة يومياً'
+    assert per_day_phrase(60, 'ar') == 'حوالي ساعتين يومياً'
+    assert per_day_phrase(90, 'ar') == 'حوالي 3 ساعات يومياً'
+    assert per_day_phrase(150, 'ar') == 'حوالي 5 ساعات يومياً'
+    assert per_day_phrase(30, 'cs') == 'asi 1 hodinu denně'
+    assert per_day_phrase(60, 'cs') == 'asi 2 hodiny denně'
+    assert per_day_phrase(90, 'cs') == 'asi 3 hodiny denně'
+    assert per_day_phrase(150, 'cs') == 'asi 5 hodin denně'
+    assert per_day_phrase(30, 'be') == 'каля 1 гадзіна ў дзень'
+    assert per_day_phrase(60, 'bs') == 'oko 2 sata dnevno'
+    assert per_day_phrase(150, 'bs') == 'oko 5 sati dnevno'
+    assert months_free_phrase(1) == '1 month free'
+    assert months_free_phrase(2) == '2 months free'
+    assert months_free_phrase(2, 'ar') == 'شهران مجاناً'
+    assert months_free_phrase(5, 'ar') == '5 أشهر مجانية'
+    assert months_free_phrase(21, 'ar') == '21 شهراً مجاناً'
+    assert months_free_phrase(2, 'cs') == '2 měsíce zdarma'
+    assert months_free_phrase(5, 'cs') == '5 měsíců zdarma'
+    assert months_free_phrase(21, 'be') == '21 месяц бясплатна'
+    assert months_free_phrase(5, 'pl') == '5 miesięcy gratis'
+    for count, word in ((1, 'hodina'), (2, 'hodiny'), (3, 'hodiny'), (5, 'hodin'), (21, 'hodin')):
+        line = _meter_hours_line(copy_for('cs'), shown=80, left=count, reset='x', locale='cs')
+        assert f'{count} {word}' in line
+    for count, word in ((1, 'ساعة'), (2, 'ساعتين'), (3, 'ساعات'), (5, 'ساعات'), (21, 'ساعة')):
+        line = _meter_hours_line(copy_for('ar'), shown=80, left=count, reset='x', locale='ar')
+        assert word in line
+        if count != 2:
+            assert str(count) in line
+    assert (
+        _count_template(
+            copy_for('en')['per_day'], 5, 'en', plural_key='under_6_plural', one_key='under_6_one', many_key='under_6'
+        )
+        == 'about {n} hours a day'
+    )
+
+
+def test_localized_storefront_goldens():
+    L10N_DIR.mkdir(parents=True, exist_ok=True)
+    for locale in L10N_LOCALES:
+        text = copy_for(locale)
+        for name in L10N_SCENARIOS:
+            sheet = _l10n_sheet(name, locale)
+            path = L10N_DIR / f'{locale}_{name}.json'
+            payload = _dump(sheet)
+            if os.environ.get('UPDATE_STOREFRONT_GOLDENS') == '1':
+                path.write_text(payload, encoding='utf-8')
+            assert path.read_text(encoding='utf-8') == payload
+            assert sheet.header != 'Choose your plan'
+            if name == 'free_settings':
+                assert sheet.header == text['headers']['default']
+                assert sheet.current.line == text['current']['free']
+            if name == 'plus_budget80':
+                assert sheet.usage.hours_left is not None and sheet.usage.hours_left > 0
+                assert sheet.usage.meter_line
+                assert sheet.usage.reset_label == text['dates']['resets'].format(date=format_date(PERIOD_END, locale))
+                assert 'resets Nov' not in sheet.usage.meter_line
+            if name == 'pro_budget_cap':
+                assert sheet.usage.hours_left is None
+                assert sheet.header == text['headers']['budget_100']
+                assert 'about 0' not in (sheet.usage.meter_line or '')
+            if name == 'cancel_scheduled_plus':
+                assert sheet.header == text['headers']['cancel_scheduled'].format(
+                    plan='Plus', date=format_date(PERIOD_END, locale)
+                )
+    german = _l10n_sheet('plus_budget80', 'de')
+    assert german.usage.reset_label == 'setzt sich am 1. Nov. zurück'
+    japanese = _l10n_sheet('cancel_scheduled_plus', 'ja')
+    assert '11月1日' in japanese.header
+    arabic = _l10n_sheet('free_settings', 'ar')
+    assert arabic.header == copy_for('ar')['headers']['default']

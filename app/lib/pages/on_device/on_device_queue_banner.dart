@@ -116,8 +116,6 @@ class _OnDeviceQueueBannerState extends State<OnDeviceQueueBanner> {
         final moreLabel = onDeviceMoreUsageTitle(
           plansSheetAvailable: _plansSheet,
           moreLabel: _moreLabel,
-          locale: Localizations.localeOf(context),
-          l10n: context.l10n,
         );
         return OnDeviceQueueBannerView(
           controller: _controller,
