@@ -322,7 +322,7 @@ def enqueue_sync_job(payload: Dict[str, Any]) -> None:
         raise ValueError('sync job sequencer epoch must be a positive integer')
     task_id = f"{payload['job_id']}-s{sequencer_epoch}" if sequencer_epoch is not None else str(payload['job_id'])
     schedule_at = direct_schedule_at(payload)
-    schedule_options = {'schedule_at': schedule_at} if schedule_at is not None else {}
+    schedule_options: Dict[str, Any] = {'schedule_at': schedule_at} if schedule_at is not None else {}
     if payload.get('lane') == 'backfill' and is_sync_backfill_routing_enabled():
         queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip()
         handler_url = os.getenv('SYNC_BACKFILL_TASKS_HANDLER_URL', '').strip()

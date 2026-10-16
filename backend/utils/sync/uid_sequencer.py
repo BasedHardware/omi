@@ -62,7 +62,7 @@ def _retire_expired(
     try:
         if sync_job_key_exists(job_id):
             return _RetirementOutcome.KEY_PRESENT
-        options = {'allow_active_owner': True} if allow_active_owner else {}
+        options: dict[str, Any] = {'allow_active_owner': True} if allow_active_owner else {}
         retired = registry.retire_expired(uid, job_id, epoch=epoch, **options)
     finally:
         release_job_run_lock(job_id, token)
