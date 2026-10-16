@@ -129,6 +129,40 @@ def test_aged_backfill_gets_one_turn_after_four_live_batches():
         loop.close()
 
 
+def test_packing_never_dispatches_aged_backfill_before_queued_live():
+    engine = BatchEngine(_make_mock_gpu_worker(), max_batch_size=8, max_inflight=1, packing=True)
+    loop = asyncio.new_event_loop()
+    try:
+        old = PendingRequest('/tmp/old.wav', True, loop.create_future(), submitted_at=time.monotonic() - 60)
+        live = PendingRequest('/tmp/live.wav', True, loop.create_future(), lane='live')
+        engine._pending = [old, live]
+        for _ in range(10):
+            assert engine._select_batch() == [live]
+        engine._pending = [old, PendingRequest('/tmp/other.wav', True, loop.create_future())]
+        assert engine._select_batch() == [old]
+    finally:
+        loop.close()
+
+
+def test_packing_rejects_multiple_gpu_batches_inflight():
+    with pytest.raises(ValueError, match='MAX_INFLIGHT=1'):
+        BatchEngine(_make_mock_gpu_worker(), packing=True, max_inflight=2)
+
+
+@pytest.mark.asyncio
+async def test_packing_cannot_bypass_quantum_bound(monkeypatch):
+    engine = BatchEngine(_make_mock_gpu_worker(), packing=True, max_inflight=1)
+    await engine.start()
+    try:
+        for duration in (None, 120.001):
+            monkeypatch.setattr(engine, '_get_audio_duration', lambda _path: duration)
+            with pytest.raises(ValueError, match='<=120s'):
+                await engine.submit('/tmp/oversized.wav')
+        assert not engine._pending
+    finally:
+        await engine.stop()
+
+
 class TestBatchEngineSubmit:
     @pytest.fixture
     def loop(self):

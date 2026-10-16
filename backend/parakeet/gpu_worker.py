@@ -11,6 +11,7 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
 import soundfile as sf
+from omegaconf import OmegaConf, open_dict
 import torch  # type: ignore[reportMissingImports]  # torch not installed in dev venv
 
 try:
@@ -355,6 +356,15 @@ class GPUWorker:
             model = model.to(_torch.bfloat16)
             self._model_dtype = _torch.bfloat16
         model.eval()
+
+        if os.getenv('PARAKEET_EXPLICIT_CUDA_GRAPHS', 'false').lower() == 'true':
+            # NeMo transcribe(timestamps=True) reconstructs decoding from cfg.
+            # Runtime disable_cuda_graphs() alone is lost at that reconstruction.
+            cfg = OmegaConf.create(OmegaConf.to_container(model.cfg.decoding, resolve=True))
+            with open_dict(cfg):
+                cfg.greedy.use_cuda_graph_decoder = not disable_cuda_graphs
+                cfg.compute_timestamps = True
+            model.change_decoding_strategy(cfg, verbose=False)
 
         if disable_cuda_graphs:
             if hasattr(model, 'decoding') and hasattr(model.decoding, 'decoding'):
