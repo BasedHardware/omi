@@ -32,6 +32,10 @@ TTL = 2 * 86400
 
 def prefix() -> str:
     stage = os.getenv('OMI_ENV_STAGE', '').strip().lower()
+    if not stage:
+        # Desktop workers already carry this explicit deployment identity.
+        channel = os.getenv('OMI_DESKTOP_BACKEND_RELEASE_CHANNEL', '').strip().lower()
+        stage = {'production': 'prod', 'development': 'dev'}.get(channel, '')
     if stage not in {'prod', 'dev', 'local', 'offline'}:
         raise ValueError('demand scheduling requires an explicit runtime stage')
     return stage + ':' + PREFIX

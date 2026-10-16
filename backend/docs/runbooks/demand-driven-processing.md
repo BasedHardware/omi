@@ -49,6 +49,8 @@ hours, once per 30 seconds per owner. Its response reports progress with
 Redis indexes are not a historical discovery database. Existing durable recovery
 continues to own unindexed or pre-rollout debt; no Firestore discovery scan was
 added to surface or tool requests.
+Desktop workers use their existing explicit production/development release
+channel when `OMI_ENV_STAGE` is absent, preserving separate Redis namespaces.
 
 The end-of-day merge hook is omitted under David's updated 2026-10-16 rulings.
 Daytime conservative smart merge stays unchanged. Lazy pyannote refinement is
@@ -61,6 +63,8 @@ and does not add GPU capacity or a speaker-refinement executor.
    existing queue identity, audience, reconcile and BYOK behavior. Test the lazy
    outbox in a Firestore-emulator environment (its existing runtime ownership
    rule permits production or emulator, not shared remote dev persistence).
+   Desktop backend config trains update the composed manifest and both inline
+   deploy-workflow declarations together; runtime contract tests enforce parity.
 2. Enable client reporting for the owner; enable the scheduler with an owner-only
    allowlist and zero percent. Check lease expiry, independent-device close,
    socket-free opening, pending promotion and unchanged audio retention. Watch

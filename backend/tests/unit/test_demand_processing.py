@@ -72,6 +72,16 @@ def test_default_off_and_owner_cohort(monkeypatch):
     assert config.enabled('owner') and not config.enabled('other')
 
 
+@pytest.mark.parametrize('channel,stage', [('production', 'prod'), ('development', 'dev')])
+def test_desktop_channel_binds_environment_without_cross_stage_keys(monkeypatch, channel, stage):
+    monkeypatch.delenv('OMI_ENV_STAGE', raising=False)
+    monkeypatch.setenv('OMI_DESKTOP_BACKEND_RELEASE_CHANNEL', channel)
+    assert demand.prefix() == stage + ':' + demand.PREFIX
+    monkeypatch.setenv('OMI_DESKTOP_BACKEND_RELEASE_CHANNEL', 'unknown')
+    with pytest.raises(ValueError):
+        demand.prefix()
+
+
 def test_surface_promotes_only_owner_and_session_leases_union(runtime):
     redis, wake = runtime
     assert schedule('owner', 'pending') and schedule('other', 'other')
