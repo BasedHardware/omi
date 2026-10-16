@@ -59,6 +59,9 @@ Grafana identity. The org-scoped enrollment token adds the JWT-created user to
 `business-viewers` before the URL is returned. It verifies org/team/user identity
 and never grants Admin via JWT. JWKS publishes only the RSA public key, including while the embed cutover flag
 is off, so keys can be staged before Grafana starts.
+TV kiosks use the same minting through `POST /api/grafana/tv-embed` after
+re-validating a TV share token server-side (`tv:<link>` identity namespace);
+flag-off keeps the legacy anonymous board only while it is actually open.
 
 Runtime settings (server only; GitHub `prod` Environment variables):
 
