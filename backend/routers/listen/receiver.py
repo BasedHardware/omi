@@ -1923,10 +1923,47 @@ class ListenReceiver(ReplayFilterMixin):
             window_ring = self._window_ring()
             ring_action = window_replay_action(window_ring, self.stt_socket, outbound_audio, outbound_start_sample)
             if ring_action == 'failover':
-                # The pressure decision published death. Move this packet to
-                # the bounded recovery tail and let receive_data keep reading.
-                await self._flush_stt_buffer(buffer, force=force)
-                return
+                # The pressure decision published death on the raw transport.
+                # The historical behavior recursed into this method and relied
+                # on the re-entry taking its recovery-tail branch at the top —
+                # entered only while ``(replay_ingesting or a dead socket) and
+                # not finishing``. When the re-entry cannot enter that branch
+                # — the leg is finishing under owner teardown (the latch
+                # ``_teardown_body`` marks via ``mark_owner_teardown`` before
+                # its forced tail flush) — the verdict reproduced identically
+                # at every depth and the call chain ran to the recursion
+                # limit, crashing the whole teardown: prod backend-listen
+                # 2026-10-14/15 RecursionError x105/30m on the stt_shutdown
+                # task, re-raised into receive through _bounded_teardown,
+                # plus runtime's
+                # "Listen WebSocket operation failed type=RecursionError".
+                if (
+                    self._replay_ingesting or (self.stt_socket is not None and live_stt_socket_is_dead(self.stt_socket))
+                ) and not socket_is_finishing(self.stt_socket):
+                    # The re-entry takes the recovery-tail branch and delivers
+                    # this packet there: one recursion terminates.
+                    await self._flush_stt_buffer(buffer, force=force)
+                    return
+                if socket_is_finishing(self.stt_socket, include_unmanaged_finishing=True):
+                    # Teardown leg: no replacement can be adopted and the
+                    # verdict cannot change. Hold the packet on this
+                    # receiver's bounded live tail — a later adopted leg
+                    # inherits it (ReplayTailSocket is constructed with the
+                    # tail) and teardown meters whatever never reaches a
+                    # provider — instead of recursing on identical arguments.
+                    # The unmanaged latch read is deliberate: under recovery
+                    # the default read ignores a legacy wrapper's _finishing,
+                    # and teardown marks exactly that latch (prod crash).
+                    if self._hold_refused_failover_packet(buffer, outbound_start_sample):
+                        return
+                # Serving leg the verdict could not fail (no raw behind the
+                # wrapper): mirror the legacy failover attempt. An adopted
+                # replacement reroutes the packet on the next iteration; a
+                # refusal falls through to the idempotent terminal send path
+                # with the buffer intact, and the surrounding bound caps the
+                # retries either way.
+                if await self._failover_stt_socket():
+                    continue
             sent = await flush_live_stt_buffer(
                 request.websocket,
                 self.host.state,
@@ -1948,6 +1985,32 @@ class ListenReceiver(ReplayFilterMixin):
                 return
             if self.host.state.stt_terminal_failure:
                 return
+
+    def _hold_refused_failover_packet(self, buffer: bytearray, start_sample: int | None) -> bool:
+        """Park one undeliverable packet on the bounded live tail.
+
+        Returns True (and clears the caller's buffer) when the packet was held.
+        Only the recovery path's refused-failover arm calls this, so the tail
+        stays dedicated to packets the serving leg never accepted. The same
+        ``LIVE_TAIL_SECONDS`` byte bound ReplayTailSocket enforces caps the
+        parked packets; beyond it the buffer is released — teardown meters
+        nothing silently either way, and the bound keeps the hold arm from
+        growing without limit during a long teardown flush burst.
+        """
+        data = bytes(buffer)
+        buffer.clear()
+        self._stt_buffer_start_sample = None
+        if (
+            not data
+            or start_sample is None
+            or self._replay_tail_bytes + len(data)
+            > replay_delivery.LIVE_TAIL_SECONDS * self.host.request.sample_rate * 2
+        ):
+            return True
+        received = self._live_birth.note(start_sample, start_sample + len(data) // 2)
+        self._replay_live_tail.append(TailPacket(start_sample, data, received))
+        self._replay_tail_bytes += len(data)
+        return True
 
     async def _recover_ingested_audio(self) -> None:
         if (

@@ -2878,6 +2878,23 @@ conservatively 90 capture seconds after the answer, preventing repeated noisy
 blips from growing the PCM buffer indefinitely. A short pause does not authorize
 any of these transitions. No unposted speech floor is discarded.
 
+The recovery flush loop (`_flush_stt_buffer`) that carries client packets around
+window-ring pressure has one bounded arm per re-entry outcome. While a
+replacement is being adopted (`_replay_ingesting`) or the leg is dead but not
+finishing, the `'failover'` verdict follows the historical one-level recursion
+whose re-entry delivers the packet through the recovery-tail branch. When that
+re-entry cannot enter the branch — the leg is finishing under owner teardown,
+the latch `_teardown_body` marks via `mark_owner_teardown` before its forced
+tail flush — the packet is held on the receiver's bounded live tail instead (a
+later adopted leg inherits that tail and teardown meters whatever never reaches
+a provider). On a still-serving leg the refused failover mirrors the legacy
+attempt once and falls through to the idempotent terminal send path inside the
+loop's existing `MAX_RECOVERY_TARGETS + 2` bound. Recursing on unchanged
+arguments in the finishing shape ran to the recursion limit instead — one event
+produced three ERROR lines (`stt_shutdown`, `receive` re-raise through
+`_bounded_teardown`, `Listen WebSocket operation failed type=RecursionError`;
+prod backend-listen 2026-10-14/15, x105/30m).
+
 Replay retention and pending capacity have separate sample boundaries, both
 mapped through the provider epoch's accepted-send spans. Answered history can
 age out while new speech is pending, but no unresolved sample can be evicted
