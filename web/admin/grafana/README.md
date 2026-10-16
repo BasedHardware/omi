@@ -162,20 +162,57 @@ The 180-day lookback, denominator and observation windows remain unchanged. Coun
 entry platform and include the full denominator. Rates do not add across splits:
 the split numerators and denominators do. Missing sources remain null.
 
-Each metric is one native **Canvas** panel, backed by Infinity as the only
-external plugin. Canvas's SVG-icon element renders a data-only card through
-Grafana's built-in SVG sanitizer. The card's background/border encloses the
-label, scope chip, value, delta, platform splits, complete-period sparkline and
-footnote. There are no floating subpanels, HTML overrides or custom JavaScript.
-Responsive constraints keep the complete card inside narrow laptop columns.
+### v3 presentation (same uid, same metric definitions)
 
-Healthy live aggregates use full contrast. Stale, partial, explicitly material-gap
-proxies and all synthetic fixtures are dimmed. A proxy label alone does not dim
-an otherwise healthy audited aggregate. Fixture cards always say **FIXTURE**.
-Cohort-rate deltas use percentage points; count and monetary deltas use relative
-percent change. Scope chips say all or macOS; entry/primary attribution is in the
-panel description and diagnostics. Money is compact at thousands, without cents
-above $100. Full source reasons and versions remain in the diagnostics table.
+The board keeps uid `omi-tv-v2` and file `dashboards/omi-tv-v2.json` (the private
+provisioning allowlist and embed links depend on them); `build_wall_dashboard.py`
+is its source. Five story columns read Growth → Activation → Retention → Revenue
+→ Health. Each starts with one native **stat** panel (headline values) and a
+one-row delta strip: the series API's prior-period change, in percentage points
+for rates and relative % for counts and money (Grafana's native percent change is
+relative only). Invisible tone markers in the text color it green/red; cost up is
+red. Native charts below are chosen per question: stacked weekly bars for
+platform composition and growth accounting, lines for rates, a W0–W8 cohort
+retention `trend`, an L1–L7 power-user histogram, activation by first-week capture source, an MRR-by-plan
+stack, Shopify weekly bars and a daily all-in cost stack against revenue. Titles say "users" in plain
+English; definitions (qualified use, deduplicated persons, qualified vs any-event
+MAU) live in panel descriptions. Platform hues
+are fixed everywhere (macOS, Mobile, Other, MCP-only). Metrics with no defensible
+source are listed in the compact **Coverage gaps** table, not drawn as empty
+charts. The primary view fits 1920×1080 kiosk without scrolling; titles fit 1440.
+
+Charts read the admin-authenticated `GET /api/omi/stats/wall/series/<name>`
+(`headline`, `growth`, `activation`, `retention`, `revenue`, `health`;
+`lib/wall-series.ts`). The series reuse the v2 snapshot and its definitions:
+
+- The snapshot's complete periods (now carrying per-period splits) win on every
+  date they cover, so each chart's latest point is the stat above it. Only older
+  periods and chart-only shapes are queried: 26 trailing 7-day growth periods
+  (one HogQL period per read; the qualified-actor CTE chain is shared with the
+  snapshot's activity query), cohort/established history periods 6–11, nine
+  weekly W0–W8 cohorts, and 30-day MAU at earlier week ends. Growth starts at the
+  first period after mobile allowlist events began (week of 2026-05-04).
+- MRR history is the FinOps Stripe-book snapshot table (deduplicated by
+  `snapshot_date`, known unmapped-price/JPY gaps disclosed); the final point is
+  the live book, never a fixture. The MRR/ARPMAU deltas use the same-source FinOps
+  change. Cost is all-in (`lib/wall-cost.ts`, shared with the snapshot's
+  `cost.net_day` / `cost.per_mau_month`): GCP net of committed-use credits minus
+  one-time incident excess (a service-day ≥2× and ≥$500 over its 14-day median),
+  Vertex LLM, OpenAI and Anthropic invoices, STT from the FinOps model (drawn
+  faint, labelled "modelled") and SaaS at a fixed $4.8K/month (labelled "fixed
+  estimate"). Unsourced lines are named in the reason, never dropped.
+- Cold-load rules match the wall: each source leg is single-flight per UTC day,
+  a cold request answers within five seconds while `after()` retains the work,
+  failed legs keep their last good value (≤24h, marked stale), partial legs retry
+  only their missing reads after two minutes, and PostHog reads run one at a time
+  on a low-priority lane that waits for any snapshot refresh. Successful reads
+  are memoized by SQL text for the day. Caches stay per-instance and disposable.
+  A daily materialization of per-person qualified days would replace ~45 bounded
+  reads per instance-day with one cheap aggregate; until then PostHog's own
+  result cache absorbs repeats across instances.
+
+The legacy `/api/omi/stats/wall` payload (Canvas card SVGs, diagnostics) is
+unchanged and still served.
 
 MAU keeps two completed 30-day periods to stay within PostHog's query budget;
 other usage/cohort trends retain six completed periods. Cohort anchors are still
@@ -193,8 +230,9 @@ eval "$(~/machine-config/scripts/container-runtime.zsh env)"
 source ~/.local/bin/gcp-agent-env.sh ro-prod
 python3 web/admin/grafana/verify_wall_local.py serve  # keep foreground in one terminal
 python3 web/admin/grafana/verify_wall_local.py provision  # another terminal, same Docker env
+python3 web/admin/grafana/verify_wall_local.py reload     # after rebuilding the board JSON
 # Python environment with playwright + Chromium installed:
-python3 web/admin/grafana/verify_wall_local.py screens
+python3 web/admin/grafana/verify_wall_local.py screens [--out DIR]
 ```
 
 `serve` reads only the authorized PostHog key and Shopify fields from the supplied
@@ -211,7 +249,7 @@ The provisioned board rewrites the proxy URL only in its local copy.
 Run records and screenshots are written only to
 `/Users/dazheng/workspace/omi/data/run-2026-10-14-omi-tv-metrics/`;
 never commit that workspace run directory in the public repository. The local
-verifier uses the `omi-tv-v2-prod-fix-rev1-1440.png` / `-1920.png` screenshot names.
+verifier writes `omi-tv-v3-1920.png` / `omi-tv-v3-1440.png` (default `build-screens/`).
 Tracked UI-evidence copies belong under `.agent-artifacts/ui-evidence/`.
 
 Deploy prerequisites and limits:
