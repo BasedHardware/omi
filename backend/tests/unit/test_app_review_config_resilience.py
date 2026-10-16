@@ -77,7 +77,6 @@ _install_stubs()
 
 from database import app_review_config as arc  # noqa: E402
 
-
 # --- fakes for the Firestore surface ----------------------------------------
 
 
