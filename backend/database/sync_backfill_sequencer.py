@@ -27,7 +27,7 @@ OWNER_REPAIRED = Counter('sync_backfill_owner_repaired', 'Missing backfill owner
 
 COLLECTION = 'sync_backfill_sequencer'
 PENDING_COLLECTION = 'sync_backfill_pending'
-LEASE_SECONDS = 30 * 60  # Longer than a Cloud Task dispatch deadline (25 minutes).
+LEASE_SECONDS = 30 * 60  # Running lease; queue wait is unbounded by the dispatch deadline.
 HEARTBEAT_SECONDS = 120
 DEFAULT_REPAIR_WINDOW_SECONDS = 30 * 60
 DISPATCH_RETRY_SECONDS = 5 * 60
@@ -418,6 +418,7 @@ def claim_next(
             'active_job_id': job['job_id'],
             'active_payload': job['payload'],
             'active_epoch': epoch,
+            'dispatch_attempt': 0,
             'active_state': 'dispatching',
             'active_accepted_at': job['accepted_at'],
             'active_since': current,
@@ -568,7 +569,7 @@ def defer_owner(uid: str, seconds: int, *, firestore_client: Any = None, now: Op
 def redrive_job(
     uid: str, job_id: str, epoch: int, *, firestore_client: Any = None, now: Optional[datetime] = None
 ) -> Optional[dict[str, Any]]:
-    """Replace a lost dispatch epoch, preserving the one active job and payload."""
+    """Retry dispatch without fencing queued work; fence expired running work."""
     _require_production()
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
@@ -579,16 +580,23 @@ def redrive_job(
         owner = _data(root.get(transaction=transaction))
         if owner.get('active_job_id') != job_id or owner.get('active_epoch') != epoch:
             return None
-        deadline_field = 'dispatch_retry_at' if owner.get('active_state') == 'dispatching' else 'lease_expires_at'
+        dispatching = owner.get('active_state') == 'dispatching'
+        deadline_field = 'dispatch_retry_at' if dispatching else 'lease_expires_at'
         deadline = owner.get(deadline_field)
         if not isinstance(deadline, datetime) or deadline > current:
             return None
-        next_epoch = epoch + 1
+        # Queue latency is not evidence that a worker lost ownership. Preserve
+        # its epoch until delivery, even across repeated uncertain enqueues.
+        next_epoch = epoch if dispatching else epoch + 1
+        # Separate task identity from execution fencing. A fresh named attempt
+        # also recovers tasks deleted/exhausted before begin_job (name tombstones).
+        dispatch_attempt = int(owner.get('dispatch_attempt') or 0) + 1 if dispatching else 0
         transaction.update(
             root,
             {
                 'epoch': next_epoch,
                 'active_epoch': next_epoch,
+                'dispatch_attempt': dispatch_attempt,
                 'active_state': 'dispatching',
                 'lease_expires_at': current + timedelta(seconds=LEASE_SECONDS),
                 'dispatch_retry_at': current + timedelta(seconds=DISPATCH_RETRY_SECONDS),
@@ -601,6 +609,7 @@ def redrive_job(
             'job_id': job_id,
             'payload': owner['active_payload'],
             'epoch': next_epoch,
+            'dispatch_attempt': dispatch_attempt,
             'accepted_at': owner['active_accepted_at'],
         }
 
