@@ -233,17 +233,28 @@ def measure_overlap_shared_speech(first: Any, second: Any) -> OverlapSharedSpeec
             raise _Rejected('no_overlap')
         a, unknown_a, dropped_a = _lines(first, aw, lo, hi)
         b, unknown_b, dropped_b = _lines(second, bw, lo, hi)
-        uncertainty = {'unknown_words': unknown_a + unknown_b, 'dropped_segments': dropped_a + dropped_b}
+        unknown_words, dropped_segments = unknown_a + unknown_b, dropped_a + dropped_b
         minimum = min(sum(len(line[1]) for line in a), sum(len(line[1]) for line in b))
         if minimum < MIN_WORDS:
-            return OverlapSharedSpeech(reason='insufficient_speech', min_words=minimum, **uncertainty)
+            return OverlapSharedSpeech(
+                reason='insufficient_speech',
+                min_words=minimum,
+                unknown_words=unknown_words,
+                dropped_segments=dropped_segments,
+            )
         tokens_a = set().union(*(line[2] for line in a))
         tokens_b = set().union(*(line[2] for line in b))
         # A lower bound: adding every unknown token to the union overcharges
         # its possible size; no unknown token enters the proven intersection.
         jaccard = len(tokens_a & tokens_b) / (len(tokens_a | tokens_b) + unknown_a + unknown_b)
         if jaccard < MIN_WINDOW_JACCARD:
-            return OverlapSharedSpeech(reason='window_text', window_jaccard=jaccard, min_words=minimum, **uncertainty)
+            return OverlapSharedSpeech(
+                reason='window_text',
+                window_jaccard=jaccard,
+                min_words=minimum,
+                unknown_words=unknown_words,
+                dropped_segments=dropped_segments,
+            )
         # Canonical orientation makes greedy assignment symmetric under pair reversal.
         if [(x[0], x[1]) for x in b] < [(x[0], x[1]) for x in a]:
             a, b = b, a
@@ -318,7 +329,8 @@ def measure_overlap_shared_speech(first: Any, second: Any) -> OverlapSharedSpeec
             support,
             minimum,
             speech_seconds,
-            **uncertainty,
+            unknown_words=unknown_words,
+            dropped_segments=dropped_segments,
         )
     except _Rejected as error:
         return OverlapSharedSpeech(reason=str(error))

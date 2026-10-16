@@ -163,8 +163,9 @@ second Luna review confirmed those fixes and found an additional pre-matcher
 unbounded-decompression risk. The storage reader now caps encoded input and
 uses bounded streaming decompression with EOF/trailing-data checks before JSON
 parsing; overflow returns a static abstention. Synthetic tests verify that a
-high-expansion payload never reaches the parser. A further Luna review is
-required before merge.
+high-expansion payload never reaches the parser. A third read-only Luna review
+of 8f407abf1dcb found no blocking issues, confirmed bounded decoding and the
+conservative unknown-word penalty, and qualified dark/shadow only.
 Thresholds favor false-fold avoidance: ordered, timed, distinct sentence evidence
 and actual line duration are mandatory. Low global lexical overlap is allowed to
 remain a false negative. Current evidence supports dark/shadow deployment only.
