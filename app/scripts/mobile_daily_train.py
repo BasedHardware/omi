@@ -7,9 +7,10 @@ iOS: the newest processed TestFlight build whose marketing version is newer than
 App Store version is submitted for review with release type AFTER_APPROVAL and the automatic
 phased rollout enabled (pausable in App Store Connect — the post-release brake). One
 submission is in flight at a time: anything WAITING_FOR_REVIEW / IN_REVIEW is left alone. An
-approved version nobody released (PENDING_DEVELOPER_RELEASE) is cancelled and replaced when
-a newer build exists; when it already carries the newest build it stays, so a human can still
-release it (App Store Connect has no API to issue the developer-release command).
+approved version nobody released (PENDING_DEVELOPER_RELEASE) blocks the iOS train until a
+human releases it or rejects that binary in App Store Connect: its review submission is
+COMPLETE, Apple refuses to cancel it (409), and the API has neither a developer-reject nor a
+developer-release command, so the train cannot replace it.
 
 Android: the newest build on the Play internal/alpha tracks that is newer than the live
 production release is written to production as a staged rollout at 5% (haltable in Play
@@ -59,7 +60,6 @@ IN_FLIGHT_STATES = (
 )
 PENDING_STATE = "PENDING_DEVELOPER_RELEASE"
 LIVE_STATE = "READY_FOR_SALE"
-REJECTED_STATE = "DEVELOPER_REJECTED"
 PLAY_SOURCE_TRACKS = ("internal", "alpha")
 ACTIVE_PLAY_STATUSES = ("completed", "inProgress")
 STATE_POLL_SECONDS = 5
@@ -185,9 +185,8 @@ class IOSState:
 
 @dataclass(frozen=True)
 class IOSPlan:
-    action: str  # hold | nothing | leave | replace | submit
+    action: str  # hold | nothing | leave | blocked | submit
     reason: str
-    reject: IOSVersion | None = None
     submit: IOSCandidate | None = None
 
 
@@ -209,17 +208,14 @@ def plan_ios(state: IOSState) -> IOSPlan:
                 f"{pending.version} is approved and waiting for a human release with the newest build "
                 f"{candidate.build_number}",
             )
-        if promote.version_parts(pending.version) > promote.version_parts(candidate.version):
-            raise TrainError(
-                f"pending version {pending.version} is newer than the newest TestFlight build "
-                f"{candidate.version} ({candidate.build_number}); refusing to reject it"
-            )
+        # Apple completes the review submission on approval and refuses to
+        # cancel it (409), and the API cannot developer-reject or release the
+        # version either, so only a human in App Store Connect can clear it.
         return IOSPlan(
-            "replace",
-            f"{pending.version} was approved but never released; replacing it with build "
-            f"{candidate.build_number} ({candidate.version})",
-            reject=pending,
-            submit=candidate,
+            "blocked",
+            f"ACTION REQUIRED: {pending.version} is approved but unreleased and the newer build "
+            f"{candidate.build_number} ({candidate.version}) cannot be submitted until a human releases "
+            f"{pending.version} or rejects its binary in App Store Connect",
         )
     return IOSPlan(
         "submit", f"submitting build {candidate.build_number} ({candidate.version}) for review", submit=candidate
@@ -357,7 +353,7 @@ def ios_phased_release_paused(live_version_id: str) -> bool:
     """Whether the live version's phased rollout is PAUSED (the operator brake).
 
     Reads GET /v1/appStoreVersions/{id}/appStoreVersionPhasedRelease over the
-    same REST+JWT surface as the replace-path lookup. A 404 means the live
+    REST+JWT surface the CLI lacks. A 404 means the live
     version has no phased release at all (released before this posture or
     fully finished), which is not a pause; so does a 200 whose `data` is null,
     which is how Apple actually answers for a version released without one. Any other lookup failure fails
@@ -398,47 +394,6 @@ def ios_live_locales(asc: Callable[..., object], live_version_id: str) -> list[s
     if not locales:
         raise TrainError("the live App Store version has no localizations")
     return sorted(set(locales))
-
-
-def review_submission_for_version(asc: Callable[..., object], version_id: str) -> str:
-    """Locate the completed review submission that carries an App Store version.
-
-    Apple strips the appStoreVersion relationship from submission items when
-    the container reaches COMPLETE, so items must be listed with
-    include=appStoreVersion (the only API surface that still resolves the
-    linkage after completion). The Codemagic CLI items action has no include
-    flag, so this reads the App Store Connect REST API directly with a JWT
-    minted from the APP_STORE_CONNECT_* credentials already present on the
-    build machine (stdlib only: pyjwt availability is not guaranteed there).
-    """
-    base = "https://api.appstoreconnect.apple.com/v1"
-    try:
-        payload = asc("apps", "list-review-submissions", APP_ID, "--platform", "IOS", "--review-submission-state", "COMPLETE")
-    except TrainError:
-        raise
-    submissions = sorted(
-        _resource_list(payload), key=lambda r: str(_attributes(r).get("submittedDate") or ""), reverse=True
-    )
-    token = _asc_rest_token()
-    headers = {"Authorization": f"Bearer {token}"}
-    for submission in submissions:
-        submission_id = _resource_id(submission)
-        # Review items paginate; follow links.next so a version on a later
-        # page is still found (the CLI-less REST surface has no auto-paging).
-        url = f"{base}/reviewSubmissions/{submission_id}/items?include=appStoreVersion&limit=200"
-        while url:
-            request = urllib.request.Request(url, headers=headers)
-            try:
-                with urllib.request.urlopen(request, timeout=60) as response:
-                    payload = json.load(response)
-            except (urllib.error.URLError, ValueError) as exc:
-                raise TrainError(f"App Store Connect items lookup failed for {submission_id}: {exc}") from exc
-            for item in payload.get("included", []) or []:
-                if item.get("type") == "appStoreVersions" and item.get("id") == version_id:
-                    return submission_id
-            next_url = payload.get("links", {}).get("next") if isinstance(payload, dict) else None
-            url = next_url if isinstance(next_url, str) and next_url else None
-    raise TrainError(f"no completed review submission contains App Store version {version_id}")
 
 
 _PEM_BLOCK = re.compile(r"-----BEGIN ([A-Z ]+)-----(.*?)-----END \1-----", re.DOTALL)
@@ -599,15 +554,6 @@ def wait_for_version_state(asc: Callable[..., object], version_id: str, expected
     raise TrainError(f"App Store version {version_id} did not reach {expected}")
 
 
-def reject_pending_ios(asc: Callable[..., object], pending: IOSVersion) -> None:
-    """Remove an approved-but-unreleased version from review (ASC: PATCH reviewSubmissions canceled=true)."""
-    submission_id = review_submission_for_version(asc, pending.id)
-    log(f"cancelling review submission {submission_id} for {pending.version} ({pending.state})")
-    asc("review-submissions", "cancel", submission_id)
-    wait_for_version_state(asc, pending.id, REJECTED_STATE)
-    log(f"{pending.version} is now {REJECTED_STATE}")
-
-
 def ensure_release_notes(version: str, release_date: str, *, write: bool) -> Path:
     """Fold any unreleased fragments into releases/<version>.json so notes are never empty."""
     spec = spec_from_file_location(
@@ -672,8 +618,6 @@ def run_ios(*, dry_run: bool, release_date: str, asc: Callable[..., object] = as
     if dry_run:
         log(f"DRY RUN: would submit build {candidate.build_number} ({candidate.version}) with notes for {len(locales)} locales")
         return f"ios=dry-run:{plan.action} {candidate.version} ({candidate.build_number})"
-    if plan.reject is not None:
-        reject_pending_ios(asc, plan.reject)
     build = promote.IOSBuild(candidate.build_id, candidate.version, str(candidate.build_number))
     try:
         promote.submit_ios(build, notes, locales=locales, release_type=RELEASE_TYPE, phased=PHASED_RELEASE)
