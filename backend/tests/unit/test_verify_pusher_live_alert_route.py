@@ -499,18 +499,18 @@ def test_gate_file_contains_every_pusher_finalization_uid(verifier: SimpleNamesp
 
 def test_live_stt_import_allowlist_excludes_pending_runway_rules(verifier: SimpleNamespace) -> None:
     rules = verifier.load_live_stt_import_rules()
-    assert set(rules) == (
-        set(verifier.LIVE_STT_IMPORT_UIDS)
-        | set(verifier.REDIS_CACHE_IMPORT_UIDS)
-        | set(verifier.DATASOURCE_CANARY_UIDS)
-    )
+    gated = verifier.load_gated_uids(verifier.load_all_committed_rules())
+    assert set(rules) == set(gated) | set(verifier.DATASOURCE_CANARY_UIDS)
+    assert set(verifier.RULE_UIDS) <= set(rules)
     assert "omi-datasource-gmp" not in rules
     assert set(rules).isdisjoint(verifier.LIVE_STT_PENDING_UIDS)
-    assert (set(rules) - set(verifier.REDIS_CACHE_IMPORT_UIDS) - set(verifier.DATASOURCE_CANARY_UIDS)) | set(
-        verifier.LIVE_STT_PENDING_UIDS
-    ) == {rule["uid"] for rule in json.loads((verifier.ALERT_SOURCES / "live-stt.json").read_text())}
-    gated = verifier.load_gated_uids(verifier.load_all_committed_rules())
-    assert set(verifier.LIVE_STT_IMPORT_UIDS) | set(verifier.REDIS_CACHE_IMPORT_UIDS) <= set(gated)
+    non_live_stt = set(gated) - set(verifier.LIVE_STT_IMPORT_UIDS)
+    assert (set(rules) - set(verifier.DATASOURCE_CANARY_UIDS) - non_live_stt) | set(verifier.LIVE_STT_PENDING_UIDS) == {
+        rule["uid"] for rule in json.loads((verifier.ALERT_SOURCES / "live-stt.json").read_text())
+    }
+    assert set(verifier.LIVE_STT_IMPORT_UIDS) | set(verifier.REDIS_CACHE_IMPORT_UIDS) | set(verifier.RULE_UIDS) <= set(
+        gated
+    )
 
 
 def test_live_stt_import_upserts_only_allowlisted_rules_and_checks_telegram_route(
@@ -579,7 +579,9 @@ def test_live_stt_fleet_scope_reports_only_the_import_allowlist(
         "https://monitor.omi.me", "secret", 1, "gated", alert_set="live-stt"
     )
     assert failures == []
-    assert report[0] == "FLEET committed=30 live=30 gated=30 matching=30 gated_matching=30"
+    count = len(committed)
+    assert set(verifier.RULE_UIDS) <= set(committed)
+    assert report[0] == (f"FLEET committed={count} live={count} gated={count} matching={count} gated_matching={count}")
     assert "COMMITTED_BUT_ABSENT (0): -" in report
     assert "LIVE_BUT_UNCOMMITTED (0): -" in report
 
@@ -615,11 +617,60 @@ def test_committed_split_exports_are_the_fleet_inventory(verifier: SimpleNamespa
     assert len(committed) >= len(verifier.RULE_UIDS)
 
 
+def _with_grafana_assigned_query_defaults(rule: dict[str, Any]) -> dict[str, Any]:
+    live = copy.deepcopy(rule)
+    for node in live["data"]:
+        if not isinstance(node, dict):
+            continue
+        node.setdefault("queryType", "")
+        model = node.get("model")
+        if isinstance(model, dict):
+            model.setdefault("intervalMs", 1000)
+            model.setdefault("maxDataPoints", 43200)
+    return live
+
+
 def test_grafana_assigned_metadata_does_not_count_as_definition_drift(verifier: SimpleNamespace) -> None:
     expected = next(iter(verifier._committed_rules().values()))
     live = _live_rule(expected, id=999, updated="2099-01-01T00:00:00Z", provenance="api")
     assert verifier.mismatched_definition_keys(live, expected) == []
     assert verifier.rule_definition_errors(expected["uid"], live, expected) == []
+
+    canary = verifier.load_all_committed_rules()[verifier.DATASOURCE_CANARY_UIDS[0]]
+    live_canary = _live_rule(_with_grafana_assigned_query_defaults(canary), id=7, provenance="api")
+    assert verifier.mismatched_definition_keys(live_canary, canary) == []
+    assert verifier.rule_definition_errors(canary["uid"], live_canary, canary) == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("queryType", "range"),
+        ("intervalMs", 2000),
+        ("maxDataPoints", 100),
+    ],
+)
+def test_grafana_assigned_query_defaults_reject_a_different_value(
+    verifier: SimpleNamespace, field: str, value: object
+) -> None:
+    canary = copy.deepcopy(verifier.load_all_committed_rules()[verifier.DATASOURCE_CANARY_UIDS[1]])
+    live = _with_grafana_assigned_query_defaults(canary)
+    expression = next(node for node in live["data"] if node.get("datasourceUid") == "__expr__")
+    if field == "queryType":
+        expression["queryType"] = value
+    else:
+        expression["model"][field] = value
+    assert verifier.mismatched_definition_keys(live, canary) == ["data"]
+
+    committed = copy.deepcopy(canary)
+    committed_expression = next(node for node in committed["data"] if node.get("datasourceUid") == "__expr__")
+    if field == "queryType":
+        committed_expression["queryType"] = "instant"
+        expression["queryType"] = ""
+    else:
+        committed_expression["model"][field] = 5000 if field == "intervalMs" else 20
+        expression["model"][field] = 1000 if field == "intervalMs" else 43200
+    assert verifier.mismatched_definition_keys(live, committed) == ["data"]
 
 
 def test_classify_committed_but_absent(verifier: SimpleNamespace) -> None:
@@ -897,6 +948,67 @@ def test_canary_readback_failure_prevents_business_keep_last_writes(verifier, mo
     assert writes == list(verifier.DATASOURCE_CANARY_UIDS)
 
 
+def test_prod_import_reads_canaries_back_before_finalization_rules(verifier, monkeypatch):
+    rules = verifier.load_live_stt_import_rules()
+    events: list[tuple[str, str]] = []
+    written: dict[str, dict] = {}
+
+    def read(_base, path, _token, **kwargs):
+        if path == verifier.ALERT_RULE_LIST_PATH:
+            return []
+        if path.endswith('/contact-points'):
+            return [{'name': verifier.TELEGRAM_RECEIVER, 'type': 'telegram'}]
+        uid = path.rsplit('/', 1)[-1]
+        events.append(('read', uid))
+        return _with_grafana_assigned_query_defaults(rules[uid])
+
+    def write(_base, uid, rule, *_args, **kwargs):
+        events.append(('write', uid))
+        written[uid] = rule
+
+    monkeypatch.setitem(verifier._run_live_stt_import.__globals__, '_request_json', read)
+    monkeypatch.setitem(verifier._run_live_stt_import.__globals__, '_write_rule', write)
+    assert verifier._run_live_stt_import('https://monitor.omi.me', 'dummy-secret') == []
+    canaries = list(verifier.DATASOURCE_CANARY_UIDS)
+    assert events[: len(canaries)] == [('write', uid) for uid in canaries]
+    assert events[len(canaries) : len(canaries) * 2] == [('read', uid) for uid in canaries]
+    later = events[len(canaries) * 2 :]
+    assert all(kind == 'write' for kind, _uid in later)
+    later_uids = [uid for _kind, uid in later]
+    assert set(verifier.RULE_UIDS) <= set(later_uids)
+    assert all(written[uid]['execErrState'] == 'KeepLast' for uid in verifier.RULE_UIDS)
+    assert events.index(('write', verifier.RULE_UIDS[0])) > events.index(('read', canaries[-1]))
+
+
+def test_nondefault_canary_query_readback_stops_before_finalization_rules(verifier, monkeypatch):
+    rules = verifier.load_live_stt_import_rules()
+    writes: list[str] = []
+
+    def read(_base, path, _token, **kwargs):
+        if path == verifier.ALERT_RULE_LIST_PATH:
+            return []
+        if path.endswith('/contact-points'):
+            return [{'name': verifier.TELEGRAM_RECEIVER, 'type': 'telegram'}]
+        uid = path.rsplit('/', 1)[-1]
+        live = _with_grafana_assigned_query_defaults(rules[uid])
+        if uid == verifier.DATASOURCE_CANARY_UIDS[0]:
+            expression = next(node for node in live['data'] if node.get('datasourceUid') == '__expr__')
+            expression['model']['intervalMs'] = 2000
+        return live
+
+    monkeypatch.setitem(verifier._run_live_stt_import.__globals__, '_request_json', read)
+    monkeypatch.setitem(
+        verifier._run_live_stt_import.__globals__,
+        '_write_rule',
+        lambda _base, uid, *_args, **kwargs: writes.append(uid),
+    )
+    failures = verifier._run_live_stt_import('https://monitor.omi.me', 'dummy-secret')
+    assert writes == list(verifier.DATASOURCE_CANARY_UIDS)
+    assert failures
+    assert all('data does not match' in failure for failure in failures)
+    assert not any(uid in failure for failure in failures for uid in verifier.RULE_UIDS)
+
+
 @pytest.mark.parametrize('uid', ['omi-datasource-prometheus', 'omi-datasource-cloud-monitoring'])
 @pytest.mark.parametrize('mutation', ['absent', 'paused', 'error', 'nodata', 'identity', 'receiver'])
 def test_live_stt_postimport_gate_includes_canaries(verifier, monkeypatch, uid, mutation):
@@ -927,8 +1039,12 @@ def test_development_loader_restores_errors_without_mutating_sources(verifier, m
     snapshot = copy.deepcopy(canonical)
     monkeypatch.setitem(verifier.load_live_stt_import_rules.__globals__, 'load_all_committed_rules', lambda: canonical)
     development = verifier.load_live_stt_import_rules(production=False)
-    assert set(development) == set(verifier.LIVE_STT_IMPORT_UIDS) | set(verifier.REDIS_CACHE_IMPORT_UIDS)
+    gated = verifier.load_gated_uids(canonical)
+    assert set(development) == set(gated)
+    assert set(verifier.RULE_UIDS) <= set(development)
+    assert set(verifier.DATASOURCE_CANARY_UIDS).isdisjoint(development)
     assert all(rule['execErrState'] != 'KeepLast' for rule in development.values())
+    assert all(development[uid]['execErrState'] == 'Error' for uid in verifier.RULE_UIDS)
     assert canonical == snapshot
     # Redis rules come directly from the shared canonical loader, so verify the
     # development copy is detached even for nested structures.
@@ -960,8 +1076,11 @@ def test_nonproduction_import_never_installs_or_reads_production_canaries(verifi
         lambda _base, uid, rule, *_args, **kwargs: writes.update({uid: rule}),
     )
     assert verifier._run_live_stt_import(target, 'dummy-token') == []
-    assert set(writes) == set(verifier.LIVE_STT_IMPORT_UIDS) | set(verifier.REDIS_CACHE_IMPORT_UIDS)
+    gated = set(verifier.load_gated_uids(verifier.load_all_committed_rules()))
+    assert set(writes) == gated
+    assert set(verifier.RULE_UIDS) <= set(writes)
     assert all(rule['execErrState'] != 'KeepLast' for rule in writes.values())
+    assert all(writes[uid]['execErrState'] == 'Error' for uid in verifier.RULE_UIDS)
     assert all(not any(uid in path for uid in verifier.DATASOURCE_CANARY_UIDS) for path in paths)
 
 
@@ -974,7 +1093,9 @@ def test_development_fleet_does_not_require_production_canaries(verifier, monkey
         'https://monitor.omiapi.com', 'dummy-token', 1, 'gated', alert_set='live-stt'
     )
     assert failures == []
-    assert report[0] == 'FLEET committed=28 live=28 gated=28 matching=28 gated_matching=28'
+    count = len(development)
+    assert set(verifier.RULE_UIDS) <= set(development)
+    assert report[0] == f'FLEET committed={count} live={count} gated={count} matching={count} gated_matching={count}'
 
 
 def test_development_fleet_rejects_unprotected_keep_last(verifier, monkeypatch):

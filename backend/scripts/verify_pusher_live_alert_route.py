@@ -88,6 +88,11 @@ POD_DELETION_TIMESTAMP_QUERY = "kube_pod_deletion_timestamp"
 KSM_POD_INFO_COUNT_QUERY = "count(kube_pod_info)"
 ALLOWED_HOSTS = {"monitor.omiapi.com", "monitor.omi.me"}
 DEFINITION_KEYS = ("uid", "title", "condition", "data", "noDataState", "execErrState", "for", "labels")
+# Grafana stores these on a query node when the committed rule omits them.
+# They are assigned storage defaults, not authored alert behavior. A committed
+# value is compared exactly, including when it equals one of these defaults.
+GRAFANA_ASSIGNED_QUERY_DEFAULTS = {"queryType": ""}
+GRAFANA_ASSIGNED_MODEL_DEFAULTS = {"intervalMs": 1000, "maxDataPoints": 43200}
 SINGLE_RULE_SIZE_LIMIT = 1_000_000
 FLEET_LIST_SIZE_LIMIT = 4_000_000
 ALERT_RULE_LIST_PATH = "/api/v1/provisioning/alert-rules"
@@ -188,6 +193,11 @@ def load_live_stt_import_rules(*, production: bool = True) -> dict[str, dict[str
         if uid not in committed:
             raise AlertRouteError(f"committed import alert {uid} is missing")
         rules[uid] = committed[uid]
+    # Gate-file UIDs, including the resilience finalization set, share this
+    # import. Canaries stay first so their read-back still precedes KeepLast.
+    for uid in load_gated_uids(committed):
+        if uid not in rules:
+            rules[uid] = committed[uid]
     if not production:
         rules = _development_rules(rules)
     for uid in canary_uids:
@@ -332,8 +342,47 @@ def _receiver(rule: dict[str, Any]) -> Any:
     return settings.get("receiver")
 
 
+def _strip_grafana_assigned_query_defaults(live_node: dict[str, Any], expected_node: dict[str, Any]) -> dict[str, Any]:
+    """Drop exact Grafana storage defaults that the committed node does not set."""
+    node = dict(live_node)
+    for key, default in GRAFANA_ASSIGNED_QUERY_DEFAULTS.items():
+        if key not in expected_node and node.get(key) == default:
+            del node[key]
+    expected_model = expected_node.get("model")
+    live_model = node.get("model")
+    if isinstance(live_model, dict) and isinstance(expected_model, dict):
+        model = dict(live_model)
+        for key, default in GRAFANA_ASSIGNED_MODEL_DEFAULTS.items():
+            if key not in expected_model and model.get(key) == default:
+                del model[key]
+        node["model"] = model
+    return node
+
+
+def _data_matches_committed(live: Any, expected: Any) -> bool:
+    if live == expected:
+        return True
+    if not isinstance(live, list) or not isinstance(expected, list) or len(live) != len(expected):
+        return False
+    for live_node, expected_node in zip(live, expected):
+        if live_node == expected_node:
+            continue
+        if not isinstance(live_node, dict) or not isinstance(expected_node, dict):
+            return False
+        if _strip_grafana_assigned_query_defaults(live_node, expected_node) != expected_node:
+            return False
+    return True
+
+
 def mismatched_definition_keys(live: dict[str, Any], expected: dict[str, Any]) -> list[str]:
-    keys = [key for key in DEFINITION_KEYS if live.get(key) != expected.get(key)]
+    keys: list[str] = []
+    for key in DEFINITION_KEYS:
+        if key == "data":
+            if not _data_matches_committed(live.get(key), expected.get(key)):
+                keys.append(key)
+            continue
+        if live.get(key) != expected.get(key):
+            keys.append(key)
     receiver = _receiver(expected)
     if not isinstance(receiver, str) or _receiver(live) != receiver:
         keys.append("receiver")
