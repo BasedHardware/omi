@@ -898,8 +898,10 @@ def create_action_item(
     if not action_item:
         raise HTTPException(status_code=500, detail="Failed to create action item")
 
-    # Send FCM data message if action item has a due date
-    if action_item.get('due_at'):
+    vector_db.upsert_action_item_vector(uid, action_item_id, action_item.get('description', ''))
+
+    # Send FCM data message if action item has a due date and is not already completed
+    if action_item.get('due_at') and not action_item.get('completed'):
         send_action_item_data_message(
             user_id=uid,
             action_item_id=action_item_id,
@@ -954,9 +956,15 @@ def create_action_items_batch(
     # Fetch all created items in a single batch query
     created_items_list = action_items_db.get_action_items_by_ids(uid, created_ids)
 
-    # Send FCM messages for items with due dates
+    if created_items_list:
+        vector_db.upsert_action_item_vectors_batch(
+            uid,
+            [{'action_item_id': item['id'], 'description': item.get('description', '')} for item in created_items_list],
+        )
+
+    # Send FCM messages for open items with due dates
     for item in created_items_list:
-        if item.get('due_at'):
+        if item.get('due_at') and not item.get('completed'):
             send_action_item_data_message(
                 user_id=uid,
                 action_item_id=item['id'],
@@ -989,12 +997,14 @@ def delete_action_item(
     - **action_item_id**: The ID of the action item to delete
     """
     action_item = action_items_db.get_action_item(uid, action_item_id)
-    if not action_item:
+    if not action_item or action_item.get('deleted', False):
         raise HTTPException(status_code=404, detail="Action item not found")
     if action_item.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this action item.")
 
-    action_items_db.delete_action_item(uid, action_item_id)
+    if not action_items_db.delete_action_item(uid, action_item_id):
+        raise HTTPException(status_code=404, detail="Action item not found")
+    vector_db.delete_action_item_vector(uid, action_item_id)
     sync_action_item_reminder(user_id=uid, action_item_id=action_item_id, description='', completed=True, due_at=None)
     return {"success": True}
 
@@ -1020,7 +1030,7 @@ def update_action_item(
     """
     # Check if action item exists
     action_item = action_items_db.get_action_item(uid, action_item_id)
-    if not action_item:
+    if not action_item or action_item.get('deleted', False):
         raise HTTPException(status_code=404, detail="Action item not found")
     if action_item.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this action item.")
@@ -1044,6 +1054,8 @@ def update_action_item(
 
     if not action_items_db.update_action_item(uid, action_item_id, update_data):
         raise HTTPException(status_code=500, detail="Failed to update action item")
+    if 'description' in update_data:
+        vector_db.upsert_action_item_vector(uid, action_item_id, update_data['description'])
     updated_item = action_items_db.get_action_item(uid, action_item_id)
     if not updated_item:
         raise HTTPException(status_code=500, detail="Updated action item could not be loaded")
@@ -1140,6 +1152,13 @@ class CreateConversationRequest(BaseModel):
     )
     language: Optional[str] = Field(default='en', description="Language code (ISO 639-1, e.g., 'en', 'es', 'fr')")
     geolocation: Optional[GeolocationInput] = Field(default=None, description="Geolocation where conversation occurred")
+
+    @field_validator('started_at', 'finished_at')
+    @classmethod
+    def require_timezone_offset(cls, value: Optional[datetime]) -> Optional[datetime]:
+        if value is not None and value.tzinfo is None:
+            raise ValueError('must include a timezone offset (e.g. 2026-09-11T12:00:00Z)')
+        return value
 
 
 class ConversationResponse(BaseModel):
@@ -2456,8 +2475,15 @@ def update_conversation_endpoint(
             lifecycle_service.restore_discarded(uid, conversation_id)
 
     conversation = conversations_db.get_conversation(uid, conversation_id)
-    if conversation:
-        populate_folder_names(uid, [conversation])
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    from utils.mcp_server.helpers import conversation_participants
+
+    conversation.update(conversation_participants(conversation))
+    conversation['transcript_included'] = False
+    conversation.pop('transcript_segments', None)
+    populate_folder_names(uid, [conversation])
     return conversation
 
 

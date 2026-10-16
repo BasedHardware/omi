@@ -59,7 +59,9 @@ def action_items_list_page_core(
         )
     except FailedPrecondition as e:
         raise_action_item_index_error(e)
-    page, consumed, has_more = offset_page([i for i in fetched if not i.get("deleted", False)], limit)
+    page, consumed, has_more = offset_page(
+        [i for i in fetched if not i.get("deleted", False) and not i.get("is_locked", False)], limit
+    )
     next_cursor = None
     if has_more:
         next_cursor = encode_cursor(
@@ -102,6 +104,8 @@ def action_items_sync_page_core(
         raise_action_item_index_error(e)
     items: List[Dict[str, Any]] = []
     for row in rows:
+        if row.get("is_locked", False):
+            continue
         cleaned = clean_action_item(row)
         cleaned["updated_at"] = row.get("updated_at")
         if row.get("deleted", False):
