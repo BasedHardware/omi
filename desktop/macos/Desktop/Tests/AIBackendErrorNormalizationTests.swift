@@ -113,7 +113,7 @@ final class AIBackendErrorNormalizationTests: XCTestCase {
   /// costs one extra inference and nothing else.
   func testTransportFailuresAreReplayedWithoutBackendAuthorization() {
     for code in [
-      URLError.Code.networkConnectionLost, .timedOut, .cannotConnectToHost,
+      URLError.Code.networkConnectionLost, .cannotConnectToHost,
       .notConnectedToInternet, .dnsLookupFailed, .cannotFindHost,
     ] {
       XCTAssertTrue(
@@ -125,6 +125,15 @@ final class AIBackendErrorNormalizationTests: XCTestCase {
   /// The widened replay must stay bounded to transport failures. A cancelled request is the
   /// user or a superseding evaluation withdrawing the work, and replaying it would resurrect
   /// work nobody is waiting for.
+  func testLocalGeminiTimeoutIsTerminalWithoutBackendAuthorization() {
+    let timeout = URLError(.timedOut)
+    XCTAssertFalse(GeminiClient.shouldAutoRetry(timeout))
+    XCTAssertFalse(
+      GeminiClient.shouldAutoRetry(GeminiClient.GeminiClientError.networkError(timeout)))
+    XCTAssertFalse(
+      GeminiClient.shouldAutoRetry(NSError(domain: NSURLErrorDomain, code: NSURLErrorTimedOut)))
+  }
+
   func testNonTransportURLErrorsAreStillNotReplayed() {
     XCTAssertFalse(GeminiClient.shouldAutoRetry(URLError(.cancelled)))
     XCTAssertFalse(GeminiClient.shouldAutoRetry(URLError(.badURL)))
