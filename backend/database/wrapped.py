@@ -5,6 +5,8 @@ Database operations for Wrapped (yearly recap) stored in users/{uid}/wrapped/{ye
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, cast
 
+from google.api_core.exceptions import NotFound
+
 from ._client import db
 
 # Collection name under user document
@@ -133,8 +135,11 @@ def update_wrapped_status(
         update_data['error'] = error
         update_data['result'] = None
 
-    wrapped_ref.update(update_data)
-    return True
+    try:
+        wrapped_ref.update(update_data)
+        return True
+    except NotFound:
+        return False
 
 
 def update_wrapped_progress(uid: str, year: int, progress: Dict[str, Any]) -> bool:
@@ -155,13 +160,16 @@ def update_wrapped_progress(uid: str, year: int, progress: Dict[str, Any]) -> bo
     if not getattr(wrapped_ref.get(), "exists", False):
         return False
 
-    wrapped_ref.update(
-        {
-            'progress': progress,
-            'updated_at': datetime.now(timezone.utc),
-        }
-    )
-    return True
+    try:
+        wrapped_ref.update(
+            {
+                'progress': progress,
+                'updated_at': datetime.now(timezone.utc),
+            }
+        )
+        return True
+    except NotFound:
+        return False
 
 
 def reset_wrapped_for_regeneration(uid: str, year: int) -> Dict[str, Any]:
