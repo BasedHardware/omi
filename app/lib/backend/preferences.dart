@@ -654,6 +654,11 @@ class SharedPreferencesUtil {
     return saveString('deviceAlias:$deviceId', normalized);
   }
 
+  Future<bool> removeDeviceAlias(String deviceId) async {
+    if (deviceId.isEmpty) return false;
+    return remove('deviceAlias:$deviceId');
+  }
+
   bool get deviceIsV2 => getBool('deviceIsV2');
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);

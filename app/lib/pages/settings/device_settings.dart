@@ -338,7 +338,10 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
     // Read the id before the stored device is cleared.
     final deviceId = provider.connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
-    if (deviceId.isNotEmpty) provider.markDisconnectIntentional(deviceId);
+    if (deviceId.isNotEmpty) {
+      provider.markDisconnectIntentional(deviceId);
+      await SharedPreferencesUtil().removeDeviceAlias(deviceId);
+    }
     await _clearStoredDevice();
     // Fully tear down the connection, transport and native service.
     if (deviceId.isNotEmpty) {
@@ -564,7 +567,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     controller.dispose();
 
     if (newName == null || newName.trim().isEmpty || newName.trim() == device.name) return;
-    await provider.renameDevice(newName);
+    await provider.renameDevice(newName, deviceId: device.id);
     if (mounted) setState(() {});
   }
 

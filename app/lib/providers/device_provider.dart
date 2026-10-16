@@ -435,13 +435,21 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       if (!_isCurrent(generation)) return;
       pairedDevice = await connectedDevice?.getDeviceInfo(connection);
       if (!_isCurrent(generation)) return;
+      if (pairedDevice != null) {
+        final alias = SharedPreferencesUtil().deviceAlias(pairedDevice!.id);
+        if (alias.isNotEmpty) {
+          pairedDevice = pairedDevice!.copyWith(name: alias);
+        }
+      }
       _persistPairedDevice();
     } else {
       if (!_isCurrent(generation)) return;
       if (SharedPreferencesUtil().btDevice.id.isEmpty) {
         pairedDevice = BtDevice.empty();
       } else {
-        pairedDevice = SharedPreferencesUtil().btDevice;
+        final stored = SharedPreferencesUtil().btDevice;
+        final alias = SharedPreferencesUtil().deviceAlias(stored.id);
+        pairedDevice = alias.isNotEmpty ? stored.copyWith(name: alias) : stored;
       }
     }
     if (!_isCurrent(generation)) return;
@@ -465,25 +473,29 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool _readoptPairMovedOn(String deviceId) =>
       _readoptExpectedPair == deviceId && SharedPreferencesUtil().btDevice.id != deviceId;
 
-  Future<bool> renameDevice(String newName) async {
-    final device = connectedDevice ?? pairedDevice;
-    if (device == null || device.id.isEmpty) return false;
+  /// Sets a local user-defined alias for the device, persisting it to preferences.
+  Future<bool> renameDevice(String newName, {String? deviceId}) async {
+    final targetId = deviceId ?? (connectedDevice ?? pairedDevice)?.id;
+    if (targetId == null || targetId.isEmpty) return false;
 
     final normalized = newName.trim();
     if (normalized.isEmpty) return false;
 
-    final saved = await SharedPreferencesUtil().saveDeviceAlias(device.id, normalized);
+    final saved = await SharedPreferencesUtil().saveDeviceAlias(targetId, normalized);
     if (!saved) return false;
 
-    if (connectedDevice?.id == device.id) {
+    if (connectedDevice?.id == targetId) {
       connectedDevice = connectedDevice!.copyWith(name: normalized);
     }
-    if (pairedDevice?.id == device.id) {
+    if (pairedDevice?.id == targetId) {
       pairedDevice = pairedDevice!.copyWith(name: normalized);
     }
 
-    final persisted = (pairedDevice ?? connectedDevice ?? device).copyWith(name: normalized);
-    await SharedPreferencesUtil().btDeviceSet(persisted);
+    final targetDevice = (pairedDevice?.id == targetId ? pairedDevice : null) ??
+        (connectedDevice?.id == targetId ? connectedDevice : null);
+    if (targetDevice != null) {
+      await SharedPreferencesUtil().btDeviceSet(targetDevice.copyWith(name: normalized));
+    }
     SharedPreferencesUtil().deviceName = normalized;
     notifyListeners();
     return true;
