@@ -16569,6 +16569,12 @@ abstract class AppLocalizations {
   /// **'Always'**
   String get voiceResponseAlways;
 
+  /// Voice response mode: play replies through the connected Omi wearable speaker
+  ///
+  /// In en, this message translates to:
+  /// **'Omi device'**
+  String get voiceResponseOmiDevice;
+
   /// Button label on the data and AI consent screen — explicit consent action.
   ///
   /// In en, this message translates to:
@@ -20186,6 +20192,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{name} + others'**
   String participantsSummaryUncounted(String name);
+
+  /// Device button gesture: one short press
+  ///
+  /// In en, this message translates to:
+  /// **'Single Tap'**
+  String get singleTap;
+
+  /// Single tap action setting
+  ///
+  /// In en, this message translates to:
+  /// **'Single Tap Action'**
+  String get singleTapAction;
+
+  /// Device button gesture: three quick presses
+  ///
+  /// In en, this message translates to:
+  /// **'Triple Tap'**
+  String get tripleTap;
+
+  /// Triple tap action setting
+  ///
+  /// In en, this message translates to:
+  /// **'Triple Tap Action'**
+  String get tripleTapAction;
 
   /// No description provided for @deviceOnboardingVoiceReplyTitle.
   ///

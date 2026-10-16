@@ -8881,6 +8881,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get voiceResponseAlways => 'Visada';
 
   @override
+  String get voiceResponseOmiDevice => 'Omi įrenginys';
+
+  @override
   String get agreeAndContinue => 'Sutinku ir tęsti';
 
   @override
@@ -11115,6 +11118,18 @@ class AppLocalizationsLt extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ir kiti';
   }
+
+  @override
+  String get singleTap => 'Vienas bakstelėjimas';
+
+  @override
+  String get singleTapAction => 'Vieno bakstelėjimo veiksmas';
+
+  @override
+  String get tripleTap => 'Trigubas bakstelėjimas';
+
+  @override
+  String get tripleTapAction => 'Trigubo bakstelėjimo veiksmas';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'Klausykitės „Omi“ atsakymų';

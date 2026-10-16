@@ -8826,6 +8826,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get voiceResponseAlways => 'เสมอ';
 
   @override
+  String get voiceResponseOmiDevice => 'อุปกรณ์ Omi';
+
+  @override
   String get agreeAndContinue => 'ยอมรับและดำเนินการต่อ';
 
   @override
@@ -11033,6 +11036,18 @@ class AppLocalizationsTh extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name และคนอื่นๆ';
   }
+
+  @override
+  String get singleTap => 'แตะครั้งเดียว';
+
+  @override
+  String get singleTapAction => 'การดำเนินการแตะครั้งเดียว';
+
+  @override
+  String get tripleTap => 'แตะสามครั้ง';
+
+  @override
+  String get tripleTapAction => 'การดำเนินการแตะสามครั้ง';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'ฟังคำตอบของ Omi';

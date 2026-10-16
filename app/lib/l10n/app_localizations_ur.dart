@@ -8889,6 +8889,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get voiceResponseAlways => 'ہمیشہ';
 
   @override
+  String get voiceResponseOmiDevice => 'Omi ڈیوائس';
+
+  @override
   String get agreeAndContinue => 'اتفاق اور جاری رکھیں';
 
   @override
@@ -11107,6 +11110,18 @@ class AppLocalizationsUr extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name اور دیگر';
   }
+
+  @override
+  String get singleTap => 'ایک بار تھپتھپائیں';
+
+  @override
+  String get singleTapAction => 'ایک بار تھپتھپانے کا عمل';
+
+  @override
+  String get tripleTap => 'تین بار تھپتھپائیں';
+
+  @override
+  String get tripleTapAction => 'تین بار تھپتھپانے کا عمل';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'Omi کے جوابات سنیں';

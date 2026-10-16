@@ -8911,6 +8911,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get voiceResponseAlways => 'Mindig';
 
   @override
+  String get voiceResponseOmiDevice => 'Omi eszköz';
+
+  @override
   String get agreeAndContinue => 'Elfogadom és folytatom';
 
   @override
@@ -11140,6 +11143,18 @@ class AppLocalizationsHu extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name és mások';
   }
+
+  @override
+  String get singleTap => 'Egyszeres érintés';
+
+  @override
+  String get singleTapAction => 'Egyszeres érintés művelet';
+
+  @override
+  String get tripleTap => 'Tripla érintés';
+
+  @override
+  String get tripleTapAction => 'Tripla érintés művelet';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'Hallgasd meg Omi válaszait';

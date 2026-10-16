@@ -8893,6 +8893,9 @@ class AppLocalizationsBs extends AppLocalizations {
   String get voiceResponseAlways => 'Uvijek';
 
   @override
+  String get voiceResponseOmiDevice => 'Omi device';
+
+  @override
   String get agreeAndContinue => 'Slažem se i nastavi';
 
   @override
@@ -11121,6 +11124,18 @@ class AppLocalizationsBs extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name i drugi';
   }
+
+  @override
+  String get singleTap => 'Jedan dodir';
+
+  @override
+  String get singleTapAction => 'Akcija jednog dodira';
+
+  @override
+  String get tripleTap => 'Trostruki dodir';
+
+  @override
+  String get tripleTapAction => 'Akcija trostrukog dodira';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'Čujte Omijeve odgovore';

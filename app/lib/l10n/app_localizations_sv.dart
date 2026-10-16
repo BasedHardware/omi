@@ -8876,6 +8876,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get voiceResponseAlways => 'Alltid';
 
   @override
+  String get voiceResponseOmiDevice => 'Omi-enhet';
+
+  @override
   String get agreeAndContinue => 'Godkänn och fortsätt';
 
   @override
@@ -11100,6 +11103,18 @@ class AppLocalizationsSv extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name och andra';
   }
+
+  @override
+  String get singleTap => 'Enkeltryck';
+
+  @override
+  String get singleTapAction => 'Enkeltrycksåtgärd';
+
+  @override
+  String get tripleTap => 'Trippeltryck';
+
+  @override
+  String get tripleTapAction => 'Trippeltrycksåtgärd';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'Lyssna på Omis svar';

@@ -8954,6 +8954,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get voiceResponseAlways => 'Palagi';
 
   @override
+  String get voiceResponseOmiDevice => 'Device ng Omi';
+
+  @override
   String get agreeAndContinue => 'Sumasang-ayon at Magpatuloy';
 
   @override
@@ -11189,6 +11192,18 @@ class AppLocalizationsTl extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name at iba pa';
   }
+
+  @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get singleTapAction => 'Single Tap Action';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
+  String get tripleTapAction => 'Triple Tap Action';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'Pakinggan ang mga sagot ni Omi';

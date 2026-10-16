@@ -8884,6 +8884,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get voiceResponseAlways => 'Her zaman';
 
   @override
+  String get voiceResponseOmiDevice => 'Omi cihazı';
+
+  @override
   String get agreeAndContinue => 'Kabul Et ve Devam Et';
 
   @override
@@ -11105,6 +11108,18 @@ class AppLocalizationsTr extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ve diğerleri';
   }
+
+  @override
+  String get singleTap => 'Tek Dokunma';
+
+  @override
+  String get singleTapAction => 'Tek Dokunma İşlemi';
+
+  @override
+  String get tripleTap => 'Üçlü Dokunma';
+
+  @override
+  String get tripleTapAction => 'Üçlü Dokunma İşlemi';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'Omi\'nin yanıtlarını dinleyin';

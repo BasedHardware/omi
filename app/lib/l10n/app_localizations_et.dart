@@ -8867,6 +8867,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get voiceResponseAlways => 'Alati';
 
   @override
+  String get voiceResponseOmiDevice => 'Omi seade';
+
+  @override
   String get agreeAndContinue => 'Nõustun ja jätka';
 
   @override
@@ -11087,6 +11090,18 @@ class AppLocalizationsEt extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ja teised';
   }
+
+  @override
+  String get singleTap => 'Ühekordne puudutus';
+
+  @override
+  String get singleTapAction => 'Ühekordse puudutuse tegevus';
+
+  @override
+  String get tripleTap => 'Kolmikpuudutus';
+
+  @override
+  String get tripleTapAction => 'Kolmikpuudutuse tegevus';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'Kuula Omi vastuseid';

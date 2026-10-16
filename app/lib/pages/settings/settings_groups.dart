@@ -158,6 +158,8 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
         return context.l10n.voiceResponseOff;
       case 2:
         return context.l10n.voiceResponseAlways;
+      case 3:
+        return context.l10n.voiceResponseOmiDevice;
       case 1:
       default:
         return context.l10n.voiceResponseHeadphonesOnly;

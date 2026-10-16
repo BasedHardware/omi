@@ -8943,6 +8943,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get voiceResponseAlways => 'எப்போதும்';
 
   @override
+  String get voiceResponseOmiDevice => 'Omi சாதனம்';
+
+  @override
   String get agreeAndContinue => 'ஒப்புக்கொள் & தொடரவும்';
 
   @override
@@ -11175,6 +11178,18 @@ class AppLocalizationsTa extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name மற்றும் மற்றவர்கள்';
   }
+
+  @override
+  String get singleTap => 'ஒற்றை தட்டு';
+
+  @override
+  String get singleTapAction => 'ஒற்றை தட்டு நடவடிக்கை';
+
+  @override
+  String get tripleTap => 'மூன்று முறை தட்டு';
+
+  @override
+  String get tripleTapAction => 'மூன்று முறை தட்டு நடவடிக்கை';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'Omi-யின் பதில்களைக் கேளுங்கள்';
