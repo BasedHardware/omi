@@ -474,6 +474,13 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
+          # Explicit dark rollback baseline; GKE hosts remain off.
+          CAPTURE_SHARED_SPEECH_MODE:
+            value: 'off'
+            category: rollout
+          CAPTURE_SHARED_SPEECH_PERCENT:
+            value: '0'
+            category: rollout
           BATCH_PIPELINE_ENABLED:
             value: "true"
             category: rollout
@@ -721,6 +728,13 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
+          # Explicit dark rollback baseline; GKE hosts remain off.
+          CAPTURE_SHARED_SPEECH_MODE:
+            value: 'off'
+            category: rollout
+          CAPTURE_SHARED_SPEECH_PERCENT:
+            value: '0'
+            category: rollout
           BATCH_PIPELINE_ENABLED:
             value: "true"
             category: rollout
@@ -943,6 +957,13 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          # Explicit dark rollback baseline; GKE hosts remain off.
+          CAPTURE_SHARED_SPEECH_MODE:
+            value: 'off'
+            category: rollout
+          CAPTURE_SHARED_SPEECH_PERCENT:
+            value: '0'
+            category: rollout
           BATCH_PIPELINE_ENABLED:
             value: "true"
             category: rollout
@@ -1136,6 +1157,13 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          # Explicit dark rollback baseline; GKE hosts remain off.
+          CAPTURE_SHARED_SPEECH_MODE:
+            value: 'off'
+            category: rollout
+          CAPTURE_SHARED_SPEECH_PERCENT:
+            value: '0'
+            category: rollout
           BATCH_PIPELINE_ENABLED:
             value: "true"
             category: rollout
