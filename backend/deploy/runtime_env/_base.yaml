@@ -983,7 +983,7 @@ environment_shared:
             category: rollout
           SYNC_BACKFILL_UID_SEQUENCER:
             provisional: true
-            value: 'on'
+            value: 'off'
             category: rollout
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
@@ -1225,7 +1225,7 @@ environment_shared:
             category: rollout
           SYNC_BACKFILL_UID_SEQUENCER:
             provisional: true
-            value: 'on'
+            value: 'off'
             category: rollout
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
