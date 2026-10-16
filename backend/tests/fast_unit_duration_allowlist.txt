@@ -455,3 +455,5 @@ tests/unit/test_plan_quota_env_retirement.py::test_manifest_forbids_plan_quota_o
 tests/unit/test_backend_listen_helm_defaults.py::test_windowed_live_rollout_is_prod_canary_and_bounded
 # 2026-10-16: builds both Vertex cache request shapes through the provider boundary (0.30s CPU at load avg ~20). Assertions still run.
 tests/unit/test_vertex_content_cache.py::test_provider_boundary_caches_both_traffic_types[False-dedicated]
+# 2026-10-16: scripted 8-turn hunt with 26 proposals, verification and exact undo (0.32-0.41s CPU under load). Assertions still run.
+tests/unit/test_dream_replay.py::test_hunt_finds_90_summary_typos_resubmits_and_applies_25_with_exact_undo

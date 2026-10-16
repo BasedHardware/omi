@@ -4974,3 +4974,58 @@ pending and no unproven frontier advance or processing success is invented.
 This neither changes cloud job dispatch nor makes legacy firmware's early
 reclaim durable. Scope and acceptance checklist:
 `app/docs/offline-sync-stall-recovery.md`.
+
+### Demand ramp telemetry
+
+Listen pins `demand_cohort=admitted|eligible_control|ineligible` once before
+initial provider selection, using the demand allocation and existing safety
+predicates. Eligible controls include flag-off sessions; ineligible includes
+BYOK, multi-channel, custom STT, onboarding, phone calls, recovery-off and
+unqualified language shapes. Visibility, handovers, recovery and kill-switch
+observations never reassign this intent-to-treat cohort.
+
+The transcript-outcome, recovery-attempt, configured-chain-exhaustion,
+terminal-after-text, window-first-text and serving-lane metrics retain their
+names and gain that label. Aggregate queries must sum across it; histogram
+queries retain `le`. Existing monitoring definitions already aggregate these
+series. Completed-session exhaustion is separately exported as
+`omi_listen_demand_exhausted_sessions_total{demand_cohort,outcome="yes|no"}`;
+this counts sockets once, whereas chain exhaustion and fallback detail count
+hops. `omi_listen_demand_failure_detail_total` exposes bounded
+`first_text_deadline|capacity_full|other` reasons and capacity subtypes without
+changing the shared `omi_fallback_total` schema.
+
+`omi_stt_provider_wire_audio_seconds_total{provider,demand_cohort}` counts PCM16
+seconds **after successful transport writes**, once per actual write including
+replay. Soniox and Modulate observe their async websocket writers; Modulate
+excludes a prepended WAV header. Deepgram observes the synchronous websocket
+below the SDK's exception-to-success conversion. Failed writes, JSON controls,
+keepalives and EOS do not count. These are successful local transport writes,
+not vendor acknowledgements or invoices. Only listen-created transports count.
+Pair wire seconds with `omi_listen_demand_capture_audio_seconds_total` (decoded
+mono capture before VAD/replay) and `omi_listen_live_lane_seconds_total` (adopted
+serving wall time, including silence). Capture increments during ingestion;
+controls flush lane seconds at teardown, admitted demand sessions also flush
+periodically. Use drained controls for a complete lane-time comparison.
+
+`omi_listen_demand_output_seconds{demand_cohort,trigger}` measures first decoded
+audio to delivered text (`first_output`) and a valid hidden-to-visible report
+to the next delivered text (`visible_return`). Repeated visible heartbeats do
+not reset the wait. Invalid reports preserve the last valid telemetry visibility
+and its pending wait; routing still treats invalid state as unknown. It includes
+provider/replay delay and time without speech;
+compare matched exposure. `omi_listen_demand_output_events_total` counts
+`started|delivered|no_output` waits so censored latencies cannot look healthy.
+A wait ends without output at teardown or when the client leaves visibility.
+No UIDs, session identifiers, text, audio or unbounded provider names enter
+these metrics. Telemetry changes neither admission percentages nor policy.
+
+Demand telemetry is optional at every session boundary. Bootstrap pins the
+admission decision independently of instrumentation and does not access the
+receiver before `_build_components`. Receiver construction applies the cohort
+to its optional lane meter. Bootstrap-only runtime construction initializes
+telemetry and recovery pins without requiring `__init__`. Missing or faulty
+telemetry resolves to `ineligible`; failed label binding, counter/histogram
+updates, lane observations and wire observations cannot interrupt bootstrap,
+audio writes, transcript delivery or teardown. Missing measurements remain a
+ramp HOLD, never evidence of healthy exposure.

@@ -36,6 +36,7 @@ from utils.stt.soniox_capture_axis import (
 from utils.stt.soniox_idle import IdleSonioxSocket, SonioxIdleBudget
 from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriterPace, clock
 from utils.stt.send_queue import AudioSendQueue
+from utils.observability.demand_cohort import create_wire_meter, telemetry_call
 from utils.stt.resilient_stream import enabled as resilient_reconnect_enabled
 from utils.stt.language_policy import LiveLanguageProfile, soniox_hints
 from utils.stt.stream_close import (
@@ -195,6 +196,7 @@ class SafeSonioxSocket(STTSocket):
         *,
         sample_rate: int = 16000,
     ) -> None:
+        self._demand_wire = create_wire_meter('soniox', sample_rate)
         self._wire_ledger_enabled = soniox_wire_ledger_enabled()
         self._wire_epoch: Any = None
         self._wire_samples = 0
@@ -469,6 +471,7 @@ class SafeSonioxSocket(STTSocket):
         try:
             await self._ws.send(data)
             written = True
+            telemetry_call(self, '_demand_wire', 'written', data)
             if provider_clock is not None and finalize:
                 provider_clock.finalize_written()
             if provider_clock is not None and isinstance(data, bytes):
