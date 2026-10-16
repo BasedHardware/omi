@@ -342,7 +342,6 @@ def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admissio
     assert x_sync_env['OMI_BACKGROUND_FLEX_CAPABLE']['value'] == 'true'
     assert x_sync_env['OMI_LLM_GATEWAY_URL']['env_var'] == 'OMI_LLM_GATEWAY_URL'
     assert set(x_sync_job['secrets']) >= {
-        'SERVICE_ACCOUNT_JSON',
         'ENCRYPTION_SECRET',
         'OPENAI_API_KEY',
         'PINECONE_API_KEY',
@@ -350,6 +349,8 @@ def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admissio
         'X_OAUTH_CLIENT_SECRET',
         'RAPID_API_KEY',
     }
+    assert 'SERVICE_ACCOUNT_JSON' not in x_sync_job['secrets']
+    assert 'GOOGLE_APPLICATION_CREDENTIALS' not in x_sync_job['secrets']
     assert x_sync_job['flags']['--service-account'] == (
         'dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com'
     )

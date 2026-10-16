@@ -1502,9 +1502,6 @@ environments:
             OPENAI_API_KEY:
               secret: OPENAI_API_KEY
               version: latest
-            SERVICE_ACCOUNT_JSON:
-              secret: SERVICE_ACCOUNT_JSON
-              version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
@@ -3541,9 +3538,6 @@ environments:
               version: latest
             OPENAI_API_KEY:
               secret: OPENAI_API_KEY
-              version: latest
-            SERVICE_ACCOUNT_JSON:
-              secret: SERVICE_ACCOUNT_JSON
               version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET

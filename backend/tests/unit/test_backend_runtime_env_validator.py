@@ -2904,6 +2904,12 @@ def test_x_connector_sync_job_workflow_is_listed_and_targets_job():
     assert 'SERVICE: x-connector-sync-job' in text
     assert 'SCHEDULER_JOB: x-connector-sync-6h' in text
     assert 'Dockerfile.x_connector_sync_job' in text
+    deploy = next(
+        step
+        for step in yaml.safe_load(text)['jobs']['deploy']['steps']
+        if step.get('uses', '').startswith('google-github-actions/deploy-cloudrun@')
+    )
+    assert deploy['with']['secrets_update_strategy'] == 'overwrite'
     assert "id-token: 'write'" in text
     assert 'verify-llm-gateway-serving' in text
     assert (
@@ -2924,6 +2930,9 @@ def test_x_connector_sync_job_workflow_is_listed_and_targets_job():
         assert 'X_OAUTH_CLIENT_ID' not in notifications.get('env', {})
         assert 'X_OAUTH_REDIRECT_URI' not in notifications.get('env', {})
         assert 'RAPID_API_HOST' not in notifications.get('env', {})
+        for credential in ('SERVICE_ACCOUNT_JSON', 'GOOGLE_APPLICATION_CREDENTIALS'):
+            assert credential not in x_sync.get('secrets', {})
+            assert credential not in x_sync.get('env', {})
         assert 'X_OAUTH_CLIENT_SECRET' in x_sync.get('secrets', {})
         assert 'RAPID_API_KEY' in x_sync.get('secrets', {})
         assert 'OMI_LLM_GATEWAY_SERVICE_TOKEN' in x_sync.get('secrets', {})
