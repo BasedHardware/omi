@@ -33,6 +33,7 @@ from database.dream_effect_fence import ACTIVE_RUN
 from utils.executors import db_executor, run_blocking
 
 TAIL_BUDGET_NOTICE_THRESHOLD = 0.20
+PROVIDER_STOP_CODES = frozenset({'dream_gateway_rejected', 'dream_gateway_failure'})
 BUDGET_STOP_CODES = frozenset(
     {
         'dream_input_token_budget',
@@ -174,16 +175,17 @@ async def run_session(
             and remaining <= limits.tokens * TAIL_BUDGET_NOTICE_THRESHOLD
         ):
             remaining_percent = max(0, min(100, int(100 * remaining / limits.tokens)))
-            messages.append(
-                {
-                    'role': 'user',
-                    'content': (
-                        f"About {remaining_percent}% of this pass's budget remains. "
-                        'Stage your strongest findings now with propose_* (or finish if there is nothing worth '
-                        'proposing); avoid new broad searches.'
-                    ),
-                }
+            notice = (
+                f"BUDGET NOTICE: about {remaining_percent}% of this pass's budget remains. "
+                'Stage your strongest findings now with propose_* (or finish if there is nothing worth '
+                'proposing); avoid new broad searches.'
             )
+            if messages and messages[-1].get('role') == 'tool' and isinstance(messages[-1].get('content'), str):
+                # Gemini rejects free text beside functionResponse parts in one user turn, so the
+                # notice rides inside the latest tool result instead of a separate message.
+                messages[-1] = {**messages[-1], 'content': messages[-1]['content'] + '\n\n' + notice}
+            else:
+                messages.append({'role': 'user', 'content': notice})
             budget_notice_sent = True
         mount = replace(mount, budget=replace(mount.budget, tokens=min(mount.budget.tokens or 0, remaining)))
         if mount.budget.tokens is None or mount.budget.tokens < 1024:
@@ -285,7 +287,15 @@ async def run_session(
                     report['stop_reason'] = result.reason
             except Exception as exc:
                 stop_code = error_code(exc)
-                if stop_code not in BUDGET_STOP_CODES:
+                provider_stop = (
+                    type(exc) in (dream_harness_transport.PreTokenFailure, RuntimeError)
+                    and str(exc) in PROVIDER_STOP_CODES
+                    and bool(session.staged)
+                )
+                if provider_stop:
+                    # A late provider failure must not discard work already staged this pass.
+                    stop_code = str(exc)
+                elif stop_code not in BUDGET_STOP_CODES:
                     raise
                 # Budget exhaustion is a normal terminal outcome even when it
                 # leaves nothing to verify. Staged proposals still cross the

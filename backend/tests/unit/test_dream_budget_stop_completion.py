@@ -7,7 +7,7 @@ import pytest
 
 from tests.unit.test_dream_harness_runtime import _plan, _verdict, runtime, store, UID
 from utils import dream_agent
-from utils.dream_harness_transport import MAIN_LANE, VERIFY_LANE
+from utils.dream_harness_transport import MAIN_LANE, VERIFY_LANE, PreTokenFailure
 from utils.llm.shaped_agent import Turn
 
 
@@ -83,3 +83,44 @@ def test_non_budget_value_error_with_staged_work_still_fails(runtime, monkeypatc
     assert report['status'] == 'failed'
     assert report['error_code'] == 'dream_invalid_usage'
     verifier.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    'failure',
+    [PreTokenFailure('dream_gateway_rejected'), RuntimeError('dream_gateway_failure')],
+    ids=['rejected', 'failure'],
+)
+def test_late_provider_failure_still_verifies_staged_work(runtime, failure):
+    main_calls = 0
+    verifier_lanes = []
+
+    async def model(uid, lane, mount, messages):
+        nonlocal main_calls
+        if lane == MAIN_LANE:
+            main_calls += 1
+            if main_calls == 1:
+                proposal = _plan().tool_calls[0]
+                return Turn(
+                    tokens=10,
+                    prompt_tokens=10,
+                    completion_tokens=0,
+                    cached_tokens=0,
+                    tool_calls=(proposal,),
+                    messages=({'role': 'assistant', 'content': None, 'tool_calls': [proposal]},),
+                )
+            raise failure
+        verifier_lanes.append(lane)
+        return _verdict(messages, True)
+
+    report = asyncio.run(dream_agent.run_pass(UID, turn=model, dry_run=True))
+    assert report['status'] == 'complete', report
+    assert report['stop_reason'] == str(failure)
+    assert verifier_lanes == [VERIFY_LANE, VERIFY_LANE]
+
+
+def test_provider_failure_without_staged_work_still_fails(runtime):
+    async def model(uid, lane, mount, messages):
+        raise PreTokenFailure('dream_gateway_rejected')
+
+    report = asyncio.run(dream_agent.run_pass(UID, turn=model, dry_run=True))
+    assert report['status'] == 'failed'
