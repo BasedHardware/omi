@@ -743,7 +743,7 @@ def delete_followup_question_endpoint(memory_id: str, uid: str = Depends(auth.ge
             raise HTTPException(status_code=400, detail='No memory in progres')
     else:
         memory = get_conversation(uid, memory_id)
-    if not memory:
+    if not memory or memory.get('deleted', False):
         raise HTTPException(status_code=404, detail='Conversation not found')
     if memory.get('is_locked', False):
         raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.')
