@@ -15,6 +15,8 @@ from typing import Any, Callable
 
 from prometheus_client import CollectorRegistry, CONTENT_TYPE_LATEST, generate_latest
 
+from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
+from utils.observability.stt_cap_dispatch import AUDIO_SECONDS
 from config.batch_pipeline_providers import provider_config
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_store import FirestoreStore
@@ -86,6 +88,9 @@ class SynchronizedWorker:
 
 
 def health_server(state: RuntimeState, registry: CollectorRegistry, port: int) -> ThreadingHTTPServer:
+    if cap_dispatch_enabled():
+        registry.register(AUDIO_SECONDS)
+
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             if self.path == '/metrics':

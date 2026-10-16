@@ -450,3 +450,19 @@ def test_recovery_rechecks_after_audio_download(setup, monkeypatch):
     assert recovery.recover('bad', 'synthetic-owner') == 'held'
     artifacts.fetch_audio.assert_called_once()
     stt.assert_not_called()
+
+
+def test_unavailable_completion_lookup_is_not_reported_as_genuine_exhaustion(setup, monkeypatch):
+    from types import SimpleNamespace
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    _, _, _, _, _, recovery = setup
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setattr(module, 'sync_allowed', Mock(return_value=True))
+    monkeypatch.setattr(
+        module, 'funded_allowance', Mock(return_value=SimpleNamespace(managed=False, reason='allowance_unavailable'))
+    )
+    metric = Mock()
+    monkeypatch.setattr(module, 'record_audio', metric)
+    assert recovery.recover('bad', 'synthetic-owner') == 'recovered'
+    metric.assert_called_once_with('sync', 'accepted', 'unknown', 5, False)

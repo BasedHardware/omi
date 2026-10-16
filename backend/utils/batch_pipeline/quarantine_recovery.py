@@ -109,7 +109,11 @@ class QuarantineRecovery:
                 payload = self.stt(item, normalized_binding(job['projection_binding']), audio)
                 if cap_enabled():
                     record_audio(
-                        'sync', 'accepted', 'unknown', item.duration_seconds, not funded_allowance(owner_id).managed
+                        'sync',
+                        'accepted',
+                        'unknown',
+                        item.duration_seconds,
+                        funded_allowance(owner_id).reason == 'plan_allowance_exhausted',
                     )
             except Exception:
                 self.protocol.settle(segment_id, token, self.clock())
