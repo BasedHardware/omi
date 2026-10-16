@@ -352,6 +352,9 @@
             "expr": "100 * (sum(increase(logging_googleapis_com:user_daily_summary_recap_generated{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[3h])) or vector(0)) / (((sum(increase(logging_googleapis_com:user_daily_summary_recap_generated{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[3h])) or vector(0)) + (sum(increase(logging_googleapis_com:user_daily_summary_user_failed{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\",error_type!=\"DailySummaryDeliveryError\"}[3h])) or vector(0))) > 0)",
             "projectName": "based-hardware",
             "step": "5m"
+          },
+          "timeSeriesList": {
+            "projectName": "based-hardware"
           }
         }
       ],
@@ -417,6 +420,9 @@
             "expr": "sum(increase(logging_googleapis_com:user_daily_summary_recap_generated{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[24h])) or vector(0)",
             "projectName": "based-hardware",
             "step": "5m"
+          },
+          "timeSeriesList": {
+            "projectName": "based-hardware"
           }
         }
       ],
@@ -486,6 +492,9 @@
             "expr": "sum(increase(logging_googleapis_com:user_daily_summary_user_failed{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\",error_type!=\"DailySummaryDeliveryError\"}[3h])) or vector(0)",
             "projectName": "based-hardware",
             "step": "5m"
+          },
+          "timeSeriesList": {
+            "projectName": "based-hardware"
           }
         }
       ],
@@ -555,6 +564,9 @@
             "expr": "sum(increase(logging_googleapis_com:user_daily_summary_job_heartbeat_missing{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[1h])) or vector(0)",
             "projectName": "based-hardware",
             "step": "5m"
+          },
+          "timeSeriesList": {
+            "projectName": "based-hardware"
           }
         }
       ],
@@ -3715,6 +3727,9 @@
                 "expr": "label_replace(sum(increase(logging_googleapis_com:user_daily_summary_recap_generated{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[15m])), \"outcome\", \"generated\", \"\", \"\")",
                 "projectName": "based-hardware",
                 "step": "15m"
+              },
+              "timeSeriesList": {
+                "projectName": "based-hardware"
               }
             },
             {
@@ -3728,6 +3743,9 @@
                 "expr": "label_replace(sum by (error_type) (increase(logging_googleapis_com:user_daily_summary_user_failed{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\",reason=\"generation_error\"}[15m])), \"outcome\", \"failed: $1\", \"error_type\", \"(.+)\")",
                 "projectName": "based-hardware",
                 "step": "15m"
+              },
+              "timeSeriesList": {
+                "projectName": "based-hardware"
               }
             },
             {
@@ -3741,6 +3759,9 @@
                 "expr": "label_replace(sum(increase(logging_googleapis_com:user_daily_summary_user_failed{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\",reason=\"user_budget_exceeded\"}[15m])), \"outcome\", \"timed out (user budget)\", \"\", \"\")",
                 "projectName": "based-hardware",
                 "step": "15m"
+              },
+              "timeSeriesList": {
+                "projectName": "based-hardware"
               }
             }
           ],
@@ -3813,6 +3834,9 @@
                 "expr": "label_replace(sum(increase(logging_googleapis_com:user_daily_summary_job_heartbeat_missing{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[15m])), \"outcome\", \"passes\", \"\", \"\")",
                 "projectName": "based-hardware",
                 "step": "15m"
+              },
+              "timeSeriesList": {
+                "projectName": "based-hardware"
               }
             },
             {
@@ -3826,6 +3850,9 @@
                 "expr": "label_replace(sum(increase(logging_googleapis_com:user_daily_summary_cohort_incomplete{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[15m])), \"outcome\", \"incomplete\", \"\", \"\")",
                 "projectName": "based-hardware",
                 "step": "15m"
+              },
+              "timeSeriesList": {
+                "projectName": "based-hardware"
               }
             }
           ],
