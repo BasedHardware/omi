@@ -63,6 +63,28 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch }}
+          fetch-depth: 0
+
+      - name: Select merged production source and image tag
+        id: vars
+        env:
+          DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
+          DEPLOY_REF: ${{ github.event.inputs.branch }}
+        run: |
+          set -euo pipefail
+          if [[ "$DEPLOY_ENVIRONMENT" == prod ]]; then
+            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+            source_sha=$(git rev-parse origin/main)
+            if [[ "$DEPLOY_REF" != main ]]; then
+              [[ "$DEPLOY_REF" =~ ^[0-9a-f]{40}$ ]] || { echo "Production source must be main or a full merged SHA" >&2; exit 1; }
+              source_sha="$DEPLOY_REF"
+            fi
+            git merge-base --is-ancestor "$source_sha" origin/main
+            git checkout --detach "$source_sha"
+          fi
+          echo "short_sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Resolve deployment target
         id: target
@@ -135,7 +157,7 @@ jobs:
           IMAGE_REPOSITORY: ${{ steps.target.outputs.image_repository }}
           DOCKERFILE: ${{ steps.target.outputs.dockerfile }}
         run: |
-          image="${IMAGE_REPOSITORY}:${GITHUB_SHA::7}"
+          image="${IMAGE_REPOSITORY}:${{ steps.vars.outputs.short_sha }}"
           docker build -t "$image" -f "$DOCKERFILE" .
           python3 backend/scripts/runtime_image_contracts.py smoke --dockerfile "$DOCKERFILE" --image "$image"
           docker push "$image"
@@ -167,7 +189,7 @@ jobs:
               -f "./$TARGET_VALUES" --set-string "image.digest=${{ steps.build.outputs.image_digest }}"
           else
             helm -n "$DEPLOY_NAMESPACE" upgrade --install "$TARGET_RELEASE" "./$TARGET_CHART" \
-              -f "./$TARGET_VALUES" --set-string "image.tag=${GITHUB_SHA::7}"
+              -f "./$TARGET_VALUES" --set-string "image.tag=${{ steps.vars.outputs.short_sha }}"
           fi
 
       - name: Verify rollout
@@ -184,8 +206,9 @@ jobs:
 
       - name: Generate deployment summary
         if: always() && github.event.inputs.environment == 'prod'
-        uses: ./.github/actions/deployment-summary
+        uses: BasedHardware/omi/.github/actions/deployment-summary@979b573718fd74b31edab3530adf2ed6082622dc
         with:
+          deployment_tag: ${{ steps.vars.outputs.short_sha || 'unadmitted' }}
           environment: ${{ github.event.inputs.environment }}
           release_version: ${{ github.event.inputs.release_version }}
           status: ${{ job.status }}
@@ -193,8 +216,9 @@ jobs:
 
       - name: Notify deployment status on Telegram
         if: always() && github.event.inputs.environment == 'prod'
-        uses: ./.github/actions/deployment-notifier
+        uses: BasedHardware/omi/.github/actions/deployment-notifier@979b573718fd74b31edab3530adf2ed6082622dc
         with:
+          deployment_tag: ${{ steps.vars.outputs.short_sha || 'unadmitted' }}
           environment: ${{ github.event.inputs.environment }}
           release_version: ${{ github.event.inputs.release_version }}
           status: ${{ job.status }}
