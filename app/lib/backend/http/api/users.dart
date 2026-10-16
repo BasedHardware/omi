@@ -762,10 +762,11 @@ Future<({List<DailySummary> items, bool ok})> getDailySummaries({int limit = 30,
 
   try {
     final raw = jsonDecode(response.body);
-    if (raw is! Map<String, dynamic> || raw['summaries'] is! List) {
-      throw const FormatException('Invalid daily recap list response');
-    }
-    final data = wire.GeneratedDailySummariesResponse.fromJson(raw);
+    final data = wire.GeneratedDailySummariesResponse.fromJson(
+      raw is Map<String, dynamic> && raw['summaries'] is List
+          ? raw
+          : throw const FormatException('Invalid daily recap list response'),
+    );
     return (items: data.summaries?.map(DailySummary.fromGenerated).toList() ?? <DailySummary>[], ok: true);
   } catch (e) {
     Logger.debug('Error parsing daily summaries: $e');
