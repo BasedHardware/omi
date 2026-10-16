@@ -37,8 +37,7 @@ def test_normalize_preserves_blank_lines():
 
 def test_srt_import_parses_every_line_ending():
     for eol in ('\n', '\r', '\r\n', '\r\r\n'):
-        parsed = tf.parse_transcript_file(
-            'd.srt', (eol.join(SRT_LINES) + eol).encode())
+        parsed = tf.parse_transcript_file('d.srt', (eol.join(SRT_LINES) + eol).encode())
         assert parsed is not None, eol
         assert _cues(parsed) == EXPECTED_CUES, eol
 
