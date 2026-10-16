@@ -7,6 +7,7 @@ on:
       - 'backend/charts/monitoring/prometheus-stackdriver-exporter/*_omi_cloud_run_metrics_exporter.yaml'
       - 'backend/charts/monitoring/kube-prometheus-stack/*_omi_monitoring_values.yaml'
       - 'backend/charts/monitoring/alerts/live-stt.json'
+      - 'backend/charts/monitoring/alerts/resilience.json'
       - 'backend/charts/monitoring/live-alert-gate.json'
       - '.github/workflows/gcp_cloud_run_metrics_egress.yml'
   workflow_dispatch:

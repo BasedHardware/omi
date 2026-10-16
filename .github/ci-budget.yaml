@@ -1178,7 +1178,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_cloud_run_metrics_egress.yml/deploy": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1187,7 +1187,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Main-branch path filter now includes resilience.json so gated finalization rules cannot drift. Non-PR; one extra budget minute records that wider trigger.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1196,7 +1196,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_cloud_run_metrics_egress.yml/provision-live-alerts": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "provision-live-alerts",
       "expected_runs_class": "non-pr",
       "expected_runs_per_day": 0,
@@ -1205,7 +1205,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Main-branch path filter now includes resilience.json so the import job runs when finalization rules change. Non-PR; one extra budget minute records that wider trigger.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3979,7 +3979,7 @@
     "gcp_cloud_run_metrics_egress.yml": {
       "name": "Deploy Cloud Run Metrics Egress",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Push paths include alerts/resilience.json so gated finalization rules provision with the live-STT import.",
       "triggers": {
         "push": {
           "branches": [
@@ -3989,6 +3989,7 @@
             "backend/charts/monitoring/prometheus-stackdriver-exporter/*_omi_cloud_run_metrics_exporter.yaml",
             "backend/charts/monitoring/kube-prometheus-stack/*_omi_monitoring_values.yaml",
             "backend/charts/monitoring/alerts/live-stt.json",
+            "backend/charts/monitoring/alerts/resilience.json",
             "backend/charts/monitoring/live-alert-gate.json",
             ".github/workflows/gcp_cloud_run_metrics_egress.yml"
           ]

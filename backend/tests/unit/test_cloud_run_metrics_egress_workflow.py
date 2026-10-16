@@ -34,6 +34,7 @@ def test_workflow_owns_dev_auto_deploy_and_manual_production() -> None:
         'backend/charts/monitoring/prometheus-stackdriver-exporter/*_omi_cloud_run_metrics_exporter.yaml',
         'backend/charts/monitoring/kube-prometheus-stack/*_omi_monitoring_values.yaml',
         'backend/charts/monitoring/alerts/live-stt.json',
+        'backend/charts/monitoring/alerts/resilience.json',
         'backend/charts/monitoring/live-alert-gate.json',
         '.github/workflows/gcp_cloud_run_metrics_egress.yml',
     }
@@ -109,6 +110,7 @@ def test_workflow_provisions_live_stt_alerts_independently_of_helm() -> None:
         assert 'python3 backend/scripts/verify_pusher_live_alert_route.py' in run
     push_paths = set(workflow['on']['push']['paths'])
     assert 'backend/charts/monitoring/alerts/live-stt.json' in push_paths
+    assert 'backend/charts/monitoring/alerts/resilience.json' in push_paths
     assert 'backend/charts/monitoring/live-alert-gate.json' in push_paths
 
 
