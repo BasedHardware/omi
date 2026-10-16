@@ -6,7 +6,6 @@ from typing import Any, Callable, Dict, List, Optional, TypeVar, Union, cast
 from datetime import datetime, timedelta, timezone
 
 import redis
-from redis.exceptions import RedisError
 import logging
 
 from database import api_key_cache
@@ -586,7 +585,7 @@ def get_conversation_uid(conversation_id: str) -> str:
 
     try:
         cached = r.get(f'memories-visibility:{conversation_id}')
-    except RedisError:
+    except redis.exceptions.RedisError:  # type: ignore[attr-defined]
         from utils.observability.fallback import record_fallback
 
         record_fallback(
@@ -606,7 +605,7 @@ def get_conversation_uid(conversation_id: str) -> str:
     if uid:
         try:
             store_conversation_to_uid(conversation_id, uid)
-        except RedisError:
+        except redis.exceptions.RedisError:  # type: ignore[attr-defined]
             _record_cache_write_skipped(f'memories-visibility:{conversation_id}', 'other')
     return uid
 
