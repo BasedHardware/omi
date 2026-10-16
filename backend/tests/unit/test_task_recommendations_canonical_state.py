@@ -67,9 +67,7 @@ class FakeCollection:
             condition = (filter.field_path, filter.op_string, filter.value)
         else:
             condition = (args[0], args[1], args[2])
-        return FakeCollection(
-            self.database, self.path, (*self.filters, condition), self.query_limit
-        )
+        return FakeCollection(self.database, self.path, (*self.filters, condition), self.query_limit)
 
     def limit(self, value):
         return FakeCollection(self.database, self.path, self.filters, value)
@@ -168,9 +166,7 @@ def test_load_canonical_product_state_filters_soft_deleted_and_terminal():
         "account_generation": 0,
     }
 
-    state = tr_db.load_canonical_product_state(
-        uid, account_generation=0, firestore_client=fake_db
-    )
+    state = tr_db.load_canonical_product_state(uid, account_generation=0, firestore_client=fake_db)
 
     # Validate action items
     task_ids = {t["id"] for t in state["tasks"]}
@@ -202,9 +198,7 @@ def test_delete_goal_idempotency_and_cache_bump(monkeypatch):
     path = ("users", uid, "goals", goal_id)
 
     bumped = []
-    monkeypatch.setattr(
-        goals_db, "bump_action_items_list_version", lambda u: bumped.append(u)
-    )
+    monkeypatch.setattr(goals_db, "bump_action_items_list_version", lambda u: bumped.append(u))
 
     # Goal does not exist
     assert not goals_db.delete_goal(uid, "nonexistent", firestore_client=fake_db)

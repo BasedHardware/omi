@@ -985,9 +985,7 @@ def load_canonical_product_state(
 
     def is_active_candidate(candidate: dict[str, Any]) -> bool:
         return not bool(
-            candidate.get('deleted')
-            or candidate.get('is_deleted')
-            or candidate.get('status') == 'dismissed'
+            candidate.get('deleted') or candidate.get('is_deleted') or candidate.get('status') == 'dismissed'
         )
 
     def is_active_goal(goal: dict[str, Any]) -> bool:
@@ -1000,9 +998,7 @@ def load_canonical_product_state(
 
     def is_active_workstream(workstream: dict[str, Any]) -> bool:
         return not bool(
-            workstream.get('deleted')
-            or workstream.get('is_deleted')
-            or workstream.get('status') == 'archived'
+            workstream.get('deleted') or workstream.get('is_deleted') or workstream.get('status') == 'archived'
         )
 
     tasks = [t for t in load_collection('action_items', 500) if is_active_task(t)]

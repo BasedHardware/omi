@@ -427,7 +427,7 @@ def get_user_goal(uid: str, *, firestore_client: Any = None) -> Optional[Dict[st
 
 def get_user_goals(uid: str, limit: int = 3, *, firestore_client: Any = None) -> List[Dict[str, Any]]:
     collection = _get_db(firestore_client).collection(users_collection).document(uid).collection(goals_collection)
-    query = collection.where(filter=FieldFilter('is_active', '==', True))
+    query = collection.where(filter=FieldFilter('is_active', '==', True)).limit(limit)
     goals = _normalize_goal_documents(query.stream())
     goals = [goal for goal in goals if goal['status'] not in {GoalStatus.achieved.value, GoalStatus.abandoned.value}]
     goals.sort(key=_goal_created_at_sort_key)
