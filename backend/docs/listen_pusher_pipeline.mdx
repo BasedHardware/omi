@@ -4935,3 +4935,16 @@ pending and no unproven frontier advance or processing success is invented.
 This neither changes cloud job dispatch nor makes legacy firmware's early
 reclaim durable. Scope and acceptance checklist:
 `app/docs/offline-sync-stall-recovery.md`.
+
+### Default-off deterministic shared speech
+
+`CAPTURE_SHARED_SPEECH_MODE=off|shadow|on`, the UID allowlist and stable percentage
+cohort gate a bounded overlap-only sentence matcher at the existing duplicate
+capture seam. Off preserves incumbent behavior. Shadow emits identifier-only
+verdicts; on requires ordered, time-aligned shared sentences and sufficient
+matched duration, including same-source duplicates. Group writes remain
+metadata-only and preserve Separate exclusions and transactional fences.
+The current authorized rollout deploys Cloud Run dark then shadow only; Pusher
+and listen keep mode off and receive code through their regular train. No on
+activation is qualified. Design, calibration, bounds and rollback details are in
+[the shared speech runbook](operational/capture-shared-speech.md).

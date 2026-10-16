@@ -173,12 +173,20 @@ No claim of zero fleet false folds follows from zero observed labeled errors.
 
 ## Production rollout and rollback
 
-Deploy dark, then land a separate runtime-env/chart config PR for shadow. Register
-all selected hosts through the runtime-env renderer and validate pre-deploy checks.
-Use the authorized workspace `bin/omi-deploy-prod` wait-eligible/cloud-run/listen
-and approve-own sequence; resolve the currently qualified pusher promotion path.
-Approve only runs dispatched by this owner. Capture served revisions/digests,
-traffic, Helm revisions and rollback commands **before** every dispatch.
+Coordinator-approved scope (2026-10-17): deploy the four Cloud Run hosts dark
+through workspace `bin/omi-deploy-prod wait-eligible` then `cloud-run`, approving
+only this owner's run. Prepare the previous eligible release SHA as rollback
+before dispatch and watch at least 15 minutes. Do not dispatch dedicated Pusher
+or backend-listen deployments. Their default-off code follows the next regular
+train owned by others; keep their mode off until the train carries the code.
+
+Land a separate runtime-env config PR enabling shadow on Cloud Run only, then
+repeat the Cloud Run deploy and watch. Leave GKE settings absent/default off.
+Capture served revisions, traffic and exact rollback commands before dispatch.
+The prior eligible release is restored through the same Cloud Run workflow with
+its previous `release_sha`. The documented incident-only Pusher fallback is
+`helm --kube-context gke_based-hardware_us-central1_prod-omi-gke -n prod-omi-backend rollback prod-omi-pusher <previous revision>`;
+do not execute it without an incident. No Pusher deploy is part of this rollout.
 
 Watch request counts/5xx and fixed error signatures against the preceding equal
 window on every touched service, readiness/restarts, and appearance of the new
@@ -196,18 +204,13 @@ pair IDs locally; never paste raw production records.
 
 After at least three clean shadow hours, compare counts by pair class and
 incumbent/new verdict, bounds/timing abstentions, latency and error signatures.
-Operations alone cannot prove accuracy. Before on, refresh real-end David
-calibration, obtain prospective labels including background audio, noisy segmentation,
-different devices and clock drift, and a sufficiently precise independent false
-fold bound. If safety is not established, stop at shadow and report the blocker.
-Only then progress David on → 5% for at least three hours → 100%, watching every
-step. No silent reduction of the observation window.
-
-Prepared rollback: deploy the previous eligible commit through the same Actions
-path, or land mode off / percentage 0 in runtime config and redeploy every touched
-host. Existing group metadata is retained; Separate remains available. An image
-rollback alone does not undo folds made while on. Exact service revision/digest
-commands belong in the local owner report before each deployment.
+Operations alone cannot prove accuracy. Stop at shadow; do not enable on for any
+account. A later activation proposal needs refreshed real-end David calibration,
+prospective labels including background audio, noisy segmentation, different
+devices and clock drift, and a sufficiently precise independent false-fold bound.
+No observation window may be shortened. Existing group metadata is retained;
+Separate remains available. An image rollback cannot undo folds made while on.
+Exact rollback commands and observation timestamps belong in the owner report.
 
 After upstream transcription/attribution fixes, re-export original starts/ends,
 re-read David's latest labels, freeze a versioned evaluation snapshot, and rerun
