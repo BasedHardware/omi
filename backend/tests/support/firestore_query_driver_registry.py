@@ -864,6 +864,13 @@ _add(
         reason='tombstone count query invoked by the count driver on every combo',
     )
 )
+_add(
+    DriverEntry(
+        'database.conversations.discover_public_conversation_owner',
+        base={'conversation_id': 'conv-1'},
+        domains={'cached_uid': ['', UID]},
+    )
+)
 _add(DriverEntry('database.conversations.count_conversations_with_geolocation', base={'uid': UID}))
 _add(DriverEntry('database.conversations.delete_conversation_photos', base={'uid': UID, 'conversation_id': 'conv-1'}))
 _add(
