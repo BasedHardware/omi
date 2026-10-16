@@ -4236,5 +4236,7 @@
     "activityEmpty": "Henüz etkinlik yok",
     "activityNewSemantics": "Etkinlik, yeni öğeler",
     "activityLoadFailed": "Etkinliğinizin tamamı yüklenemedi",
-    "activityNewItem": "Yeni"
+    "activityNewItem": "Yeni",
+    "onDeviceGetMoreUsage": "Daha fazla kullanım alın",
+    "onDeviceGettingSpeechReady": "Konuşma hazırlanıyor · %{percent}"
 }

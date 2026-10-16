@@ -4201,5 +4201,7 @@
     "activityEmpty": "Veiklos dar nėra",
     "activityNewSemantics": "Veikla, nauji elementai",
     "activityLoadFailed": "Nepavyko įkelti visos jūsų veiklos",
-    "activityNewItem": "Nauja"
+    "activityNewItem": "Nauja",
+    "onDeviceGetMoreUsage": "Gaukite daugiau naudojimo",
+    "onDeviceGettingSpeechReady": "Ruošiama kalba · {percent}%"
 }

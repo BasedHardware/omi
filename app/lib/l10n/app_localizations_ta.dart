@@ -13780,4 +13780,12 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get activityNewItem => 'புதியது';
+
+  @override
+  String get onDeviceGetMoreUsage => 'மேலும் பயன்பாட்டைப் பெறுங்கள்';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'பேச்சு தயாராகிறது · $percent%';
+  }
 }

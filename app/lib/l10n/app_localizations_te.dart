@@ -13745,4 +13745,12 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get activityNewItem => 'కొత్తది';
+
+  @override
+  String get onDeviceGetMoreUsage => 'మరింత వినియోగం పొందండి';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'మాట సిద్ధమవుతోంది · $percent%';
+  }
 }

@@ -11621,5 +11621,7 @@
     "activityEmpty": "अद्याप कोणतीही क्रिया नाही",
     "activityNewSemantics": "क्रिया, नवीन आयटम",
     "activityLoadFailed": "तुमची सर्व क्रिया लोड करता आली नाही",
-    "activityNewItem": "नवीन"
+    "activityNewItem": "नवीन",
+    "onDeviceGetMoreUsage": "अधिक वापर मिळवा",
+    "onDeviceGettingSpeechReady": "बोलणे तयार होत आहे · {percent}%"
 }

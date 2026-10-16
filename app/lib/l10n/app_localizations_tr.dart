@@ -13704,4 +13704,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Yeni';
+
+  @override
+  String get onDeviceGetMoreUsage => 'Daha fazla kullanım alın';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Konuşma hazırlanıyor · %$percent';
+  }
 }

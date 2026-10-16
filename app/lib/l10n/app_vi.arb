@@ -4201,5 +4201,7 @@
     "activityEmpty": "Chưa có hoạt động",
     "activityNewSemantics": "Hoạt động, mục mới",
     "activityLoadFailed": "Không thể tải toàn bộ hoạt động của bạn",
-    "activityNewItem": "Mới"
+    "activityNewItem": "Mới",
+    "onDeviceGetMoreUsage": "Nhận thêm mức sử dụng",
+    "onDeviceGettingSpeechReady": "Đang chuẩn bị giọng nói · {percent}%"
 }

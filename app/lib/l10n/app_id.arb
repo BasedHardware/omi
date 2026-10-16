@@ -4236,5 +4236,7 @@
     "activityEmpty": "Belum ada aktivitas",
     "activityNewSemantics": "Aktivitas, item baru",
     "activityLoadFailed": "Tidak dapat memuat semua aktivitas Anda",
-    "activityNewItem": "Baru"
+    "activityNewItem": "Baru",
+    "onDeviceGetMoreUsage": "Dapatkan lebih banyak penggunaan",
+    "onDeviceGettingSpeechReady": "Menyiapkan ucapan · {percent}%"
 }

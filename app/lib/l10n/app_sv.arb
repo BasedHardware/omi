@@ -4201,5 +4201,7 @@
     "activityEmpty": "Ingen aktivitet än",
     "activityNewSemantics": "Aktivitet, nya objekt",
     "activityLoadFailed": "Kunde inte läsa in all din aktivitet",
-    "activityNewItem": "Ny"
+    "activityNewItem": "Ny",
+    "onDeviceGetMoreUsage": "Få mer användning",
+    "onDeviceGettingSpeechReady": "Förbereder tal · {percent} %"
 }

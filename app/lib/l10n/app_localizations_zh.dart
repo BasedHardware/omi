@@ -13475,4 +13475,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get activityNewItem => '新';
+
+  @override
+  String get onDeviceGetMoreUsage => '获取更多用量';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return '正在准备语音 · $percent%';
+  }
 }

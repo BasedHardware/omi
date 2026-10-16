@@ -13717,4 +13717,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Jauns';
+
+  @override
+  String get onDeviceGetMoreUsage => 'Iegūstiet vairāk lietojuma';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Runa tiek sagatavota · $percent%';
+  }
 }

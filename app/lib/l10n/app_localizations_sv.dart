@@ -13695,4 +13695,12 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Ny';
+
+  @override
+  String get onDeviceGetMoreUsage => 'Få mer användning';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Förbereder tal · $percent %';
+  }
 }

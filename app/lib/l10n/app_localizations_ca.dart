@@ -13761,4 +13761,12 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nou';
+
+  @override
+  String get onDeviceGetMoreUsage => 'Aconsegueix més ús';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Preparant la parla · $percent%';
+  }
 }

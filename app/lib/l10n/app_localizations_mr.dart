@@ -13699,4 +13699,12 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get activityNewItem => 'नवीन';
+
+  @override
+  String get onDeviceGetMoreUsage => 'अधिक वापर मिळवा';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'बोलणे तयार होत आहे · $percent%';
+  }
 }

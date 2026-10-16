@@ -11621,5 +11621,7 @@
     "activityEmpty": "Wala pang aktibidad",
     "activityNewSemantics": "Aktibidad, mga bagong item",
     "activityLoadFailed": "Hindi ma-load ang lahat ng iyong aktibidad",
-    "activityNewItem": "Bago"
+    "activityNewItem": "Bago",
+    "onDeviceGetMoreUsage": "Kumuha ng higit pang paggamit",
+    "onDeviceGettingSpeechReady": "Inihahanda ang pananalita · {percent}%"
 }

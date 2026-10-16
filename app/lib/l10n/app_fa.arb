@@ -11621,5 +11621,7 @@
     "activityEmpty": "هنوز فعالیتی نیست",
     "activityNewSemantics": "فعالیت، موارد جدید",
     "activityLoadFailed": "بارگیری همه فعالیت‌های شما ممکن نشد",
-    "activityNewItem": "جدید"
+    "activityNewItem": "جدید",
+    "onDeviceGetMoreUsage": "استفادهٔ بیشتر بگیرید",
+    "onDeviceGettingSpeechReady": "آماده‌سازی گفتار · {percent}%"
 }

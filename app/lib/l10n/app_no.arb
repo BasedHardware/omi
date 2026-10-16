@@ -4201,5 +4201,7 @@
     "activityEmpty": "Ingen aktivitet ennå",
     "activityNewSemantics": "Aktivitet, nye elementer",
     "activityLoadFailed": "Kunne ikke laste inn all aktiviteten din",
-    "activityNewItem": "Ny"
+    "activityNewItem": "Ny",
+    "onDeviceGetMoreUsage": "Få mer bruk",
+    "onDeviceGettingSpeechReady": "Gjør tale klar · {percent}%"
 }

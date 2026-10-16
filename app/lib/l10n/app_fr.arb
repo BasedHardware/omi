@@ -4236,5 +4236,7 @@
     "activityEmpty": "Aucune activité pour l'instant",
     "activityNewSemantics": "Activité, nouveaux éléments",
     "activityLoadFailed": "Impossible de charger toute votre activité",
-    "activityNewItem": "Nouveau"
+    "activityNewItem": "Nouveau",
+    "onDeviceGetMoreUsage": "Obtenir plus d'utilisation",
+    "onDeviceGettingSpeechReady": "Préparation de la parole · {percent} %"
 }

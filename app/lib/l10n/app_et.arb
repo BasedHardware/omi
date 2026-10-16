@@ -4201,5 +4201,7 @@
     "activityEmpty": "Tegevusi veel pole",
     "activityNewSemantics": "Tegevus, uued üksused",
     "activityLoadFailed": "Kogu tegevust ei õnnestunud laadida",
-    "activityNewItem": "Uus"
+    "activityNewItem": "Uus",
+    "onDeviceGetMoreUsage": "Hangi rohkem kasutust",
+    "onDeviceGettingSpeechReady": "Kõne ettevalmistamine · {percent}%"
 }

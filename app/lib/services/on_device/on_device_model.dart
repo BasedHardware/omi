@@ -66,6 +66,11 @@ abstract class OnDeviceModel extends ChangeNotifier {
   OnDeviceModelStatus get status;
 
   String? get engine => null;
+
+  /// False until the first [refresh] reports which engine this phone will use.
+  /// An unknown engine is loading, not Parakeet.
+  bool get engineResolved => true;
+
   bool get isOsManaged => engine == 'speech_analyzer' || engine == 'sfspeech';
 
   /// Re-reads what is on disk.
@@ -240,9 +245,12 @@ class AppleOnDeviceModel extends OnDeviceModel {
   static const channel = MethodChannel('com.omi/on_device');
   OnDeviceModelStatus _status = const OnDeviceModelStatus(phase: OnDeviceModelPhase.notDownloaded);
   String? _engine;
+  bool _engineResolved = false;
   Timer? _poll;
   @override
   String? get engine => _engine;
+  @override
+  bool get engineResolved => _engineResolved;
   @override
   OnDeviceModelStatus get status => _status;
   Map<String, dynamic> get _args => {
@@ -264,6 +272,7 @@ class AppleOnDeviceModel extends OnDeviceModel {
     } on MissingPluginException {
       _status = const OnDeviceModelStatus(phase: OnDeviceModelPhase.unsupported);
     }
+    _engineResolved = true;
     notifyListeners();
   }
 

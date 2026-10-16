@@ -13740,4 +13740,12 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Ново';
+
+  @override
+  String get onDeviceGetMoreUsage => 'Вземете още потребление';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Подготовка на речта · $percent%';
+  }
 }

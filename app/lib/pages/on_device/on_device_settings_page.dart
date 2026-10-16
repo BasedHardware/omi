@@ -13,6 +13,8 @@ import 'package:omi/pages/on_device/on_device_setup_page.dart';
 import 'package:omi/pages/settings/widgets/plans/contextual_plans.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/experiments/plan_storefront_gate.dart';
+import 'package:omi/services/on_device/on_device_model.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -38,6 +40,7 @@ class OnDeviceSettingsPage extends StatefulWidget {
 
 class _OnDeviceSettingsPageState extends State<OnDeviceSettingsPage> {
   StorefrontUsage? _usage;
+  bool _plansSheet = false;
   Future<void>? _loading;
 
   @override
@@ -47,8 +50,15 @@ class _OnDeviceSettingsPageState extends State<OnDeviceSettingsPage> {
   }
 
   Future<void> _load() async {
+    final provider = context.read<UsageProvider>();
+    final sheet = provider.showSubscriptionUI && await PlanStorefrontGate.sheetEnabled();
+    if (!mounted) return;
     final usage = await (widget.loadUsage ?? loadOnDeviceUsage)(context.l10n.localeName);
-    if (mounted) setState(() => _usage = usage);
+    if (!mounted) return;
+    setState(() {
+      _plansSheet = sheet;
+      _usage = usage;
+    });
   }
 
   @override
@@ -58,11 +68,12 @@ class _OnDeviceSettingsPageState extends State<OnDeviceSettingsPage> {
         context.watch<LocalRecordingsProvider>().recordings.where((r) => r.state == LocalRecordingState.pending);
     return OnDeviceSettingsView(
       usage: _usage,
+      plansSheetAvailable: _plansSheet,
       showSaveUsage: subscription?.subscription.plan.isPaid ?? false,
       pendingSeconds: recordings.fold<int>(0, (sum, r) => sum + r.seconds) +
           (widget.controller ?? OnDeviceTranscriptionController.instance).pendingSeconds,
       pendingBytes: recordings.fold(0, (sum, r) => sum + r.sizeBytes),
-      onGetMoreUsage: () => openOnDeviceUpgrade(context),
+      onGetMoreUsage: () => unawaited(openOnDeviceUsagePlans(context)),
       controller: widget.controller,
     );
   }
@@ -72,6 +83,7 @@ class OnDeviceSettingsView extends StatelessWidget {
   const OnDeviceSettingsView({
     super.key,
     required this.usage,
+    required this.plansSheetAvailable,
     required this.showSaveUsage,
     required this.pendingSeconds,
     required this.pendingBytes,
@@ -81,6 +93,9 @@ class OnDeviceSettingsView extends StatelessWidget {
 
   /// Backend usage payload. The meter and the get-more label are its strings; absent means no meter.
   final StorefrontUsage? usage;
+
+  /// The contextual plans sheet can open. The get-more row stays hidden otherwise.
+  final bool plansSheetAvailable;
 
   /// Paid plans can transcribe on the phone before the shared budget runs out.
   final bool showSaveUsage;
@@ -104,23 +119,42 @@ class OnDeviceSettingsView extends StatelessWidget {
           final meterLine = meter?.meterLine;
           final showMeter = meter != null && meterLine != null && meterLine.isNotEmpty;
           final moreLabel = meter?.moreLabel;
-          final showMore = moreLabel != null && moreLabel.isNotEmpty;
+          final showMore = plansSheetAvailable && moreLabel != null && moreLabel.isNotEmpty;
+          final moreTitle = showMore
+              ? (onDeviceUsesLocalizedCopy(Localizations.localeOf(context)) ? l10n.onDeviceGetMoreUsage : moreLabel)
+              : null;
+          final modelKnown = controller.model.engineResolved;
+          final showModelRows = modelKnown && !controller.model.isOsManaged;
+          final showSpeechProgress =
+              modelKnown && controller.model.isOsManaged && status.phase == OnDeviceModelPhase.downloading;
           return ListView(
             padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.xxl),
             children: [
               if (showMeter || showMore) ...[
-                if (showMeter) StorefrontUsageMeter(usage: meter),
-                if (showMore)
-                  OmiSettingsGroup(
-                    children: [
+                OmiSettingsGroup(
+                  children: [
+                    if (showMeter) StorefrontUsageMeter(usage: meter, embedded: true),
+                    if (showMore)
                       OmiSettingsRow(
                         key: const Key('on_device_settings_more_usage'),
                         leading: const Icon(Icons.bolt),
-                        title: moreLabel,
+                        title: moreTitle!,
                         onTap: onGetMoreUsage,
                       ),
-                    ],
-                  ),
+                  ],
+                ),
+                const SizedBox(height: OmiSpacing.lg),
+              ],
+              if (showSpeechProgress) ...[
+                OmiSettingsGroup(
+                  children: [
+                    OmiSettingsRow(
+                      key: const Key('on_device_settings_speech_progress'),
+                      leading: const Icon(Icons.graphic_eq),
+                      title: l10n.onDeviceGettingSpeechReady((status.progress * 100).floor()),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: OmiSpacing.lg),
               ],
               OmiSettingsGroup(
@@ -134,8 +168,11 @@ class OnDeviceSettingsView extends StatelessWidget {
                     onChanged: (value) {
                       unawaited(() async {
                         await controller.updateSettings(settings.copyWith(enabled: value));
-                        if (!context.mounted || !value || !controller.model.isOsManaged) return;
-                        if (!controller.model.status.isInstalled && controller.model.status.isSupported) {
+                        if (!context.mounted || !value) return;
+                        final model = controller.model;
+                        if (!model.engineResolved) await model.refresh();
+                        if (!context.mounted || !model.isOsManaged) return;
+                        if (!model.status.isInstalled && model.status.isSupported) {
                           await openOnDeviceSetup(context, controller: this.controller);
                         }
                       }());
@@ -188,7 +225,7 @@ class OnDeviceSettingsView extends StatelessWidget {
               OmiSettingsGroup(
                 header: l10n.onDeviceOnThisPhone,
                 children: [
-                  if (!controller.model.isOsManaged)
+                  if (showModelRows)
                     OmiSettingsRow(
                       key: const Key('on_device_settings_model'),
                       leading: const Icon(Icons.graphic_eq),
@@ -208,7 +245,7 @@ class OnDeviceSettingsView extends StatelessWidget {
                     title: l10n.onDeviceAudioWaiting,
                     value: onDeviceSizeLabel(l10n, pendingBytes),
                   ),
-                  if (status.isInstalled && !controller.model.isOsManaged)
+                  if (status.isInstalled && showModelRows)
                     OmiSettingsRow(
                       key: const Key('on_device_settings_remove'),
                       leading: const Icon(Icons.delete_outline),

@@ -13683,4 +13683,12 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get activityNewItem => 'جدید';
+
+  @override
+  String get onDeviceGetMoreUsage => 'استفادهٔ بیشتر بگیرید';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'آماده‌سازی گفتار · $percent%';
+  }
 }

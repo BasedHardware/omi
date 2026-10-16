@@ -3,11 +3,18 @@ import 'package:omi/services/on_device/phone_power_source.dart';
 
 /// An [OnDeviceModel] whose status the test sets directly; records calls.
 class FakeOnDeviceModel extends OnDeviceModel {
-  FakeOnDeviceModel([OnDeviceModelStatus? status, this.engine])
+  FakeOnDeviceModel([OnDeviceModelStatus? status, this.engine, this.engineResolved = true])
       : _status = status ?? const OnDeviceModelStatus(phase: OnDeviceModelPhase.installed);
 
   @override
-  final String? engine;
+  String? engine;
+
+  @override
+  bool engineResolved;
+
+  /// Runs at the start of [refresh], before the engine is marked resolved.
+  Future<void> Function()? beforeRefresh;
+
   OnDeviceModelStatus _status;
   int downloads = 0;
   bool? lastWifiOnly;
@@ -23,7 +30,12 @@ class FakeOnDeviceModel extends OnDeviceModel {
   }
 
   @override
-  Future<void> refresh() async {}
+  Future<void> refresh() async {
+    final hook = beforeRefresh;
+    if (hook != null) await hook();
+    engineResolved = true;
+    notifyListeners();
+  }
 
   @override
   Future<void> download({required bool wifiOnly}) async {

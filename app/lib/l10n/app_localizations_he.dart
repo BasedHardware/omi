@@ -13594,4 +13594,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get activityNewItem => 'חדש';
+
+  @override
+  String get onDeviceGetMoreUsage => 'קבלו עוד שימוש';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'מכין את הדיבור · $percent%';
+  }
 }

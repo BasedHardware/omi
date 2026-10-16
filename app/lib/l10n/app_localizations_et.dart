@@ -13683,4 +13683,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Uus';
+
+  @override
+  String get onDeviceGetMoreUsage => 'Hangi rohkem kasutust';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Kõne ettevalmistamine · $percent%';
+  }
 }

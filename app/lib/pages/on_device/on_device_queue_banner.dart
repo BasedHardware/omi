@@ -25,6 +25,13 @@ import 'package:omi/utils/other/temp.dart';
 /// Opens the plans sheet for the shared usage budget.
 void openOnDeviceUpgrade(BuildContext context) => unawaited(_openOnDeviceUpgrade(context));
 
+/// Opens that sheet from the settings "Get more usage" row.
+///
+/// Returns false when the sheet is unavailable. This row does not open the legacy usage page.
+Future<bool> openOnDeviceUsagePlans(BuildContext context) {
+  return openContextualPlans(context, source: 'on_device_overflow', trigger: 'usage_budget');
+}
+
 /// The storefront `usage` object. Null when the sheet is off or the payload is not the shared
 /// budget. The client never invents hours from a local counter.
 Future<StorefrontUsage?> loadOnDeviceUsage(String locale) async {

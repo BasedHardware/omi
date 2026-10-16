@@ -13500,4 +13500,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get activityNewItem => '새 항목';
+
+  @override
+  String get onDeviceGetMoreUsage => '사용량을 더 받기';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return '음성을 준비하는 중 · $percent%';
+  }
 }

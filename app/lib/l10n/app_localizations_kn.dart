@@ -13733,4 +13733,12 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get activityNewItem => 'ಹೊಸದು';
+
+  @override
+  String get onDeviceGetMoreUsage => 'ಹೆಚ್ಚಿನ ಬಳಕೆಯನ್ನು ಪಡೆಯಿರಿ';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'ಮಾತನ್ನು ಸಿದ್ಧಪಡಿಸಲಾಗುತ್ತಿದೆ · $percent%';
+  }
 }

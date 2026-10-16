@@ -13694,4 +13694,12 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Ny';
+
+  @override
+  String get onDeviceGetMoreUsage => 'Få mer bruk';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Gjør tale klar · $percent%';
+  }
 }

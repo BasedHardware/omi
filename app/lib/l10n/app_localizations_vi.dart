@@ -13687,4 +13687,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Mới';
+
+  @override
+  String get onDeviceGetMoreUsage => 'Nhận thêm mức sử dụng';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Đang chuẩn bị giọng nói · $percent%';
+  }
 }

@@ -11621,5 +11621,7 @@
     "activityEmpty": "இதுவரை எந்தச் செயல்பாடும் இல்லை",
     "activityNewSemantics": "செயல்பாடு, புதிய உருப்படிகள்",
     "activityLoadFailed": "உங்கள் எல்லா செயல்பாடுகளையும் ஏற்ற முடியவில்லை",
-    "activityNewItem": "புதியது"
+    "activityNewItem": "புதியது",
+    "onDeviceGetMoreUsage": "மேலும் பயன்பாட்டைப் பெறுங்கள்",
+    "onDeviceGettingSpeechReady": "பேச்சு தயாராகிறது · {percent}%"
 }

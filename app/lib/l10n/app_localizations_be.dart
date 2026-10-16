@@ -13725,4 +13725,12 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Новае';
+
+  @override
+  String get onDeviceGetMoreUsage => 'Атрымайце больш выкарыстання';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Падрыхтоўка маўлення · $percent%';
+  }
 }

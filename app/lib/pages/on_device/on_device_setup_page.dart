@@ -12,88 +12,22 @@ import 'package:omi/utils/other/temp.dart';
 
 /// Opens model setup only when this phone needs a download the user starts.
 ///
-/// SpeechAnalyzer and the system speech fallback are OS-managed: already-installed engines just
-/// turn on. If iOS still has to install speech assets, this shows progress and nothing else.
-/// Parakeet and Android keep the download setup page.
+/// An unknown engine is still loading: wait for it, and do not guess Parakeet. SpeechAnalyzer and
+/// the system speech fallback are OS-managed. They turn on here, and a speech-asset install is a
+/// progress row on the settings page, not its own screen. Parakeet and Android keep the download
+/// setup page.
 Future<void> openOnDeviceSetup(BuildContext context, {OnDeviceTranscriptionController? controller}) async {
   final resolved = controller ?? OnDeviceTranscriptionController.instance;
   final model = resolved.model;
-  if (!model.status.isSupported) return;
+  if (!model.engineResolved) await model.refresh();
+  if (!context.mounted || !model.engineResolved || !model.status.isSupported) return;
   if (model.isOsManaged) {
-    if (model.status.isInstalled) return;
-    await routeToPage(context, OnDeviceAssetProgressPage(controller: controller));
-    return;
-  }
-  await routeToPage(context, OnDeviceSetupPage(controller: controller));
-}
-
-/// iOS speech-asset install. No explanation and no setup steps: a progress line until the asset is ready.
-class OnDeviceAssetProgressPage extends StatefulWidget {
-  const OnDeviceAssetProgressPage({super.key, this.controller});
-
-  final OnDeviceTranscriptionController? controller;
-
-  @override
-  State<OnDeviceAssetProgressPage> createState() => _OnDeviceAssetProgressPageState();
-}
-
-class _OnDeviceAssetProgressPageState extends State<OnDeviceAssetProgressPage> {
-  OnDeviceTranscriptionController get _controller => widget.controller ?? OnDeviceTranscriptionController.instance;
-
-  @override
-  void initState() {
-    super.initState();
-    final model = _controller.model;
     if (!model.status.isInstalled && model.status.phase != OnDeviceModelPhase.downloading) {
       unawaited(model.download(wifiOnly: false));
     }
+    return;
   }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.onDeviceTranscription)),
-      body: SafeArea(
-        top: false,
-        child: ListenableBuilder(
-          listenable: _controller.model,
-          builder: (context, _) {
-            final status = _controller.model.status;
-            if (status.isInstalled) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted) Navigator.of(context).pop(true);
-              });
-            }
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.lg, OmiSpacing.lg, OmiSpacing.lg),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (status.phase == OnDeviceModelPhase.downloading) ...[
-                    OnDeviceProgressBar(value: status.progress),
-                    const SizedBox(height: OmiSpacing.sm),
-                  ],
-                  Text(
-                    onDeviceModelStatusLabel(l10n, status, wifiOnly: false),
-                    style: OmiType.callout.copyWith(color: OmiColors.textSecondary),
-                  ),
-                  if (status.phase == OnDeviceModelPhase.failed) ...[
-                    const SizedBox(height: OmiSpacing.md),
-                    OmiButton.secondary(
-                      key: const Key('on_device_asset_retry'),
-                      label: l10n.tryAgain,
-                      onPressed: () => unawaited(_controller.model.download(wifiOnly: false)),
-                    ),
-                  ],
-                ],
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
+  await routeToPage(context, OnDeviceSetupPage(controller: controller));
 }
 
 /// Step 1 of 2: get the speech model. Recording never waits on this, so Next is always available

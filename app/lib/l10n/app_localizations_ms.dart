@@ -13722,4 +13722,12 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Baharu';
+
+  @override
+  String get onDeviceGetMoreUsage => 'Dapatkan lebih banyak penggunaan';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Menyediakan pertuturan · $percent%';
+  }
 }

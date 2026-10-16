@@ -4294,5 +4294,7 @@
     "activityEmpty": "Még nincs tevékenység",
     "activityNewSemantics": "Tevékenység, új elemek",
     "activityLoadFailed": "Nem sikerült betölteni az összes tevékenységet",
-    "activityNewItem": "Új"
+    "activityNewItem": "Új",
+    "onDeviceGetMoreUsage": "Szerezzen több használatot",
+    "onDeviceGettingSpeechReady": "A beszéd előkészítése · {percent}%"
 }

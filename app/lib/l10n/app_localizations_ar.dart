@@ -13615,4 +13615,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get activityNewItem => 'جديد';
+
+  @override
+  String get onDeviceGetMoreUsage => 'احصل على المزيد من الاستخدام';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'جارٍ تجهيز الكلام · $percent%';
+  }
 }

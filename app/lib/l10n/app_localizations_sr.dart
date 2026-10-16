@@ -13697,4 +13697,12 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Ново';
+
+  @override
+  String get onDeviceGetMoreUsage => 'Набавите још коришћења';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Припрема говора · $percent%';
+  }
 }

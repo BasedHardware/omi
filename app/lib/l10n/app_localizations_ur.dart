@@ -13703,4 +13703,12 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get activityNewItem => 'نیا';
+
+  @override
+  String get onDeviceGetMoreUsage => 'مزید استعمال حاصل کریں';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'تقریر تیار ہو رہی ہے · $percent%';
+  }
 }

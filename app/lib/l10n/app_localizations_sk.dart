@@ -13684,4 +13684,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nové';
+
+  @override
+  String get onDeviceGetMoreUsage => 'Získajte viac využitia';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Príprava reči · $percent%';
+  }
 }

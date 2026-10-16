@@ -4,10 +4,12 @@ import 'package:omi/backend/schema/gen/storefront_wire.g.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/on_device/on_device_at_cap_sheet.dart';
 import 'package:omi/pages/on_device/on_device_components.dart';
 import 'package:omi/pages/on_device/on_device_provenance_section.dart';
@@ -15,7 +17,9 @@ import 'package:omi/pages/on_device/on_device_queue_banner.dart';
 import 'package:omi/pages/on_device/on_device_schedule_page.dart';
 import 'package:omi/pages/on_device/on_device_settings_page.dart';
 import 'package:omi/pages/on_device/on_device_setup_page.dart';
+import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/models/plan_storefront.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/on_device/on_device_model.dart';
 import 'package:omi/services/on_device/on_device_provenance.dart';
 import 'package:omi/services/on_device/on_device_schedule_policy.dart';
@@ -103,6 +107,21 @@ void main() {
     testWidgets('leaves out the return date when unknown', (tester) async {
       await _pump(tester, OnDeviceAtCapSheet(onContinue: (_) {}));
       expect(find.text(l10n.onDeviceAtCapBody), findsOneWidget);
+    });
+
+    testWidgets('a non-english device uses the translated at-cap title', (tester) async {
+      final copy = GeneratedStorefrontCapChoice.fromJson(
+          jsonDecode(File('../backend/tests/fixtures/ladder_v1_at_cap.json').readAsStringSync()));
+      final spanish = lookupAppLocalizations(const Locale('es'));
+      await tester.pumpWidget(MaterialApp(
+        locale: const Locale('es'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: OnDeviceAtCapSheet(copy: copy, onContinue: (_) {})),
+      ));
+      await tester.pump();
+      expect(find.text(spanish.onDeviceAtCapTitle), findsOneWidget);
+      expect(find.text(copy.title), findsNothing);
     });
   });
 
@@ -343,6 +362,7 @@ void main() {
           showSaveUsage: true,
           pendingSeconds: 12000,
           pendingBytes: 180 * 1024 * 1024,
+          plansSheetAvailable: true,
           onGetMoreUsage: () {},
         ),
         page: true,
@@ -392,6 +412,7 @@ void main() {
         OnDeviceSettingsView(
           controller: controller,
           usage: const StorefrontUsage(kind: 'usage_budget', percent: 40, meterLine: '40% used · resets Nov 1'),
+          plansSheetAvailable: true,
           showSaveUsage: true,
           pendingSeconds: 0,
           pendingBytes: 0,
@@ -402,6 +423,98 @@ void main() {
       expect(find.byKey(const Key('on_device_settings_model')), findsNothing);
       expect(find.byKey(const Key('on_device_settings_remove')), findsNothing);
       expect(find.text(l10n.onDeviceSaveLiveHours), findsOneWidget);
+    });
+
+    testWidgets('hides get more usage unless the plans sheet is available', (tester) async {
+      final controller = _controller();
+      await _pump(
+        tester,
+        OnDeviceSettingsView(
+          controller: controller,
+          usage: const StorefrontUsage(
+            kind: 'usage_budget',
+            percent: 80,
+            meterLine: '80% used · resets Nov 1',
+            moreLabel: 'Get more usage',
+          ),
+          plansSheetAvailable: false,
+          showSaveUsage: false,
+          pendingSeconds: 0,
+          pendingBytes: 0,
+          onGetMoreUsage: () => fail('legacy usage page must not open from this row'),
+        ),
+        page: true,
+      );
+      expect(find.byKey(const Key('on_device_settings_more_usage')), findsNothing);
+    });
+
+    testWidgets('get more usage does not open the legacy usage page', (tester) async {
+      final usage = UsageProvider()
+        ..debugSetSubscription(UserSubscriptionResponse(
+          subscription: Subscription(plan: PlanType.unlimited, status: SubscriptionStatus.active),
+          transcriptionSecondsUsed: 0,
+          transcriptionSecondsLimit: 0,
+          wordsTranscribedUsed: 0,
+          wordsTranscribedLimit: 0,
+          insightsGainedUsed: 0,
+          insightsGainedLimit: 0,
+          showSubscriptionUi: false,
+        ));
+      await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+        value: usage,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => openOnDeviceUsagePlans(context),
+              child: const Text('more'),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('more'));
+      await tester.pumpAndSettle();
+      expect(find.byType(UsagePage), findsNothing);
+    });
+
+    testWidgets('unknown engine hides model rows and does not open Parakeet setup', (tester) async {
+      final model = FakeOnDeviceModel(const OnDeviceModelStatus(phase: OnDeviceModelPhase.notDownloaded), null, false);
+      model.beforeRefresh = () async {
+        model.engine = 'speech_analyzer';
+      };
+      final controller = OnDeviceTranscriptionController(model: model, power: const UnknownPhonePowerSource())
+        ..debugActivate(settings: const OnDeviceSettings(enabled: true));
+      await _pump(
+        tester,
+        OnDeviceSettingsView(
+          controller: controller,
+          usage: null,
+          plansSheetAvailable: false,
+          showSaveUsage: false,
+          pendingSeconds: 0,
+          pendingBytes: 0,
+          onGetMoreUsage: () {},
+        ),
+        page: true,
+      );
+      expect(find.byKey(const Key('on_device_settings_model')), findsNothing);
+
+      await _pump(
+        tester,
+        Builder(
+          builder: (context) => TextButton(
+            onPressed: () => openOnDeviceSetup(context, controller: controller),
+            child: const Text('setup'),
+          ),
+        ),
+        page: true,
+      );
+      await _tap(tester, find.text('setup'));
+      await tester.pumpAndSettle();
+      expect(find.byType(OnDeviceSetupPage), findsNothing);
+      expect(model.engine, 'speech_analyzer');
+      expect(model.downloads, 1);
     });
   });
 }

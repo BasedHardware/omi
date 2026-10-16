@@ -13711,4 +13711,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nauja';
+
+  @override
+  String get onDeviceGetMoreUsage => 'Gaukite daugiau naudojimo';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Ruošiama kalba · $percent%';
+  }
 }

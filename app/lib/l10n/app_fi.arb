@@ -4201,5 +4201,7 @@
     "activityEmpty": "Ei vielä toimintaa",
     "activityNewSemantics": "Toiminta, uusia kohteita",
     "activityLoadFailed": "Kaikkea toimintaa ei voitu ladata",
-    "activityNewItem": "Uusi"
+    "activityNewItem": "Uusi",
+    "onDeviceGetMoreUsage": "Hanki lisää käyttöä",
+    "onDeviceGettingSpeechReady": "Puhe valmistellaan · {percent} %"
 }

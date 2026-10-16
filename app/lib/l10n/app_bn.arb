@@ -11621,5 +11621,7 @@
     "activityEmpty": "এখনও কোনো কার্যকলাপ নেই",
     "activityNewSemantics": "কার্যকলাপ, নতুন আইটেম",
     "activityLoadFailed": "আপনার সব কার্যকলাপ লোড করা যায়নি",
-    "activityNewItem": "নতুন"
+    "activityNewItem": "নতুন",
+    "onDeviceGetMoreUsage": "আরও ব্যবহার নিন",
+    "onDeviceGettingSpeechReady": "কথা বলার প্রস্তুতি · {percent}%"
 }

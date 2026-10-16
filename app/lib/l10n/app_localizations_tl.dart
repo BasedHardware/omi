@@ -13799,4 +13799,12 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Bago';
+
+  @override
+  String get onDeviceGetMoreUsage => 'Kumuha ng higit pang paggamit';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Inihahanda ang pananalita · $percent%';
+  }
 }

@@ -13494,4 +13494,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get activityNewItem => '新着';
+
+  @override
+  String get onDeviceGetMoreUsage => '使用量を追加する';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return '音声を準備しています · $percent%';
+  }
 }

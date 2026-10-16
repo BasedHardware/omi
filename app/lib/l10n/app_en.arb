@@ -16534,5 +16534,18 @@
     "activityNewItem": "New",
     "@activityNewItem": {
         "description": "Screen reader suffix for an Activity row added since the last visit"
+    },
+    "onDeviceGetMoreUsage": "Get more usage",
+    "@onDeviceGetMoreUsage": {
+        "description": "Settings row that opens the plans sheet for more usage"
+    },
+    "onDeviceGettingSpeechReady": "Getting speech ready · {percent}%",
+    "@onDeviceGettingSpeechReady": {
+        "description": "Settings row while the system installs speech assets",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            }
+        }
     }
 }

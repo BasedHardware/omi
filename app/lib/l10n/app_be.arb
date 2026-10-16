@@ -11621,5 +11621,7 @@
     "activityEmpty": "Пакуль няма актыўнасці",
     "activityNewSemantics": "Актыўнасць, новыя элементы",
     "activityLoadFailed": "Не ўдалося загрузіць усю вашу актыўнасць",
-    "activityNewItem": "Новае"
+    "activityNewItem": "Новае",
+    "onDeviceGetMoreUsage": "Атрымайце больш выкарыстання",
+    "onDeviceGettingSpeechReady": "Падрыхтоўка маўлення · {percent}%"
 }

@@ -13694,4 +13694,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Uusi';
+
+  @override
+  String get onDeviceGetMoreUsage => 'Hanki lisää käyttöä';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Puhe valmistellaan · $percent %';
+  }
 }

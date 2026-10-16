@@ -21,6 +21,7 @@ import 'package:omi/pages/on_device/on_device_setup_page.dart';
 import 'package:omi/services/on_device/on_device_model.dart';
 import 'package:omi/services/on_device/on_device_provenance.dart';
 import 'package:omi/services/on_device/on_device_settings.dart';
+import 'package:omi/services/on_device/on_device_tuning.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/services/on_device/phone_power_source.dart';
 import 'package:omi/ui/ui.dart';
@@ -89,6 +90,8 @@ void main() {
 
     debugDefaultTargetPlatformOverride = null;
     if (evidence.isEmpty) return;
+    _paintProductFont(tester.renderObject<RenderRepaintBoundary>(find.byKey(boundaryKey)));
+    await tester.pump();
     await tester.runAsync(() async {
       final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(boundaryKey));
       final image = await boundary.toImage(pixelRatio: 3);
@@ -226,6 +229,7 @@ void main() {
     return OnDeviceSettingsView(
       controller: value,
       usage: usage,
+      plansSheetAvailable: true,
       showSaveUsage: true,
       pendingSeconds: 12000,
       pendingBytes: 180 * 1024 * 1024,
@@ -233,15 +237,20 @@ void main() {
     );
   }
 
+  OnDeviceTranscriptionController parakeetSettings() => controller(
+      status:
+          const OnDeviceModelStatus(phase: OnDeviceModelPhase.installed, sizeBytes: OnDeviceTuning.parakeetSizeBytes));
+
   testWidgets('parakeet settings top', (tester) async {
-    await shoot(tester, '10-settings-top-ios.png', home: settings(controller()));
+    await shoot(tester, '10-settings-top-ios.png', home: settings(parakeetSettings()));
     expect(find.text('Get more usage'), findsOneWidget);
+    expect(find.text('Installed · 443 MB'), findsOneWidget);
     expect(find.text('Always transcribe on this phone'), findsOneWidget);
     expect(find.text('Saves your usage. No speaker labels.'), findsOneWidget);
   });
 
   testWidgets('parakeet settings scrolled', (tester) async {
-    await shoot(tester, '11-settings-scrolled-ios.png', home: settings(controller()), afterPump: (tester) async {
+    await shoot(tester, '11-settings-scrolled-ios.png', home: settings(parakeetSettings()), afterPump: (tester) async {
       await tester.drag(find.byType(ListView), const Offset(0, -500));
       await tester.pump();
     });
@@ -325,31 +334,18 @@ void main() {
     expect(find.textContaining("doesn't count toward your usage"), findsOneWidget);
   });
 
-  testWidgets('ios 26 first run has no setup', (tester) async {
-    await shoot(
-      tester,
-      '17-ios26-first-run-no-setup.png',
-      home: settings(controller(
-          engine: 'speech_analyzer', status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.installed))),
-    );
-    expect(find.text('Speech model'), findsNothing);
-    expect(find.text('Remove Speech Model'), findsNothing);
-    expect(find.byType(OnDeviceSetupPage), findsNothing);
-    expect(find.byType(OnDeviceAssetProgressPage), findsNothing);
-  });
-
-  testWidgets('ios 26 asset install progress', (tester) async {
+  testWidgets('ios 26 asset install is a settings row', (tester) async {
     await shoot(
       tester,
       '18-ios26-os-asset-installing.png',
-      home: OnDeviceAssetProgressPage(
-          controller: controller(
+      home: settings(controller(
         engine: 'speech_analyzer',
         status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.downloading, progress: 0.4),
       )),
     );
-    expect(find.textContaining('Downloading'), findsOneWidget);
-    expect(find.text(lookupAppLocalizations(const Locale('en')).onDeviceSetupBody), findsNothing);
+    expect(find.text(lookupAppLocalizations(const Locale('en')).onDeviceGettingSpeechReady(40)), findsOneWidget);
+    expect(find.byType(OnDeviceSetupPage), findsNothing);
+    expect(find.text('Speech model'), findsNothing);
   });
 
   testWidgets('parakeet setup page', (tester) async {
@@ -387,16 +383,16 @@ void main() {
     );
   });
 
-  testWidgets('ios 15 asset progress has no download essay', (tester) async {
+  testWidgets('ios 15 asset progress is a settings row', (tester) async {
     await shoot(
       tester,
       '22-ios15-lower-quality-fallback.png',
-      home: OnDeviceAssetProgressPage(
-          controller: controller(
+      home: settings(controller(
         engine: 'sfspeech',
         status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.downloading, progress: 0.2),
       )),
     );
+    expect(find.text(lookupAppLocalizations(const Locale('en')).onDeviceGettingSpeechReady(20)), findsOneWidget);
     expect(find.text(lookupAppLocalizations(const Locale('en')).onDeviceSetupBody), findsNothing);
   });
 
@@ -423,6 +419,25 @@ void main() {
       )),
     );
   });
+}
+
+void _paintProductFont(RenderObject object) {
+  if (object is RenderParagraph) object.text = _productFont(object.text);
+  object.visitChildren(_paintProductFont);
+  object.markNeedsPaint();
+}
+
+InlineSpan _productFont(InlineSpan span) {
+  if (span is! TextSpan) return span;
+  final style = span.style ?? const TextStyle();
+  return TextSpan(
+    text: span.text,
+    style: style.fontFamily == null ? style.copyWith(fontFamily: 'SF Pro Display') : style,
+    children: span.children?.map(_productFont).toList(),
+    recognizer: span.recognizer,
+    semanticsLabel: span.semanticsLabel,
+    locale: span.locale,
+  );
 }
 
 void _rejectForbiddenCopy(WidgetTester tester) {

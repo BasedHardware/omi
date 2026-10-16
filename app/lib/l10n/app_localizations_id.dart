@@ -13699,4 +13699,12 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Baru';
+
+  @override
+  String get onDeviceGetMoreUsage => 'Dapatkan lebih banyak penggunaan';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Menyiapkan ucapan · $percent%';
+  }
 }

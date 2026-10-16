@@ -4201,5 +4201,7 @@
     "activityEmpty": "لا يوجد نشاط بعد",
     "activityNewSemantics": "النشاط، عناصر جديدة",
     "activityLoadFailed": "تعذّر تحميل كل نشاطك",
-    "activityNewItem": "جديد"
+    "activityNewItem": "جديد",
+    "onDeviceGetMoreUsage": "احصل على المزيد من الاستخدام",
+    "onDeviceGettingSpeechReady": "جارٍ تجهيز الكلام · {percent}%"
 }

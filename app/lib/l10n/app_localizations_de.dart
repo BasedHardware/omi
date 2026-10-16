@@ -13790,4 +13790,12 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Neu';
+
+  @override
+  String get onDeviceGetMoreUsage => 'Mehr Nutzung holen';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Sprache wird vorbereitet · $percent %';
+  }
 }

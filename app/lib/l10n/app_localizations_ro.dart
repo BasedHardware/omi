@@ -13746,4 +13746,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nou';
+
+  @override
+  String get onDeviceGetMoreUsage => 'Obțineți mai multă utilizare';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Se pregătește vorbirea · $percent%';
+  }
 }

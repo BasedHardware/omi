@@ -9,6 +9,10 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// The copy names the iPhone on iOS ("Transcribed on this iPhone") and the phone elsewhere.
 bool get onDeviceIsIphone => defaultTargetPlatform == TargetPlatform.iOS;
 
+/// The storefront catalog ships English only. These two on-device strings already have app
+/// translations, so a non-English device uses those instead of the English payload.
+bool onDeviceUsesLocalizedCopy(Locale locale) => locale.languageCode.toLowerCase() != 'en';
+
 /// The glyph for "this phone", matching the platform.
 IconData get onDevicePhoneIcon => onDeviceIsIphone ? Icons.phone_iphone : Icons.phone_android;
 

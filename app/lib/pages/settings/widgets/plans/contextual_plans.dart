@@ -159,14 +159,35 @@ class _BudgetUpsellBannerState extends State<BudgetUpsellBanner> {
 
 /// Usage-screen meter. The line is the backend string; there is no separate title.
 class StorefrontUsageMeter extends StatelessWidget {
-  const StorefrontUsageMeter({super.key, required this.usage});
+  const StorefrontUsageMeter({super.key, required this.usage, this.embedded = false});
   final StorefrontUsage usage;
+
+  /// Draws the meter as padding inside a settings card instead of its own card.
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
     final line = usage.meterLine;
     if (line == null || line.isEmpty) return const SizedBox.shrink();
     final percent = usage.percent;
+    final body = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(line, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+      if (percent != null) ...[
+        const SizedBox(height: OmiSpacing.xs),
+        LinearProgressIndicator(
+          key: const Key('storefront_usage_meter_bar'),
+          value: (percent / 100).clamp(0.0, 1.0),
+          minHeight: 4,
+          color: OmiColors.accent,
+          backgroundColor: OmiColors.surface3,
+          borderRadius: OmiRadius.pillAll,
+        ),
+      ],
+    ]);
+    if (embedded) {
+      return Padding(
+          key: const Key('storefront_usage_meter'), padding: const EdgeInsets.all(OmiSpacing.md), child: body);
+    }
     return Container(
       key: const Key('storefront_usage_meter'),
       margin: const EdgeInsets.only(top: OmiSpacing.sm),
@@ -176,20 +197,7 @@ class StorefrontUsageMeter extends StatelessWidget {
         borderRadius: OmiRadius.lgAll,
         border: Border.all(color: OmiColors.border),
       ),
-      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(line, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-        if (percent != null) ...[
-          const SizedBox(height: OmiSpacing.xs),
-          LinearProgressIndicator(
-            key: const Key('storefront_usage_meter_bar'),
-            value: (percent / 100).clamp(0.0, 1.0),
-            minHeight: 4,
-            color: OmiColors.accent,
-            backgroundColor: OmiColors.surface3,
-            borderRadius: OmiRadius.pillAll,
-          ),
-        ],
-      ]),
+      child: body,
     );
   }
 }

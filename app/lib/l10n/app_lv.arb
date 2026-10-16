@@ -4201,5 +4201,7 @@
     "activityEmpty": "Vēl nav aktivitātes",
     "activityNewSemantics": "Aktivitāte, jauni vienumi",
     "activityLoadFailed": "Neizdevās ielādēt visu jūsu aktivitāti",
-    "activityNewItem": "Jauns"
+    "activityNewItem": "Jauns",
+    "onDeviceGetMoreUsage": "Iegūstiet vairāk lietojuma",
+    "onDeviceGettingSpeechReady": "Runa tiek sagatavota · {percent}%"
 }

@@ -54,7 +54,15 @@ class _OnDeviceAtCapSheetState extends State<OnDeviceAtCapSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Semantics(header: true, child: Text(widget.copy?.title ?? l10n.onDeviceAtCapTitle, style: OmiType.title2)),
+          Semantics(
+            header: true,
+            child: Text(
+              onDeviceUsesLocalizedCopy(Localizations.localeOf(context))
+                  ? l10n.onDeviceAtCapTitle
+                  : (widget.copy?.title ?? l10n.onDeviceAtCapTitle),
+              style: OmiType.title2,
+            ),
+          ),
           const SizedBox(height: OmiSpacing.xs),
           Text(widget.copy?.body ?? body, style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.4)),
           const SizedBox(height: OmiSpacing.lg),

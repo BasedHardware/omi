@@ -13718,4 +13718,12 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Нове';
+
+  @override
+  String get onDeviceGetMoreUsage => 'Отримати більше використання';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Підготовка мовлення · $percent%';
+  }
 }

@@ -4201,5 +4201,7 @@
     "activityEmpty": "Все още няма активност",
     "activityNewSemantics": "Активност, нови елементи",
     "activityLoadFailed": "Не можахме да заредим цялата ви активност",
-    "activityNewItem": "Ново"
+    "activityNewItem": "Ново",
+    "onDeviceGetMoreUsage": "Вземете още потребление",
+    "onDeviceGettingSpeechReady": "Подготовка на речта · {percent}%"
 }

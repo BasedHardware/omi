@@ -11621,5 +11621,7 @@
     "activityEmpty": "Še ni dejavnosti",
     "activityNewSemantics": "Dejavnost, novi elementi",
     "activityLoadFailed": "Ni bilo mogoče naložiti vse vaše dejavnosti",
-    "activityNewItem": "Novo"
+    "activityNewItem": "Novo",
+    "onDeviceGetMoreUsage": "Pridobite več uporabe",
+    "onDeviceGettingSpeechReady": "Priprava govora · {percent} %"
 }

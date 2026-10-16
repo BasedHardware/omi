@@ -4201,5 +4201,7 @@
     "activityEmpty": "Δεν υπάρχει δραστηριότητα ακόμα",
     "activityNewSemantics": "Δραστηριότητα, νέα στοιχεία",
     "activityLoadFailed": "Δεν ήταν δυνατή η φόρτωση όλης της δραστηριότητάς σας",
-    "activityNewItem": "Νέο"
+    "activityNewItem": "Νέο",
+    "onDeviceGetMoreUsage": "Αποκτήστε περισσότερη χρήση",
+    "onDeviceGettingSpeechReady": "Προετοιμασία ομιλίας · {percent}%"
 }

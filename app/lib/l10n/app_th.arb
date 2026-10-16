@@ -4201,5 +4201,7 @@
     "activityEmpty": "ยังไม่มีกิจกรรม",
     "activityNewSemantics": "กิจกรรม, รายการใหม่",
     "activityLoadFailed": "โหลดกิจกรรมทั้งหมดของคุณไม่ได้",
-    "activityNewItem": "ใหม่"
+    "activityNewItem": "ใหม่",
+    "onDeviceGetMoreUsage": "รับการใช้งานเพิ่ม",
+    "onDeviceGettingSpeechReady": "กำลังเตรียมเสียงพูด · {percent}%"
 }

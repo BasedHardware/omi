@@ -4201,5 +4201,7 @@
     "activityEmpty": "Zatiaľ žiadna aktivita",
     "activityNewSemantics": "Aktivita, nové položky",
     "activityLoadFailed": "Nepodarilo sa načítať celú vašu aktivitu",
-    "activityNewItem": "Nové"
+    "activityNewItem": "Nové",
+    "onDeviceGetMoreUsage": "Získajte viac využitia",
+    "onDeviceGettingSpeechReady": "Príprava reči · {percent}%"
 }

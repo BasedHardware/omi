@@ -4201,5 +4201,7 @@
     "activityEmpty": "अभी तक कोई गतिविधि नहीं",
     "activityNewSemantics": "गतिविधि, नए आइटम",
     "activityLoadFailed": "आपकी पूरी गतिविधि लोड नहीं हो सकी",
-    "activityNewItem": "नया"
+    "activityNewItem": "नया",
+    "onDeviceGetMoreUsage": "और उपयोग पाएँ",
+    "onDeviceGettingSpeechReady": "बोली तैयार हो रही है · {percent}%"
 }

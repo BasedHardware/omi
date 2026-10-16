@@ -4201,5 +4201,7 @@
     "activityEmpty": "Encara no hi ha activitat",
     "activityNewSemantics": "Activitat, elements nous",
     "activityLoadFailed": "No s'ha pogut carregar tota la teva activitat",
-    "activityNewItem": "Nou"
+    "activityNewItem": "Nou",
+    "onDeviceGetMoreUsage": "Aconsegueix més ús",
+    "onDeviceGettingSpeechReady": "Preparant la parla · {percent}%"
 }

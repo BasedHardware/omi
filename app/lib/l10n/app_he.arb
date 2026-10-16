@@ -11621,5 +11621,7 @@
     "activityEmpty": "אין פעילות עדיין",
     "activityNewSemantics": "פעילות, פריטים חדשים",
     "activityLoadFailed": "לא ניתן היה לטעון את כל הפעילות שלך",
-    "activityNewItem": "חדש"
+    "activityNewItem": "חדש",
+    "onDeviceGetMoreUsage": "קבלו עוד שימוש",
+    "onDeviceGettingSpeechReady": "מכין את הדיבור · {percent}%"
 }

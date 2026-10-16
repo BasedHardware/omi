@@ -4243,5 +4243,7 @@
     "activityEmpty": "Ingen aktivitet endnu",
     "activityNewSemantics": "Aktivitet, nye elementer",
     "activityLoadFailed": "Kunne ikke indlæse al din aktivitet",
-    "activityNewItem": "Ny"
+    "activityNewItem": "Ny",
+    "onDeviceGetMoreUsage": "Få mere forbrug",
+    "onDeviceGettingSpeechReady": "Gør tale klar · {percent} %"
 }

@@ -13743,4 +13743,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Új';
+
+  @override
+  String get onDeviceGetMoreUsage => 'Szerezzen több használatot';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'A beszéd előkészítése · $percent%';
+  }
 }

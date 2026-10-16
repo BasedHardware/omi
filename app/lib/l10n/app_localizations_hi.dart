@@ -13673,4 +13673,12 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get activityNewItem => 'नया';
+
+  @override
+  String get onDeviceGetMoreUsage => 'और उपयोग पाएँ';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'बोली तैयार हो रही है · $percent%';
+  }
 }

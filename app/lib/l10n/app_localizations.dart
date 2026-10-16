@@ -24398,6 +24398,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'New'**
   String get activityNewItem;
+
+  /// Settings row that opens the plans sheet for more usage
+  ///
+  /// In en, this message translates to:
+  /// **'Get more usage'**
+  String get onDeviceGetMoreUsage;
+
+  /// Settings row while the system installs speech assets
+  ///
+  /// In en, this message translates to:
+  /// **'Getting speech ready · {percent}%'**
+  String onDeviceGettingSpeechReady(int percent);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

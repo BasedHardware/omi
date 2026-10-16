@@ -13776,4 +13776,12 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Νέο';
+
+  @override
+  String get onDeviceGetMoreUsage => 'Αποκτήστε περισσότερη χρήση';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Προετοιμασία ομιλίας · $percent%';
+  }
 }

@@ -13684,4 +13684,12 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get activityNewItem => 'নতুন';
+
+  @override
+  String get onDeviceGetMoreUsage => 'আরও ব্যবহার নিন';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'কথা বলার প্রস্তুতি · $percent%';
+  }
 }

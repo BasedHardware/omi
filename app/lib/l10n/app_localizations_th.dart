@@ -13622,4 +13622,12 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get activityNewItem => 'ใหม่';
+
+  @override
+  String get onDeviceGetMoreUsage => 'รับการใช้งานเพิ่ม';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'กำลังเตรียมเสียงพูด · $percent%';
+  }
 }

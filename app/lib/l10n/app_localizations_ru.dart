@@ -13736,4 +13736,12 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Новое';
+
+  @override
+  String get onDeviceGetMoreUsage => 'Получить больше использования';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Подготовка речи · $percent%';
+  }
 }

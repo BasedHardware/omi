@@ -13677,4 +13677,12 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Ny';
+
+  @override
+  String get onDeviceGetMoreUsage => 'Få mere forbrug';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Gør tale klar · $percent %';
+  }
 }

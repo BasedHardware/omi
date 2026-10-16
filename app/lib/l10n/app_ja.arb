@@ -4201,5 +4201,7 @@
     "activityEmpty": "アクティビティはまだありません",
     "activityNewSemantics": "アクティビティ、新着あり",
     "activityLoadFailed": "アクティビティの一部を読み込めませんでした",
-    "activityNewItem": "新着"
+    "activityNewItem": "新着",
+    "onDeviceGetMoreUsage": "使用量を追加する",
+    "onDeviceGettingSpeechReady": "音声を準備しています · {percent}%"
 }

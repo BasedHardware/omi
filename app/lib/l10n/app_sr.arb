@@ -11621,5 +11621,7 @@
     "activityEmpty": "Још нема активности",
     "activityNewSemantics": "Активност, нове ставке",
     "activityLoadFailed": "Није могуће учитати сву вашу активност",
-    "activityNewItem": "Ново"
+    "activityNewItem": "Ново",
+    "onDeviceGetMoreUsage": "Набавите још коришћења",
+    "onDeviceGettingSpeechReady": "Припрема говора · {percent}%"
 }

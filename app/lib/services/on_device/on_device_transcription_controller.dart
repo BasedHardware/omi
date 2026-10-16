@@ -142,8 +142,7 @@ class OnDeviceTranscriptionController extends ChangeNotifier {
     _active = true;
     model.addListener(notifyListeners);
     await _syncNativeCustody();
-    notifyListeners();
-    unawaited(model.refresh());
+    await model.refresh();
     try {
       canSummarizeOnPhone = await AppleBatchEngine().canSummarize();
     } catch (_) {

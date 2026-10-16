@@ -4201,5 +4201,7 @@
     "activityEmpty": "Nicio activitate încă",
     "activityNewSemantics": "Activitate, elemente noi",
     "activityLoadFailed": "Nu am putut încărca toată activitatea ta",
-    "activityNewItem": "Nou"
+    "activityNewItem": "Nou",
+    "onDeviceGetMoreUsage": "Obțineți mai multă utilizare",
+    "onDeviceGettingSpeechReady": "Se pregătește vorbirea · {percent}%"
 }
