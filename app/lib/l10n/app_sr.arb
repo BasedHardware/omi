@@ -5968,10 +5968,6 @@
     "@content": {
         "description": "Tab label for content"
     },
-    "noContentToDisplay": "Нема садржаја за приказ",
-    "@noContentToDisplay": {
-        "description": "Message when there is no content available"
-    },
     "noSummary": "Нема резимеа",
     "@noSummary": {
         "description": "Message when no summary is available"
@@ -10593,7 +10589,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Додирните дугме за снимање да започнете снимање",
-    "processingTakingLonger": "Još traje — ovo traje duže nego inače.",
     "speechProfileEnrollmentPrompt": "Да би Omi знао који је глас ваш — причајте о било чему око 5 секунди.",
     "home": "Почетна",
     "failedToUpdateBaselineStatus": "Није могуће ажурирати ову успомену. Пробајте поново.",
@@ -11560,5 +11555,8 @@
     "activityEmpty": "Још нема активности",
     "activityNewSemantics": "Активност, нове ставке",
     "activityLoadFailed": "Није могуће учитати сву вашу активност",
-    "activityNewItem": "Ново"
+    "activityNewItem": "Ново",
+    "activityNeedsAttention": "Потребна пажња",
+    "activityRetryAll": "Покушај све поново",
+    "attentionSummaryFailed": "Овај разговор није могуће сажети"
 }

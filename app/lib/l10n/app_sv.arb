@@ -1542,7 +1542,6 @@
     "photos": "Foton",
     "rawData": "Rådata",
     "content": "Innehåll",
-    "noContentToDisplay": "Inget innehåll att visa",
     "noSummary": "Ingen sammanfattning",
     "updateOmiFirmware": "Uppdatera omi-firmware",
     "anErrorOccurredTryAgain": "Ett fel uppstod. Försök igen.",
@@ -3167,7 +3166,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Tryck på inspelningsknappen för att börja spela in",
-    "processingTakingLonger": "Fortfarande igång — det tar längre tid än vanligt.",
     "speechProfileEnrollmentPrompt": "Så att Omi vet vilken röst som är din — prata om vad som helst i ungefär 5 sekunder.",
     "home": "Hem",
     "failedToUpdateBaselineStatus": "Det gick inte att uppdatera minnet. Försök igen.",
@@ -4134,5 +4132,8 @@
     "activityEmpty": "Ingen aktivitet än",
     "activityNewSemantics": "Aktivitet, nya objekt",
     "activityLoadFailed": "Kunde inte läsa in all din aktivitet",
-    "activityNewItem": "Ny"
+    "activityNewItem": "Ny",
+    "activityNeedsAttention": "Behöver uppmärksamhet",
+    "activityRetryAll": "Försök igen med alla",
+    "attentionSummaryFailed": "Det gick inte att sammanfatta samtalet"
 }

@@ -1542,7 +1542,6 @@
     "photos": "Ảnh",
     "rawData": "Dữ liệu thô",
     "content": "Nội dung",
-    "noContentToDisplay": "Không có nội dung để hiển thị",
     "noSummary": "Không có tóm tắt",
     "updateOmiFirmware": "Cập nhật phần mềm Omi",
     "anErrorOccurredTryAgain": "Đã xảy ra lỗi. Vui lòng thử lại.",
@@ -3167,7 +3166,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Nhấn nút ghi âm để bắt đầu ghi âm",
-    "processingTakingLonger": "Vẫn đang xử lý — mất nhiều thời gian hơn bình thường.",
     "speechProfileEnrollmentPrompt": "Để Omi biết đâu là giọng của bạn — hãy nói về bất cứ điều gì trong khoảng 5 giây.",
     "home": "Trang chủ",
     "failedToUpdateBaselineStatus": "Không thể cập nhật kỷ niệm này. Vui lòng thử lại.",
@@ -4134,5 +4132,8 @@
     "activityEmpty": "Chưa có hoạt động",
     "activityNewSemantics": "Hoạt động, mục mới",
     "activityLoadFailed": "Không thể tải toàn bộ hoạt động của bạn",
-    "activityNewItem": "Mới"
+    "activityNewItem": "Mới",
+    "activityNeedsAttention": "Cần chú ý",
+    "activityRetryAll": "Thử lại tất cả",
+    "attentionSummaryFailed": "Không thể tóm tắt cuộc trò chuyện này"
 }

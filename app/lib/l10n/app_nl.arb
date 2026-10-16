@@ -1542,7 +1542,6 @@
     "photos": "Foto's",
     "rawData": "Ruwe gegevens",
     "content": "Inhoud",
-    "noContentToDisplay": "Geen inhoud om weer te geven",
     "noSummary": "Geen samenvatting",
     "updateOmiFirmware": "Omi-firmware bijwerken",
     "anErrorOccurredTryAgain": "Er is een fout opgetreden. Probeer het opnieuw.",
@@ -3167,7 +3166,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Tik op de opnameknop om de opname te starten",
-    "processingTakingLonger": "Nog bezig — dit duurt langer dan normaal.",
     "speechProfileEnrollmentPrompt": "Zodat Omi weet welke stem van jou is — praat ongeveer 5 seconden over wat je maar wilt.",
     "home": "Home",
     "failedToUpdateBaselineStatus": "Kan deze herinnering niet bijwerken. Probeer het opnieuw.",
@@ -4134,5 +4132,8 @@
     "activityEmpty": "Nog geen activiteit",
     "activityNewSemantics": "Activiteit, nieuwe items",
     "activityLoadFailed": "Niet al je activiteit kon worden geladen",
-    "activityNewItem": "Nieuw"
+    "activityNewItem": "Nieuw",
+    "activityNeedsAttention": "Vraagt aandacht",
+    "activityRetryAll": "Alles opnieuw proberen",
+    "attentionSummaryFailed": "Dit gesprek kon niet worden samengevat"
 }

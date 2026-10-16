@@ -5968,10 +5968,6 @@
     "@content": {
         "description": "Tab label for content"
     },
-    "noContentToDisplay": "محتوایی برای نمایش نیست",
-    "@noContentToDisplay": {
-        "description": "Message when there is no content available"
-    },
     "noSummary": "بدون خلاصه",
     "@noSummary": {
         "description": "Message when no summary is available"
@@ -10593,7 +10589,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "برای شروع ضبط روی دکمه ضبط بزنید",
-    "processingTakingLonger": "هنوز در حال انجام است — بیشتر از حد معمول طول می‌کشد.",
     "speechProfileEnrollmentPrompt": "برای اینکه Omi بداند کدام صدا متعلق به شماست — حدود ۵ ثانیه درباره هر چیزی صحبت کنید.",
     "home": "خانه",
     "failedToUpdateBaselineStatus": "این یادداشت به‌روز نشد. دوباره امتحان کنید.",
@@ -11560,5 +11555,8 @@
     "activityEmpty": "هنوز فعالیتی نیست",
     "activityNewSemantics": "فعالیت، موارد جدید",
     "activityLoadFailed": "بارگیری همه فعالیت‌های شما ممکن نشد",
-    "activityNewItem": "جدید"
+    "activityNewItem": "جدید",
+    "activityNeedsAttention": "نیاز به توجه",
+    "activityRetryAll": "تلاش دوباره برای همه",
+    "attentionSummaryFailed": "خلاصه‌سازی این گفتگو ممکن نشد"
 }

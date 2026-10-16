@@ -4988,9 +4988,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get content => 'المحتوى';
 
   @override
-  String get noContentToDisplay => 'لا يوجد محتوى للعرض';
-
-  @override
   String get noSummary => 'لا يوجد ملخص';
 
   @override
@@ -9749,9 +9746,6 @@ class AppLocalizationsAr extends AppLocalizations {
       'تحويل الكلام إلى نص غير متاح الآن. تحقق من اتصالك بالإنترنت وإعدادات التعرف على الكلام في جهازك، ثم حاول مرة أخرى.';
 
   @override
-  String get processingTakingLonger => 'ما زال قيد العمل — يستغرق وقتًا أطول من المعتاد.';
-
-  @override
   String get speechProfileEnrollmentPrompt => 'لكي يعرف Omi أي صوت هو صوتك — تحدث عن أي شيء لمدة 5 ثوانٍ تقريبًا.';
 
   @override
@@ -13405,4 +13399,13 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get activityNewItem => 'جديد';
+
+  @override
+  String get activityNeedsAttention => 'يحتاج إلى انتباه';
+
+  @override
+  String get activityRetryAll => 'إعادة محاولة الكل';
+
+  @override
+  String get attentionSummaryFailed => 'تعذّر تلخيص هذه المحادثة';
 }

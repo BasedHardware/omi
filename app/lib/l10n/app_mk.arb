@@ -5968,10 +5968,6 @@
     "@content": {
         "description": "Tab label for content"
     },
-    "noContentToDisplay": "Нема содржина за приказ",
-    "@noContentToDisplay": {
-        "description": "Message when there is no content available"
-    },
     "noSummary": "Нема резиме",
     "@noSummary": {
         "description": "Message when no summary is available"
@@ -10593,7 +10589,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Допрете го копчето за снимање за да започнете со снимање",
-    "processingTakingLonger": "Сè уште се обработува — ова трае подолго од вообичаеното.",
     "speechProfileEnrollmentPrompt": "За Omi да знае кој глас е вашиот — зборувајте за што било околу 5 секунди.",
     "home": "Почетна",
     "failedToUpdateBaselineStatus": "Не можеше да се ажурира овој спомен. Обидете се повторно.",
@@ -11560,5 +11555,8 @@
     "activityEmpty": "Сè уште нема активност",
     "activityNewSemantics": "Активност, нови ставки",
     "activityLoadFailed": "Не можевме да ја вчитаме целата ваша активност",
-    "activityNewItem": "Ново"
+    "activityNewItem": "Ново",
+    "activityNeedsAttention": "Потребно е внимание",
+    "activityRetryAll": "Обиди ги сите повторно",
+    "attentionSummaryFailed": "Овој разговор не можеше да се сумира"
 }

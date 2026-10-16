@@ -5036,9 +5036,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get content => 'Nội dung';
 
   @override
-  String get noContentToDisplay => 'Không có nội dung để hiển thị';
-
-  @override
   String get noSummary => 'Không có tóm tắt';
 
   @override
@@ -9808,9 +9805,6 @@ class AppLocalizationsVi extends AppLocalizations {
       'Hiện không thể chuyển giọng nói thành văn bản. Hãy kiểm tra kết nối internet và cài đặt nhận dạng giọng nói trên thiết bị rồi thử lại.';
 
   @override
-  String get processingTakingLonger => 'Vẫn đang xử lý — mất nhiều thời gian hơn bình thường.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Để Omi biết đâu là giọng của bạn — hãy nói về bất cứ điều gì trong khoảng 5 giây.';
 
@@ -13476,4 +13470,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Mới';
+
+  @override
+  String get activityNeedsAttention => 'Cần chú ý';
+
+  @override
+  String get activityRetryAll => 'Thử lại tất cả';
+
+  @override
+  String get attentionSummaryFailed => 'Không thể tóm tắt cuộc trò chuyện này';
 }

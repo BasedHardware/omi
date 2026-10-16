@@ -5027,9 +5027,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get content => 'Innhold';
 
   @override
-  String get noContentToDisplay => 'Ingen innhold å vise';
-
-  @override
   String get noSummary => 'Ingen oppsummering';
 
   @override
@@ -9809,9 +9806,6 @@ class AppLocalizationsNo extends AppLocalizations {
       'Tale til tekst er ikke tilgjengelig akkurat nå. Kontroller internettforbindelsen og enhetens innstillinger for talegjenkjenning, og prøv igjen.';
 
   @override
-  String get processingTakingLonger => 'Jobber fortsatt — dette tar lengre tid enn vanlig.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Så Omi vet hvilken stemme som er din — snakk om hva som helst i omtrent 5 sekunder.';
 
@@ -13480,4 +13474,13 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Ny';
+
+  @override
+  String get activityNeedsAttention => 'Trenger oppmerksomhet';
+
+  @override
+  String get activityRetryAll => 'Prøv alle på nytt';
+
+  @override
+  String get attentionSummaryFailed => 'Kunne ikke oppsummere denne samtalen';
 }

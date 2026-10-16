@@ -1542,7 +1542,6 @@
     "photos": "Fotoğraflar",
     "rawData": "Ham Veri",
     "content": "İçerik",
-    "noContentToDisplay": "Gösterilecek içerik yok",
     "noSummary": "Özet yok",
     "updateOmiFirmware": "Omi yazılımını güncelle",
     "anErrorOccurredTryAgain": "Bir hata oluştu. Lütfen tekrar deneyin.",
@@ -3202,7 +3201,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Kaydı başlatmak için kayıt düğmesine dokunun",
-    "processingTakingLonger": "Hâlâ devam ediyor — bu her zamankinden daha uzun sürüyor.",
     "speechProfileEnrollmentPrompt": "Omi'nin hangi sesin size ait olduğunu bilmesi için yaklaşık 5 saniye boyunca istediğiniz bir konuda konuşun.",
     "home": "Ana Sayfa",
     "failedToUpdateBaselineStatus": "Bu anı güncellenemedi. Tekrar deneyin.",
@@ -4169,5 +4167,8 @@
     "activityEmpty": "Henüz etkinlik yok",
     "activityNewSemantics": "Etkinlik, yeni öğeler",
     "activityLoadFailed": "Etkinliğinizin tamamı yüklenemedi",
-    "activityNewItem": "Yeni"
+    "activityNewItem": "Yeni",
+    "activityNeedsAttention": "İlgi gerekiyor",
+    "activityRetryAll": "Tümünü yeniden dene",
+    "attentionSummaryFailed": "Bu konuşma özetlenemedi"
 }

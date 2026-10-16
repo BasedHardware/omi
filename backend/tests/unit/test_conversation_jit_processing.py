@@ -1167,7 +1167,9 @@ def test_running_now_still_defers_first_open_when_rollout_admits() -> None:
     create_kwargs = _call_keywords(conversations, "process_in_progress_conversation", "process_conversation")
     assert _attribute_name(create_kwargs.get("trigger")) == "CLIENT_FINALIZE"
 
-    reprocess_kwargs = _call_keywords(conversations, "reprocess_conversation", "process_conversation")
+    # The route owns the retry claim; the shared executor owns the processing mode.
+    _call_keywords(conversations, "reprocess_conversation", "execute_reprocess")
+    reprocess_kwargs = _call_keywords(conversations, "execute_reprocess", "process_conversation")
     assert _attribute_name(reprocess_kwargs.get("trigger")) == "USER_REPROCESS"
 
     finalize_kwargs = _call_keywords(conversations, "finalize_conversation", "request_finalization")

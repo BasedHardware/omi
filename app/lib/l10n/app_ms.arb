@@ -1542,7 +1542,6 @@
     "photos": "Foto",
     "rawData": "Data Mentah",
     "content": "Kandungan",
-    "noContentToDisplay": "Tiada kandungan untuk dipaparkan",
     "noSummary": "Tiada ringkasan",
     "updateOmiFirmware": "Kemas kini perisian tegar Omi",
     "anErrorOccurredTryAgain": "Ralat berlaku. Sila cuba lagi.",
@@ -3167,7 +3166,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Ketik butang rakam untuk mula merakam",
-    "processingTakingLonger": "Masih diproses — ini mengambil masa lebih lama daripada biasa.",
     "speechProfileEnrollmentPrompt": "Supaya Omi tahu suara yang mana milik anda — bercakap tentang apa sahaja selama kira-kira 5 saat.",
     "home": "Utama",
     "failedToUpdateBaselineStatus": "Tidak dapat mengemas kini kenangan ini. Cuba lagi.",
@@ -4134,5 +4132,8 @@
     "activityEmpty": "Belum ada aktiviti",
     "activityNewSemantics": "Aktiviti, item baharu",
     "activityLoadFailed": "Tidak dapat memuatkan semua aktiviti anda",
-    "activityNewItem": "Baharu"
+    "activityNewItem": "Baharu",
+    "activityNeedsAttention": "Perlu perhatian",
+    "activityRetryAll": "Cuba semua semula",
+    "attentionSummaryFailed": "Perbualan ini tidak dapat diringkaskan"
 }

@@ -1542,7 +1542,6 @@
     "photos": "รูปภาพ",
     "rawData": "ข้อมูลดิบ",
     "content": "เนื้อหา",
-    "noContentToDisplay": "ไม่มีเนื้อหาที่จะแสดง",
     "noSummary": "ไม่มีสรุป",
     "updateOmiFirmware": "อัปเดตเฟิร์มแวร์ Omi",
     "anErrorOccurredTryAgain": "เกิดข้อผิดพลาด กรุณาลองอีกครั้ง",
@@ -3167,7 +3166,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "แตะปุ่มบันทึกเพื่อเริ่มบันทึก",
-    "processingTakingLonger": "ยังทำงานอยู่ — ใช้เวลานานกว่าปกติ",
     "speechProfileEnrollmentPrompt": "เพื่อให้ Omi รู้ว่าเสียงไหนเป็นของคุณ — พูดเรื่องอะไรก็ได้ประมาณ 5 วินาที",
     "home": "หน้าหลัก",
     "failedToUpdateBaselineStatus": "ไม่สามารถอัปเดตความทรงจำนี้ได้ ลองอีกครั้ง",
@@ -4134,5 +4132,8 @@
     "activityEmpty": "ยังไม่มีกิจกรรม",
     "activityNewSemantics": "กิจกรรม, รายการใหม่",
     "activityLoadFailed": "โหลดกิจกรรมทั้งหมดของคุณไม่ได้",
-    "activityNewItem": "ใหม่"
+    "activityNewItem": "ใหม่",
+    "activityNeedsAttention": "ต้องดำเนินการ",
+    "activityRetryAll": "ลองใหม่ทั้งหมด",
+    "attentionSummaryFailed": "ไม่สามารถสรุปบทสนทนานี้ได้"
 }

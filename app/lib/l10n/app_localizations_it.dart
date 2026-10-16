@@ -5055,9 +5055,6 @@ class AppLocalizationsIt extends AppLocalizations {
   String get content => 'Contenuto';
 
   @override
-  String get noContentToDisplay => 'Nessun contenuto da visualizzare';
-
-  @override
   String get noSummary => 'Nessun riepilogo';
 
   @override
@@ -9864,9 +9861,6 @@ class AppLocalizationsIt extends AppLocalizations {
       'La trascrizione vocale non è disponibile al momento. Controlla la connessione Internet e le impostazioni di riconoscimento vocale del dispositivo, poi riprova.';
 
   @override
-  String get processingTakingLonger => 'Ancora in corso: ci sta mettendo più del solito.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Perché Omi sappia qual è la tua voce — parla di qualsiasi cosa per circa 5 secondi.';
 
@@ -13549,4 +13543,13 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nuovo';
+
+  @override
+  String get activityNeedsAttention => 'Richiede attenzione';
+
+  @override
+  String get activityRetryAll => 'Riprova tutto';
+
+  @override
+  String get attentionSummaryFailed => 'Impossibile riassumere questa conversazione';
 }

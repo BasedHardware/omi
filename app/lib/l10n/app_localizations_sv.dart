@@ -5028,9 +5028,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get content => 'Innehåll';
 
   @override
-  String get noContentToDisplay => 'Inget innehåll att visa';
-
-  @override
   String get noSummary => 'Ingen sammanfattning';
 
   @override
@@ -9811,9 +9808,6 @@ class AppLocalizationsSv extends AppLocalizations {
       'Tal till text är inte tillgängligt just nu. Kontrollera internetanslutningen och enhetens inställningar för taligenkänning och försök igen.';
 
   @override
-  String get processingTakingLonger => 'Fortfarande igång — det tar längre tid än vanligt.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Så att Omi vet vilken röst som är din — prata om vad som helst i ungefär 5 sekunder.';
 
@@ -13483,4 +13477,13 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Ny';
+
+  @override
+  String get activityNeedsAttention => 'Behöver uppmärksamhet';
+
+  @override
+  String get activityRetryAll => 'Försök igen med alla';
+
+  @override
+  String get attentionSummaryFailed => 'Det gick inte att sammanfatta samtalet';
 }

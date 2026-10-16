@@ -1542,7 +1542,6 @@
     "photos": "Fotografii",
     "rawData": "Date brute",
     "content": "Conținut",
-    "noContentToDisplay": "Nu există conținut de afișat",
     "noSummary": "Fără rezumat",
     "updateOmiFirmware": "Actualizează firmware-ul Omi",
     "anErrorOccurredTryAgain": "A apărut o eroare. Vă rugăm să încercați din nou.",
@@ -3167,7 +3166,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Atinge butonul de înregistrare pentru a începe înregistrarea",
-    "processingTakingLonger": "Încă se procesează — durează mai mult decât de obicei.",
     "speechProfileEnrollmentPrompt": "Pentru ca Omi să știe care este vocea ta — vorbește despre orice timp de aproximativ 5 secunde.",
     "home": "Acasă",
     "failedToUpdateBaselineStatus": "Nu s-a putut actualiza această amintire. Încearcă din nou.",
@@ -4134,5 +4132,8 @@
     "activityEmpty": "Nicio activitate încă",
     "activityNewSemantics": "Activitate, elemente noi",
     "activityLoadFailed": "Nu am putut încărca toată activitatea ta",
-    "activityNewItem": "Nou"
+    "activityNewItem": "Nou",
+    "activityNeedsAttention": "Necesită atenție",
+    "activityRetryAll": "Reîncearcă tot",
+    "attentionSummaryFailed": "Conversația nu a putut fi rezumată"
 }

@@ -5034,9 +5034,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get content => 'İçerik';
 
   @override
-  String get noContentToDisplay => 'Gösterilecek içerik yok';
-
-  @override
   String get noSummary => 'Özet yok';
 
   @override
@@ -9820,9 +9817,6 @@ class AppLocalizationsTr extends AppLocalizations {
       'Konuşmayı metne dönüştürme şu anda kullanılamıyor. İnternet bağlantınızı ve cihazınızın konuşma tanıma ayarlarını kontrol edip tekrar deneyin.';
 
   @override
-  String get processingTakingLonger => 'Hâlâ devam ediyor — bu her zamankinden daha uzun sürüyor.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Omi\'nin hangi sesin size ait olduğunu bilmesi için yaklaşık 5 saniye boyunca istediğiniz bir konuda konuşun.';
 
@@ -13491,4 +13485,13 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Yeni';
+
+  @override
+  String get activityNeedsAttention => 'İlgi gerekiyor';
+
+  @override
+  String get activityRetryAll => 'Tümünü yeniden dene';
+
+  @override
+  String get attentionSummaryFailed => 'Bu konuşma özetlenemedi';
 }

@@ -5035,9 +5035,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get content => 'Zawartość';
 
   @override
-  String get noContentToDisplay => 'Brak treści do wyświetlenia';
-
-  @override
   String get noSummary => 'Brak podsumowania';
 
   @override
@@ -9840,9 +9837,6 @@ class AppLocalizationsPl extends AppLocalizations {
       'Zamiana mowy na tekst jest teraz niedostępna. Sprawdź połączenie internetowe i ustawienia rozpoznawania mowy na urządzeniu, a następnie spróbuj ponownie.';
 
   @override
-  String get processingTakingLonger => 'Nadal działa — trwa to dłużej niż zwykle.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Aby Omi wiedziało, który głos jest Twój — mów o czymkolwiek przez około 5 sekund.';
 
@@ -13517,4 +13511,13 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nowe';
+
+  @override
+  String get activityNeedsAttention => 'Wymaga uwagi';
+
+  @override
+  String get activityRetryAll => 'Ponów wszystkie';
+
+  @override
+  String get attentionSummaryFailed => 'Nie udało się podsumować tej rozmowy';
 }
