@@ -5075,9 +5075,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get content => 'Contenu';
 
   @override
-  String get noContentToDisplay => 'Aucun contenu à afficher';
-
-  @override
   String get noSummary => 'Pas de résumé';
 
   @override
@@ -9894,9 +9891,6 @@ class AppLocalizationsFr extends AppLocalizations {
       'La transcription vocale est indisponible pour le moment. Vérifiez votre connexion Internet et les réglages de reconnaissance vocale de votre appareil, puis réessayez.';
 
   @override
-  String get processingTakingLonger => 'Toujours en cours — cela prend plus de temps que d’habitude.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Pour qu’Omi reconnaisse votre voix — parlez de ce que vous voulez pendant environ 5 secondes.';
 
@@ -13584,4 +13578,13 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nouveau';
+
+  @override
+  String get activityNeedsAttention => 'Nécessite votre attention';
+
+  @override
+  String get activityRetryAll => 'Tout réessayer';
+
+  @override
+  String get attentionSummaryFailed => 'Impossible de résumer cette conversation';
 }

@@ -1542,7 +1542,6 @@
     "photos": "Снимки",
     "rawData": "Необработени данни",
     "content": "Съдържание",
-    "noContentToDisplay": "Няма съдържание за показване",
     "noSummary": "Няма резюме",
     "updateOmiFirmware": "Актуализиране на фърмуера на Omi",
     "anErrorOccurredTryAgain": "Възникна грешка. Моля, опитайте отново.",
@@ -3167,7 +3166,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Докоснете бутона за запис, за да започнете запис",
-    "processingTakingLonger": "Все още работи — отнема повече време от обичайното.",
     "speechProfileEnrollmentPrompt": "За да знае Omi кой глас е вашият — говорете за каквото искате около 5 секунди.",
     "home": "Начало",
     "failedToUpdateBaselineStatus": "Не можа да се актуализира този спомен. Опитайте отново.",
@@ -4134,5 +4132,8 @@
     "activityEmpty": "Все още няма активност",
     "activityNewSemantics": "Активност, нови елементи",
     "activityLoadFailed": "Не можахме да заредим цялата ви активност",
-    "activityNewItem": "Ново"
+    "activityNewItem": "Ново",
+    "activityNeedsAttention": "Изисква внимание",
+    "activityRetryAll": "Опитай всички отново",
+    "attentionSummaryFailed": "Този разговор не можа да бъде обобщен"
 }

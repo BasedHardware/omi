@@ -5035,9 +5035,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get content => 'Vsebina';
 
   @override
-  String get noContentToDisplay => 'Ni vsebine za prikaz';
-
-  @override
   String get noSummary => 'Brez povzetka';
 
   @override
@@ -9839,9 +9836,6 @@ class AppLocalizationsSl extends AppLocalizations {
       'Pretvorba govora v besedilo trenutno ni na voljo. Preverite internetno povezavo in nastavitve prepoznavanja govora v napravi ter poskusite znova.';
 
   @override
-  String get processingTakingLonger => 'Še poteka — traja dlje kot običajno.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Da bo Omi vedel, kateri glas je vaš — govorite o čemer koli približno 5 sekund.';
 
@@ -13509,4 +13503,13 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Novo';
+
+  @override
+  String get activityNeedsAttention => 'Potrebna je pozornost';
+
+  @override
+  String get activityRetryAll => 'Poskusi vse znova';
+
+  @override
+  String get attentionSummaryFailed => 'Tega pogovora ni bilo mogoče povzeti';
 }

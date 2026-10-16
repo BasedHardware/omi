@@ -5968,10 +5968,6 @@
     "@content": {
         "description": "Tab label for content"
     },
-    "noContentToDisplay": "প্রদর্শন করার জন্য কোনো বিষয়বস্তু নেই",
-    "@noContentToDisplay": {
-        "description": "Message when there is no content available"
-    },
     "noSummary": "কোনো সারাংশ নেই",
     "@noSummary": {
         "description": "Message when no summary is available"
@@ -10593,7 +10589,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "রেকর্ডিং শুরু করতে রেকর্ড বোতাম চাপুন",
-    "processingTakingLonger": "এখনও কাজ চলছে — এটি স্বাভাবিকের চেয়ে বেশি সময় নিচ্ছে।",
     "speechProfileEnrollmentPrompt": "Omi যেন আপনার কণ্ঠ চিনতে পারে — যেকোনো বিষয়ে প্রায় ৫ সেকেন্ড কথা বলুন।",
     "home": "হোম",
     "failedToUpdateBaselineStatus": "এই স্মৃতি আপডেট করা যায়নি। আবার চেষ্টা করুন।",
@@ -11560,5 +11555,8 @@
     "activityEmpty": "এখনও কোনো কার্যকলাপ নেই",
     "activityNewSemantics": "কার্যকলাপ, নতুন আইটেম",
     "activityLoadFailed": "আপনার সব কার্যকলাপ লোড করা যায়নি",
-    "activityNewItem": "নতুন"
+    "activityNewItem": "নতুন",
+    "activityNeedsAttention": "মনোযোগ প্রয়োজন",
+    "activityRetryAll": "সবগুলো আবার চেষ্টা করুন",
+    "attentionSummaryFailed": "এই কথোপকথনের সারাংশ তৈরি করা যায়নি"
 }

@@ -5050,9 +5050,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get content => 'Conținut';
 
   @override
-  String get noContentToDisplay => 'Nu există conținut de afișat';
-
-  @override
   String get noSummary => 'Fără rezumat';
 
   @override
@@ -9857,9 +9854,6 @@ class AppLocalizationsRo extends AppLocalizations {
       'Conversia vorbirii în text nu este disponibilă momentan. Verifică conexiunea la internet și setările de recunoaștere vocală ale dispozitivului, apoi încearcă din nou.';
 
   @override
-  String get processingTakingLonger => 'Încă se procesează — durează mai mult decât de obicei.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Pentru ca Omi să știe care este vocea ta — vorbește despre orice timp de aproximativ 5 secunde.';
 
@@ -13533,4 +13527,13 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nou';
+
+  @override
+  String get activityNeedsAttention => 'Necesită atenție';
+
+  @override
+  String get activityRetryAll => 'Reîncearcă tot';
+
+  @override
+  String get attentionSummaryFailed => 'Conversația nu a putut fi rezumată';
 }

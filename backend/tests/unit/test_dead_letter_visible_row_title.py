@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import zlib
+from copy import deepcopy
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -25,6 +26,8 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 from database import conversation_finalization_jobs as jobs
 from database import conversation_terminal_title as terminal_title
 from database import conversations as conversations_db
+from database import processing_attention as attention
+from tests.unit.fixtures.strict_firestore_transaction import ReadAfterWriteError, StrictFirestore
 from models.conversation import Conversation
 from utils import encryption
 
@@ -44,6 +47,7 @@ class _Photos:
 
     def stream(self, transaction=None):
         assert transaction is not None, 'photo probe must read inside the transaction'
+        transaction._assert_read_allowed()
         self.reads += 1
         return iter([SimpleNamespace(to_dict=lambda photo=photo: photo) for photo in self.photos])
 
@@ -56,8 +60,10 @@ class _Ref:
         self.photos = _Photos(child_photos or [])
 
     def get(self, transaction=None):
-        del transaction
-        return SimpleNamespace(exists=self.data is not None, id=self.id, to_dict=lambda: self.data)
+        if transaction is None:
+            return SimpleNamespace(exists=self.data is not None, id=self.id, to_dict=lambda: self.data)
+        self.parent = SimpleNamespace(parent=transaction.database.collection('users').document(_UID))
+        return transaction.document(self).get(transaction=transaction)
 
     def collection(self, name: str):
         assert name == 'photos'
@@ -65,11 +71,33 @@ class _Ref:
 
 
 class _Transaction:
+    """Keep title/photo fixtures while delegating document semantics to StrictFirestore."""
+
     def __init__(self):
+        self.database = StrictFirestore()
+        self.strict = self.database.transaction()
         self.updates: list[tuple[_Ref, dict]] = []
+        self.sets = []
+
+    def document(self, ref):
+        path = tuple(ref.path.split('/'))
+        if ref.data is not None and path not in self.database.rows:
+            self.database.rows[path] = deepcopy(ref.data)
+        return self.database.document(ref.path)
+
+    def _assert_read_allowed(self):
+        self.strict._assert_read_allowed()
+
+    def _assert_reference_belongs(self, ref):
+        self.strict._assert_reference_belongs(ref)
 
     def update(self, ref, data):
+        self.strict.update(self.document(ref), data)
         self.updates.append((ref, data))
+
+    def set(self, ref, data):
+        self.strict.set(ref, data)
+        self.sets.append((ref, data))
 
 
 def _job() -> _Ref:
@@ -125,6 +153,16 @@ def _dead_letter(conversation: _Ref, failure_code: str = 'final_attempt_failed',
     conversation_writes = [patch for ref, patch in transaction.updates if ref is conversation]
     assert len(conversation_writes) == 1
     patch = conversation_writes[0]
+    assert len(transaction.sets) == 1
+    attention_ref, item = transaction.sets[0]
+    assert attention_ref.path == (
+        'users',
+        _UID,
+        'processing_attention_items',
+        attention.item_id(conversation.id, conversation.data),
+    )
+    assert item['conversation_id'] == conversation.id
+    assert item['retryable'] == bool(patch.get('summary_retryable'))
     patch['_zone_calls'] = zone_calls
     return patch
 
@@ -306,6 +344,7 @@ def test_unbound_or_discarded_rows_are_not_touched():
         transaction, _job(), 3, 1, 5, _NOW, lambda uid, conversation_id: discarded, None, 'final_attempt_failed'
     )
     assert [ref for ref, _patch in transaction.updates if ref is discarded] == []
+    assert transaction.sets == []
 
 
 def test_titled_dead_letter_row_is_a_valid_api_conversation():
@@ -489,3 +528,22 @@ def test_many_action_item_maps_near_the_limit_drop_the_title():
     assert patch == {'status': 'completed', 'discarded': False, 'finalization_status': 'dead_letter'}
     after = {**near_limit.data, **patch}
     assert _reference_document_size(after, near_limit.path) <= terminal_title.FIRESTORE_MAX_DOCUMENT_BYTES
+
+
+def test_attention_read_after_a_terminal_write_is_rejected():
+    transaction = _Transaction()
+    conversation = _conversation({'transcript_segments': _segments('Plan the offsite.')})
+    conversation.get(transaction=transaction)
+    job = _job()
+    job.get(transaction=transaction)
+    transaction.update(job, {'status': 'dead_letter'})
+    with pytest.raises(ReadAfterWriteError):
+        attention.create_in_transaction(
+            transaction,
+            _UID,
+            conversation,
+            conversation.data,
+            {'summary_retryable': True},
+            'final_attempt_failed',
+            _NOW,
+        )

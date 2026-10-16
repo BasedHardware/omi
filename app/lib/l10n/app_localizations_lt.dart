@@ -5026,9 +5026,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get content => 'Turinys';
 
   @override
-  String get noContentToDisplay => 'Nėra turinio rodyti';
-
-  @override
   String get noSummary => 'Nėra santraukos';
 
   @override
@@ -9828,9 +9825,6 @@ class AppLocalizationsLt extends AppLocalizations {
       'Kalbos vertimas tekstu šiuo metu nepasiekiamas. Patikrinkite interneto ryšį ir įrenginio kalbos atpažinimo nustatymus, tada bandykite dar kartą.';
 
   @override
-  String get processingTakingLonger => 'Vis dar vyksta — tai užtrunka ilgiau nei įprasta.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Kad Omi žinotų, kuris balsas yra jūsų — kalbėkite apie bet ką maždaug 5 sekundes.';
 
@@ -13502,4 +13496,13 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nauja';
+
+  @override
+  String get activityNeedsAttention => 'Reikia dėmesio';
+
+  @override
+  String get activityRetryAll => 'Bandyti visus iš naujo';
+
+  @override
+  String get attentionSummaryFailed => 'Nepavyko apibendrinti šio pokalbio';
 }

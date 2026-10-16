@@ -180,6 +180,10 @@ _add(
 )
 _add(DriverEntry('database._client.get_users_uid'))
 
+# Authenticated pending-work projections use bounded, single-field owner queries.
+_add(DriverEntry('database.processing_attention.list_items', base={'uid': UID}, domains={'limit': [None, 100]}))
+_add(DriverEntry('database.processing_attention.pending_conversations', base={'uid': UID}))
+
 _add(DriverEntry('database.account_deletion_transitions.read_agent_vm_migration_journals', base={'uid': UID}))
 
 _add(

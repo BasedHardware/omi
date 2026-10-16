@@ -5032,9 +5032,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get content => 'Вміст';
 
   @override
-  String get noContentToDisplay => 'Немає вмісту для відображення';
-
-  @override
   String get noSummary => 'Немає підсумку';
 
   @override
@@ -9832,9 +9829,6 @@ class AppLocalizationsUk extends AppLocalizations {
       'Перетворення мовлення на текст зараз недоступне. Перевірте підключення до інтернету та налаштування розпізнавання мовлення на пристрої й спробуйте ще раз.';
 
   @override
-  String get processingTakingLonger => 'Ще обробляється — це триває довше, ніж зазвичай.';
-
-  @override
   String get speechProfileEnrollmentPrompt => 'Щоб Omi знав, який голос ваш, говоріть про будь-що приблизно 5 секунд.';
 
   @override
@@ -13508,4 +13502,13 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Нове';
+
+  @override
+  String get activityNeedsAttention => 'Потребує уваги';
+
+  @override
+  String get activityRetryAll => 'Повторити все';
+
+  @override
+  String get attentionSummaryFailed => 'Не вдалося підсумувати цю розмову';
 }

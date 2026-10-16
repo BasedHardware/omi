@@ -1542,7 +1542,6 @@
     "photos": "Fotos",
     "rawData": "Rådata",
     "content": "Indhold",
-    "noContentToDisplay": "Intet indhold at vise",
     "noSummary": "Ingen oversigt",
     "updateOmiFirmware": "Opdater omi-firmware",
     "anErrorOccurredTryAgain": "Der opstod en fejl. Prøv venligst igen.",
@@ -3209,7 +3208,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Tryk på optageknappen for at starte optagelsen",
-    "processingTakingLonger": "Arbejder stadig — det tager længere end normalt.",
     "speechProfileEnrollmentPrompt": "Så Omi ved, hvilken stemme der er din — tal om hvad som helst i cirka 5 sekunder.",
     "home": "Hjem",
     "failedToUpdateBaselineStatus": "Kunne ikke opdatere dette minde. Prøv igen.",
@@ -4176,5 +4174,8 @@
     "activityEmpty": "Ingen aktivitet endnu",
     "activityNewSemantics": "Aktivitet, nye elementer",
     "activityLoadFailed": "Kunne ikke indlæse al din aktivitet",
-    "activityNewItem": "Ny"
+    "activityNewItem": "Ny",
+    "activityNeedsAttention": "Kræver opmærksomhed",
+    "activityRetryAll": "Prøv alle igen",
+    "attentionSummaryFailed": "Samtalen kunne ikke opsummeres"
 }
