@@ -4385,6 +4385,16 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Pelan $plan anda tamat pada $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Langgan semula sekarang untuk mengekalkan manfaat anda - tiada caj sehingga $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Pelan anda ditetapkan untuk dibatalkan pada $date.\nLanggan semula sekarang untuk mengekalkan manfaat anda - tiada caj sehingga $date.';
   }
@@ -4392,6 +4402,11 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Pelan tahunan anda akan bermula secara automatik apabila pelan bulanan anda tamat.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Pelan $plan anda akan diperbaharui pada $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4424,6 +4439,9 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get continueText => 'Teruskan';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Langgan semula dahulu untuk menukar pelan.';
 
   @override
   String get resubscribe => 'Langgan semula';

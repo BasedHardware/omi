@@ -4371,6 +4371,16 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Jūsų $plan planas baigiasi $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Persiregistruokite dabar, kad išsaugotumėte privalumus - nėra mokesčio iki $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Jūsų planas nustatytas atšaukti $date.\nPersiregistruokite dabar, kad išsaugotumėte privalumus - nėra mokesčio iki $date.';
   }
@@ -4378,6 +4388,11 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Jūsų metinis planas automatiškai prasidės, kai baigsis mėnesinis planas.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Jūsų $plan planas bus atnaujintas $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4410,6 +4425,9 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get continueText => 'Tęsti';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Norėdami pakeisti planą, pirmiausia užsiprenumeruokite iš naujo.';
 
   @override
   String get resubscribe => 'Persiregistruoti';

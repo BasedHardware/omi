@@ -9,11 +9,83 @@ import WebKit
 let operatorDeprecationFallbackPrice = "$49/mo"
 
 enum SubscriptionPlanPresentation {
+  static let resubscribeFirst = "Resubscribe first to change plans."
+
+  enum Purchase {
+    case resubscribe
+    case blocked
+    case proceed
+  }
+
+  static func purchase(cancelAtPeriodEnd: Bool, currentPriceId: String?, priceId: String) -> Purchase {
+    guard cancelAtPeriodEnd else { return .proceed }
+    if let currentPriceId, !currentPriceId.isEmpty, priceId == currentPriceId {
+      return .resubscribe
+    }
+    return .blocked
+  }
+
+  static func endsLine(plan: String, date: String) -> String {
+    "Your \(plan) plan ends \(date)."
+  }
+
+  static func renewsLine(plan: String, date: String) -> String {
+    "Your \(plan) plan will renew on \(date)."
+  }
+
   static func selectionLabel(planTitle: String, startingPrice: String?) -> String {
     guard let startingPrice, !startingPrice.isEmpty else {
       return "Select \(planTitle)"
     }
     return "Select \(planTitle) · \(startingPrice)"
+  }
+}
+
+/// Trailing actions on the current-plan card. The catalog hides the plan the
+/// reader is already on, so Resubscribe has to live here while a cancellation
+/// is pending. Manage stays available either way.
+struct CurrentPlanCardActions: View {
+  let cancelAtPeriodEnd: Bool
+  let currentPriceId: String?
+  let checkoutBusy: Bool
+  let portalBusy: Bool
+  let onResubscribe: (String) -> Void
+  let onManage: () -> Void
+
+  var resubscribePriceId: String? {
+    guard cancelAtPeriodEnd, let currentPriceId, !currentPriceId.isEmpty else { return nil }
+    return currentPriceId
+  }
+
+  var body: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      if let priceId = resubscribePriceId {
+        Button(action: { onResubscribe(priceId) }) {
+          if checkoutBusy {
+            ProgressView()
+              .controlSize(.small)
+          } else {
+            Text("Resubscribe")
+              .scaledFont(size: OmiType.body, weight: .semibold)
+          }
+        }
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+        .disabled(checkoutBusy)
+        .accessibilityIdentifier("current-plan-resubscribe")
+      }
+
+      Button(action: onManage) {
+        if portalBusy {
+          ProgressView()
+            .controlSize(.small)
+        } else {
+          Text("Manage")
+            .scaledFont(size: OmiType.body, weight: .semibold)
+        }
+      }
+      .buttonStyle(OmiButtonStyle(resubscribePriceId == nil ? .primary : .secondary, size: .compact))
+      .disabled(portalBusy)
+    }
   }
 }
 
@@ -153,8 +225,18 @@ extension SettingsContentView {
     let formatter = DateFormatter()
     formatter.dateStyle = .medium
     formatter.timeStyle = .none
-    let prefix = subscription.cancelAtPeriodEnd ? "Access ends" : "Renews"
-    return "\(prefix) on \(formatter.string(from: date))"
+    let formatted = formatter.string(from: date)
+    if subscription.cancelAtPeriodEnd {
+      return SubscriptionPlanPresentation.endsLine(plan: subscription.plan.displayName, date: formatted)
+    }
+    return "Renews on \(formatted)"
+  }
+
+  func mediumPeriodDate(_ periodEnd: Int) -> String {
+    let formatter = DateFormatter()
+    formatter.dateStyle = .medium
+    formatter.timeStyle = .none
+    return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(periodEnd)))
   }
 
   static func planSubtitle(for planId: String) -> String? {
@@ -343,6 +425,10 @@ extension SettingsContentView {
       || userSubscription?.subscription.plan == .pro
     let isDowngrade = isArchitectUser && plan.id == "unlimited"
     let canPurchase = !isCurrentPlan && !isDowngrade
+    let cancelPending = userSubscription?.subscription.cancelAtPeriodEnd == true
+    let ownsCurrentPrice = plan.prices.contains {
+      $0.id == userSubscription?.subscription.currentPriceId
+    }
 
     VStack(alignment: .leading, spacing: OmiSpacing.lg) {
       HStack(alignment: .top, spacing: OmiSpacing.md) {
@@ -417,7 +503,11 @@ extension SettingsContentView {
         }
       }
 
-      if isSelected && canPurchase {
+      if isSelected && canPurchase && cancelPending && !ownsCurrentPrice {
+        Text(SubscriptionPlanPresentation.resubscribeFirst)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .foregroundColor(SettingsInk.notice)
+      } else if isSelected && canPurchase {
         GlassSeparator()
 
         VStack(alignment: .leading, spacing: OmiSpacing.sm) {
@@ -494,18 +584,35 @@ extension SettingsContentView {
           }
         }
       } else if isCurrentPlan {
-        HStack {
-          Text("Current Plan")
-            .scaledFont(size: OmiType.caption, weight: .bold)
-            .foregroundColor(Ink.primary)
-          Spacer()
-          // The glyph keeps the tint — it is a graphical object, which is a 3:1 bar rather than a
-          // 4.5:1 one — and the words next to it stop being set in a hue that cannot clear either.
-          Image(systemName: "checkmark.circle.fill")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(accent)
+        if cancelPending, let priceId = userSubscription?.subscription.currentPriceId, !priceId.isEmpty {
+          Button(action: { startCheckout(for: priceId) }) {
+            Group {
+              if activeCheckoutPriceId == priceId {
+                ProgressView()
+                  .controlSize(.small)
+                  .frame(maxWidth: .infinity)
+              } else {
+                Text("Resubscribe")
+                  .frame(maxWidth: .infinity)
+              }
+            }
+          }
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+          .disabled(activeCheckoutPriceId != nil)
+        } else {
+          HStack {
+            Text("Current Plan")
+              .scaledFont(size: OmiType.caption, weight: .bold)
+              .foregroundColor(Ink.primary)
+            Spacer()
+            // The glyph keeps the tint — it is a graphical object, which is a 3:1 bar rather than a
+            // 4.5:1 one — and the words next to it stop being set in a hue that cannot clear either.
+            Image(systemName: "checkmark.circle.fill")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(accent)
+          }
+          .padding(.vertical, OmiSpacing.sm)
         }
-        .padding(.vertical, OmiSpacing.sm)
       } else {
         Button(action: {
           selectedPlanIdForCheckout = plan.id
@@ -955,9 +1062,20 @@ extension SettingsContentView {
 
   func startCheckout(for priceId: String) {
     guard activeCheckoutPriceId == nil else { return }
+    if let subscription = userSubscription?.subscription,
+      SubscriptionPlanPresentation.purchase(
+        cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+        currentPriceId: subscription.currentPriceId,
+        priceId: priceId
+      ) == .blocked
+    {
+      subscriptionError = SubscriptionPlanPresentation.resubscribeFirst
+      return
+    }
     activeCheckoutPriceId = priceId
     pendingSubscriptionPriceId = priceId
     subscriptionError = nil
+    subscriptionConfirmation = nil
     let selection = checkoutSelection(for: priceId)
     pendingCheckoutPlanId = selection.plan
     pendingCheckoutInterval = selection.interval
@@ -991,7 +1109,9 @@ extension SettingsContentView {
           await MainActor.run {
             activeCheckoutPriceId = nil
             pendingSubscriptionPriceId = nil
-            subscriptionError = apiError.detail ?? "Failed to schedule plan change."
+            subscriptionError =
+              pendingCancelCheckoutMessage(apiError) ?? apiError.detail
+              ?? "Failed to schedule plan change."
           }
         } catch {
           logError("Failed to schedule plan change", error: error)
@@ -1017,6 +1137,11 @@ extension SettingsContentView {
 
         if response.status == "reactivated" {
           await MainActor.run {
+            let planName = userSubscription?.subscription.plan.displayName ?? "plan"
+            if let periodEnd = userSubscription?.subscription.currentPeriodEnd {
+              subscriptionConfirmation = SubscriptionPlanPresentation.renewsLine(
+                plan: planName, date: mediumPeriodDate(periodEnd))
+            }
             subscriptionError = nil
             pendingSubscriptionPriceId = nil
             pendingCheckoutSessionId = nil
@@ -1046,7 +1171,7 @@ extension SettingsContentView {
           activeCheckoutPriceId = nil
           pendingSubscriptionPriceId = nil
           pendingCheckoutSessionId = nil
-          subscriptionError = apiError.detail ?? "Failed to open checkout."
+          subscriptionError = pendingCancelCheckoutMessage(apiError) ?? apiError.detail ?? "Failed to open checkout."
         }
       } catch {
         logError("Failed to create checkout session", error: error)
@@ -1058,6 +1183,13 @@ extension SettingsContentView {
         }
       }
     }
+  }
+
+  func pendingCancelCheckoutMessage(_ error: APIError) -> String? {
+    if case .httpError(let statusCode, _) = error, statusCode == 409 {
+      return SubscriptionPlanPresentation.resubscribeFirst
+    }
+    return nil
   }
 
   func openCustomerPortal() {

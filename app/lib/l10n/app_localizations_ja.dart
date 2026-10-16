@@ -4304,12 +4304,27 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return '$planプランは$dateに終了します。';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return '特典を維持するために今すぐ再登録 - $dateまで請求はありません。';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'プランは$dateにキャンセル予定です。\n特典を維持するために今すぐ再登録 - $dateまで請求はありません。';
   }
 
   @override
   String get annualPlanStartsAutomatically => '月額プランが終了すると、年間プランが自動的に開始されます。';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return '$planプランは$dateに更新されます。';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4342,6 +4357,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get continueText => '続ける';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'プランを変更するには、先に再購読してください。';
 
   @override
   String get resubscribe => '再購読';

@@ -5065,6 +5065,8 @@
             }
         }
     },
+    "yourPlanEndsOn": "آپ کا {plan} پلان {date} کو ختم ہوگا۔",
+    "resubscribeNowNoChargeUntil": "اپنے فوائل کو برقرار رکھنے کے لیے اب دوبارہ رکنیت حاصل کریں - {date} تک کوئی چارج نہیں۔",
     "planSetToCancelOn": "آپ کا منصوبہ {date} کو منسوخ ہونے کے لیے طے شدہ ہے۔\nاپنے فوائل کو برقرار رکھنے کے لیے اب دوبارہ رکنیت حاصل کریں - {date} تک کوئی چارج نہیں۔",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5079,6 +5081,7 @@
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
     },
+    "yourPlanWillRenewOn": "آپ کا {plan} پلان {date} کو تجدید ہوگا۔",
     "planRenewsOn": "آپ کا منصوبہ {date} کو تازہ ہوگا۔",
     "@planRenewsOn": {
         "description": "Message showing plan renewal date",
@@ -5125,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "resubscribeFirstToChangePlans": "پلان بدلنے کے لیے پہلے دوبارہ رکنیت حاصل کریں۔",
     "resubscribe": "دوبارہ رکنیت حاصل کریں",
     "@resubscribe": {
         "description": "Button to resubscribe"

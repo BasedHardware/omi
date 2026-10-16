@@ -63,7 +63,7 @@ class WalListItem extends StatelessWidget {
     if (hasError) return (Colors.redAccent, l.failedStatus);
     switch (state) {
       case WalSyncDisplayState.synced:
-        return (Colors.grey.shade500, l.syncStatusConversationCreated);
+        return (Colors.grey.shade500, l.statusProcessed);
       case WalSyncDisplayState.uploaded:
         return (Colors.grey.shade400, l.syncStatusUploaded);
       case WalSyncDisplayState.retrying:
@@ -528,6 +528,9 @@ class _SyncPageState extends State<SyncPage> {
       subtitle = job.tracked && job.totalSeconds > 0
           ? l.syncCardTranscribedOf(dur(job.doneSeconds), dur(job.totalSeconds))
           : l.syncProcessingBackgroundHint;
+    } else if (syncProvider.needsAttentionWalsCount > 0) {
+      title = l.syncCardNeedsAttention(syncProvider.needsAttentionWalsCount);
+      titleColor = Colors.orangeAccent;
     } else if (readyToSync > 0) {
       final seconds = syncProvider.missingWalsInSeconds;
       title = seconds > 0 ? l.syncCardReadyAmount(dur(seconds)) : l.syncCardReadyCount(readyToSync);
@@ -641,9 +644,10 @@ class _SyncPageState extends State<SyncPage> {
   Widget _buildEmptyFilterState(BuildContext context, WalStatusFilter filter) {
     final isPending = filter == WalStatusFilter.pending;
     final isCorrupted = filter == WalStatusFilter.corrupted;
+    final needsAttention = isPending && context.read<SyncProvider>().needsAttentionWalsCount > 0;
     return OmiEmptyState(
       glyph: FaIcon(
-        isPending
+        isPending && !needsAttention
             ? FontAwesomeIcons.circleCheck
             : isCorrupted
                 ? FontAwesomeIcons.triangleExclamation
@@ -654,7 +658,7 @@ class _SyncPageState extends State<SyncPage> {
           : isCorrupted
               ? context.l10n.syncStatusFileUnavailable
               : context.l10n.noProcessedRecordings,
-      message: isPending ? context.l10n.allCaughtUp : null,
+      message: isPending && !needsAttention ? context.l10n.allCaughtUp : null,
     );
   }
 

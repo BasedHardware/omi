@@ -5065,6 +5065,8 @@
             }
         }
     },
+    "yourPlanEndsOn": "Tvoj {plan} plan završava {date}.",
+    "resubscribeNowNoChargeUntil": "Prenazovite se sada kako biste zadržali svoju korist - bez naplate do {date}.",
     "planSetToCancelOn": "Vaš plan je postavljen da se otkaže {date}.\nPrenazovite se sada kako biste zadržali svoju korist - bez naplate do {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5079,6 +5081,7 @@
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
     },
+    "yourPlanWillRenewOn": "Tvoj {plan} plan će se obnoviti {date}.",
     "planRenewsOn": "Vaš plan se obnavljja {date}.",
     "@planRenewsOn": {
         "description": "Message showing plan renewal date",
@@ -5125,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "resubscribeFirstToChangePlans": "Prvo se ponovno pretplati da promijeniš plan.",
     "resubscribe": "Ponovo se pretplati",
     "@resubscribe": {
         "description": "Button to resubscribe"
