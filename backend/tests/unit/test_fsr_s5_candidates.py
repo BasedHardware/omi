@@ -169,11 +169,28 @@ def test_generation_uid_empty_and_redis_failure(monkeypatch):
     assert len(calls) == 4
 
 
-def test_off_has_no_redis_io(monkeypatch):
+def test_off_reads_have_no_redis_io(monkeypatch):
     monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
     monkeypatch.setattr(cache, '_redis', lambda: SimpleNamespace(set=lambda *a, **kw: pytest.fail('off Redis IO')))
     assert cache.load_compatibility_candidates('u', 7, lambda: []) == []
+
+
+def test_lever_off_writer_still_invalidates_enabled_readers(monkeypatch):
+    # Mixed rollout: an enabled revision warms the entry, then an off-config host mutates candidates.
+    monkeypatch.setattr(cache, '_redis', lambda fake=Redis(): fake)
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"candidates_page":100}')
+    calls = []
+
+    def load():
+        calls.append(1)
+        return [candidate(len(calls))]
+
+    cache.load_compatibility_candidates('u', 7, load)
+    monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
     assert cache.invalidate_after_write(lambda uid: 'ok')('u') == 'ok'
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"candidates_page":100}')
+    cache.load_compatibility_candidates('u', 7, load)
+    assert len(calls) == 2
 
 
 @pytest.mark.parametrize('generation', [7, 8])
