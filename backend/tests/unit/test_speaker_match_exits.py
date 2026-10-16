@@ -95,6 +95,7 @@ async def test_exit_reasons_are_enumerated():
             'embedding_budget',
             'authority_unavailable',
             'rejector_tail_reserved',
+            'embedding_backoff',
         }
     )
     assert any(

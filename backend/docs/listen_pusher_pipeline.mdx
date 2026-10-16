@@ -3450,6 +3450,30 @@ The approved cutoff applies to the fractional balance literally: a balance of
 2.1 can spend one token and leave 1.1. It does not reserve two whole request
 opportunities at every fractional balance; that would require a different cutoff.
 
+A voice whose embedding request fails (the diarizer's 422 for below-threshold
+audio, a 5xx, or a transport fault) leaves the failure handler with none of the
+request's evidence. Before 2026-10 every subsequent provider segment for that
+voice re-sent the same doomed request, and each one logged
+`Speaker ID match failed type=HTTPStatusError` — the unbounded ERROR storm
+observed at x954/30m on backend-listen. The failure handler now records one
+classified `Speaker ID embedding failed` line per occurrence (numeric `status`
+for HTTP failures, the sanitized exception type otherwise), latches one
+socket-wide `omi_fallback_total{component="other",from_mode="speaker_embedding",
+to_mode="unlabeled"}` degradation signal per generation (reason `provider_5xx`
+for a 5xx status, `http_error` otherwise), and starts a per-voice monotonic
+silence window: 30s doubling per consecutive failure capped at 300s, on the
+monotonic clock. Transport-level faults (timeouts, connection errors) get no
+time gate — the existing 12-attempt voice ceiling and the VoiceRecovery
+tranches remain their bounded retry program. Inside the
+window the voice skips GPU reservation entirely and every blocked segment
+records `embedding_backoff` in the bounded exit/diagnostic vocabulary; the
+socket token and voice attempt are not spent. A published decision on the same
+voice ends its streak (the next genuine failure starts a fresh ladder), and
+`clear()` resets all four pieces of backoff state with the generation
+inventory. Exit metrics gain exactly one closed reason label (`embedding_backoff`).
+Backoff windows deliberately do not set `_pending_rollover_carry`: a voice
+silenced at a rollover boundary is not retained as if its last segment succeeded.
+
 Each dequeued update contributes its own audio interval to the existing pending
 minimum-evidence accumulation. Successful queries subtract already-embedded
 ranges, select at most ten seconds using the existing centered/chronological

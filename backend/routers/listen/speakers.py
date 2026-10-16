@@ -14,6 +14,7 @@ from utils.observability import owner_recognition_diagnostics as diagnostics
 import utils.stt.speaker_match as match_policy
 import numpy as np
 from pydantic import ValidationError
+from httpx import HTTPStatusError
 
 from config.speaker_prior import pinned_speaker_prior_enabled
 from models.transcript_segment import SpeakerIdentityStatus
@@ -45,6 +46,7 @@ from utils.stt.speaker_recovery import VoiceRecovery, recovery_voice_blocked
 from utils.transcribe_decisions import USER_SELF_PERSON_ID, should_spawn_speaker_match
 from utils.transcribe_store import conversations_db, get_user_name, user_db
 from utils.metrics import OMI_SPEAKER_ID_MATCH_EXITS_TOTAL, OMI_LIVE_SPEAKER_COLLAPSE_TOTAL
+from utils.observability.fallback import record_fallback
 from utils.observability.owner_recognition import (
     live_decision_labels,
     pending_decision_target,
@@ -75,6 +77,13 @@ SOCKET_EMBEDDING_REFILL_PER_SECOND = 240 / 3600
 MAX_OWNER_FAILED_LOADS = 8
 MAX_OWNER_PROFILE_RETRIES = 7
 MAX_OWNER_AUDIO_REPAIRS = 3
+# Backoff ladder for a voice whose embedding request was deterministically
+# rejected (an HTTP status), doubling per consecutive failure up to the
+# ceiling. Transport-level faults get no time gate: the voice-attempt ceiling
+# and VoiceRecovery tranches remain their bounded retry program. Monotonic
+# clock only — wall-clock jumps must not extend or shorten a silence window.
+EMBEDDING_STATUS_BACKOFF_SECONDS = 30.0
+EMBEDDING_BACKOFF_CEILING_SECONDS = 300.0
 
 # The enumerated early-exit reasons for live speaker-ID matching. Every return
 # before a match decision bumps exactly one of these (Prometheus counter label
@@ -109,6 +118,9 @@ SPEAKER_ID_EXIT_REASONS = frozenset(
         'embedding_budget',
         'authority_unavailable',
         'rejector_tail_reserved',
+        # The voice is inside its post-failure silence window (deterministic
+        # HTTP rejections and 5xx/transport faults use distinct ladders).
+        'embedding_backoff',
     }
 )
 
@@ -173,6 +185,14 @@ class SpeakerMatcher:
         # Voice incidence resets with generation; socket incidence never does.
         # Diarized IDs share the same 128-voice inventory as the admission cap.
         self._budget_blocked_voices: set[int] = set()
+        # Per-voice embedding failure backoff: consecutive-failure count, the
+        # monotonic retry deadline, the last HTTP status class (for the one
+        # bounded degradation signal), and the socket-wide warning latch. All
+        # reset by clear() with the rest of the generation inventory.
+        self._embedding_failures: Dict[int, int] = {}
+        self._embedding_retry_after: Dict[int, float] = {}
+        self._embedding_last_status_5xx = False
+        self._embedding_degradation_warned = False
         self._budget_socket_blocked = False
         self._generation = 0
         self.collapse_monitor = LiveSpeakerCollapseMonitor()
@@ -687,6 +707,59 @@ class SpeakerMatcher:
         OMI_SPEAKER_ID_MATCH_EXITS_TOTAL.labels(reason=reason).inc()
         self.diagnostics.observe(reason, self._voice_scopes.get(speaker_id, ''))
 
+    # The embedding API's structured error details in one bounded log per
+    # throttled voice. ``status`` is the numeric HTTP status code, or the
+    # sanitized exception type for transport-level failures.
+    def _log_embedding_failure(self, speaker_id: int, error: Exception) -> None:
+        response = getattr(error, 'response', None)
+        status = getattr(response, 'status_code', None)
+        kind = sanitize(type(error).__name__)
+        logger.error(
+            'Speaker ID embedding failed speaker=%s type=%s status=%s session=%s',
+            speaker_id,
+            kind,
+            status if status is not None else 'none',
+            self._session_log_id(),
+        )
+
+    # A voice whose embedding request was deterministically rejected (an HTTP
+    # status: the diarizer's 422 for below-threshold audio, a 404 route, a 5xx
+    # outage) sits out until this deadline instead of re-sending the same
+    # doomed request on every provider segment (the unbounded
+    # "Speaker ID match failed type=HTTPStatusError" storm). Transport-level
+    # faults get no time gate: the existing voice-attempt ceiling and the
+    # VoiceRecovery tranches remain the bounded retry program for those.
+    # HTTP statuses are assumed at least temporarily deterministic; 5xx usually
+    # heals within seconds, so it climbs the same ladder from a low base.
+    # Monotonic clock only — wall-clock jumps must not extend or shorten a
+    # silence window.
+    def _embedding_failure_backoff(self, speaker_id: int, error: Exception) -> float:
+        if not isinstance(error, HTTPStatusError):
+            return 0.0
+        status = getattr(error.response, 'status_code', None)
+        if isinstance(status, bool) or not isinstance(status, int):
+            return 0.0
+        return min(
+            EMBEDDING_BACKOFF_CEILING_SECONDS,
+            EMBEDDING_STATUS_BACKOFF_SECONDS * 2 ** self._embedding_failures.get(speaker_id, 0),
+        )
+
+    # The one bounded degradation signal per voice backoff window: the
+    # pipeline degrades from live speaker identification to unlabeled, and
+    # every previously silent clip emission carries that warning once.
+    def _record_embedding_degradation(self) -> None:
+        if self._embedding_degradation_warned:
+            return
+        self._embedding_degradation_warned = True
+        record_fallback(
+            component='other',
+            from_mode='speaker_embedding',
+            to_mode='unlabeled',
+            reason='provider_5xx' if self._embedding_last_status_5xx else 'http_error',
+            outcome='degraded',
+            log=logger,
+        )
+
     def _record_budget_exit(self, cap: str, speaker_id: int, segment: Optional[dict[str, Any]]) -> None:
         # This synchronous pair increments once per blocked reservation; no
         # per-segment budget log. The one first-block log is attributable by UID.
@@ -778,6 +851,14 @@ class SpeakerMatcher:
     ) -> bool:
         """Reserve synchronously before any await; failed requests spend tokens too."""
         now = time.monotonic()
+        if now < self._embedding_retry_after.get(speaker_id, 0.0):
+            # Silence the voice until its retry deadline. Counting the attempt
+            # keeps the existing voice-capacity ladder intact while blocked
+            # volume stays attributable through the bounded exit counter.
+            if self._embedding_attempts.get(speaker_id, 0) < MAX_VOICE_EMBEDDING_ATTEMPTS:
+                self._embedding_attempts[speaker_id] = self._embedding_attempts.get(speaker_id, 0) + 1
+                self._record_exit('embedding_backoff', speaker_id)
+            return False
         elapsed = max(0.0, now - self._socket_embedding_refilled_at)
         self._socket_embedding_tokens = min(
             SOCKET_EMBEDDING_BURST,
@@ -1282,8 +1363,30 @@ class SpeakerMatcher:
                     ),
                 )
                 reconnect_recorded = True
+            # A published decision from still-valid evidence ends the voice's
+            # failure streak, so the next genuine failure starts a fresh ladder.
+            self._embedding_failures.pop(speaker_id, None)
+            self._embedding_retry_after.pop(speaker_id, None)
             await self.continuity.update(receipt, force=True, generation=generation)
         except Exception as error:
+            # An embedding-API failure (HTTP 422 short audio, 5xx/transport) has
+            # none of the request's evidence: without a throttle, every provider
+            # segment re-sends the same doomed request — the unbounded prod
+            # "Speaker ID match failed type=HTTPStatusError" ERROR storm
+            # (backend-listen 2026-10, x954/30m). Classified log, one
+            # socket-wide degradation signal, then a per-voice silence window.
+            # Decisions made from still-valid earlier evidence stand.
+            if isinstance(error, HTTPStatusError):
+                status = getattr(error.response, 'status_code', None)
+                self._embedding_last_status_5xx = (
+                    isinstance(status, int) and not isinstance(status, bool) and status >= 500
+                )
+            self._log_embedding_failure(speaker_id, error)
+            retry_delay = self._embedding_failure_backoff(speaker_id, error)
+            self._embedding_failures[speaker_id] = self._embedding_failures.get(speaker_id, 0) + 1
+            if retry_delay > 0:
+                self._embedding_retry_after[speaker_id] = time.monotonic() + retry_delay
+            self._record_embedding_degradation()
             if isinstance(error, ValidationError):
                 issues = error.errors(include_input=False, include_context=False, include_url=False)
                 first = issues[0] if issues else {}
@@ -1476,6 +1579,10 @@ class SpeakerMatcher:
         self._covered_audio.clear()
         self._pending_audio.clear()
         self._embedding_attempts.clear()
+        self._embedding_failures.clear()
+        self._embedding_retry_after.clear()
+        self._embedding_last_status_5xx = False
+        self._embedding_degradation_warned = False
         self._voice_recovery.clear()
         self._rejectors.clear()
         self._budget_blocked_voices.clear()
