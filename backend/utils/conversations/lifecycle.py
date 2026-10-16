@@ -22,7 +22,10 @@ from database import conversations as conversations_db
 from database import oversized_conversation_terminal as oversized_terminal_db
 from database import recording_sessions as recording_sessions_db
 from database.firestore_read_metrics import FirestoreReadSite
-from database.firestore_transaction_retry import FirestoreContentionExhausted
+from database.firestore_transaction_retry import (
+    FirestoreContentionExhausted,
+    is_transaction_contention,
+)
 from models.conversation_enums import ConversationStatus
 from utils.cloud_tasks import (
     enqueue_listen_finalization_job,
@@ -635,9 +638,22 @@ def renew_live_recording_session_lease(
             conversation_id,
             firestore_client=firestore_client,
         )
-    except Exception:
+    except Exception as error:
         if recording_session_mode() == 'enforce':
             raise
+        if isinstance(error, FirestoreContentionExhausted) or is_transaction_contention(error):
+            # Firestore retried the renewal at both transaction boundaries and
+            # every attempt hit atomic contention; nothing was written. The
+            # next minute's audio activity re-arms the renewal, so this is the
+            # bounded transient — not the failed write the fail-open branch
+            # exists for. Log-only; no omi_fallback_total degradation event.
+            logger.warning(
+                'recording session lease renewal contended uid=%s session=%s conversation=%s',
+                uid,
+                recording_session_id,
+                conversation_id,
+            )
+            return False
         logger.exception(
             'recording session lease renewal failed uid=%s session=%s conversation=%s',
             uid,

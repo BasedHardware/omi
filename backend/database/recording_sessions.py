@@ -15,7 +15,8 @@ from typing import Any, Literal, Mapping, TypedDict
 from google.cloud import firestore
 
 from database import conversations as conversations_db
-from database._client import get_firestore_client
+from database._client import get_firestore_client, run_transactional
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.people_stats_cache import invalidate_people_stats_cache
 
 RECORDING_SESSIONS_COLLECTION = 'recording_sessions'
@@ -211,19 +212,36 @@ def renew_recording_session_lease(
     *,
     firestore_client: Any = None,
 ) -> bool:
-    """Renew a live session's lease against its identity and phase fence."""
+    """Renew a live session's lease against its identity and phase fence.
+
+    The renewal races every lifecycle event and the recovery sweep's admission
+    transaction on the same session document for the whole life of a live
+    recording. Firestore's SDK retries a commit ``Aborted`` by replaying the
+    *same* transaction id — the id a read-time abort has already retired — and
+    never retries an ``Aborted`` raised by the body's read, so each contention
+    burst surfaced as ``recording session lease renewal failed`` ERRORs from
+    ``renew_live_recording_session_lease`` and let the five-minute fence run
+    down while audio still flowed. Both retry layers the rest of ``database/``
+    uses apply here: the shared bounded fresh-transaction contention budget
+    replays a read-time abort on a brand-new transaction, and
+    ``run_transactional`` restarts an expired-transaction rejection.
+    """
     if not uid or not recording_session_id or not conversation_id:
         return False
     client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_renew_recording_session_lease_txn)
-    return transactional(
-        transaction,
-        _session_ref(client, uid, recording_session_id),
-        uid,
-        recording_session_id,
-        conversation_id,
-        _now(),
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        lambda transaction: run_transactional(
+            client,
+            firestore.transactional(_renew_recording_session_lease_txn),
+            _session_ref(client, uid, recording_session_id),
+            uid,
+            recording_session_id,
+            conversation_id,
+            _now(),
+            initial_transaction=transaction,
+        ),
+        operation_name='recording_session_lease_renewal',
     )
 
 

@@ -45,6 +45,13 @@ def _is_transaction_contention(error: BaseException) -> bool:
     return False
 
 
+# Public read on the classification the bounded budget itself uses. Callers
+# whose fail-open branch must distinguish "this attempt hit atomic contention"
+# from a real write failure classify with this instead of matching SDK error
+# names, so the boundary and the budget never drift apart.
+is_transaction_contention = _is_transaction_contention
+
+
 def run_with_transaction_contention_retry(
     transaction_factory: Callable[[], Any],
     operation: Callable[[Any], T],

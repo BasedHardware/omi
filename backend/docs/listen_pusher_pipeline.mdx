@@ -1986,6 +1986,20 @@ identity-matching lease. Lease renewal and recovery admission therefore
 conflict atomically; a sweep cannot finalize an audio-bearing conversation
 that a live socket still owns.
 
+Since 2026-10-16, lease renewal runs on the shared bounded transaction
+contention budget (`recording_session_lease_renewal`) with the expired-
+transaction restart, like the recovery admission it races. A renewal whose
+budget exhausts under a contention burst is reported at WARNING as
+`recording session lease renewal contended` — logged without a stack trace,
+no `omi_fallback_total` degradation event — and the next minute of accepted
+audio re-arms it; the FAILED ERROR `recording session lease renewal failed`
+(rescued fail-open) is reserved for real write failures. Before this, the
+renewal ran bare: Firestore replays a commit abort on the same (often
+retired) transaction id and never retries an abort raised by the body's
+read, so each burst surfaced as the failed-write ERROR and let the fence run
+down while audio still flowed (prod backend-listen ×29/30m plus its
+renew_live_recording_session_lease traceback sibling, sampled 2026-10-14..16).
+
 Eligible meeting receipts also carry the stable Chat intent ID and, after the
 desktop kernel acknowledges its journal write, the materialization time. The
 durable receipt projection remains on the finalization write path. The disabled
