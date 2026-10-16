@@ -63,6 +63,16 @@ SYNC_PIPELINE_INDEX_REQUIREMENTS = (
         (_asc('uid'), _asc('sort_at'), _asc('__name__')),
     ),
     FirestoreIndexRequirement(
+        'sync_backfill_pending_uid_sort_newest',
+        'sync_backfill_pending',
+        'COLLECTION',
+        (
+            _asc('uid'),
+            FirestoreIndexField('sort_at', order='DESCENDING'),
+            FirestoreIndexField('__name__', order='DESCENDING'),
+        ),
+    ),
+    FirestoreIndexRequirement(
         'sync_backfill_pending_uid_accepted',
         'sync_backfill_pending',
         'COLLECTION',

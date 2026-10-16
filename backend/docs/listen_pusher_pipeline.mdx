@@ -4740,6 +4740,16 @@ Backfill ownership and expired-head retirement are defined in [the two-lane runb
 
 Backfill admission transactionally creates or repairs its sequencer owner. Completion and retirement transactionally park empty owners outside the hot reconcile query while retaining their fencing epochs; admission wakes them atomically. The bounded pending reconcile scan self-heals legacy missing owners over a configurable window (default 30 minutes), honors the staggered deadline before claiming or retiring waiting work, and meters `sync_backfill_owner_repaired`. The operator-only dry-run/apply procedure is in [backfill owner repair](runbooks/sync-two-lane.md#backfill-owner-repair).
 
+The default-oldest `SYNC_BACKFILL_ORDER` policy can select descending pending
+capture time for a UID cohort, including persisted work draining while sequencer
+admission is off. Direct tasks receive a bounded newer-first eligibility
+preference; Cloud Tasks does not guarantee order among eligible tasks. Segment
+assignment remains chronological within a job, and atomic interval intake
+merges late earlier chunks across jobs. The existing pending sweep retires
+Redis-expired old tails without modifying a newer active owner, audio or user
+data. Index prerequisites, cohort controls and limitations are in the
+[newest-first rollout](runbooks/sync-two-lane.md#newest-first-rollout).
+
 ### Shared Gateway caller routes
 
 NLLB, VAD and every speaker-embedding host (including Parakeet fallback) use
@@ -4881,10 +4891,19 @@ Compute failures retain the ordered head and retry with a 600s backoff cap;
 historical dead heads can be redriven by authenticated internal RPC or owner
 polling. Privacy-fenced recovery is isolated without clearing deletion fences.
 Model VAD ends are cropped to the actual sample buffer, and ASR window clocks
-use the integer slice origin. Empty ASR on detected speech is an observable
-failure, never silence; safe reason/count diagnostics are specified in the
-[worker runtime](../diarizer/batch_pipeline_runtime.md). No attempt ceiling or
-automatic legacy takeover of accepted batch claims is implemented.
+use the integer slice origin. When detected speech has no owned ASR words,
+the Parakeet worker retries once on the entire capture, as a single-item batch
+with 2s of synthetic silence on each edge (at least 8s total). This removes VAD
+cuts and core ownership from the retry; clocks are rebased to the original
+capture and synthetic-padding words are excluded. The padded retry must fit
+both 120s and the configured padded budget; larger units are retained whole
+for fenced legacy recovery, never truncated. Remaining empty ASR is an
+observable failure, never silence; safe reason/count diagnostics are specified
+in the [worker runtime](../diarizer/batch_pipeline_runtime.md).
+The scheduler quarantines exhausted failures while preserving their audio and
+content claim. The default-off, owner-allowlisted fenced legacy recovery path
+is defined in [serving settings](batch-pipeline-serving.md); the worker retry
+does not dispatch legacy STT or change its enablement.
 Late captures receive 202, retain their original clock and append after the
 committed tail; no unsupported 409 or capture-watermark regression occurs.
 Conversation projection, deletion, indexes READY and GPU qualification remain
