@@ -208,6 +208,11 @@ def plan_ios(state: IOSState) -> IOSPlan:
                 f"{pending.version} is approved and waiting for a human release with the newest build "
                 f"{candidate.build_number}",
             )
+        if promote.version_parts(pending.version) > promote.version_parts(candidate.version):
+            raise TrainError(
+                f"pending version {pending.version} is newer than the newest TestFlight build "
+                f"{candidate.version} ({candidate.build_number}); release {pending.version} by hand, never reject it"
+            )
         # Apple completes the review submission on approval and refuses to
         # cancel it (409), and the API cannot developer-reject or release the
         # version either, so only a human in App Store Connect can clear it.
@@ -581,6 +586,10 @@ def ensure_release_notes(version: str, release_date: str, *, write: bool) -> Pat
     return release_path
 
 
+def _live_version_id(asc: Callable[..., object], state: IOSState) -> str:
+    return next(v.id for v in ios_versions_in_state(asc, LIVE_STATE) if v.version == state.live_version)
+
+
 def run_ios(*, dry_run: bool, release_date: str, asc: Callable[..., object] = asc_json) -> str:
     for name in ("APP_STORE_CONNECT_ISSUER_ID", "APP_STORE_CONNECT_KEY_IDENTIFIER", "APP_STORE_CONNECT_PRIVATE_KEY"):
         if not os.environ.get(name):
@@ -589,6 +598,10 @@ def run_ios(*, dry_run: bool, release_date: str, asc: Callable[..., object] = as
     state = fetch_ios_state(asc)
     plan = plan_ios(state)
     log(f"iOS live {state.live_version}; plan={plan.action}: {plan.reason}")
+    if plan.action == "blocked" and PHASED_RELEASE and ios_phased_release_paused(_live_version_id(asc, state)):
+        # The brake holds the whole iOS train: never ask a human to release
+        # the approved version while the live rollout is paused.
+        return f"ios=hold (live {state.live_version} phased rollout is PAUSED — the operator brake; {plan.reason})"
     if plan.submit is None:
         return f"ios={plan.action} ({plan.reason})"
     candidate = plan.submit
@@ -602,8 +615,8 @@ def run_ios(*, dry_run: bool, release_date: str, asc: Callable[..., object] = as
             f"TRAIN_PIN_IOS {'none' if pin.is_none else f'{pin.version}/{pin.build}'} does not match the selected "
             f"candidate {candidate.version}/{candidate.build_number}; refusing to release an unaudited build"
         )
-    live = next(v for v in ios_versions_in_state(asc, LIVE_STATE) if v.version == state.live_version)
-    if PHASED_RELEASE and ios_phased_release_paused(live.id):
+    live_id = _live_version_id(asc, state)
+    if PHASED_RELEASE and ios_phased_release_paused(live_id):
         # The operator paused the live version's phased rollout in App Store
         # Connect — the documented post-release brake. Hold the whole iOS
         # train while the brake is on: submitting the candidate now would
@@ -614,7 +627,7 @@ def run_ios(*, dry_run: bool, release_date: str, asc: Callable[..., object] = as
         )
     release_path = ensure_release_notes(candidate.version, release_date, write=not dry_run)
     notes = promote.require_notes(release_path, candidate.version, "ios") if release_path.is_file() else "<collected at run time>"
-    locales = ios_live_locales(asc, live.id)
+    locales = ios_live_locales(asc, live_id)
     if dry_run:
         log(f"DRY RUN: would submit build {candidate.build_number} ({candidate.version}) with notes for {len(locales)} locales")
         return f"ios=dry-run:{plan.action} {candidate.version} ({candidate.build_number})"

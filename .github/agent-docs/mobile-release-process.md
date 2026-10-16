@@ -133,7 +133,9 @@ listing only returns live versions):
   either: the version's review submission is `COMPLETE` and Apple answers a
   cancel (`PATCH /v1/reviewSubmissions/{id} canceled=true`) with 409, and the
   API has no developer-reject or developer-release command (observed
-  2026-10-16 on 1.0.563). Two pending versions stop the train.
+  2026-10-16 on 1.0.563). A paused live phased rollout turns that into a plain
+  hold. A pending version newer than every TestFlight build, or two pending
+  versions, stops the train.
 - Submission: `builds submit-to-app-store` with
   `--app-store-version-localizations` carrying the derived iOS notes for
   every locale of the live version (a bare `--whats-new` covers only the

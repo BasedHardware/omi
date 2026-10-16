@@ -125,6 +125,11 @@ class PlanTests(unittest.TestCase):
         self.assertIn("ACTION REQUIRED", plan.reason)
         self.assertIn("releases 1.0.554 or rejects its binary", plan.reason)
 
+    def test_pending_newer_than_testflight_is_never_offered_for_rejection(self):
+        pending = train.IOSVersion("pend", "1.0.560", "PENDING_DEVELOPER_RELEASE")
+        with self.assertRaisesRegex(train.TrainError, "never reject it"):
+            train.plan_ios(self.state(pending=(pending,)))
+
     def test_two_pending_versions_need_a_human(self):
         pending = (
             train.IOSVersion("a", "1.0.554", "PENDING_DEVELOPER_RELEASE"),
@@ -367,6 +372,20 @@ class RunIOSTests(unittest.TestCase):
         with self.assertRaisesRegex(promote.PromotionError, "MANUAL or AFTER_APPROVAL"):
             promote.submit_ios(build, "- n", locales=["en-US"], release_type="WHENEVER")
 
+    def test_paused_brake_holds_instead_of_asking_for_a_release(self):
+        pending = version("pend", "1.0.554", "PENDING_DEVELOPER_RELEASE")
+        asc = FakeASC(
+            live_responses(
+                states={"PENDING_DEVELOPER_RELEASE": [pending]},
+                builds={"1.0.554": [build("b1335", "1335"), build("b1334", "1334")]},
+                extra={("builds", "app-store-version"): None},
+            )
+        )
+        with patch.object(promote.subprocess, "run") as run, patch.object(train, "ios_phased_release_paused", return_value=True):
+            summary = train.run_ios(dry_run=False, release_date="2026-10-06", asc=asc)
+        run.assert_not_called()
+        self.assertTrue(summary.startswith("ios=hold (live 1.0.553 phased rollout is PAUSED"))
+
     def test_blocked_pending_version_touches_nothing(self):
         pending = version("pend", "1.0.554", "PENDING_DEVELOPER_RELEASE")
         asc = FakeASC(
@@ -376,10 +395,9 @@ class RunIOSTests(unittest.TestCase):
                 extra={("builds", "app-store-version"): None},
             )
         )
-        with patch.object(promote.subprocess, "run") as run, patch.object(train, "ios_phased_release_paused") as paused:
+        with patch.object(promote.subprocess, "run") as run, patch.object(train, "ios_phased_release_paused", return_value=False):
             summary = train.run_ios(dry_run=False, release_date="2026-10-06", asc=asc)
         run.assert_not_called()
-        paused.assert_not_called()
         self.assertTrue(summary.startswith("ios=blocked (ACTION REQUIRED: 1.0.554 is approved"))
         self.assertEqual([c for c in asc.calls if c[:2] == ("review-submissions", "cancel")], [])
 
