@@ -75,15 +75,23 @@ _DEFAULT_FREE_PLAN = _profile_default('free')
 _DEFAULT_PAID_PLAN = _profile_default('paid')
 
 
-def _fetch_config() -> Dict[str, Any]:
-    doc = db.collection("phone_call_config").document("default").get()
-    if not getattr(doc, "exists", False):
+def _fetch_config(firestore_client: Optional[Any] = None) -> Dict[str, Any]:
+    client = firestore_client if firestore_client is not None else db
+    if client is None:
         return {}
-    raw: object = doc.to_dict()
-    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+    try:
+        doc: Any = client.collection("phone_call_config").document("default").get()
+        if not getattr(doc, "exists", False):
+            return {}
+        raw: object = doc.to_dict()
+        return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+    except Exception:
+        return {}
 
 
-def _get_config() -> Dict[str, Any]:
+def _get_config(firestore_client: Optional[Any] = None) -> Dict[str, Any]:
+    if firestore_client is not None:
+        return _fetch_config(firestore_client=firestore_client)
     fetched = get_memory_cache().get_or_fetch(_CACHE_KEY, _fetch_config, ttl=_CACHE_TTL_SECONDS)
     return cast(Dict[str, Any], fetched) if isinstance(fetched, dict) else {}
 
@@ -124,7 +132,22 @@ def _declared_override(override: object, defaults: Dict[str, Any]) -> Dict[str, 
     """Return only known Firestore fields that are declared for this overlay."""
     if not isinstance(override, dict):
         return {}
-    return {key: override[key] for key in defaults if key in override}
+    declared: Dict[str, Any] = {}
+    for key in defaults:
+        if key not in override:
+            continue
+        val = override[key]
+        if key == "allowed_countries":
+            if isinstance(val, list):
+                declared[key] = [c.strip().upper() for c in val if isinstance(c, str) and len(c.strip()) == 2]
+        elif key in ("monthly_call_limit", "max_duration_seconds"):
+            if val is None:
+                declared[key] = None
+            elif isinstance(val, int) and not isinstance(val, bool) and val >= 0:
+                declared[key] = val
+        else:
+            declared[key] = val
+    return declared
 
 
 def _ignored_override_fields(override: object, defaults: Dict[str, Any]) -> tuple[str, ...]:
@@ -234,14 +257,25 @@ def _effective_config(profile: str, raw_config: Dict[str, Any]) -> Dict[str, Any
     return effective
 
 
-def get_free_plan_config() -> Dict[str, Any]:
-    return _effective_config('free', _get_config())
+def get_free_plan_config(
+    config: Optional[Dict[str, Any]] = None, firestore_client: Optional[Any] = None
+) -> Dict[str, Any]:
+    raw = config if config is not None else _get_config(firestore_client=firestore_client)
+    return _effective_config('free', raw)
 
 
-def get_paid_plan_config() -> Dict[str, Any]:
-    return _effective_config('paid', _get_config())
+def get_paid_plan_config(
+    config: Optional[Dict[str, Any]] = None, firestore_client: Optional[Any] = None
+) -> Dict[str, Any]:
+    raw = config if config is not None else _get_config(firestore_client=firestore_client)
+    return _effective_config('paid', raw)
 
 
-def get_config_for_plan(plan: PlanType | str | None) -> Dict[str, Any]:
+def get_config_for_plan(
+    plan: PlanType | str | None,
+    config: Optional[Dict[str, Any]] = None,
+    firestore_client: Optional[Any] = None,
+) -> Dict[str, Any]:
     """Resolve config using the catalog's phone-call profile for ``plan``."""
-    return _effective_config(_phone_call_profile_for_plan(plan), _get_config())
+    raw = config if config is not None else _get_config(firestore_client=firestore_client)
+    return _effective_config(_phone_call_profile_for_plan(plan), raw)
