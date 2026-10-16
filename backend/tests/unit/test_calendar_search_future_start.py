@@ -108,9 +108,9 @@ def calendar_tools() -> Iterator[ModuleType]:
     stubs["utils.retrieval.tools.google_utils"].GoogleAPIError = _GoogleAPIError
 
     with stub_modules(stubs):
+        load_module_fresh("utils.retrieval.tools.calendar_render", str(TOOLS_DIR / "calendar_render.py"))
         # The real date parsing and max_results capping the tool relies on.
         load_module_fresh("utils.retrieval.tools.integration_base", str(TOOLS_DIR / "integration_base.py"))
-        load_module_fresh("utils.retrieval.tools.calendar_render", str(TOOLS_DIR / "calendar_render.py"))
         module = load_module_fresh("utils.retrieval.tools.calendar_tools", str(TOOLS_DIR / "calendar_tools.py"))
         module.prepare_access = lambda *_args: ("uid-1", {"connected": True, "access_token": "token"}, "token", None)
         yield module
