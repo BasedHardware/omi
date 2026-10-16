@@ -207,7 +207,7 @@
       "matrix_size": 1,
       "needs": "ci-tier",
       "owner": "CI maintainers",
-      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily run over the PR M forecast of 72 until the next weekly audit",
+      "rationale": "#21780 runs 38823920783/38827426342 hit the 10m whole-job ceiling; the second completed all 2040 assertions in 535.44s before setup/cleanup pushed it over. A bounded 15m ceiling admits the complete suite. Retain the 3m p50 improvement target and existing runner, triggers, matrix and daily forecast.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
