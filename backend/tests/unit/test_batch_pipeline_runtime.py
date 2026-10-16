@@ -205,8 +205,18 @@ def test_startup_pins_precision_reuses_segmentation_and_owns_one_gpu(monkeypatch
     assert ('diarizer-revision', startup.DIARIZER_REVISION) in calls
     assert asr.cfg.decoding.greedy.use_cuda_graph_decoder is False
     fake_torch.cuda.device_count = lambda: 2
+    startup_calls = list(calls)
     with pytest.raises(RuntimeError, match='exactly one'):
         startup.load_worker(artifacts)
+    fake_torch.cuda.device_count = lambda: 1
+    fake_torch.cuda.is_available = lambda: False
+    with pytest.raises(RuntimeError, match='exactly one'):
+        startup.load_worker(artifacts)
+    fake_torch.cuda.is_available = lambda: True
+    fake_torch.cuda.is_bf16_supported = lambda: False
+    with pytest.raises(RuntimeError, match='BF16'):
+        startup.load_worker(artifacts)
+    assert calls == startup_calls
 
 
 def test_process_composes_a_pump_with_fresh_dedicated_capacity(monkeypatch):

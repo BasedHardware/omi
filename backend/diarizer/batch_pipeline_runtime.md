@@ -89,8 +89,23 @@ end-to-end projection/deletion, and AMI quality in the built digest.
 
 The chart `charts/batch-pipeline-worker` pins a qualified image digest, existing
 Workload Identity service account, explicit data-plane project, secrets and
-staging bucket. It fixes the `diarizer-batch-pool` node selector and taints,
-requests one GPU, and prevents surge GPUs. It cannot be installed over the live
+staging bucket. It selects the dedicated `batch-pipeline-pool` with
+`service=batch-pipeline` and `env=<env>` labels, requests one GPU, and prevents
+surge GPUs. **An NVIDIA L4 on `g2-standard-8` is required**: the joint chain was
+qualified on L4 and ASR requires native BF16; T4 (`sm75`) is unsupported. The
+live `diarizer-batch-pool` is separate and must not host this worker.
+
+An operator creates the pool out-of-band, not through IaC or this chart, with
+labels `env=<env>,service=batch-pipeline` (`env=dev` or `env=prod`), taints
+`nvidia.com/gpu=present:NoSchedule` and `omi.ai/batch-pipeline=true:NoSchedule`,
+node autoscaling `0..N`, and location policy `ANY`. The chart tolerates exactly
+those two taints. Node autoscaling to zero is separate from the minimum-one
+worker requirement below. The image puts GKE's `/usr/local/nvidia/bin` on
+`PATH` and `/usr/local/nvidia/lib:/usr/local/nvidia/lib64` on `LD_LIBRARY_PATH`,
+retaining `/usr/lib/x86_64-linux-gnu` for system libraries. The pinned torch
+wheels supply CUDA userspace; the host mount supplies `libcuda.so.1`.
+
+The worker cannot be installed over the live
 embedding or Parakeet release. Dedicated bucket lifecycle must preserve pending
 accepted work; D arms cleanup only after successful projection.
 

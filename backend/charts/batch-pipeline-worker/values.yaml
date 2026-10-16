@@ -12,8 +12,19 @@ dataPlaneProject: ""
 bucket: ""
 secretName: ""
 replicaCount: 1
-nodeSelector: {}
-tolerations: []
+# Operator-managed L4 (g2-standard-8) pool; never share the live diarizer pool.
+nodeSelector:
+  cloud.google.com/gke-nodepool: batch-pipeline-pool
+  service: batch-pipeline
+tolerations:
+  - key: omi.ai/batch-pipeline
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+  - key: nvidia.com/gpu
+    operator: Equal
+    value: present
+    effect: NoSchedule
 worker:
   batchSize: 8
   unitSeconds: 3600
