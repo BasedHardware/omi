@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: firmware-settings-partition-contract
+    command: ["python3", "omi/firmware/omi/tests/check_partition_layout.py"]
+    triggers: ["omi/firmware/boards/omi/pm_static.yml", "omi/firmware/boards/omi/omi-cpuapp_partitioning.dtsi", "omi/firmware/omi/omi.conf", "omi/firmware/omi/tests/check_partition_layout.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#5400: static app allocation overlapped board NVS; validate partition extents, packed regions, OTA slot equality, external device bindings, and settings DTS/Kconfig agreement without claiming an NCS build"
   - id: monitoring-alert-backtest-lint
     command: ["python3", "backend/scripts/alert_backtest.py", "--lint"]
     triggers: ["backend/charts/monitoring/alerts/**", "backend/charts/monitoring/metric-inventory.prod.json", "backend/scripts/alert_backtest.py", "backend/tests/unit/test_monitoring_alert_backtest.py", ".github/checks-manifest.yaml"]
