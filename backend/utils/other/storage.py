@@ -1008,9 +1008,10 @@ def list_audio_chunks(
                     'size': blob.size,
                     'is_batch': is_batch,
                     'generation': getattr(blob, 'generation', None),
-                    'md5_hash': getattr(blob, 'md5_hash', None),
-                    'crc32c': getattr(blob, 'crc32c', None),
                 }
+                if playback_on_demand():
+                    chunk_entry['md5_hash'] = getattr(blob, 'md5_hash', None)
+                    chunk_entry['crc32c'] = getattr(blob, 'crc32c', None)
                 blob_bucket = getattr(getattr(blob, 'bucket', None), 'name', private_cloud_sync_bucket)
                 if blob_bucket != private_cloud_sync_bucket:
                     chunk_entry['bucket'] = blob_bucket

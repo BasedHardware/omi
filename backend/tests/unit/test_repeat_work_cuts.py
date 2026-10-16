@@ -56,6 +56,23 @@ def test_stable_source_identity_and_changed_sources(monkeypatch):
     assert conversations._finalize_audio_file_group('u', 'c', source, []).id != first.id
 
 
+@pytest.mark.parametrize('enabled', [False, True])
+def test_chunk_listing_checksums_only_when_playback_enabled(monkeypatch, enabled):
+    monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', str(enabled).lower())
+    monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
+    monkeypatch.setattr(storage.audio_archive, 'admitted', lambda *_: False)
+    blob = SimpleNamespace(
+        name='chunks/u/c/1000.000.pcm', size=160000, generation='7', md5_hash='md5', crc32c='crc', metadata=None
+    )
+    client = Mock()
+    client.bucket.return_value.list_blobs.return_value = [blob]
+    monkeypatch.setattr(storage, '_get_storage_client', lambda: client)
+    expected = dict(timestamp=1000.0, path=blob.name, size=blob.size, is_batch=False, generation='7')
+    if enabled:
+        expected.update(md5_hash='md5', crc32c='crc')
+    assert storage.list_audio_chunks('u', 'c') == [expected]
+
+
 def test_background_updates_do_not_build_but_open_and_play_enqueue(monkeypatch):
     monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'true')
     enqueue = Mock()
