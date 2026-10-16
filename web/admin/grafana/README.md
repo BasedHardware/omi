@@ -198,18 +198,32 @@ Charts read the admin-authenticated `GET /api/omi/stats/wall/series/<name>`
   change. Cost is all-in (`lib/wall-cost.ts`, shared with the snapshot's
   `cost.net_day` / `cost.per_mau_month`): GCP net of committed-use credits minus
   one-time incident excess (a service-day ≥2× and ≥$500 over its 14-day median),
-  Vertex LLM, OpenAI and Anthropic invoices, STT from the FinOps model (drawn
-  faint, labelled "modelled") and SaaS at a fixed $4.8K/month (labelled "fixed
-  estimate"). Unsourced lines are named in the reason, never dropped.
-- Cold-load rules match the wall: each source leg is single-flight per UTC day,
-  a cold request answers within five seconds while `after()` retains the work,
-  failed legs keep their last good value (≤24h, marked stale), partial legs retry
-  only their missing reads after two minutes, and PostHog reads run one at a time
-  on a low-priority lane that waits for any snapshot refresh. Successful reads
-  are memoized by SQL text for the day. Caches stay per-instance and disposable.
-  A daily materialization of per-person qualified days would replace ~45 bounded
-  reads per instance-day with one cheap aggregate; until then PostHog's own
-  result cache absorbs repeats across instances.
+  Vertex LLM, OpenAI and Anthropic invoices, STT at $5.3K/month from the
+  Soniox console (October 2026, read 2026-10-16; no invoice feed yet, labelled
+  "STT est.") and SaaS at a fixed $4.8K/month ("SaaS est."), both amber. Unsourced lines are named in the reason, never dropped.
+- Cold-load rules match the wall and converge across Cloud Run instances
+  (`lib/wall-series-store.ts`). Each leg's last-good value, retry schedule and
+  the day's successful reads live in one doc in the admin Firestore payload cache
+  (`admin_stats_payload_cache`, keys `wall-series:v1:leg:<leg>`), so any instance
+  serves the shared value at once. A Firestore-transaction lease
+  (`wall-series:v1:lease:<leg>`, 3 min, renewed by the holder) lets one instance
+  refresh a leg; a fill an instance abandons resumes from its persisted reads. A
+  cold request answers within five seconds while `after()` retains the work;
+  failed legs keep their last good value (≤24h, marked stale); partial legs retry
+  only their missing reads after two minutes with exponential backoff; PostHog
+  reads run one at a time per instance after any snapshot refresh. 30-day MAU is
+  split into `mauRecent` (headline) and `mauHistory` (charts) so a slow older
+  window never holds back the headline. Store calls are bounded (2 s) and fail
+  open to per-process behaviour.
+- Observability: one `wall_series_leg` log line per leg attempt (leg, outcome
+  `ok|partial:<class>|timeout|http_<status>|error`, error class, duration_ms,
+  rows, failures, served_stale, instance = revision + process id) and one
+  `wall_series_read` line per PostHog read. Aggregates only: no SQL, no ids.
+- The headline payload's `status` (and the first row of the "Data & coverage"
+  table) gives the oldest leg's data-through day (UTC) across every series and
+  how many legs are still filling, so the TV shows stale-but-real data with a
+  visible date instead of waiting. A daily BigQuery materialization of per-person
+  qualified days remains the long-term replacement for these PostHog reads.
 
 The legacy `/api/omi/stats/wall` payload (Canvas card SVGs, diagnostics) is
 unchanged and still served.
