@@ -17,6 +17,63 @@ Backfill speech is written under the `sync_backfill` accounting source. Live har
 
 ## Per-UID backfill dispatch
 
+### Newest-first rollout
+
+`SYNC_BACKFILL_ORDER=oldest|newest` defaults to `oldest`; unknown values also
+retain oldest-first behavior. With `newest`, `SYNC_BACKFILL_ORDER_PERCENT`
+(default 100) selects a stable SHA-256 UID cohort, plus the comma-separated
+`SYNC_BACKFILL_ORDER_UID_ALLOWLIST`. Set percent 0 for an allowlist-only pilot.
+Neither knob changes `SYNC_BACKFILL_UID_SEQUENCER`.
+
+For durable waiting jobs, selection uses the existing `uid` equality and
+`sort_at` field in descending order, inside the same fenced transaction.
+This also applies to persisted waiting jobs drained by sweep/wake while the
+sequencer admission flag is off. Active jobs are never preempted. A recording
+is not cheaply grouped in the historical pending model: job payloads may
+contain multiple files and have no indexed recording group. We therefore use
+the descending-job fallback, including for separate jobs from one recording.
+Within each job, VAD segments still assign chronologically through the ordered
+turnstile. Across jobs, atomic interval intake finds preceding and following
+adjacent chunks, rebases transcript offsets to the earliest start, and coalesces
+unattended donors transactionally. Late earlier chunks and intervening bridges
+converge on one conversation. Device/source/lock partitions, user curation,
+explicit live targets and document-size rollover retain their existing fences;
+newest-first does not promise consolidation across those boundaries.
+
+Direct Cloud Tasks uploads use the same cohort policy with no Firestore reads.
+Their `schedule_time` is admission time plus capture age / 288, rounded up to
+a second and capped at five minutes (unknown age takes the maximum).
+For uploads admitted together, newer captures become eligible earlier; retrying
+enqueue preserves the deadline. Already selected sequenced tasks and fresh
+tasks receive no delay. Cloud Tasks has no priority among eligible tasks:
+this is a bounded scheduling preference, not a strict execution-order guarantee,
+and it cannot reorder already queued tasks. No new queue is required.
+
+Keep `SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM=true` for retirement. In newest
+cohorts the existing bounded pending sweep page also checks entries accepted
+over 24 hours ago, including while newer work owns the UID. Age alone never
+retires a job: exact Redis absence, an acquired run lock, and the existing
+transactional unbound-ledger proof are mandatory. Retirement removes only the
+pending record and releases its matching unbound content claim; an active
+owner is preserved byte-for-byte. Audio and conversation data are untouched.
+The expired job remains a poll 404, permitting WAL re-upload.
+
+Deploy prerequisite: build the declared composite on `sync_backfill_pending`:
+`uid ASC, sort_at DESC, __name__ DESC`. It is owned by
+`database/sync_pipeline_indexes.py` and generated into `firestore.indexes.json`.
+Wait for READY before enabling any cohort. The query still reads one head;
+there is no added admission/worker Firestore lookup or recording-group scan.
+
+After source release and index readiness, an authorized operator sets the
+order flag on both sync services, starts with an allowlist and percent 0,
+then ramps 5% → 25% → 100% after observing freshness, fragmentation/new-row
+and bridge/merge counts, persistence `Aborted`, partial failures and the
+expired-retirement counter. Preserve the independently operated sequencer OFF
+setting. Compare against the oldest cohort; sustained older-work starvation
+is a reason to reduce the cohort or restore `oldest`. Rollback restores
+oldest selection immediately for future claims/enqueues; direct tasks already
+scheduled retain at most their original five-minute delay.
+
 `sync_backfill_sequencer/{uid}` is a Firestore owner document with one active job, a monotonically advanced dispatch epoch retained across empty queues, and a 30-minute renewable lease. Each waiting job is its own append-only `sync_backfill_pending/{job_id}` document with the complete Cloud Task payload. Admission transactionally writes the pending document and creates a missing owner or wakes a parked owner without resetting its epoch. An existing discoverable owner needs no admission write. Completion and retirement check pending presence in their transaction: owners with waiting work stay discoverable, while empty owners retain their epoch without a `reconcile_at` field, excluding them from the hot range query. An empty claim and stale deferral also park empty owners transactionally; a concurrent active claim or admission cannot be hidden by parking. Owner writes also cover dispatch claims, releases and active two-minute heartbeats. The pending and active payload maps are exempt from unqueried single-field indexes. Admission writes the job before 202; after a lost write acknowledgement it checks the registry. A confirmed write still returns 202, a confirmed absence cleans up and returns 503, and an unavailable verification fails the request while preserving the content claim and staged material for investigation. It never acknowledges 202 without a known registry write. One pending job is promoted transactionally and enqueued with a deterministic `job_id-s{epoch}` task name. The ordered oldest-pending query is inside the owner-claim transaction, so a newly admitted earlier capture cannot be missed by a separate preselection. Waiting jobs are selected oldest capture first, then Firestore document ID for ties. The mobile WAL sends recent batches first, so the first arrived batch can start immediately; oldest first applies among jobs already waiting and reduces cross-job conversation bridge work. It cannot reorder a job already running. Other UIDs dispatch independently into the same bounded global queue (Train 1 source configuration: 90 concurrent / 15 dispatches per second).
 
 The worker checks the persisted job/epoch before any transcript work, renews its lease every two minutes, and releases ownership only after the Redis job is terminal or has expired. A stale delivery cannot enter the pipeline. Terminal success, failure, partial failure, duplicate delivery, dead-letter confirmation, and expired-job cleanup all converge through that release and a dispatch of the next waiting job. A retryable HTTP 409/500 keeps the owner; Cloud Tasks retries it. The existing per-job Redis run lock remains a second fence. Redis jobs persist `dispatch_mode=sequenced`, so polling does not mistake an intentionally waiting job for a lost direct Cloud Task; the worker's persisted retry count is reused after redrive rather than resetting the paid provider attempt budget. An old queued task without a sequencer epoch that reaches a new worker while the flag is on is marked sequenced, registered and acknowledged, then redelivered with an epoch. While the flag is off, a new worker also migrates a queued direct task if that UID still has a sequenced owner or pending record. This prevents new direct work from bypassing waiting sequenced jobs during rollback. Old Redis admission-slot keys are ignored.

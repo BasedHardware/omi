@@ -27,6 +27,24 @@
           "order": "ASCENDING"
         },
         {
+          "fieldPath": "sort_at",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "sync_backfill_pending",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "uid",
+          "order": "ASCENDING"
+        },
+        {
           "fieldPath": "accepted_at",
           "order": "ASCENDING"
         },
