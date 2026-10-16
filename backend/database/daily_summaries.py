@@ -25,6 +25,7 @@ users/{uid}/desktop_daily_usage/{date}__{client_device_id}
     └── updated_at
 """
 
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 
@@ -42,6 +43,75 @@ DESKTOP_DAILY_USAGE_COUNTER_FIELDS = (
     'proactive_cards_acted',
     'ptt_turns',
 )
+
+_MAX_ID_LENGTH = 256
+_UNSAFE_ID_CHARS = ('/', '\\', ':')
+_DATE_PATTERN = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+_MIN_PAGE_LIMIT = 1
+_MAX_PAGE_LIMIT = 100
+
+
+def _clean_uid(uid: Any) -> str:
+    """Validate a user id before it is used as a `users/{uid}` path segment.
+
+    An empty or separator-bearing uid previously produced malformed collection
+    paths (e.g. `users//daily_summaries/...`), silently writing orphaned
+    documents that no reader could ever resolve.
+    """
+    if not isinstance(uid, str):
+        raise ValueError('uid must be a non-empty string')
+    cleaned = uid.strip()
+    if not cleaned or len(cleaned) > _MAX_ID_LENGTH:
+        raise ValueError('uid must be a non-empty, bounded string')
+    if any(char in cleaned for char in _UNSAFE_ID_CHARS):
+        raise ValueError('uid must not contain path separators')
+    return cleaned
+
+
+def _clean_id(value: Any, field: str = 'id') -> str:
+    """Validate a document id (summary id / client device id) path segment."""
+    if not isinstance(value, str):
+        raise ValueError(f'{field} must be a non-empty string')
+    cleaned = value.strip()
+    if not cleaned or len(cleaned) > _MAX_ID_LENGTH:
+        raise ValueError(f'{field} must be a non-empty, bounded string')
+    if cleaned in ('.', '..'):
+        raise ValueError(f'{field} must not be a relative path segment')
+    if any(char in cleaned for char in _UNSAFE_ID_CHARS):
+        raise ValueError(f'{field} must not contain path separators')
+    return cleaned
+
+
+def _clean_date(value: Any, field: str = 'date') -> str:
+    """Validate a `YYYY-MM-DD` date string before it is used in a query or id."""
+    if not isinstance(value, str) or not _DATE_PATTERN.match(value.strip()):
+        raise ValueError(f'{field} must be a YYYY-MM-DD string')
+    return value.strip()
+
+
+def _safe_counter(value: Any) -> int:
+    """Coerce a stored/client counter to a non-negative int, else 0."""
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    return 0
+
+
+def _as_page_int(value: Any, default: int) -> int:
+    """Return ``value`` when it is a real int, else ``default``.
+
+    ``bool`` is rejected explicitly because ``isinstance(True, int)`` is true and
+    a boolean limit/offset is a caller bug, not a page window.
+    """
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    return default
+
+
+def _require_summary_data(value: Any, field: str = 'summary_data') -> Dict[str, Any]:
+    """Validate the untrusted summary payload before it reaches Firestore."""
+    if not isinstance(value, dict):
+        raise ValueError(f'{field} must be a dict')
+    return value
 
 
 def upsert_desktop_daily_usage(
@@ -81,17 +151,17 @@ def get_desktop_daily_usage(uid: str, date: str) -> Dict[str, int]:
 
     A date with no usage documents returns every counter as zero.
     """
-    user_ref = db.collection('users').document(uid)
-    query = user_ref.collection(DESKTOP_DAILY_USAGE_COLLECTION).where(filter=FieldFilter('date', '==', date))
+    clean_uid = _clean_uid(uid)
+    clean_date = _clean_date(date)
+    user_ref = db.collection('users').document(clean_uid)
+    query = user_ref.collection(DESKTOP_DAILY_USAGE_COLLECTION).where(filter=FieldFilter('date', '==', clean_date))
     totals = {field: 0 for field in DESKTOP_DAILY_USAGE_COUNTER_FIELDS}
     for doc in query.stream():
         raw = doc.to_dict()
         if not isinstance(raw, dict):
             continue
         for field in DESKTOP_DAILY_USAGE_COUNTER_FIELDS:
-            value = raw.get(field)
-            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
-                totals[field] += value
+            totals[field] += _safe_counter(raw.get(field))
     return totals
 
 
@@ -106,10 +176,15 @@ def create_daily_summary(uid: str, summary_data: Dict[str, Any]) -> str:
     Returns:
         The summary ID
     """
-    user_ref = db.collection('users').document(uid)
-    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_data['id'])
+    clean_uid = _clean_uid(uid)
+    summary_data = _require_summary_data(summary_data)
+    if 'id' not in summary_data:
+        raise ValueError('summary_data must be a dict containing an id')
+    summary_id = _clean_id(summary_data['id'], 'summary_id')
+    user_ref = db.collection('users').document(clean_uid)
+    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
     summary_ref.set(summary_data)
-    return summary_data['id']
+    return summary_id
 
 
 def get_daily_summary(uid: str, summary_id: str) -> Optional[Dict[str, Any]]:
@@ -123,8 +198,10 @@ def get_daily_summary(uid: str, summary_id: str) -> Optional[Dict[str, Any]]:
     Returns:
         Summary data dict or None if not found
     """
-    user_ref = db.collection('users').document(uid)
-    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
+    clean_uid = _clean_uid(uid)
+    clean_summary_id = _clean_id(summary_id, 'summary_id')
+    user_ref = db.collection('users').document(clean_uid)
+    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(clean_summary_id)
     doc = summary_ref.get()
 
     if getattr(doc, "exists", False):
@@ -144,8 +221,10 @@ def get_daily_summary_by_date(uid: str, date: str) -> Optional[Dict[str, Any]]:
     Returns:
         Summary data dict or None if not found
     """
-    user_ref = db.collection('users').document(uid)
-    query = user_ref.collection(DAILY_SUMMARIES_COLLECTION).where(filter=FieldFilter('date', '==', date)).limit(1)
+    clean_uid = _clean_uid(uid)
+    clean_date = _clean_date(date)
+    user_ref = db.collection('users').document(clean_uid)
+    query = user_ref.collection(DAILY_SUMMARIES_COLLECTION).where(filter=FieldFilter('date', '==', clean_date)).limit(1)
 
     docs = list(query.stream())
     if docs:
@@ -174,16 +253,24 @@ def get_daily_summaries(
     Returns:
         List of summary data dicts
     """
-    user_ref = db.collection('users').document(uid)
+    clean_uid = _clean_uid(uid)
+    # An unbounded or negative limit/offset previously reached Firestore as an
+    # invalid query; clamp to a safe page window instead.
+    safe_limit = _as_page_int(limit, 30)
+    safe_limit = max(_MIN_PAGE_LIMIT, min(_MAX_PAGE_LIMIT, safe_limit))
+    safe_offset = _as_page_int(offset, 0)
+    safe_offset = max(0, safe_offset)
+
+    user_ref = db.collection('users').document(clean_uid)
     query = user_ref.collection(DAILY_SUMMARIES_COLLECTION)
 
     if start_date:
-        query = query.where(filter=FieldFilter('date', '>=', start_date))
+        query = query.where(filter=FieldFilter('date', '>=', _clean_date(start_date, 'start_date')))
     if end_date:
-        query = query.where(filter=FieldFilter('date', '<=', end_date))
+        query = query.where(filter=FieldFilter('date', '<=', _clean_date(end_date, 'end_date')))
 
     query = query.order_by('date', direction=firestore.Query.DESCENDING)
-    query = query.limit(limit).offset(offset)
+    query = query.limit(safe_limit).offset(safe_offset)
 
     summaries: List[Dict[str, Any]] = []
     for doc in query.stream():
@@ -201,12 +288,15 @@ def update_daily_summary(uid: str, summary_id: str, summary_data: Dict[str, Any]
     contents of the summary the user is looking at instead of spawning a
     duplicate doc for the same date.
     """
-    user_ref = db.collection('users').document(uid)
-    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
+    clean_uid = _clean_uid(uid)
+    clean_summary_id = _clean_id(summary_id, 'summary_id')
+    summary_data = _require_summary_data(summary_data)
+    user_ref = db.collection('users').document(clean_uid)
+    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(clean_summary_id)
     # Force id back to the existing doc id: the generator always allocates a
     # fresh UUID, and we don't want that leaking into the stored payload
     # where readers key off summary['id'].
-    payload: Dict[str, Any] = {**summary_data, 'id': summary_id}
+    payload: Dict[str, Any] = {**summary_data, 'id': clean_summary_id}
     summary_ref.set(payload)
 
 
@@ -216,8 +306,12 @@ def mark_daily_summary_delivery_completed(uid: str, summary_id: str, *, firestor
     Patch only delivery metadata, preserving concurrent edits to the recap.
     A tokenless recap also completes push handling without sending anything.
     """
+    clean_uid = _clean_uid(uid)
+    clean_summary_id = _clean_id(summary_id, 'summary_id')
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    summary_ref = client.collection('users').document(uid).collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
+    summary_ref = (
+        client.collection('users').document(clean_uid).collection(DAILY_SUMMARIES_COLLECTION).document(clean_summary_id)
+    )
     summary_ref.update({'notification_delivery_completed': True})
 
 
@@ -232,16 +326,20 @@ def delete_daily_summary(uid: str, summary_id: str) -> bool:
     Returns:
         True if deleted successfully
     """
-    user_ref = db.collection('users').document(uid)
-    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
+    clean_uid = _clean_uid(uid)
+    clean_summary_id = _clean_id(summary_id, 'summary_id')
+    user_ref = db.collection('users').document(clean_uid)
+    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(clean_summary_id)
     summary_ref.delete()
-    redis_db.remove_daily_summary_to_uid(summary_id)
+    redis_db.remove_daily_summary_to_uid(clean_summary_id)
     return True
 
 
 def set_daily_summary_visibility(uid: str, summary_id: str, visibility: str) -> None:
-    user_ref = db.collection('users').document(uid)
-    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
+    clean_uid = _clean_uid(uid)
+    clean_summary_id = _clean_id(summary_id, 'summary_id')
+    user_ref = db.collection('users').document(clean_uid)
+    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(clean_summary_id)
     summary_ref.update({'visibility': visibility})
 
 
@@ -255,7 +353,8 @@ def get_summaries_count(uid: str) -> int:
     Returns:
         Count of summaries
     """
-    user_ref = db.collection('users').document(uid)
+    clean_uid = _clean_uid(uid)
+    user_ref = db.collection('users').document(clean_uid)
     count_query = user_ref.collection(DAILY_SUMMARIES_COLLECTION).count()
     result = count_query.get()
     return int(result[0][0].value or 0)
