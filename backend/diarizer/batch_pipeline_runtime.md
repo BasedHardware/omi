@@ -183,3 +183,13 @@ Staging uses resumable GCS uploads (including short captures), 8MiB chunks,
 The stream refuses new chunks after 15 minutes. The deletion outbox keeps the
 unique object name for 30 minutes, covering the last request/retry plus margin.
 Retries retain the registered create-only object name and encrypted stream.
+
+
+## Per-item quarantine
+
+Explicit failed items stop retrying at `BATCH_PIPELINE_MAX_ATTEMPTS` (default 5).
+The scheduler records a terminal failure and removes it from ordered pending
+work; it never reports successful silence. Successful siblings retain their
+assignment receipts, while later uploads may advance. Legacy recovery is held,
+not dispatched: see [terminal quarantine and the visible gap](../docs/batch-pipeline-worker.md#terminal-quarantine-and-the-visible-gap)
+for client status, retained audio/usage obligations and the fenced recovery design.

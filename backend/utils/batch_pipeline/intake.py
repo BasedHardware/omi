@@ -62,13 +62,18 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
         if not completed:
             for job in jobs:
                 Scheduler.redrive_in_transaction(tx, job, time.time())
+        failed = sum(job.get('state') == 'quarantined' for job in jobs)
         status = (
-            'completed'
-            if completed
+            'failed'
+            if failed
             else (
-                'processing'
-                if any(job.get('state') in {'leased', 'result_ready', 'committed'} for job in jobs)
-                else 'queued'
+                'completed'
+                if completed
+                else (
+                    'processing'
+                    if any(job.get('state') in {'leased', 'result_ready', 'committed'} for job in jobs)
+                    else 'queued'
+                )
             )
         )
         return {
@@ -79,9 +84,10 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             'total_segments': result.get('total_segments', len(jobs)) if completed else len(jobs),
             'processed_segments': sum(job.get('state') == 'committed' for job in jobs),
             'successful_segments': result.get('total_segments', len(jobs)) if completed else 0,
-            'failed_segments': 0,
-            'result': result if completed else None,
-            'poll_after_ms': 0 if completed else 3000,
+            'failed_segments': failed,
+            'errors': ['batch_worker_quarantined'] if failed else [],
+            'result': result if completed and not failed else None,
+            'poll_after_ms': 0 if completed or failed else 3000,
         }
 
     return store.run(read)
