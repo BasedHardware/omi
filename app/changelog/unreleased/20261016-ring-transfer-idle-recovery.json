@@ -1,0 +1,3 @@
+{
+  "change": "Stop stalled ring-buffer downloads sooner while keeping received audio and unfinished recordings available for retry."
+}

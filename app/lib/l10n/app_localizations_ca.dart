@@ -4397,6 +4397,16 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'El vostre pla $plan acaba el $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Torna a subscriure\'t ara per mantenir els teus beneficis - sense càrrec fins $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'El teu pla està configurat per cancel·lar-se el $date.\nTorna a subscriure\'t ara per mantenir els teus beneficis - sense càrrec fins $date.';
   }
@@ -4404,6 +4414,11 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'El teu pla anual començarà automàticament quan acabi el teu pla mensual.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'El vostre pla $plan es renovarà el $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4436,6 +4451,9 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get continueText => 'Continuar';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Torneu a subscriure-us primer per canviar de pla.';
 
   @override
   String get resubscribe => 'Tornar a subscriure';
