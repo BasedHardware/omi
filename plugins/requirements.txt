@@ -179,7 +179,7 @@ tiktoken==0.13.0
 tinycss2==1.4.0
 toml==0.10.2
 tomli==2.4.1
-tornado==6.5.5
+tornado==6.5.9
 tqdm==4.67.3
 traitlets==5.15.0
 typer==0.25.1

@@ -7,14 +7,14 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import database.action_items as action_items_db
-import database.notifications as notification_db
 from utils.notifications import (
     send_action_item_completed_notification,
     send_action_item_created_notification,
     send_action_item_data_message,
     sync_action_item_reminder,
 )
-from utils.conversations.render import format_local_time, resolve_display_tz
+from utils.model_text import format_date, format_instant
+from utils.user_clock import clock_for_uid
 from utils.retrieval.tool_services.conversations import parse_iso_date
 from utils.retrieval.safety import safe_isoformat
 import logging
@@ -36,6 +36,7 @@ def get_action_items_text(
 ) -> str:
     """Fetch action items and format as LLM-ready text."""
     logger.info(f"get_action_items_text - uid: {uid}, limit: {limit}, offset: {offset}, completed: {completed}")
+    clock = clock_for_uid(uid)
 
     # Cap limit
     limit = min(limit, 500)
@@ -92,17 +93,17 @@ def get_action_items_text(
     if not action_items:
         date_info = ""
         if start_dt and end_dt:
-            date_info = f" created between {start_dt.strftime('%Y-%m-%d')} and {end_dt.strftime('%Y-%m-%d')}"
+            date_info = f" created between {format_date(start_dt, clock)} and {format_date(end_dt, clock)}"
         elif start_dt:
-            date_info = f" created after {start_dt.strftime('%Y-%m-%d')}"
+            date_info = f" created after {format_date(start_dt, clock)}"
         elif end_dt:
-            date_info = f" created before {end_dt.strftime('%Y-%m-%d')}"
+            date_info = f" created before {format_date(end_dt, clock)}"
         if due_start_dt and due_end_dt:
-            date_info += f" due between {due_start_dt.strftime('%Y-%m-%d')} and {due_end_dt.strftime('%Y-%m-%d')}"
+            date_info += f" due between {format_date(due_start_dt, clock)} and {format_date(due_end_dt, clock)}"
         elif due_start_dt:
-            date_info += f" due after {due_start_dt.strftime('%Y-%m-%d')}"
+            date_info += f" due after {format_date(due_start_dt, clock)}"
         elif due_end_dt:
-            date_info += f" due before {due_end_dt.strftime('%Y-%m-%d')}"
+            date_info += f" due before {format_date(due_end_dt, clock)}"
         status_info = ""
         if completed is True:
             status_info = " completed"
@@ -113,14 +114,9 @@ def get_action_items_text(
     # Render timestamps in the user's local timezone with an explicit label, matching
     # get_action_items_tool: an unlabelled UTC wall clock makes the agent state the wrong
     # time of day (issue #6214). A timezone lookup failure must never abort retrieval.
-    try:
-        display_tz, tz_label = resolve_display_tz(notification_db.get_user_time_zone(uid))
-    except Exception as tz_error:
-        logger.warning(f"get_action_items_text - timezone lookup failed, formatting in UTC: {tz_error}")
-        display_tz, tz_label = timezone.utc, "UTC"
-
     result = f"User Action Items ({len(action_items)} total):\n\n"
     if source_sink is not None:
+        # Structured client source metadata; not model-facing prose.
         for item in action_items[:128]:
             source_sink.append(
                 {
@@ -136,11 +132,11 @@ def get_action_items_text(
         result += f"{i}. [{status}] {item.get('description', 'No description')}\n"
         result += f"   ID: {item.get('id')}\n"
         if item.get('created_at'):
-            result += f"   Created: {format_local_time(item['created_at'], display_tz, tz_label)}\n"
+            result += f"   Created: {format_instant(item['created_at'], clock)}\n"
         if item.get('due_at'):
-            result += f"   Due: {format_local_time(item['due_at'], display_tz, tz_label)}\n"
+            result += f"   Due: {format_instant(item['due_at'], clock)}\n"
         if item.get('completed_at'):
-            result += f"   Completed: {format_local_time(item['completed_at'], display_tz, tz_label)}\n"
+            result += f"   Completed: {format_instant(item['completed_at'], clock)}\n"
         if item.get('conversation_id'):
             result += f"   From conversation: {item['conversation_id']}\n"
         result += "\n"
@@ -155,6 +151,7 @@ def create_action_item_text(
 ) -> str:
     """Create an action item and return confirmation text."""
     logger.info(f"create_action_item_text - uid: {uid}, description: {description}")
+    clock = clock_for_uid(uid)
 
     if not description or not description.strip():
         return "Error: Description is required."
@@ -170,10 +167,7 @@ def create_action_item_text(
             due_dt = parse_iso_date(due_at, 'due_at')
             now_utc = datetime.now(timezone.utc)
             if due_dt < now_utc - timedelta(days=1):
-                return (
-                    f"Error: due_at '{due_at}' is in the past. "
-                    f"Current time is {now_utc.strftime('%Y-%m-%dT%H:%M:%SZ')}."
-                )
+                return f"Error: due_at '{due_at}' is in the past. " f"Current time is {format_instant(now_utc, clock)}."
             action_item_data['due_at'] = due_dt
         except ValueError as e:
             return f"Error: Invalid due_at format: {e}"
@@ -196,13 +190,13 @@ def create_action_item_text(
 
         if created_item.get('due_at'):
             due = created_item['due_at']
-            result += f" (due {due.strftime('%b %d')})"
+            result += f" (due {format_instant(due, clock)})"
             try:
                 send_action_item_data_message(
                     user_id=uid,
                     action_item_id=action_item_id,
                     description=task_desc,
-                    due_at=due.isoformat(),
+                    due_at=due.isoformat(),  # not-model-facing: client notification payload
                     completed=bool(created_item.get('completed')),
                     status=created_item.get('status'),
                     deleted=bool(created_item.get('deleted')),
@@ -230,6 +224,7 @@ def update_action_item_text(
     due_at: Optional[str] = None,
 ) -> str:
     """Update an action item and return confirmation text."""
+    clock = clock_for_uid(uid)
     logger.info(f"update_action_item_text - uid: {uid}, id: {action_item_id}")
 
     if not action_item_id or not action_item_id.strip():
@@ -262,7 +257,7 @@ def update_action_item_text(
         try:
             due_dt = parse_iso_date(due_at, 'due_at')
             update_data['due_at'] = due_dt
-            changes.append(f"due date set to {due_dt.strftime('%Y-%m-%d %H:%M')}")
+            changes.append(f"due date set to {format_instant(due_dt, clock)}")
         except ValueError as e:
             return f"Error: Invalid due_at format: {e}"
 

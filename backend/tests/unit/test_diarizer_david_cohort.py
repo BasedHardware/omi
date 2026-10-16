@@ -19,7 +19,7 @@ def test_prepared_cohort_matches_reviewed_stage(monkeypatch, host):
     stages = json.loads((ROOT / 'config/diarization-cohort-stages.json').read_text())
     keys = tuple(stages['A'])
     selected = {key: binding[key]['value'] for key in keys}
-    assert selected == stages['C']
+    assert selected == stages['E']
     assert selected == {key: manifest['gke']['pusher']['env'][key]['value'] for key in keys}
     for key, value in selected.items():
         monkeypatch.setenv(key, value)
@@ -63,6 +63,7 @@ def test_prepared_cohort_does_not_enable_integration_or_dev():
         ('B', '0', 'true', '1'),
         ('C', '1', 'true', '80'),
         ('D', '5', 'true', '400'),
+        ('E', '5', 'true', '1200'),
     ],
 )
 def test_ramp_data_preserves_scope_and_capacity(monkeypatch, stage, percent, authoritative, cap):
@@ -72,6 +73,10 @@ def test_ramp_data_preserves_scope_and_capacity(monkeypatch, stage, percent, aut
     assert values['TRANSCRIPTION_FINAL_PASS_PERCENT'] == values['TRANSCRIPTION_SHADOW_PERCENT'] == percent
     assert values['TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE'] == authoritative
     assert values['TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS'] == cap
+    sync_audio_cap = {'D': '50', 'E': '150'}.get(stage, '10')
+    sync_request_cap = {'D': '5000', 'E': '15000'}.get(stage, '1000')
+    assert values['TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS'] == sync_audio_cap
+    assert values['TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS'] == sync_request_cap
     assert values['TRANSCRIPTION_SHADOW_ENABLED'] == 'true'
     assert values['TRANSCRIPTION_SHADOW_KILL_SWITCH'] == 'false'
     assert values['TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED'] == ('false' if stage == 'A' else 'true')
@@ -82,4 +87,14 @@ def test_ramp_data_preserves_scope_and_capacity(monkeypatch, stage, percent, aut
         assert not flags.enabled_for('synthetic-outside-cohort')
     else:
         assert float(cap) >= 6300 * float(percent) / 100
-        assert 140 * float(percent) / 5 * 0.06 < 24
+        assert 142 * float(percent) / 5 * 0.042 < 24
+        diarizer_values = yaml.safe_load(
+            (ROOT / 'backend/charts/diarizer/prod_omi_diarizer_batch_values.yaml').read_text()
+        )['autoscaling']
+        scale_up_step = max(
+            policy['value'] for policy in diarizer_values['behavior']['scaleUp']['policies'] if policy['type'] == 'Pods'
+        )
+        assert diarizer_values['maxReplicas'] == 18
+        assert scale_up_step == 3
+        projected_peak_replicas = 5 * float(percent) / 5
+        assert projected_peak_replicas <= 18 - 3

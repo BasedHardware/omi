@@ -26,7 +26,8 @@ import {
   createCheckoutSession,
   upgradeSubscription,
   openCustomerPortal,
-  OPERATOR_DEPRECATION_FALLBACK_PRICE
+  OPERATOR_DEPRECATION_FALLBACK_PRICE,
+  RESUBSCRIBE_FIRST
 } from '../../../lib/billing'
 import type {
   UserSubscriptionResponse,
@@ -168,8 +169,11 @@ export function PlanUsageTab(): React.JSX.Element {
           // price id does not move until the period rolls.
           break
         case 'reactivated':
-          toast('Subscription reactivated', { tone: 'success' })
+          toast(result.message ?? 'Your plan will renew.', { tone: 'success' })
           break
+        case 'blocked':
+          toast(RESUBSCRIBE_FIRST, { tone: 'error' })
+          return
         default:
           toast("You're all set", { tone: 'success' })
       }
@@ -177,7 +181,11 @@ export function PlanUsageTab(): React.JSX.Element {
       setSelectedPlanId(null)
       await load()
     } catch (e) {
-      toast('Checkout failed', { tone: 'error', body: apiError(e) })
+      const status = (e as { response?: { status?: number } }).response?.status
+      toast('Checkout failed', {
+        tone: 'error',
+        body: status === 409 ? RESUBSCRIBE_FIRST : apiError(e)
+      })
     } finally {
       setActivePriceId(null)
     }

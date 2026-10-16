@@ -1,3 +1,8 @@
+from omi_logging import configure_logging, TraceContextMiddleware
+
+# Gateway and Ingress logging coverage differs; retain general request logs.
+configure_logging('diarizer', access_policy='keep')
+
 from typing import Any, Dict, List
 
 from fastapi import FastAPI, UploadFile, File
@@ -9,13 +14,11 @@ from diarization import diarization_endpoint, initialize_diarization
 from embedding import embedding_endpoint, embedding_endpoint_v2, initialize_embeddings
 import logging
 
-from utils.logging_config import configure_split_stream_logging
-
-# The internal HTTP LB already logs every request. Uvicorn access lines duplicated it.
-configure_split_stream_logging(level=logging.INFO)
-logging.getLogger('uvicorn.access').setLevel(logging.WARNING)
+# Vendor imports may install handlers; reapply the process policy afterward.
+configure_logging('diarizer', access_policy='keep')
 
 logger = logging.getLogger(__name__)
+logger.info('Diarizer logging configured')
 
 
 @asynccontextmanager
@@ -28,6 +31,7 @@ async def lifespan(_app):
 
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(TraceContextMiddleware)
 
 
 @app.post('/v1/diarization')

@@ -4,7 +4,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 
 /// Home redesign A/B (PostHog flag `home-redesign`): `test` shows the redesigned Home (the bottom
-/// recording pill with no top card, the processing row, text-only empty states, pull-to-refresh,
+/// recording pill with no top card, text-only empty states, pull-to-refresh,
 /// page actions beside the switcher, upgrade in place, Tasks fold and menu, Omi's chat welcome,
 /// starter to-dos); `control`, an unread flag or anything unexpected shows today's Home.
 ///

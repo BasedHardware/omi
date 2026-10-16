@@ -39,6 +39,8 @@ from tests.support.firestore_conversation_profiles import (
 from tests.support.firestore_review_query_drivers import registry_extension as outside_drivers
 from tests.support.firestore_dream_query_drivers import registry_extension as dream_drivers
 from tests.support.firestore_usage_units_driver import DRIVER as USAGE_UNITS_DRIVER
+from tests.support.firestore_batch_pipeline_drivers import entries as batch_pipeline_entries
+from tests.support.firestore_batch_privacy_drivers import entries as batch_privacy_entries
 from models.announcement import AnnouncementType
 from models.candidate import CandidateStatus
 from models.chat_first import ChatFirstSubject
@@ -52,7 +54,6 @@ from models.task_recommendation import (
     TaskIntelligenceOutcomeCode,
     WhatMattersNowProjection,
 )
-from models.workstream import TaskGoalLinkImportRequest
 from database.memory_outbox_worker import CanonicalMemoryOutboxSideEffects, CanonicalMemoryOutboxWorkerConfig
 from utils.other.list_budget import ListReadBudget
 from database.memory_vector_repair_outbox_worker import VectorRepairOutboxWorkerTickConfig
@@ -126,7 +127,15 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
-    'database.dream_scheduler.discover': 'c0e27c29293523fa0ddf6095c56b0502810590259e28ce80c43e0ac4bc826789',
+    'database.batch_pipeline_store.FirestoreTransaction.service_frontier': '74aa1993996cdc9ca93a1141de64dfc7e05a9d831a67860ddbb8a64d55520a02',
+    'database.batch_pipeline_store.FirestoreStore.control_candidate': '73808da191932dbe29ef2a4d06712add5c584fb0b6e93f980ff666c08df60288',
+    'database.batch_pipeline_store.FirestoreStore.oldest_retry': '8d77904364b37100b5816f0252831ef6cf8807930dba8671cdc56bf603340315',
+    'database.batch_pipeline_staging.reap': '39b0e41ad13a7bc50bb8f987b6f78d11253663fd15baf39ca6663fb9f1fde377',
+    'database.batch_pipeline_store.FirestoreStore.projection_pending': '351a3ea949d6033cf3f2003805681af4af223cd0db4a12dc2869e70fb2a74d59',
+    'database.batch_pipeline_store.FirestoreStore.oldest': 'ce672d79f4c8c453f5096d0ff9a6a074277caff55c0ae5cb80900698125f0327',
+    'database.batch_pipeline_store.FirestoreStore.due': '6082abc15cee6736e23fa3554fbaa74ce65f751082a884e67416eda0757bc5ea',
+    'database.batch_pipeline_store.FirestoreTransaction.first_pending': '48a4a9544add4433487df790e5884203eec835b9f8b16ed977c4743b88b596ea',
+    'database.dream_scheduler.discover': '925cc08b93ece7ff9e68c75a87aaf0437b80575a4794325b5153dfa30d875d16',
     'database.proactivity_producers.mentor_history_query': '716c4f332e0ff0cf6fda3bcea41f479ce3bb7eb2956c8bfe37c61e0baabbfdb3',
     'database.proactivity_producers.recent_mentor_query': 'dc28a1084121daa40a430764d1c638ec4fe090e66dff499e0bec152444035dee',
     'database.proactivity_producers.task_items_query': '9e98b929e35f9118cdb76076bb526e41a5383d94d0304f098d17a0a2a3bc3cb5',
@@ -170,6 +179,10 @@ _add(
     )
 )
 _add(DriverEntry('database._client.get_users_uid'))
+
+# Authenticated pending-work projections use bounded, single-field owner queries.
+_add(DriverEntry('database.processing_attention.list_items', base={'uid': UID}, domains={'limit': [None, 100]}))
+_add(DriverEntry('database.processing_attention.pending_conversations', base={'uid': UID}))
 
 _add(DriverEntry('database.account_deletion_transitions.read_agent_vm_migration_journals', base={'uid': UID}))
 
@@ -855,6 +868,13 @@ _add(
         reason='tombstone count query invoked by the count driver on every combo',
     )
 )
+_add(
+    DriverEntry(
+        'database.conversations.discover_public_conversation_owner',
+        base={'conversation_id': 'conv-1'},
+        domains={'cached_uid': ['', UID]},
+    )
+)
 _add(DriverEntry('database.conversations.count_conversations_with_geolocation', base={'uid': UID}))
 _add(DriverEntry('database.conversations.delete_conversation_photos', base={'uid': UID, 'conversation_id': 'conv-1'}))
 _add(
@@ -1108,6 +1128,17 @@ _FRAME_REQUEST_DOC = {
 }
 _FRAME_LIMIT = (32, 'bounded frame-request window cap; fixed, not filter-affecting')
 
+
+def _seed_attached_frame_request(client, combo, trial):
+    client.documents[f'users/{UID}/frame_requests/req-1'] = {
+        **_FRAME_REQUEST_DOC,
+        'state': 'uploaded',
+        'storage_id': 'store-1',
+        'conversation_id': 'conv-1',
+    }
+    client.documents[f'users/{UID}/conversations/conv-1'] = {'status': 'completed'}
+
+
 _add(
     DriverEntry(
         'database.frame_requests.attach_frame_request_to_conversation',
@@ -1120,13 +1151,7 @@ _add(
             'permanent_storage_id': 'store-1',
         },
         domains={'now': [None, T0]},
-        setup=lambda client, combo, trial: (
-            client.documents.__setitem__(
-                f'users/{UID}/frame_requests/req-1',
-                {**_FRAME_REQUEST_DOC, 'state': 'uploaded', 'storage_id': 'store-1', 'conversation_id': 'conv-1'},
-            ),
-            client.documents.__setitem__(f'users/{UID}/conversations/conv-1', {'status': 'completed'}),
-        ),
+        setup=_seed_attached_frame_request,
     )
 )
 _add(
@@ -2043,7 +2068,7 @@ _add(
             'database.sync_backfill_sequencer.has_pending',
             'database.sync_backfill_sequencer.pending_head',
         ),
-        reason='oldest-pending probe observed inside the listed claim, inspection and presence consumers',
+        reason='configured pending probe observed inside the listed claim, inspection and presence consumers',
     )
 )
 _add(
@@ -2059,13 +2084,40 @@ _add(
         body_digest=BODY_DIGEST['database.sync_backfill_sequencer._pending_for_uid'],
     )
 )
+
+
+def _seed_sync_retirement(client, combo, trial):
+    client.documents['sync_backfill_pending/shape-job'] = {'uid': UID, 'job_id': 'shape-job', 'payload': {}}
+    if combo['epoch'] is not None:
+        client.documents[f'sync_backfill_sequencer/{UID}'] = {
+            'active_job_id': 'shape-job',
+            'active_epoch': 1,
+            'active_state': 'dispatching',
+            'active_payload': {},
+        }
+
+
 _SYNC_PROD = (_stub('database.sync_backfill_sequencer.production_stage', True),)
+
+
+def _sync_order_trial(client, combo, trial):
+    client.backfill_newest_first = bool(trial % 2)
+
+
+def _sync_order_patch(client):
+    return unittest.mock.patch(
+        'database.sync_backfill_sequencer.newest_first', side_effect=lambda uid: client.backfill_newest_first
+    )
+
+
 _add(
     DriverEntry(
         'database.sync_backfill_sequencer.claim_next',
         base={'uid': UID},
         domains={'now': [None, T0], 'expected_job_id': [None, 'expected-job']},
-        patchers=_SYNC_PROD,
+        trials=2,
+        setup=_sync_order_trial,
+        patchers=(*_SYNC_PROD, _sync_order_patch),
     )
 )
 _add(
@@ -2084,8 +2136,64 @@ _add(
         patchers=_SYNC_PROD,
     )
 )
-_add(DriverEntry('database.sync_backfill_sequencer.pending_head', base={'uid': UID}, patchers=_SYNC_PROD))
-_add(DriverEntry('database.sync_backfill_sequencer.has_pending', base={'uid': UID}, patchers=_SYNC_PROD))
+_add(
+    DriverEntry(
+        'database.sync_backfill_sequencer.repair_owner',
+        base={'uid': UID},
+        domains={'now': [None, T0], 'dry_run': [False, True]},
+        neutrals={'repair_window': (1800, 'staggering controls scheduling, not query filters')},
+        patchers=_SYNC_PROD,
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.sync_backfill_sequencer._has_pending',
+        covered_by=(
+            'database.sync_backfill_sequencer.repair_owner',
+            'database.sync_backfill_sequencer.finish_job',
+            'database.sync_backfill_sequencer.retire_expired',
+            'database.sync_backfill_sequencer.defer_owner',
+        ),
+        reason='bounded presence/successor probes run within the fenced owning transactions',
+    )
+)
+_add(
+    DriverEntry(
+        'database.sync_backfill_sequencer.finish_job',
+        base={'uid': UID, 'job_id': 'shape-job', 'epoch': 1, 'outcome': 'completed'},
+        domains={'now': [None, T0]},
+        setup=_seed(f'sync_backfill_sequencer/{UID}', {'active_job_id': 'shape-job', 'active_epoch': 1}),
+        patchers=_SYNC_PROD,
+    )
+)
+_add(
+    DriverEntry(
+        'database.sync_backfill_sequencer.retire_expired',
+        base={'uid': UID, 'job_id': 'shape-job'},
+        domains={'now': [None, T0], 'epoch': [None, 1], 'allow_active_owner': [False, True]},
+        setup=_seed_sync_retirement,
+        patchers=_SYNC_PROD,
+    )
+)
+_add(
+    DriverEntry(
+        'database.sync_backfill_sequencer.defer_owner',
+        base={'uid': UID, 'seconds': 120},
+        domains={'now': [None, T0]},
+        setup=_seed(f'sync_backfill_sequencer/{UID}', {'epoch': 1}),
+        patchers=_SYNC_PROD,
+    )
+)
+for _sync_probe in ('pending_head', 'has_pending'):
+    _add(
+        DriverEntry(
+            f'database.sync_backfill_sequencer.{_sync_probe}',
+            base={'uid': UID},
+            trials=2,
+            setup=_sync_order_trial,
+            patchers=(*_SYNC_PROD, _sync_order_patch),
+        )
+    )
 _add(
     DriverEntry(
         'database.sync_backfill_sequencer.waiting_sample',
@@ -2533,6 +2641,8 @@ _add(
 )
 
 for entry in (
+    *batch_pipeline_entries(),
+    *batch_privacy_entries(),
     *outside_drivers.DRIVERS.values(),
     *outside_drivers.COVERED_BY.values(),
     *outside_drivers.SKIPS.values(),
@@ -2773,12 +2883,27 @@ _add(
         patchers=(lambda client: unittest.mock.patch('config.messaging.channel_enabled', lambda channel: False),),
     )
 )
+
+
+def _messaging_retention_candidate(client, combo, trial):
+    path = 'channel_identities/unknown'
+    row = {'active': False, 'last_inbound_at': T0 - timedelta(days=40)}
+    client.documents[path] = row
+    client.queue_results([])  # expired proofs
+    client.queue_results([client.snapshot(path, row)])
+    client.queue_results(
+        [client.snapshot(path + '/inbox/ambiguous', {'status': 'running'})] if combo['limit'] == 1 else []
+    )
+
+
 _add(
     DriverEntry(
         'database.messaging.MessagingStore.cleanup',
         base={'self': _messaging_store},
         neutrals={'now': _NOW},
         domains={'limit': [1, 100], 'retention_days': [7, 30]},
+        setup=_messaging_retention_candidate,
+        patchers=(_messaging_cleanup,),
     )
 )
 
@@ -2824,7 +2949,19 @@ _context_store = ChatContextStore(messaging=_messaging_store)
 def _context_boundary(client, combo, trial):
     client.documents['users/' + UID] = {'name': 'synthetic'}
     client.documents['users/' + UID + '/chat_sessions/session'] = {'id': 'session'}
-    client.documents['users/' + UID + '/messages/boundary'] = {'chat_session_id': 'session', 'created_at': T0}
+    client.documents['users/' + UID + '/messages/boundary'] = {
+        'id': 'boundary',
+        'chat_session_id': 'session',
+        'created_at': T0,
+    }
+    client.queue_results(
+        [
+            client.snapshot(
+                'users/' + UID + '/messages/boundary',
+                client.documents['users/' + UID + '/messages/boundary'],
+            )
+        ]
+    )
 
 
 _add(

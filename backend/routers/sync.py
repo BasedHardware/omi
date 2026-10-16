@@ -8,19 +8,29 @@ import threading
 import time
 import uuid as _uuid
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Request, Response, Header
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
+from config.batch_pipeline import enabled_for as batch_enabled_for
+from utils.batch_pipeline.intake import accept_upload as accept_batch_upload, get_durable_job_status
+from models.sync_job_status import (
+    SyncJobStartResponse,
+    SyncJobStatusResponse,
+    SyncCaptureManifestRequest,
+    SyncCaptureManifestResponse,
+)
+from routers.batch_pipeline import enrichment_response
 from database import conversations as conversations_db
 from database import fair_use as fair_use_db
 from database import sync_dead_letters
 from database import sync_backfill_sequencer
 from database import users as users_db
 from database.firestore_read_metrics import FirestoreReadSite
+from database.firestore_read_origin import read_origin
 from database.sync_jobs import (
     SyncLedgerFenceMode,
     TERMINAL_STATUSES,
@@ -106,7 +116,10 @@ from utils.metrics import (
     OMI_SYNC_QUEUE_WAIT_SECONDS,
     OMI_SYNC_RECORDING_AGE_SECONDS,
 )
-from utils.sync.poll_limit import SYNC_POLL_WINDOW_SECONDS, admit_sync_job_poll
+from utils.sync.poll_limit import SYNC_POLL_WINDOW_SECONDS, admit_sync_job_poll, with_poll_hint
+from config.repeat_work import playback_on_demand
+from contextlib import nullcontext
+from utils.sync.repeat_work_metrics import PLAYBACK_BUILD_SECONDS, PLAYBACK_BUILDS, record_playback_ready
 from utils.product_metrics import record_product_event, sanitize_app_build
 from utils.journey_metrics_contract import resolve_client_kind
 from utils.client_device import resolve_client_device, resolve_client_device_from_request
@@ -182,53 +195,6 @@ AUDIO_SAMPLE_RATE = 16000
 _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'}
 
 router = APIRouter(route_class=MultipartMaxPartSizeRoute, dependencies=[Depends(sync_stage.require_http_stage)])
-
-
-class SyncLocalFilesResultResponse(BaseModel):
-    new_memories: list[str] = Field(default_factory=list)
-    updated_memories: list[str] = Field(default_factory=list)
-    failed_segments: int = 0
-    total_segments: int = 0
-    errors: list[str] = Field(default_factory=list)
-
-
-class SyncJobStartResponse(BaseModel):
-    job_id: str
-    status: str
-    total_files: int
-    total_segments: int
-    poll_after_ms: int
-    lane: str = SyncLane.FRESH.value
-
-
-class SyncJobStatusResponse(BaseModel):
-    job_id: str
-    status: str
-    total_segments: int = 0
-    processed_segments: int = 0
-    successful_segments: int = 0
-    failed_segments: int = 0
-    result: SyncLocalFilesResultResponse | None = None
-    error: str | None = None
-    lane: str = SyncLane.FRESH.value
-    reason_code: str | None = None
-    retry_after: int | None = None
-    recording_age_seconds: int | None = None
-    poll_after_ms: int | None = None
-
-
-class SyncCaptureManifestFile(BaseModel):
-    name: str = Field(min_length=1, max_length=255)
-    sha256: str = Field(pattern=r'^[0-9a-fA-F]{64}$')
-
-
-class SyncCaptureManifestRequest(BaseModel):
-    conversation_id: str = Field(min_length=1, max_length=128)
-    files: List[SyncCaptureManifestFile] = Field(min_length=1, max_length=20)
-
-
-class SyncCaptureManifestResponse(BaseModel):
-    manifest: str
 
 
 @router.post('/v2/sync-capture-manifest', response_model=SyncCaptureManifestResponse)
@@ -381,7 +347,14 @@ def precache_conversation_audio_endpoint(
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
-    return sync_playback.precache_audio_files(uid, conversation_id, conversation.get('audio_files', []))
+    return sync_playback.precache_audio_files(
+        uid,
+        conversation_id,
+        conversation.get('audio_files', []),
+        **(
+            {'playback_epoch': conversation['playback_eager_epoch']} if conversation.get('playback_eager_epoch') else {}
+        ),
+    )
 
 
 @router.get("/v1/sync/audio/{conversation_id}/urls", response_model=AudioUrlsResponse, tags=['v1'])
@@ -475,14 +448,24 @@ def download_audio_file_endpoint(
     audio_files = conversation.get('audio_files', [])
     audio_file = None
     for af in audio_files:
-        if af.get('id') == audio_file_id:
+        if af.get('id') == audio_file_id or audio_file_id in (af.get('legacy_ids') or []):
             audio_file = af
             break
 
     if not audio_file:
         raise HTTPException(status_code=404, detail="Audio file not found in conversation")
 
-    return sync_playback.download_audio_file_response(uid, conversation_id, audio_file_id, audio_file, request, format)
+    return sync_playback.download_audio_file_response(
+        uid,
+        conversation_id,
+        audio_file['id'],
+        audio_file,
+        request,
+        format,
+        **(
+            {'playback_epoch': conversation['playback_eager_epoch']} if conversation.get('playback_eager_epoch') else {}
+        ),
+    )
 
 
 # **********************************************
@@ -1128,6 +1111,39 @@ async def sync_local_files_v2(
 
         content_id = await run_blocking(sync_executor, compute_sync_content_id, uid, paths)
 
+        if batch_enabled_for(uid):
+            # Route ownership is durable before any acceptance; neither errors
+            # nor rollback may start a legacy twin or release this batch claim.
+            sequencer_registration_started = True
+            batch_response = await accept_batch_upload(
+                uid=uid,
+                job_id=job_id,
+                content_id=content_id,
+                paths=paths,
+                lane=lane_decision.lane.value,
+                recording_age_seconds=lane_decision.maximum_age_seconds,
+                source=source.value,
+                should_lock=should_lock,
+                conversation_id=conversation_id if isinstance(conversation_id, str) else None,
+                client_device_id=client_device_context.client_device_id,
+                client_platform=client_device_context.platform,
+                byok_enabled=byok_enabled,
+                intake_context={
+                    'recording_session_id': recording_session_id,
+                    'audio_start_seconds': (
+                        audio_start_seconds if isinstance(audio_start_seconds, (int, float)) else None
+                    ),
+                    'audio_end_seconds': audio_end_seconds if isinstance(audio_end_seconds, (int, float)) else None,
+                    'geolocation': geolocation.model_dump(mode='json') if geolocation else None,
+                    'filenames': filenames,
+                    'capture_evidence_claims': capture_claims,
+                    'raw_capture_paths': archive_paths,
+                },
+            )
+            if batch_response is not None:
+                return batch_response
+            sequencer_registration_started = False
+
         # Create Redis job — total_segments=0 until VAD completes in background
         await run_blocking(
             db_executor,
@@ -1345,7 +1361,7 @@ async def sync_local_files_v2(
                     registered = await run_blocking(db_executor, sync_backfill_sequencer.is_registered, uid, job_id)
                     if not registered:
                         # A fast worker may have consumed the last pending
-                        # document and removed its owner before this read.
+                        # document and cleared its active owner before this read.
                         observed_job = await run_blocking(db_executor, get_sync_job, job_id)
                         registered = bool(observed_job and observed_job.get('status') in TERMINAL_STATUSES)
                     if not registered:
@@ -1629,7 +1645,7 @@ def _terminal_repeat_failure_kwargs(job: dict) -> dict[str, str]:
 
 
 @router.get("/v2/sync-local-files/{job_id}", response_model=SyncJobStatusResponse, response_model_exclude_none=True)
-def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_uid), surface_open: bool = False):
     """Poll for the status of an async sync job."""
     OMI_SYNC_JOB_POLL_REQUESTS_TOTAL.inc()
     if not admit_sync_job_poll(uid):
@@ -1639,6 +1655,9 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
             detail='Sync job polling too frequent; retry later',
             headers={'Retry-After': str(SYNC_POLL_WINDOW_SECONDS)},
         )
+    durable = get_durable_job_status(job_id, uid)
+    if durable is not None:
+        return with_poll_hint(durable, surface_open=surface_open)
     job = get_sync_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Sync job not found or expired")
@@ -1790,7 +1809,7 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
         if job.get('error'):
             resp['error'] = job['error']
 
-    return resp
+    return with_poll_hint(resp, surface_open=surface_open)
 
 
 async def _maintain_uid_sequencer_lease(
@@ -1817,6 +1836,7 @@ async def _maintain_uid_sequencer_lease(
 
 
 @router.post('/v2/sync-backfill-sequencer/sweep', include_in_schema=False)
+@read_origin('job:sync_backfill_sequencer')
 async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     outcomes = await run_blocking(db_executor, uid_sequencer.sweep)
     from utils.sync import reprocess
@@ -1830,24 +1850,6 @@ async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud
         outcomes['reprocess_repaired'] = repair['repaired']
         outcomes['reprocess_repair_errors'] = repair['error']
     return JSONResponse(status_code=500 if outcomes.get('error') else 200, content={'outcomes': outcomes})
-
-
-async def _run_sync_reprocess(payload: dict):
-    from utils.sync import reprocess
-    from utils.sync.pipeline import _reprocess_conversation_after_update
-
-    # Dev services share the production Firestore project. Never consume its
-    # obligations outside production (except the explicitly bound emulator).
-    if not reprocess.owns_runtime():
-        return JSONResponse(status_code=200, content={'status': 'foreign_runtime'})
-    if set(payload) != {'kind', 'key', 'task_token'} or not all(
-        isinstance(payload.get(field), str) and payload[field] for field in ('key', 'task_token')
-    ):
-        return JSONResponse(status_code=400, content={'status': 'invalid_payload'})
-    status = await run_blocking(
-        sync_executor, reprocess.run, payload['key'], payload['task_token'], _reprocess_conversation_after_update
-    )
-    return JSONResponse(status_code=503 if status == 'busy' else 200, content={'status': status})
 
 
 @router.post('/v2/sync-backfill-sequencer/wake', include_in_schema=False)
@@ -1877,33 +1879,23 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         payload = await request.json()
     except Exception:
         return await _run_sync_job_body(request, task_retry_count)
-    # Reuse the authenticated worker's 1500s timeout and audience. A distinct
-    # payload kind cannot be confused with a transcription job or its lease.
     if isinstance(payload, dict) and payload.get('kind') == 'sync_reprocess':
-        return await _run_sync_reprocess(payload)
+        return await enrichment_response(payload)
     epoch = payload.get('sequencer_epoch') if isinstance(payload, dict) else None
     if uid_sequencer.foreign_delivery(payload):
         return JSONResponse(status_code=200, content={'status': 'foreign_stage'})
     if epoch is None:
+        # Sequencer off: direct work runs at once, in parallel with the drain of
+        # already-sequenced entries, instead of queueing behind them.
         if (
             isinstance(payload, dict)
             and payload.get('lane') == SyncLane.BACKFILL.value
             and uid_sequencer.production_stage()
+            and uid_sequencer.enabled()
             and isinstance(payload.get('uid'), str)
             and isinstance(payload.get('job_id'), str)
         ):
             legacy_job = await run_blocking(db_executor, get_sync_job, payload['job_id'])
-            sequencer_on = uid_sequencer.enabled()
-            owner = (
-                await run_blocking(db_executor, sync_backfill_sequencer.get_owner, payload['uid'])
-                if legacy_job and legacy_job.get('status') == 'queued' and not sequencer_on
-                else {}
-            )
-            pending = (
-                await run_blocking(db_executor, sync_backfill_sequencer.has_pending, payload['uid'])
-                if legacy_job and legacy_job.get('status') == 'queued' and not sequencer_on and not owner
-                else False
-            )
             if legacy_job and legacy_job.get('status') == 'processing':
                 active_owner = await run_blocking(db_executor, sync_backfill_sequencer.get_owner, payload['uid'])
                 if active_owner.get('active_job_id'):
@@ -1914,14 +1906,14 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                         active_owner['active_job_id'],
                         backfill_cutover.uid_hash(payload['uid']),
                     )
-                elif sequencer_on:
+                else:
                     logger.info(
                         'event=sync_uid_sequencer action=cutover_direct_active outcome=observed '
                         'job_id=%s uid_hash=%s',
                         payload['job_id'],
                         backfill_cutover.uid_hash(payload['uid']),
                     )
-            if legacy_job and legacy_job.get('status') == 'queued' and (sequencer_on or owner or pending):
+            if legacy_job and legacy_job.get('status') == 'queued':
                 marked = await run_blocking(
                     db_executor, update_sync_job, payload['job_id'], {'dispatch_mode': 'sequenced'}
                 )
@@ -2463,6 +2455,23 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
     # artifact: the named task's tombstone makes the /urls re-enqueue a no-op, so the
     # artifact is never rebuilt until audio_files change. _run_conversation_merge_job
     # validates its own payload and returns 200-dropped for genuinely malformed input.
+    if playback_on_demand() and not payload.get('on_demand'):
+        # ACK burns this eager name. Persist an opaque recovery namespace first;
+        # open/play readers reuse their already loaded row to escape that name
+        # after rollback. Update-only: no read, transcript write or resurrection.
+        try:
+            await run_blocking(
+                db_executor,
+                conversations_db.mark_playback_deferred,
+                payload['uid'],
+                payload['conversation_id'],
+                _uuid.uuid4().hex,
+            )
+        except Exception as e:
+            logger.warning('audio_merge: playback deferral stamp failed exception_type=%s', type(e).__name__)
+            return JSONResponse(status_code=503, content={'status': 'retry'})
+        PLAYBACK_BUILDS.labels('conversation' if schema_version == 2 else 'file', 'deferred').inc()
+        return JSONResponse(status_code=200, content={'status': 'deferred_until_playback'})
     if schema_version == 2:
         return await _run_conversation_merge_job(payload, task_retry_count)
 
@@ -2483,12 +2492,20 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
             storage_executor, get_playback_artifact_signed_url, uid, conversation_id, audio_file_id
         )
         if existing:
+            if playback_on_demand():
+                PLAYBACK_BUILDS.labels('file', 'reused').inc()
             return JSONResponse(status_code=200, content={'status': 'exists'})
 
         try:
-            mp3_data = await run_blocking(
-                sync_executor, sync_playback.build_playback_artifact, uid, conversation_id, timestamps
-            )
+            with PLAYBACK_BUILD_SECONDS.labels('file').time() if playback_on_demand() else nullcontext():
+                mp3_data = await run_blocking(
+                    sync_executor,
+                    sync_playback.build_playback_artifact,
+                    uid,
+                    conversation_id,
+                    timestamps,
+                    **({'source_fingerprint': payload.get('source_fingerprint')} if payload.get('on_demand') else {}),
+                )
         except FileNotFoundError:
             logger.warning(f'audio_merge: chunks missing conv={conversation_id} file={audio_file_id}, dropping')
             # Persist the verdict or /urls reports pending forever and clients
@@ -2575,6 +2592,9 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
                 f'file={audio_file_id}, will retry: {e}'
             )
             return JSONResponse(status_code=500, content={'status': 'retry'})
+        if playback_on_demand():
+            PLAYBACK_BUILDS.labels('file', 'built').inc()
+            record_playback_ready(payload, 'file')
         logger.info(f'audio_merge: built artifact conv={conversation_id} file={audio_file_id} size={len(mp3_data)}')
         return JSONResponse(status_code=200, content={'status': 'done'})
     finally:
@@ -2596,6 +2616,7 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
         uid = payload['uid']
         conversation_id = payload['conversation_id']
         payload_fingerprint = payload.get('fingerprint')
+        demand = payload.get('on_demand') is True
     except Exception as e:
         logger.error(f'audio_merge handler: invalid v2 payload, dropping task: {e}')
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
@@ -2615,14 +2636,29 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
         if not conversation.get('audio_files'):
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'no_audio_files'})
         audio_files = conversation['audio_files']
-        fingerprint = compute_audio_files_fingerprint(audio_files)
+        if demand:
+            fingerprint = compute_audio_files_fingerprint(
+                audio_files,
+                origin=conversation.get('started_at') or conversation.get('created_at'),
+                source_identity=True,
+            )
+        else:
+            fingerprint = compute_audio_files_fingerprint(audio_files)
         if payload_fingerprint and payload_fingerprint != fingerprint:
             return JSONResponse(status_code=200, content={'status': 'superseded'})
 
         stamp = conversation.get('conversation_audio') or {}
         if stamp.get('audio_files_fingerprint') == fingerprint:
-            existing = await run_blocking(storage_executor, get_conversation_playback_signed_url, uid, conversation_id)
+            existing = await run_blocking(
+                storage_executor,
+                get_conversation_playback_signed_url,
+                uid,
+                conversation_id,
+                **({'fingerprint': fingerprint} if demand else {}),
+            )
             if existing:
+                if demand:
+                    PLAYBACK_BUILDS.labels('conversation', 'reused').inc()
                 return JSONResponse(status_code=200, content={'status': 'exists'})
 
         started_at_ts = persisted_started_seconds(conversation.get('started_at') or conversation.get('created_at'))
@@ -2633,14 +2669,16 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
             started_at_ts = min(chunk_starts) if chunk_starts else 0.0
 
         try:
-            mp3_data, spans = await run_blocking(
-                sync_executor,
-                sync_playback.build_conversation_playback_artifact,
-                uid,
-                conversation_id,
-                audio_files,
-                started_at_ts,
-            )
+            with PLAYBACK_BUILD_SECONDS.labels('conversation').time() if demand else nullcontext():
+                mp3_data, spans = await run_blocking(
+                    sync_executor,
+                    sync_playback.build_conversation_playback_artifact,
+                    uid,
+                    conversation_id,
+                    audio_files,
+                    started_at_ts,
+                    **({'strict_sources': True} if demand else {}),
+                )
         except FileNotFoundError:
             logger.warning(f'audio_merge: conversation chunks missing conv={conversation_id}, dropping')
             try:
@@ -2685,7 +2723,14 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
             return JSONResponse(status_code=500, content={'status': 'retry'})
 
         try:
-            await run_blocking(storage_executor, upload_conversation_playback_artifact, uid, conversation_id, mp3_data)
+            await run_blocking(
+                storage_executor,
+                upload_conversation_playback_artifact,
+                uid,
+                conversation_id,
+                mp3_data,
+                **({'fingerprint': fingerprint} if demand else {}),
+            )
         except Exception as e:
             if isinstance(e, DestructiveOperationInProgress):
                 deferred = await _defer_merge_for_destructive_operation(payload)
@@ -2717,6 +2762,8 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
                 f'audio_merge: conversation attempt {task_retry_count + 1} failed conv={conversation_id}, will retry: {e}'
             )
             return JSONResponse(status_code=500, content={'status': 'retry'})
+        if demand:
+            PLAYBACK_BUILDS.labels('conversation', 'built').inc()
         mp3_size = len(mp3_data)
         del mp3_data
 
@@ -2738,6 +2785,8 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
                 }
             },
         )
+        if demand:
+            record_playback_ready(payload, 'conversation')
         logger.info(
             f'audio_merge: built conversation artifact conv={conversation_id} size={mp3_size} spans={len(spans)}'
         )

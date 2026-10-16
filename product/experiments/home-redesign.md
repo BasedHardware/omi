@@ -6,14 +6,15 @@ more, come back more and upgrade more than today's Home?
 **Arms** (PostHog flag `home-redesign`, id 963799, experiment 486169, 50/50 by distinct id; draft until the
 build is in the stores):
 - `control` — today's Home, unchanged: the Ask Omi chat bar with the round record button, the live
-  recording card above the list, the processing row, empty states with icons, the calendar in the
+  recording card above the list, empty states with icons, the calendar in the
   header, locked rows that open Usage, no chat welcome or starter to-dos.
 - `test` — the redesigned Home: Ask Omi beside one recording pill that carries every recording state
-  (no card above the list; details in a sheet), the condensing processing row, text-only empty
+  (no card above the list; details in a sheet), text-only empty
   states, Omi pull-to-refresh, page actions beside the Home/Tasks switcher, locked rows that open
   the paywall in place ("Upgrade"), the Tasks tick-and-fold, a closable voice-profile card, Omi's
   first chat message, the Tasks dot and starter to-dos after onboarding.
-Shared by both arms (not part of the comparison): the Activity bell and pending row (#21689), the
+Shared by both arms (not part of the comparison): the Activity bell and the one "on the way" row
+for syncing and processing work (#21689, #21850), the
 Tasks menu in the header, the Settings plan card.
 
 **Unit.** A signed-in reader who reaches Home. Exposure = `$feature_flag_called` with

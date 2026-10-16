@@ -42,12 +42,6 @@ abstract final class SyncPendingWork {
 
   static bool shouldShow(SyncProvider p) => hasServerJobs(p) || p.allWals.any(isPendingWal);
 
-  /// Home's row, split by stage with the list's own Processing rows: audio still waiting or
-  /// uploading always counts; audio the server is already turning into conversations counts only
-  /// while no Processing row is on Home, so one recording never shows in both places.
-  static bool shouldShowOnHome(SyncProvider p, {required bool processingRowsShown}) =>
-      p.allWals.any(isPendingWal) || (!processingRowsShown && hasServerJobs(p));
-
   /// Ids of device recordings whose phone copy already moved on: lagging
   /// bookkeeping, not audio still on the device.
   static Set<String> movedIds(SyncProvider p) => p.allWals
@@ -96,7 +90,20 @@ abstract final class SyncPendingWork {
 
   /// One pass over the unsorted index, stopping at the threshold: Home's row asks this on every
   /// SyncProvider notify, which streams progress during a sync.
+  /// Per WAL list: SyncProvider replaces the list whenever a status changes (see its partition
+  /// caches), and progress notifications reuse it, so a sync's ticks do not redo the scan.
+  static final Expando<(int, bool)> _backlogMemo = Expando('largeSyncBacklog');
+
   static bool isLargeBacklog(SyncProvider p) {
+    final wals = p.allWals;
+    final memo = _backlogMemo[wals];
+    if (memo != null && memo.$1 == wals.length) return memo.$2;
+    final large = _computeLargeBacklog(p);
+    _backlogMemo[wals] = (wals.length, large);
+    return large;
+  }
+
+  static bool _computeLargeBacklog(SyncProvider p) {
     var seconds = 0;
     for (final w in p.allWals) {
       if (w.status != WalStatus.uploaded) continue;

@@ -200,7 +200,7 @@ def receiver():
 async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypatch):
     before_accepted = WINDOW_ADMISSION.labels(outcome='accepted')._value.get()
     before_text = WINDOW_SESSION_OUTCOME.labels(outcome='text', reason='none')._value.get()
-    before_first = WINDOW_FIRST_TEXT._sum.get()
+    before_first = WINDOW_FIRST_TEXT.labels(demand_cohort='ineligible')._sum.get()
     client = Client()
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     from utils.stt import live_session
@@ -234,7 +234,7 @@ async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypa
     assert window.admission.active == 0
     assert WINDOW_ADMISSION.labels(outcome='accepted')._value.get() == before_accepted + 1
     assert WINDOW_SESSION_OUTCOME.labels(outcome='text', reason='none')._value.get() == before_text + 1
-    assert WINDOW_FIRST_TEXT._sum.get() > before_first
+    assert WINDOW_FIRST_TEXT.labels(demand_cohort='ineligible')._sum.get() > before_first
 
 
 @pytest.mark.asyncio
@@ -1517,7 +1517,7 @@ async def test_answered_blip_then_later_real_speech_has_fresh_startup_budget(mon
             return {'segments': [{'text': 'Real speech.', 'start': 0.6, 'end': _wav_duration(kwargs) - 0.28}]}
 
         client.payloads.append(real_response)
-    before_latency = WINDOW_FIRST_TEXT._sum.get()
+    before_latency = WINDOW_FIRST_TEXT.labels(demand_cohort='ineligible')._sum.get()
     for _ in range(150):
         sample = await _fragment_frame(actual, clock, sample, speech=True, yield_pump=False)
     new_started = previous.raw._deadline_speech_at
@@ -1534,7 +1534,7 @@ async def test_answered_blip_then_later_real_speech_has_fresh_startup_budget(mon
         sample = await _settled_fragment_silence(actual, clock, sample, 125)
         assert [item['text'] for item in base.emitted] == ['Real speech.']
         assert previous.raw._first_text_timer is None
-        assert WINDOW_FIRST_TEXT._sum.get() - before_latency == pytest.approx(31.32)
+        assert WINDOW_FIRST_TEXT.labels(demand_cohort='ineligible')._sum.get() - before_latency == pytest.approx(31.32)
         assert previous.raw._answered_empty_speech_bytes == 0
         clock[0] = new_started + 12
         assert not previous.is_connection_dead

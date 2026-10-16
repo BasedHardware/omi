@@ -681,7 +681,7 @@ async def test_conflicting_envelope_abstains_whole_capture(coordinator, monkeypa
     assert len(state.vad_seen) == 1
     assert _read_payload(state.vad_seen[0]) == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in range(10))
     coverage_lines = [r.getMessage() for r in caplog.records if 'event=sync_wal_audio_coverage' in r.getMessage()]
-    assert any('outcome=abstained' in line for line in coverage_lines)
+    assert any('outcome=abstained reason=evidence' in line for line in coverage_lines)
 
 
 @pytest.mark.asyncio

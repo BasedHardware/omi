@@ -6,6 +6,7 @@ from concurrent.futures import Future
 from functools import wraps
 
 from config.audio_archive import admitted
+from config.repeat_work import playback_on_demand
 from utils.other.audio_archive_metrics import REBUILDS_COALESCED
 
 _lock = threading.Lock()
@@ -18,7 +19,7 @@ def coalesce_rebuild(function):
 
     @wraps(function)
     def wrapped(uid, conversation_id, *args, **kwargs):
-        if not admitted(uid, 'COALESCE'):
+        if not playback_on_demand() and not admitted(uid, 'COALESCE'):
             return function(uid, conversation_id, *args, **kwargs)
         bound = signature.bind(uid, conversation_id, *args, **kwargs)
         bound.apply_defaults()

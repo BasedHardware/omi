@@ -5,13 +5,20 @@ Tools for accessing Google Calendar events.
 import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple, cast
-from zoneinfo import ZoneInfo
 
 import httpx
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
-import database.notifications as notification_db
+from utils.model_text import (
+    UNTRUSTED_LEGEND,
+    count_header,
+    format_date,
+    format_instant,
+    format_span,
+    truncation_note,
+)
+from utils.user_clock import clock_for_config
 from models.calendar_mutation import (
     CalendarMutationResult,
     event_title as calendar_event_title,
@@ -39,43 +46,9 @@ from utils.retrieval.tools.google_utils import refresh_google_token
 from utils.log_sanitizer import sanitize, sanitize_pii
 import logging
 
+from utils.retrieval.tools.calendar_render import render_calendar_event
+
 logger = logging.getLogger(__name__)
-
-
-def _resolve_display_tz(tz: Optional[str]) -> Tuple[Any, str]:
-    """Return ``(tzinfo, label)`` for rendering event times in the user's timezone,
-    falling back to UTC on a missing or invalid zone (issue #4643)."""
-    if tz:
-        try:
-            return ZoneInfo(tz), tz
-        except Exception:
-            pass
-    return timezone.utc, "UTC"
-
-
-def _format_event_dt(dt: datetime, display_tz: Any, tz_label: str) -> str:
-    """Render a calendar event datetime in the user's timezone with a label.
-
-    Google event times are tz-aware; a naive value is treated as UTC so the chat
-    model never sees an unlabeled wall-clock time and mislabels the time of day.
-    """
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return f"{dt.astimezone(display_tz).strftime('%Y-%m-%d %H:%M:%S')} {tz_label}"
-
-
-async def _get_user_display_tz(uid: str) -> Tuple[Any, str]:
-    """Return ``(tzinfo, label)`` for the user's timezone, read off the event loop.
-
-    A timezone lookup failure must never abort the calendar tool, so fall back to
-    UTC and let the events still render (issue #4643).
-    """
-    try:
-        tz = await run_blocking(db_executor, notification_db.get_user_time_zone, uid)
-    except Exception as tz_error:
-        logger.warning(f"get_calendar_events_tool - timezone lookup failed, formatting in UTC: {tz_error}")
-        tz = None
-    return _resolve_display_tz(tz)
 
 
 async def search_google_contacts(access_token: str, query: str) -> Optional[str]:
@@ -258,8 +231,8 @@ async def create_google_calendar_event(
         end_time_utc = end_time.replace(tzinfo=timezone.utc)
 
     # Format times in RFC3339 format (UTC)
-    start_time_str = start_time_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
-    end_time_str = end_time_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+    start_time_str = start_time_utc.strftime('%Y-%m-%dT%H:%M:%SZ')  # not-model-facing: Google Calendar API parameter
+    end_time_str = end_time_utc.strftime('%Y-%m-%dT%H:%M:%SZ')  # not-model-facing: Google Calendar API parameter
 
     # Build event body
     event_body: Dict[str, Any] = {
@@ -354,7 +327,9 @@ async def update_google_calendar_event(
             start_time_utc = start_time.astimezone(timezone.utc)
         else:
             start_time_utc = start_time.replace(tzinfo=timezone.utc)
-        start_time_str = start_time_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+        start_time_str = start_time_utc.strftime(  # not-model-facing: Google Calendar API parameter
+            '%Y-%m-%dT%H:%M:%SZ'
+        )
         event_body['start'] = {
             'dateTime': start_time_str,
             'timeZone': 'UTC',
@@ -365,7 +340,7 @@ async def update_google_calendar_event(
             end_time_utc = end_time.astimezone(timezone.utc)
         else:
             end_time_utc = end_time.replace(tzinfo=timezone.utc)
-        end_time_str = end_time_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+        end_time_str = end_time_utc.strftime('%Y-%m-%dT%H:%M:%SZ')  # not-model-facing: Google Calendar API parameter
         event_body['end'] = {
             'dateTime': end_time_str,
             'timeZone': 'UTC',
@@ -441,8 +416,8 @@ async def get_google_calendar_events(
     time_max = (time_max or (time_min + timedelta(days=7))).astimezone(timezone.utc)
 
     # Format times in RFC3339 format (UTC)
-    time_min_str = time_min.strftime('%Y-%m-%dT%H:%M:%SZ')
-    time_max_str = time_max.strftime('%Y-%m-%dT%H:%M:%SZ')
+    time_min_str = time_min.strftime('%Y-%m-%dT%H:%M:%SZ')  # not-model-facing: Google Calendar API parameter
+    time_max_str = time_max.strftime('%Y-%m-%dT%H:%M:%SZ')  # not-model-facing: Google Calendar API parameter
 
     params: Dict[str, Any] = {
         'timeMin': time_min_str,
@@ -537,6 +512,7 @@ async def get_calendar_events_tool(
             return access_err
         if uid is None or integration is None or access_token is None:
             return "Google Calendar access token not found."
+        clock = clock_for_config(config, uid)
 
         max_results = ensure_capped(max_results, 50, "⚠️ get_calendar_events_tool - max_results capped from {} to {}")
 
@@ -559,32 +535,46 @@ async def get_calendar_events_tool(
         if err:
             return err
 
+        requested_time_min = time_min
+        requested_time_max = time_max
+        range_widened = False
+        defaulted_search_range = False
+        search_range_label = ""
+
         # If search_query is provided, expand date range to ensure we don't miss events
         # Default to searching back 1 year if no dates provided, or expand range if dates are too narrow
         if search_query:
             now = datetime.now(timezone.utc)
             if time_max is None:
-                time_max = now
+                # Like the non-search default, run at least 7 days past start_date and never end before now:
+                # a future start_date ("upcoming meetings with Andy") must not get an end in its own past.
+                time_max = max(now, time_min + timedelta(days=7)) if time_min else now
             if time_min is None:
                 # Default to 1 year back when searching
                 time_min = time_max - timedelta(days=365)
-                logger.info(
-                    f"📅 search_query provided, defaulting to 1 year range: {time_min.strftime('%Y-%m-%d')} to {time_max.strftime('%Y-%m-%d')}"
-                )
+                defaulted_search_range = requested_time_min is None and requested_time_max is None
+                range_widened = not defaulted_search_range
+                logger.info("📅 search_query provided, defaulting to 1 year range")
             else:
                 # If dates are provided but range is less than 6 months, expand to at least 6 months
                 days_range = (time_max - time_min).days
                 if days_range < 180:  # Less than 6 months
                     # Expand backwards from time_max to ensure at least 6 months
                     time_min = time_max - timedelta(days=180)
-                    logger.info(
-                        f"📅 search_query provided, expanding date range to 6 months: {time_min.strftime('%Y-%m-%d')} to {time_max.strftime('%Y-%m-%d')}"
-                    )
+                    range_widened = True
+                    logger.info("📅 search_query provided, expanding date range to 6 months")
                 elif days_range < 365:  # Less than 1 year, expand to 1 year
                     time_min = time_max - timedelta(days=365)
-                    logger.info(
-                        f"📅 search_query provided, expanding date range to 1 year: {time_min.strftime('%Y-%m-%d')} to {time_max.strftime('%Y-%m-%d')}"
-                    )
+                    range_widened = True
+                    logger.info("📅 search_query provided, expanding date range to 1 year")
+
+            search_range_label = f"Searched {format_date(time_min, clock)} – {format_date(time_max, clock)}"
+            if range_widened:
+                search_range_label += " (widened from the requested range to find matches)"
+            elif defaulted_search_range:
+                search_range_label += " (defaulted to a one-year range for search_query)"
+            elif requested_time_min is None or requested_time_max is None:
+                search_range_label += " (the missing bound was set to the current time)"
 
         telemetry_context = IntegrationTelemetryContext(
             integration_name=GOOGLE_CALENDAR,
@@ -594,10 +584,9 @@ async def get_calendar_events_tool(
         emit_sync_attempted(telemetry_context)
 
         # Fetch events with smart date range handling
+        days_range = (time_max - time_min).days if time_min and time_max else 0
+        order = "newest first" if not search_query and days_range > 30 else "soonest first"
         try:
-            # Calculate date range
-            days_range = (time_max - time_min).days if time_min and time_max else 0
-
             # If search_query is provided, use single API call (server-side filtering is efficient)
             # Otherwise, for large date ranges (>30 days), use iterative search
             if search_query:
@@ -610,7 +599,9 @@ async def get_calendar_events_tool(
                     max_results=max_results,
                     search_query=search_query,
                 )
-            elif days_range > 30:
+            elif days_range > 30 and time_max is not None and time_max <= datetime.now(timezone.utc):
+                # Most-recent-first only suits a range that has already ended. A range reaching into the
+                # future ("next two months") takes the plain read below, so its soonest events come first.
                 logger.info(
                     f"📅 Large date range ({days_range} days), using iterative search starting from most recent"
                 )
@@ -632,9 +623,7 @@ async def get_calendar_events_tool(
                     if time_min and search_start < time_min:
                         search_start = time_min
 
-                    logger.info(
-                        f"📅 Searching window {months_back + 1}: {search_start.strftime('%Y-%m-%d')} to {search_end.strftime('%Y-%m-%d')}"
-                    )
+                    logger.info("📅 Searching calendar window %s", months_back + 1)
 
                     # Fetch events for this window
                     window_events = await get_google_calendar_events(
@@ -706,6 +695,7 @@ async def get_calendar_events_tool(
                             max_results=max_results,
                             search_query=search_query,
                         )
+                        order = "soonest first"  # the retry reads the whole range in start-time order
                     except Exception as retry_error:
                         logger.error(f"❌ Error after token refresh: {retry_error}", exc_info=True)
                         emit_sync_failed(telemetry_context, retry_error)
@@ -734,60 +724,42 @@ async def get_calendar_events_tool(
         if not events:
             date_info = ""
             if time_min and time_max:
-                date_info = f" between {time_min.strftime('%Y-%m-%d')} and {time_max.strftime('%Y-%m-%d')}"
+                date_info = f" between {format_date(time_min, clock)} and {format_date(time_max, clock)}"
             elif time_min:
-                date_info = f" after {time_min.strftime('%Y-%m-%d')}"
+                date_info = f" after {format_date(time_min, clock)}"
             elif time_max:
-                date_info = f" before {time_max.strftime('%Y-%m-%d')}"
+                date_info = f" before {format_date(time_max, clock)}"
 
             emit_sync_succeeded(telemetry_context, item_count=0)
-            return f"No calendar events found{date_info}."
+            searched_range = f"\n{search_range_label}" if search_range_label else ""
+            return f"No calendar events found{date_info}.{searched_range}"
 
         # Format events
-        # Render event times in the user's timezone so the chat model labels the time
-        # of day correctly (issue #4643). The tz read is sync Firestore, so offload it.
-        display_tz, tz_label = await _get_user_display_tz(uid)
-        result = f"Calendar Events ({len(events)} found):\n\n"
-
+        # Render event times in the turn's clock so the chat model sees the same zone as the prompt.
+        result = (
+            count_header(
+                "Calendar Events",
+                shown=len(events),
+                order=order,
+                more_may_exist=len(events) >= max_results,
+            )
+            + "\n"
+        )
+        if search_range_label:
+            result += search_range_label + "\n"
+        result += "\n"
         for i, event in enumerate(events, 1):
-            summary = event.get('summary', 'No title')
-            result += f"{i}. {summary}\n"
+            result += render_calendar_event(event, i, clock)
 
-            # Parse start time
-            start = event.get('start', {})
-            if 'dateTime' in start:
-                try:
-                    start_dt = datetime.fromisoformat(start['dateTime'].replace('Z', '+00:00'))
-                    result += f"   Start: {_format_event_dt(start_dt, display_tz, tz_label)}\n"
-                except (ValueError, TypeError):
-                    result += f"   Start: {start.get('dateTime', 'Unknown')}\n"
-            elif 'date' in start:
-                result += f"   Date: {start.get('date', 'Unknown')}\n"
-
-            # Parse end time
-            end = event.get('end', {})
-            if 'dateTime' in end:
-                try:
-                    end_dt = datetime.fromisoformat(end['dateTime'].replace('Z', '+00:00'))
-                    result += f"   End: {_format_event_dt(end_dt, display_tz, tz_label)}\n"
-                except (ValueError, TypeError):
-                    result += f"   End: {end.get('dateTime', 'Unknown')}\n"
-            elif 'date' in end:
-                result += f"   End Date: {end.get('date', 'Unknown')}\n"
-
-            # Add location if available
-            location = event.get('location')
-            if location:
-                result += f"   Location: {location}\n"
-
-            # Add description if available (truncated)
-            description = event.get('description', '')
-            if description:
-                desc_preview = description[:100] + '...' if len(description) > 100 else description
-                result += f"   Description: {desc_preview}\n"
-
-            result += "\n"
-
+        if len(events) >= max_results:
+            result += "\n" + truncation_note(
+                shown=len(events),
+                total=None,
+                cut=True,
+                unit="calendar events",
+                how_to_get_more="Narrow the date range or use a more specific search query for additional events.",
+            )
+        result += "\n" + UNTRUSTED_LEGEND
         emit_sync_succeeded(telemetry_context, item_count=len(events))
         return result.strip()
     except Exception as e:
@@ -859,13 +831,14 @@ async def create_calendar_event_tool(
             return access_err
         if uid is None or integration is None or access_token is None:
             return "Google Calendar access token not found."
+        clock = clock_for_config(config, uid)
 
         # Parse start and end times
         try:
             start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
             if start_dt.tzinfo is None:
                 return f"Error: start_time must include timezone in format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T14:00:00-08:00'): {start_time}"
-            logger.info(f"📅 Parsed start_time '{start_time}' as {start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            logger.info("Parsed calendar start_time")
         except ValueError as e:
             return f"Error: Invalid start_time format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {start_time} - {str(e)}"
 
@@ -873,13 +846,13 @@ async def create_calendar_event_tool(
             end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
             if end_dt.tzinfo is None:
                 return f"Error: end_time must include timezone in format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T15:00:00-08:00'): {end_time}"
-            logger.info(f"📅 Parsed end_time '{end_time}' as {end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            logger.info("Parsed calendar end_time")
         except ValueError as e:
             return f"Error: Invalid end_time format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {end_time} - {str(e)}"
 
         # Validate that end_time is after start_time
         if end_dt <= start_dt:
-            return f"Error: end_time must be after start_time. Start: {start_dt.strftime('%Y-%m-%d %H:%M:%S')}, End: {end_dt.strftime('%Y-%m-%d %H:%M:%S')}"
+            return f"Error: end_time must be after start_time. Requested span: {format_span(start_dt, end_dt, clock)}"
 
         # Parse and resolve attendees if provided
         attendee_list: Optional[List[str]] = None
@@ -919,8 +892,7 @@ async def create_calendar_event_tool(
             event_link = event.get('htmlLink', '')
 
             result = f"✅ Successfully created calendar event: {title}\n"
-            result += f"   Start: {start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
-            result += f"   End: {end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+            result += f"   When: {format_span(start_dt, end_dt, clock)}\n"
 
             if location:
                 result += f"   Location: {location}\n"
@@ -954,8 +926,7 @@ async def create_calendar_event_tool(
                         event_link = event.get('htmlLink', '')
 
                         result = f"✅ Successfully created calendar event: {title}\n"
-                        result += f"   Start: {start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
-                        result += f"   End: {end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+                        result += f"   When: {format_span(start_dt, end_dt, clock)}\n"
 
                         if location:
                             result += f"   Location: {location}\n"
@@ -1045,7 +1016,7 @@ async def delete_calendar_event_tool(
             return access_err
         if uid is None or integration is None or access_token is None:
             return "Google Calendar access token not found."
-
+        clock = clock_for_config(config, uid)
         # If event_id is provided, delete directly
         if event_id:
             try:
@@ -1105,7 +1076,7 @@ async def delete_calendar_event_tool(
         # If only start_date provided, set end_date to 1 day later
         if time_min and not time_max:
             time_max = time_min + timedelta(days=1)
-            logger.info(f"📅 Auto-set end_date to 1 day after start_date: {time_max.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            logger.info("Auto-set calendar end_date to one day after start_date")
 
         # Search for matching events
         try:
@@ -1120,11 +1091,9 @@ async def delete_calendar_event_tool(
             if not events:
                 date_info = ""
                 if time_min and time_max:
-                    date_info = (
-                        f" between {time_min.strftime('%Y-%m-%d %H:%M')} and {time_max.strftime('%Y-%m-%d %H:%M')}"
-                    )
+                    date_info = f" between {format_instant(time_min, clock)} and {format_instant(time_max, clock)}"
                 elif time_min:
-                    date_info = f" on {time_min.strftime('%Y-%m-%d')}"
+                    date_info = f" on {format_date(time_min, clock)}"
 
                 title_info = f" matching '{event_title}'" if event_title else ""
                 return f"No calendar events found{title_info}{date_info}."
@@ -1137,11 +1106,9 @@ async def delete_calendar_event_tool(
             if not matching_events:
                 date_info = ""
                 if time_min and time_max:
-                    date_info = (
-                        f" between {time_min.strftime('%Y-%m-%d %H:%M')} and {time_max.strftime('%Y-%m-%d %H:%M')}"
-                    )
+                    date_info = f" between {format_instant(time_min, clock)} and {format_instant(time_max, clock)}"
                 elif time_min:
-                    date_info = f" on {time_min.strftime('%Y-%m-%d')}"
+                    date_info = f" on {format_date(time_min, clock)}"
                 return f"No calendar events found matching '{event_title}'{date_info}."
 
             logger.info(f"📅 Found {len(matching_events)} matching event(s) to delete")
@@ -1185,9 +1152,11 @@ async def delete_calendar_event_tool(
 
                         date_info_retry = ""
                         if time_min and time_max:
-                            date_info_retry = f" between {time_min.strftime('%Y-%m-%d %H:%M')} and {time_max.strftime('%Y-%m-%d %H:%M')}"
+                            date_info_retry = (
+                                f" between {format_instant(time_min, clock)} and {format_instant(time_max, clock)}"
+                            )
                         elif time_min:
-                            date_info_retry = f" on {time_min.strftime('%Y-%m-%d')}"
+                            date_info_retry = f" on {format_date(time_min, clock)}"
 
                         if not events:
                             return f"No calendar events found matching '{event_title}'{date_info_retry}."
@@ -1304,7 +1273,6 @@ async def update_calendar_event_tool(
             return access_err
         if uid is None or integration is None or access_token is None:
             return "Google Calendar access token not found."
-
         # Find the event if event_id not provided
         target_event_id = event_id
         if not target_event_id:

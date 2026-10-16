@@ -278,26 +278,29 @@ def test_memory_maintenance_entrypoint_does_not_invoke_daily_sweep_job():
     assert 'memory_maintenance_job.py' in dockerfile
 
 
-def _without_named_env(node, name: str):
+def _contains_uid_outside_approved_allowlists(node, uid: str) -> bool:
+    approved_allowlists = {'CAPTURE_JEV_SHADOW_UID_ALLOWLIST', 'AUDIO_ARCHIVE_UID_ALLOWLIST'}
     if isinstance(node, dict):
-        return {key: _without_named_env(value, name) for key, value in node.items() if key != name}
+        for key, value in node.items():
+            if key in approved_allowlists or key == 'knowledge-ledger-drain-job':
+                continue
+            if _contains_uid_outside_approved_allowlists(value, uid):
+                return True
+        return False
     if isinstance(node, list):
-        return [_without_named_env(item, name) for item in node]
-    return node
+        return any(_contains_uid_outside_approved_allowlists(item, uid) for item in node)
+    return node == uid
 
 
 def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admission():
-    dev = deepcopy(_MANIFEST['environments']['dev'])
     # The dev-only ledger drain has an explicit operational fence for the two
     # owner test accounts. Product/runtime surfaces must still contain no
-    # first-user or capture admission lists. EXP-003 is the one approved
-    # allowlist-only vendor shadow for this UID.
-    dev['cloud_run']['jobs'].pop('knowledge-ledger-drain-job', None)
-    serialized = json.dumps(
-        _without_named_env(dev, 'CAPTURE_JEV_SHADOW_UID_ALLOWLIST'),
-        sort_keys=True,
+    # first-user or capture admission lists. COALESCE and EXP-003 are the only
+    # approved David-only allowlists.
+    assert not _contains_uid_outside_approved_allowlists(
+        _MANIFEST['environments']['dev'],
+        'vi7SA9ckQCe4ccobWNxlbdcNdC23',
     )
-    assert 'vi7SA9ckQCe4ccobWNxlbdcNdC23' not in serialized
 
     cloud_run = _MANIFEST['environments']['dev']['cloud_run']
     services = cloud_run['services']
@@ -342,7 +345,6 @@ def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admissio
     assert x_sync_env['OMI_BACKGROUND_FLEX_CAPABLE']['value'] == 'true'
     assert x_sync_env['OMI_LLM_GATEWAY_URL']['env_var'] == 'OMI_LLM_GATEWAY_URL'
     assert set(x_sync_job['secrets']) >= {
-        'SERVICE_ACCOUNT_JSON',
         'ENCRYPTION_SECRET',
         'OPENAI_API_KEY',
         'PINECONE_API_KEY',
@@ -350,6 +352,8 @@ def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admissio
         'X_OAUTH_CLIENT_SECRET',
         'RAPID_API_KEY',
     }
+    assert 'SERVICE_ACCOUNT_JSON' not in x_sync_job['secrets']
+    assert 'GOOGLE_APPLICATION_CREDENTIALS' not in x_sync_job['secrets']
     assert x_sync_job['flags']['--service-account'] == (
         'dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com'
     )
@@ -575,7 +579,9 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
     # Live prod backend-integration was maxScale=25, minScale=1, concurrency=300
     # on 1 CPU. ChatGPT openai-mcp POSTs then 503 with "no available instance"
     # because I/O-bound MCP work does not trip CPU scale-out. Pin scale-out
-    # here only; do not copy onto backend / backend-sync.
+    # here only; do not copy onto backend.
+    # backend-sync DOES carry --cpu=2 (#21668): its 6-8Gi memory requires >=2
+    # CPU on Cloud Run, and 1-CPU deploys of 8Gi are rejected outright.
     integration_flags = _deploy_backend_stack_step_flags('deploy-backend-integration')
     backend_flags = _deploy_backend_stack_step_flags('deploy-backend')
     sync_flags = _deploy_backend_stack_step_flags('deploy-backend-sync')
@@ -591,9 +597,11 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
         assert flag not in backend_flags, flag
         # backend-sync owns its own scale-out cap (see test_sync_two_lane.py);
         # its value may legitimately equal integration's, so only the other
-        # integration-specific flags must stay off it.
-        if not flag.startswith('--max-instances='):
+        # integration-specific flags must stay off it. --cpu=2 is likewise
+        # legitimate on sync (#21668: 8Gi needs >=2 CPU).
+        if not (flag.startswith('--max-instances=') or flag == '--cpu=2'):
             assert flag not in sync_flags, flag
+    assert '--cpu=2' in sync_flags
 
 
 VERTEX_PT_CONTRACT = 'Company-paid Gemini text and vision generation may use only the active model'
@@ -720,6 +728,9 @@ def test_desktop_manifest_env_matches_what_the_workflow_deploys(env_name):
     literal_project = {'dev': 'based-hardware-dev', 'prod': 'based-hardware'}[env_name]
     for entry in state['services']['desktop-backend']['env']:
         name, value = entry['name'], entry['value']
+        if name in _MODULE['FIRESTORE_READ_RUNTIME_ENV_NAMES']:
+            assert '${{ steps.desktop-expected-env.outputs.firestore_read_env_vars }}' in workflow
+            continue
         if value == literal_project:
             # Supplied to the workflow as ${{ vars.GCP_PROJECT_ID }}.
             assert f'{name}=${{{{ vars.GCP_PROJECT_ID }}}}' in workflow, name
@@ -760,9 +771,30 @@ def test_desktop_cohort_output_reuses_escaped_state_value(monkeypatch, tmp_path,
     state = tmp_path / 'state.json'
     monkeypatch.setattr('sys.argv', [str(_SCRIPT), '--env', 'dev', '--desktop-state-output', str(state)])
     assert _MODULE['main']() == 0
-    assert capsys.readouterr().out == 'free_tier_local_processing_cohort=uid:fixture-a\\,uid:fixture-b\n'
+    output = capsys.readouterr().out
+    assert output.startswith(
+        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":5\\,"backfill_task_reads":0\\,"candidates_page":5\\,"deletion_marker_cache":5\\,"request_read_dedupe":5\\,"serving_config_cache":5\\,"singleton_loops":0\\,"subscription_cache":5\\,"usage_month_cache":5}\n'
+    )
+    assert output.endswith(
+        '__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n'
+        'free_tier_local_processing_cohort=uid:fixture-a\\,uid:fixture-b\n'
+    )
     entries = json.loads(state.read_text())['services']['desktop-backend']['env']
     assert {'name': 'FREE_TIER_LOCAL_PROCESSING_COHORT', 'value': cohort} in entries
+
+
+def test_desktop_lever_output_tracks_manifest_value_and_escapes_deploy_delimiters(monkeypatch, tmp_path, capsys):
+    env_config = deepcopy(_MANIFEST['environments']['dev'])
+    env_config['desktop_backend']['env']['FIRESTORE_READ_LEVERS']['value'] = '{"queue_age":true,"subscription":true}'
+    monkeypatch.setitem(_MODULE['main'].__globals__, '_load_yaml', lambda _path: {'environments': {'dev': env_config}})
+    state = tmp_path / 'state.json'
+    monkeypatch.setattr('sys.argv', [str(_SCRIPT), '--env', 'dev', '--desktop-state-output', str(state)])
+
+    assert _MODULE['main']() == 0
+
+    output = capsys.readouterr().out
+    assert 'FIRESTORE_READ_LEVERS={"queue_age":true\\,"subscription":true}\n' in output
+    assert output.endswith('__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n' 'free_tier_local_processing_cohort=\n')
 
 
 def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_path):
@@ -805,7 +837,12 @@ def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_
         capture_output=True,
         text=True,
     )
-    assert result.stdout == 'free_tier_local_processing_cohort=\n'
+    assert result.stdout.startswith(
+        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":5\\,"backfill_task_reads":0\\,"candidates_page":5\\,"deletion_marker_cache":5\\,"request_read_dedupe":5\\,"serving_config_cache":5\\,"singleton_loops":0\\,"subscription_cache":5\\,"usage_month_cache":5}\n'
+    )
+    assert result.stdout.endswith(
+        '__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n' 'free_tier_local_processing_cohort=\n'
+    )
     entries = json.loads(state.read_text())['services']['desktop-backend']['env']
     assert {'name': 'FREE_TIER_LOCAL_PROCESSING', 'value': 'false'} in entries
     assert {'name': 'FREE_TIER_LOCAL_PROCESSING_COHORT', 'value': ''} in entries
@@ -841,19 +878,17 @@ def test_phase_a_keeps_cloud_run_credentials_and_isolates_gke_v2_redis():
     for key in ('HOST', 'PORT', 'PASSWORD'):
         assert f'REDIS_DB_{key}' not in desktop['env']
         assert f'REDIS_DB_{key}' not in desktop['secrets']
-    # Gateway reservation bindings live in chart-only optional runtime references.
+    # Gateway reservation state shares the same Redis binding as backend-listen.
     chart = yaml.safe_load((_REPO_ROOT / 'backend/charts/llm-gateway/prod_omi_llm_gateway_values.yaml').read_text())
     env = {row['name']: row for row in chart['env']}
-    for key in ('HOST', 'PORT'):
-        assert env[f'REDIS_DB_{key}']['valueFrom']['configMapKeyRef'] == {
-            'name': 'prod-omi-reservation-runtime-config',
-            'key': f'REDIS_DB_{key}',
-            'optional': True,
-        }
+    assert env['REDIS_DB_HOST']['valueFrom']['configMapKeyRef'] == {
+        'name': 'prod-omi-backend-config',
+        'key': 'REDIS_DB_HOST',
+    }
+    assert env['REDIS_DB_PORT']['value'] == '13151'
     assert env['REDIS_DB_PASSWORD']['valueFrom']['secretKeyRef'] == {
         'name': 'prod-omi-backend-secrets',
-        'key': 'VERTEX_RESERVATION_REDIS_PASSWORD',
-        'optional': True,
+        'key': 'REDIS_DB_PASSWORD',
     }
 
 
@@ -911,3 +946,24 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
         ('METRICS_SECRET', 'METRICS_SECRET', 'latest'),
         ('POSTHOG_PROJECT_API_KEY', 'POSTHOG_PROJECT_API_KEY', 'latest'),
     }
+
+
+def test_integration_enrichment_renderer_targets_fresh_sync_handler(monkeypatch):
+    handler = 'https://fresh.invalid/v2/sync-jobs/run'
+    monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', handler)
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@example.invalid')
+    entries = _MANIFEST['environments']['prod']['cloud_run']['services']['backend-integration']['env']
+    selected = {
+        name: entries[name]
+        for name in (
+            'SYNC_TASKS_QUEUE',
+            'SYNC_TASKS_HANDLER_URL',
+            'SYNC_TASKS_OIDC_AUDIENCE',
+            'SYNC_TASKS_INVOKER_SA',
+        )
+    }
+    rendered = _MODULE['_render_env_vars'](selected)
+    assert 'SYNC_TASKS_QUEUE=sync-jobs' in rendered
+    assert f'SYNC_TASKS_HANDLER_URL={handler}' in rendered
+    assert f'SYNC_TASKS_OIDC_AUDIENCE={handler}' in rendered
+    assert 'SYNC_TASKS_INVOKER_SA=invoker@example.invalid' in rendered

@@ -781,6 +781,9 @@ def reprocess_conversation(
     # on the raw doc because the Conversation model does not carry `deleted`.
     if conversations_db.is_soft_deleted(conversation):
         raise HTTPException(status_code=404, detail="Conversation not found")
+    from database import processing_attention as attention_db
+
+    input_generation = attention_db.generation(conversation)
     was_discarded = bool(conversation.get('discarded'))
     conversation = deserialize_conversation(conversation)
     if not language_code:
@@ -788,6 +791,40 @@ def reprocess_conversation(
 
     explicit_app = _validate_reprocess_app_selection(uid, app_id) if app_id else None
 
+    # Reprocess is a new user intent once the prior writer finishes. Share the
+    # active writer across app selections to avoid racing summary writes.
+    try:
+        operation, owned = attention_db.claim(
+            uid, conversation_id, expected_generation=input_generation, restart_succeeded=True
+        )
+    except attention_db.ClaimRejected as error:
+        raise HTTPException(status_code=404, detail='Conversation not found') from error
+    if not owned or not attention_db.owns_live_claim(uid, operation):
+        return deserialize_conversation(_get_valid_conversation_by_id(uid, conversation_id))
+    try:
+        result = execute_reprocess(
+            uid,
+            conversation_id,
+            conversation,
+            language_code,
+            app_id,
+            explicit_app,
+            was_discarded,
+            background_tasks,
+            response,
+        )
+    except Exception:
+        attention_db.finish(uid, operation, 'failed')
+        raise
+    attention_db.finish(
+        uid, operation, 'succeeded' if getattr(getattr(result, 'structured', None), 'overview', None) else 'failed'
+    )
+    return result
+
+
+def execute_reprocess(
+    uid, conversation_id, conversation, language_code, app_id, explicit_app, was_discarded, background_tasks, response
+):
     receipt_applied: list = []
 
     processed_conversation = process_conversation(
@@ -1915,7 +1952,12 @@ def get_shared_conversation_by_id(conversation_id: str):
     if not uid:
         raise HTTPException(status_code=404, detail="Conversation is private")
 
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    try:
+        conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail='Shared conversation unavailable') from exc
     visibility = conversation.get('visibility', ConversationVisibility.private)
     if not visibility or visibility == ConversationVisibility.private:
         raise HTTPException(status_code=404, detail="Conversation is private")

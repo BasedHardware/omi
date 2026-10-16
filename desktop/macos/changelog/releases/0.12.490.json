@@ -1,0 +1,7 @@
+{
+  "version": "0.12.490",
+  "date": "2026-10-16",
+  "changes": [
+    "Screen intelligence requests now stop promptly when the server deadline is reached."
+  ]
+}

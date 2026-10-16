@@ -74,6 +74,7 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/image/image_utils.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/battery_widget_service.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/app_globals.dart';
 
@@ -1890,6 +1891,8 @@ class CaptureController extends ChangeNotifier
     _voiceCommandStartedDuringOnboarding = false;
     var data = List<List<int>>.from(_commandBytes);
     _commandBytes = [];
+    unawaited(DebugLogManager.logEvent(
+        'pendant_voice_question', {'phase': 'submitted', 'frames': data.length, 'auto_submitted': autoSubmitted}));
     _processVoiceCommandBytes(deviceId, data, allowWhenDisabled: allowWhenDisabled);
   }
 
@@ -1931,24 +1934,25 @@ class CaptureController extends ChangeNotifier
 
   Future streamButton(String deviceId) async {
     Logger.debug('streamButton in capture_provider');
-    _bleButtonStream = lifetime.takeSubscription(
-      _bleButtonStream,
-      await _getBleButtonListener(
-        deviceId,
-        onButtonReceived: (List<int> value) {
-          final snapshot = List<int>.from(value);
-          if (snapshot.length < 4) {
-            _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.invalidButtonPayload);
-            return;
-          }
-          final buttonState = ByteData.view(
-            Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer,
-          ).getUint32(0);
-          Logger.debug("device button $buttonState");
-          _handleButtonEvent(deviceId, buttonState);
-        },
-      ),
+    final previous = _bleButtonStream;
+    final listener = await _getBleButtonListener(
+      deviceId,
+      onButtonReceived: (List<int> value) {
+        final snapshot = List<int>.from(value);
+        if (snapshot.length < 4) {
+          _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.invalidButtonPayload);
+          return;
+        }
+        final buttonState = ByteData.view(
+          Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer,
+        ).getUint32(0);
+        Logger.debug("device button $buttonState");
+        _handleButtonEvent(deviceId, buttonState);
+      },
     );
+    // Without this a shared log cannot tell "pendant button never subscribed" from "never pressed".
+    unawaited(DebugLogManager.logEvent('pendant_button_listener', {'subscribed': listener != null}));
+    _bleButtonStream = lifetime.takeSubscription(previous, listener);
   }
 
   @visibleForTesting
@@ -1957,6 +1961,7 @@ class CaptureController extends ChangeNotifier
   }
 
   void _handleButtonEvent(String deviceId, int buttonState) {
+    unawaited(DebugLogManager.logEvent('pendant_button_event', {'state': buttonState}));
     // Intercept for interactive device onboarding
     if (deviceOnboardingProvider?.isOnboardingActive == true) {
       deviceOnboardingProvider!.onButtonEvent(buttonState);
@@ -2055,6 +2060,7 @@ class CaptureController extends ChangeNotifier
 
         _startVoiceCommandTimeout(deviceId);
         _playSpeakerHaptic(deviceId, 1);
+        unawaited(DebugLogManager.logEvent('pendant_voice_question', {'phase': 'started'}));
       } else {
         debugPrint("Ending voice question session (toggle mode)");
         _endVoiceCommandSession(deviceId);
@@ -2539,9 +2545,21 @@ class CaptureController extends ChangeNotifier
     // case the disable/reject paths may have removed nativeBleStreamConfig and
     // the native background streamer cannot start from nativeBleStreamingEnabled
     // alone.
-    _preferences.backgroundModeEnabled = true;
     final device = _recordingDevice!;
-    final codec = await _getAudioCodec(device.id);
+    final BleAudioCodec codec;
+    try {
+      codec = await _getAudioCodec(device.id);
+    } catch (e) {
+      Logger.debug('[BackgroundMode] enable failed - unable to read audio codec: ');
+      _preferences.backgroundModeEnabled = false;
+      await _preferences.saveBool('nativeBleStreamingEnabled', false);
+      await _preferences.saveBool('nativeBleForegroundReady', false);
+      await _preferences.remove('nativeBleStreamConfig');
+      notifyListeners();
+      return false;
+    }
+
+    _preferences.backgroundModeEnabled = true;
     final wasForegroundReady = _preferences.getBool('nativeBleForegroundReady');
     await _saveNativeBleStreamConfig(device, codec);
     if (wasForegroundReady) {

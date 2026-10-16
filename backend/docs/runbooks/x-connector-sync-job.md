@@ -8,9 +8,13 @@ Manual: `.github/workflows/gcp_x_connector_sync_job.yml` (`workflow_dispatch`, e
 
 Env contract: `cloud_run.jobs.x-connector-sync-job` in `backend/deploy/runtime_env.yaml` (compose from `_base.yaml` + overlays). Required for `run_x_sync_job()`:
 
-- Secrets: `SERVICE_ACCOUNT_JSON`, `ENCRYPTION_SECRET`, `OPENAI_API_KEY`, `PINECONE_API_KEY`, `X_OAUTH_CLIENT_SECRET`, `RAPID_API_KEY`
+- Secrets: `ENCRYPTION_SECRET`, `OPENAI_API_KEY`, `PINECONE_API_KEY`, `X_OAUTH_CLIENT_SECRET`, `RAPID_API_KEY`
 - Env: `PINECONE_INDEX_NAME`, `X_OAUTH_CLIENT_ID`, `X_OAUTH_REDIRECT_URI`, `RAPID_API_HOST`, `OMI_ENV_STAGE`
 - Runtime identity: `dev-backend-runtime` in development, `backend-runtime` in prod. A new job without `--service-account` is created as the default compute identity. Prod uses `backend-runtime` because that is the identity that already mounts the X OAuth secret and RapidAPI key on the Cloud Run API.
+
+Firebase Admin and Firestore use Application Default Credentials (ADC) from the attached runtime identity; `OMI_CUSTOMER_DATA_PROJECT` pins the customer-data project. Do not mount `SERVICE_ACCOUNT_JSON` or `GOOGLE_APPLICATION_CREDENTIALS`. The deploy action uses `secrets_update_strategy: overwrite` to replace the complete secret list, dropping the former JSON binding on redeploy.
+
+This job has **no Google Sheets or Drive client, file IDs, or Workspace scopes**. It lists the Firestore `x_connector_users` registry, refreshes per-user X OAuth tokens, fetches tweets/bookmarks (or the RapidAPI public timeline), and persists posts, extracted memories/profile context and Pinecone vectors. X OAuth scopes are unrelated to Google OAuth scopes. Workspace traffic attributed only by service-account totals must be traced separately; no sheet/folder sharing is required for this job. See [the keyless dependency decisions](nik164-keyless-dependencies.md) for the separate Workspace and Vertex retirement boundaries.
 
 Interactive OAuth connect/callback still lives on the GKE API; this job needs the same OAuth + RapidAPI bindings so incremental sync can refresh expired access tokens and use the public-timeline fallback.
 

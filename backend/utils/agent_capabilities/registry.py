@@ -20,6 +20,11 @@ class Kind:
     allowed_fields: tuple[str, ...] = ()
     collections: tuple[str, ...] = ()
     tool: str = 'propose_edit'
+    # Named deterministic checks. Unused until a verifier chain includes them.
+    # None of these kinds are deterministic-sufficient: a passing check cannot
+    # auto-apply on its own.
+    verifier_checks: tuple[str, ...] = ()
+    deterministic_sufficient: bool = False
 
     def validate(self, *args, **kwargs):
         return _call('utils.agent_capabilities.tools', self.validation, *args, **kwargs)
@@ -44,7 +49,9 @@ class Kind:
 
 
 KINDS = {
-    'spelling': Kind('validate_spelling', 'apply_spelling', 'patch_spelling', key_rule='spelling'),
+    'spelling': Kind(
+        'validate_spelling', 'apply_spelling', 'patch_spelling', key_rule='spelling', verifier_checks=('spelling',)
+    ),
     'title': Kind(
         'validate_summary',
         patcher='patch_summary',
@@ -113,6 +120,7 @@ KINDS = {
         key_rule='merge',
         allowed_fields=('dream_duplicate_of', 'dream_duplicate'),
         collections=('conversations',),
+        verifier_checks=('duplicate_capture',),
     ),
     'set_language': Kind(
         'validate_cleanup',
@@ -120,6 +128,7 @@ KINDS = {
         schema_rule='language',
         allowed_fields=('language',),
         collections=('conversations',),
+        verifier_checks=('language',),
     ),
 }
 KINDS['vocabulary'] = Kind(

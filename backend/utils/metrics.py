@@ -3,6 +3,8 @@ import re
 import threading
 from typing import Any
 
+from database.fsr_cache_telemetry import OMI_FALLBACK_TOTAL as OMI_FALLBACK_TOTAL
+
 from fastapi import Response
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
@@ -942,12 +944,6 @@ LLM_GATEWAY_CLIENT_FIRST_BYTE_SECONDS = Histogram(
     buckets=(0.1, 0.25, 0.5, 1, 2, 3, 5, 10, 15, 30),
 )
 
-OMI_FALLBACK_TOTAL = Counter(
-    'omi_fallback_total',
-    'Fallback / resilience transitions by component, path, reason, and outcome',
-    ['component', 'from_mode', 'to_mode', 'reason', 'outcome'],
-)
-
 DESKTOP_UPDATE_RESOLUTION_TOTAL = Counter(
     'desktop_update_resolution_total',
     (
@@ -1146,7 +1142,7 @@ OMI_LIVE_STT_TERMINAL_TOTAL = Counter(
 OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL = Counter(
     'omi_live_session_transcript_outcome_total',
     'Terminal transcript outcome per backend-STT live listen session (transcribed / no_transcript / too_short)',
-    ['outcome'],
+    ['outcome', 'demand_cohort'],
 )
 
 # Process-local STT breaker state (utils/stt/provider_resilience.py), published

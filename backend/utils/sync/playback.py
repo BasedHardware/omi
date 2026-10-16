@@ -9,6 +9,8 @@ from fastapi import HTTPException, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydub import AudioSegment
 
+from config.repeat_work import playback_on_demand
+from utils.other.playback_identity import validate_sources
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.executors import postprocess_executor, storage_executor, submit_with_context
 from utils.other.storage import (
@@ -25,6 +27,7 @@ from utils.other.storage import (
     get_or_create_merged_audio,
     get_playback_artifact_signed_url,
     is_playback_unavailable,
+    list_audio_chunks,
 )
 
 logger = logging.getLogger(__name__)
@@ -140,12 +143,20 @@ def _run_parallel_precache(
             logger.error(f"Error in parallel {error_label}: {e}")
 
 
-def precache_audio_files(uid: str, conversation_id: str, audio_files: list[dict[str, Any]]) -> dict[str, Any]:
+def precache_audio_files(
+    uid: str, conversation_id: str, audio_files: list[dict[str, Any]], *, playback_epoch: str | None = None
+) -> dict[str, Any]:
     if not audio_files:
         return {"status": "no_audio", "message": "No audio files in conversation"}
 
     if is_audio_merge_dispatch_enabled():
-        enqueue_conversation_audio_merge(uid, conversation_id, audio_files, caller='precache_endpoint')
+        enqueue_conversation_audio_merge(
+            uid,
+            conversation_id,
+            audio_files,
+            caller='precache_endpoint',
+            **({'playback_epoch': playback_epoch} if playback_epoch else {}),
+        )
         return {"status": "started", "audio_file_count": len(audio_files)}
 
     # Start background parallel pre-caching with bounded concurrency (#7387)
@@ -169,10 +180,28 @@ def _conversation_audio_urls_entry(
     lifecycle) falls through to pending + re-enqueue under a fingerprint-named
     task, making staleness self-healing.
     """
-    fingerprint = compute_audio_files_fingerprint(audio_files)
+    if playback_on_demand():
+        fingerprint = compute_audio_files_fingerprint(
+            audio_files, origin=(conversation or {}).get('started_at') or (conversation or {}).get('created_at')
+        )
+    else:
+        fingerprint = compute_audio_files_fingerprint(audio_files)
     stamp = (conversation or {}).get('conversation_audio') or {}
-    if stamp.get('audio_files_fingerprint') == fingerprint:
-        signed_url = get_conversation_playback_signed_url(uid, conversation_id)
+    cached_fingerprint = fingerprint
+    immutable = playback_on_demand()
+    stamped = stamp.get('audio_files_fingerprint')
+    if not immutable and isinstance(stamped, str) and len(stamped) == 64:
+        source_fingerprint = compute_audio_files_fingerprint(
+            audio_files,
+            origin=(conversation or {}).get('started_at') or (conversation or {}).get('created_at'),
+            source_identity=True,
+        )
+        if stamped == source_fingerprint:
+            cached_fingerprint, immutable = source_fingerprint, True
+    if stamped == cached_fingerprint:
+        signed_url = get_conversation_playback_signed_url(
+            uid, conversation_id, **({'fingerprint': cached_fingerprint} if immutable else {})
+        )
         if signed_url:
             return {
                 "status": "cached",
@@ -184,7 +213,14 @@ def _conversation_audio_urls_entry(
             }
     if get_conversation_playback_unavailable_fingerprint(uid, conversation_id) == fingerprint:
         return {"status": "unavailable", "signed_url": None, "spans": []}
-    enqueue_conversation_artifact_build(uid, conversation_id, fingerprint, caller='sync_urls')
+    epoch = (conversation or {}).get('playback_eager_epoch') or (stamped if immutable else None)
+    enqueue_conversation_artifact_build(
+        uid,
+        conversation_id,
+        fingerprint,
+        caller='sync_urls',
+        **({'playback_epoch': epoch} if epoch else {}),
+    )
     return {"status": "pending", "signed_url": None, "spans": []}
 
 
@@ -244,7 +280,14 @@ def _get_audio_urls_via_artifacts(
             to_enqueue.append(af)
 
     if to_enqueue:
-        enqueue_conversation_audio_merge(uid, conversation_id, to_enqueue, caller='sync_urls')
+        epoch = (conversation or {}).get('playback_eager_epoch')
+        enqueue_conversation_audio_merge(
+            uid,
+            conversation_id,
+            to_enqueue,
+            caller='sync_urls',
+            **({'playback_epoch': epoch} if epoch else {}),
+        )
 
     conversation_audio = _conversation_audio_urls_entry(uid, conversation_id, audio_files, conversation)
 
@@ -342,7 +385,7 @@ def get_audio_signed_urls(
 
 
 def _get_artifact_download_payload(
-    uid: str, conversation_id: str, audio_file_id: str, audio_file: dict[str, Any]
+    uid: str, conversation_id: str, audio_file_id: str, audio_file: dict[str, Any], *, playback_epoch: str | None = None
 ) -> tuple[bytes, str, str] | None:
     # Artifact-backed mode: serve only prebuilt audio, never merge in-request. On
     # miss, enqueue the merge task and tell the client to poll /urls.
@@ -359,7 +402,13 @@ def _get_artifact_download_payload(
     if legacy_data is not None:
         return legacy_data, "audio/wav", "wav"
 
-    enqueue_conversation_audio_merge(uid, conversation_id, [audio_file], caller='sync_download')
+    enqueue_conversation_audio_merge(
+        uid,
+        conversation_id,
+        [audio_file],
+        caller='sync_download',
+        **({'playback_epoch': playback_epoch} if playback_epoch else {}),
+    )
     return None
 
 
@@ -449,13 +498,21 @@ def download_audio_file_response(
     audio_file: dict[str, Any],
     request: Request,
     format: str,
+    *,
+    playback_epoch: str | None = None,
 ) -> Response:
     try:
         if not audio_file.get('chunk_timestamps'):
             raise HTTPException(status_code=500, detail="Audio file has no chunk timestamps")
 
         if format == "wav" and is_audio_merge_dispatch_enabled():
-            payload = _get_artifact_download_payload(uid, conversation_id, audio_file_id, audio_file)
+            payload = _get_artifact_download_payload(
+                uid,
+                conversation_id,
+                audio_file_id,
+                audio_file,
+                **({'playback_epoch': playback_epoch} if playback_epoch else {}),
+            )
             if payload is None:
                 return JSONResponse(
                     status_code=202,
@@ -479,11 +536,18 @@ def download_audio_file_response(
     )
 
 
-def build_playback_artifact(uid: str, conversation_id: str, timestamps: list[float]) -> bytes:
+def build_playback_artifact(
+    uid: str, conversation_id: str, timestamps: list[float], *, source_fingerprint: str | None = None
+) -> bytes:
     """Merge chunks (download -> decrypt -> decode -> gap-fill) and encode MP3 ~48kbps mono."""
+    source = [{'chunk_timestamps': timestamps, 'source_fingerprint': source_fingerprint}]
+    if source_fingerprint:
+        validate_sources(source, list_audio_chunks(uid, conversation_id, source_identity=True))
     pcm_data = download_audio_chunks_and_merge(
         uid, conversation_id, timestamps, fill_gaps=True, sample_rate=AUDIO_SAMPLE_RATE
     )
+    if source_fingerprint:
+        validate_sources(source, list_audio_chunks(uid, conversation_id, source_identity=True))
     if not pcm_data:
         return b''
     segment = AudioSegment(data=pcm_data, sample_width=2, frame_rate=AUDIO_SAMPLE_RATE, channels=1)
@@ -498,7 +562,7 @@ _PCM_BYTES_PER_SECOND = AUDIO_SAMPLE_RATE * 2
 
 
 def build_conversation_playback_artifact(
-    uid: str, conversation_id: str, audio_files: list[dict], started_at_ts: float
+    uid: str, conversation_id: str, audio_files: list[dict], started_at_ts: float, *, strict_sources: bool = False
 ) -> tuple[bytes, list[dict]]:
     """One dense CBR MP3 for the whole conversation + spans manifest.
 
@@ -519,6 +583,9 @@ def build_conversation_playback_artifact(
         [af for af in audio_files if af.get('id') and af.get('chunk_timestamps')],
         key=lambda af: min(af['chunk_timestamps']),
     )
+    verified = (strict_sources or playback_on_demand()) and any(af.get('source_fingerprint') for af in parts)
+    if verified:
+        validate_sources(parts, list_audio_chunks(uid, conversation_id, source_identity=True))
     pcm_buf = bytearray()
     spans: list[dict] = []
     for af in parts:
@@ -528,6 +595,8 @@ def build_conversation_playback_artifact(
                 uid, conversation_id, timestamps, fill_gaps=True, sample_rate=AUDIO_SAMPLE_RATE
             )
         except FileNotFoundError:
+            if strict_sources or playback_on_demand():
+                raise
             logger.warning(f'conversation_artifact: part {af["id"]} has no chunks, skipping conv={conversation_id}')
             continue
         if not pcm:
@@ -542,6 +611,8 @@ def build_conversation_playback_artifact(
         )
         pcm_buf.extend(pcm)
         del pcm
+    if verified:
+        validate_sources(parts, list_audio_chunks(uid, conversation_id, source_identity=True))
     if not pcm_buf:
         raise FileNotFoundError(f'No chunks found for conversation {conversation_id}')
     segment = AudioSegment(data=bytes(pcm_buf), sample_width=2, frame_rate=AUDIO_SAMPLE_RATE, channels=1)

@@ -991,6 +991,11 @@ checks:
     triggers: ["backend/**/*.py", "backend/**/Dockerfile*", "backend/runtime_images.json", "backend/scripts/runtime_image_contracts.py", ".github/workflows/runtime_image_contracts.yml", ".github/workflows/desktop_backend_auto_dev.yml", ".github/workflows/gcp_backend*.yml", ".github/workflows/gcp_diarizer.yml", ".github/workflows/gcp_models.yml", ".github/workflows/gcp_parakeet.yml", ".github/workflows/gcp_nllb_translation.yml", ".github/workflows/gcp_memory_maintenance_job*.yml", ".github/workflows/gcp_notifications_job.yml", ".github/workflows/gcp_plugins.yml", "plugins/**/*.py", "plugins/Dockerfile"]
     lanes: ["local", "ci"]
     reason: "#9857: deployable Python images must contain the transitive first-party imports of their runtime entrypoints"
+  - id: backend-logging-entrypoints
+    command: ["python3", "backend/scripts/check_logging_entrypoints.py", "--base", "{base}"]
+    triggers: ["backend/**/*.py", "backend/**/Dockerfile*", "backend/charts/**/*.yaml", "backend/charts/**/*.yml", "backend/runtime_images.json", "backend/logging_rollout_pending.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#21677/#21681: every backend launch surface must retain shared logging and correct severity; ordered migration exceptions only shrink"
   - id: backend-module-isolation
     command: ["python3", "backend/scripts/check_module_stub_pollution.py", "--files", "{changed_files}", "--check-allowlist-monotonic", "{base}"]
     triggers: ["backend/tests/**/*.py", "backend/testing/**/*.py", "backend/tests/.module_stub_legacy_allowlist", "backend/scripts/check_module_stub_pollution.py"]

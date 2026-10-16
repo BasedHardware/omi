@@ -211,3 +211,19 @@ def test_successful_reprocess_schedules_durable_learning():
     from utils.speaker_learning_jobs import run_speaker_learning_jobs
 
     assert tasks[0] == (run_speaker_learning_jobs, ('u1', 'c1'))
+
+
+@pytest.fixture(autouse=True)
+def retry_ledger(monkeypatch):
+    from database import processing_attention as attention
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    client = StrictFirestore({('users', 'u1', 'conversations', 'c1'): {'id': 'c1', 'status': 'completed'}})
+    monkeypatch.setattr(attention, 'db', client)
+    monkeypatch.setattr(attention.firestore, 'transactional', lambda fn: fn)
+
+    def run(client, fn, *args, **kwargs):
+        with client.lock:
+            return fn(client.transaction(), *args, **kwargs)
+
+    monkeypatch.setattr(attention, 'run_transactional', run)

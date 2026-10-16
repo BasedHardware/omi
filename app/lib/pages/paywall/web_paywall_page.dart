@@ -94,7 +94,12 @@ class _WebPaywallPageState extends State<WebPaywallPage> {
     final usage = context.read<UsageProvider>();
     if (usage.availablePlans == null) await usage.loadAvailablePlans();
     if (!mounted) return;
-    _offer = PaywallOffer.fromCatalog(usage.availablePlans);
+    final subscription = usage.subscription?.subscription;
+    _offer = PaywallOffer.fromCatalog(
+      usage.availablePlans,
+      cancelAtPeriodEnd: subscription?.cancelAtPeriodEnd == true,
+      currentPriceId: subscription?.currentPriceId,
+    );
     final url = WebPaywallPage.buildUrl(
       widget.url,
       source: widget.source,

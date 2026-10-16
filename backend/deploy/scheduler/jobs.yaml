@@ -142,6 +142,26 @@ environments:
   prod:
     project: based-hardware
     jobs:
+      - name: messaging-maintenance-hourly
+        lifecycle: planned
+        region: us-central1
+        schedule: "17 * * * *"
+        time_zone: Etc/UTC
+        state: ENABLED
+        target:
+          type: http
+          uri: https://run.googleapis.com/v2/projects/based-hardware/locations/us-central1/jobs/messaging-maintenance-job:run
+          method: POST
+          oauth:
+            service_account: messaging-maintenance-scheduler@based-hardware.iam.gserviceaccount.com
+            scope: https://www.googleapis.com/auth/cloud-platform
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 180s
+        owner: backend/docs/runbooks/messaging-channels.md
       - name: day3-reengagement-email-daily
         region: us-central1
         schedule: "0 15 * * *"

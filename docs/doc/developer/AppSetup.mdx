@@ -435,3 +435,13 @@ flutter test test/providers/speech_profile_provider_test.dart test/widgets/speec
 For device verification, use the dev flavor and dev backend. Check speaking,
 Skip, and upload failure on the actual onboarding step. Advancing through All
 Done is a navigation event; verify the upload result separately.
+
+## Fleet telemetry for app contributors
+
+The backend accepts aggregated operational summaries at `POST /v1/telemetry/fleet`
+with the app's Firebase ID token. Client integrations should follow the checked-in
+[fleet schema](https://github.com/BasedHardware/omi/blob/main/backend/telemetry/fleet_schema.json)
+and [transport contract](https://github.com/BasedHardware/omi/blob/main/backend/telemetry/README.md).
+Aggregate locally, normally over 15 minutes, and coalesce background flushes within
+the per-account budget. Use only registered events, outcomes and histogram edges;
+do not include recording content, user/device identifiers, or free-text errors.
