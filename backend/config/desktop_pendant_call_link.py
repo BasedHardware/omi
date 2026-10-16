@@ -42,6 +42,18 @@ def window(row: Mapping[str, Any]) -> tuple[datetime, datetime] | None:
     return (start, finish) if finish > start else None
 
 
+def capture_windows(*rows: Mapping[str, Any]) -> dict[str, tuple[datetime, datetime]] | None:
+    """Only validated windows may be handed to the transaction fence."""
+    result = {}
+    for row in rows:
+        observed = window(row)
+        cid = row.get('id')
+        if observed is None or not isinstance(cid, str) or not cid:
+            return None
+        result[cid] = observed
+    return result
+
+
 def call_pair(a: Mapping[str, Any], b: Mapping[str, Any]) -> dict | None:
     if a.get('id') == b.get('id') or not a.get('id') or not b.get('id'):
         return None

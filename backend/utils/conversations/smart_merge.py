@@ -52,7 +52,7 @@ from config.conversation_smart_merge import (
     smart_merge_wallclock_gap_mode,
 )
 from config.jev_decisions import JEV_MODEL
-from config.desktop_pendant_call_link import call_link_mode, desktop_meeting, without_capture_metadata, window
+from config.desktop_pendant_call_link import call_link_mode, capture_windows, desktop_meeting, without_capture_metadata
 from database import capture_groups as capture_groups_db
 from database import conversations as conversations_db
 from database import notifications as notification_db
@@ -428,6 +428,9 @@ def _continue_call_group(
         snapshots[cid] = dict(row, id=cid)
         fingerprints[cid] = fingerprint
     previous, new = snapshots[predecessor_id], snapshots[new_id]
+    expected_windows = capture_windows(previous, new)
+    if expected_windows is None:
+        return
     group = previous.get('capture_group') or {}
     members = {m['id'] for m in group.get('members', [])}
     if not group.get('id') or predecessor_id not in members or new_id in members:
@@ -526,7 +529,7 @@ def _continue_call_group(
                 predecessor_id,
                 new_id,
                 {'method': 'desktop_pendant_call_continuation'},
-                expected_windows={cid: window(snapshots[cid]) for cid in (predecessor_id, new_id)},
+                expected_windows=expected_windows,
                 expected_fingerprints=fingerprints,
                 call_primary_id=desktop_id,
                 continuation_from=predecessor_id,

@@ -5,7 +5,13 @@ from __future__ import annotations
 import logging
 from typing import Mapping, Any
 
-from config.desktop_pendant_call_link import call_link_mode, call_pair, desktop_meeting, window
+from config.desktop_pendant_call_link import (
+    CALL_GROUP_KIND,
+    call_link_mode,
+    call_pair,
+    capture_windows,
+    desktop_meeting,
+)
 from database import capture_groups as groups_db
 from database import conversations as conversations_db
 
@@ -72,12 +78,15 @@ def link_call_pair(uid: str, conversation_id: str, rows: list[dict], *, saturate
         decision = 'would_link'
         if mode == 'on':
             desktop_id, pendant_id, evidence = selected
+            expected_windows = capture_windows(by_id[desktop_id], by_id[pendant_id])
+            if expected_windows is None:
+                return
             group_id = groups_db.join_capture_group(
                 uid,
                 desktop_id,
                 pendant_id,
                 evidence,
-                expected_windows={cid: window(by_id[cid]) for cid in (desktop_id, pendant_id)},
+                expected_windows=expected_windows,
                 call_primary_id=desktop_id,
             )
             decision = 'linked' if group_id else 'keep'

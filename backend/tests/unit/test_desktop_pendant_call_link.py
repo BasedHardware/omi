@@ -2,10 +2,11 @@
 
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock
 
 import pytest
 
-from config.desktop_pendant_call_link import call_link_mode, call_pair
+from config.desktop_pendant_call_link import call_link_mode, call_pair, capture_windows
 from database import capture_groups as groups
 from database import conversations as conversations
 from models.conversation import Conversation
@@ -43,6 +44,8 @@ def store(monkeypatch):
     monkeypatch.setenv('DESKTOP_PENDANT_CALL_LINK_MODE', 'on')
     monkeypatch.setenv('DESKTOP_PENDANT_CALL_LINK_PERCENT', '100')
     monkeypatch.setenv('CAPTURE_JEV_SHADOW_ENABLED', 'false')
+    fake.degraded = MagicMock()
+    monkeypatch.setattr(duplicate_capture, '_record_degraded', fake.degraded)
     monkeypatch.setattr(groups, 'get_firestore_client', lambda: fake)
     monkeypatch.setattr(conversations, 'get_firestore_client', lambda: fake)
     monkeypatch.setattr(
@@ -77,6 +80,7 @@ def test_short_and_complementary_pairs_both_arrival_orders(store, duration, arri
     assert not store.rows[path(earlier)].get('capture_group')
     store.rows[path(arrival)] = records[arrival]
     duplicate_capture.link_duplicate_captures(UID, Conversation(**records[arrival]))
+    assert store.degraded.call_count == 0
     group = store.rows[path('desktop')]['capture_group']
     assert group['primary_id'] == 'desktop'
     assert group['kind'] == 'desktop_pendant_call'
@@ -212,3 +216,20 @@ def test_page_saturation_keeps_pair_separate(store, monkeypatch):
     monkeypatch.setattr(duplicate_capture, 'CANDIDATE_PAGE_LIMIT', 2)
     duplicate_capture.link_duplicate_captures(UID, Conversation(**store.rows[path('desktop')]))
     assert not store.rows[path('desktop')].get('capture_group')
+
+
+def test_on_mode_preserves_ordinary_nonmeeting_cross_source_hints(store):
+    desktop = row('desktop', 'desktop', end=120)
+    desktop['external_data']['conversation_role'] = 'ambient'
+    store.rows[path('desktop')] = desktop
+    store.rows[path('phone')] = row('phone', 'phone')
+    duplicate_capture.link_duplicate_captures(UID, Conversation(**desktop))
+    assert store.degraded.call_count == 0
+    assert store.rows[path('phone')]['external_data']['duplicate_capture_of'] == 'desktop'
+    assert not store.rows[path('desktop')].get('capture_group')
+
+
+def test_transaction_window_map_rejects_invalid_windows():
+    assert capture_windows(row('p', 'omi', 10, 0)) is None
+    assert capture_windows(dict(row('p', 'omi'), started_at=None)) is None
+    assert capture_windows(row('', 'omi')) is None
