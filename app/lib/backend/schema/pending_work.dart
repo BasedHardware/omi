@@ -1,6 +1,9 @@
 // Server views of work that is not a conversation yet (`GET /v1/pending-work`) and of work the
 // server gave up on (`GET /v1/attention-items`). Both answer `enabled: false` while the backend
-// gate is off; the app then keeps its local view.
+// gate is off; the app then keeps its local view. Responses decode through the generated wire
+// models in `gen/pending_work_wire.g.dart`; these adapters only shape them for the UI.
+
+import 'package:omi/backend/schema/gen/pending_work_wire.g.dart' as wire;
 
 DateTime? _date(Object? v) => v is String ? DateTime.tryParse(v) : null;
 int? _int(Object? v) => v is num ? v.toInt() : null;
@@ -58,6 +61,9 @@ class PendingWorkSnapshot {
   final bool enabled;
   final List<PendingWorkItem> items;
   final int attentionUnseenCount;
+
+  factory PendingWorkSnapshot.fromGenerated(wire.GeneratedPendingWorkSnapshot generated) =>
+      PendingWorkSnapshot.fromJson(generated.toJson());
 
   factory PendingWorkSnapshot.fromJson(Map<String, dynamic> json) {
     final rows = json['items'];
@@ -155,6 +161,9 @@ class AttentionItemsPage {
   final List<AttentionItem> items;
   final int unseenCount;
 
+  factory AttentionItemsPage.fromGenerated(wire.GeneratedAttentionItemsPage generated) =>
+      AttentionItemsPage.fromJson(generated.toJson());
+
   factory AttentionItemsPage.fromJson(Map<String, dynamic> json) {
     final rows = json['items'];
     return AttentionItemsPage(
@@ -176,6 +185,16 @@ class AttentionRetryResult {
   final String itemId;
   final String? operationId;
   final AttentionRetryState state;
+
+  /// Accepts a single-retry response or one Retry all operation: both carry operation_id and state.
+  static AttentionRetryResult fromGenerated(String itemId, Object generated) => fromJson(
+        itemId,
+        switch (generated) {
+          wire.GeneratedAttentionRetryResponse g => g.toJson(),
+          wire.GeneratedAttentionRetryAllOperation g => g.toJson(),
+          _ => throw ArgumentError.value(generated, 'generated'),
+        },
+      );
 
   static AttentionRetryResult fromJson(String itemId, Map<String, dynamic> json) {
     final op = json['operation_id'];

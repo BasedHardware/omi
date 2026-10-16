@@ -9,25 +9,23 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 from fastapi.responses import JSONResponse, Response
 from google.cloud import firestore
-from pydantic import BaseModel, Field
 
 from database import processing_attention as store
 from database._client import db, run_transactional
+from models.pending_work import (
+    AttentionItemsPage,
+    AttentionRetryAllResponse,
+    AttentionRetryResponse,
+    PendingWorkSnapshot,
+    RetryAllRequest,
+    SeenRequest,
+)
 from utils.other import endpoints as auth
 
 router = APIRouter(tags=['processing'])
 
 
-class RetryAllRequest(BaseModel):
-    idempotency_key: str = Field(min_length=1, max_length=200)
-
-
-class SeenRequest(BaseModel):
-    ids: list[str] = Field(default_factory=list, max_length=100)
-    all: bool = False
-
-
-@router.get('/v1/pending-work')
+@router.get('/v1/pending-work', response_model=PendingWorkSnapshot)
 def pending_work(uid: str = Depends(auth.get_current_user_uid)):
     from database.sync_jobs import pending_sync_jobs
 
@@ -39,7 +37,7 @@ def pending_work(uid: str = Depends(auth.get_current_user_uid)):
     }
 
 
-@router.get('/v1/attention-items')
+@router.get('/v1/attention-items', response_model=AttentionItemsPage)
 def attention_items(uid: str = Depends(auth.get_current_user_uid)):
     items = store.list_items(uid)
     return {'enabled': True, 'items': items, 'unseen_count': sum(not item['seen'] for item in items)}
@@ -101,7 +99,7 @@ def _claim_item(uid: str, item_id: str, idempotency_key: str | None = None) -> t
         raise HTTPException(status_code=409, detail='not_retryable') from error
 
 
-@router.post('/v1/attention-items/retry-all')
+@router.post('/v1/attention-items/retry-all', response_model=AttentionRetryAllResponse)
 def retry_all(
     request: RetryAllRequest, background_tasks: BackgroundTasks, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -160,7 +158,7 @@ def retry_all(
     return response
 
 
-@router.post('/v1/attention-items/seen')
+@router.post('/v1/attention-items/seen', status_code=204, response_class=Response, response_model=None)
 def seen(request: SeenRequest, uid: str = Depends(auth.get_current_user_uid)):
     ids = [item['id'] for item in store.list_items(uid)] if request.all else request.ids
     for item_id in ids:
@@ -170,7 +168,7 @@ def seen(request: SeenRequest, uid: str = Depends(auth.get_current_user_uid)):
     return Response(status_code=204)
 
 
-@router.post('/v1/attention-items/{item_id}/retry')
+@router.post('/v1/attention-items/{item_id}/retry', response_model=AttentionRetryResponse)
 def retry(
     item_id: str,
     background_tasks: BackgroundTasks,
@@ -188,7 +186,7 @@ def retry(
     return _operation_response(operation)
 
 
-@router.post('/v1/attention-items/{item_id}/dismiss')
+@router.post('/v1/attention-items/{item_id}/dismiss', status_code=204, response_class=Response, response_model=None)
 def dismiss(item_id: str, uid: str = Depends(auth.get_current_user_uid)):
     ref = store.items_ref(uid).document(item_id)
     if not ref.get().exists:

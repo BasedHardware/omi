@@ -264,7 +264,6 @@ def test_dead_letter_and_attention_commit_in_same_strict_transaction(database):
         }
     )
     conv_ref = database.collection('users').document(UID).collection('conversations').document('c1')
-    conv_ref.parent = SimpleNamespace(parent=database.collection('users').document(UID))
     transaction = database.transaction()
     assert jobs._mark_finalization_dead_letter_txn(transaction, job_ref, 1, 1, 5, NOW, lambda uid, cid: conv_ref)
     assert database.rows[CONV_PATH]['summary_retryable']
@@ -299,7 +298,7 @@ def test_enabled_http_get_shapes(monkeypatch, http_client):
     response = http_client.get('/v1/attention-items')
     assert response.status_code == 200
     assert response.json()['unseen_count'] == 1
-    assert response.json()['items'][0]['started_at'] == '2026-10-16T00:00:00+00:00'
+    assert datetime.fromisoformat(response.json()['items'][0]['started_at']) == NOW
     assert response.json()['items'][0]['retry'] == {'state': 'none', 'operation_id': None}
     assert http_client.get('/v1/pending-work').json() == {'enabled': True, 'items': [], 'attention_unseen_count': 1}
 
@@ -439,3 +438,54 @@ def test_attention_success_key_replays_after_explicit_reprocess_starts(database)
     assert not owned
     assert replay['operation_id'] == original['operation_id']
     assert replay['state'] == 'succeeded'
+
+
+def test_typed_pending_projection_serializes_rows(monkeypatch, http_client):
+    from database import sync_jobs
+
+    monkeypatch.setattr(store, 'list_items', lambda uid, **kwargs: [])
+    row = {
+        'id': 'conv:c1',
+        'kind': 'conversation',
+        'state': 'summarizing',
+        'conversation_ids': ['c1'],
+        'started_at': NOW,
+        'duration_seconds': 12.5,
+        'updated_at': None,
+        'internal_only': 'omit',
+    }
+    monkeypatch.setattr(store, 'pending_conversations', lambda uid: [row])
+    monkeypatch.setattr(sync_jobs, 'pending_sync_jobs', lambda uid: [])
+    response = http_client.get('/v1/pending-work')
+    assert response.status_code == 200
+    body = response.json()
+    assert body['enabled'] is True
+    item = body['items'][0]
+    assert set(item) == set(row) - {'internal_only'}
+    assert item['duration_seconds'] == 12.5
+    assert item['updated_at'] is None
+    assert datetime.fromisoformat(item['started_at']) == NOW
+
+
+def test_recovery_openapi_has_typed_success_and_bodyless_204(http_client):
+    spec = http_client.get('/openapi.json').json()
+    paths = spec['paths']
+    for method, path, schema in [
+        ('get', '/v1/pending-work', 'PendingWorkSnapshot'),
+        ('get', '/v1/attention-items', 'AttentionItemsPage'),
+        ('post', '/v1/attention-items/retry-all', 'AttentionRetryAllResponse'),
+        ('post', '/v1/attention-items/{item_id}/retry', 'AttentionRetryResponse'),
+    ]:
+        assert paths[path][method]['responses']['200']['content']['application/json']['schema'] == {
+            '$ref': '#/components/schemas/' + schema
+        }
+    for path in ['/v1/attention-items/seen', '/v1/attention-items/{item_id}/dismiss']:
+        responses = paths[path]['post']['responses']
+        assert '200' not in responses
+        assert 'content' not in responses['204']
+    assert paths['/v1/attention-items/seen']['post']['requestBody']['content']['application/json']['schema'] == {
+        '$ref': '#/components/schemas/SeenRequest'
+    }
+    assert paths['/v1/attention-items/retry-all']['post']['requestBody']['content']['application/json']['schema'] == {
+        '$ref': '#/components/schemas/RetryAllRequest'
+    }

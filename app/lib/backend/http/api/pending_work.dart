@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/gen/pending_work_wire.g.dart' as wire;
 import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/env/env.dart';
 
@@ -18,12 +19,12 @@ String _id(String id) => Uri.encodeComponent(id);
 
 Future<ApiResult<PendingWorkSnapshot>> getPendingWork() => executeApi(
       request: ApiRequest(url: '${Env.apiBaseUrl}v1/pending-work', method: 'GET'),
-      decode: (body) => PendingWorkSnapshot.fromJson(_object(body)),
+      decode: (body) => PendingWorkSnapshot.fromGenerated(wire.GeneratedPendingWorkSnapshot.fromJson(_object(body))),
     );
 
 Future<ApiResult<AttentionItemsPage>> getAttentionItems() => executeApi(
       request: ApiRequest(url: '${Env.apiBaseUrl}v1/attention-items', method: 'GET'),
-      decode: (body) => AttentionItemsPage.fromJson(_object(body)),
+      decode: (body) => AttentionItemsPage.fromGenerated(wire.GeneratedAttentionItemsPage.fromJson(_object(body))),
     );
 
 /// The server claims the retry once per failed attempt: a repeated or concurrent call returns the
@@ -34,7 +35,8 @@ Future<ApiResult<AttentionRetryResult>> retryAttentionItem(String id, {required 
         method: 'POST',
         headers: {'Idempotency-Key': idempotencyKey},
       ),
-      decode: (body) => AttentionRetryResult.fromJson(id, _object(body)),
+      decode: (body) =>
+          AttentionRetryResult.fromGenerated(id, wire.GeneratedAttentionRetryResponse.fromJson(_object(body))),
     );
 
 /// Same [idempotencyKey], same answer: a double tap or a lost response replays, never re-runs.
@@ -43,16 +45,12 @@ Future<ApiResult<List<AttentionRetryResult>>> retryAllAttentionItems({required S
         url: '${Env.apiBaseUrl}v1/attention-items/retry-all',
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'idempotency_key': idempotencyKey}),
+        body: jsonEncode(wire.GeneratedRetryAllRequest(idempotencyKey: idempotencyKey).toJson()),
       ),
-      decode: (body) {
-        final ops = _object(body)['operations'];
-        if (ops is! List) throw const FormatException('Expected operations');
-        return [
-          for (final op in ops)
-            if (op is Map<String, dynamic> && op['id'] is String) AttentionRetryResult.fromJson(op['id'] as String, op),
-        ];
-      },
+      decode: (body) => [
+        for (final op in wire.GeneratedAttentionRetryAllResponse.fromJson(_object(body)).operations)
+          AttentionRetryResult.fromGenerated(op.id, op),
+      ],
     );
 
 Future<ApiResult<void>> markAttentionItemsSeen(List<String> ids) => executeApi(
@@ -60,7 +58,7 @@ Future<ApiResult<void>> markAttentionItemsSeen(List<String> ids) => executeApi(
         url: '${Env.apiBaseUrl}v1/attention-items/seen',
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'ids': ids}),
+        body: jsonEncode(wire.GeneratedSeenRequest(ids: ids).toJson()),
       ),
       decode: (_) {},
     );
