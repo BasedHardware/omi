@@ -723,3 +723,34 @@ def test_serving_config_ttl_is_capped(monkeypatch):
 
     monkeypatch.setenv('FSR_SERVING_CONFIG_TTL_SECONDS', '999999')
     assert s4_read_cache.ttl('FSR_SERVING_CONFIG_TTL_SECONDS', 60) == 300
+
+
+def test_request_read_scope_teardown_in_another_context():
+    # Streaming responses finish yield dependencies in a different Context than the one that set the token.
+    async def run():
+        scope = cache.request_read_scope()
+        await asyncio.create_task(scope.__anext__())
+        holder = cache._request.get()
+        with pytest.raises(StopAsyncIteration):
+            await asyncio.create_task(scope.__anext__())
+        return holder
+
+    assert asyncio.run(run()) is None
+
+
+def test_streaming_route_with_read_scope_returns_200(monkeypatch):
+    from fastapi.responses import StreamingResponse
+
+    app = FastAPI()
+
+    @app.get('/stream')
+    async def stream(_scope=Depends(cache.request_read_scope)):
+        async def body():
+            yield b'a'
+            yield b'b'
+
+        return StreamingResponse(body())
+
+    with TestClient(app, raise_server_exceptions=True) as client:
+        response = client.get('/stream')
+    assert response.status_code == 200 and response.content == b'ab'

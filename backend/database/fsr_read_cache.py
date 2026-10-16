@@ -50,7 +50,12 @@ async def request_read_scope():
         with holder.lock:
             holder.closed = True
             holder.values.clear()
-        _request.reset(token)
+        try:
+            _request.reset(token)
+        except ValueError:
+            # FastAPI may tear down yield dependencies in another Context (streaming responses);
+            # the closed holder already stops reuse there.
+            pass
 
 
 @contextmanager
