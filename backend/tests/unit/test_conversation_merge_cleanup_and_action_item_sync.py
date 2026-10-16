@@ -17,6 +17,14 @@ DUE = datetime(2026, 9, 22, 15, tzinfo=timezone.utc)
 
 @pytest.fixture(scope="module")
 def isolated_modules():
+    import ast
+
+    vector_db_source = (_BACKEND / "database" / "vector_db.py").read_text(encoding="utf-8")
+    vector_db_tree = ast.parse(vector_db_source)
+    real_vector_db_funcs = {
+        node.name for node in vector_db_tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+
     fakes: dict[str, ModuleType] = {}
 
     def add(name: str, mod: ModuleType | None = None) -> ModuleType:
@@ -35,6 +43,11 @@ def isolated_modules():
     client_stub.document_id_from_seed = lambda seed: "seed-id"
     client_stub.run_transactional = MagicMock()
 
+    # Strict module stub: only expose functions that actually exist in database/vector_db.py
+    vector_db_stub = add("database.vector_db", ModuleType("database.vector_db"))
+    for fn_name in real_vector_db_funcs:
+        setattr(vector_db_stub, fn_name, MagicMock(name=fn_name))
+
     for name in (
         "database.conversations",
         "database.conversation_scan",
@@ -42,7 +55,6 @@ def isolated_modules():
         "database.action_items",
         "database.redis_db",
         "database.users",
-        "database.vector_db",
         "database.firestore_read_metrics",
         "utils.other.storage",
         "utils.screen_frames.store",
@@ -85,6 +97,8 @@ def isolated_modules():
             merge=merge_mod,
             router=router_mod,
             action_items_db=fakes["database.action_items"],
+            vector_db=vector_db_stub,
+            real_vector_db_funcs=real_vector_db_funcs,
         )
 
 
@@ -324,9 +338,11 @@ def test_update_conversation_action_item_description_syncs_vector_and_reminder(m
         "update_action_item",
         lambda uid, item_id, payload: updated_db.append((uid, item_id, payload)),
     )
+    assert "upsert_action_item_vector" in isolated_modules.real_vector_db_funcs
+    assert conversations_router.upsert_action_item_vector is isolated_modules.vector_db.upsert_action_item_vector
     monkeypatch.setattr(
         conversations_router,
-        "update_action_item_description_vector",
+        "upsert_action_item_vector",
         lambda uid, item_id, desc: updated_vectors.append((uid, item_id, desc)),
     )
     notifications = ModuleType("utils.notifications")

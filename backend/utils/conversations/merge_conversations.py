@@ -20,17 +20,11 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 import database.conversations as conversations_db
 from database import conversation_tombstones
 from database._client import db as firestore_db
-from database.vector_db import delete_vector
-
-try:
-    from database.vector_db import delete_action_item_vectors_batch, delete_transcript_chunk_vectors
-except ImportError:
-
-    def delete_action_item_vectors_batch(uid: str, action_item_ids: List[str]) -> None:
-        return None
-
-    def delete_transcript_chunk_vectors(uid: str, conversation_id: str) -> None:
-        return None
+from database.vector_db import (
+    delete_action_item_vectors_batch,
+    delete_transcript_chunk_vectors,
+    delete_vector,
+)
 
 
 from models.audio_file import AudioFile

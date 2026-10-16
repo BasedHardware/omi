@@ -20,15 +20,9 @@ from database.vector_db import (
     delete_action_item_vectors_batch,
     delete_vector,
     delete_transcript_chunk_vectors,
+    upsert_action_item_vector,
 )
 import database.vector_db as vector_db
-
-try:
-    from database.vector_db import update_action_item_description_vector
-except ImportError:
-
-    def update_action_item_description_vector(uid: str, action_item_id: str, description: str) -> None:
-        return None
 
 
 from utils.other.storage import delete_privacy_conversation_audio, delete_owner_prompt_embedding_cache
@@ -1526,7 +1520,7 @@ def update_action_item_description(
         for ai in existing_items:
             if ai.get('description') == data.old_description:
                 action_items_db.update_action_item(uid, ai['id'], {'description': data.description})
-                update_action_item_description_vector(uid, ai['id'], data.description)
+                upsert_action_item_vector(uid, ai['id'], data.description)
                 if ai.get('due_at') and not ai.get('completed'):
                     sync_action_item_reminder(
                         user_id=uid,
