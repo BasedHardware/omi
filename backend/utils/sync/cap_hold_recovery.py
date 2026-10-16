@@ -110,7 +110,7 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
         await run_blocking(storage_executor, cap_hold.read_audio, uid, row, path)
         paths, source_maps, targets, bindings = await prepare_audio(uid, path, meta)
         processed = set(row.get('processed_paths') or [])
-        receipts = dict(row.get('piece_receipts') or {})
+        receipts: dict[str, dict[str, Any]] = dict(row.get('piece_receipts') or {})
         for segment_path in sorted(paths):
             if not await run_blocking(
                 db_executor, cap_hold.renew, uid, snapshot.reference, row['lease_token'], time.time()
@@ -119,7 +119,7 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
             name = Path(segment_path).name
             if name in processed:
                 continue
-            receipt = receipts.get(name)
+            receipt: dict[str, Any] | None = receipts.get(name)
             if receipt is None:
                 if not await run_blocking(db_executor, _new_dispatch_allowed, uid):
                     return False
