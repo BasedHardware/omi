@@ -64,6 +64,20 @@ grafana:
   # Use the supported synchronous installer (also exercised in local13 QA).
   env:
     GF_PLUGINS_PREINSTALL_SYNC: yesoreyeram-infinity-datasource@4.1.1
+  # Grafana 13 refuses to start with the default [rendering] renderer_token in
+  # production (2026-10-16 crash loop). Secret grafana-renderer-token is created
+  # out of band; the renderer reads the same value as AUTH_TOKEN.
+  envValueFrom:
+    GF_RENDERING_RENDERER_TOKEN:
+      secretKeyRef:
+        name: grafana-renderer-token
+        key: token
+  # Server admin (user 1, omi_admin_prod) lives in an out-of-band secret so a
+  # helm upgrade with --reuse-values cannot overwrite it with the chart default.
+  admin:
+    existingSecret: grafana-admin-credentials
+    userKey: admin-user
+    passwordKey: admin-password
   # Parent bootstrap supplies the allocated org ID; never default to monitoring.
   service:
     annotations:
@@ -160,6 +174,11 @@ grafana:
       - kubernetes.io/pvc-protection
   imageRenderer:
     enabled: true
+    envValueFrom:
+      AUTH_TOKEN:
+        secretKeyRef:
+          name: grafana-renderer-token
+          key: token
   grafana.ini:
     # Grafana v13.1.3 conf/defaults.ini [database] and
     # pkg/services/sqlstore/database_config.go (https://github.com/grafana/grafana/tree/v13.1.3).
