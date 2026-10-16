@@ -21,6 +21,18 @@ import database.conversations as conversations_db
 from database import conversation_tombstones
 from database._client import db as firestore_db
 from database.vector_db import delete_vector
+
+try:
+    from database.vector_db import delete_action_item_vectors_batch, delete_transcript_chunk_vectors
+except ImportError:
+
+    def delete_action_item_vectors_batch(uid: str, action_item_ids: List[str]) -> None:
+        return None
+
+    def delete_transcript_chunk_vectors(uid: str, conversation_id: str) -> None:
+        return None
+
+
 from models.audio_file import AudioFile
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
@@ -139,6 +151,7 @@ def validate_merge_compatibility(
 
     Rejection criteria (hard failures):
     - Less than 2 conversations
+    - Duplicate conversation IDs
     - Any conversation is a soft-deleted tombstone
     - Any conversation is locked
     - Any conversation is not completed (processing/merging/in_progress)
@@ -148,6 +161,14 @@ def validate_merge_compatibility(
     """
     if len(conversations) < 2:
         return False, "At least 2 conversations required to merge", None
+
+    seen_ids = set()
+    for conv in conversations:
+        conv_id = conv.get("id")
+        if conv_id is not None:
+            if conv_id in seen_ids:
+                return False, "Duplicate conversation IDs are not allowed in merge.", None
+            seen_ids.add(conv_id)
 
     # Check none are soft-deleted. A soft-deleted tombstone is invisible to the
     # user, so merging it resurrects deleted content into a new visible
@@ -856,12 +877,19 @@ def _delete_conversation_and_related_data(
             _cancel_open_dated_task_reminders(uid, source_items)
         except Exception as e:
             logger.error(f"Error cancelling task reminders for {conversation_id}: {e}")
+        source_item_ids = [item["id"] for item in (source_items or []) if isinstance(item, dict) and item.get("id")]
+        if source_item_ids:
+            try:
+                delete_action_item_vectors_batch(uid, source_item_ids)
+            except Exception as e:
+                logger.error(f"Error deleting task vectors for {conversation_id}: {e}")
 
     if retain_capture:
         # Sync bridges retain redirect tombstones and original audio: another
         # in-flight worker may still be uploading to that immutable source ID.
         # Propagate errors so the durable ancestry can replay cleanup on retry.
         delete_vector(uid, conversation_id)
+        delete_transcript_chunk_vectors(uid, conversation_id)
         conversations_db._delete_conversation_search_index(uid, conversation_id)
         return
 
@@ -887,6 +915,11 @@ def _delete_conversation_and_related_data(
         delete_vector(uid, conversation_id)
     except Exception as e:
         logger.error(f"Error deleting vector for {conversation_id}: {e}")
+
+    try:
+        delete_transcript_chunk_vectors(uid, conversation_id)
+    except Exception as e:
+        logger.error(f"Error deleting transcript chunk vectors for {conversation_id}: {e}")
 
     try:
         # Purge retained bridge sources only for a real source/user deletion.
@@ -924,6 +957,25 @@ def _cleanup_merged_target_after_failure(uid: str, merged_conversation_id: str) 
         return False
 
     try:
+        import database.action_items as action_items_db
+
+        merged_items = action_items_db.get_action_items_by_conversation(uid, merged_conversation_id)
+        action_items_db.delete_action_items_for_conversation(uid, merged_conversation_id)
+    except Exception as e:
+        logger.error(f"Error deleting merged conversation action items for {merged_conversation_id}: {e}")
+    else:
+        try:
+            _cancel_open_dated_task_reminders(uid, [item for item in (merged_items or []) if isinstance(item, dict)])
+        except Exception as e:
+            logger.error(f"Error cancelling merged conversation task reminders for {merged_conversation_id}: {e}")
+        merged_item_ids = [item["id"] for item in (merged_items or []) if isinstance(item, dict) and item.get("id")]
+        if merged_item_ids:
+            try:
+                delete_action_item_vectors_batch(uid, merged_item_ids)
+            except Exception as e:
+                logger.error(f"Error deleting merged conversation task vectors for {merged_conversation_id}: {e}")
+
+    try:
         conversations_db.delete_conversation_photos(uid, merged_conversation_id)
     except Exception as e:
         logger.error(f"Error deleting merged conversation photos for {merged_conversation_id}: {e}")
@@ -935,6 +987,10 @@ def _cleanup_merged_target_after_failure(uid: str, merged_conversation_id: str) 
         delete_vector(uid, merged_conversation_id)
     except Exception as e:
         logger.error(f"Error deleting merged conversation vector for {merged_conversation_id}: {e}")
+    try:
+        delete_transcript_chunk_vectors(uid, merged_conversation_id)
+    except Exception as e:
+        logger.error(f"Error deleting merged conversation transcript chunk vectors for {merged_conversation_id}: {e}")
     try:
         conversations_db.delete_conversation(uid, merged_conversation_id)
     except Exception as e:
