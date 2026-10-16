@@ -13,6 +13,9 @@ def prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial: 
     if not partial or 'status' in action_item_data or 'completed' in action_item_data:
         status = action_item_data.get('status')
         completed = action_item_data.get('completed')
+        if isinstance(status, str):
+            status = status.strip() or None
+            action_item_data['status'] = status
         if status is None:
             status = 'completed' if completed is True else 'active'
             action_item_data['status'] = status
@@ -23,6 +26,8 @@ def prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial: 
     if not partial:
         action_item_data.setdefault('owner', 'unknown')
         action_item_data.setdefault('source', 'legacy')
+        if not isinstance(action_item_data.get('provenance'), list):
+            action_item_data['provenance'] = []
         action_item_data.setdefault('provenance', [])
         action_item_data.setdefault('sort_order', 0)
         action_item_data.setdefault('indent_level', 0)
@@ -76,6 +81,8 @@ def prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial: 
 
 def prepare_action_item_for_read(action_item_data: Dict[str, Any]) -> Dict[str, Any]:
     """Prepare action item data for reading from database"""
+    # Never mutate the caller's dict — a read must be side-effect free.
+    action_item_data = dict(action_item_data)
     # `completed` may be missing OR explicitly null (legacy/partial writes). setdefault
     # won't overwrite an existing null, so drop it first and let status derive a concrete
     # bool — strict client parsers reject a null `completed` and drop the whole page.
@@ -85,11 +92,32 @@ def prepare_action_item_for_read(action_item_data: Dict[str, Any]) -> Dict[str, 
     action_item_data.setdefault('completed', action_item_data['status'] == 'completed')
     action_item_data.setdefault('owner', 'unknown')
     action_item_data.setdefault('source', 'legacy')
-    action_item_data.setdefault('provenance', [])
+    if not isinstance(action_item_data.get('provenance'), list):
+        action_item_data['provenance'] = []
     action_item_data.setdefault('sort_order', 0)
     action_item_data.setdefault('indent_level', 0)
+    # Normalize every date shape the store can return — ISO strings, Firestore
+    # timestamps (``to_datetime``), epoch seconds, and datetimes — to aware UTC.
+    # Any failure must degrade to the stored value, never a 500 on read.
     for field in ['created_at', 'updated_at', 'due_at', 'completed_at']:
         if field in action_item_data and action_item_data[field]:
-            if hasattr(action_item_data[field], 'timestamp'):
-                action_item_data[field] = datetime.fromtimestamp(action_item_data[field].timestamp(), tz=timezone.utc)
+            try:
+                value = action_item_data[field]
+                parsed = None
+                if isinstance(value, datetime):
+                    parsed = value
+                elif isinstance(value, str):
+                    parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                elif hasattr(value, 'to_datetime'):
+                    parsed = value.to_datetime()
+                elif hasattr(value, 'timestamp'):
+                    parsed = datetime.fromtimestamp(value.timestamp(), tz=timezone.utc)
+                if isinstance(parsed, datetime):
+                    if parsed.tzinfo is None:
+                        parsed = parsed.replace(tzinfo=timezone.utc)
+                    else:
+                        parsed = parsed.astimezone(timezone.utc)
+                    action_item_data[field] = parsed
+            except (OverflowError, ValueError, OSError, TypeError):
+                logger.warning("Leaving unparseable %s on action item read", field)
     return action_item_data
