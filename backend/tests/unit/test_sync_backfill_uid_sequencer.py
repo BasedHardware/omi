@@ -1096,4 +1096,3 @@ def test_redrive_job_tolerates_missing_document(db, monkeypatch):
     monkeypatch.setattr(registry.firestore, 'transactional', lambda fn: failing_commit)
     # Must return None instead of raising NotFound
     assert registry.redrive_job('missing_uid', 'job', 1) is None
-
