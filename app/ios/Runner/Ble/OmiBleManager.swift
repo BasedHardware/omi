@@ -907,8 +907,11 @@ final class OmiBleManager: NSObject {
             } else {
                 history = Array((history + [["timestamp": marker, "lostAudioResolvedAt": now, "identity_epoch": healthStore.epoch]]).suffix(Self.maxDisconnectHistory))
             }
-            guard persistPropertyListRecords(history, forKey: key, in: defaults) else { return }
+            let persisted = persistPropertyListRecords(history, forKey: key, in: defaults)
+            // Audio resumed. Clear the marker even when the history plist write
+            // fails; otherwise a stuck start is re-imported as a full lost day.
             defaults.removeObject(forKey: "ble_audio_outage_\(uuid)")
+            guard persisted else { return }
             persistPropertyListRecords(packetDays[uuid] ?? [], forKey: "ble_packet_days_\(uuid)", in: defaults)
         }
     }

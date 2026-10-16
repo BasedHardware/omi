@@ -474,6 +474,41 @@ void main() {
     expect(record['open_since'], DateTime(2026, 10, 9, 23).millisecondsSinceEpoch);
   });
 
+  test('stale native outage on a connected device is not a full lost day', () async {
+    final day = DateTime(2026, 10, 15);
+    final start = day.millisecondsSinceEpoch;
+    final poisoned = DeviceHealthTelemetry.rollup({
+      'observed_at': start + 86400000,
+      'outage_open_since': start - 86400000,
+      'connected_at': start + 90000,
+    }, day);
+    expect(poisoned['connected_time_fraction'], greaterThan(0.99));
+    expect(poisoned['lost_audio_seconds'], 90);
+    expect(poisoned['unresolved_outage_seconds'], 90);
+
+    const id = 'stale-connected';
+    await DeviceHealthTelemetry.recordOutage(id, at: DateTime.fromMillisecondsSinceEpoch(start - 86400000));
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: (_) async => jsonEncode({
+              'observed_at': start + 86400000,
+              'audio_outage_started_at': start - 86400000,
+              'connected_at': start + 90000,
+              'audio_packets_received': 5000,
+              'audio_packet_days': [
+                {'ts': start, 'received': 5000, 'expected': 5000}
+              ],
+            }),
+        emit: (_, props) => events.add(props));
+    expect(events.map((e) => e['day']), ['2026-10-15']);
+    expect(events.single['connected_time_fraction'], greaterThan(0.99));
+    expect(events.single['lost_audio_seconds'], 90);
+    expect(events.single['unresolved_outage_open'], isFalse);
+    expect(events.single['lost_audio_seconds'], isNot(86400));
+  });
+
   test('sign-out sends native retirement before subsequent recording', () async {
     final policies = <Map>[];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

@@ -103,9 +103,18 @@ class DeviceHealthTelemetry {
     return _resolveOutage(id, at: at);
   }
 
-  static Future<void> _resolveOutage(String id, {DateTime? at, num? nativeStart}) => _writeOutage(id, (record, now) {
+  static Future<void> _resolveOutage(
+    String id, {
+    DateTime? at,
+    num? nativeStart,
+    bool keepOutagesAfterRecovery = false,
+  }) =>
+      _writeOutage(id, (record, now) {
         final start = nativeStart ?? record['open_since'] as num?;
         if (start == null || (record['last_resolved_start'] as num? ?? -1) >= start) return;
+        // A live audio-bearing link closes markers from before that link.
+        // A newer gap on the same link stays open until its own recovery.
+        if (keepOutagesAfterRecovery && start > now) return;
         if (record['open_since'] == start) record.remove('open_since');
         final began = DateTime.fromMillisecondsSinceEpoch(start.toInt());
         final days = Map<String, dynamic>.from(record['resolved_days'] as Map? ?? {});
@@ -228,7 +237,7 @@ class DeviceHealthTelemetry {
     final resolved = (diagnostics['outage_resolved_days'] as Map?)?[start.toString()] as num?;
     if (resolved != null) lostAudioSeconds = resolved.toDouble();
     final openSince = diagnostics['outage_open_since'] as num?;
-    final unresolved =
+    var unresolved =
         openSince == null ? null : (exposureEnd - openSince.clamp(start, exposureEnd)).clamp(0, 86400000) / 1000;
     if (unresolved != null) lostAudioSeconds = (lostAudioSeconds ?? 0) + unresolved;
     final builds = <String>{};
@@ -286,6 +295,17 @@ class DeviceHealthTelemetry {
       if (ts == null || ts < start || ts >= end) continue;
       received += (point['received'] as num?)?.toInt() ?? 0;
       expected += (point['expected'] as num?)?.toInt() ?? 0;
+    }
+    // Lost audio is time without a link. A stale open marker must not bill the
+    // connected part of the day; never-recovered gaps still count in full when
+    // the day has no connection evidence.
+    final disconnectedSeconds = ((end - start) - connectedMs.clamp(0, end - start)) / 1000;
+    if (unresolved != null && unresolved > disconnectedSeconds) {
+      lostAudioSeconds = (lostAudioSeconds ?? 0) - (unresolved - disconnectedSeconds);
+      unresolved = disconnectedSeconds;
+    }
+    if (lostAudioSeconds != null && lostAudioSeconds > disconnectedSeconds) {
+      lostAudioSeconds = disconnectedSeconds;
     }
     var drainLevels = 0;
     var drainHours = 0.0;
@@ -427,7 +447,20 @@ class DeviceHealthTelemetry {
         await _resolveOutage(device.id, nativeStart: start, at: DateTime.fromMillisecondsSinceEpoch(recovered.toInt()));
       }
       final nativeStart = diagnostics['audio_outage_started_at'] as num?;
-      if (nativeStart != null && nativeStart > 0) {
+      final connectedAt = (diagnostics['connected_at'] as num?)?.toInt() ?? 0;
+      final packetsReceived = (diagnostics['audio_packets_received'] as num?)?.toInt() ?? 0;
+      if (connectedAt > 0 && packetsReceived > 0) {
+        // This link has delivered audio. A native marker from before the link
+        // is stale (iOS keeps it across restore); close it at the link start
+        // instead of reopening a calendar-day outage. Do not import a marker
+        // that is still inside the link — packets are already flowing.
+        if (nativeStart != null && nativeStart > 0 && nativeStart <= connectedAt) {
+          await _resolveOutage(device.id,
+              nativeStart: nativeStart.toInt(), at: DateTime.fromMillisecondsSinceEpoch(connectedAt));
+        }
+        await _resolveOutage(device.id,
+            at: DateTime.fromMillisecondsSinceEpoch(connectedAt), keepOutagesAfterRecovery: true);
+      } else if (nativeStart != null && nativeStart > 0) {
         await recordOutage(device.id, at: DateTime.fromMillisecondsSinceEpoch(nativeStart.toInt()));
       }
       await (_writes[outageKey(device.id)] ?? Future.value());
