@@ -24,7 +24,8 @@ Future<bool> launchIntegrationOAuth(
     final remaining = deadline - elapsed.elapsed;
     if (remaining <= Duration.zero) return false;
     final launch = openBrowser ?? (Uri uri) => launchUrl(uri, mode: LaunchMode.externalApplication);
-    return await launch(uri).timeout(remaining);
+    final opened = await launch(uri).timeout(remaining);
+    return opened && (isCurrent?.call() ?? true);
   } catch (_) {
     // URLs may contain OAuth state; do not include them in errors or logs.
     return false;

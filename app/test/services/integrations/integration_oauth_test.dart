@@ -63,4 +63,20 @@ void main() {
     expect(await result, isFalse);
     expect(browser.launches, isEmpty);
   });
+
+  test('a late browser receipt cannot start completion for a departed owner', () async {
+    var current = true;
+    final opened = Completer<bool>();
+    final launching = Completer<void>();
+    final result = launchIntegrationOAuth(() async => 'https://vendor.test/oauth',
+        openBrowser: (_) {
+          launching.complete();
+          return opened.future;
+        },
+        isCurrent: () => current);
+    await launching.future;
+    current = false;
+    opened.complete(true);
+    expect(await result, isFalse);
+  });
 }
