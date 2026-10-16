@@ -1865,25 +1865,17 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
     if uid_sequencer.foreign_delivery(payload):
         return JSONResponse(status_code=200, content={'status': 'foreign_stage'})
     if epoch is None:
+        # Sequencer off: direct work runs at once, in parallel with the drain of
+        # already-sequenced entries, instead of queueing behind them.
         if (
             isinstance(payload, dict)
             and payload.get('lane') == SyncLane.BACKFILL.value
             and uid_sequencer.production_stage()
+            and uid_sequencer.enabled()
             and isinstance(payload.get('uid'), str)
             and isinstance(payload.get('job_id'), str)
         ):
             legacy_job = await run_blocking(db_executor, get_sync_job, payload['job_id'])
-            sequencer_on = uid_sequencer.enabled()
-            owner_job_id = (
-                await run_blocking(db_executor, sync_backfill_sequencer.get_owner, payload['uid'])
-                if legacy_job and legacy_job.get('status') == 'queued' and not sequencer_on
-                else {}
-            ).get('active_job_id')
-            pending = (
-                await run_blocking(db_executor, sync_backfill_sequencer.has_pending, payload['uid'])
-                if legacy_job and legacy_job.get('status') == 'queued' and not sequencer_on and not owner_job_id
-                else False
-            )
             if legacy_job and legacy_job.get('status') == 'processing':
                 active_owner = await run_blocking(db_executor, sync_backfill_sequencer.get_owner, payload['uid'])
                 if active_owner.get('active_job_id'):
@@ -1894,14 +1886,14 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                         active_owner['active_job_id'],
                         backfill_cutover.uid_hash(payload['uid']),
                     )
-                elif sequencer_on:
+                else:
                     logger.info(
                         'event=sync_uid_sequencer action=cutover_direct_active outcome=observed '
                         'job_id=%s uid_hash=%s',
                         payload['job_id'],
                         backfill_cutover.uid_hash(payload['uid']),
                     )
-            if legacy_job and legacy_job.get('status') == 'queued' and (sequencer_on or owner_job_id or pending):
+            if legacy_job and legacy_job.get('status') == 'queued':
                 marked = await run_blocking(
                     db_executor, update_sync_job, payload['job_id'], {'dispatch_mode': 'sequenced'}
                 )
