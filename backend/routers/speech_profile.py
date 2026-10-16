@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import List, Optional
 
 import av
@@ -111,55 +112,63 @@ def get_speech_profile_status(uid: str = Depends(auth.get_current_user_uid)):
 @max_part_size(SPEECH_PROFILE_MAX_PART_SIZE)
 def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_uid)):
     os.makedirs(f'_temp/{uid}', exist_ok=True)
-    file_path = f"_temp/{uid}/{file.filename}"
-    with open(file_path, 'wb') as f:
-        f.write(file.file.read())
-
+    safe_filename = Path(file.filename or 'speech_profile.wav').name or 'speech_profile.wav'
+    file_path = f"_temp/{uid}/{safe_filename}"
     try:
-        aseg = AudioSegment.from_wav(file_path)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid audio file: must be a valid 16kHz WAV.")
-    if aseg.frame_rate != 16000:
-        raise HTTPException(status_code=400, detail="Invalid codec, must be opus 16khz.")
+        with open(file_path, 'wb') as f:
+            f.write(file.file.read())
 
-    # Upper bound must stay >= the app's onboarding recording cap (maxDuration = 150 in
-    # app/lib/providers/speech_profile_provider.dart) plus headroom: a 120s cap rejected
-    # ~28% of prod onboarding uploads (users whose Q&A ran past 2 minutes).
-    if aseg.duration_seconds < 5 or aseg.duration_seconds > 180:
-        raise HTTPException(status_code=400, detail="Audio duration is invalid (must be 5-180 seconds)")
+        try:
+            aseg = AudioSegment.from_wav(file_path)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid audio file: must be a valid 16kHz WAV.")
+        if aseg.frame_rate != 16000:
+            raise HTTPException(status_code=400, detail="Invalid codec, must be opus 16khz.")
 
-    try:
-        apply_vad_for_speech_profile(file_path)
-    except VADEmptyError:
-        raise HTTPException(status_code=400, detail="Audio is empty")
+        # Upper bound must stay >= the app's onboarding recording cap (maxDuration = 150 in
+        # app/lib/providers/speech_profile_provider.dart) plus headroom: a 120s cap rejected
+        # ~28% of prod onboarding uploads (users whose Q&A ran past 2 minutes).
+        if aseg.duration_seconds < 5 or aseg.duration_seconds > 180:
+            raise HTTPException(status_code=400, detail="Audio duration is invalid (must be 5-180 seconds)")
 
-    # Write-ahead: Cache exact duration after VAD processing (use av for fast header-only read)
-    with av.open(file_path) as container:
-        duration = (float(container.duration) / av.time_base) + 5 if container.duration else 0
+        try:
+            apply_vad_for_speech_profile(file_path)
+        except VADEmptyError:
+            raise HTTPException(status_code=400, detail="Audio is empty")
 
-    # Extract before upload so a 200 means the same embedding stack used for
-    # live/post-process matching actually stored a voiceprint (#12765).
-    try:
-        embedding = extract_embedding(file_path)
-    except Exception as e:
-        logger.error(f"Speech profile: failed to extract speaker embedding for {uid}: {e}")
-        raise HTTPException(status_code=503, detail="Failed to extract speaker embedding") from e
+        # Write-ahead: Cache exact duration after VAD processing (use av for fast header-only read)
+        with av.open(file_path) as container:
+            duration = (float(container.duration) / av.time_base) + 5 if container.duration else 0
 
-    # Persist the voiceprint before overwriting GCS audio. A Firestore miss
-    # must not leave a new profile blob live without a matching embedding.
-    try:
-        set_user_speaker_embedding(uid, embedding.flatten().tolist())
-    except Exception as e:
-        logger.error(f"Speech profile: failed to store speaker embedding for {uid}: {e}")
-        raise HTTPException(status_code=503, detail="Failed to store speaker embedding") from e
+        # Extract before upload so a 200 means the same embedding stack used for
+        # live/post-process matching actually stored a voiceprint (#12765).
+        try:
+            embedding = extract_embedding(file_path)
+        except Exception as e:
+            logger.error(f"Speech profile: failed to extract speaker embedding for {uid}: {e}")
+            raise HTTPException(status_code=503, detail="Failed to extract speaker embedding") from e
 
-    url = upload_profile_audio(file_path, uid)
-    # Cache the duration only once the profile blob is actually stored: a failed
-    # overwrite must not leave the cache describing an upload that never landed.
-    set_speech_profile_duration(uid, duration)
-    logger.info("Speech profile: stored speaker embedding for %s", uid)
+        # Persist the voiceprint before overwriting GCS audio. A Firestore miss
+        # must not leave a new profile blob live without a matching embedding.
+        try:
+            set_user_speaker_embedding(uid, embedding.flatten().tolist())
+        except Exception as e:
+            logger.error(f"Speech profile: failed to store speaker embedding for {uid}: {e}")
+            raise HTTPException(status_code=503, detail="Failed to store speaker embedding") from e
 
-    return {"url": url}
+        url = upload_profile_audio(file_path, uid)
+        # Cache the duration only once the profile blob is actually stored: a failed
+        # overwrite must not leave the cache describing an upload that never landed.
+        set_speech_profile_duration(uid, duration)
+        logger.info("Speech profile: stored speaker embedding for %s", uid)
+
+        return {"url": url}
+    finally:
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except OSError:
+            pass
 
 
 # ******************************************************
@@ -190,6 +199,8 @@ def delete_extra_speech_profile_sample(
 
 @router.get('/v3/speech-profile/expand', tags=['v3'], response_model=List[str])
 def get_extra_speech_profile_samples(person_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
+    if person_id == 'null':
+        person_id = None
     if person_id:
         return get_user_person_speech_samples(uid, person_id)
     return get_additional_profile_recordings(uid)

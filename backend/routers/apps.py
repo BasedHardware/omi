@@ -4,6 +4,7 @@ import os
 import time
 from html import escape
 from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
 from typing import List, Mapping, Optional
@@ -889,20 +890,31 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                         status_code=422,
                         detail=f'Unsupported action type. Supported types: {", ".join([action_type.value for action_type in ActionType])}',
                     )
-    os.makedirs('_temp/apps', exist_ok=True)
-    file_path = f"_temp/apps/{file.filename}"
-    with open(file_path, 'wb') as f:
-        f.write(file.file.read())
-    img_url = upload_app_logo(file_path, data['id'])
-    data['image'] = img_url
-    data['created_at'] = datetime.now(timezone.utc)
     # Backward compatibility: Set app_home_url from first auth step if not provided
     if isinstance(data.get('external_integration'), dict):
         backfill_app_home_url_from_auth_steps(data['external_integration'])
 
+    os.makedirs('_temp/apps', exist_ok=True)
+    safe_filename = Path(file.filename or 'logo.png').name or 'logo.png'
+    file_path = f"_temp/apps/{safe_filename}"
+    try:
+        with open(file_path, 'wb') as f:
+            f.write(file.file.read())
+        img_url = upload_app_logo(file_path, data['id'])
+    finally:
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
+    data['image'] = img_url
+    data['created_at'] = datetime.now(timezone.utc)
+
     try:
         app = AppCreate.model_validate(data)
     except ValidationError as e:
+        if isinstance(img_url, str) and img_url.startswith('https://storage.googleapis.com/'):
+            delete_app_logo(img_url)
         raise HTTPException(status_code=422, detail=e.errors(include_input=False))
 
     # Build app dict
@@ -947,16 +959,26 @@ async def create_persona(
     data['persona_prompt'] = await generate_persona_prompt(uid, data)
     data['description'] = await run_blocking(llm_executor, generate_persona_desc, uid, data['name'])
     os.makedirs('_temp/apps', exist_ok=True)
-    file_path = f"_temp/apps/{file.filename}"
-    contents = await file.read()
-    await run_blocking(storage_executor, _write_file, file_path, contents)
-    img_url = await run_blocking(storage_executor, upload_app_logo, file_path, data['id'])
+    safe_filename = Path(file.filename or 'logo.png').name or 'logo.png'
+    file_path = f"_temp/apps/{safe_filename}"
+    try:
+        contents = await file.read()
+        await run_blocking(storage_executor, _write_file, file_path, contents)
+        img_url = await run_blocking(storage_executor, upload_app_logo, file_path, data['id'])
+    finally:
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
     data['image'] = img_url
     data['created_at'] = datetime.now(timezone.utc)
 
     try:
         app_create = AppCreate.model_validate(data)
     except ValidationError as e:
+        if isinstance(img_url, str) and img_url.startswith('https://storage.googleapis.com/'):
+            await run_blocking(storage_executor, delete_app_logo, img_url)
         raise HTTPException(status_code=422, detail=e.errors(include_input=False))
 
     await run_blocking(db_executor, add_app_to_db, app_create.model_dump(exclude_unset=True))
@@ -988,10 +1010,18 @@ async def update_persona(
         ):
             await run_blocking(storage_executor, delete_app_logo, persona['image'])
         os.makedirs('_temp/apps', exist_ok=True)
-        file_path = f"_temp/apps/{file.filename}"
-        contents = await file.read()
-        await run_blocking(storage_executor, _write_file, file_path, contents)
-        img_url = await run_blocking(storage_executor, upload_app_logo, file_path, persona_id)
+        safe_filename = Path(file.filename or 'logo.png').name or 'logo.png'
+        file_path = f"_temp/apps/{safe_filename}"
+        try:
+            contents = await file.read()
+            await run_blocking(storage_executor, _write_file, file_path, contents)
+            img_url = await run_blocking(storage_executor, upload_app_logo, file_path, persona_id)
+        finally:
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except OSError:
+                    pass
         data['image'] = img_url
 
     # Partial update: released clients PATCH the whole persona, but a client that
@@ -1115,15 +1145,6 @@ def update_app(
         raise HTTPException(status_code=404, detail='App not found')
     if app['uid'] != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    if file:
-        if 'image' in app and len(app['image']) > 0 and app['image'].startswith('https://storage.googleapis.com/'):
-            delete_app_logo(app['image'])
-        os.makedirs('_temp/apps', exist_ok=True)
-        file_path = f"_temp/apps/{file.filename}"
-        with open(file_path, 'wb') as f:
-            f.write(file.file.read())
-        img_url = upload_app_logo(file_path, app_id)
-        data['image'] = img_url
     # Ownership was checked on the path id; a body `id` must not retarget the write to another app.
     data['id'] = app_id
     data['updated_at'] = datetime.now(timezone.utc)
@@ -1142,8 +1163,29 @@ def update_app(
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=e.errors(include_input=False))
 
+    if update_app.price is not None and update_app.price < 0.0:
+        raise HTTPException(status_code=422, detail='Price cannot be a negative value')
+
     # Build update dict
     update_dict = update_app.model_dump(exclude_unset=True)
+
+    if file:
+        if 'image' in app and len(app['image']) > 0 and app['image'].startswith('https://storage.googleapis.com/'):
+            delete_app_logo(app['image'])
+        os.makedirs('_temp/apps', exist_ok=True)
+        safe_filename = Path(file.filename or 'logo.png').name or 'logo.png'
+        file_path = f"_temp/apps/{safe_filename}"
+        try:
+            with open(file_path, 'wb') as f:
+                f.write(file.file.read())
+            img_url = upload_app_logo(file_path, app_id)
+        finally:
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except OSError:
+                    pass
+        update_dict['image'] = img_url
 
     # Fetch chat tools from manifest URL (only way to add/update chat tools)
     if external_integration := data.get('external_integration'):
@@ -1159,12 +1201,17 @@ def update_app(
 
     update_app_in_db(update_dict)
 
-    # payment link
+    # payment link — fall back to stored pricing fields on partial updates
+    effective_is_paid = update_dict['is_paid'] if 'is_paid' in update_dict else app.get('is_paid', False)
+    effective_price = update_dict['price'] if 'price' in update_dict else app.get('price')
+    effective_payment_plan = (
+        update_dict['payment_plan'] if 'payment_plan' in update_dict else app.get('payment_plan')
+    )
     upsert_app_payment_link(
         app_id,
-        data.get('is_paid', False),
-        data.get('price'),
-        data.get('payment_plan'),
+        effective_is_paid,
+        effective_price,
+        effective_payment_plan,
         uid,
         previous_price=app.get("price", 0),
     )
@@ -1242,9 +1289,13 @@ def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
         raise HTTPException(status_code=404, detail='App not found')
     if app['uid'] != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    if app.get('image') and app['image'].startswith('https://storage.googleapis.com/'):
+        delete_app_logo(app['image'])
     delete_app_from_db(app_id)
-    if app['approved']:
+    if app.get('approved'):
         invalidate_approved_apps_cache()
+    if app.get('is_popular'):
+        invalidate_popular_apps_cache()
     delete_app_cache_by_id(app_id)
     return {'status': 'ok'}
 
@@ -1351,11 +1402,12 @@ def update_app_review(app_id: str, data: ReviewAppRequest, uid: str = Depends(au
     old_review = get_specific_user_review(app_id, uid)
     if not old_review:
         raise HTTPException(status_code=404, detail='Review not found')
+    now_iso = datetime.now(timezone.utc).isoformat()
     review_data = {
         'score': data.score,
         'review': data.review or '',
-        'updated_at': datetime.now(timezone.utc).isoformat(),
-        'rated_at': old_review['rated_at'],
+        'updated_at': now_iso,
+        'rated_at': old_review.get('rated_at') or now_iso,
         'username': data.username if data.username is not None else old_review.get('username', ''),
         'response': old_review.get('response', ''),
         'uid': uid,
@@ -2458,14 +2510,18 @@ def set_app_popular(app_id: str, value: bool = Query(...), secret_key: str = Hea
 def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    app = get_available_app_by_id(app_id, uid)
+    if not app:
+        raise HTTPException(status_code=404, detail='App not found')
     change_app_approval_status(app_id, True)
     invalidate_approved_apps_cache()  # App is now public, invalidate cache
+    if app.get('is_popular'):
+        invalidate_popular_apps_cache()
     delete_app_cache_by_id(app_id)
-    app = get_available_app_by_id(app_id, uid)
     send_notification(
         uid,
         'App Approved 🎉',
-        f'Your app {app["name"]} has been approved and is now available for everyone to use 🥳',
+        f'Your app {app.get("name", "app")} has been approved and is now available for everyone to use 🥳',
     )
     return {'status': 'ok'}
 
@@ -2474,15 +2530,19 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
 def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    app = get_available_app_by_id(app_id, uid)
+    if not app:
+        raise HTTPException(status_code=404, detail='App not found')
     change_app_approval_status(app_id, False)
     invalidate_approved_apps_cache()  # App removed from public list, invalidate cache
+    if app.get('is_popular'):
+        invalidate_popular_apps_cache()
     delete_app_cache_by_id(app_id)
-    app = get_available_app_by_id(app_id, uid)
     # TODO: Add reason for rejection in payload and also redirect to the app page
     send_notification(
         uid,
         'App Rejected 😔',
-        f'Your app {app["name"]} has been rejected. Please make the necessary changes and resubmit for approval.',
+        f'Your app {app.get("name", "app")} has been rejected. Please make the necessary changes and resubmit for approval.',
     )
     return {'status': 'ok'}
 
@@ -2527,7 +2587,12 @@ def delete_persona(persona_id: str, secret_key: str = Header(...)):
     personas = get_persona_by_id_db(persona_id)
     if not personas:
         raise HTTPException(status_code=404, detail='Persona not found')
+    if isinstance(personas, dict) and (personas.get('image') or '').startswith('https://storage.googleapis.com/'):
+        delete_app_logo(personas['image'])
     delete_persona_db(persona_id)
+    if isinstance(personas, dict) and personas.get('approved'):
+        invalidate_approved_apps_cache()
+    delete_app_cache_by_id(persona_id)
     return {'status': 'ok'}
 
 
