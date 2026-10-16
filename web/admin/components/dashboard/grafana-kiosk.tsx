@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { grafanaRenewalDelay } from "@/lib/grafana-renewal";
@@ -13,25 +13,34 @@ type TvEmbed = {
   expiresAt?: number;
 };
 
-class TvEmbedError extends Error {
-  constructor(public status: number) {
-    super("TV embed unavailable");
-  }
-}
-
 /** POST the validated path token; the route re-validates server-side. */
 async function tvEmbedFetcher([url, token]: [
   string,
   string
 ]): Promise<TvEmbed> {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token }),
-    cache: "no-store",
-  });
-  if (!response.ok) throw new TvEmbedError(response.status);
-  return response.json();
+  const controller = new AbortController();
+  // A stalled route (e.g. Firestore lookup hanging) must surface as an
+  // error so renewal retry logic engages; a bare fetch would never settle.
+  const timer = setTimeout(() => controller.abort(), 30_000);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const error = new Error("TV embed unavailable") as Error & {
+        status?: number;
+      };
+      error.status = response.status;
+      throw error;
+    }
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function KioskFrame({ src }: { src: string }) {
@@ -62,6 +71,7 @@ function KioskFrame({ src }: { src: string }) {
 }
 
 function TvEmbedFrame({ token }: { token: string }) {
+  const retryAttempt = useRef(0);
   const {
     data: embed,
     error,
@@ -71,23 +81,35 @@ function TvEmbedFrame({ token }: { token: string }) {
     refreshInterval: (data) =>
       data?.enabled ? grafanaRenewalDelay(data.expiresAt ?? 0) : 0,
     revalidateOnFocus: false,
-    shouldRetryOnError: (failure) =>
-      !(
-        failure instanceof TvEmbedError &&
-        [400, 401, 403].includes(failure.status)
-      ),
-    errorRetryCount: 3,
-    errorRetryInterval: 5000,
-    // Override the app-wide handler, which uses its own backoff and limit.
-    onErrorRetry: (failure, _key, config, revalidate, { retryCount }) => {
-      if ([400, 401, 403].includes(failure?.status)) return;
-      if (retryCount > (config.errorRetryCount ?? 3)) return;
-      setTimeout(
-        () => revalidate({ retryCount }),
-        config.errorRetryInterval ?? 5000
-      );
-    },
+    shouldRetryOnError: false,
   });
+  // A failed renewal must not strand an unattended TV on a dead iframe:
+  // shouldRetryOnError:false leaves SWR's polling stopped while an error is
+  // cached. Revalidate the SAME key with exponential backoff so no new
+  // cache entries accumulate, and stop once the failure is permanent (the
+  // link is revoked/expired; a new token requires a new URL anyway).
+  useEffect(() => {
+    if (!error) return;
+    // 400/403 are permanent for this URL (invalid/revoked/expired link);
+    // only transient failures (503, network) keep retrying.
+    if (
+      error.status >= 400 &&
+      error.status < 500 &&
+      ![408, 429].includes(error.status)
+    )
+      return;
+    const capped = Math.min(retryAttempt.current, 5);
+    const delay = Math.min(15_000 * 2 ** capped, 8 * 60_000);
+    const timer = setTimeout(() => {
+      retryAttempt.current = capped + 1;
+      void mutate();
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [error, mutate]);
+  useEffect(() => {
+    // A successful fetch clears the backoff counter for the next renewal.
+    if (!error && embed) retryAttempt.current = 0;
+  }, [embed, error]);
   useEffect(() => {
     const resume = () => {
       if (
@@ -107,22 +129,22 @@ function TvEmbedFrame({ token }: { token: string }) {
     };
   }, [embed, mutate, error]);
 
-  // Legacy closed or kiosk enrollment unavailable: honest native notice
-  // instead of framing Grafana's login/denial page.
+  // Renewal failure shows the honest notice immediately — a stale embed must
+  // not keep framing a dead JWT — and the bounded retry effect above
+  // re-arms renewal so an unattended TV self-heals.
   if (error || (!isLoading && embed && !embed.enabled && !embed.legacy)) {
     return (
       <main className="flex h-screen w-screen items-center justify-center bg-neutral-950 px-6 text-center text-neutral-200">
         <div>
           <h1 className="text-xl font-semibold">TV dashboard unavailable</h1>
           <p className="mt-2 text-sm text-neutral-400">
-            Ask an admin to enable the private TV dashboard or open /dashboard
-            on a signed-in admin device.
+            Retrying automatically. Ask an admin to check the private TV
+            dashboard or open /dashboard on a signed-in admin device.
           </p>
         </div>
       </main>
     );
   }
-  if (embed?.enabled && embed.url) return <KioskFrame src={embed.url} />;
   // Flag-off while legacy anonymous board still exists: keep it working.
   if (embed && !embed.enabled && embed.legacy) {
     return (
@@ -131,6 +153,7 @@ function TvEmbedFrame({ token }: { token: string }) {
       </Suspense>
     );
   }
+  if (embed?.enabled && embed.url) return <KioskFrame src={embed.url} />;
   return <div className="h-screen w-screen bg-black" />;
 }
 

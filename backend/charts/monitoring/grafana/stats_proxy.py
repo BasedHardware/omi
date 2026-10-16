@@ -6,7 +6,6 @@ are never logged. Successful GETs coalesce/cache for 15m; failures never serve s
 
 import base64
 import json
-import re
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -27,14 +26,22 @@ class NoRedirect(HTTPRedirectHandler):
         return None
 
 
+# The private board requests exactly this route (see
+# web/admin/grafana/dashboards/omi-tv-v2.json). Anything else — other stats
+# routes, query strings, fragments — is rejected before parsing so unique
+# attacker URLs cannot each become a distinct 360-second cache/slot entry.
+WALL_PATH = "/api/omi/stats/wall"
+
+
 def allowed_path(path):
+    if path != WALL_PATH:
+        return False
     parsed = urlsplit(path)
     return (
-        len(path) <= 2048
-        and not parsed.scheme
+        not parsed.scheme
         and not parsed.netloc
+        and not parsed.query
         and not parsed.fragment
-        and re.fullmatch(r"/api/omi/stats/[a-z][a-z0-9-]*", parsed.path) is not None
         and not any(ord(c) < 32 or ord(c) == 127 for c in path)
     )
 
@@ -153,7 +160,10 @@ class Handler(BaseHTTPRequestHandler):
 
 class Server(ThreadingHTTPServer):
     daemon_threads = True
-    request_queue_size = 8
+    # The board fires ~24 Infinity targets at once; every admitted request
+    # coalesces behind the proxy's cache_lock, so admission must queue the
+    # full burst rather than close connections beyond the upstream budget.
+    request_queue_size = 64
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -165,7 +175,9 @@ class Server(ThreadingHTTPServer):
         return request, address
 
     def process_request(self, request, client_address):
-        if not self.slots.acquire(blocking=False):
+        # Bound blocking time by the socket deadline; a queued burst waits
+        # here without consuming an upstream slot or being dropped.
+        if not self.slots.acquire(timeout=430):
             self.shutdown_request(request)
             return
         try:

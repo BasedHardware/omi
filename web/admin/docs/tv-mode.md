@@ -12,7 +12,10 @@ secret URL. No custom metrics board.
 | `DELETE /api/omi/tv-links/[id]` | Firebase admin | Revoke (`await props.params`) |
 | `POST /api/grafana/tv-embed` | Capability token | Mint kiosk embed for a validated link |
 
-Optional query on the kiosk URL: `?tv=0.55` (Fire TV scale), `&platform=macos|mobile`.
+Optional query on the kiosk URL: `?tv=0.55` (Fire TV scale). While the
+legacy board is still framed, `&platform=macos|mobile` selects that legacy
+platform board; the private v2 embed is the single combined canonical board
+and ignores `platform`.
 
 Firestore `admin_tv_links`; doc id = sha256 hex; store `tokenHash` + `token`.
 Default TTL 90d. TV tokens unlock the kiosk page only. While the private

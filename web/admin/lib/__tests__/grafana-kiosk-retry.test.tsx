@@ -41,7 +41,7 @@ function validEmbed() {
   });
 }
 
-it("removes a failed renewal frame and schedules exactly three five-second retries under SWRProvider", async () => {
+it("removes a failed renewal frame and schedules capped exponential retries under SWRProvider", async () => {
   fetchMock.mockImplementation(async () => new Response(null, { status: 503 }));
   fetchMock.mockImplementationOnce(async () => validEmbed());
   await mountKiosk();
@@ -49,14 +49,17 @@ it("removes a failed renewal frame and schedules exactly three five-second retri
   await advance(6000);
   expect(fetchMock).toHaveBeenCalledTimes(2);
   expect(screen.queryByTitle("Omi TV")).toBeNull();
-  for (let retry = 1; retry <= 3; retry++) {
-    await advance(4999);
+  for (const [index, delay] of [
+    15000, 30000, 60000, 120000, 240000, 480000, 480000,
+  ].entries()) {
+    const retry = index + 1;
+    await advance(delay - 1);
     expect(fetchMock).toHaveBeenCalledTimes(retry + 1);
     await advance(1);
     expect(fetchMock).toHaveBeenCalledTimes(retry + 2);
   }
   await advance(30000);
-  expect(fetchMock).toHaveBeenCalledTimes(5);
+  expect(fetchMock).toHaveBeenCalledTimes(9);
 });
 
 it("never retries a revoked capability under SWRProvider", async () => {

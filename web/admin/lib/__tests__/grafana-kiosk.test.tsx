@@ -1,79 +1,84 @@
-import React from "react";
-import { cleanup, render, screen } from "@testing-library/react";
+import { createElement } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
 
 const state = vi.hoisted(() => ({
-  current: {} as Record<string, unknown>,
-  fetcher: undefined as unknown,
-  options: undefined as unknown,
+  embed: undefined as any,
+  error: undefined as Error | undefined,
+  config: undefined as any,
+}));
+vi.mock("swr", () => ({
+  default: (_key: unknown, _fetcher: unknown, config: any) => {
+    // Expose config for assertions; data/error drive the renders.
+    state.config = config;
+    return {
+      data: state.embed,
+      error: state.error,
+      isLoading: false,
+      mutate: vi.fn(),
+    };
+  },
 }));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
-vi.mock("swr", () => ({
-  default: (_key: unknown, fetcher: unknown, options: unknown) => {
-    state.fetcher = fetcher;
-    state.options = options;
-    return state.current;
-  },
-}));
+
 import { GrafanaKiosk } from "@/components/dashboard/grafana-kiosk";
 
-beforeEach(() => {
-  state.current = {
-    data: {
-      enabled: true,
-      url: "https://monitor.omi.me/d/omi-tv-v2?auth_token=old",
-      expiresAt: Date.now() + 240000,
-    },
-    error: undefined,
-    isLoading: false,
-    mutate: vi.fn(),
-  };
-});
 afterEach(() => {
   cleanup();
-  vi.unstubAllGlobals();
+  state.embed = undefined;
+  state.error = undefined;
+  vi.useRealTimers();
 });
 
-it.each([403, 503])(
-  "removes the cached JWT iframe after renewal failure %s",
-  (status) => {
-    const view = render(<GrafanaKiosk token="test-link" />);
-    expect(screen.getByTitle("Omi TV")).toBeTruthy();
-    state.current.error = Object.assign(new Error("renewal failed"), {
-      status,
-    });
-    view.rerender(<GrafanaKiosk token="test-link" />);
-    expect(screen.queryByTitle("Omi TV")).toBeNull();
-    expect(screen.getByText("TV dashboard unavailable")).toBeTruthy();
-  }
-);
-
-it("keeps an explicitly available legacy board while the flag is off", () => {
-  state.current.data = { enabled: false, legacy: true };
-  render(<GrafanaKiosk token="test-link" />);
-  expect(screen.getByTitle("Omi TV")).toBeTruthy();
+beforeEach(() => {
+  vi.useFakeTimers();
 });
 
-it("retries transient failures with bounds and stops capability rejection", async () => {
-  render(<GrafanaKiosk token="test-link" />);
-  const fetcher = state.fetcher as (key: [string, string]) => Promise<unknown>;
-  const options = state.options as {
-    shouldRetryOnError: (error: unknown) => boolean;
-    errorRetryCount: number;
-    errorRetryInterval: number;
+it("renders the private embed while renewal succeeds", () => {
+  state.embed = {
+    enabled: true,
+    url: "https://monitor.omi.me/d/omi-tv-v2?kiosk=",
+    expiresAt: Date.now() + 240_000,
   };
-  expect(options.errorRetryCount).toBe(3);
-  expect(options.errorRetryInterval).toBe(5000);
-  for (const status of [400, 401, 403, 503]) {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(new Response(null, { status }))
-    );
-    const failure = await fetcher(["/api/grafana/tv-embed", "test-link"]).catch(
-      (error) => error
-    );
-    expect(options.shouldRetryOnError(failure)).toBe(status === 503);
-  }
+  const { container } = render(
+    createElement(GrafanaKiosk, { token: "t".repeat(43) })
+  );
+  const frame = container.querySelector("iframe");
+  expect(frame?.getAttribute("src")).toContain("monitor.omi.me/d/omi-tv-v2");
+});
+
+it("shows the honest notice over a stale embed when renewal fails", () => {
+  // Codex P1: stale embed must not win over a cached renewal error.
+  state.embed = {
+    enabled: true,
+    url: "https://monitor.omi.me/d/omi-tv-v2?kiosk=",
+    expiresAt: Date.now() - 1,
+  };
+  state.error = new Error("renewal failed");
+  const { container } = render(
+    createElement(GrafanaKiosk, { token: "t".repeat(43) })
+  );
+  expect(container.querySelector("iframe")).toBeNull();
+  expect(screen.getByText("TV dashboard unavailable")).toBeTruthy();
+});
+
+it("keeps the legacy board only while it is open anonymously", () => {
+  state.embed = { enabled: false, legacy: true };
+  const { container } = render(
+    createElement(GrafanaKiosk, { token: "t".repeat(43) })
+  );
+  expect(container.querySelector("iframe")?.getAttribute("src")).toContain(
+    "/grafana/d/"
+  );
+});
+
+it("shows the notice when legacy is closed and the flag is off", () => {
+  state.embed = { enabled: false, legacy: false };
+  const { container } = render(
+    createElement(GrafanaKiosk, { token: "t".repeat(43) })
+  );
+  expect(container.querySelector("iframe")).toBeNull();
+  expect(screen.getByText("TV dashboard unavailable")).toBeTruthy();
 });
