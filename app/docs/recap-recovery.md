@@ -57,6 +57,9 @@ Tracked by [#11821](https://github.com/BasedHardware/omi/issues/11821).
   arrival/deletion events and Activity state when integrating current main.
 - [x] Exercise a 127-row backlog with a 429, a transient read, missing job
   handles, unavailable audio and one still-queued owner; keep retained bytes.
+- [x] Recover orphan uploads while `addExternalWal` admits a recording mid-pass
+  (previously `ConcurrentModificationError`), and re-read rows changed during a
+  file check before moving them (`sync_poll_storm_test.dart`).
 - [x] Display failed/processing outcomes honestly on both Offline Sync screens.
 - [ ] Release the mobile and web clients after merge.
 
@@ -67,6 +70,12 @@ recovery. Uploaded rows with a blank/missing job handle cannot be polled: retain
 audio re-enters the existing deduplicated upload path without spending retry
 budget, while missing local audio stays visible as unavailable. Both changes
 persist before notification; account changes fence asynchronous file checks.
+The pass walks a snapshot of candidate rows, never the live list, so a recording
+admitted (`addExternalWal`) during a file check neither breaks the pass nor is
+lost. After every await, each row is re-read before it moves: it must still
+belong to this sync and still be `uploaded` under the same job handle (blank for
+orphans). A row an upload claimed under a new job, retention released, or
+another path finished is left as it is.
 Accepted jobs remain processing until the terminal-policy boundary confirms
 completion. A valid empty/silent completion remains complete, without endless
 re-upload or a fabricated conversation claim.

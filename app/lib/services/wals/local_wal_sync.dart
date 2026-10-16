@@ -2496,6 +2496,16 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     });
   }
 
+  /// A row read before an await may have changed by the time the pass writes
+  /// it: an upload may have claimed it under a new job, retention may have
+  /// released it, or another path may have finished it. Only a row this sync
+  /// still owns, still `uploaded` under the same job handle (blank = none),
+  /// may be moved.
+  bool _stillUploadedUnder(Wal wal, String? jobId) =>
+      wal.status == WalStatus.uploaded &&
+      (wal.jobId?.trim() ?? '') == (jobId?.trim() ?? '') &&
+      _wals.any((w) => identical(w, wal));
+
   Future<SyncLocalFilesResponse> _reconcileUploadedWals() async {
     final generation = _sessionGeneration;
     final resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
@@ -2505,9 +2515,13 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     // A restored uploaded row with no job handle cannot ever be polled.
     // Retained audio re-enters the normal deduplicated upload path; missing
     // audio remains visible as unavailable. Neither is a successful sync.
-    for (final w in _wals.where((w) => w.status == WalStatus.uploaded && (w.jobId?.trim().isEmpty ?? true))) {
+    // Iterate a snapshot: a recording admitted during a file check must not
+    // break the pass, and each row is re-read after the check before it moves.
+    final orphans = _wals.where((w) => _stillUploadedUnder(w, null)).toList();
+    for (final w in orphans) {
       final exists = await _localFileExists(w);
       if (!_isCurrent(generation)) return resp;
+      if (!_stillUploadedUnder(w, null)) continue;
       changed = true;
       if (exists) {
         w.status = WalStatus.miss;
@@ -2567,6 +2581,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
               final hadJob = w.jobId;
               final fileExists = await _localFileExists(w);
               if (!_isCurrent(generation)) return resp;
+              if (!_stillUploadedUnder(w, jobId)) continue;
               changed = true;
               w.jobId = null;
               if (fileExists) {
@@ -2625,6 +2640,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
                 // Completion telemetry must not change WAL acknowledgement.
               }
               for (final w in members) {
+                if (!_stillUploadedUnder(w, jobId)) continue;
                 if ((s.result?.newConversationIds.length ?? 0) == 0 &&
                     (s.result?.updatedConversationIds.length ?? 0) == 0) {
                   DebugLogManager.logEvent('reconcile_completed_empty', {
@@ -2667,6 +2683,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
               // out-of-window rejection already does. The file stays on disk.
               final permanentInput = !capacityLimited && syncJobFailureIsPermanent(s);
               for (final w in members) {
+                if (!_stillUploadedUnder(w, jobId)) continue;
                 changed = true;
                 final hadJob = w.jobId;
                 if (permanentInput) {

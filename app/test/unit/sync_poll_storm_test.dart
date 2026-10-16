@@ -238,6 +238,104 @@ void main() {
     }
   });
 
+  LocalWalSyncImpl orphanSync(List<Map<String, dynamic>> persisted, {void Function()? onPoll}) => LocalWalSyncImpl(
+        _Listener(),
+        now: () => now,
+        persistWals: (items) async {
+          persisted
+            ..clear()
+            ..addAll(items.map((wal) => wal.toJson()));
+        },
+        jobStatusFetcher: (id) async {
+          onPoll?.call();
+          return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'processing'));
+        },
+      );
+
+  Future<List<Wal>> orphanRows(int count) async {
+    final rows = List.generate(count, pending)..forEach((wal) => wal.jobId = null);
+    for (final wal in rows) {
+      await File('${dir.path}/${wal.filePath}').writeAsBytes([1, 2, 3]);
+    }
+    return rows;
+  }
+
+  test('a recording admitted while orphan uploads are checked does not break recovery', () async {
+    final persisted = <Map<String, dynamic>>[];
+    final orphans = await orphanRows(3);
+    final incoming = Wal(
+        timerStart: 1700000100,
+        codec: BleAudioCodec.opus,
+        seconds: 31,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        device: 'omi',
+        filePath: 'incoming.bin');
+    await File('${dir.path}/incoming.bin').writeAsBytes([9, 9, 9]);
+    final sync = orphanSync(persisted);
+    final wals = [...orphans];
+    sync.testWals = wals;
+
+    // The pass suspends on the first orphan's file check; the new recording is
+    // appended synchronously before addExternalWal's first await.
+    final pass = sync.reconcileUploadedWals();
+    final admitted = sync.addExternalWal(incoming, admittedGeneration: sync.sessionGeneration);
+    await expectLater(pass, completes);
+    await admitted;
+
+    expect(orphans.every((wal) => wal.status == WalStatus.miss && wal.jobId == null), isTrue,
+        reason: 'retained orphan audio re-enters the upload path');
+    expect(orphans.every((wal) => wal.retryCount == 0), isTrue, reason: 'recovery spends no retry budget');
+    expect(wals.where((wal) => identical(wal, incoming)), hasLength(1));
+    expect(incoming.status, WalStatus.miss);
+    final saved = persisted.map(Wal.fromJson).toList();
+    expect(saved.where((wal) => wal.filePath == 'incoming.bin'), hasLength(1), reason: 'the new recording is durable');
+    for (final orphan in orphans) {
+      expect(saved.singleWhere((wal) => wal.filePath == orphan.filePath).status, WalStatus.miss,
+          reason: 'recovery is persisted, not only in memory');
+    }
+    for (final wal in [...orphans, incoming]) {
+      expect(await File('${dir.path}/${wal.filePath}').exists(), isTrue, reason: 'no retained audio is deleted');
+    }
+  });
+
+  test('orphan rows that changed during a file check are re-read before they move', () async {
+    final persisted = <Map<String, dynamic>>[];
+    var polls = 0;
+    final orphans = await orphanRows(4);
+    final sync = orphanSync(persisted, onPoll: () => polls++);
+    final wals = [...orphans];
+    sync.testWals = wals;
+
+    final pass = sync.reconcileUploadedWals();
+    orphans[0].jobId = 'job-new'; // a newer upload claimed this row
+    wals.remove(orphans[1]); // retention released this row
+    orphans[2].status = WalStatus.synced; // another path already finished it
+    await expectLater(pass, completes);
+
+    expect(orphans[0].status, WalStatus.uploaded, reason: 'newer upload state is never overwritten');
+    expect(orphans[0].jobId, 'job-new');
+    expect(orphans[1].status, WalStatus.uploaded, reason: 'a row no longer owned by this sync is left alone');
+    expect(orphans[2].status, WalStatus.synced);
+    expect(orphans[3].status, WalStatus.miss);
+    expect(orphans.every((wal) => wal.retryCount == 0), isTrue);
+    expect(polls, 1, reason: 'existing job polling still runs for the newly claimed handle');
+  });
+
+  test('an account change during an orphan file check leaves every row untouched', () async {
+    final persisted = <Map<String, dynamic>>[];
+    final orphans = await orphanRows(2);
+    final sync = orphanSync(persisted);
+    sync.testWals = [...orphans];
+
+    final pass = sync.reconcileUploadedWals();
+    sync.clearUserData();
+    await expectLater(pass, completes);
+
+    expect(orphans.every((wal) => wal.status == WalStatus.uploaded && wal.jobId == null), isTrue,
+        reason: 'the retired session moves nothing');
+  });
+
   test('shared budget, per-job cadence, server hint, fairness and sliding window', () async {
     final poller = SyncJobPoller(clock: () => now);
     final seen = <String>[];
