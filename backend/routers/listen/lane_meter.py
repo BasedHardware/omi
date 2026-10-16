@@ -12,11 +12,14 @@ class LiveLaneMeter:
         self.since: float | None = None
         self.lane = 'vendor'
         self.reason = 'baseline'
+        self.demand_cohort = 'ineligible'
 
     def flush(self, *, reason: str | None = None) -> None:
         now = self.clock()
         if self.since is not None:
-            DEMAND_LANE_SECONDS.labels(lane=self.lane, reason=self.reason).inc(max(0, now - self.since))
+            DEMAND_LANE_SECONDS.labels(lane=self.lane, reason=self.reason, demand_cohort=self.demand_cohort).inc(
+                max(0, now - self.since)
+            )
             self.since = now
         if reason is not None:
             self.reason = reason

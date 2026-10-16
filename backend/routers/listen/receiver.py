@@ -2090,6 +2090,9 @@ class ListenReceiver(ReplayFilterMixin):
         elif kind == 'speaker_assigned':
             await self._handle_speaker_assigned(payload)
         elif kind == 'client_state':
+            telemetry = getattr(self.host, 'demand_telemetry', None)
+            if telemetry is not None:
+                telemetry.observe_visibility(payload)
             demand = getattr(self, 'live_demand', None)
             if demand is not None:
                 demand.observe(payload)
@@ -2275,6 +2278,9 @@ class ListenReceiver(ReplayFilterMixin):
                     self._note_audio_activity()
                     self._mark_first_audio(now)
                     decoded_audio_bytes += len(decoded)
+                    telemetry = getattr(self.host, 'demand_telemetry', None)
+                    if telemetry is not None:
+                        telemetry.capture(len(decoded) / (2 * request.sample_rate))
                     self._capture('capture_client_audio', decoded)
                     if self.capture_timeline is not None:
                         # The decoded frame occupies an exact capture sample

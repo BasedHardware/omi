@@ -50,6 +50,7 @@ from utils.stt.recovery_state import current_recovery
 from utils.stt.socket import STTSocket
 from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriterPace, clock
 from utils.stt.send_queue import AudioSendQueue
+from utils.observability.demand_cohort import MeteredSyncTransport, WireAudioMeter
 from utils.stt.soniox import SafeSonioxSocket, process_audio_soniox  # fmt: skip  # pyright: ignore[reportUnusedImport]  # noqa: F401 — re-exported for backward compat
 from utils.stt.live_router import target_circuit
 from utils.stt.provider_resilience import (
@@ -1158,6 +1159,11 @@ async def process_audio_dg(
         return None
 
     # Always wrap with SafeDeepgramSocket for dead-connection detection (#5870)
+    wire_meter = WireAudioMeter('deepgram', sample_rate, channels)
+    # SDK send() returns True even for some closed-socket exceptions. Count
+    # below that handler, only after the actual synchronous websocket write.
+    if wire_meter.telemetry is not None and getattr(dg_connection, '_socket', None) is not None:
+        dg_connection._socket = MeteredSyncTransport(dg_connection._socket, wire_meter)
     safe_conn = SafeDeepgramSocket(dg_connection)
 
     # Register close-reason handlers that feed into SafeDeepgramSocket
@@ -1433,7 +1439,10 @@ class SafeModulateSocket(STTSocket):
         stream_transcript: Callable[[List[Dict[str, Any]]], None],
         loop: asyncio.AbstractEventLoop,
         preseconds: int = 0,
+        *,
+        sample_rate: int = 16000,
     ) -> None:
+        self._demand_wire = WireAudioMeter('modulate', sample_rate)
         self._ws: Any = ws
         self._stream_transcript: Callable[[List[Dict[str, Any]]], None] = stream_transcript
         self._loop: asyncio.AbstractEventLoop = loop
@@ -1632,6 +1641,13 @@ class SafeModulateSocket(STTSocket):
         except Exception:
             pass
 
+    def _note_wire_audio(self, data: bytes) -> None:
+        header = self._wav_header
+        if header is not None and not getattr(self, '_wire_header_written', False) and data.startswith(header):
+            self._wire_header_written = True
+            data = data[len(header) :]
+        self._demand_wire.written(data)
+
     async def _send_loop(self) -> None:
         _EOS_SENTINEL = b'__EOS__'
         try:
@@ -1645,6 +1661,7 @@ class SafeModulateSocket(STTSocket):
                         await self._ws.send('')
                         break
                     await self._ws.send(data)
+                    self._note_wire_audio(data)
                     continue
                 if data == b'':
                     self._send_queue.discard(data)
@@ -1676,6 +1693,7 @@ class SafeModulateSocket(STTSocket):
                             raise
                     else:
                         await self._ws.send(data)
+                    self._note_wire_audio(data)
                     self._send_queue.note_written(data)
                     written = True
                     if pace is not None and type(data) is bytes:
@@ -1872,7 +1890,7 @@ async def process_audio_modulate(
     logger.info(f'Connecting to Modulate Velma-2 streaming sample_rate={sample_rate} language={language}')
     ws = await websockets.connect(uri, ping_timeout=10, ping_interval=10)
     loop = asyncio.get_running_loop()
-    sock = SafeModulateSocket(ws, stream_transcript, loop, preseconds=preseconds)
+    sock = SafeModulateSocket(ws, stream_transcript, loop, preseconds=preseconds, sample_rate=sample_rate)
     logger.info('Modulate Velma-2 streaming connection established')
     return sock
 

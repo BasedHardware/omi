@@ -7,6 +7,7 @@ from typing import Any, Callable, Mapping
 
 from config.live_demand import language_qualified, resolve_live_demand
 from utils.observability.fallback import record_fallback
+from utils.observability.demand_cohort import DemandTelemetry, current_demand
 from utils.stt.live_rollout import managed_chain_enabled
 from utils.stt.demand_consumers import realtime_consumer_active
 from utils.stt.demand_presence import update_presence
@@ -195,9 +196,19 @@ def attach_live_demand(receiver) -> LiveDemandRouting | None:
     host = receiver.host
     if not resolve_live_demand().enabled:
         return None
+    telemetry = getattr(host, 'demand_telemetry', None)
+    if telemetry is None:
+        telemetry = capture_demand_admission(host)
+    return LiveDemandRouting(receiver, eligible=telemetry.cohort == 'admitted')
+
+
+def capture_demand_admission(host) -> DemandTelemetry:
+    existing = getattr(host, 'demand_telemetry', None)
+    if existing is not None:
+        return existing
+    config = resolve_live_demand()
     eligible = (
-        resolve_live_demand().admits(host.request.uid)
-        and receiver.recovery_enabled
+        host.recovery_enabled
         and managed_chain_enabled(host)
         and not host.is_multi_channel
         and not host.use_custom_stt
@@ -205,4 +216,8 @@ def attach_live_demand(receiver) -> LiveDemandRouting | None:
         and host.request.source != 'phone_call'
         and language_qualified(host)
     )
-    return LiveDemandRouting(receiver, eligible=eligible)
+    cohort = ('admitted' if config.admits(host.request.uid) else 'eligible_control') if eligible else 'ineligible'
+    telemetry = DemandTelemetry(cohort)
+    host.demand_telemetry = telemetry
+    current_demand.set(telemetry)
+    return telemetry

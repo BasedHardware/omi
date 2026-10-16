@@ -22,6 +22,7 @@ from typing import Any, Callable
 from starlette.websockets import WebSocketState
 
 from utils.stt.live_metrics import RECOVERY_ATTEMPTS, provider_family
+from utils.observability.demand_cohort import demand_cohort
 from config.live_stt_registry import MAX_REGISTRY_TARGETS
 
 # One recovery episode per provider death.
@@ -357,6 +358,8 @@ class LiveRecoveryController:
         # reach this seam.
         if self._deadline is not None:
             RECOVERY_ATTEMPTS.labels(
-                source=provider_family(self.source_family), successor=provider_family(successor or identity)
+                source=provider_family(self.source_family),
+                successor=provider_family(successor or identity),
+                demand_cohort=demand_cohort(),
             ).inc()
         return True

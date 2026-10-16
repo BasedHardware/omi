@@ -67,7 +67,9 @@ from utils.live_speaker_suggestions import emit_speaker_suggestion as emit_live_
 from utils.stt.streaming import get_stt_service_for_language
 import utils.stt.replay_delivery as replay_delivery
 from utils.stt.live_failure import terminate_live_stt_backoff
-from config.live_demand import DemandSelection, language_qualified, resolve_live_demand
+from config.live_demand import DemandSelection
+from routers.listen.demand_routing import capture_demand_admission
+from utils.observability.demand_cohort import current_demand
 from utils.stt.live_rollout import WindowSelection, managed_chain_enabled, window_allocation, window_selection_kwargs
 from utils.stt.live_metrics import (
     COST_CANARY_OUTCOME,
@@ -286,6 +288,9 @@ class ListenSessionRuntime:
 
     def complete_live_transcription(self) -> None:
         """Record the first nonempty transcript successfully delivered to the client."""
+        telemetry = getattr(self, 'demand_telemetry', None)
+        if telemetry is not None:
+            telemetry.delivered()
         self.state.live_transcript_delivered = True
         if self.state.live_transcription_attempt is not None:
             self.state.live_transcription_attempt.finish('success', phase='transcript_delivery')
@@ -412,17 +417,25 @@ class ListenSessionRuntime:
             outcome = self._session_transcript_outcome()
             record_live_session_transcript_outcome(
                 outcome=outcome,
+                demand_cohort=getattr(getattr(self, 'demand_telemetry', None), 'cohort', 'ineligible'),
                 uid=self.request.uid,
                 source=self.request.source,
                 platform=self.client_device_context.platform,
                 recording_id=self.request.client_conversation_id,
             )
+            telemetry = getattr(self, 'demand_telemetry', None)
+            if telemetry is not None:
+                telemetry.finish()
             WINDOW_CANARY_OUTCOME.labels(
-                arm='window' if window_allocation(self.request.uid) else 'control', outcome=outcome
+                arm='window' if window_allocation(self.request.uid) else 'control',
+                outcome=outcome,
+                demand_cohort=getattr(telemetry, 'cohort', 'ineligible'),
             ).inc()
             arm = getattr(self, '_cost_routing_arm', None)
             if arm is not None:
-                COST_CANARY_OUTCOME.labels(arm=arm, outcome=outcome).inc()
+                COST_CANARY_OUTCOME.labels(
+                    arm=arm, outcome=outcome, demand_cohort=getattr(telemetry, 'cohort', 'ineligible')
+                ).inc()
             if (
                 session_recovery_enabled(self)
                 and self.state.live_transcript_delivered
@@ -434,7 +447,10 @@ class ListenSessionRuntime:
                     or getattr(self.state, 'requested_provider', None)
                     or 'unknown'
                 )
-                LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider=provider_family(provider)).inc()
+                LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(
+                    provider=provider_family(provider),
+                    demand_cohort=getattr(telemetry, 'cohort', 'ineligible'),
+                ).inc()
             cohort = getattr(self, '_routing_cohort', None)
             if cohort is not None:
                 self._routing_cohort_completion = (
@@ -562,14 +578,9 @@ class ListenSessionRuntime:
             learned_sessions=learned_sessions,
         )
         self.language_observations = LiveLanguageObservations(self.language_profile)
-        demand_vendor_start = (
-            resolve_live_demand().admits(request.uid)
-            and language_qualified(self)
-            and self.recovery_enabled
-            and managed_chain_enabled(self)
-            and not request.onboarding_mode
-            and request.source != 'phone_call'
-        )
+        telemetry = capture_demand_admission(self)
+        self.receiver.lane_meter.demand_cohort = telemetry.cohort
+        demand_vendor_start = telemetry.cohort == 'admitted'
         window_kwargs: WindowSelection = {} if demand_vendor_start else window_selection_kwargs(self, request.uid)
         demand_kwargs: DemandSelection = {'exclude': frozenset({'parakeet'})} if demand_vendor_start else {}
         self.stt_service, self.stt_language, self.stt_model = get_stt_service_for_language(
@@ -1023,9 +1034,11 @@ class ListenSessionRuntime:
             self.recovery_enabled = session_recovery_enabled(self)
         token = current_recovery_enabled.set(self.recovery_enabled)
         cohort_token = current_routing_cohort.set(None)
+        demand_token = current_demand.set(None)
         try:
             await self._run()
         finally:
+            current_demand.reset(demand_token)
             current_routing_cohort.reset(cohort_token)
             current_recovery_enabled.reset(token)
 
