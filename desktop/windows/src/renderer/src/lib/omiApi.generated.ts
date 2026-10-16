@@ -5241,6 +5241,7 @@ export interface SyncJobStatusResponse {
 export interface SyncLocalFilesResultResponse {
   errors?: Array<string>;
   failed_segments?: number;
+  held_audio?: boolean | null;
   new_memories?: Array<string>;
   total_segments?: number;
   updated_memories?: Array<string>;
