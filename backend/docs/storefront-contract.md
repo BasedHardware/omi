@@ -154,6 +154,7 @@ Budgets are the plan-catalog usage units when the catalog declares them, and
 otherwise the rate card in the copy config (Plus 16360, Pro 44090, Architect
 189463). `units_per_recorded_hour` is provisional; replace it with the shadow
 ledger p50 (#21369). Meter hours apply that definition to remaining units.
+Hours appear only from 80% to below 100%.
 The client does not hardcode hours.
 
 Price reads use `stripe_price:{price_id}` with a 24-hour TTL. Cache failures

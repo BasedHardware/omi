@@ -448,13 +448,20 @@ def present_usage(
         payload['period_id'] = period_id
         payload['reset_label'] = reset_label
     if kind == 'usage_budget' and payload['reset_label']:
-        left = recording_hours_left(plan_id, shown)
-        payload['meter_line'] = text['meter']['line'].format(
-            percent=shown, hours=f'{left:,}', reset=payload['reset_label']
-        )
-        payload['more_label'] = text['meter']['more_label']
+        # Hours only from 80 up to, but not including, 100. At the cap the at-cap
+        # state applies, so the meter never says "about 0 hours".
         if 80 <= shown < 100:
+            left = recording_hours_left(plan_id, shown)
+            if left > 0:
+                payload['meter_line'] = text['meter']['line'].format(
+                    percent=shown, hours=f'{left:,}', reset=payload['reset_label']
+                )
+            else:
+                payload['meter_line'] = text['meter']['line_short'].format(percent=shown, reset=payload['reset_label'])
             payload['nudge_line'] = text['meter']['nudge_80'].format(reset=payload['reset_label'])
+        else:
+            payload['meter_line'] = text['meter']['line_short'].format(percent=shown, reset=payload['reset_label'])
+        payload['more_label'] = text['meter']['more_label']
     return payload
 
 

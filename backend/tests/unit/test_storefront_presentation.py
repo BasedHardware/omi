@@ -24,6 +24,7 @@ from utils.storefront import (
 from utils.storefront_copy import (
     cta_label,
     current_line,
+    load_copy,
     floor_to_nice,
     format_money,
     hours_line,
@@ -156,6 +157,25 @@ def test_floor_to_nice_and_per_day_phrasing():
     assert recording_hours_left('basic', 80) == 3
     assert recording_hours_left('basic', 120) == 0
     assert months_free(4999, 49990) == 2
+
+
+def test_meter_line_includes_hours_only_from_80_until_100():
+    def line(percent: float, plan_id: str = 'basic') -> str:
+        return present_usage(plan_id=plan_id, kind='usage_budget', percent=percent, reset_at=PERIOD_END)['meter_line']
+
+    assert line(40) == '40% used · resets Nov 1'
+    assert line(79) == '79% used · resets Nov 1'
+    assert line(80) == '80% used · about 3 hours of recording left · resets Nov 1'
+    assert line(99, 'operator') == '99% used · about 5 hours of recording left · resets Nov 1'
+    # A shown percent still in the hours band can round to no hours. Omit the estimate.
+    assert line(99) == '99% used · resets Nov 1'
+    assert 'about 0 hours' not in line(99)
+    assert line(100) == '100% used · resets Nov 1'
+    assert 'about 0 hours' not in line(100)
+    assert 'about 0 hours' not in line(140)
+    for code, text in load_copy()['locales'].items():
+        assert '{hours}' in text['meter']['line'], code
+        assert '{hours}' not in text['meter']['line_short'], code
 
 
 def test_one_month_free_is_singular_and_yearly_switch_uses_the_price_currency():
@@ -843,7 +863,8 @@ def test_golden_storefront_scenarios():
     capped = rendered['pro_budget_cap']
     assert capped.header == "You've used all of this month's usage"
     assert capped.usage.percent == 100
-    assert capped.usage.meter_line == '100% used · about 0 hours of recording left · resets Nov 1'
+    assert capped.usage.meter_line == '100% used · resets Nov 1'
+    assert 'about 0 hours' not in capped.usage.meter_line
     assert [tier.plan_id for tier in capped.tiers] == ['architect', 'plus', 'operator']
     architect = next(tier for tier in capped.tiers if tier.plan_id == 'architect')
     assert architect.recommended and architect.action == 'checkout'

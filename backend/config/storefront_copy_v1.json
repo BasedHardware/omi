@@ -104,6 +104,7 @@
       },
       "meter": {
         "line": "{percent}% used · about {hours} hours of recording left · {reset}",
+        "line_short": "{percent}% used · {reset}",
         "nudge_80": "You've used 80% of this month's usage · {reset}",
         "more_label": "Get more usage"
       },

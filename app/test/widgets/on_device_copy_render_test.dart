@@ -225,10 +225,10 @@ void main() {
     expect(find.textContaining("doesn't count toward your usage"), findsOneWidget);
   });
 
-  Widget settings(OnDeviceTranscriptionController value) {
+  Widget settings(OnDeviceTranscriptionController value, {StorefrontUsage? meter}) {
     return OnDeviceSettingsView(
       controller: value,
-      usage: usage,
+      usage: meter ?? usage,
       plansSheetAvailable: true,
       showSaveUsage: true,
       pendingSeconds: 12000,
@@ -243,6 +243,7 @@ void main() {
 
   testWidgets('parakeet settings top', (tester) async {
     await shoot(tester, '10-settings-top-ios.png', home: settings(parakeetSettings()));
+    expect(find.text('80% used · about 3 hours of recording left · resets Nov 1'), findsOneWidget);
     expect(find.text('Get more usage'), findsOneWidget);
     expect(find.text('Installed · 443 MB'), findsOneWidget);
     expect(find.text('Always transcribe on this phone'), findsOneWidget);
@@ -255,6 +256,19 @@ void main() {
       await tester.pump();
     });
     expect(find.text('Remove Speech Model'), findsOneWidget);
+  });
+
+  testWidgets('settings below 80 omit the hours estimate', (tester) async {
+    const low = StorefrontUsage(
+      kind: 'usage_budget',
+      percent: 40,
+      resetLabel: 'resets Nov 1',
+      meterLine: '40% used · resets Nov 1',
+      moreLabel: 'Get more usage',
+    );
+    await shoot(tester, '26-settings-40-percent-ios.png', home: settings(parakeetSettings(), meter: low));
+    expect(find.text('40% used · resets Nov 1'), findsOneWidget);
+    expect(find.textContaining('hours of recording left'), findsNothing);
   });
 
   testWidgets('unsupported banner', (tester) async {
@@ -400,6 +414,7 @@ void main() {
     final value =
         controller(engine: 'speech_analyzer', status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.installed));
     await shoot(tester, '23-ios26-settings-top.png', home: settings(value));
+    expect(find.text('80% used · about 3 hours of recording left · resets Nov 1'), findsOneWidget);
     expect(find.text('Speech model'), findsNothing);
     await shoot(tester, '24-ios26-settings-scrolled.png', home: settings(value), afterPump: (tester) async {
       await tester.drag(find.byType(ListView), const Offset(0, -400));
