@@ -2112,7 +2112,11 @@ class ParakeetStreamingSocket(STTSocket):
         try:
             client = get_stt_client()
             async with get_stt_semaphore():
-                resp = await client.post(self._url, files={'file': ('audio.wav', wav, 'audio/wav')})
+                resp = await client.post(
+                    self._url,
+                    files={'file': ('audio.wav', wav, 'audio/wav')},
+                    headers={'X-Omi-STT-Surface': 'live-stream'},
+                )
             resp.raise_for_status()
             loaded: object = resp.json()
         except Exception as e:
