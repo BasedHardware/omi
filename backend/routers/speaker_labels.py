@@ -1,5 +1,6 @@
 import logging
 import re
+import traceback
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -9,6 +10,7 @@ from database import voice_profiles as voice_profiles_db
 from models.conversation import Conversation
 from models.speaker_labels import RejectSpeakerRequest, VoiceMatchesResponse
 from utils.conversations.factory import deserialize_conversation
+from utils.log_sanitizer import hash_log_identifier
 from utils.other import endpoints as auth
 from utils.other.storage import delete_speech_profile_blob
 from utils.speaker_voice_matches import find_person_voice_matches
@@ -17,12 +19,26 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-_DOC_ID_PATTERN = r'^[A-Za-z0-9_-]{1,128}$'
 
+def _valid_document_id(value: str) -> bool:
+    """Keep legacy IDs intact; reject only invalid Firestore document shapes.
 
-def _is_safe_firestore_document_id(value: str) -> bool:
-    """Validate Firestore ids in handlers without narrowing released OpenAPI schemas."""
-    return re.fullmatch(_DOC_ID_PATTERN, value) is not None
+    Storage limits: https://docs.cloud.google.com/firestore/quotas
+    Imported Datastore numeric IDs use the documented __id[0-9]+__ form.
+    """
+    try:
+        encoded = value.encode('utf-8')
+    except UnicodeEncodeError:
+        return False
+    reserved = re.fullmatch(r'__.*__', value, flags=re.DOTALL) is not None
+    imported_numeric = re.fullmatch(r'__id[0-9]+__', value) is not None
+    return (
+        bool(value)
+        and len(encoded) <= 1500
+        and '/' not in value
+        and value not in ('.', '..')
+        and (not reserved or imported_numeric)
+    )
 
 
 @router.post(
@@ -37,11 +53,10 @@ def reject_speaker_label(
     background_tasks: BackgroundTasks,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    if not _is_safe_firestore_document_id(conversation_id):
+    if not _valid_document_id(conversation_id):
         raise HTTPException(status_code=422, detail='invalid conversation_id')
-    if not 0 <= speaker_id <= 1_000_000:
-        raise HTTPException(status_code=422, detail='invalid speaker_id')
-    if data.person_id is not None and not _is_safe_firestore_document_id(data.person_id):
+    # Check the exact ID sent downstream; do not strip or normalize legacy IDs.
+    if data.person_id is not None and not _valid_document_id(data.person_id):
         raise HTTPException(status_code=400, detail='invalid person_id')
     try:
         raw, resolved, removed, _before = conversations_db.assign_conversation_speaker(
@@ -55,27 +70,34 @@ def reject_speaker_label(
             rejection={'kind': data.kind, 'person_id': data.person_id},
         )
     except LookupError as error:
-        # Same rule as the 409 below: log the real detail, return a static one —
-        # a future raise site must not be able to regress this reflection.
-        logger.warning('speaker label reject lookup miss conv=%s speaker=%s: %s', conversation_id, speaker_id, error)
+        logger.warning(
+            'speaker label reject lookup miss conv_hash=%s speaker=%s: %s\n%s',
+            hash_log_identifier(conversation_id),
+            speaker_id,
+            type(error).__name__,
+            ''.join(traceback.format_tb(error.__traceback__)),
+        )
         raise HTTPException(status_code=404, detail='Conversation or speaker not found') from error
     except PermissionError as error:
         raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.') from error
     except ValueError as error:
-        # A conflict detail is user-actionable, but log the real message and return
-        # a generic one so an internal detail never leaks through the boundary.
-        logger.warning('speaker label reject conflict conv=%s speaker=%s: %s', conversation_id, speaker_id, error)
+        logger.warning(
+            'speaker label reject conflict conv_hash=%s speaker=%s: %s\n%s',
+            hash_log_identifier(conversation_id),
+            speaker_id,
+            type(error).__name__,
+            ''.join(traceback.format_tb(error.__traceback__)),
+        )
         raise HTTPException(status_code=409, detail='The speaker cannot be updated right now.') from error
     except Exception as error:
-        # Unexpected (Firestore, network, bug): log full context internally,
-        # surface a sanitized 500 to the client.
+        # Keep stack locations without exception text, which can echo opaque IDs.
         logger.error(
-            'speaker label reject failed conv=%s speaker=%s uid=%s: %s',
-            conversation_id,
+            'speaker label reject failed conv_hash=%s speaker=%s uid=%s: %s\n%s',
+            hash_log_identifier(conversation_id),
             speaker_id,
             uid,
             type(error).__name__,
-            exc_info=True,
+            ''.join(traceback.format_tb(error.__traceback__)),
         )
         raise HTTPException(status_code=500, detail='Failed to update the speaker') from error
     if data.kind == 'not_a_person':
@@ -100,7 +122,7 @@ async def get_person_voice_matches(
     person_id: str,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    if not _is_safe_firestore_document_id(person_id):
+    if not _valid_document_id(person_id):
         raise HTTPException(status_code=422, detail='invalid person_id')
     try:
         return await find_person_voice_matches(uid, person_id)
@@ -108,10 +130,10 @@ async def get_person_voice_matches(
         raise HTTPException(status_code=404, detail='Person not found') from error
     except Exception as error:
         logger.error(
-            'person voice-matches failed person=%s uid=%s: %s',
-            person_id,
+            'person voice-matches failed person_hash=%s uid=%s: %s\n%s',
+            hash_log_identifier(person_id),
             uid,
             type(error).__name__,
-            exc_info=True,
+            ''.join(traceback.format_tb(error.__traceback__)),
         )
         raise HTTPException(status_code=500, detail='Failed to load voice matches') from error
