@@ -36,11 +36,7 @@ TAIL_BUDGET_NOTICE_THRESHOLD = 0.20
 BUDGET_STOP_CODES = frozenset(
     {
         'dream_input_token_budget',
-        'dream_model_context_budget',
-        'dream_search_token_budget',
-        'dream_evidence_token_budget',
-        'dream_reasoning_budget',
-        'dream_triage_budget',
+        'dream_daily_budget',
     }
 )
 
