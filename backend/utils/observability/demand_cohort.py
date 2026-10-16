@@ -38,32 +38,91 @@ OUTPUT_LATENCY = Histogram(
     ['demand_cohort', 'trigger'],
     buckets=(0.1, 0.5, 1, 2, 5, 10, 15, 20, 30, 45, 60),
 )
-for _cohort in DEMAND_COHORTS:
-    CAPTURE_AUDIO.labels(demand_cohort=_cohort)
-    for _provider in ('soniox', 'modulate', 'deepgram'):
-        WIRE_AUDIO.labels(provider=_provider, demand_cohort=_cohort)
-    for _reason in ('first_text_deadline', 'capacity_full', 'other'):
-        _subtypes = (
-            ('buffer_cap', 'span_cap', 'admission', 'replay_ring_cap', 'queue_timeout', 'unknown')
-            if _reason == 'capacity_full'
-            else ('none',)
-        )
-        for _subtype in _subtypes:
-            for _outcome in ('recovered', 'degraded', 'exhausted'):
-                FAILURE_DETAIL.labels(
-                    demand_cohort=_cohort, reason=_reason, capacity_subtype=_subtype, outcome=_outcome
-                )
-    for _outcome in ('yes', 'no'):
-        EXHAUSTED_SESSIONS.labels(demand_cohort=_cohort, outcome=_outcome)
-    for _trigger in ('first_output', 'visible_return'):
-        OUTPUT_LATENCY.labels(demand_cohort=_cohort, trigger=_trigger)
-        for _outcome in ('started', 'delivered', 'no_output'):
-            OUTPUT_EVENTS.labels(demand_cohort=_cohort, trigger=_trigger, outcome=_outcome)
+
+
+def record_metric(metric, labels: dict, value: float = 1, *, observe: bool = False) -> None:
+    """Metric lookup, label binding and mutation are outside the serving failure domain."""
+    try:
+        child = metric.labels(**labels) if labels else metric
+        if observe:
+            child.observe(value)
+        else:
+            child.inc(value)
+    except Exception:
+        pass
+
+
+def telemetry_call(owner, attribute: str, method: str, *args, **kwargs) -> None:
+    """An absent or broken optional attachment must never interrupt the caller."""
+    try:
+        target = getattr(owner, attribute, None)
+        if target is not None:
+            getattr(target, method)(*args, **kwargs)
+    except Exception:
+        pass
+
+
+def cohort_label(telemetry) -> str:
+    try:
+        cohort = getattr(telemetry, 'cohort', 'ineligible')
+        return cohort if cohort in DEMAND_COHORTS else 'ineligible'
+    except Exception:
+        return 'ineligible'
+
+
+def host_telemetry(host):
+    try:
+        return getattr(host, 'demand_telemetry', None)
+    except Exception:
+        return None
+
+
+def host_cohort(host) -> str:
+    return cohort_label(host_telemetry(host))
+
+
+def initialize_metric(metric, **labels) -> None:
+    try:
+        metric.labels(**labels)
+    except Exception:
+        pass
+
+
+def current_telemetry():
+    try:
+        return current_demand.get()
+    except Exception:
+        return None
 
 
 def demand_cohort() -> str:
-    telemetry = current_demand.get()
-    return telemetry.cohort if telemetry is not None else 'ineligible'
+    return cohort_label(current_telemetry())
+
+
+try:
+    for _cohort in DEMAND_COHORTS:
+        CAPTURE_AUDIO.labels(demand_cohort=_cohort)
+        for _provider in ('soniox', 'modulate', 'deepgram'):
+            WIRE_AUDIO.labels(provider=_provider, demand_cohort=_cohort)
+        for _reason in ('first_text_deadline', 'capacity_full', 'other'):
+            _subtypes = (
+                ('buffer_cap', 'span_cap', 'admission', 'replay_ring_cap', 'queue_timeout', 'unknown')
+                if _reason == 'capacity_full'
+                else ('none',)
+            )
+            for _subtype in _subtypes:
+                for _outcome in ('recovered', 'degraded', 'exhausted'):
+                    FAILURE_DETAIL.labels(
+                        demand_cohort=_cohort, reason=_reason, capacity_subtype=_subtype, outcome=_outcome
+                    )
+        for _outcome in ('yes', 'no'):
+            EXHAUSTED_SESSIONS.labels(demand_cohort=_cohort, outcome=_outcome)
+        for _trigger in ('first_output', 'visible_return'):
+            OUTPUT_LATENCY.labels(demand_cohort=_cohort, trigger=_trigger)
+            for _outcome in ('started', 'delivered', 'no_output'):
+                OUTPUT_EVENTS.labels(demand_cohort=_cohort, trigger=_trigger, outcome=_outcome)
+except Exception:
+    pass  # Missing zero children are a telemetry HOLD, never a startup failure.
 
 
 class DemandTelemetry:
@@ -83,7 +142,7 @@ class DemandTelemetry:
             if self.first_audio_at is None:
                 self.first_audio_at = monotonic()
                 self.output_event('first_output', 'started')
-            CAPTURE_AUDIO.labels(demand_cohort=self.cohort).inc(seconds)
+            record_metric(CAPTURE_AUDIO, {'demand_cohort': self.cohort}, seconds)
 
     def observe_visibility(self, payload) -> None:
         foreground, visible = payload.get('foreground'), payload.get('transcript_visible')
@@ -102,20 +161,26 @@ class DemandTelemetry:
     def delivered(self) -> None:
         now = monotonic()
         if not self.first_output and self.first_audio_at is not None:
-            OUTPUT_LATENCY.labels(demand_cohort=self.cohort, trigger='first_output').observe(
-                max(0, now - self.first_audio_at)
+            record_metric(
+                OUTPUT_LATENCY,
+                {'demand_cohort': self.cohort, 'trigger': 'first_output'},
+                max(0, now - self.first_audio_at),
+                observe=True,
             )
             self.first_output = True
             self.output_event('first_output', 'delivered')
         if self.visible_at is not None:
-            OUTPUT_LATENCY.labels(demand_cohort=self.cohort, trigger='visible_return').observe(
-                max(0, now - self.visible_at)
+            record_metric(
+                OUTPUT_LATENCY,
+                {'demand_cohort': self.cohort, 'trigger': 'visible_return'},
+                max(0, now - self.visible_at),
+                observe=True,
             )
             self.visible_at = None
             self.output_event('visible_return', 'delivered')
 
     def output_event(self, trigger: str, outcome: str) -> None:
-        OUTPUT_EVENTS.labels(demand_cohort=self.cohort, trigger=trigger, outcome=outcome).inc()
+        record_metric(OUTPUT_EVENTS, {'demand_cohort': self.cohort, 'trigger': trigger, 'outcome': outcome}, 1)
 
     def finish(self) -> None:
         if not self.finished:
@@ -125,21 +190,25 @@ class DemandTelemetry:
             if self.visible_at is not None:
                 self.output_event('visible_return', 'no_output')
                 self.visible_at = None
-            EXHAUSTED_SESSIONS.labels(demand_cohort=self.cohort, outcome='yes' if self.exhausted else 'no').inc()
+            record_metric(
+                EXHAUSTED_SESSIONS, {'demand_cohort': self.cohort, 'outcome': 'yes' if self.exhausted else 'no'}, 1
+            )
 
 
 class WireAudioMeter:
     """Pin at transport creation; call only after a successful binary audio write."""
 
     def __init__(self, provider: str, sample_rate: int, channels: int = 1):
-        self.telemetry = current_demand.get()
+        self.telemetry = current_telemetry()
         self.provider = provider
         self.bytes_per_second = 2 * sample_rate * channels
 
     def written(self, data: bytes | str) -> None:
         if self.telemetry is not None and isinstance(data, bytes) and data and self.bytes_per_second > 0:
-            WIRE_AUDIO.labels(provider=self.provider, demand_cohort=self.telemetry.cohort).inc(
-                len(data) / self.bytes_per_second
+            record_metric(
+                WIRE_AUDIO,
+                {'provider': self.provider, 'demand_cohort': cohort_label(self.telemetry)},
+                len(data) / self.bytes_per_second,
             )
 
 
@@ -155,5 +224,22 @@ class MeteredSyncTransport:
 
     def send(self, data, *args, **kwargs):
         result = self.transport.send(data, *args, **kwargs)
-        self.meter.written(data)
+        telemetry_call(self, 'meter', 'written', data)
         return result
+
+
+def create_wire_meter(provider: str, sample_rate: int, channels: int = 1):
+    try:
+        return WireAudioMeter(provider, sample_rate, channels)
+    except Exception:
+        return None
+
+
+def attach_demand_telemetry(host, cohort: str):
+    try:
+        telemetry = DemandTelemetry(cohort)
+        host.demand_telemetry = telemetry
+        current_demand.set(telemetry)
+        return telemetry
+    except Exception:
+        return None

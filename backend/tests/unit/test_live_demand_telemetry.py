@@ -8,6 +8,17 @@ import pytest
 from prometheus_client import REGISTRY
 
 from routers.listen import demand_routing
+from routers.listen import runtime as runtime_module
+from routers.listen import lane_meter as lane_module
+from routers.listen.contracts import ListenRequest
+from routers.listen.runtime import ListenSessionRuntime
+from utils.observability import transcription
+from tests.unit.test_listen_parity_runtime import (
+    _AUDIO,
+    _FakePersistence,
+    _FakeWebSocket,
+    _install_runtime_fakes,
+)
 from utils.observability import demand_cohort as telemetry
 from utils.observability.fallback import record_fallback
 from utils.stt.recovery_state import LiveRecoveryController
@@ -238,3 +249,129 @@ def test_recovery_dials_and_session_outcomes_keep_the_admission_cohort(monkeypat
         value(OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL, outcome='no_transcript', demand_cohort='admitted') - before
         == 1
     )
+
+
+class _BrokenMetric:
+    def __init__(self, failure):
+        self.failure = failure
+
+    def labels(self, **_labels):
+        if self.failure == 'labels':
+            raise RuntimeError('synthetic label binding failure')
+        return self
+
+    def inc(self, *_args):
+        raise RuntimeError('synthetic counter failure')
+
+    def observe(self, *_args):
+        raise RuntimeError('synthetic histogram failure')
+
+
+class _BrokenAttachment:
+    @property
+    def cohort(self):
+        raise RuntimeError('synthetic cohort access failure')
+
+    def __getattr__(self, _name):
+        raise RuntimeError('synthetic telemetry access failure')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure', ['absent', 'constructor', 'attachment', 'labels', 'mutation'])
+async def test_dark_real_runtime_bootstrap_audio_and_teardown_survive_optional_telemetry(monkeypatch, failure):
+    """Real runtime/receiver lifecycle: receiver is None until late bootstrap."""
+    monkeypatch.setenv('STT_LIVE_DEMAND_ENABLED', 'false')
+    monkeypatch.setenv('OMI_PARITY_PACK_CAPTURE', '0')
+    if failure == 'constructor':
+
+        def unavailable(_cohort):
+            raise RuntimeError('synthetic telemetry constructor failure')
+
+        monkeypatch.setattr(telemetry, 'DemandTelemetry', unavailable)
+    elif failure == 'attachment':
+        monkeypatch.setattr(telemetry, 'DemandTelemetry', lambda _cohort: _BrokenAttachment())
+    elif failure in {'labels', 'mutation'}:
+        broken = _BrokenMetric(failure)
+        for name in ('CAPTURE_AUDIO', 'WIRE_AUDIO', 'OUTPUT_EVENTS', 'OUTPUT_LATENCY', 'EXHAUSTED_SESSIONS'):
+            monkeypatch.setattr(telemetry, name, broken)
+        for name in ('WINDOW_CANARY_OUTCOME', 'COST_CANARY_OUTCOME', 'LIVE_SESSION_TERMINAL_AFTER_TEXT'):
+            monkeypatch.setattr(runtime_module, name, broken)
+        monkeypatch.setattr(lane_module, 'DEMAND_LANE_SECONDS', broken)
+        monkeypatch.setattr(lane_module, 'DEMAND_SWITCHES', broken)
+        monkeypatch.setattr(transcription, 'OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL', broken)
+
+    runtime = ListenSessionRuntime(
+        ListenRequest(websocket=_FakeWebSocket(_AUDIO), uid=f'synthetic-telemetry-{failure}', codec='pcm16')
+    )
+    assert runtime.receiver is None
+    # Exercise the same omitted optional attributes as bootstrap-only constructors.
+    del runtime.demand_telemetry
+    del runtime.recovery_enabled
+    if failure == 'absent':
+        monkeypatch.setattr(demand_routing, 'attach_demand_telemetry', lambda *_: None)
+    runtime.persistence = _FakePersistence(fail_usage=False)
+    sockets = []
+    _install_runtime_fakes(monkeypatch, runtime, sockets, [])
+    await runtime.run()
+    assert runtime.receiver.live_demand is None
+    assert len(sockets) == 1
+    assert sockets[0].sent == [_AUDIO]
+    assert sockets[0].finished
+    assert len(runtime.transcripts.inbound) == 1
+    runtime.complete_live_transcription()
+    assert runtime.state.live_transcript_delivered
+    if failure in {'absent', 'constructor', 'attachment'}:
+        assert telemetry.host_cohort(runtime) == 'ineligible'
+
+
+def test_metric_constructor_failure_does_not_change_demand_admission(monkeypatch):
+    monkeypatch.setenv('STT_LIVE_DEMAND_ENABLED', 'true')
+    monkeypatch.setenv('STT_LIVE_DEMAND_PERCENT', '100')
+    monkeypatch.setattr(demand_routing, 'managed_chain_enabled', lambda _: True)
+
+    def unavailable(_cohort):
+        raise RuntimeError('synthetic telemetry failure')
+
+    monkeypatch.setattr(telemetry, 'DemandTelemetry', unavailable)
+    h = host()
+    del h.recovery_enabled
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+    assert demand_routing.capture_demand_admission(h) is None
+    assert h._demand_cohort == 'admitted'
+    assert demand_routing.attach_live_demand(SimpleNamespace(host=h)).eligible
+    assert telemetry.host_cohort(h) == 'ineligible'
+
+
+@pytest.mark.parametrize('failure', ['labels', 'mutation'])
+def test_wire_meter_failure_cannot_change_successful_transport_result(monkeypatch, failure):
+    telemetry.current_demand.set(telemetry.DemandTelemetry('admitted'))
+    monkeypatch.setattr(telemetry, 'WIRE_AUDIO', _BrokenMetric(failure))
+    raw = SimpleNamespace(send=lambda *_: 'written')
+    wrapped = telemetry.MeteredSyncTransport(raw, telemetry.WireAudioMeter('deepgram', 16000))
+    assert wrapped.send(b'\0\0') == 'written'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('provider', ['soniox', 'modulate'])
+@pytest.mark.parametrize('failure', ['labels', 'mutation'])
+async def test_async_wire_metric_failure_keeps_successful_socket_alive(monkeypatch, provider, failure):
+    telemetry.current_demand.set(telemetry.DemandTelemetry('admitted'))
+    monkeypatch.setattr(telemetry, 'WIRE_AUDIO', _BrokenMetric(failure))
+    wire = SimpleNamespace(send=AsyncMock(), close=AsyncMock())
+    cls = SafeSonioxSocket if provider == 'soniox' else SafeModulateSocket
+    sock = cls(wire, lambda _: None, asyncio.get_running_loop())
+    sock._recv_task.cancel()
+    sock._send_task.cancel()
+    await asyncio.gather(sock._recv_task, sock._send_task, return_exceptions=True)
+    pcm = b'\0\0' * 160
+    try:
+        if provider == 'soniox':
+            await sock._write(pcm)
+        else:
+            assert sock.send(pcm)
+            sock._send_queue.put_nowait(b'__EOS__')
+            await sock._send_loop()
+        assert wire.send.call_args_list[0].args == (pcm,)
+        assert not sock.is_connection_dead
+    finally:
+        sock._closed = True

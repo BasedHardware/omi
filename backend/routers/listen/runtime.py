@@ -69,7 +69,14 @@ import utils.stt.replay_delivery as replay_delivery
 from utils.stt.live_failure import terminate_live_stt_backoff
 from config.live_demand import DemandSelection
 from routers.listen.demand_routing import capture_demand_admission
-from utils.observability.demand_cohort import current_demand
+from utils.observability.demand_cohort import record_metric
+from utils.observability.demand_cohort import (
+    DemandTelemetry,
+    current_demand,
+    host_cohort,
+    host_telemetry,
+    telemetry_call,
+)
 from utils.stt.live_rollout import WindowSelection, managed_chain_enabled, window_allocation, window_selection_kwargs
 from utils.stt.live_metrics import (
     COST_CANARY_OUTCOME,
@@ -142,7 +149,13 @@ def _normalize_client_conversation_id(value: Optional[str]) -> Optional[str]:
 class ListenSessionRuntime:
     """Stateful session coordinator; subcomponents only communicate through this surface."""
 
+    demand_telemetry: DemandTelemetry | None = None
+    _demand_cohort: str | None = None
+    receiver: Any = None
+
     def __init__(self, request: ListenRequest):
+        self.demand_telemetry = None
+        self._demand_cohort = None
         self.recovery_enabled = recovery_enabled()
         self.request = request
         self.declared_codec = request.codec
@@ -288,9 +301,7 @@ class ListenSessionRuntime:
 
     def complete_live_transcription(self) -> None:
         """Record the first nonempty transcript successfully delivered to the client."""
-        telemetry = getattr(self, 'demand_telemetry', None)
-        if telemetry is not None:
-            telemetry.delivered()
+        telemetry_call(self, 'demand_telemetry', 'delivered')
         self.state.live_transcript_delivered = True
         if self.state.live_transcription_attempt is not None:
             self.state.live_transcription_attempt.finish('success', phase='transcript_delivery')
@@ -417,25 +428,27 @@ class ListenSessionRuntime:
             outcome = self._session_transcript_outcome()
             record_live_session_transcript_outcome(
                 outcome=outcome,
-                demand_cohort=getattr(getattr(self, 'demand_telemetry', None), 'cohort', 'ineligible'),
+                demand_cohort=host_cohort(self),
                 uid=self.request.uid,
                 source=self.request.source,
                 platform=self.client_device_context.platform,
                 recording_id=self.request.client_conversation_id,
             )
-            telemetry = getattr(self, 'demand_telemetry', None)
-            if telemetry is not None:
-                telemetry.finish()
-            WINDOW_CANARY_OUTCOME.labels(
-                arm='window' if window_allocation(self.request.uid) else 'control',
-                outcome=outcome,
-                demand_cohort=getattr(telemetry, 'cohort', 'ineligible'),
-            ).inc()
+            telemetry_call(self, 'demand_telemetry', 'finish')
+            record_metric(
+                WINDOW_CANARY_OUTCOME,
+                {
+                    'arm': 'window' if window_allocation(self.request.uid) else 'control',
+                    'outcome': outcome,
+                    'demand_cohort': host_cohort(self),
+                },
+                1,
+            )
             arm = getattr(self, '_cost_routing_arm', None)
             if arm is not None:
-                COST_CANARY_OUTCOME.labels(
-                    arm=arm, outcome=outcome, demand_cohort=getattr(telemetry, 'cohort', 'ineligible')
-                ).inc()
+                record_metric(
+                    COST_CANARY_OUTCOME, {'arm': arm, 'outcome': outcome, 'demand_cohort': host_cohort(self)}, 1
+                )
             if (
                 session_recovery_enabled(self)
                 and self.state.live_transcript_delivered
@@ -447,10 +460,11 @@ class ListenSessionRuntime:
                     or getattr(self.state, 'requested_provider', None)
                     or 'unknown'
                 )
-                LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(
-                    provider=provider_family(provider),
-                    demand_cohort=getattr(telemetry, 'cohort', 'ineligible'),
-                ).inc()
+                record_metric(
+                    LIVE_SESSION_TERMINAL_AFTER_TEXT,
+                    {'provider': provider_family(provider), 'demand_cohort': host_cohort(self)},
+                    1,
+                )
             cohort = getattr(self, '_routing_cohort', None)
             if cohort is not None:
                 self._routing_cohort_completion = (
@@ -499,6 +513,9 @@ class ListenSessionRuntime:
         return True
 
     async def _bootstrap(self) -> bool:
+        self.demand_telemetry = host_telemetry(self)
+        self._demand_cohort = getattr(self, '_demand_cohort', None)
+        self.recovery_enabled = session_recovery_enabled(self)
         request = self.request
         base = await load_listen_connect_base(request.uid, source=request.source, use_custom_stt=self.use_custom_stt)
         if not base.user_exists:
@@ -578,9 +595,8 @@ class ListenSessionRuntime:
             learned_sessions=learned_sessions,
         )
         self.language_observations = LiveLanguageObservations(self.language_profile)
-        telemetry = capture_demand_admission(self)
-        self.receiver.lane_meter.demand_cohort = telemetry.cohort
-        demand_vendor_start = telemetry.cohort == 'admitted'
+        capture_demand_admission(self)
+        demand_vendor_start = self._demand_cohort == 'admitted'
         window_kwargs: WindowSelection = {} if demand_vendor_start else window_selection_kwargs(self, request.uid)
         demand_kwargs: DemandSelection = {'exclude': frozenset({'parakeet'})} if demand_vendor_start else {}
         self.stt_service, self.stt_language, self.stt_model = get_stt_service_for_language(
@@ -712,9 +728,7 @@ class ListenSessionRuntime:
 
     async def _heartbeat(self) -> None:
         while self.state.active:
-            meter = getattr(getattr(self, 'receiver', None), 'lane_meter', None)
-            if meter is not None:
-                meter.flush()
+            telemetry_call(getattr(self, 'receiver', None), 'lane_meter', 'flush')
             if self.request.websocket.client_state != WebSocketState.CONNECTED:
                 self.state.active = False
                 break
@@ -1235,9 +1249,7 @@ class ListenSessionRuntime:
             except Exception as error:
                 logger.error('Translation flush failed type=%s', type(error).__name__)
         self.state.active = False
-        meter = getattr(self.receiver, 'lane_meter', None)
-        if meter is not None:
-            meter.close()
+        telemetry_call(getattr(self, 'receiver', None), 'lane_meter', 'close')
         demand = getattr(self.receiver, 'live_demand', None)
         if demand is not None:
             demand.close()

@@ -4997,3 +4997,13 @@ compare matched exposure. `omi_listen_demand_output_events_total` counts
 A wait ends without output at teardown or when the client leaves visibility.
 No UIDs, session identifiers, text, audio or unbounded provider names enter
 these metrics. Telemetry changes neither admission percentages nor policy.
+
+Demand telemetry is optional at every session boundary. Bootstrap pins the
+admission decision independently of instrumentation and does not access the
+receiver before `_build_components`. Receiver construction applies the cohort
+to its optional lane meter. Bootstrap-only runtime construction initializes
+telemetry and recovery pins without requiring `__init__`. Missing or faulty
+telemetry resolves to `ineligible`; failed label binding, counter/histogram
+updates, lane observations and wire observations cannot interrupt bootstrap,
+audio writes, transcript delivery or teardown. Missing measurements remain a
+ramp HOLD, never evidence of healthy exposure.

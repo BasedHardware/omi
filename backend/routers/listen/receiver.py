@@ -24,6 +24,7 @@ from routers.listen.contracts import ConversationCaptureOrigin
 from routers.listen.demand_routing import attach_live_demand
 from routers.listen.demand_switch import switch_live_demand
 from routers.listen.lane_meter import LiveLaneMeter
+from utils.observability.demand_cohort import host_cohort, telemetry_call
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
 from utils.stt.replay_capture_accounting import record_replay_sends
 from utils.capture_evidence import SourcePositionMap, parse_live_frame
@@ -250,7 +251,11 @@ class ListenReceiver(ReplayFilterMixin):
         self.soniox_idle_budget = SonioxIdleBudget()
         self.host = host
         self.raw_archive = LiveAudioArchive(host)
-        self.lane_meter = LiveLaneMeter()
+        try:
+            self.lane_meter = LiveLaneMeter()
+            self.lane_meter.demand_cohort = host_cohort(host)
+        except Exception:
+            self.lane_meter = None
         self.live_demand = None
         self.translation_demand = TranslationDemand()
         self._translation_expiry_task: asyncio.Task[Any] | None = None
@@ -1192,11 +1197,13 @@ class ListenReceiver(ReplayFilterMixin):
 
     def _record_selected_epoch(self, epoch: Optional[ProviderEpochTranslator], socket: Any) -> None:
         demand = getattr(self, 'live_demand', None)
-        meter = getattr(self, 'lane_meter', None)
-        if meter is not None:
-            meter.transition(
-                self._serving_provider(), reason=demand.policy.reason if demand and demand.eligible else 'baseline'
-            )
+        telemetry_call(
+            self,
+            'lane_meter',
+            'transition',
+            self._serving_provider(),
+            reason=demand.policy.reason if demand and demand.eligible else 'baseline',
+        )
         if epoch is None:
             return
         if getattr(socket, 'manages_vad', False):
@@ -1254,7 +1261,7 @@ class ListenReceiver(ReplayFilterMixin):
                         )
                         return False
                     self.stt_sockets_multi[index] = track_live_stt_socket(socket, self.host.stt_service.value)
-                    self.lane_meter.transition(self._serving_provider())
+                    telemetry_call(self, 'lane_meter', 'transition', self._serving_provider())
                     record_live_connection(self.host, self._serving_provider())
                 return True
             if not managed_chain_enabled(self.host) and should_initialize_vad_gate(
@@ -2090,9 +2097,7 @@ class ListenReceiver(ReplayFilterMixin):
         elif kind == 'speaker_assigned':
             await self._handle_speaker_assigned(payload)
         elif kind == 'client_state':
-            telemetry = getattr(self.host, 'demand_telemetry', None)
-            if telemetry is not None:
-                telemetry.observe_visibility(payload)
+            telemetry_call(self.host, 'demand_telemetry', 'observe_visibility', payload)
             demand = getattr(self, 'live_demand', None)
             if demand is not None:
                 demand.observe(payload)
@@ -2278,9 +2283,7 @@ class ListenReceiver(ReplayFilterMixin):
                     self._note_audio_activity()
                     self._mark_first_audio(now)
                     decoded_audio_bytes += len(decoded)
-                    telemetry = getattr(self.host, 'demand_telemetry', None)
-                    if telemetry is not None:
-                        telemetry.capture(len(decoded) / (2 * request.sample_rate))
+                    telemetry_call(self.host, 'demand_telemetry', 'capture', len(decoded) / (2 * request.sample_rate))
                     self._capture('capture_client_audio', decoded)
                     if self.capture_timeline is not None:
                         # The decoded frame occupies an exact capture sample

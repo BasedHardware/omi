@@ -20,6 +20,7 @@ from utils.stt.batch_pressure import BatchPressure
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.stt import streaming as st
+from utils.observability.demand_cohort import record_metric
 from utils.observability.demand_cohort import demand_cohort
 from utils.stt.live_metrics import (
     WINDOW_ACTIVE,
@@ -847,8 +848,11 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                     self._first_text_recorded = True
                     self._cancel_first_text_timer()
                     if self._first_speech_at is not None:
-                        WINDOW_FIRST_TEXT.labels(demand_cohort=self._demand_cohort).observe(
-                            max(0.0, time.monotonic() - self._first_speech_at)
+                        record_metric(
+                            WINDOW_FIRST_TEXT,
+                            {'demand_cohort': getattr(self, '_demand_cohort', 'ineligible')},
+                            max(0.0, time.monotonic() - self._first_speech_at),
+                            observe=True,
                         )
             # Snapshot the emission boundary in this socket's stream seconds
             # BEFORE the callback: downstream rewrites start/end in place onto

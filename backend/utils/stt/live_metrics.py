@@ -5,7 +5,7 @@ from typing import NamedTuple
 import threading
 
 from config.live_stt_recovery import recovery_enabled
-from utils.observability.demand_cohort import DEMAND_COHORTS
+from utils.observability.demand_cohort import DEMAND_COHORTS, initialize_metric
 
 DEMAND_LANE_SECONDS = Counter(
     'omi_listen_live_lane_seconds_total',
@@ -114,7 +114,7 @@ COST_CANARY_OUTCOME = Counter(
 for _arm in ('on', 'control'):
     for _outcome in ('transcribed', 'no_transcript', 'too_short'):
         for _cohort in DEMAND_COHORTS:
-            COST_CANARY_OUTCOME.labels(arm=_arm, outcome=_outcome, demand_cohort=_cohort)
+            initialize_metric(COST_CANARY_OUTCOME, arm=_arm, outcome=_outcome, demand_cohort=_cohort)
 WINDOW_CONTEXT = Histogram(
     'omi_stt_window_context_seconds',
     'Posted TDT context duration',
@@ -147,8 +147,8 @@ CHAIN_EXHAUSTED = Counter(
     'omi_stt_chain_exhausted_total', 'Configured live chains that could not serve', ['demand_cohort']
 )
 for _cohort in DEMAND_COHORTS:
-    CHAIN_EXHAUSTED.labels(demand_cohort=_cohort)
-    WINDOW_FIRST_TEXT.labels(demand_cohort=_cohort)
+    initialize_metric(CHAIN_EXHAUSTED, demand_cohort=_cohort)
+    initialize_metric(WINDOW_FIRST_TEXT, demand_cohort=_cohort)
 
 LEG_ATTEMPTS = Counter('omi_stt_leg_attempts_total', 'Configured-chain connection results', ['to_mode', 'outcome'])
 RECONNECT = Counter(
@@ -274,10 +274,10 @@ if recovery_enabled():
             REPLAY_SKIPPED.labels(source=_source, successor=_successor)
             REPLAY_CLOSED.labels(source=_source, successor=_successor)
             for _cohort in DEMAND_COHORTS:
-                RECOVERY_ATTEMPTS.labels(source=_source, successor=_successor, demand_cohort=_cohort)
+                initialize_metric(RECOVERY_ATTEMPTS, source=_source, successor=_successor, demand_cohort=_cohort)
     for _provider in PROVIDER_FAMILIES:
         for _cohort in DEMAND_COHORTS:
-            LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider=_provider, demand_cohort=_cohort)
+            initialize_metric(LIVE_SESSION_TERMINAL_AFTER_TEXT, provider=_provider, demand_cohort=_cohort)
         for _event in ('opened', 'probe', 'skipped', 'reset', 'escape'):
             CONNECT_BACKOFF.labels(provider=_provider, event=_event)
 
