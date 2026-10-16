@@ -154,6 +154,29 @@ def test_deletion_next_request_fenced_after_real_intent_writer(env, monkeypatch)
     assert deletion.get_user_deletion_wipe_status('u') == 'cancelled'
 
 
+def test_lever_off_writer_still_fences_enabled_readers(env, monkeypatch):
+    # Mixed rollout: an enabled revision warms the cache, then an old/off-cohort revision writes.
+    enable(monkeypatch, 'deletion_marker_cache', 'subscription_cache')
+    assert deletion.get_user_deletion_wipe_status('u') is None
+    assert users.get_user_valid_subscription('u').plan == PlanType.basic
+
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{}')
+    monkeypatch.setattr(
+        users,
+        '_mark_user_deletion_wipe_intent_txn',
+        lambda transaction, ref, job_id: ref.set({'wipe_status': 'pending', 'wipe_job_id': job_id}, merge=True)
+        or {'wipe_job_id': job_id, 'dispatch_claimed': True},
+    )
+    users.mark_user_deletion_wipe_intent('u')
+    users.update_user_subscription(
+        'u', {'plan': 'operator', 'status': 'active', 'current_period_end': int(time.time()) + 3600}
+    )
+
+    enable(monkeypatch, 'deletion_marker_cache', 'subscription_cache')
+    assert deletion.get_user_deletion_wipe_status('u') == 'pending'
+    assert users.get_user_valid_subscription('u').plan == PlanType.operator
+
+
 @pytest.mark.parametrize('enabled,expected', [(False, 4), (True, 1)])
 def test_subscription_read_count_and_deep_copies(env, monkeypatch, enabled, expected):
     if enabled:
@@ -700,3 +723,34 @@ def test_serving_config_ttl_is_capped(monkeypatch):
 
     monkeypatch.setenv('FSR_SERVING_CONFIG_TTL_SECONDS', '999999')
     assert s4_read_cache.ttl('FSR_SERVING_CONFIG_TTL_SECONDS', 60) == 300
+
+
+def test_request_read_scope_teardown_in_another_context():
+    # Streaming responses finish yield dependencies in a different Context than the one that set the token.
+    async def run():
+        scope = cache.request_read_scope()
+        await asyncio.create_task(scope.__anext__())
+        holder = cache._request.get()
+        with pytest.raises(StopAsyncIteration):
+            await asyncio.create_task(scope.__anext__())
+        return holder
+
+    assert asyncio.run(run()) is None
+
+
+def test_streaming_route_with_read_scope_returns_200(monkeypatch):
+    from fastapi.responses import StreamingResponse
+
+    app = FastAPI()
+
+    @app.get('/stream')
+    async def stream(_scope=Depends(cache.request_read_scope)):
+        async def body():
+            yield b'a'
+            yield b'b'
+
+        return StreamingResponse(body())
+
+    with TestClient(app, raise_server_exceptions=True) as client:
+        response = client.get('/stream')
+    assert response.status_code == 200 and response.content == b'ab'

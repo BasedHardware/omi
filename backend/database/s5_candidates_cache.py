@@ -62,15 +62,15 @@ def invalidate_after_write(fn):
     @functools.wraps(fn)
     def wrapped(uid, *args, **kwargs):
         result = fn(uid, *args, **kwargs)
-        if lever_enabled('candidates_page', uid):
-            try:
-                # Random generations cannot expire back onto a live entry or
-                # reuse an old counter following version-key eviction.
-                _redis().set(_version_key(uid), uuid4().hex, ex=7 * 86400)
-                CACHE_OPERATIONS.labels(outcome='invalidated').inc()
-            except RedisError:
-                _cache_unavailable('invalidation_unavailable')
-                logger.warning('Candidate compatibility cache invalidation unavailable')
+        # Unconditional: enabled readers on other revisions/cohorts may hold this UID's entry.
+        try:
+            # Random generations cannot expire back onto a live entry or
+            # reuse an old counter following version-key eviction.
+            _redis().set(_version_key(uid), uuid4().hex, ex=7 * 86400)
+            CACHE_OPERATIONS.labels(outcome='invalidated').inc()
+        except RedisError:
+            _cache_unavailable('invalidation_unavailable')
+            logger.warning('Candidate compatibility cache invalidation unavailable')
         return result
 
     return wrapped
