@@ -188,6 +188,10 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert preflight.direct_pusher_bindings(deployment) == expected
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
+        "PLAYBACK_ON_DEMAND_ENABLED": "false",
+        "REPEAT_WORK_REVISION_ENABLED": "false",
+        "REPEAT_WORK_LLM_VERSION": "2026-10-16-v1",
+        "SYNC_POLL_BACKOFF_ENABLED": "false",
         "AUDIO_ARCHIVE_LIVE_ENABLED": "false",
         "AUDIO_ARCHIVE_READ_ENABLED": "false",
         "AUDIO_ARCHIVE_STOP_PCM_ENABLED": "false",
