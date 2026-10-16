@@ -52,10 +52,8 @@ def prepare_hourly_usage_updates(
     has_increments = any(key in METRIC_KEYS for key in update_doc)
     if not has_increments:
         return {}
-    if not plan_key or not isinstance(plan_key, str) or not plan_key.strip():
-        safe_plan = '_unattributed'
-    else:
-        safe_plan = _sanitize_field_segment(plan_key.strip())
+    stripped_plan = plan_key.strip() if plan_key else ''
+    safe_plan = _sanitize_field_segment(stripped_plan) if stripped_plan else '_unattributed'
     plan_prefix = f'plan_usage.{safe_plan}'
     for key, value in updates.items():
         if key in METRIC_KEYS and _is_valid_positive_increment(value):
