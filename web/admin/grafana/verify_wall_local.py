@@ -98,7 +98,7 @@ def screens(out: Path | None = None):
         for width,height in [(1920,1080),(1440,900)]:
             page = browser.new_page(viewport={'width':width,'height':height},device_scale_factor=1)
             page.goto('http://127.0.0.1:3207/d/omi-tv-v2/omi-tv-v2?orgId=1&kiosk',wait_until='networkidle',timeout=120000)
-            page.get_by_text('Coverage gaps',exact=True).wait_for(timeout=60000)
+            page.get_by_text('Data & coverage',exact=True).wait_for(timeout=60000)
             page.wait_for_function("!document.body.innerText.includes('Loading…')",timeout=120000)
             page.evaluate('document.fonts.ready')
             page.wait_for_timeout(2000)

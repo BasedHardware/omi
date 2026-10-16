@@ -26,11 +26,15 @@ PLATFORM = {"macOS": "#3987e5", "Mobile": "#d95926", "Other": "#199e70", "MCP-on
 TOTAL = "#e8e6df"
 MUTED = "#6b6a63"
 VIOLET, LILAC, RED, GREEN = "#9085e9", "#c4bdf4", "#e66767", "#008300"
+# Status steps (dataviz palette.md, fixed): ≥3:1 on the dark surface; the strip's
+# ▲/▼ glyph carries direction, so color is never the only signal.
+STATUS_GOOD, STATUS_BAD = "#0ca30c", "#d03b3b"
 PLANS = {"Unlimited": "#3987e5", "Unlimited v2": "#9085e9", "Operator": "#199e70",
          "Plus": "#c98500", "Architect": "#d55181", "Other": MUTED}
 COST = {"GCP": "#5c6b80", "Vertex LLM": "#8494ab", "OpenAI": "#aab6c6", "Anthropic": "#cdd5df"}
 # Estimated lines are drawn apart from invoiced ones: amber, low opacity.
-ESTIMATE = {"STT (modelled)": "#c98500", "SaaS (fixed estimate)": "#8a7a5c"}
+ESTIMATE_OPACITY = 55  # invoiced bars use 88
+ESTIMATE = {"STT est.": "#c98500", "SaaS est.": "#e0b45c"}
 GOOD_MARK, BAD_MARK = "\u200b", "\u2060"  # tone markers set by the series API
 
 # Column x/width; Health and Revenue carry the widest charts.
@@ -129,7 +133,7 @@ def delta_strip(column, keys, description):
     return {"type": "stat", "title": "", "description": description, "datasource": DS, "transparent": True,
             "targets": [target("headline", f"strip_{column.lower()}", [(k, k, "string") for k in keys])],
             "fieldConfig": {"defaults": {"color": {"mode": "fixed", "fixedColor": MUTED}, "noValue": "—",
-                                         "mappings": [tone(GOOD_MARK, "#3fb950"), tone(BAD_MARK, RED)]},
+                                         "mappings": [tone(GOOD_MARK, STATUS_GOOD), tone(BAD_MARK, STATUS_BAD)]},
                             "overrides": []},
             "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "/.*/", "values": False},
                         "textMode": "value", "colorMode": "value", "graphMode": "none",
@@ -158,8 +162,9 @@ USERS = ("Users are deduplicated persons with qualified use (v2 definitions): a 
 QUALIFIED_MAU = ("MAU here is qualified MAU (~10K). The \"Omi Cost vs Revenue\" artifact divides by any-event "
                  "PostHog MAU (~22K, $3.41 in October), so its per-user cost is about half of this one. ")
 ALL_IN = ("All-in cost counts every line: GCP net of committed-use credits (one-time incidents excluded), "
-          "Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT (Soniox/Deepgram; no invoice feed, so the "
-          "FinOps modelled estimate) and SaaS at a fixed $4.8K/month estimate. ")
+          "Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT and SaaS. STT has no invoice feed yet: it is "
+          "a $5.3K/month estimate from the Soniox console (October 2026, read 2026-10-16; the FinOps "
+          "stt_vendor_low model overstated it ~2×). SaaS is a fixed $4.8K/month estimate. ")
 
 
 def columns():
@@ -262,20 +267,20 @@ def columns():
     ]
     health = [
         stat("Health", ALL_IN + "Cost / day is the settled day D−2; cost per user is the 30-day all-in cost ÷ monthly users. " + QUALIFIED_MAU + "Relative % change; up is bad.",
-             [("headline", "netCost", "All-in cost / day", "currencyUSD", 0),
-              ("headline", "costPerMau", "Cost / user · 30d", "currencyUSD", 2)]),
+             [("headline", "netCost", "Cost / day", "currencyUSD", 0),
+              ("headline", "costPerMau", "Cost / user", "currencyUSD", 2)]),
         (8, chart("All-in cost vs revenue",
-                  ALL_IN + "Settled through D−2. Invoiced lines are solid; STT (modelled) and SaaS (fixed estimate) are the faint amber segments. The stack top is the cost stat. One-time GCP spikes (a service-day above 2× and $500 over its 14-day median, e.g. the 2026-09-07 Coldline migration) are excluded and shown in the tooltip. Revenue = FinOps MRR ÷ 30.4.",
+                  ALL_IN + "Settled through D−2. Invoiced lines are the solid blue-greys; STT est. (Soniox console) and SaaS est. (fixed) are the amber segments. The stack top is the cost stat. One-time GCP spikes (a service-day above 2× and $500 over its 14-day median, e.g. the 2026-09-07 Coldline migration) are excluded and shown in the tooltip. Revenue = FinOps MRR ÷ 30.4.",
                   [target("health", "cost", [DATE, ("gcp", "GCP", "number"),
                                              ("vertexLlm", "Vertex LLM", "number"),
                                              ("openai", "OpenAI", "number"), ("anthropic", "Anthropic", "number"),
-                                             ("stt", "STT (modelled)", "number"),
-                                             ("saas", "SaaS (fixed estimate)", "number"),
+                                             ("stt", "STT est.", "number"),
+                                             ("saas", "SaaS est.", "number"),
                                              ("revenuePerDay", "Revenue", "number"),
                                              ("oneTimeExcluded", "One-time excluded", "number"),
                                              ("total", "All-in total", "number")])],
                   unit="currencyUSD", axis="USD / day", draw="bars", stack=True, decimals=0, time_from="35d",
-                  legend=False,
+                  legend=True,
                   overrides=[*[color(n, h) for n, h in COST.items()],
                              *[estimate(n, h) for n, h in ESTIMATE.items()],
                              dashed("Revenue", "#199e70"), prop("Revenue", ("custom.lineStyle", {"fill": "solid"})),
@@ -292,9 +297,9 @@ def columns():
 
 
 def estimate(name, hex_):
-    """Modelled / fixed-estimate cost lines: stacked like the rest, drawn faint."""
+    """Estimated cost lines (STT, SaaS): stacked like the rest, amber and lighter."""
     o = color(name, hex_)
-    o["properties"] += [{"id": "custom.fillOpacity", "value": 30}, {"id": "custom.lineWidth", "value": 1}]
+    o["properties"] += [{"id": "custom.fillOpacity", "value": ESTIMATE_OPACITY}, {"id": "custom.lineWidth", "value": 1}]
     return o
 
 
@@ -334,11 +339,12 @@ def curve_options(panel):
     panel["options"]["xField"] = "week"  # Infinity does not keep JSON key order
     panel["fieldConfig"]["overrides"] = [prop("week", ("unit", "none"), ("custom.axisLabel", "weeks since first seen"))]
     panel["options"]["legend"] = {"showLegend": True, "displayMode": "list", "placement": "right"}
+    d["noValue"] = "Cohorts still filling"  # an empty frame, not "Cannot visualize data"
 
 
 def coverage_table():
-    return {"type": "table", "title": "Coverage gaps",
-            "description": "Wall metrics without a defensible source (2026-10-15 contract audit). They stay off the charts rather than showing empty panels or fake zeros. The route's full classified reason is in /api/omi/stats/wall/series/headline (gaps[].reason) and the v2 diagnostics.",
+    return {"type": "table", "title": "Data & coverage",
+            "description": "First row: the oldest series' data-through day (UTC) across every chart, and how many series are still filling; the board shows stale-but-real data rather than waiting. Below: wall metrics without a defensible source (2026-10-15 contract audit). They stay off the charts rather than showing empty panels or fake zeros. The route's full classified reason is in /api/omi/stats/wall/series/headline (gaps[].reason) and the v2 diagnostics.",
             "datasource": DS,
             "targets": [target("headline", "gaps", [("metric", "Metric", "string"), ("missing", "Missing", "string")])],
             "fieldConfig": {"defaults": {"custom": {"align": "left", "cellOptions": {"type": "auto", "wrapText": False}},
@@ -367,7 +373,7 @@ def build_wall_board():
             "refresh": "1m", "editable": True, "graphTooltip": 1, "tags": ["omi-tv", "v3"],
             "time": {"from": "now-182d", "to": "now"}, "timepicker": {"hidden": True}, "templating": {"list": []},
             "annotations": {"list": []}, "panels": panels, "links": [],
-            "description": "Growth → Activation → Retention → Revenue → Health. Stats above native charts; v2 metric definitions via /api/omi/stats/wall/series. Every chart's latest point is the stat above it. Missing sources are listed under Coverage gaps."}
+            "description": "Growth → Activation → Retention → Revenue → Health. Stats above native charts; v2 metric definitions via /api/omi/stats/wall/series. Every chart's latest point is the stat above it. Data-through day and missing sources are listed under Data & coverage."}
 
 
 def write_wall_board():
