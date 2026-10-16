@@ -22,7 +22,7 @@ except ImportError:
     open_dict = None
 
 from config.batch_pipeline_providers import provider_config
-from diarizer.batch_pipeline import PipelineWorker
+from diarizer.batch_pipeline import PipelineWorker, crop_model_vad_spans
 from utils.stt.diarization_turns import exclusive_from_activity, overlap_regions
 
 
@@ -114,7 +114,9 @@ class PyannoteVAD:
             raise RuntimeError('pyannote adapter requires the GPU runtime with torch')
         with torch.inference_mode():
             output = self.model({'waveform': torch.from_numpy(samples).unsqueeze(0), 'sample_rate': 16000})
-        return [(float(t.start), float(t.end)) for t in output.get_timeline().support()]
+        return crop_model_vad_spans(
+            [(float(t.start), float(t.end)) for t in output.get_timeline().support()], len(samples) / 16000
+        )
 
 
 def decode_pcm16_wav(body):

@@ -141,11 +141,27 @@ the receipt is emitted after CUDA synchronization. Host peaks include startup.
 This receipt also runs when individual items fail; it is not an item-success
 receipt. Nonfatal item failures log `event=batch_worker_failed` with only
 `error_class`, a bounded `stage` and `segment_id`, once per item per flight,
-even without an `on_failure` callback. Buffer only those strings and emit after
+even without an `on_failure` callback. Repository validation raises
+`BatchValidationError` (a `ValueError`) with a closed `reason`: `word_shape`,
+`word_clock`, `word_sequence`, `vad_nonfinite`, `vad_order`, `vad_bounds`,
+`empty_asr`, or `no_owned_words`. Other exceptions use `unclassified`; never
+classify provider messages by printing them. Numeric `samples`, `vad_spans`,
+`windows`, `asr_words` and `owned_words` describe the failed shape; -1 means
+the operation did not return that count. ASR counts include validated records
+and context repeats; an invalid hypothesis fails before contributing its count.
+Buffer only those strings/integers and emit after
 the item exception handlers exit, so handler diagnostics cannot chain the worker
 exception. Logging failures are swallowed without another log attempt; healthy
 sibling results still return. Never add exception messages, traceback
 locals, transcript/audio, object URIs or lease/admission tokens to this event.
+Pyannote uses frame-centered VAD intervals: crop their end to the actual input
+duration, reject malformed or wholly outside intervals, and keep every in-buffer
+speech interval. Rebase ASR windows from the integer sample index used to slice
+them. Empty ASR on VAD speech and an ownership-empty hypothesis remain failures;
+neither becomes silence or bypasses accepted content claims. These boundary
+fixes and diagnostic reasons are not proof of the production failure cause.
+There is no retry ceiling or automatic legacy fallback today. Terminal recovery
+needs a separate durable claim/ordered-gap/publication design, not a local skip.
 For qualification run a synthetic one-hour unit with the intended model batch
 size and retain the GPU model/VRAM, exact image digest/config and receipt.
 Set the chart **host RAM** limit from the larger measured process/container peak

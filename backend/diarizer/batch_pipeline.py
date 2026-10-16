@@ -6,6 +6,7 @@ chain. Missing results denote retryable failures per the scheduler contract.
 """
 
 from dataclasses import dataclass
+from enum import Enum
 import math
 import logging
 import threading
@@ -19,6 +20,27 @@ from utils.batch_pipeline.errors import FatalGpuError
 SAMPLE_RATE = 16000
 _GPU_CHAIN_LOCK = threading.Lock()
 logger = logging.getLogger(__name__)
+
+
+class ValidationReason(Enum):
+    WORD_SHAPE = 'word_shape'
+    WORD_CLOCK = 'word_clock'
+    WORD_SEQUENCE = 'word_sequence'
+    VAD_NONFINITE = 'vad_nonfinite'
+    VAD_ORDER = 'vad_order'
+    VAD_BOUNDS = 'vad_bounds'
+    EMPTY_ASR = 'empty_asr'
+    NO_OWNED_WORDS = 'no_owned_words'
+
+
+class BatchValidationError(ValueError):
+    """A closed reason code, never a provider exception message."""
+
+    def __init__(self, reason: object):
+        if not isinstance(reason, ValidationReason):
+            raise ValueError('invalid batch validation reason')
+        self.reason = reason.value
+        super().__init__(reason.value)
 
 
 def is_fatal_cuda_error(exc):
@@ -87,13 +109,34 @@ def validate_words(words, duration):
     result = []
     previous = -1.0
     for word in words:
-        start, end = map(float, word['timestamp'])
+        try:
+            start, end = map(float, word['timestamp'])
+        except ValueError:
+            raise BatchValidationError(ValidationReason.WORD_SHAPE) from None
         if not all(math.isfinite(v) for v in (start, end)) or not 0 <= start <= end <= duration + 0.01:
-            raise ValueError('invalid word clock')
+            raise BatchValidationError(ValidationReason.WORD_CLOCK)
         if start < previous or not isinstance(word['word'], str) or not word['word'].strip():
-            raise ValueError('invalid word sequence')
+            raise BatchValidationError(ValidationReason.WORD_SEQUENCE)
         previous = start
         result.append({**word, 'timestamp': [start, end]})
+    return result
+
+
+def crop_model_vad_spans(spans, duration):
+    """Intersect frame-centered model intervals with the real captured buffer.
+
+    Pyannote's loose frame crop may leave the final frame center past EOF.
+    Only the end is cropped; malformed or wholly out-of-buffer spans still fail.
+    """
+    result = []
+    for start, end in spans:
+        if not all(math.isfinite(v) for v in (start, end)):
+            raise BatchValidationError(ValidationReason.VAD_NONFINITE)
+        if not 0 <= start < end:
+            raise BatchValidationError(ValidationReason.VAD_ORDER)
+        if start >= duration:
+            raise BatchValidationError(ValidationReason.VAD_BOUNDS)
+        result.append((start, min(end, duration)))
     return result
 
 
@@ -115,8 +158,12 @@ def speech_windows(item, samples, spans, config):
     duration = len(samples) / SAMPLE_RATE
     merged = []
     for start, end in sorted(spans):
-        if not all(math.isfinite(v) for v in (start, end)) or not 0 <= start < end <= duration + 0.01:
-            raise ValueError('invalid VAD span')
+        if not all(math.isfinite(v) for v in (start, end)):
+            raise BatchValidationError(ValidationReason.VAD_NONFINITE)
+        if not 0 <= start < end:
+            raise BatchValidationError(ValidationReason.VAD_ORDER)
+        if end > duration + 0.01:
+            raise BatchValidationError(ValidationReason.VAD_BOUNDS)
         start, end = max(0, start - config.context_seconds), min(duration, end + config.context_seconds)
         if merged and start <= merged[-1][1]:
             merged[-1] = (merged[-1][0], max(end, merged[-1][1]))
@@ -128,7 +175,14 @@ def speech_windows(item, samples, spans, config):
             stop = min(end, core + config.window_seconds)
             left = max(0, core - config.context_seconds)
             right = min(duration, stop + config.context_seconds)
-            yield Window(item.segment_id, samples[int(left * SAMPLE_RATE) : int(right * SAMPLE_RATE)], left, core, stop)
+            left_sample, right_sample = int(left * SAMPLE_RATE), int(right * SAMPLE_RATE)
+            yield Window(
+                item.segment_id,
+                samples[left_sample:right_sample],
+                left_sample / SAMPLE_RATE,
+                core,
+                stop,
+            )
             core = stop
 
 
@@ -203,6 +257,7 @@ class PipelineWorker:
     def _process(self, items):
         states, windows, failed, results = {}, [], set(), []
         failure_records = []
+        shapes = {item.segment_id: {'samples': -1, 'vad_spans': -1, 'windows': -1, 'asr_words': 0} for item in items}
 
         def fail(item, exc, stage):
             # Quarantine poisoned CUDA state without importing a second GPU owner.
@@ -212,7 +267,22 @@ class PipelineWorker:
             if item.segment_id not in failed:
                 failed.add(item.segment_id)
                 self.counts['failed'] += 1
-                failure_records.append((type(exc).__name__, stage, item.segment_id))
+                reason = exc.reason if isinstance(exc, BatchValidationError) else 'unclassified'
+                owned = len(states.get(item.segment_id, {}).get('words', []))
+                shape = shapes[item.segment_id]
+                failure_records.append(
+                    (
+                        type(exc).__name__,
+                        stage,
+                        item.segment_id,
+                        reason,
+                        shape['samples'],
+                        shape['vad_spans'],
+                        shape['windows'],
+                        shape['asr_words'],
+                        owned,
+                    )
+                )
                 if self.on_failure:
                     try:
                         self.on_failure(item, type(exc).__name__)
@@ -224,12 +294,15 @@ class PipelineWorker:
             stage = 'fetch_decode'
             try:
                 samples = self.decode(item)
+                shapes[item.segment_id]['samples'] = len(samples)
                 duration = len(samples) / SAMPLE_RATE
                 if not 0 < duration <= self.config.max_unit_seconds or abs(duration - item.duration_seconds) > 0.1:
                     raise ValueError('decoded duration differs from admitted capture')
                 stage = 'vad_windows'
                 spans = list(self.vad(samples))
+                shapes[item.segment_id]['vad_spans'] = len(spans)
                 clips = list(speech_windows(item, samples, spans, self.config))
+                shapes[item.segment_id]['windows'] = len(clips)
                 speech_spans = vad_speech_spans(spans, len(samples))
                 state = {
                     'item': item,
@@ -278,7 +351,9 @@ class PipelineWorker:
                 continue
             for window, hypothesis in zip(batch, hypotheses):
                 try:
-                    for word in validate_words(hypothesis, window.duration):
+                    checked_words = validate_words(hypothesis, window.duration)
+                    shapes[window.segment_id]['asr_words'] += len(checked_words)
+                    for word in checked_words:
                         start, end = [t + window.start for t in word['timestamp']]
                         midpoint = (start + end) / 2
                         if window.core_start <= midpoint < window.core_end:
@@ -295,7 +370,11 @@ class PipelineWorker:
                 duration = len(state['samples']) / SAMPLE_RATE
                 words = validate_words(sorted(state['words'], key=lambda w: w['timestamp'][0]), duration)
                 if not state['silence'] and not words:
-                    raise ValueError('speech yielded no words')
+                    raise BatchValidationError(
+                        ValidationReason.NO_OWNED_WORDS
+                        if shapes[item.segment_id]['asr_words']
+                        else ValidationReason.EMPTY_ASR
+                    )
                 # The triage adapter must return existing calibrated resolution.
                 resolution = (
                     self.single_speaker(item, state['samples'], words) if self.single_speaker and words else None
@@ -329,15 +408,22 @@ class PipelineWorker:
                 results.append(WorkResult(item.segment_id, uri, 'silence' if state['silence'] else 'success'))
             except Exception as exc:
                 fail(item, exc, stage)
-        # Emit only strings after every item exception handler has exited.
+        # Emit only strings/integers after every item exception handler has exited.
         # Handler error printers must not inherit the private worker exception.
-        for error_class, failure_stage, segment_id in failure_records:
+        for error_class, failure_stage, segment_id, reason, samples, spans, clips, asr_words, owned in failure_records:
             try:
                 logger.error(
-                    'event=batch_worker_failed error_class=%s stage=%s segment_id=%s',
+                    'event=batch_worker_failed error_class=%s stage=%s segment_id=%s reason=%s '
+                    'samples=%d vad_spans=%d windows=%d asr_words=%d owned_words=%d',
                     error_class,
                     failure_stage,
                     segment_id,
+                    reason,
+                    samples,
+                    spans,
+                    clips,
+                    asr_words,
+                    owned,
                 )
             except Exception:
                 pass  # Observability failure must never discard healthy results.
