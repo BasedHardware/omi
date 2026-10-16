@@ -1,0 +1,3 @@
+{
+  "change": "The assistant no longer asks you to approve Messages, Mail or AppleScript actions it cannot run yet; it says the action is not available and carries on"
+}
