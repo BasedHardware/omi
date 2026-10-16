@@ -495,12 +495,12 @@ def build_playback_artifact(
     """Merge chunks (download -> decrypt -> decode -> gap-fill) and encode MP3 ~48kbps mono."""
     source = [{'chunk_timestamps': timestamps, 'source_fingerprint': source_fingerprint}]
     if source_fingerprint:
-        validate_sources(source, list_audio_chunks(uid, conversation_id))
+        validate_sources(source, list_audio_chunks(uid, conversation_id, source_identity=True))
     pcm_data = download_audio_chunks_and_merge(
         uid, conversation_id, timestamps, fill_gaps=True, sample_rate=AUDIO_SAMPLE_RATE
     )
     if source_fingerprint:
-        validate_sources(source, list_audio_chunks(uid, conversation_id))
+        validate_sources(source, list_audio_chunks(uid, conversation_id, source_identity=True))
     if not pcm_data:
         return b''
     segment = AudioSegment(data=pcm_data, sample_width=2, frame_rate=AUDIO_SAMPLE_RATE, channels=1)
@@ -538,7 +538,7 @@ def build_conversation_playback_artifact(
     )
     verified = (strict_sources or playback_on_demand()) and any(af.get('source_fingerprint') for af in parts)
     if verified:
-        validate_sources(parts, list_audio_chunks(uid, conversation_id))
+        validate_sources(parts, list_audio_chunks(uid, conversation_id, source_identity=True))
     pcm_buf = bytearray()
     spans: list[dict] = []
     for af in parts:
@@ -565,7 +565,7 @@ def build_conversation_playback_artifact(
         pcm_buf.extend(pcm)
         del pcm
     if verified:
-        validate_sources(parts, list_audio_chunks(uid, conversation_id))
+        validate_sources(parts, list_audio_chunks(uid, conversation_id, source_identity=True))
     if not pcm_buf:
         raise FileNotFoundError(f'No chunks found for conversation {conversation_id}')
     segment = AudioSegment(data=bytes(pcm_buf), sample_width=2, frame_rate=AUDIO_SAMPLE_RATE, channels=1)

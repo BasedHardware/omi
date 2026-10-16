@@ -954,6 +954,7 @@ def list_audio_chunks(
     retry: Any = None,
     deadline: Optional[float] = None,
     max_count: Optional[int] = None,
+    source_identity: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     List all audio chunks for a conversation.
@@ -1009,7 +1010,7 @@ def list_audio_chunks(
                     'is_batch': is_batch,
                     'generation': getattr(blob, 'generation', None),
                 }
-                if playback_on_demand():
+                if source_identity or playback_on_demand():
                     chunk_entry['md5_hash'] = getattr(blob, 'md5_hash', None)
                     chunk_entry['crc32c'] = getattr(blob, 'crc32c', None)
                 blob_bucket = getattr(getattr(blob, 'bucket', None), 'name', private_cloud_sync_bucket)

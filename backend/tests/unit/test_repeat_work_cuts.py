@@ -56,8 +56,8 @@ def test_stable_source_identity_and_changed_sources(monkeypatch):
     assert conversations._finalize_audio_file_group('u', 'c', source, []).id != first.id
 
 
-@pytest.mark.parametrize('enabled', [False, True])
-def test_chunk_listing_checksums_only_when_playback_enabled(monkeypatch, enabled):
+@pytest.mark.parametrize(('enabled', 'source_identity'), [(False, False), (True, False), (False, True)])
+def test_chunk_listing_checksums_only_when_requested(monkeypatch, enabled, source_identity):
     monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', str(enabled).lower())
     monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
     monkeypatch.setattr(storage.audio_archive, 'admitted', lambda *_: False)
@@ -68,9 +68,34 @@ def test_chunk_listing_checksums_only_when_playback_enabled(monkeypatch, enabled
     client.bucket.return_value.list_blobs.return_value = [blob]
     monkeypatch.setattr(storage, '_get_storage_client', lambda: client)
     expected = dict(timestamp=1000.0, path=blob.name, size=blob.size, is_batch=False, generation='7')
-    if enabled:
+    if enabled or source_identity:
         expected.update(md5_hash='md5', crc32c='crc')
-    assert storage.list_audio_chunks('u', 'c') == [expected]
+    assert storage.list_audio_chunks('u', 'c', source_identity=source_identity) == [expected]
+
+
+@pytest.mark.parametrize('representation', ['file', 'conversation'])
+def test_source_validation_drains_with_checksums_after_rollback(monkeypatch, representation):
+    from utils.sync import playback
+
+    monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'true')
+    monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
+    monkeypatch.setattr(storage.audio_archive, 'admitted', lambda *_: False)
+    blob = SimpleNamespace(
+        name='chunks/u/c/1000.000.bin', size=32000, generation='7', md5_hash='md5', crc32c='crc', metadata=None
+    )
+    client = Mock()
+    client.bucket.return_value.list_blobs.return_value = [blob]
+    monkeypatch.setattr(storage, '_get_storage_client', lambda: client)
+    fingerprint = source_fingerprint(storage.list_audio_chunks('u', 'c'))
+    assert fingerprint
+    monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'false')
+    monkeypatch.setattr(playback, 'download_audio_chunks_and_merge', lambda *a, **kw: b'\0' * 32000)
+    if representation == 'file':
+        assert playback.build_playback_artifact('u', 'c', [1000.0], source_fingerprint=fingerprint)
+    else:
+        files = [dict(id='stable', chunk_timestamps=[1000.0], source_fingerprint=fingerprint)]
+        audio, spans = playback.build_conversation_playback_artifact('u', 'c', files, 1000.0, strict_sources=True)
+        assert audio and spans
 
 
 def test_background_updates_do_not_build_but_open_and_play_enqueue(monkeypatch):
