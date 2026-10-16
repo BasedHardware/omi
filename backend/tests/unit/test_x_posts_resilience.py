@@ -75,9 +75,7 @@ def test_save_x_posts_under_limit_single_commit(monkeypatch):
 def test_save_x_posts_skips_malformed_entries(monkeypatch):
     commits, writes = _install_fake_db(monkeypatch)
 
-    saved = x_posts_db.save_x_posts(
-        UID, [{"id": "1"}, "not-a-dict", {"id": ""}, {"id": None}, {"id": " 2 "}]
-    )
+    saved = x_posts_db.save_x_posts(UID, [{"id": "1"}, "not-a-dict", {"id": ""}, {"id": None}, {"id": " 2 "}])
 
     assert saved == 2
     assert writes == ["1", "2"]
