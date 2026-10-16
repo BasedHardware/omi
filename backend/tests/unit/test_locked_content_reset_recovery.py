@@ -304,8 +304,8 @@ def test_cap_audio_recovery_is_kicked_even_with_legacy_reset_flag_off(env, monke
     fake.kick = Mock()
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     monkeypatch.setenv('LOCKED_CONTENT_RESET_RECOVERY_ENABLED', 'false')
-    with stub_modules({'utils.sync.cap_hold_recovery': fake}):
-        env.module.recover_locked_content('test-user', now=NOW)
-        env.module.recover_locked_content('test-user', now=NOW)
+    env.module.register_cap_audio_recovery(fake.kick)
+    env.module.recover_locked_content('test-user', now=NOW)
+    env.module.recover_locked_content('test-user', now=NOW)
     assert fake.kick.call_count == 2
     env.state.get.assert_not_called()

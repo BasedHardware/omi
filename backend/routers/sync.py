@@ -185,6 +185,18 @@ from utils.sync.lanes import CaptureTimeTrust, SyncLane, classify_sync_lane
 from utils.sync import backfill_cutover, legacy_fresh, stage as sync_stage, uid_sequencer
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
 
+# Only the API process importing this router owns held-audio STT recovery.
+# Pusher/auth-only images retain the lightweight locked-content recovery path.
+if cap_dispatch_enabled():
+    from utils.locked_content_recovery import register_cap_audio_recovery
+
+    def _kick_cap_hold_recovery(uid: str) -> None:
+        from utils.sync.cap_hold_recovery import kick
+
+        kick(uid)
+
+    register_cap_audio_recovery(_kick_cap_hold_recovery)
+
 logger = logging.getLogger(__name__)
 
 # Audio constants

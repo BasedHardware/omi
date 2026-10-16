@@ -101,7 +101,7 @@ async def test_held_constructor_resumes_after_reset_without_reopening_capture(mo
 def test_queued_sync_always_resolves_omi_funding(managed, monkeypatch):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     resolver = Mock(return_value=SimpleNamespace(managed=managed, reason='plan_allowance_exhausted'))
-    monkeypatch.setattr(cap, 'resolve_transcription_allowance', resolver)
+    monkeypatch.setattr('utils.subscription.resolve_transcription_allowance', resolver)
     assert cap.sync_allowed('synthetic', 60, 'parakeet') is managed
     resolver.assert_called_once_with('synthetic', source=None, byok_active=False, omi_funded=True)
 

@@ -137,7 +137,6 @@ from utils.stt.voiceprints import usable_person_voiceprint
 from config.stt_cap_dispatch import enabled as stt_cap_dispatch_enabled
 from utils.stt_cap_dispatch import sync_allowed, funded_allowance
 from utils.observability.stt_cap_dispatch import record_audio as record_cap_audio
-from utils.sync.cap_hold import hold_segment, hold_capture_if_exhausted
 from utils.stt.pre_recorded import get_prerecorded_service, postprocess_words, prerecorded
 from utils.stt.outcomes import (
     TranscriptionFailure,
@@ -1257,6 +1256,8 @@ def process_segment(
                 if deferred_outcome is not None:
                     deferred_outcome['cap_held'] = True
                 if not cap_recovery:
+                    from utils.sync.cap_hold import hold_segment
+
                     hold_segment(
                         uid,
                         path,
@@ -1326,6 +1327,8 @@ def process_segment(
                 if deferred_outcome is not None:
                     deferred_outcome['cap_held'] = True
                 if not cap_recovery:
+                    from utils.sync.cap_hold import hold_segment
+
                     hold_segment(
                         uid,
                         path,
@@ -2312,6 +2315,8 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 return
             cap_held = False
             if stt_cap_dispatch_enabled():
+                from utils.sync.cap_hold import hold_capture_if_exhausted
+
                 cap_held = await run_blocking(
                     sync_executor,
                     hold_capture_if_exhausted,

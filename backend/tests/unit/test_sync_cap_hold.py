@@ -7,7 +7,7 @@ import wave
 
 import pytest
 
-from utils.sync import pipeline
+from utils.sync import cap_hold, pipeline
 from utils import stt_cap_dispatch as cap
 
 
@@ -24,7 +24,7 @@ def test_exhaustion_holds_before_url_or_provider_dispatch(tmp_path, monkeypatch,
         cap, 'funded_allowance', Mock(return_value=SimpleNamespace(managed=False, reason='plan_allowance_exhausted'))
     )
     hold, url, stt = Mock(), Mock(return_value='synthetic-url'), Mock(return_value=([], 'en'))
-    monkeypatch.setattr(pipeline, 'hold_segment', hold)
+    monkeypatch.setattr(cap_hold, 'hold_segment', hold)
     monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', url)
     monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', Mock())
     monkeypatch.setattr(pipeline, 'keyterms', AsyncMock(return_value=[]))
@@ -61,7 +61,7 @@ def test_hold_failure_cannot_acknowledge_audio_or_dispatch_provider(tmp_path, mo
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     monkeypatch.setattr(pipeline, 'ambiguous_binding_pending', lambda *_: False)
     monkeypatch.setattr(pipeline, 'sync_allowed', lambda *_: False)
-    monkeypatch.setattr(pipeline, 'hold_segment', Mock(side_effect=RuntimeError('synthetic upload failed')))
+    monkeypatch.setattr(cap_hold, 'hold_segment', Mock(side_effect=RuntimeError('synthetic upload failed')))
     stt = Mock()
     monkeypatch.setattr(pipeline, 'prerecorded', stt)
     errors = []

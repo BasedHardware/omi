@@ -51,7 +51,9 @@ Concurrent identical uploads cannot overwrite a recovery checkpoint.
 
 The existing `locked_content_recovery` authenticated-request path kicks an async
 recovery pass independently of its once-per-month unlock receipt and legacy reset
-flag. A distributed 60-second cooldown bounds requests; token-fenced renewable
+flag. The flagged API sync router registers the recovery callback; auth-only and
+pusher images do not load the sync pipeline. A distributed 60-second cooldown
+bounds requests; token-fenced renewable
 leases prevent concurrent processing of a hold. At reset or upgrade, current
 funded allowance must pass again before every recovered piece is sent. Recovery
 reuses VAD, segment intake, enrichment and optional playback finalization. Piece

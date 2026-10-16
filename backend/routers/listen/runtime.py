@@ -775,7 +775,7 @@ class ListenSessionRuntime:
             await self._refresh_credits(transcription_seconds=transcription_seconds)
 
     async def _refresh_credits(self, *, transcription_seconds: int = 0) -> None:
-        admission = getattr(self.receiver, 'cap_admission', None)
+        admission = getattr(getattr(self, 'receiver', None), 'cap_admission', None)
         if admission is not None:
             await admission.refresh()
             if getattr(self.receiver, 'cap_paused', False) and admission.managed:

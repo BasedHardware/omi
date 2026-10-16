@@ -12,7 +12,6 @@ from config.stt_cap_dispatch import enabled
 from utils.observability.stt_cap_dispatch import record_audio
 from utils.byok import get_byok_key
 from utils.executors import db_executor, run_blocking
-from utils.subscription import resolve_transcription_allowance
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +25,10 @@ def customer_funded(provider):
 
 
 def funded_allowance(uid, source=None):
+    # Streaming imports this module even with enforcement off. Load billing
+    # policy only at the admission boundary, not during provider-module import.
+    from utils.subscription import resolve_transcription_allowance
+
     return resolve_transcription_allowance(uid, source=source, byok_active=False, omi_funded=True)
 
 
