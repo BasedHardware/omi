@@ -31,7 +31,16 @@ class Session:
                 raise AssertionError('Logging metrics use GET or PUT')
             if name not in self.metrics:
                 return SimpleNamespace(ok=False, status_code=404)
-            return SimpleNamespace(ok=True, status_code=200, json=lambda: copy.deepcopy(self.metrics[name]))
+            value = copy.deepcopy(self.metrics[name])
+            if method == 'GET':
+                # A valid API response can omit these proto defaults. Exercise
+                # normalization in both post-write verification and no-op checks.
+                if value.get('disabled') is False:
+                    value.pop('disabled')
+                for label in value.get('metricDescriptor', {}).get('labels', []):
+                    if label.get('valueType') == 'STRING':
+                        label.pop('valueType')
+            return SimpleNamespace(ok=True, status_code=200, json=lambda: value)
         if method == 'GET':
             if 'locations/' in url:
                 if self.job is None:

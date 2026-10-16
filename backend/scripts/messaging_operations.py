@@ -91,6 +91,14 @@ def desired_alerts(channels):
     return bodies
 
 
+def normalize_log_metric(value):
+    # Proto JSON may omit default false and the STRING=0 label enum.
+    value.setdefault('disabled', False)
+    for label in value.get('metricDescriptor', {}).get('labels', []):
+        label.setdefault('valueType', 'STRING')
+    return value
+
+
 def reconcile_log_metrics(session, mode):
     if mode == 'validate':
         raise ValueError('Logging has no validateOnly API; use --check to review the diff')
@@ -100,7 +108,7 @@ def reconcile_log_metrics(session, mode):
     for body in bodies:
         current = request(session, 'GET', url + body['name'])
         if current is not None:
-            current.setdefault('disabled', False)
+            normalize_log_metric(current)
             descriptor = current.get('metricDescriptor', {})
             expected = body['metricDescriptor']
             expected_labels = {label['key']: label for label in expected.get('labels', [])}
@@ -128,7 +136,7 @@ def reconcile_log_metrics(session, mode):
         verified = request(session, 'GET', target)
         if verified is None:
             raise RuntimeError('Log metric missing during verification')
-        verified.setdefault('disabled', False)
+        normalize_log_metric(verified)
         if not contains(verified, body):
             raise RuntimeError('Log metric verification failed')
         print('VERIFIED ' + body['name'])
