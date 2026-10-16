@@ -135,14 +135,19 @@ VAD compaction and shared-live off until their independent quality gates pass.
 
 ## Recovery and late captures
 
-Compute failures and expired leases remain ordered, pending retries forever,
-with exponential backoff capped at 600s. Alert when
+Explicit compute failures retry with exponential backoff capped at 600s until
+`BATCH_PIPELINE_MAX_ATTEMPTS` (default 5, valid 1–20) is reached. The fenced
+terminal quarantine removes the failed span from ordered pending work without
+publishing success/silence. Expired leases alone remain recoverable. Successful
+siblings of that upload move to `quarantine_held` after persistence, preserving
+the projection cursor while allowing the bounded sweep to reach later uploads.
+See [the visible transcript gap and retained recovery obligations](batch-pipeline-worker.md#terminal-quarantine-and-the-visible-gap). Alert when
 `omi_batch_pipeline_retry_age_seconds{priority="fresh"}` exceeds 600s (same for
 recent/deep), scoped by worker_release/namespace; metric freshness must remain
-under 60s. Age persists through requeue/lease until successful completion.
+under 60s. Age persists through requeue/lease until success or terminal quarantine.
 Historical dead heads are redriven by authenticated `POST
 /v2/batch-pipeline/redrive-dead` with `{stage, segment_id}` or by authorized
-client job polling, including admission rollback. No route skips an ordered gap.
+client job polling, including admission rollback. Those routes never revive terminal quarantines; only the explicit bounded-failure transition skips a gap.
 A privacy-fenced lease is separately revoked to `privacy_blocked`; erasure still
 belongs to the durable deletion outbox.
 
