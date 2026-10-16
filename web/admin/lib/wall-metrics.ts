@@ -133,7 +133,7 @@ export interface WallSources {
     daily: {
       date: string;
       total: number;
-      components?: Record<string, number>;
+      components?: Record<string, unknown>;
     }[];
     generatedAt: number;
     summary: {

@@ -27,7 +27,7 @@ const saasDay = SAAS_MONTHLY_USD / (365.25 / 12);
 describe("all-in cost", () => {
   it("removes only the excess of a one-time spike", () => {
     const spikes = oneTimeExcess(days);
-    expect([...spikes.keys()]).toEqual([day(20)]);
+    expect(Array.from(spikes.keys())).toEqual([day(20)]);
     expect(spikes.get(day(20))).toMatchObject({ usd: 13_800, llmUsd: 0 });
     const { daily } = allInCost(days, null);
     expect(daily.find((d) => d.date === day(20))!.gcp).toBe(1_700);
@@ -63,19 +63,17 @@ describe("all-in cost", () => {
   });
 
   it("needs a week of history before calling anything one-time", () => {
-    const early = days
-      .slice(0, 6)
-      .map((d, i) =>
-        i === 5
-          ? {
-              ...d,
-              components: {
-                ...d.components,
-                gcpServices: { "Cloud Storage": 9_000 },
-              },
-            }
-          : d
-      );
+    const early = days.slice(0, 6).map((d, i) =>
+      i === 5
+        ? {
+            ...d,
+            components: {
+              ...d.components,
+              gcpServices: { "Cloud Storage": 9_000 },
+            },
+          }
+        : d
+    );
     expect(oneTimeExcess(early).size).toBe(0);
   });
 });
