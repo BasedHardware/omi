@@ -71,7 +71,7 @@ class _SettingsPlanSectionState extends State<SettingsPlanSection> {
       key: const ValueKey('settings_plan_upgrade'),
       label: plan == PlanType.plus ? context.l10n.upgradeToUnlimited : context.l10n.upgrade,
       expand: true,
-      onPressed: () => openSettingsUpgrade(context, plan!),
+      onPressed: () => openSettingsUpgrade(context),
     );
     if (arm == SettingsPlanCardArm.control) {
       return _ControlSection(row: widget.row, subscription: subscription, upgrade: upgrade);
@@ -209,7 +209,4 @@ class _PlanCard extends StatelessWidget {
 }
 
 /// The Settings Upgrade button: the paywall experiment's arm for the reader, else the plans sheet.
-Future<void> openSettingsUpgrade(BuildContext context, PlanType plan) => openUpgradePaywall(
-      context,
-      source: 'usage_page',
-    );
+Future<void> openSettingsUpgrade(BuildContext context) => openUpgradePaywall(context, source: 'usage_page');
