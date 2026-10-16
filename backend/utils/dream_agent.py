@@ -502,8 +502,8 @@ async def run_pass(
         seed, records, dirty, limits = await run_blocking(db_executor, dream_seed.load, uid, caps)
         limits = replace(
             limits,
-            completion_tokens=min(limits.completion_tokens, caps.completion_tokens),
-            verifier_completion_tokens=min(limits.verifier_completion_tokens, caps.completion_tokens),
+            completion_tokens=caps.completion_tokens,
+            verifier_completion_tokens=min(limits.verifier_completion_tokens, caps.verifier_completion_tokens),
         )
         caps = replace(caps, tokens=limits.tokens)
         if not dry_run:
