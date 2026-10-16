@@ -176,8 +176,13 @@ String meterLineForLayout(String line) {
 bool _containsCjk(String text) => text.runes.any(_isCjk);
 
 bool _isCjk(int rune) =>
+    (rune >= 0x1100 && rune <= 0x11FF) ||
     (rune >= 0x3040 && rune <= 0x30FF) ||
+    (rune >= 0x3130 && rune <= 0x318F) ||
     (rune >= 0x3400 && rune <= 0x9FFF) ||
+    (rune >= 0xA960 && rune <= 0xA97F) ||
+    (rune >= 0xAC00 && rune <= 0xD7AF) ||
+    (rune >= 0xD7B0 && rune <= 0xD7FF) ||
     (rune >= 0xF900 && rune <= 0xFAFF) ||
     (rune >= 0xFF00 && rune <= 0xFFEF);
 

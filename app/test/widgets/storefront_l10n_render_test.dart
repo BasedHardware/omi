@@ -195,6 +195,50 @@ void main() {
       await capture(tester, 'settings-${locale.$2}.png');
     });
   }
+
+  testWidgets('settings ko', (tester) async {
+    final data = PlanStorefront.fromJson(sheet('ko_plus_budget80'));
+    final usage = data.usage!;
+    await pumpLocalized(
+      tester,
+      locale: const Locale('ko'),
+      size: const Size(390, 900),
+      home: OnDeviceSettingsView(
+        controller: installed(),
+        usage: usage,
+        plansSheetAvailable: true,
+        showSaveUsage: true,
+        pendingSeconds: 0,
+        pendingBytes: 0,
+        onGetMoreUsage: () {},
+      ),
+    );
+    expect(
+      find.byWidgetPredicate((widget) {
+        if (widget is! Text) return false;
+        final shown = (widget.data ?? widget.textSpan?.toPlainText() ?? '').replaceAll('\u2060', '');
+        return shown == usage.meterLine;
+      }),
+      findsOneWidget,
+    );
+    final element = find
+        .byWidgetPredicate((widget) {
+          if (widget is! RichText) return false;
+          return widget.text.toPlainText().contains('초기화'.split('').join('\u2060'));
+        })
+        .evaluate()
+        .single;
+    final paragraph = element.renderObject! as RenderParagraph;
+    final plain = paragraph.text.toPlainText();
+    final start = plain.indexOf('1');
+    final end = plain.lastIndexOf('화') + 1;
+    final boxes = paragraph.getBoxesForSelection(TextSelection(baseOffset: start, extentOffset: end));
+    expect(boxes.map((box) => box.top.round()).toSet(), hasLength(1));
+    expect(find.text(usage.moreLabel!), findsOneWidget);
+    expect(find.text('Get more usage'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await capture(tester, 'settings-ko.png');
+  });
 }
 
 Future<void> _loadIconFont(String family, File file) async {
