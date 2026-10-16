@@ -4387,6 +4387,11 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Abonejiet atkārtoti tagad, lai saglabātu savus ieguvumus - bez maksas līdz $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Jūsu plāns ir iestatīts atcelšanai $date.\nAbonejiet atkārtoti tagad, lai saglabātu savus ieguvumus - bez maksas līdz $date.';
   }

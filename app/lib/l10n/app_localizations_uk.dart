@@ -4382,6 +4382,11 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Підпишіться знову, щоб зберегти переваги - без оплати до $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Ваш план налаштовано на скасування $date.\nПідпишіться знову, щоб зберегти переваги - без оплати до $date.';
   }

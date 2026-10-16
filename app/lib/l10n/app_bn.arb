@@ -5066,6 +5066,7 @@
         }
     },
     "yourPlanEndsOn": "আপনার {plan} প্ল্যান {date} এ শেষ হবে।",
+    "resubscribeNowNoChargeUntil": "আপনার সুবিধা রাখতে এখনই পুনরায় সাবস্ক্রাইব করুন - {date} পর্যন্ত কোনও চার্জ নেই।",
     "planSetToCancelOn": "আপনার পরিকল্পনা {date} তে বাতিল হওয়ার জন্য নির্ধারিত হয়েছে।\nআপনার সুবিধা রাখতে এখনই পুনরায় সাবস্ক্রাইব করুন - {date} পর্যন্ত কোনও চার্জ নেই।",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",

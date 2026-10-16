@@ -1344,6 +1344,7 @@
     "youAreOnUnlimitedPlan": "Du er på det ubegrænsede abonnement.",
     "planEndedOn": "Dit abonnement sluttede {date}.\nGentilmeld dig nu - du vil straks blive opkrævet for en ny faktureringsperiode.",
     "yourPlanEndsOn": "Dit {plan}-abonnement slutter {date}.",
+    "resubscribeNowNoChargeUntil": "Gentilmeld dig nu for at beholde dine fordele - ingen opkrævning indtil {date}.",
     "planSetToCancelOn": "Dit abonnement er sat til at blive annulleret {date}.\nGentilmeld dig nu for at beholde dine fordele - ingen opkrævning indtil {date}.",
     "annualPlanStartsAutomatically": "Dit årlige abonnement starter automatisk, når dit månedlige abonnement slutter.",
     "yourPlanWillRenewOn": "Dit {plan}-abonnement fornys {date}.",

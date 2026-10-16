@@ -4379,6 +4379,11 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'همین الآن مجددا مشترک شوید تا از مزایای خود محروم نشوید - تا $date هیچ هزینه‌ای نخواهید داشت.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'طرح شما برای لغو در تاریخ $date برنامه‌ریزی شده است.\nهمین الآن مجددا مشترک شوید تا از مزایای خود محروم نشوید - تا $date هیچ هزینه‌ای نخواهید داشت.';
   }

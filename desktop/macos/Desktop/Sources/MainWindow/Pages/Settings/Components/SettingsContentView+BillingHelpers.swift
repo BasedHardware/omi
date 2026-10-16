@@ -41,6 +41,54 @@ enum SubscriptionPlanPresentation {
   }
 }
 
+/// Trailing actions on the current-plan card. The catalog hides the plan the
+/// reader is already on, so Resubscribe has to live here while a cancellation
+/// is pending. Manage stays available either way.
+struct CurrentPlanCardActions: View {
+  let cancelAtPeriodEnd: Bool
+  let currentPriceId: String?
+  let checkoutBusy: Bool
+  let portalBusy: Bool
+  let onResubscribe: (String) -> Void
+  let onManage: () -> Void
+
+  var resubscribePriceId: String? {
+    guard cancelAtPeriodEnd, let currentPriceId, !currentPriceId.isEmpty else { return nil }
+    return currentPriceId
+  }
+
+  var body: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      if let priceId = resubscribePriceId {
+        Button(action: { onResubscribe(priceId) }) {
+          if checkoutBusy {
+            ProgressView()
+              .controlSize(.small)
+          } else {
+            Text("Resubscribe")
+              .scaledFont(size: OmiType.body, weight: .semibold)
+          }
+        }
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+        .disabled(checkoutBusy)
+        .accessibilityIdentifier("current-plan-resubscribe")
+      }
+
+      Button(action: onManage) {
+        if portalBusy {
+          ProgressView()
+            .controlSize(.small)
+        } else {
+          Text("Manage")
+            .scaledFont(size: OmiType.body, weight: .semibold)
+        }
+      }
+      .buttonStyle(OmiButtonStyle(resubscribePriceId == nil ? .primary : .secondary, size: .compact))
+      .disabled(portalBusy)
+    }
+  }
+}
+
 /// Copy comes from the server's allowance decision, not the synthetic BYOK
 /// subscription flag: an enrolled LLM key alone does not pay for transcription.
 enum TranscriptionAllowancePresentation {

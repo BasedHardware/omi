@@ -5066,6 +5066,7 @@
         }
     },
     "yourPlanEndsOn": "Magtatapos ang iyong {plan} plan sa {date}.",
+    "resubscribeNowNoChargeUntil": "Mag-subscribe muli upang mapanatili ang iyong mga benepisyo - walang bayad hanggang {date}.",
     "planSetToCancelOn": "Ang iyong plano ay nakatakda na kanselahin sa {date}.\nMag-subscribe muli upang mapanatili ang iyong mga benepisyo - walang bayad hanggang {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",

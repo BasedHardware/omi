@@ -1344,6 +1344,7 @@
     "youAreOnUnlimitedPlan": "Vous êtes sur le forfait Illimité.",
     "planEndedOn": "Votre forfait s'est terminé le {date}.\nRéabonnez-vous maintenant - vous serez facturé immédiatement pour une nouvelle période de facturation.",
     "yourPlanEndsOn": "Votre forfait {plan} se termine le {date}.",
+    "resubscribeNowNoChargeUntil": "Réabonnez-vous maintenant pour conserver vos avantages - pas de frais jusqu'au {date}.",
     "planSetToCancelOn": "Votre forfait est programmé pour être annulé le {date}.\nRéabonnez-vous maintenant pour conserver vos avantages - pas de frais jusqu'au {date}.",
     "annualPlanStartsAutomatically": "Votre forfait annuel débutera automatiquement à la fin de votre forfait mensuel.",
     "yourPlanWillRenewOn": "Votre forfait {plan} sera renouvelé le {date}.",

@@ -4390,6 +4390,11 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Абонирайте се отново сега, за да запазите предимствата си - без такса до $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Планът ви е настроен да се отмени на $date.\nАбонирайте се отново сега, за да запазите предимствата си - без такса до $date.';
   }

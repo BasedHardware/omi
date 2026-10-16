@@ -4368,6 +4368,11 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Assine novamente agora para manter seus benefícios - sem cobrança até $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Seu plano está configurado para cancelar em $date.\nAssine novamente agora para manter seus benefícios - sem cobrança até $date.';
   }

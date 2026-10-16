@@ -4402,6 +4402,11 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Iratkozzon fel újra most, hogy megtartsa előnyeit - nincs díj $date-ig.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'A csomagja $date-án törlésre van beállítva.\nIratkozzon fel újra most, hogy megtartsa előnyeit - nincs díj $date-ig.';
   }

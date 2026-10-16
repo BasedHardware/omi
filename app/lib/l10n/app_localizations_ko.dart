@@ -4310,6 +4310,11 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return '혜택을 유지하려면 지금 재구독하세요 - $date까지 요금이 청구되지 않습니다.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return '플랜이 $date에 취소될 예정입니다.\n혜택을 유지하려면 지금 재구독하세요 - $date까지 요금이 청구되지 않습니다.';
   }

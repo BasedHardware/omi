@@ -1344,6 +1344,7 @@
     "youAreOnUnlimitedPlan": "Sie haben den Unlimited-Plan.",
     "planEndedOn": "Ihr Plan endete am {date}.\nAbonnieren Sie jetzt erneut - Ihnen wird sofort für einen neuen Abrechnungszeitraum berechnet.",
     "yourPlanEndsOn": "Ihr {plan}-Plan endet am {date}.",
+    "resubscribeNowNoChargeUntil": "Abonnieren Sie jetzt erneut, um Ihre Vorteile zu behalten - keine Gebühr bis {date}.",
     "planSetToCancelOn": "Ihr Plan wird am {date} gekündigt.\nAbonnieren Sie jetzt erneut, um Ihre Vorteile zu behalten - keine Gebühr bis {date}.",
     "annualPlanStartsAutomatically": "Ihr Jahresplan beginnt automatisch, wenn Ihr Monatsplan endet.",
     "yourPlanWillRenewOn": "Ihr {plan}-Plan verlängert sich am {date}.",

@@ -1347,6 +1347,7 @@
     "youAreOnUnlimitedPlan": "您正在使用无限版计划。",
     "planEndedOn": "您的计划于{date}结束。\n立即重新订阅 - 您将立即被收取新计费周期的费用。",
     "yourPlanEndsOn": "您的 {plan} 套餐将于 {date} 结束。",
+    "resubscribeNowNoChargeUntil": "立即重新订阅以保留您的权益 - {date}之前不收费。",
     "planSetToCancelOn": "您的计划将于{date}取消。\n立即重新订阅以保留您的权益 - {date}之前不收费。",
     "annualPlanStartsAutomatically": "您的年度计划将在月度计划结束时自动开始。",
     "yourPlanWillRenewOn": "您的 {plan} 套餐将于 {date} 续订。",

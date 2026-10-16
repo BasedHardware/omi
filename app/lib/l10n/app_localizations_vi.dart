@@ -4388,6 +4388,11 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Đăng ký lại ngay để giữ quyền lợi - không tính phí cho đến $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Gói của bạn được đặt để hủy vào $date.\nĐăng ký lại ngay để giữ quyền lợi - không tính phí cho đến $date.';
   }

@@ -4381,6 +4381,11 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Претплатите се поново да бисте задржали своје предности - никаква наплата до $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Ваш план је подешен да буде отказан дана $date.\nПретплатите се поново да бисте задржали своје предности - никаква наплата до $date.';
   }

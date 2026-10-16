@@ -4404,6 +4404,11 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Riabbonati ora per mantenere i tuoi benefici - nessun addebito fino al $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Il tuo piano è impostato per essere annullato il $date.\nRiabbonati ora per mantenere i tuoi benefici - nessun addebito fino al $date.';
   }

@@ -4402,6 +4402,11 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Torna a subscriure\'t ara per mantenir els teus beneficis - sense càrrec fins $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'El teu pla està configurat per cancel·lar-se el $date.\nTorna a subscriure\'t ara per mantenir els teus beneficis - sense càrrec fins $date.';
   }

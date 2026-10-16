@@ -4383,6 +4383,11 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Prekvalificira se sedaj, da obdržite prednosti - brez napolnitve do $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Vaš načrt je nastavljen na preklic $date.\nPrekvalificira se sedaj, da obdržite prednosti - brez napolnitve do $date.';
   }

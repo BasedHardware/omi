@@ -1344,6 +1344,7 @@
     "youAreOnUnlimitedPlan": "Anda berada di Pelan Tanpa Had.",
     "planEndedOn": "Pelan anda tamat pada {date}.\nLanggan semula sekarang - anda akan dicaj serta-merta untuk tempoh pengebilan baharu.",
     "yourPlanEndsOn": "Pelan {plan} anda tamat pada {date}.",
+    "resubscribeNowNoChargeUntil": "Langgan semula sekarang untuk mengekalkan manfaat anda - tiada caj sehingga {date}.",
     "planSetToCancelOn": "Pelan anda ditetapkan untuk dibatalkan pada {date}.\nLanggan semula sekarang untuk mengekalkan manfaat anda - tiada caj sehingga {date}.",
     "annualPlanStartsAutomatically": "Pelan tahunan anda akan bermula secara automatik apabila pelan bulanan anda tamat.",
     "yourPlanWillRenewOn": "Pelan {plan} anda akan diperbaharui pada {date}.",

@@ -4385,6 +4385,11 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'اپنے فوائل کو برقرار رکھنے کے لیے اب دوبارہ رکنیت حاصل کریں - $date تک کوئی چارج نہیں۔';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'آپ کا منصوبہ $date کو منسوخ ہونے کے لیے طے شدہ ہے۔\nاپنے فوائل کو برقرار رکھنے کے لیے اب دوبارہ رکنیت حاصل کریں - $date تک کوئی چارج نہیں۔';
   }

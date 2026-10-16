@@ -8361,6 +8361,12 @@ abstract class AppLocalizations {
   /// **'Your {plan} plan ends {date}.'**
   String yourPlanEndsOn(String plan, String date);
 
+  /// Reassurance under a pending cancellation that resubscribing is not charged until the end date
+  ///
+  /// In en, this message translates to:
+  /// **'Resubscribe now to keep your plan. No charge until {date}.'**
+  String resubscribeNowNoChargeUntil(String date);
+
   /// Message when plan is set to cancel
   ///
   /// In en, this message translates to:

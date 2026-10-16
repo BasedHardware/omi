@@ -5066,6 +5066,7 @@
         }
     },
     "yourPlanEndsOn": "Vaš {plan} plan ističe {date}.",
+    "resubscribeNowNoChargeUntil": "Ponovno se pretplatite sada da zadržite svoje benefite - nema naknade do {date}.",
     "planSetToCancelOn": "Vaš plan je postavljen da se otkaže {date}.\nPonovno se pretplatite sada da zadržite svoje benefite - nema naknade do {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",

@@ -1344,6 +1344,7 @@
     "youAreOnUnlimitedPlan": "Olete Piiramatul plaanil.",
     "planEndedOn": "Teie plaan lõppes {date}.\nTellige uuesti kohe - teilt võetakse kohe tasu uue arveldusperioodi eest.",
     "yourPlanEndsOn": "Teie {plan} pakett lõpeb {date}.",
+    "resubscribeNowNoChargeUntil": "Tellige uuesti kohe, et säilitada oma eelised - tasu ei võeta kuni {date}.",
     "planSetToCancelOn": "Teie plaan on seatud tühistuma {date}.\nTellige uuesti kohe, et säilitada oma eelised - tasu ei võeta kuni {date}.",
     "annualPlanStartsAutomatically": "Teie aastane plaan algab automaatselt, kui teie kuuplaan lõpeb.",
     "yourPlanWillRenewOn": "Teie {plan} pakett uueneb {date}.",

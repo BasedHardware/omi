@@ -5066,6 +5066,7 @@
         }
     },
     "yourPlanEndsOn": "तुमची {plan} योजना {date} रोजी संपेल.",
+    "resubscribeNowNoChargeUntil": "आपले फायदे कायम राखण्यासाठी आता पुन्हा सदस्यता घ्या - {date} पर्यंत कोणतीही शुल्क नाही.",
     "planSetToCancelOn": "आपली योजना {date} ला रद्द होण्यासाठी सेट केली आहे.\nआपले फायदे कायम राखण्यासाठी आता पुन्हा सदस्यता घ्या - {date} पर्यंत कोणतीही शुल्क नाही.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",

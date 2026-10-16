@@ -1344,6 +1344,7 @@
     "youAreOnUnlimitedPlan": "Estás en el plan Ilimitado.",
     "planEndedOn": "Tu plan terminó el {date}.\nVuelve a suscribirte ahora - se te cobrará inmediatamente por un nuevo período de facturación.",
     "yourPlanEndsOn": "Tu plan {plan} termina el {date}.",
+    "resubscribeNowNoChargeUntil": "Vuelve a suscribirte ahora para mantener tus beneficios - sin cargo hasta {date}.",
     "planSetToCancelOn": "Tu plan está configurado para cancelarse el {date}.\nVuelve a suscribirte ahora para mantener tus beneficios - sin cargo hasta {date}.",
     "annualPlanStartsAutomatically": "Tu plan anual comenzará automáticamente cuando termine tu plan mensual.",
     "yourPlanWillRenewOn": "Tu plan {plan} se renovará el {date}.",

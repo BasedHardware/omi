@@ -4346,6 +4346,11 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'הירשם מחדש כעת כדי לשמור על ההטבות שלך - לא תחויב עד $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'התוכנית שלך מוגדרת להיות מבוטלת ב-$date.\nהירשם מחדש כעת כדי לשמור על ההטבות שלך - לא תחויב עד $date.';
   }

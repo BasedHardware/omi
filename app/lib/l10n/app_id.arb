@@ -1344,6 +1344,7 @@
     "youAreOnUnlimitedPlan": "Anda berada di Paket Tak Terbatas.",
     "planEndedOn": "Paket Anda berakhir pada {date}.\nBerlangganan lagi sekarang - Anda akan dikenakan biaya segera untuk periode penagihan baru.",
     "yourPlanEndsOn": "Paket {plan} Anda berakhir pada {date}.",
+    "resubscribeNowNoChargeUntil": "Berlangganan lagi sekarang untuk mempertahankan manfaat Anda - tidak ada biaya hingga {date}.",
     "planSetToCancelOn": "Paket Anda diatur untuk dibatalkan pada {date}.\nBerlangganan lagi sekarang untuk mempertahankan manfaat Anda - tidak ada biaya hingga {date}.",
     "annualPlanStartsAutomatically": "Paket tahunan Anda akan dimulai secara otomatis saat paket bulanan Anda berakhir.",
     "yourPlanWillRenewOn": "Paket {plan} Anda akan diperpanjang pada {date}.",

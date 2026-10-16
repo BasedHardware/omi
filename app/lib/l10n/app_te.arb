@@ -5066,6 +5066,7 @@
         }
     },
     "yourPlanEndsOn": "మీ {plan} ప్లాన్ {date}న ముగుస్తుంది.",
+    "resubscribeNowNoChargeUntil": "మీ ప్రయోజనాలను ఉంచడానికి ఇప్పుడే సబ్‌స్క్రిప్ట్ చేయండి - {date} వరకు ఛార్జ్ లేదు.",
     "planSetToCancelOn": "మీ ప్లాన్ {date} న రద్దు చేయడానికి సెట్ చేయబడింది.\nమీ ప్రయోజనాలను ఉంచడానికి ఇప్పుడే సబ్‌స్క్రిప్ట్ చేయండి - {date} వరకు ఛార్జ్ లేదు.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",

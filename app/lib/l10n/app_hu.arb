@@ -1344,6 +1344,7 @@
     "youAreOnUnlimitedPlan": "Ön a Korlátlan csomagban van.",
     "planEndedOn": "A csomagja {date}-án lejárt.\nIratkozzon fel újra most - azonnal felszámítjuk az új számlázási időszakot.",
     "yourPlanEndsOn": "A {plan} csomagod {date}-án lejár.",
+    "resubscribeNowNoChargeUntil": "Iratkozzon fel újra most, hogy megtartsa előnyeit - nincs díj {date}-ig.",
     "planSetToCancelOn": "A csomagja {date}-án törlésre van beállítva.\nIratkozzon fel újra most, hogy megtartsa előnyeit - nincs díj {date}-ig.",
     "annualPlanStartsAutomatically": "Az éves csomagja automatikusan elindul, amikor a havi csomagja lejár.",
     "yourPlanWillRenewOn": "A {plan} csomagod {date}-án megújul.",

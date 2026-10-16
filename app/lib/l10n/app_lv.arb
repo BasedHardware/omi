@@ -1344,6 +1344,7 @@
     "youAreOnUnlimitedPlan": "Jūs esat Neierobežotajā plānā.",
     "planEndedOn": "Jūsu plāns beidzās {date}.\nAbonejiet atkārtoti tagad - jums nekavējoties tiks iekasēta maksa par jauno norēķinu periodu.",
     "yourPlanEndsOn": "Jūsu {plan} plāns beidzas {date}.",
+    "resubscribeNowNoChargeUntil": "Abonejiet atkārtoti tagad, lai saglabātu savus ieguvumus - bez maksas līdz {date}.",
     "planSetToCancelOn": "Jūsu plāns ir iestatīts atcelšanai {date}.\nAbonejiet atkārtoti tagad, lai saglabātu savus ieguvumus - bez maksas līdz {date}.",
     "annualPlanStartsAutomatically": "Jūsu gada plāns automātiski sāksies, kad beigsies jūsu mēneša plāns.",
     "yourPlanWillRenewOn": "Jūsu {plan} plāns atjaunosies {date}.",

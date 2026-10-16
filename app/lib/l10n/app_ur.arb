@@ -5066,6 +5066,7 @@
         }
     },
     "yourPlanEndsOn": "آپ کا {plan} پلان {date} کو ختم ہوگا۔",
+    "resubscribeNowNoChargeUntil": "اپنے فوائل کو برقرار رکھنے کے لیے اب دوبارہ رکنیت حاصل کریں - {date} تک کوئی چارج نہیں۔",
     "planSetToCancelOn": "آپ کا منصوبہ {date} کو منسوخ ہونے کے لیے طے شدہ ہے۔\nاپنے فوائل کو برقرار رکھنے کے لیے اب دوبارہ رکنیت حاصل کریں - {date} تک کوئی چارج نہیں۔",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",

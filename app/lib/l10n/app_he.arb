@@ -5066,6 +5066,7 @@
         }
     },
     "yourPlanEndsOn": "תוכנית {plan} שלך מסתיימת ב-{date}.",
+    "resubscribeNowNoChargeUntil": "הירשם מחדש כעת כדי לשמור על ההטבות שלך - לא תחויב עד {date}.",
     "planSetToCancelOn": "התוכנית שלך מוגדרת להיות מבוטלת ב-{date}.\nהירשם מחדש כעת כדי לשמור על ההטבות שלך - לא תחויב עד {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",

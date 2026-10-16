@@ -1355,6 +1355,7 @@
     "youAreOnUnlimitedPlan": "أنت مشترك في الخطة غير المحدودة.",
     "planEndedOn": "انتهت خطتك في {date}.\nأعد الاشتراك الآن - سيتم تحصيل الرسوم فوراً لفترة فوترة جديدة.",
     "yourPlanEndsOn": "تنتهي خطة {plan} في {date}.",
+    "resubscribeNowNoChargeUntil": "أعد الاشتراك الآن للحفاظ على مزاياك - لن يتم تحصيل رسوم حتى {date}.",
     "planSetToCancelOn": "تم تعيين خطتك للإلغاء في {date}.\nأعد الاشتراك الآن للحفاظ على مزاياك - لن يتم تحصيل رسوم حتى {date}.",
     "annualPlanStartsAutomatically": "ستبدأ خطتك السنوية تلقائياً عند انتهاء خطتك الشهرية.",
     "yourPlanWillRenewOn": "ستتجدد خطة {plan} في {date}.",

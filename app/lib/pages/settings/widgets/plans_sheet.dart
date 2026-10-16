@@ -823,6 +823,15 @@ class _PlansSheetState extends State<PlansSheet> {
                             color: _renewalConfirmation == null ? OmiColors.warning : OmiColors.success,
                           ),
                         ),
+                        if (_renewalConfirmation == null && !periodEnded) ...[
+                          const SizedBox(height: OmiSpacing.xxs),
+                          Text(
+                            l10n.resubscribeNowNoChargeUntil(renewalDate),
+                            key: const ValueKey('plans_sheet_cancel_reassurance'),
+                            textAlign: TextAlign.center,
+                            style: OmiType.subhead.copyWith(color: OmiColors.warning),
+                          ),
+                        ],
                       ] else if (_renewalConfirmation != null) ...[
                         const SizedBox(height: OmiSpacing.xs),
                         Text(

@@ -4400,6 +4400,11 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Reabonați-vă acum pentru a vă păstra beneficiile - fără taxă până la $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Planul dvs. este setat să fie anulat pe $date.\nReabonați-vă acum pentru a vă păstra beneficiile - fără taxă până la $date.';
   }

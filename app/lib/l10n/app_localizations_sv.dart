@@ -4381,6 +4381,11 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Prenumerera igen nu för att behålla dina fördelar - ingen avgift till $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Din plan är inställd på att avbrytas $date.\nPrenumerera igen nu för att behålla dina fördelar - ingen avgift till $date.';
   }

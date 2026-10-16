@@ -4389,6 +4389,11 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Abonneer nu opnieuw om uw voordelen te behouden - geen kosten tot $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Uw plan wordt geannuleerd op $date.\nAbonneer nu opnieuw om uw voordelen te behouden - geen kosten tot $date.';
   }

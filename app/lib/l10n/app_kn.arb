@@ -5066,6 +5066,7 @@
         }
     },
     "yourPlanEndsOn": "ನಿಮ್ಮ {plan} ಯೋಜನೆ {date} ರಂದು ಕೊನೆಗೊಳ್ಳುತ್ತದೆ.",
+    "resubscribeNowNoChargeUntil": "ನಿಮ್ಮ ಪ್ರಯೋಜನಗಳನ್ನು ಮುಂದುವರಿಸಲು ಈಗ ಮರುಸದಸ್ಯಗೊಳಿಸಿ - {date} ವರೆಗೆ ಯಾವುದೇ ಶುಲ್ಕ ಇಲ್ಲ.",
     "planSetToCancelOn": "ನಿಮ್ಮ ಯೋಜನೆ {date} ಮೇಲೆ ರದ್ದುಗೊಳಿಸುವ ನಿರ್ಧಾರವನ್ನು ಹೊಂದಿದೆ.\nನಿಮ್ಮ ಪ್ರಯೋಜನಗಳನ್ನು ಮುಂದುವರಿಸಲು ಈಗ ಮರುಸದಸ್ಯಗೊಳಿಸಿ - {date} ವರೆಗೆ ಯಾವುದೇ ಶುಲ್ಕ ಇಲ್ಲ.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",

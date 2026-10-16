@@ -1344,6 +1344,7 @@
     "youAreOnUnlimitedPlan": "Estàs al pla Il·limitat.",
     "planEndedOn": "El teu pla va acabar el {date}.\nTorna a subscriure't ara - se't cobrarà immediatament per un nou període de facturació.",
     "yourPlanEndsOn": "El vostre pla {plan} acaba el {date}.",
+    "resubscribeNowNoChargeUntil": "Torna a subscriure't ara per mantenir els teus beneficis - sense càrrec fins {date}.",
     "planSetToCancelOn": "El teu pla està configurat per cancel·lar-se el {date}.\nTorna a subscriure't ara per mantenir els teus beneficis - sense càrrec fins {date}.",
     "annualPlanStartsAutomatically": "El teu pla anual començarà automàticament quan acabi el teu pla mensual.",
     "yourPlanWillRenewOn": "El vostre pla {plan} es renovarà el {date}.",

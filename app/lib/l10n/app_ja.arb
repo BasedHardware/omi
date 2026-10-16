@@ -1345,6 +1345,7 @@
     "youAreOnUnlimitedPlan": "Unlimitedプランをご利用中です。",
     "planEndedOn": "プランは{date}に終了しました。\n今すぐ再登録 - 新しい請求期間の料金が即座に請求されます。",
     "yourPlanEndsOn": "{plan}プランは{date}に終了します。",
+    "resubscribeNowNoChargeUntil": "特典を維持するために今すぐ再登録 - {date}まで請求はありません。",
     "planSetToCancelOn": "プランは{date}にキャンセル予定です。\n特典を維持するために今すぐ再登録 - {date}まで請求はありません。",
     "annualPlanStartsAutomatically": "月額プランが終了すると、年間プランが自動的に開始されます。",
     "yourPlanWillRenewOn": "{plan}プランは{date}に更新されます。",

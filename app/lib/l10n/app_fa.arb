@@ -5066,6 +5066,7 @@
         }
     },
     "yourPlanEndsOn": "طرح {plan} شما در {date} به پایان می‌رسد.",
+    "resubscribeNowNoChargeUntil": "همین الآن مجددا مشترک شوید تا از مزایای خود محروم نشوید - تا {date} هیچ هزینه‌ای نخواهید داشت.",
     "planSetToCancelOn": "طرح شما برای لغو در تاریخ {date} برنامه‌ریزی شده است.\nهمین الآن مجددا مشترک شوید تا از مزایای خود محروم نشوید - تا {date} هیچ هزینه‌ای نخواهید داشت.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",

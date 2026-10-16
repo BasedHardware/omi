@@ -1344,6 +1344,7 @@
     "youAreOnUnlimitedPlan": "Sunteți pe planul Nelimitat.",
     "planEndedOn": "Planul dvs. s-a încheiat pe {date}.\nReabonați-vă acum - veți fi taxat imediat pentru o nouă perioadă de facturare.",
     "yourPlanEndsOn": "Planul tău {plan} se încheie pe {date}.",
+    "resubscribeNowNoChargeUntil": "Reabonați-vă acum pentru a vă păstra beneficiile - fără taxă până la {date}.",
     "planSetToCancelOn": "Planul dvs. este setat să fie anulat pe {date}.\nReabonați-vă acum pentru a vă păstra beneficiile - fără taxă până la {date}.",
     "annualPlanStartsAutomatically": "Planul dvs. anual va începe automat când planul lunar se încheie.",
     "yourPlanWillRenewOn": "Planul tău {plan} se va reînnoi pe {date}.",

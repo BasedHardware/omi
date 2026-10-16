@@ -1344,6 +1344,7 @@
     "youAreOnUnlimitedPlan": "Ste na pláne Unlimited.",
     "planEndedOn": "Váš plán skončil {date}.\nZnova sa prihláste teraz - budete okamžite účtovaní za nové fakturačné obdobie.",
     "yourPlanEndsOn": "Váš plán {plan} končí {date}.",
+    "resubscribeNowNoChargeUntil": "Znova sa prihláste teraz, aby ste si zachovali výhody - bez poplatku do {date}.",
     "planSetToCancelOn": "Váš plán je nastavený na zrušenie {date}.\nZnova sa prihláste teraz, aby ste si zachovali výhody - bez poplatku do {date}.",
     "annualPlanStartsAutomatically": "Váš ročný plán sa automaticky spustí po skončení mesačného plánu.",
     "yourPlanWillRenewOn": "Váš plán {plan} sa obnoví {date}.",

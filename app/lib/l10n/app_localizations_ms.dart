@@ -4390,6 +4390,11 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Langgan semula sekarang untuk mengekalkan manfaat anda - tiada caj sehingga $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Pelan anda ditetapkan untuk dibatalkan pada $date.\nLanggan semula sekarang untuk mengekalkan manfaat anda - tiada caj sehingga $date.';
   }

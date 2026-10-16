@@ -5066,6 +5066,7 @@
         }
     },
     "yourPlanEndsOn": "Вашиот план {plan} завршува на {date}.",
+    "resubscribeNowNoChargeUntil": "Претплатете се сега за да ги задржите вашите бенефиции - без наплата до {date}.",
     "planSetToCancelOn": "Вашиот план е поставен да се откаже на {date}.\nПретплатете се сега за да ги задржите вашите бенефиции - без наплата до {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",

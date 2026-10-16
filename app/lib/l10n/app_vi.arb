@@ -1344,6 +1344,7 @@
     "youAreOnUnlimitedPlan": "Bạn đang sử dụng gói Unlimited.",
     "planEndedOn": "Gói của bạn đã kết thúc vào {date}.\nĐăng ký lại ngay - bạn sẽ bị tính phí ngay lập tức cho kỳ thanh toán mới.",
     "yourPlanEndsOn": "Gói {plan} của bạn kết thúc vào {date}.",
+    "resubscribeNowNoChargeUntil": "Đăng ký lại ngay để giữ quyền lợi - không tính phí cho đến {date}.",
     "planSetToCancelOn": "Gói của bạn được đặt để hủy vào {date}.\nĐăng ký lại ngay để giữ quyền lợi - không tính phí cho đến {date}.",
     "annualPlanStartsAutomatically": "Gói năm của bạn sẽ tự động bắt đầu khi gói tháng kết thúc.",
     "yourPlanWillRenewOn": "Gói {plan} của bạn sẽ gia hạn vào {date}.",

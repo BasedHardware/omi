@@ -5066,6 +5066,7 @@
         }
     },
     "yourPlanEndsOn": "Vaš načrt {plan} se konča {date}.",
+    "resubscribeNowNoChargeUntil": "Prekvalificira se sedaj, da obdržite prednosti - brez napolnitve do {date}.",
     "planSetToCancelOn": "Vaš načrt je nastavljen na preklic {date}.\nPrekvalificira se sedaj, da obdržite prednosti - brez napolnitve do {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",

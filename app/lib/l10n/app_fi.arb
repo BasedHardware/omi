@@ -1344,6 +1344,7 @@
     "youAreOnUnlimitedPlan": "Sinulla on Rajoittamaton tilaus.",
     "planEndedOn": "Tilauksesi päättyi {date}.\nTilaa uudelleen nyt - sinulta veloitetaan välittömästi uudesta laskutusjaksosta.",
     "yourPlanEndsOn": "{plan}-pakettisi päättyy {date}.",
+    "resubscribeNowNoChargeUntil": "Tilaa uudelleen nyt säilyttääksesi edut - ei veloitusta ennen {date}.",
     "planSetToCancelOn": "Tilauksesi on asetettu peruuntumaan {date}.\nTilaa uudelleen nyt säilyttääksesi edut - ei veloitusta ennen {date}.",
     "annualPlanStartsAutomatically": "Vuositilauksesi alkaa automaattisesti, kun kuukausitilauksesi päättyy.",
     "yourPlanWillRenewOn": "{plan}-pakettisi uusiutuu {date}.",

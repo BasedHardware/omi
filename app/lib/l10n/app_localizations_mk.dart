@@ -4398,6 +4398,11 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Претплатете се сега за да ги задржите вашите бенефиции - без наплата до $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Вашиот план е поставен да се откаже на $date.\nПретплатете се сега за да ги задржите вашите бенефиции - без наплата до $date.';
   }

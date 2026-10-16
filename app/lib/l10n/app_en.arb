@@ -5128,6 +5128,16 @@
             }
         }
     },
+    "resubscribeNowNoChargeUntil": "Resubscribe now to keep your plan. No charge until {date}.",
+    "@resubscribeNowNoChargeUntil": {
+        "description": "Reassurance under a pending cancellation that resubscribing is not charged until the end date",
+        "placeholders": {
+            "date": {
+                "type": "String",
+                "example": "Nov 3, 2026"
+            }
+        }
+    },
     "planSetToCancelOn": "Your plan is set to cancel on {date}.\nResubscribe now to keep your benefits - no charge until {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",

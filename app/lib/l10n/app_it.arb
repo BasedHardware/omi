@@ -1344,6 +1344,7 @@
     "youAreOnUnlimitedPlan": "Sei sul piano Illimitato.",
     "planEndedOn": "Il tuo piano è terminato il {date}.\nRiabbonati ora - ti verrà addebitato immediatamente per un nuovo periodo di fatturazione.",
     "yourPlanEndsOn": "Il tuo piano {plan} termina il {date}.",
+    "resubscribeNowNoChargeUntil": "Riabbonati ora per mantenere i tuoi benefici - nessun addebito fino al {date}.",
     "planSetToCancelOn": "Il tuo piano è impostato per essere annullato il {date}.\nRiabbonati ora per mantenere i tuoi benefici - nessun addebito fino al {date}.",
     "annualPlanStartsAutomatically": "Il tuo piano annuale inizierà automaticamente al termine del piano mensile.",
     "yourPlanWillRenewOn": "Il tuo piano {plan} si rinnoverà il {date}.",

@@ -195,6 +195,8 @@ void main() {
     final date = _date(tester);
 
     expect(find.text(l10n.yourPlanEndsOn('Plus', date)), findsOneWidget);
+    expect(find.text(l10n.resubscribeNowNoChargeUntil(date)), findsOneWidget);
+    expect(find.text(l10n.resubscribe), findsOneWidget);
     expect(find.byKey(const ValueKey('plans_sheet_resubscribe_button')), findsOneWidget);
     final plus = tester.widget<PlanOptionCard>(find.widgetWithText(PlanOptionCard, 'Plus'));
     expect(plus.isSelected, isTrue);
@@ -207,6 +209,7 @@ void main() {
     expect(usage.upgrades, isEmpty);
     expect(find.text(l10n.yourPlanWillRenewOn('Plus', date)), findsWidgets);
     expect(find.text(l10n.yourPlanEndsOn('Plus', date)), findsNothing);
+    expect(find.text(l10n.resubscribeNowNoChargeUntil(date)), findsNothing);
   });
 
   testWidgets('another price is refused before any request', (tester) async {

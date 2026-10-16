@@ -4415,6 +4415,11 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Mag-subscribe muli upang mapanatili ang iyong mga benepisyo - walang bayad hanggang $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Ang iyong plano ay nakatakda na kanselahin sa $date.\nMag-subscribe muli upang mapanatili ang iyong mga benepisyo - walang bayad hanggang $date.';
   }
