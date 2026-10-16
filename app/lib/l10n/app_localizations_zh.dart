@@ -4938,9 +4938,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get content => '内容';
 
   @override
-  String get noContentToDisplay => '没有可显示的内容';
-
-  @override
   String get noSummary => '无摘要';
 
   @override
@@ -9640,9 +9637,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get speechToTextUnavailableDesc => '目前无法将语音转换为文字。请检查网络连接和设备的语音识别设置，然后重试。';
 
   @override
-  String get processingTakingLonger => '仍在处理中——比平时耗时更长。';
-
-  @override
   String get speechProfileEnrollmentPrompt => '让 Omi 知道哪个声音是你的——随便聊点什么，说大约 5 秒就好。';
 
   @override
@@ -13271,4 +13265,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get activityNewItem => '新';
+
+  @override
+  String get activityNeedsAttention => '需要处理';
+
+  @override
+  String get activityRetryAll => '全部重试';
+
+  @override
+  String get attentionSummaryFailed => '无法总结这段对话';
 }

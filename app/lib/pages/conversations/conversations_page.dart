@@ -19,6 +19,7 @@ import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/review_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/backend/http/api_presentation.dart';
@@ -44,7 +45,7 @@ String _conversationDateRangeLabel(BuildContext context, DateTime start, DateTim
   return '${dates.date(start)} – ${dates.date(end)}';
 }
 
-enum _ConversationListRowKind { topSpacer, dateHeader, processing, pendingSync, conversation, recording, groupSpacer }
+enum _ConversationListRowKind { topSpacer, dateHeader, pendingSync, conversation, recording, groupSpacer }
 
 typedef _ConversationListRow = ({
   _ConversationListRowKind kind,
@@ -144,7 +145,6 @@ List<_ConversationListRow> _buildConversationListRows({
   required List<DateTime> dates,
   required Map<DateTime, List<ServerConversation>> conversationsByDate,
   required Map<DateTime, List<LocalRecording>> recordingsByDate,
-  Map<DateTime, ServerConversation> processingByDate = const {},
 }) {
   final rows = <_ConversationListRow>[];
   var hasRenderedDate = false;
@@ -153,12 +153,11 @@ List<_ConversationListRow> _buildConversationListRows({
     final date = dates[dateIndex];
     final conversations = conversationsByDate[date] ?? const <ServerConversation>[];
     final recordings = recordingsByDate[date] ?? const <LocalRecording>[];
-    final processing = processingByDate[date];
     final entries = buildConversationGroupEntries(conversations: conversations, recordings: recordings);
     final conversationIndexes = <String, int>{
       for (var index = 0; index < conversations.length; index++) conversations[index].id: index,
     };
-    if (entries.isEmpty && processing == null) continue;
+    if (entries.isEmpty) continue;
 
     if (!hasRenderedDate) {
       rows.add((
@@ -178,18 +177,6 @@ List<_ConversationListRow> _buildConversationListRows({
       recording: null,
       conversationIndex: -1,
     ));
-
-    // Process Now belongs to the list, above the day where the completed conversation lands.
-    if (processing != null) {
-      rows.add((
-        kind: _ConversationListRowKind.processing,
-        date: date,
-        isFirst: false,
-        conversation: processing,
-        recording: null,
-        conversationIndex: -1,
-      ));
-    }
 
     for (final entry in entries) {
       final conversation = entry.conversation;
@@ -287,7 +274,7 @@ List<ServerConversation>? _lockedRunAt(List<_ConversationListRow> rows, int inde
 /// more as it scrolls. Search, folders, starred and places live in the search overlay the header's
 /// search button opens, so this list is never filtered in place.
 class ConversationsPage extends StatefulWidget {
-  const ConversationsPage({super.key, this.requestInitialLoad = true, this.loadRecaps});
+  const ConversationsPage({super.key, this.requestInitialLoad = true, this.loadRecaps, this.pendingWork});
 
   /// Production stays true. Widget tests that already call
   /// [ConversationProvider.getInitialConversations] inside `runAsync` pass
@@ -296,6 +283,9 @@ class ConversationsPage extends StatefulWidget {
 
   /// Injectable for tests and the visual audit; defaults to the recaps endpoint.
   final RecentRecapsLoader? loadRecaps;
+
+  /// Injectable for tests; defaults to [PendingWorkStore.instance].
+  final PendingWorkStore? pendingWork;
 
   @override
   State<ConversationsPage> createState() => _ConversationsPageState();
@@ -325,10 +315,18 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     });
   }
 
+  PendingWorkStore get _pendingWork => widget.pendingWork ?? PendingWorkStore.instance;
+
+  void _onPendingWorkChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
     _scheduleDayRollover();
+    _pendingWork.addListener(_onPendingWorkChanged);
+    unawaited(_pendingWork.refresh());
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final conversationProvider = context.read<ConversationProvider>();
@@ -429,6 +427,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
   @override
   void dispose() {
+    _pendingWork.removeListener(_onPendingWorkChanged);
     _dayTimer?.cancel();
     for (final timer in _deferred) {
       timer.cancel();
@@ -522,7 +521,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     super.build(context);
     // Placing the pending row reads the clock and reshapes the top of the list: redo it whenever the
     // row appears or goes away, not only when the conversation list changes.
-    final pendingVisible = context.select<SyncProvider, bool>(SyncPendingWork.shouldShow);
+    final syncPendingVisible = context.select<SyncProvider, bool>(SyncPendingWork.shouldShow);
     return Selector2<ConversationProvider, LocalRecordingsProvider, _ConversationPageSnapshot>(
       selector: (_, conversationProvider, recordingsProvider) =>
           _conversationPageSnapshot(conversationProvider, recordingsProvider),
@@ -546,11 +545,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         }
         final bool hasRecordings = recordingsByDate.isNotEmpty;
         final bool hasProcessingConversations = snapshot.processingConversations.isNotEmpty;
-        final processingNewest = newestProcessingConversation(snapshot.processingConversations);
-        final processingByDate = <DateTime, ServerConversation>{
-          if (processingNewest != null)
-            conversationLocalDayKey(processingNewest.startedAt ?? processingNewest.createdAt): processingNewest,
-        };
+        // Conversations still processing and server-side work join the one pending row instead of
+        // drawing their own cards: slow work never reads as a problem on Home.
+        final pendingVisible = syncPendingVisible || hasProcessingConversations || _pendingWork.pending.isNotEmpty;
         final apiPhase = snapshot.apiViewPhase;
         final bool showTypedStatus = apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
@@ -565,19 +562,19 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         final mergedDates = <DateTime>{
           ...convoProvider.groupedConversations.keys,
           ...recordingsByDate.keys,
-          ...processingByDate.keys,
         }.toList()
           ..sort((a, b) => b.compareTo(a));
         final listRows = _buildConversationListRows(
           dates: mergedDates,
           conversationsByDate: convoProvider.groupedConversations,
           recordingsByDate: recordingsByDate,
-          processingByDate: processingByDate,
         );
         // Recordings that are not conversations yet sit in Today, where they will land.
         // Speaker-scoped results are a search: the global pending row was never filtered by speaker.
+        // A conversation just captured stays visible under a folder or starred filter too: the
+        // capture must never seem to vanish while it processes.
         final showPending = pendingVisible &&
-            showRecordings &&
+            (showRecordings || hasProcessingConversations) &&
             convoProvider.selectedSpeakerId == null &&
             dateFilterIncludesToday(convoProvider.selectedStartDate, convoProvider.selectedEndDate, DateTime.now());
         final conversationRows = showPending ? _withPendingSyncRow(listRows, DateTime.now()) : listRows;
@@ -588,6 +585,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           onRefresh: () async {
             HapticFeedback.mediumImpact();
             _lastLoadMoreRequestKey = null;
+            unawaited(_pendingWork.refresh());
             Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
             await Future.wait([
               convoProvider.getInitialConversations(),
@@ -620,8 +618,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               // Today is always below the recaps. With no list to sit in, the pending row brings its own
               // Today header, spaced like the list's first day so nothing moves when the list arrives.
               if (pendingOpensToday)
-                const SliverToBoxAdapter(
-                  child: Padding(padding: EdgeInsets.only(top: 10), child: HomePendingRow(showTodayHeader: true)),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: HomePendingRow(showTodayHeader: true, pendingWork: widget.pendingWork),
+                  ),
                 ),
               // Typed HTTP status precedes empty/loading/hero so an outage is
               // never the new-account empty state. Unset (data) keeps production.
@@ -710,11 +711,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           isFirst: row.isFirst,
                         );
                       case _ConversationListRowKind.pendingSync:
-                        return HomePendingRow(key: const ValueKey('pending_sync'), showTodayHeader: row.isFirst);
-                      case _ConversationListRowKind.processing:
-                        return ProcessingConversationWidget(
-                          key: ValueKey('processing_${row.conversation!.id}'),
-                          conversation: row.conversation!,
+                        return HomePendingRow(
+                          key: const ValueKey('pending_sync'),
+                          showTodayHeader: row.isFirst,
+                          pendingWork: widget.pendingWork,
                         );
                       case _ConversationListRowKind.conversation:
                         // Consecutive locked rows share one frosted card and one upgrade action;

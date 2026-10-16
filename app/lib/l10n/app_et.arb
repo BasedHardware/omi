@@ -1542,7 +1542,6 @@
     "photos": "Fotod",
     "rawData": "Töötlemata andmed",
     "content": "Sisu",
-    "noContentToDisplay": "Sisu pole kuvamiseks",
     "noSummary": "Kokkuvõte puudub",
     "updateOmiFirmware": "Värskenda Omi püsivara",
     "anErrorOccurredTryAgain": "Tekkis viga. Palun proovige uuesti.",
@@ -3167,7 +3166,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Salvestamise alustamiseks puuduta salvestusnuppu",
-    "processingTakingLonger": "Ikka käimas — see võtab kauem aega kui tavaliselt.",
     "speechProfileEnrollmentPrompt": "Et Omi teaks, milline hääl on sinu oma — räägi ükskõik millest umbes 5 sekundit.",
     "home": "Avaleht",
     "failedToUpdateBaselineStatus": "Seda mälestust ei õnnestunud uuendada. Proovi uuesti.",
@@ -4134,5 +4132,8 @@
     "activityEmpty": "Tegevusi veel pole",
     "activityNewSemantics": "Tegevus, uued üksused",
     "activityLoadFailed": "Kogu tegevust ei õnnestunud laadida",
-    "activityNewItem": "Uus"
+    "activityNewItem": "Uus",
+    "activityNeedsAttention": "Vajab tähelepanu",
+    "activityRetryAll": "Proovi kõiki uuesti",
+    "attentionSummaryFailed": "Seda vestlust ei õnnestunud kokku võtta"
 }

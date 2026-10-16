@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { ipcMain, webContents } from 'electron'
 import { readStickyNotes } from '../integrations/stickyNotes'
 import {
   xConnect,
@@ -33,6 +33,14 @@ export function isSignLanguageEnabled(): boolean {
 
 export function setSignLanguageEnabled(enabled: boolean): void {
   signLanguageEnabled = enabled
+}
+
+// Tell every renderer the toggle moved, so the main window's sign overlay mounts
+// or unmounts without a relaunch.
+function broadcastSignLanguageEnabled(enabled: boolean): void {
+  for (const wc of webContents.getAllWebContents()) {
+    if (!wc.isDestroyed()) wc.send('integrations:signLanguage:changed', enabled)
+  }
 }
 
 // All integrations IPC lives here so concurrent chat/KG work doesn't conflict
@@ -124,6 +132,7 @@ export function registerIntegrationsHandlers(): void {
     'integrations:signLanguage:setEnabled',
     async (_e, enabled: boolean): Promise<void> => {
       setSignLanguageEnabled(enabled)
+      broadcastSignLanguageEnabled(isSignLanguageEnabled())
     }
   )
 }

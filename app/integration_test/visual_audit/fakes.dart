@@ -163,6 +163,11 @@ class InertSyncProvider extends ChangeNotifier implements SyncProvider {
   @override
   int get needsAttentionWalsCount => 0;
   @override
+  List<Wal> get retryableAttentionWals =>
+      allWals.where((w) => w.syncDisplayState == WalSyncDisplayState.failed).toList();
+  @override
+  Future<void> retryNeedsAttentionWals() async {}
+  @override
   bool get isSyncing => false;
   @override
   bool get syncCompleted => false;

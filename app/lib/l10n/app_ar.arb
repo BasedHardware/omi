@@ -1553,7 +1553,6 @@
     "photos": "الصور",
     "rawData": "البيانات الخام",
     "content": "المحتوى",
-    "noContentToDisplay": "لا يوجد محتوى للعرض",
     "noSummary": "لا يوجد ملخص",
     "updateOmiFirmware": "تحديث برنامج Omi",
     "anErrorOccurredTryAgain": "حدث خطأ. يرجى المحاولة مرة أخرى.",
@@ -3167,7 +3166,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "اضغط على زر التسجيل لبدء التسجيل",
-    "processingTakingLonger": "ما زال قيد العمل — يستغرق وقتًا أطول من المعتاد.",
     "speechProfileEnrollmentPrompt": "لكي يعرف Omi أي صوت هو صوتك — تحدث عن أي شيء لمدة 5 ثوانٍ تقريبًا.",
     "home": "الرئيسية",
     "failedToUpdateBaselineStatus": "تعذّر تحديث هذه الذاكرة. حاول مرة أخرى.",
@@ -4134,5 +4132,8 @@
     "activityEmpty": "لا يوجد نشاط بعد",
     "activityNewSemantics": "النشاط، عناصر جديدة",
     "activityLoadFailed": "تعذّر تحميل كل نشاطك",
-    "activityNewItem": "جديد"
+    "activityNewItem": "جديد",
+    "activityNeedsAttention": "يحتاج إلى انتباه",
+    "activityRetryAll": "إعادة محاولة الكل",
+    "attentionSummaryFailed": "تعذّر تلخيص هذه المحادثة"
 }

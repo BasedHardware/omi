@@ -1542,7 +1542,6 @@
     "photos": "Fotos",
     "rawData": "Dados brutos",
     "content": "Conteúdo",
-    "noContentToDisplay": "Nenhum conteúdo para exibir",
     "noSummary": "Sem resumo",
     "updateOmiFirmware": "Atualizar firmware do Omi",
     "anErrorOccurredTryAgain": "Ocorreu um erro. Por favor, tente novamente.",
@@ -3202,7 +3201,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Toque no botão de gravar para começar a gravar",
-    "processingTakingLonger": "Ainda a trabalhar — isto está a demorar mais do que o habitual.",
     "speechProfileEnrollmentPrompt": "Para que o Omi saiba qual é a sua voz — fale sobre qualquer coisa por cerca de 5 segundos.",
     "home": "Início",
     "failedToUpdateBaselineStatus": "Não foi possível atualizar esta memória. Tente novamente.",
@@ -4169,5 +4167,8 @@
     "activityEmpty": "Nenhuma atividade ainda",
     "activityNewSemantics": "Atividade, novos itens",
     "activityLoadFailed": "Não foi possível carregar toda a sua atividade",
-    "activityNewItem": "Novo"
+    "activityNewItem": "Novo",
+    "activityNeedsAttention": "Precisa de atenção",
+    "activityRetryAll": "Tentar tudo novamente",
+    "attentionSummaryFailed": "Não foi possível resumir esta conversa"
 }

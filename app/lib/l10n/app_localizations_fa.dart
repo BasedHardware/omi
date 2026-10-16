@@ -5025,9 +5025,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get content => 'محتوا';
 
   @override
-  String get noContentToDisplay => 'محتوایی برای نمایش نیست';
-
-  @override
   String get noSummary => 'بدون خلاصه';
 
   @override
@@ -9805,9 +9802,6 @@ class AppLocalizationsFa extends AppLocalizations {
       'تبدیل گفتار به نوشتار در حال حاضر در دسترس نیست. اتصال اینترنت و تنظیمات تشخیص گفتار دستگاه خود را بررسی کنید و دوباره تلاش کنید.';
 
   @override
-  String get processingTakingLonger => 'هنوز در حال انجام است — بیشتر از حد معمول طول می‌کشد.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'برای اینکه Omi بداند کدام صدا متعلق به شماست — حدود ۵ ثانیه درباره هر چیزی صحبت کنید.';
 
@@ -13473,4 +13467,13 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get activityNewItem => 'جدید';
+
+  @override
+  String get activityNeedsAttention => 'نیاز به توجه';
+
+  @override
+  String get activityRetryAll => 'تلاش دوباره برای همه';
+
+  @override
+  String get attentionSummaryFailed => 'خلاصه‌سازی این گفتگو ممکن نشد';
 }

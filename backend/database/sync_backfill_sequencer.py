@@ -450,7 +450,10 @@ def begin_job(
         )
         return True
 
-    return commit(client.transaction())
+    try:
+        return commit(client.transaction())
+    except NotFound:
+        return False
 
 
 def renew_job(
@@ -476,7 +479,10 @@ def renew_job(
         )
         return True
 
-    return commit(client.transaction())
+    try:
+        return commit(client.transaction())
+    except NotFound:
+        return False
 
 
 def finish_job(
@@ -539,7 +545,10 @@ def defer_owner(uid: str, seconds: int, *, firestore_client: Any = None, now: Op
             reconcile_at = owner['repair_not_before']
         transaction.update(root, {'reconcile_at': reconcile_at, 'updated_at': current})
 
-    commit(client.transaction())
+    try:
+        commit(client.transaction())
+    except NotFound:
+        pass
 
 
 def redrive_job(
@@ -581,7 +590,10 @@ def redrive_job(
             'accepted_at': owner['active_accepted_at'],
         }
 
-    replacement = commit(client.transaction())
+    try:
+        replacement = commit(client.transaction())
+    except NotFound:
+        return None
     if replacement:
         logger.warning('event=sync_uid_sequencer action=redrive outcome=lease_expired')
     return replacement

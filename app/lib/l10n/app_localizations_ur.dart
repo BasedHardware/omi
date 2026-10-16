@@ -5034,9 +5034,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get content => 'مواد';
 
   @override
-  String get noContentToDisplay => 'دکھانے کے لیے کوئی مواد نہیں';
-
-  @override
   String get noSummary => 'کوئی خلاصہ نہیں';
 
   @override
@@ -9822,9 +9819,6 @@ class AppLocalizationsUr extends AppLocalizations {
       'اس وقت آواز کو متن میں تبدیل کرنے کی سہولت دستیاب نہیں ہے۔ اپنا انٹرنیٹ کنکشن اور آلے کی آواز پہچاننے کی ترتیبات چیک کریں، پھر دوبارہ کوشش کریں۔';
 
   @override
-  String get processingTakingLonger => 'ابھی کام جاری ہے — اس میں معمول سے زیادہ وقت لگ رہا ہے۔';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'تاکہ Omi آپ کی آواز پہچان سکے — کسی بھی موضوع پر تقریباً 5 سیکنڈ بات کریں۔';
 
@@ -13492,4 +13486,13 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get activityNewItem => 'نیا';
+
+  @override
+  String get activityNeedsAttention => 'توجہ درکار ہے';
+
+  @override
+  String get activityRetryAll => 'سب دوبارہ کوشش کریں';
+
+  @override
+  String get attentionSummaryFailed => 'اس گفتگو کا خلاصہ نہیں بن سکا';
 }

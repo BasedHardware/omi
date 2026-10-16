@@ -5033,9 +5033,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get content => 'Saturs';
 
   @override
-  String get noContentToDisplay => 'Nav satura, ko parādīt';
-
-  @override
   String get noSummary => 'Nav kopsavilkuma';
 
   @override
@@ -9835,9 +9832,6 @@ class AppLocalizationsLv extends AppLocalizations {
       'Runas pārvēršana tekstā pašlaik nav pieejama. Pārbaudiet interneta savienojumu un ierīces runas atpazīšanas iestatījumus un mēģiniet vēlreiz.';
 
   @override
-  String get processingTakingLonger => 'Joprojām notiek — tas aizņem ilgāk nekā parasti.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Lai Omi zinātu, kura balss ir jūsu — runājiet par jebko aptuveni 5 sekundes.';
 
@@ -13507,4 +13501,13 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Jauns';
+
+  @override
+  String get activityNeedsAttention => 'Nepieciešama uzmanība';
+
+  @override
+  String get activityRetryAll => 'Mēģināt visu vēlreiz';
+
+  @override
+  String get attentionSummaryFailed => 'Šo sarunu neizdevās apkopot';
 }

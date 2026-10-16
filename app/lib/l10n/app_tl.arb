@@ -5968,10 +5968,6 @@
     "@content": {
         "description": "Tab label for content"
     },
-    "noContentToDisplay": "Walang content na ipapakita",
-    "@noContentToDisplay": {
-        "description": "Message when there is no content available"
-    },
     "noSummary": "Walang summary",
     "@noSummary": {
         "description": "Message when no summary is available"
@@ -10593,7 +10589,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "I-tap ang record button para magsimulang mag-record",
-    "processingTakingLonger": "Ginagawa pa — mas matagal ito kaysa karaniwan.",
     "speechProfileEnrollmentPrompt": "Para malaman ng Omi kung alin ang boses mo — magsalita tungkol sa kahit ano nang mga 5 segundo.",
     "home": "Home",
     "failedToUpdateBaselineStatus": "Hindi ma-update ang alaalang ito. Subukan ulit.",
@@ -11560,5 +11555,8 @@
     "activityEmpty": "Wala pang aktibidad",
     "activityNewSemantics": "Aktibidad, mga bagong item",
     "activityLoadFailed": "Hindi ma-load ang lahat ng iyong aktibidad",
-    "activityNewItem": "Bago"
+    "activityNewItem": "Bago",
+    "activityNeedsAttention": "Kailangang tingnan",
+    "activityRetryAll": "Subukan muli lahat",
+    "attentionSummaryFailed": "Hindi ma-summarize ang usapang ito"
 }

@@ -9,11 +9,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
-import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -179,31 +177,6 @@ void main() {
     await tester.tap(find.text('go'));
     await tester.pump();
     expect(home.selectedIndex, HomeProvider.homeTab);
-  });
-
-  testWidgets('optimistic processing row renders the skeleton until title and emoji exist', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: ThemeData.dark(),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: ProcessingConversationWidget(
-            conversation: ServerConversation(
-              id: '0',
-              createdAt: DateTime.utc(2026),
-              structured: Structured('', '', emoji: ''),
-              status: ConversationStatus.processing,
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pump();
-
-    expect(find.byType(ProcessingConversationWidget), findsOneWidget);
-    expect(find.text('Processing'), findsOneWidget);
-    expect(find.text('Weekly standup'), findsNothing);
   });
 }
 

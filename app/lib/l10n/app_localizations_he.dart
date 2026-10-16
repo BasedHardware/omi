@@ -4986,9 +4986,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get content => 'תוכן';
 
   @override
-  String get noContentToDisplay => 'אין תוכן להצגה';
-
-  @override
   String get noSummary => 'אין סיכום';
 
   @override
@@ -9730,9 +9727,6 @@ class AppLocalizationsHe extends AppLocalizations {
       'המרת דיבור לטקסט אינה זמינה כרגע. בדקו את החיבור לאינטרנט ואת הגדרות זיהוי הדיבור במכשיר, ואז נסו שוב.';
 
   @override
-  String get processingTakingLonger => 'עדיין בעבודה — זה לוקח יותר זמן מהרגיל.';
-
-  @override
   String get speechProfileEnrollmentPrompt => 'כדי ש-Omi יידע איזה קול הוא שלך — יש לדבר על כל נושא במשך כ-5 שניות.';
 
   @override
@@ -13385,4 +13379,13 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get activityNewItem => 'חדש';
+
+  @override
+  String get activityNeedsAttention => 'דורש תשומת לב';
+
+  @override
+  String get activityRetryAll => 'נסה הכול שוב';
+
+  @override
+  String get attentionSummaryFailed => 'לא ניתן היה לסכם את השיחה הזו';
 }

@@ -44,6 +44,10 @@ def store(monkeypatch):
 
     monkeypatch.setattr(_client, 'get_firestore_client', lambda: client)
     monkeypatch.setenv('SYNC_REPROCESS_SETTLE_SECONDS', '600')
+    monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs')
+    monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://fresh.invalid/v2/sync-jobs/run')
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@example.invalid')
+    monkeypatch.delenv('SYNC_TASKS_OIDC_AUDIENCE', raising=False)
     monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'true')
     tasks = []
     monkeypatch.setattr(reprocess, '_enqueue', lambda row: tasks.append(deepcopy(row)))

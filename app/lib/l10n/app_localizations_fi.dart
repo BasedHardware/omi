@@ -5027,9 +5027,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get content => 'Sisältö';
 
   @override
-  String get noContentToDisplay => 'Ei sisältöä näytettäväksi';
-
-  @override
   String get noSummary => 'Ei yhteenvetoa';
 
   @override
@@ -9812,9 +9809,6 @@ class AppLocalizationsFi extends AppLocalizations {
       'Puheen muuntaminen tekstiksi ei ole juuri nyt käytettävissä. Tarkista internetyhteytesi ja laitteesi puheentunnistusasetukset ja yritä uudelleen.';
 
   @override
-  String get processingTakingLonger => 'Vielä käynnissä — tämä kestää tavallista kauemmin.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Jotta Omi tietää, mikä ääni on sinun — puhu mistä tahansa noin 5 sekuntia.';
 
@@ -13483,4 +13477,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Uusi';
+
+  @override
+  String get activityNeedsAttention => 'Vaatii huomiota';
+
+  @override
+  String get activityRetryAll => 'Yritä kaikkia uudelleen';
+
+  @override
+  String get attentionSummaryFailed => 'Tätä keskustelua ei voitu tiivistää';
 }

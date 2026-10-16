@@ -1542,7 +1542,6 @@
     "photos": "Kuvat",
     "rawData": "Raakadata",
     "content": "Sisältö",
-    "noContentToDisplay": "Ei sisältöä näytettäväksi",
     "noSummary": "Ei yhteenvetoa",
     "updateOmiFirmware": "Päivitä omin laiteohjelmisto",
     "anErrorOccurredTryAgain": "Tapahtui virhe. Yritä uudelleen.",
@@ -3167,7 +3166,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Aloita tallennus napauttamalla tallennuspainiketta",
-    "processingTakingLonger": "Vielä käynnissä — tämä kestää tavallista kauemmin.",
     "speechProfileEnrollmentPrompt": "Jotta Omi tietää, mikä ääni on sinun — puhu mistä tahansa noin 5 sekuntia.",
     "home": "Koti",
     "failedToUpdateBaselineStatus": "Tätä muistoa ei voitu päivittää. Yritä uudelleen.",
@@ -4134,5 +4132,8 @@
     "activityEmpty": "Ei vielä toimintaa",
     "activityNewSemantics": "Toiminta, uusia kohteita",
     "activityLoadFailed": "Kaikkea toimintaa ei voitu ladata",
-    "activityNewItem": "Uusi"
+    "activityNewItem": "Uusi",
+    "activityNeedsAttention": "Vaatii huomiota",
+    "activityRetryAll": "Yritä kaikkia uudelleen",
+    "attentionSummaryFailed": "Tätä keskustelua ei voitu tiivistää"
 }
