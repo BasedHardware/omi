@@ -158,6 +158,32 @@ class ProjectionStore:
             operation_name='batch_projection',
         )
 
+    def hold_for_quarantine(self, segment_id: str, binding: ProjectionBinding, now: float) -> bool:
+        """Stop re-sweeping a persisted sibling; keep ledger/assignment fences intact."""
+
+        @firestore.transactional
+        def commit(transaction):
+            session = self.session(segment_id, binding, now)
+            session.prepare(transaction, replay=False)
+            if session.receipt().get('state') != 'ready':
+                return False
+            held = False
+            for sibling in binding.segment_ids:
+                job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
+                if job.get('state') == 'quarantined':
+                    if (
+                        not job.get('projection_binding')
+                        or normalized_binding(job['projection_binding']) != binding
+                        or job.get('merge_pending') is not False
+                    ):
+                        raise ProjectionBlocked('quarantined sibling binding mismatch')
+                    held = True
+            if held:
+                transaction.update(session.result_ref, {'projection_state': 'quarantine_held'})
+            return held
+
+        return self.run(commit)
+
     def prepare_accounting(self, binding: ProjectionBinding, now: float) -> dict | None:
         """Resolve usage attribution outside the retryable completion transaction."""
         import math

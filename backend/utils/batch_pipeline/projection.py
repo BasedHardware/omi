@@ -146,6 +146,7 @@ class Projector:
             self.finish_part(item, binding, receipt, int(index) if index is not None else None)
         accounting = self.store.prepare_accounting(binding, self.clock())
         if accounting is None:
+            self.store.hold_for_quarantine(segment_id, binding, self.clock())
             return None
         if accounting['seconds'] > 0 and not accounting['completed']:
             from utils.fair_use import record_speech_ms
