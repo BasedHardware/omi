@@ -1405,6 +1405,13 @@ overlay:
           SYNC_TASKS_INVOKER_SA:
             env_var: SYNC_TASKS_INVOKER_SA
             category: reliability
+          # Batch projection dispatches enrichment to the fresh sync worker.
+          SYNC_TASKS_QUEUE:
+            value: sync-jobs
+            category: reliability
+          SYNC_TASKS_OIDC_AUDIENCE:
+            env_var: SYNC_TASKS_HANDLER_URL
+            category: reliability
           SYNC_TASKS_HANDLER_URL:
             env_var: SYNC_TASKS_HANDLER_URL
             category: reliability

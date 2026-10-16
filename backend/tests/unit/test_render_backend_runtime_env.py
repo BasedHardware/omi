@@ -943,3 +943,24 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
         ('METRICS_SECRET', 'METRICS_SECRET', 'latest'),
         ('POSTHOG_PROJECT_API_KEY', 'POSTHOG_PROJECT_API_KEY', 'latest'),
     }
+
+
+def test_integration_enrichment_renderer_targets_fresh_sync_handler(monkeypatch):
+    handler = 'https://fresh.invalid/v2/sync-jobs/run'
+    monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', handler)
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@example.invalid')
+    entries = _MANIFEST['environments']['prod']['cloud_run']['services']['backend-integration']['env']
+    selected = {
+        name: entries[name]
+        for name in (
+            'SYNC_TASKS_QUEUE',
+            'SYNC_TASKS_HANDLER_URL',
+            'SYNC_TASKS_OIDC_AUDIENCE',
+            'SYNC_TASKS_INVOKER_SA',
+        )
+    }
+    rendered = _MODULE['_render_env_vars'](selected)
+    assert 'SYNC_TASKS_QUEUE=sync-jobs' in rendered
+    assert f'SYNC_TASKS_HANDLER_URL={handler}' in rendered
+    assert f'SYNC_TASKS_OIDC_AUDIENCE={handler}' in rendered
+    assert 'SYNC_TASKS_INVOKER_SA=invoker@example.invalid' in rendered
