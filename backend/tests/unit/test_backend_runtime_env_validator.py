@@ -72,6 +72,8 @@ def with_memory_env(payload: str) -> str:
         {"name": "BATCH_PIPELINE_UID_ALLOWLIST", "value": ""},
         {"name": "BATCH_PIPELINE_PERCENT", "value": "0"},
         {"name": "BATCH_PIPELINE_SERVING_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_RECOVERY_MODE", "value": "off"},
+        {"name": "BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST", "value": ""},
         {"name": "BATCH_PIPELINE_WORKER_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_API_URL", "value": ""},
         {"name": "BATCH_PIPELINE_WORKER_AUDIENCE", "value": ""},
@@ -84,10 +86,10 @@ def with_memory_env(payload: str) -> str:
         {"name": "AUDIO_ARCHIVE_STOP_PCM_ENABLED", "value": "false"},
         {"name": "AUDIO_ARCHIVE_SYNC_ENABLED", "value": "false"},
         {"name": "AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED", "value": "false"},
-        {"name": "AUDIO_ARCHIVE_COALESCE_ENABLED", "value": "false"},
+        {"name": "AUDIO_ARCHIVE_COALESCE_ENABLED", "value": "true"},
         {"name": "AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED", "value": "false"},
         {"name": "AUDIO_ARCHIVE_PERCENT", "value": "0"},
-        {"name": "AUDIO_ARCHIVE_UID_ALLOWLIST", "value": ""},
+        {"name": "AUDIO_ARCHIVE_UID_ALLOWLIST", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
         {"name": "BUCKET_AUDIO_DERIVED", "value": ""},
         {"name": "AUDIO_MERGE_WORKER_URL", "value": ""},
         {"name": "REDIS_DB_PORT", "value": "13151"},
@@ -528,7 +530,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = re.sub(
         r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
         r'\1\n        {"name": "CAPTURE_GROUP_CONTAINMENT_MODE", "value": "shadow"},'
-        r'\n        {"name": "DESKTOP_PENDANT_CALL_LINK_MODE", "value": "off"},'
+        r'\n        {"name": "DESKTOP_PENDANT_CALL_LINK_MODE", "value": "shadow"},'
         r'\n        {"name": "DESKTOP_PENDANT_CALL_LINK_PERCENT", "value": "100"},',
         payload,
         flags=re.DOTALL,
@@ -3238,6 +3240,17 @@ def test_live_chain_ramp_accepts_policy_tokens_unconditionally():
     config = {'gke': {'backend-listen': {'env': env_map}}}
     assert _validate_stt_serving_model_policy('prod', config) == []
     env_map['STT_SERVICE_MODELS']['value'] = 'unapproved-provider,soniox'
+    assert _validate_stt_serving_model_policy('prod', config)
+
+
+def test_non_listener_stt_models_accept_a_policy_ordered_subset():
+    from scripts.runtime_env_validation.manifest import _validate_stt_serving_model_policy
+
+    env_map = {'STT_SERVICE_MODELS': {'value': 'modulate-velma-2,soniox,parakeet'}}
+    config = {'gke': {'pusher': {'env': env_map}}}
+    assert _validate_stt_serving_model_policy('prod', config) == []
+
+    env_map['STT_SERVICE_MODELS']['value'] = 'parakeet,modulate-velma-2'
     assert _validate_stt_serving_model_policy('prod', config)
 
 
