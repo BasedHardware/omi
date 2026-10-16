@@ -24,7 +24,7 @@ from typing import Any, Callable, TypeVar
 
 from prometheus_client import Counter
 
-from utils.firestore_read_levers import lever_enabled
+from config.firestore_read_levers import lever_enabled
 
 logger = logging.getLogger(__name__)
 T = TypeVar('T')

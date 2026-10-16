@@ -2,7 +2,7 @@ import admin, { getDb } from "@/lib/firebase/admin";
 import { getRedis } from "@/lib/redis";
 import { randomUUID } from "node:crypto";
 
-// Same generation/writer protocol as backend/utils/s4_read_cache.py.
+// Same generation/writer protocol as backend/database/fsr_read_cache.py.
 // Always fence admin writes, including when the backend rollout is off.
 const BEGIN = `
 redis.call('SADD', KEYS[2], ARGV[1])
@@ -46,23 +46,46 @@ async function withSubscriptionInvalidation(
   const ttl = Number.isInteger(parsedTtl)
     ? Math.min(60, Math.max(1, parsedTtl))
     : 60;
+  // One deadline for the operation, independent of employee count. Reserve half
+  // for the end fence; Redis commands on the same connection retain FIFO order
+  // even if a timed-out begin finishes after the durable write.
+  const deadline = performance.now() + 250;
   async function invalidate(phase: "begin" | "end") {
     if (!redis) return;
-    for (const { root, token } of fences) {
-      try {
+    const client = redis;
+    const pending = Promise.all(
+      fences.map(async ({ root, token }) => {
         const args =
           phase === "begin" ? [token, ttl * 2] : [token, randomUUID(), ttl * 2];
-        await redis.eval(
+        await client.eval(
           phase === "begin" ? BEGIN : END,
           2,
           root + ":generation",
           root + ":writers",
           ...args
         );
-      } catch {
-        // Do not log user identifiers or provider exception payloads.
-        console.warn(`Subscription cache invalidation failed phase=${phase}`);
-      }
+      })
+    ).catch(() => {
+      // Do not log user identifiers or provider exception payloads.
+      console.warn(`Subscription cache invalidation failed phase=${phase}`);
+    });
+    const remaining = Math.max(0, deadline - performance.now());
+    const wait = phase === "begin" ? Math.min(125, remaining) : remaining;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        pending,
+        new Promise<void>((resolve) => {
+          timer = setTimeout(() => {
+            console.warn(
+              `Subscription cache invalidation timed out phase=${phase}`
+            );
+            resolve();
+          }, wait);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
     }
   }
   await invalidate("begin");

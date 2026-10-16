@@ -1,6 +1,6 @@
 import pytest
 
-from utils import firestore_read_levers as levers
+from config import firestore_read_levers as levers
 
 
 @pytest.fixture(autouse=True)

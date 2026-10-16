@@ -8,7 +8,7 @@ from typing import Any
 
 from prometheus_client import Counter
 
-from utils.firestore_read_levers import lever_enabled
+from config.firestore_read_levers import lever_enabled
 
 READS = Counter(
     'omi_sync_backfill_metadata_reads_total',

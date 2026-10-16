@@ -32,7 +32,7 @@ from utils.byok import (
 )
 from utils.executors import ExecutorSaturatedError, critical_executor, db_executor, run_blocking
 from utils.rate_limit_config import RATE_POLICIES, RATE_LIMIT_SHADOW, get_effective_limit
-from utils.s4_read_cache import request_read_scope
+from database.fsr_read_cache import request_read_scope
 from utils.jit_qa_admission import JITQAAdmissionError, enforce_jit_qa_uid
 
 logger = logging.getLogger(__name__)

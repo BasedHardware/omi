@@ -2,7 +2,7 @@ from typing import Any, Optional, cast
 from urllib.parse import urlparse
 
 from database._client import get_firestore_client
-from utils.s4_read_cache import serving_config
+from database.fsr_read_cache import serving_config
 
 # Keep the default live until the stable-promotion workflow has published the
 # static repair page. Operators can point an active recovery policy at that

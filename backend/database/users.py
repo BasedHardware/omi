@@ -1,5 +1,6 @@
+from config.firestore_read_levers import lever_enabled
 import uuid
-from utils.s4_read_cache import cache_writer, cached_read, memo, plane_id, ttl, user_snapshot, writing
+from database.fsr_read_cache import cache_writer, cached_read, memo, plane_id, ttl, user_snapshot, writing
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Optional, TypedDict
 
@@ -1824,8 +1825,6 @@ def set_user_onboarding_state(uid: str, onboarding_data: dict, *, firestore_clie
 
 
 def _s4_subscription_read(uid: str, variant: str, fetch) -> Subscription:
-    from utils.firestore_read_levers import lever_enabled
-
     # Preserve the original object/observation semantics with both levers off.
     if not lever_enabled('subscription_cache', uid) and not lever_enabled('request_read_dedupe', uid):
         return fetch()
@@ -1851,8 +1850,6 @@ def _s4_subscription_read(uid: str, variant: str, fetch) -> Subscription:
 
 
 def get_user_subscription(uid: str, *, firestore_client: Any | None = None, read_only: bool = False) -> Subscription:
-    from utils.firestore_read_levers import lever_enabled
-
     if not lever_enabled('subscription_cache', uid) and not lever_enabled('request_read_dedupe', uid):
         return _s4_get_user_subscription_uncached(uid, firestore_client=firestore_client, read_only=read_only)
     variant = f'subscription:{bool(read_only)}:{plane_id(firestore_client or db)}'

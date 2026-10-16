@@ -110,7 +110,7 @@ def _stub_module(name: str) -> types.ModuleType:
 # --- database stubs ---
 database_mod = _stub_module("database")
 if not hasattr(database_mod, "__path__"):
-    database_mod.__path__ = []
+    database_mod.__path__ = [str(BACKEND_DIR / "database")]
 for submodule in [
     "redis_db",
     "memories",

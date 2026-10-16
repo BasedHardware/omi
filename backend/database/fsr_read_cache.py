@@ -20,7 +20,10 @@ from datetime import datetime
 from functools import lru_cache, wraps
 from typing import Any
 
-from utils.firestore_read_levers import lever_enabled
+from config.firestore_read_levers import lever_enabled
+from database import redis_db
+from database.firestore_cache_metrics import record_request
+from database.fsr_cache_telemetry import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +66,7 @@ def fresh_reads():
 @contextmanager
 def fresh_cache_reads(uid, *families):
     """Fresh entitlements for client payment refreshes, retaining request dedupe."""
-    if any(lever_enabled(family, uid) for family in families):
+    if lever_enabled('request_read_dedupe', uid) or any(lever_enabled(family, uid) for family in families):
         _forget(uid)  # Auth may already have memoized a cached BYOK/user snapshot.
     token = _fresh_families.set(_fresh_families.get().union(families))
     try:
@@ -162,17 +165,13 @@ def ttl(name, default):
 
 @lru_cache(maxsize=1)
 def _redis():
-    from database.redis_db import create_bounded_redis_client
-
     # Optional caches and writer fences must not hold auth or durable writes open.
-    return create_bounded_redis_client(0.1)
+    return redis_db.create_bounded_redis_client(0.1)
 
 
 def _failure(family, operation):
     _event(family, operation + '_error')
     try:
-        from utils.observability.fallback import record_fallback
-
         record_fallback(
             component='firestore_read_cache',
             from_mode=family,
@@ -187,8 +186,6 @@ def _failure(family, operation):
 
 def _event(family, result):
     try:
-        from database.firestore_cache_metrics import record_request
-
         record_request('fsr_s4_' + family, result)
     except Exception:
         pass  # Instrumentation cannot change the source-of-truth behavior.

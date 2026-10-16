@@ -5,6 +5,7 @@ import copy
 import json
 import time
 from datetime import datetime, timezone
+from contextvars import Context
 from types import SimpleNamespace
 
 import fakeredis
@@ -18,7 +19,7 @@ from database import desktop_update_policy, serving_query_reads, user_usage, use
 from models.users import PlanType, Subscription
 from routers import users as router, payment, desktop_prompts, updates
 from utils.other import endpoints as auth
-from utils import s4_read_cache as cache
+from database import fsr_read_cache as cache
 from utils import subscription
 
 
@@ -650,15 +651,18 @@ def test_slow_read_does_not_extend_ttl_bound(env, monkeypatch, family, maximum):
     assert not env[1].exists(cache._root(family, 'u') + ':data:slow')
 
 
-def test_fresh_entitlement_refresh_discards_auth_memo_but_dedupes(env, monkeypatch):
-    enable(monkeypatch, 'subscription_cache', 'request_read_dedupe')
+@pytest.mark.parametrize('subscription_cache', [False, True])
+def test_fresh_entitlement_refresh_discards_auth_memo_but_dedupes(env, monkeypatch, subscription_cache):
+    enable(monkeypatch, 'request_read_dedupe', *(['subscription_cache'] if subscription_cache else []))
 
     async def request():
         scope = cache.request_read_scope()
         await anext(scope)
         try:
             assert users.get_user_subscription('u').plan == PlanType.basic
-            env[0].docs['users/u']['subscription'] = {'plan': 'operator', 'status': 'active'}
+            # A webhook runs in another request and cannot clear this auth memo.
+            Context().run(users.update_user_subscription, 'u', {'plan': 'operator', 'status': 'active'})
+            assert users.get_user_subscription('u').plan == PlanType.basic
             with cache.fresh_cache_reads('u', 'subscription_cache'):
                 assert users.get_user_subscription('u').plan == PlanType.operator
                 assert users.get_user_subscription('u').plan == PlanType.operator
@@ -692,7 +696,7 @@ def test_delayed_publication_cannot_extend_deletion_bound(env, monkeypatch, dela
 
 
 def test_serving_config_ttl_is_capped(monkeypatch):
-    from utils import s4_read_cache
+    from database import fsr_read_cache as s4_read_cache
 
     monkeypatch.setenv('FSR_SERVING_CONFIG_TTL_SECONDS', '999999')
     assert s4_read_cache.ttl('FSR_SERVING_CONFIG_TTL_SECONDS', 60) == 300

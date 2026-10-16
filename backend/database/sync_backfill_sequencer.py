@@ -18,7 +18,7 @@ from google.api_core.exceptions import NotFound
 from prometheus_client import Counter
 
 from database._client import get_firestore_client
-from utils.firestore_read_levers import lever_enabled
+from config.firestore_read_levers import lever_enabled
 from utils.sync import stage as sync_stage
 
 logger = logging.getLogger(__name__)

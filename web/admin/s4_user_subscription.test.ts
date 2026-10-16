@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   updateUserSubscriptionDetails,
   removeUserSubscriptionDetails,
@@ -44,7 +44,41 @@ beforeEach(() => {
     mocks.events.push("write");
   });
 });
+afterEach(() => vi.useRealTimers());
 describe("subscription writer cache fences", () => {
+  it.each(["grant", "remove"])(
+    "bounds all 500 hung Redis invalidations for %s to one deadline",
+    async (operation) => {
+      vi.useFakeTimers();
+      mocks.eval.mockImplementation(() => new Promise(() => {}));
+      const employees = Array.from({ length: 500 }, (_, i) => ({
+        uid: `u-${i}`,
+      }));
+      let completed = false;
+      const result = (
+        operation === "grant"
+          ? updateUserSubscriptionDetails(employees, subscription)
+          : removeUserSubscriptionDetails(employees)
+      ).then(() => {
+        completed = true;
+      });
+      expect(mocks.eval).toHaveBeenCalledTimes(500);
+      expect(mocks.commit).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(125);
+      expect(mocks.commit).toHaveBeenCalledOnce();
+      expect(mocks.eval).toHaveBeenCalledTimes(1000);
+      await vi.advanceTimersByTimeAsync(125);
+      await result;
+      expect(completed).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+      // The same tokens pair begin/end even when begin never acknowledges.
+      for (let i = 0; i < 500; i++) {
+        expect(mocks.eval.mock.calls[500 + i][4]).toBe(
+          mocks.eval.mock.calls[i][4]
+        );
+      }
+    }
+  );
   it("matches Python JSON key escaping for Unicode UIDs", async () => {
     await updateSingleUserSubscription("é😀\x7f", subscription);
     expect(mocks.eval.mock.calls[0][2]).toBe(

@@ -29,7 +29,7 @@ from database.action_items_cache import (
     read_cached_list,
     write_cached_list,
 )
-from utils.firestore_read_levers import lever_enabled
+from config.firestore_read_levers import lever_enabled
 from utils.action_items_list_guard import enforce_hot_client_list_ceiling, enforce_stale_client_list_refusal
 from utils.metrics import record_action_items_list_cache
 from utils.users import get_user_display_name

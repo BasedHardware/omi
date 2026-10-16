@@ -49,7 +49,7 @@ from typing import Any, Dict, Optional
 import redis as redis_pkg
 
 from database import redis_db
-from utils.firestore_read_levers import lever_enabled
+from config.firestore_read_levers import lever_enabled
 
 logger = logging.getLogger(__name__)
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from utils.s4_read_cache import cached_read, memo, plane_id, ttl
+from database.fsr_read_cache import cached_read, memo, plane_id, ttl
 
 from database._client import get_data_plane_firestore_client
 from database.account_deletion_policy import normalize_account_deletion_status

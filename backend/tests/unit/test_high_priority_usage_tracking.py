@@ -156,7 +156,7 @@ if pytz_stubbed:
 # Use _stub_module which only creates if not already loaded
 database_mod = _stub_module("database")
 if not hasattr(database_mod, '__path__'):
-    database_mod.__path__ = []
+    database_mod.__path__ = [str(BACKEND_DIR / "database")]
 for submodule in [
     "auth",
     "redis_db",

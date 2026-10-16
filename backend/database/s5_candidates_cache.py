@@ -18,7 +18,7 @@ from redis.exceptions import RedisError
 from database import redis_db
 from database.read_boundary import MalformedDocError, parse_payload_strict
 from models.candidate import CandidateRecord
-from utils.firestore_read_levers import lever_enabled
+from config.firestore_read_levers import lever_enabled
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)

@@ -91,7 +91,7 @@ from models.users import (
 )
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
 from utils.apps import get_available_app_by_id
-from utils.s4_read_cache import fresh_cache_reads
+from database.fsr_read_cache import fresh_cache_reads
 from utils.subscription import (
     DESKTOP_CHAT_BYOK_PROVIDER,
     resolve_transcription_allowance,

@@ -643,7 +643,7 @@ def apply_reset(client: Any, uid: str, plan: ResetPlan) -> None:
     """Zero ``transcription_seconds`` on every doc in the reset plan (batched)."""
     if not plan.doc_ids:
         return
-    from utils.s4_read_cache import writing
+    from database.fsr_read_cache import writing
 
     with writing('usage_month_cache', uid):
         hourly = client.collection("users").document(uid).collection("hourly_usage")

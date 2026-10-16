@@ -3,8 +3,8 @@
 from database._client import get_firestore_client
 from dataclasses import dataclass
 from copy import deepcopy
-from utils.s4_read_cache import serving_config, serving_config_key
-from utils.firestore_read_levers import lever_enabled
+from database.fsr_read_cache import serving_config, serving_config_key
+from config.firestore_read_levers import lever_enabled
 
 
 @dataclass

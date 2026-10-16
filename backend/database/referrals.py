@@ -6,7 +6,7 @@ from google.cloud import firestore
 
 from database._client import get_customer_firestore_client, run_transactional
 from utils.referrals import referral_claim_patch
-from utils.s4_read_cache import writing
+from database.fsr_read_cache import writing
 
 
 def claim_referral_trial(

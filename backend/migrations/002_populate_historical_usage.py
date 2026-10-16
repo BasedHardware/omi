@@ -19,7 +19,7 @@ from database import user_usage as user_usage_db
 from models.conversation import Conversation
 from models.memories import MemoryDB
 from utils import encryption
-from utils.s4_read_cache import cache_writer
+from database.fsr_read_cache import cache_writer
 import logging
 
 logger = logging.getLogger(__name__)

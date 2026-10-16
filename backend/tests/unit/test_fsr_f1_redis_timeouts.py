@@ -8,7 +8,7 @@ from unittest.mock import Mock
 import pytest
 
 from database import action_items_cache, s5_candidates_cache
-from utils import s4_read_cache
+from database import fsr_read_cache as s4_read_cache
 from routers import action_items as router
 
 
