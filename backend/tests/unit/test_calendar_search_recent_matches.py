@@ -301,3 +301,41 @@ class TestCalendarSearchRecentMatches(unittest.IsolatedAsyncioTestCase):
         assert len(results) == 5
         # The 5 nearest time_max (the latest events from page 2)
         assert [e["id"] for e in results] == ["event_15", "event_16", "event_17", "event_18", "event_19"]
+
+    async def test_auth_error_retry_preserves_newest_first_with_search_query(self):
+        """Verify that after an auth error and token refresh, the retry call still
+        passes newest_first=True when search_query is set (catching regression noted by maintainer)."""
+        all_items = [
+            {
+                "id": f"event_{i:02d}",
+                "summary": f"1:1 with Andy #{i}",
+                "start": {"dateTime": f"2026-03-{i+1:02d}T10:00:00Z"},
+            }
+            for i in range(20)
+        ]
+
+        auth_error = GoogleAPIError("Token expired", is_auth_error=True, status_code=401)
+        mock_get_events = AsyncMock(
+            side_effect=[
+                auth_error,
+                all_items[-10:],
+            ]
+        )
+
+        with patch.object(ct, "prepare_access", return_value=("test-uid", {"connected": True}, "old-token", None)), \
+             patch.object(ct, "refresh_google_token", new=AsyncMock(return_value="new-token")), \
+             patch.object(ct, "_get_user_display_tz", new=AsyncMock(return_value=(timezone.utc, "UTC"))), \
+             patch.object(ct, "get_google_calendar_events", mock_get_events):
+
+            result = await get_calendar_events_tool(
+                search_query="Andy",
+                max_results=10,
+            )
+
+        assert mock_get_events.call_count == 2
+        # First call passes newest_first=True
+        assert mock_get_events.call_args_list[0].kwargs.get("newest_first") is True
+        # Retry call after refresh MUST also pass newest_first=True
+        assert mock_get_events.call_args_list[1].kwargs.get("newest_first") is True
+        assert "1:1 with Andy #19" in result
+

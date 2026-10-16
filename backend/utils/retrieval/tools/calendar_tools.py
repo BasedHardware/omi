@@ -715,6 +715,7 @@ async def get_calendar_events_tool(
                             time_max=time_max,
                             max_results=max_results,
                             search_query=search_query,
+                            newest_first=bool(search_query),
                         )
                     except Exception as retry_error:
                         logger.error(f"❌ Error after token refresh: {retry_error}", exc_info=True)
