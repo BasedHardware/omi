@@ -172,6 +172,9 @@ def _enqueue(row: dict[str, Any]) -> None:
         immediate=bool(row.get('immediate')),
     ):
         return
+    from config.demand_processing import enabled
+
+    eager_recovery = enabled(row['uid'])
     enqueue_named_task(
         dispatch['queue'],
         handler,
@@ -179,7 +182,7 @@ def _enqueue(row: dict[str, Any]) -> None:
         payload,
         audience=dispatch['audience'],
         invoker_sa=dispatch['invoker_sa'],
-        schedule_at=math.ceil(row['due_at']),
+        schedule_at=math.ceil(time.time() if eager_recovery else row['due_at']),
     )
 
 
@@ -283,7 +286,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         pending = dict(old)
         pending.update(
             lease_until=0,
-            task_token=old['task_token'] if old.get('effects_only') else uuid.uuid4().hex,
+            task_token=uuid.uuid4().hex,
             wake_token=uuid.uuid4().hex,
             task_due_at=pending['due_at'],
         )
@@ -352,7 +355,7 @@ def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bo
         language=language,
         effects_only=True,
         immediate=immediate,
-        task_token=document_id[:32],
+        task_token=uuid.uuid4().hex,
         due_at=current + settle_seconds(),
         task_due_at=current + settle_seconds(),
         dispatch=_effects_binding(),

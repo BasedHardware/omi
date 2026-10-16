@@ -10,17 +10,31 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import time
 from typing import Any
 
 from prometheus_client import Counter, Gauge
-from config.demand_processing import enabled, OPEN_LEASE_SECONDS, RECENT_SECONDS, DISPATCH_DELAY
+from config.demand_processing import (
+    enabled,
+    surface_reporting_enabled,
+    OPEN_LEASE_SECONDS,
+    RECENT_SECONDS,
+    DISPATCH_DELAY,
+)
 
 logger = logging.getLogger(__name__)
 AGE = Gauge('omi_demand_processing_queue_age_seconds', 'Oldest waiting obligation by tier', ['tier'])
 EVENTS = Counter('omi_demand_processing_total', 'Demand scheduling outcomes', ['outcome'])
 PREFIX = 'demand-processing:v1:'
 TTL = 2 * 86400
+
+
+def prefix() -> str:
+    stage = os.getenv('OMI_ENV_STAGE', '').strip().lower()
+    if stage not in {'prod', 'dev', 'local', 'offline'}:
+        raise ValueError('demand scheduling requires an explicit runtime stage')
+    return stage + ':' + PREFIX
 
 
 def client():
@@ -30,7 +44,7 @@ def client():
 
 
 def owner_key(uid: str) -> str:
-    return PREFIX + hashlib.sha256(uid.encode()).hexdigest()
+    return prefix() + hashlib.sha256(uid.encode()).hexdigest()
 
 
 def tier(last_open: float | None, open_until: float, now: float) -> int:
@@ -98,7 +112,7 @@ def schedule(
     now = time.time() if now is None else now
     try:
         r = client()
-        old = r.get(PREFIX + obligation)
+        old = r.get(prefix() + obligation)
         previous = json.loads(old) if old else {}
         started = previous.get('started_at', now)
         priority = user_tier(uid, now=now, redis=r)
@@ -118,12 +132,12 @@ def schedule(
             name=name,
         )
         p = r.pipeline()
-        p.set(PREFIX + obligation, json.dumps(row), ex=TTL)
+        p.set(prefix() + obligation, json.dumps(row), ex=TTL)
         p.zadd(owner_key(uid) + ':pending', {obligation: started})
         p.expire(owner_key(uid) + ':pending', TTL)
         for t in range(3):
-            p.zrem(PREFIX + f'queue:{t}', obligation)
-        p.zadd(PREFIX + f'queue:{priority}', {obligation: started})
+            p.zrem(prefix() + f'queue:{t}', obligation)
+        p.zadd(prefix() + f'queue:{priority}', {obligation: started})
         p.execute()
         _wake(row)
         EVENTS.labels('scheduled').inc()
@@ -133,41 +147,58 @@ def schedule(
         return False
 
 
-def promote(uid: str, *, hours: int = 6, limit: int = 100, now: float | None = None) -> dict:
+def promote(uid: str, *, hours: int = 6, limit: int | None = 100, now: float | None = None) -> dict:
     """Wake only this authenticated owner's indexed debt, newest first, without database scans."""
     now = time.time() if now is None else now
     r = client()
-    pending = r.zrevrangebyscore(owner_key(uid) + ':pending', now, now - hours * 3600, start=0, num=limit + 1)
+    query = {} if limit is None else {'start': 0, 'num': limit + 1}
+    pending = r.zrevrangebyscore(owner_key(uid) + ':pending', now, now - hours * 3600, **query)
     count = 0
-    for raw in pending[:limit]:
+    for raw in pending if limit is None else pending[:limit]:
         obligation = raw.decode() if isinstance(raw, bytes) else raw
-        value = r.get(PREFIX + obligation)
-        if not value:
-            r.zrem(owner_key(uid) + ':pending', obligation)
-            continue
-        row = json.loads(value)
-        if row['owner'] != owner_key(uid):
-            continue
-        row.update(tier=0, due_at=now)
-        p = r.pipeline()
-        p.set(PREFIX + obligation, json.dumps(row), ex=TTL)
-        for t in range(3):
-            p.zrem(PREFIX + f'queue:{t}', obligation)
-        p.zadd(PREFIX + 'queue:0', {obligation: row['started_at']})
-        p.execute()
-        _wake(row, immediate=True, now=now)
-        count += 1
+        if _promote_member(uid, obligation, r, now):
+            count += 1
     EVENTS.labels('promoted').inc(count)
     return {
         'status': 'processing' if count else 'no_indexed_pending_work',
         'promoted': count,
-        'has_more': len(pending) > limit,
+        'has_more': limit is not None and len(pending) > limit,
         'ready': False,
     }
 
 
-def observe_surface(uid: str, session: str, payload: dict, *, now: float | None = None) -> None:
+def _promote_member(uid: str, obligation: str, r: Any, now: float) -> bool:
+    value = r.get(prefix() + obligation)
+    if not value:
+        r.zrem(owner_key(uid) + ':pending', obligation)
+        return False
+    row = json.loads(value)
+    if row['owner'] != owner_key(uid):
+        return False
+    row.update(tier=0, due_at=now)
+    p = r.pipeline()
+    p.set(prefix() + obligation, json.dumps(row), ex=TTL)
+    for priority in range(3):
+        p.zrem(prefix() + f'queue:{priority}', obligation)
+    p.zadd(prefix() + 'queue:0', {obligation: row['started_at']})
+    p.execute()
+    _wake(row, immediate=True, now=now)
+    return True
+
+
+def promote_conversation_effects(uid: str, conversation_id: str) -> None:
     if not enabled(uid):
+        return
+    from utils.sync.reprocess import key
+
+    try:
+        _promote_member(uid, key(uid, conversation_id + '\0effects'), client(), time.time())
+    except Exception:
+        _fallback()
+
+
+def observe_surface(uid: str, session: str, payload: dict, *, now: float | None = None) -> None:
+    if not enabled(uid) or not surface_reporting_enabled():
         return
     foreground = payload.get('surface_open', payload.get('foreground'))
     if not isinstance(foreground, bool) or not isinstance(payload.get('transcript_visible'), bool):
@@ -188,7 +219,7 @@ def observe_surface(uid: str, session: str, payload: dict, *, now: float | None 
         p.execute()
         if foreground and not was_open:
             # All indexed pending work, including older debt; newest is woken first.
-            promote(uid, hours=48, limit=1000, now=now)
+            promote(uid, hours=48, limit=None, now=now)
     except Exception:
         _fallback()
 
@@ -205,7 +236,7 @@ def admit(obligation: str, *, now: float | None = None, token: str | int | None 
     now = time.time() if now is None else now
     try:
         r = client()
-        raw = r.get(PREFIX + obligation)
+        raw = r.get(prefix() + obligation)
         if not raw:
             return True
         row = json.loads(raw)
@@ -233,7 +264,7 @@ def admit(obligation: str, *, now: float | None = None, token: str | int | None 
             return postpone()
         overdue = now - row['started_at'] >= DISPATCH_DELAY[2]
         for priority in range(3):
-            queue = PREFIX + f'queue:{priority}'
+            queue = prefix() + f'queue:{priority}'
             # Prune expired rows without allowing stale index entries to block drain.
             r.zremrangebyscore(queue, '-inf', now - TTL)
             oldest = r.zrange(queue, 0, 0, withscores=True)
@@ -242,9 +273,9 @@ def admit(obligation: str, *, now: float | None = None, token: str | int | None 
                 return postpone()
         p = r.pipeline()
         for priority in range(3):
-            p.zrem(PREFIX + f'queue:{priority}', obligation)
+            p.zrem(prefix() + f'queue:{priority}', obligation)
         p.zrem(row['owner'] + ':pending', obligation)
-        p.delete(PREFIX + obligation)
+        p.delete(prefix() + obligation)
         p.execute()
         EVENTS.labels('admitted').inc()
         return True
@@ -274,7 +305,7 @@ def queue_age(priority: int) -> float:
     try:
         now = time.time()
         r = client()
-        queue = PREFIX + f'queue:{priority}'
+        queue = prefix() + f'queue:{priority}'
         r.zremrangebyscore(queue, '-inf', now - TTL)
         oldest = r.zrange(queue, 0, 0, withscores=True)
         return max(0.0, now - oldest[0][1]) if oldest else 0.0

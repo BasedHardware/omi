@@ -13,9 +13,11 @@ from utils.conversations.day_merge_pass import engaged, shadow_day
 
 @pytest.fixture
 def runtime(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'true')
     monkeypatch.setenv('DEMAND_PROCESSING_PERCENT', '100')
     monkeypatch.setenv('DEMAND_PROCESSING_TOOL_ENABLED', 'true')
+    monkeypatch.setenv('DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED', 'true')
     redis = fakeredis.FakeRedis()
     monkeypatch.setattr(demand, 'client', lambda: redis)
     from utils import cloud_tasks
@@ -77,8 +79,8 @@ def test_surface_promotes_only_owner_and_session_leases_union(runtime):
     assert wake.call_args.kwargs['schedule_at'] == 4540
     report('owner')
     assert demand.user_tier('owner', now=1001) == 0
-    assert json.loads(redis.get(demand.PREFIX + 'pending'))['tier'] == 0
-    assert json.loads(redis.get(demand.PREFIX + 'other'))['tier'] == 2
+    assert json.loads(redis.get(demand.prefix() + 'pending'))['tier'] == 0
+    assert json.loads(redis.get(demand.prefix() + 'other'))['tier'] == 2
     report('owner', session='mac', now=1002)
     report('owner', False, now=1003)
     assert demand.user_tier('owner', now=1004) == 0
@@ -108,7 +110,7 @@ def test_ceiling_not_reset_by_revision_or_redis_repair(runtime):
     redis, _ = runtime
     schedule('owner', 'pending', now=1000)
     schedule('owner', 'pending', now=4400)
-    row = json.loads(redis.get(demand.PREFIX + 'pending'))
+    row = json.loads(redis.get(demand.prefix() + 'pending'))
     assert row['started_at'] == 1000 and row['due_at'] == 4540
     assert demand.admit('pending', now=4540)
 
@@ -116,7 +118,7 @@ def test_ceiling_not_reset_by_revision_or_redis_repair(runtime):
 def test_lazy_settlement_and_open_bypass(runtime):
     redis, _ = runtime
     schedule('owner', 'effects', now=1000, not_before=1600, effects_only=True)
-    assert json.loads(redis.get(demand.PREFIX + 'effects'))['due_at'] == 1600
+    assert json.loads(redis.get(demand.prefix() + 'effects'))['due_at'] == 1600
     report('owner', now=1100)
     assert demand.admit('effects', now=1100)
 
@@ -132,7 +134,7 @@ def test_tool_auth_bounds_and_progress(runtime):
     result = demand.process_recent('owner')
     assert result['promoted'] == 1 and result['ready'] is False
     assert demand.process_recent('owner')['status'] == 'rate_limited'
-    assert json.loads(runtime[0].get(demand.PREFIX + 'other'))['tier'] == 2
+    assert json.loads(runtime[0].get(demand.prefix() + 'other'))['tier'] == 2
 
 
 def test_merge_pass_is_shadow_and_unknown_engagement_protected(monkeypatch, caplog):
@@ -156,7 +158,7 @@ def test_stale_delivery_cannot_remove_current_priority(runtime):
     redis, _ = runtime
     schedule('owner', 'pending', now=1000)
     assert demand.admit('pending', now=1000, token=2)
-    assert redis.get(demand.PREFIX + 'pending')
+    assert redis.get(demand.prefix() + 'pending')
 
 
 def test_queue_age_uses_waiting_index_without_worker_start(runtime, monkeypatch):
@@ -164,3 +166,31 @@ def test_queue_age_uses_waiting_index_without_worker_start(runtime, monkeypatch)
     monkeypatch.setattr(demand.time, 'time', lambda: 1200)
     assert demand.queue_age(2) == 200
     assert demand.queue_age(0) == 0
+
+
+@pytest.fixture
+def tool_adapters():
+    from utils.retrieval.tools.demand_processing_tools import process_recent_conversations
+    from utils.mcp_server.handlers import other
+    from utils.mcp_server.errors import ToolExecutionError
+
+    return process_recent_conversations, other, ToolExecutionError
+
+
+def test_chat_tool_binds_injected_owner_without_uid_argument(runtime, monkeypatch, tool_adapters):
+    process_recent_conversations, _, _ = tool_adapters
+
+    assert set(process_recent_conversations.args) == {'hours', 'limit'}
+    called = Mock(return_value={'ready': False, 'status': 'processing'})
+    monkeypatch.setattr(demand, 'process_recent', called)
+    process_recent_conversations.invoke({'hours': 2, 'limit': 3}, config={'configurable': {'user_id': 'owner'}})
+    called.assert_called_once_with('owner', hours=2, limit=3)
+    with pytest.raises(PermissionError):
+        process_recent_conversations.invoke({})
+
+
+def test_mcp_tool_rejects_an_owner_argument(runtime, tool_adapters):
+    _, other, ToolExecutionError = tool_adapters
+
+    with pytest.raises(ToolExecutionError):
+        other.process_recent_conversations('owner', {'uid': 'other'})

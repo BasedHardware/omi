@@ -2183,6 +2183,16 @@ def _write_action_items(uid: str, conversation: Conversation, trigger: Optional[
         submit_with_context(postprocess_executor, _run_auto_sync)
 
 
+def apply_settled_enrichment(uid: str, conversation: Conversation) -> None:
+    """Apply invisible effects using the same canonical and capture-policy writers."""
+    extract_memories(uid, conversation)
+    person_ids = list(set(conversation.get_person_ids()))
+    people = Person.deserialize_many_safe(users_db.get_people_by_ids(uid, person_ids)) if person_ids else []
+    _save_action_items(uid, conversation, people, ProcessingTrigger.SYNC_UPDATE)
+    if save_structured_vector(uid, conversation) is False:
+        raise RuntimeError('conversation vector is not ready')
+
+
 def _save_action_items(
     uid: str, conversation: Conversation, people: Sequence[Person] = (), trigger: Optional[ProcessingTrigger] = None
 ):

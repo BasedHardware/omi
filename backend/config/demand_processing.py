@@ -10,8 +10,13 @@ def enabled(uid: str | None = None) -> bool:
         return True
     import hashlib
 
-    allowlist = os.getenv('DEMAND_PROCESSING_UID_ALLOWLIST', '').split(',')
-    percent = max(0, min(100, int(os.getenv('DEMAND_PROCESSING_PERCENT', '0'))))
+    if not uid:
+        return False
+    allowlist = {item.strip() for item in os.getenv('DEMAND_PROCESSING_UID_ALLOWLIST', '').split(',') if item.strip()}
+    try:
+        percent = max(0, min(100, int(os.getenv('DEMAND_PROCESSING_PERCENT', '0'))))
+    except ValueError:
+        percent = 0
     return uid in allowlist or int(hashlib.sha256(uid.encode()).hexdigest()[:8], 16) % 100 < percent
 
 
@@ -28,3 +33,7 @@ RECENT_SECONDS = 7 * 86400
 # Reserve one minute for processing before the product's completion target.
 DISPATCH_DELAY = (0, 240, 3540)
 CEILING_SECONDS = 3600
+
+
+def surface_reporting_enabled() -> bool:
+    return os.getenv('DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED', 'false').lower() == 'true'

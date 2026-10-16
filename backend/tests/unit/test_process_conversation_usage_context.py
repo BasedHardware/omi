@@ -1748,7 +1748,9 @@ def test_lazy_worker_uses_settled_notes_without_regenerating_them(monkeypatch):
     monkeypatch.setattr(process_conversation, 'save_structured_vector', vectors)
     monkeypatch.setattr(process_conversation, '_get_structured', notes)
     monkeypatch.setattr(
-        lazy_enrichment.conversations_db, 'update_conversation', lambda uid, cid, changes: row.update(changes)
+        lazy_enrichment.conversations_db,
+        'record_demand_enrichment_checkpoint',
+        lambda uid, cid, digest: row.update({lazy_enrichment.CHECKPOINT: digest}),
     )
     lazy_enrichment.enrich_settled('uid', 'c', 'en')
     lazy_enrichment.enrich_settled('uid', 'c', 'en')

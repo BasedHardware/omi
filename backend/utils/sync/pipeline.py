@@ -1637,6 +1637,10 @@ def _reprocess_merged_conversations(
                 mark(uid, conversation_id, language)
             else:
                 _reprocess_conversation_after_update(uid, conversation_id, language)
+                if user_selected:
+                    from utils.conversations.demand_processing import promote_conversation_effects
+
+                    promote_conversation_effects(uid, conversation_id)
         except SyncConversationPersistenceFenced:
             fenced_ids.add(conversation_id)
             response.setdefault(_RESPONSE_FENCED_CONVERSATION_IDS, set()).add(conversation_id)

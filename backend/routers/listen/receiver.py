@@ -2092,7 +2092,7 @@ class ListenReceiver(ReplayFilterMixin):
         elif kind == 'client_state':
             from utils.conversations.demand_processing import observe_surface
 
-            if 'surface_open' in payload:
+            if 'surface_open' in payload or self._telemetry_platform() in {'ios', 'android', 'mobile'}:
                 await run_blocking(
                     db_executor, observe_surface, self.host.request.uid, str(self.host.session_id), payload
                 )
