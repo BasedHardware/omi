@@ -896,6 +896,7 @@ final class OmiBleManager: NSObject {
         let i = days.count - 1
         days[i]["received"] = (days[i]["received"] as? Int64 ?? 0) + 1
         days[i]["expected"] = (days[i]["expected"] as? Int64 ?? 0) + Int64(delta > 4096 ? 1 : delta)
+        days[i]["last_at"] = now
         packetDays[uuid] = Array(days.suffix(8))
         if let marker = healthStore.openSince(uuid) {
             let key = Self.historyKey(uuid)
@@ -908,11 +909,29 @@ final class OmiBleManager: NSObject {
                 history = Array((history + [["timestamp": marker, "lostAudioResolvedAt": now, "identity_epoch": healthStore.epoch]]).suffix(Self.maxDisconnectHistory))
             }
             let persisted = persistPropertyListRecords(history, forKey: key, in: defaults)
-            // Audio resumed. Clear the marker even when the history plist write
-            // fails; otherwise a stuck start is re-imported as a full lost day.
-            defaults.removeObject(forKey: "ble_audio_outage_\(uuid)")
-            guard persisted else { return }
-            persistPropertyListRecords(packetDays[uuid] ?? [], forKey: "ble_packet_days_\(uuid)", in: defaults)
+            // Audio resumed. Drop the start marker only after some durable
+            // recovery exists. A failed history write keeps the marker unless a
+            // separate small stamp lands, so the outage cannot vanish.
+            if persisted {
+                defaults.removeObject(forKey: "ble_audio_recovery_\(uuid)")
+                defaults.removeObject(forKey: "ble_audio_outage_\(uuid)")
+                persistPropertyListRecords(packetDays[uuid] ?? [], forKey: "ble_packet_days_\(uuid)", in: defaults)
+            } else if persistAudioRecoveryStamp(uuid: uuid, start: marker, resolvedAt: now, in: defaults) {
+                defaults.removeObject(forKey: "ble_audio_outage_\(uuid)")
+            }
+        }
+    }
+
+    private func persistAudioRecoveryStamp(uuid: String, start: Int64, resolvedAt: Int64, in defaults: UserDefaults) -> Bool {
+        do {
+            try SafeDefaults.store(.dictionary([
+                "start": .int64(start),
+                "resolved_at": .int64(resolvedAt),
+                "identity_epoch": .int64(healthStore.epoch),
+            ]), forKey: "ble_audio_recovery_\(uuid)", in: defaults)
+            return true
+        } catch {
+            return false
         }
     }
 
@@ -978,6 +997,13 @@ final class OmiBleManager: NSObject {
         ]
         data["identity_epoch"] = healthStore.epoch
         data["audio_outage_started_at"] = healthStore.openSince(uuid)
+        if let recovery = defaults.dictionary(forKey: "ble_audio_recovery_\(uuid)"),
+           recovery["identity_epoch"] as? Int64 == healthStore.epoch,
+           let resolvedStart = recovery["start"] as? Int64,
+           let resolvedAt = recovery["resolved_at"] as? Int64 {
+            data["audio_outage_resolved_start"] = resolvedStart
+            data["audio_outage_resolved_at"] = resolvedAt
+        }
         guard let encoded = try? SafeJSON.data(withJSONObject: data),
               let result = String(data: encoded, encoding: .utf8) else { return "{}" }
         return result
