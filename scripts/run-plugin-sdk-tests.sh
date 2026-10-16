@@ -10,6 +10,8 @@ python_version="$(tr -d '[:space:]' < "$repo_root/backend/.python-version")"
 sdk_src="$repo_root/plugins/omi-plugin-sdk/src"
 test_files=(
   "$repo_root/plugins/omi-plugin-sdk/tests/test_models.py"
+  "$repo_root/plugins/omi-plugin-sdk/tests/test_webhook_signing.py"
+  "$repo_root/plugins/omi-plugin-sdk/tests/test_request_signing.py"
 )
 
 pinned_deps=(

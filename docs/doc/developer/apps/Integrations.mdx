@@ -446,6 +446,174 @@ The top-level `created_at` is the webhook send timestamp in UTC, with an explici
 
 ---
 
+## Verifying Webhook Signatures
+
+Anyone who knows a user's `uid` can send your endpoint a request that looks like one of the payloads above. To prove a request really came from Omi, issue a **signing secret** for your destination and check the signature on every delivery before you trust `uid`.
+
+### Getting a secret
+
+<Steps>
+  <Step title="Developer webhooks" icon="gear">
+    In the Omi web app open **Settings → Developer → Webhooks**. The **Signing secret** row sits under the four webhook URLs. Click **Create secret**; the secret (`whsec_...`) is shown **once**, so copy it into your server's secret manager before closing the dialog. One secret signs every developer webhook you have configured.
+  </Step>
+  <Step title="Integration apps" icon="puzzle-piece">
+    Open your app from **Connectors**, click **Edit**, and find **Webhook signing** in the **External Integration** section (it appears once the app exists). **Create secret** works the same way. Each app has its own secret, and only the app owner can manage it. The same secret also signs the app's [chat-tool calls](/doc/developer/apps/ChatTools#verify-every-tool-call).
+  </Step>
+  <Step title="Rotate or delete" icon="rotate">
+    **Rotate** issues a new secret immediately and keeps the current one valid for 24 hours, so you can update your server without dropping deliveries. Only the current and the previous secret are kept. **Delete** turns signing off; deliveries then carry no signature headers.
+  </Step>
+</Steps>
+
+The same actions are available over the API with your normal Omi `Authorization` header:
+
+| Destination | Endpoint |
+|-------------|----------|
+| Developer webhooks | `POST`, `GET`, `DELETE` `/v1/users/developer/webhook-signing-secret` |
+| An integration app you own | `POST`, `GET`, `DELETE` `/v1/apps/{app_id}/webhook-signing-secret` |
+
+`POST` issues the secret and returns it **once**; calling it again **rotates** (`previous_valid_until` in the response tells you how long the old secret keeps signing). `GET` reports whether a secret is configured. `DELETE` turns signing off.
+
+Issue, rotate and delete are limited to 10 calls per hour per account across both destinations; a refused call answers `429` with a `Retry-After` header. Reading the status is not limited.
+
+### What a signed delivery carries
+
+| Header | Value |
+|--------|-------|
+| `X-Omi-Signature` | `t=<unix seconds>,v1=<hex HMAC-SHA256>`. During a rotation window there are two `v1=` entries, one per secret. |
+| `X-Omi-Event` | The webhook type: `memory_created`, `realtime_transcript`, `audio_bytes`, `day_summary` or `button_event` |
+| `X-Omi-Delivery` | A stable id for this delivery, repeated unchanged on every retry |
+| `Idempotency-Key` | Developer webhooks: the same id as `X-Omi-Delivery`. Integration apps receive it as `X-Omi-Idempotency-Key` on memory deliveries. |
+
+### The signed string
+
+The signature is HMAC-SHA256, keyed with your secret, over these bytes, in this order:
+
+1. the `t` value from the header, as decimal ASCII digits;
+2. one `.` (ASCII 0x2E);
+3. the `uid` Omi appended to the request's query string, as the decoded parameter value, UTF-8 encoded;
+4. one `.`;
+5. the raw request body, byte for byte.
+
+So for `t=1760000000`, `?uid=abc123` and a JSON body, the signed bytes are `1760000000.abc123.{"id":...}`. Every delivery Omi sends today carries `uid`; if a future event has none, the segment is empty (`1760000000..<body>`). The signature covers `uid` on purpose: most bodies do not contain the user id, so without it a captured delivery could be replayed within the tolerance window with someone else's `uid` in the query string. A changed `uid` makes verification fail.
+
+Verify against the exact body bytes you received: parsing the JSON and serializing it again will not match. Reject timestamps more than five minutes away from your clock so a captured delivery cannot be replayed later. Inside those five minutes a captured delivery could still be sent again unchanged, and `v1` does not cover `X-Omi-Delivery`, so a replay can carry a fresh one. To reject replays inside the window, remember the signature values you have seen for five minutes and refuse a repeat. Omi's own retries are signed afresh, so this does not swallow them; use `X-Omi-Delivery` to recognise those (see [Retries and duplicate deliveries](#retries-and-duplicate-deliveries)).
+
+A destination without a secret receives exactly what it receives today, with none of these headers.
+
+<Note>
+Chat-tool calls are signed with the same app secret, but with the request-bound `v2` scheme, which also covers the method, path and query string: see [Verify Every Tool Call](/doc/developer/apps/ChatTools#verify-every-tool-call). The `audio_bytes_websocket` stream is not signed yet, so keep treating `uid` in it as unverified.
+</Note>
+
+### Verifying (Python)
+
+`body` must be the raw request **bytes** (`await request.body()`), never a parsed-and-re-serialized object. `uid` is the value from the query string. The comparison runs on bytes so a hostile non-ASCII header yields `False` (your 401) rather than an exception (a 500).
+
+```python
+import hashlib
+import hmac
+import time
+
+TOLERANCE_SECONDS = 300
+
+
+def verify_omi_signature(headers, body: bytes, uid: str, secret: str) -> bool:
+    if not isinstance(body, (bytes, bytearray)):
+        return False
+    timestamp, signatures = None, []
+    for part in headers.get("X-Omi-Signature", "").split(","):
+        key, _, value = part.strip().partition("=")
+        if key == "t" and value.isascii() and value.isdigit():
+            timestamp = int(value)  # isascii: "²".isdigit() is True and int("²") raises
+        elif key == "v1" and value:
+            signatures.append(value)
+    if timestamp is None or not signatures:
+        return False
+    if abs(time.time() - timestamp) > TOLERANCE_SECONDS:
+        return False  # stale or from the future: treat as a replay
+    message = f"{timestamp}.{uid}.".encode("utf-8") + bytes(body)
+    expected = hmac.new(secret.encode("utf-8"), message, hashlib.sha256).hexdigest().encode("ascii")
+    return any(hmac.compare_digest(expected, candidate.encode("utf-8")) for candidate in signatures)
+```
+
+Used from the FastAPI handler shown below:
+
+```python
+import json
+import os
+
+from fastapi import FastAPI, HTTPException, Request
+
+app = FastAPI()
+OMI_WEBHOOK_SECRET = os.environ["OMI_WEBHOOK_SECRET"]
+
+
+@app.post("/webhook")
+async def handle_memory(request: Request, uid: str):
+    body = await request.body()  # raw bytes: do not use request.json() here
+    if not verify_omi_signature(request.headers, body, uid, OMI_WEBHOOK_SECRET):
+        raise HTTPException(status_code=401, detail="Invalid Omi signature")
+    memory = json.loads(body)  # only now is uid trustworthy
+    return {"status": "ok"}
+```
+
+### Verifying (Node)
+
+Same rules: the body must be the raw bytes (use a raw body parser, not a JSON one, on the webhook route), `uid` comes from the query string, and the comparison is constant-time on equal-length buffers.
+
+```ts
+import { createHmac, timingSafeEqual } from "node:crypto";
+import express from "express";
+
+const TOLERANCE_SECONDS = 300;
+
+export function verifyOmiSignature(
+  signatureHeader: string | undefined,
+  body: Buffer,
+  uid: string,
+  secret: string,
+): boolean {
+  if (!signatureHeader || !Buffer.isBuffer(body)) return false;
+  let timestamp: number | undefined;
+  const signatures: string[] = [];
+  for (const part of signatureHeader.split(",")) {
+    const [key, ...rest] = part.trim().split("=");
+    const value = rest.join("=");
+    if (key === "t" && /^\d+$/.test(value)) timestamp = Number(value);
+    else if (key === "v1" && value) signatures.push(value);
+  }
+  if (timestamp === undefined || signatures.length === 0) return false;
+  if (Math.abs(Date.now() / 1000 - timestamp) > TOLERANCE_SECONDS) return false; // stale or future: replay
+  const expected = Buffer.from(
+    createHmac("sha256", secret).update(`${timestamp}.${uid}.`).update(body).digest("hex"),
+  );
+  return signatures.some((candidate) => {
+    const given = Buffer.from(candidate);
+    return given.length === expected.length && timingSafeEqual(expected, given);
+  });
+}
+
+const app = express();
+const OMI_WEBHOOK_SECRET = process.env.OMI_WEBHOOK_SECRET!;
+
+// express.raw keeps req.body as the exact bytes Omi sent; express.json() would re-serialize them.
+// Raise the default 100 kb limit: a memory_created body with a long transcript is larger, and a
+// 413 from the body parser would reject the delivery before it is ever verified.
+app.post("/webhook", express.raw({ type: "*/*", limit: "10mb" }), (req, res) => {
+  const uid = String(req.query.uid ?? "");
+  if (!verifyOmiSignature(req.header("X-Omi-Signature"), req.body, uid, OMI_WEBHOOK_SECRET)) {
+    return res.status(401).json({ error: "Invalid Omi signature" });
+  }
+  const memory = JSON.parse(req.body.toString("utf8")); // only now is uid trustworthy
+  return res.json({ status: "ok" });
+});
+```
+
+### Retries and duplicate deliveries
+
+Developer webhooks are retried after a network error, a 5xx, a 408 or a 429: up to three more attempts, roughly 1, 5 and 30 seconds later. Any other 4xx is treated as final and is not retried. Every attempt carries the same `Idempotency-Key` and `X-Omi-Delivery`, so keep a short-lived record of the ids you have processed and skip repeats. Each attempt is signed with a fresh timestamp. A developer webhook that fails 100 times in a row is switched off automatically and you receive a notification; fix the endpoint, then re-enable the webhook in Developer Settings.
+
+---
+
 ## Creating an Integration App
 
 <Steps>
@@ -461,6 +629,7 @@ The top-level `created_at` is the webhook send timestamp in UTC, with an explici
 
     Your endpoint should:
     - Accept POST requests
+    - Verify `X-Omi-Signature` (see [Verifying Webhook Signatures](#verifying-webhook-signatures)) before trusting the request
     - Parse JSON body (or binary for audio)
     - Read `uid` from query parameters
     - Return 200 OK quickly
