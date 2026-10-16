@@ -137,11 +137,11 @@ env:
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_COALESCE_ENABLED
-    value: "false"
+    value: "true"
   - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
-    value: "0"
+    value: "100"
   - name: AUDIO_ARCHIVE_UID_ALLOWLIST
     value: ""
   - name: BUCKET_AUDIO_DERIVED
@@ -223,7 +223,7 @@ env:
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
     value: "shadow"
   - name: DESKTOP_PENDANT_CALL_LINK_MODE
-    value: "off"
+    value: "shadow"
   - name: DESKTOP_PENDANT_CALL_LINK_PERCENT
     value: "100"
   - name: FREE_TIER_LOCAL_PROCESSING
@@ -532,7 +532,7 @@ env:
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
   - name: STT_SERVICE_MODELS
-    value: "modulate-velma-2,soniox,dg-nova-3,parakeet"
+    value: "modulate-velma-2,soniox,parakeet"
   - name: RAPID_API_KEY
     valueFrom:
       secretKeyRef:

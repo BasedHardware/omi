@@ -104,7 +104,7 @@ env:
   - name: DEMAND_PROCESSING_PERCENT
     value: "0"
   - name: BATCH_PIPELINE_ENABLED
-    value: "false"
+    value: "true"
   - name: BATCH_PIPELINE_UID_ALLOWLIST
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: BATCH_PIPELINE_PERCENT
@@ -125,6 +125,10 @@ env:
     value: "3600"
   - name: BATCH_PIPELINE_SHARED_LIVE_ENABLED
     value: "false"
+  - name: BATCH_PIPELINE_RECOVERY_MODE
+    value: "off"
+  - name: BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST
+    value: ""
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_READ_ENABLED
@@ -136,11 +140,11 @@ env:
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_COALESCE_ENABLED
-    value: "false"
+    value: "true"
   - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
-    value: "0"
+    value: "100"
   - name: AUDIO_ARCHIVE_UID_ALLOWLIST
     value: ""
   - name: BUCKET_AUDIO_DERIVED
@@ -208,7 +212,7 @@ env:
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
     value: "shadow"
   - name: DESKTOP_PENDANT_CALL_LINK_MODE
-    value: "off"
+    value: "shadow"
   - name: DESKTOP_PENDANT_CALL_LINK_PERCENT
     value: "100"
   # Keep these aligned with the production GitHub environment variables used
@@ -614,7 +618,7 @@ env:
   - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
     value: "30"
   - name: STT_SERVICE_MODELS
-    value: "parakeet-window,modulate-velma-2,soniox,dg-nova-3"
+    value: "parakeet-window,modulate-velma-2,soniox"
   - name: HOSTED_TRANSLATION_API_URL
     value: "http://172.16.160.20/nllb"
   - name: TRANSLATION_SERVICE_MODELS
