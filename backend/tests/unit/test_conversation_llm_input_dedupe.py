@@ -11,6 +11,9 @@ from utils.conversations import llm_input_dedupe as dedupe
 
 @pytest.fixture
 def enabled(monkeypatch):
+    # First-use model loading belongs to setup, outside the per-call CPU budget.
+    import models.conversation  # noqa: F401
+
     monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'true')
     monkeypatch.setattr(dedupe, '_stored', lambda *a, **k: {})
     return SimpleNamespace(id='c', sync_content_revision=3)

@@ -4939,11 +4939,19 @@ Demand tasks carry their source-identity protocol through rollback and use separ
 first play; run locks coalesce cross-hour deliveries. The first request may return
 pending. Measure `omi_playback_demand_to_ready_seconds` (queue/retry included),
 `omi_playback_build_seconds`, and `omi_playback_artifacts_total` before widening.
+Pre-enable eager tasks transfer to a distinct 60-second delayed successor in the
+same Cloud Tasks queue before acknowledgement. They keep deferring while enabled
+and build eagerly after rollback; a failed transfer returns 503. This preserves
+the obligation despite the original name's tombstone, without a Firestore read.
+Track the transitional `omi_playback_artifacts_total{outcome="deferred"}` rate and
+queue depth: retained pre-enable work adds one delivery per minute until rollback.
+Flag-off readers also reuse a matching immutable demand artifact and its spans.
 
 `REPEAT_WORK_REVISION_ENABLED=false` preserves Train 1 controls. Enabled uses the
 same #21679 `sync_reprocess_outbox`, leases, repair sweep and explicit Process Now
 bypass. Quiet-window extension is capped at 60 minutes from the first pending mark;
-new revisions during execution remain owed. The step-1 demand scheduler owns surface
+new revisions during execution remain owed with their original first-pending clock.
+The step-1 demand scheduler owns surface
 promotion and the 1/5/60-minute tiers; this flag introduces no second queue or surface
 inference. Notes (including task generation) and L1 reuse only exact effective inputs
 with successful durable checkpoints, using the already loaded conversation snapshot
