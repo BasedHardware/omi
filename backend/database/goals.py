@@ -427,7 +427,7 @@ def get_user_goal(uid: str, *, firestore_client: Any = None) -> Optional[Dict[st
 
 def get_user_goals(uid: str, limit: int = 3, *, firestore_client: Any = None) -> List[Dict[str, Any]]:
     collection = _get_db(firestore_client).collection(users_collection).document(uid).collection(goals_collection)
-    query = collection.where(filter=FieldFilter('is_active', '==', True)).limit(limit)
+    query = collection.where(filter=FieldFilter('is_active', '==', True))
     goals = _normalize_goal_documents(query.stream())
     goals = [goal for goal in goals if goal['status'] not in {GoalStatus.achieved.value, GoalStatus.abandoned.value}]
     goals.sort(key=_goal_created_at_sort_key)
@@ -1058,8 +1058,12 @@ def delete_goal(uid: str, goal_id: str, *, firestore_client: Any = None) -> bool
     """Released DELETE compatibility: soft-abandon and retain relationships."""
 
     ref = _goal_ref(uid, goal_id, firestore_client=firestore_client)
-    if not ref.get().exists:
+    snapshot = ref.get()
+    if not snapshot.exists:
         return False
+    data = snapshot.to_dict() or {}
+    if data.get('status') == GoalStatus.abandoned.value and not data.get('is_active', True):
+        return True
     now = datetime.now(timezone.utc)
     ref.update(
         {
@@ -1071,6 +1075,7 @@ def delete_goal(uid: str, goal_id: str, *, firestore_client: Any = None) -> bool
             'ended_at': now,
         }
     )
+    bump_action_items_list_version(uid)
     return True
 
 
