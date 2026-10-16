@@ -40,6 +40,8 @@ wins. Running GPU kernels cannot be interrupted. V2 retains its original file
 for whole-file speaker clustering; chunk-relative timestamps are offset onto
 the original file clock, and a short tail is retained. Owned quantum files
 remain owned by the GPU batch through caller cancellation.
+Files <=120s pass through at their original path and subtype, including v2's
+caller-owned files (`owns_file=False`) retained for speaker clustering.
 
 Strict priority is work-conserving on the warm floor. Sustained live pressure
 can starve historical work; watch oldest backfill age and upstream fresh/
@@ -79,6 +81,12 @@ Never bind Firebase/Firestore credentials or call an application backend.
 image, on public fixture audio only. It starts a local ASR server, compares
 packing off/on at 2 simultaneous requests, then probes 3. Forty synchronized
 waves per step use 24s live windows and 120s backfill, minimum 3s cadence.
+That 40-wave table measures mixed-load delivery and DCGM at the tested request
+density. Its backfill inputs fit one quantum: it is not splitter, boundary-word
+or speaker evidence. The separate 360s historical probe exercises splitting
+with six overlapping live requests; its nonempty v2 response and last segment
+end of 359.84s support yielding and time coverage only. Diarization was disabled,
+so boundary-word, language and speaker-quality parity remain canary gates.
 Receipts retain only shapes, response success, timing and node-matched DCGM.
 Use an owned 1Hz DCGM exporter: the managed 30s exporter can alias bursts.
 Run with `nice -n 19`; never overlap this qualification with local tests or

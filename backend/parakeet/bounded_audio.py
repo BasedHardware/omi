@@ -40,7 +40,7 @@ async def submit_audio(
     delegated = False
     try:
         info = await loop.run_in_executor(executor, sf.info, path)
-        if info.duration <= MAX_BACKFILL_SECONDS and owns_file:
+        if info.duration <= MAX_BACKFILL_SECONDS:
             delegated = True
             return await engine.submit(path, timestamps=True, lane=lane, owns_file=owns_file)
         quantum = MAX_BACKFILL_SECONDS * info.samplerate
