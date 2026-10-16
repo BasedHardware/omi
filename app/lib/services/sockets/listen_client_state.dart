@@ -76,6 +76,10 @@ class ListenClientState extends ValueNotifier<ListenClientStateSnapshot> {
 
   static final ListenClientState instance = ListenClientState._();
 
+  static void startSurfaceReporting() {
+    if (_reportingEnabled) unawaited(instance._reportSurface());
+  }
+
   bool _foreground = _initiallyForeground();
   int _capturePagesOpen = 0;
 

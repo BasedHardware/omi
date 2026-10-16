@@ -23,6 +23,11 @@ final class ListenClientState: ObservableObject {
 
   static let shared = ListenClientState()
 
+  static func startSurfaceReporting() {
+    guard ProcessInfo.processInfo.environment["DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED"] == "true" else { return }
+    _ = shared
+  }
+
   @Published private(set) var snapshot: Snapshot
 
   private var heartbeat: Timer?

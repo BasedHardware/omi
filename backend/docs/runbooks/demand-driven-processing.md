@@ -78,8 +78,10 @@ any rewrite. This PR does not qualify cross-device or ambiguous merging.
    catch-up regression. Only then consider 25%, 50%, 100% in separate trains.
 5. Enable the day-merge shadow hook separately. It has no rewrite executor.
 
-Rollback disables new scheduler admission/client reporting, then lazy/tool flags;
-retain queue workers and existing durable sweeps until debt drains. No historical
+Rollback sets the percent to zero and clears the allowlist, then disables client
+reporting and lazy/tool admission. Keep the master scheduler switch on while the
+indexed and durable queues drain, so priority cleanup and metrics remain active;
+only then turn it off. Retain queue workers and existing durable sweeps. No historical
 content repair, GPU/HPA change, production enablement or cost saving is claimed.
 
 Firestore optimization remains separately owned. Relevant multiplier pointers are
