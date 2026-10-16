@@ -16,6 +16,7 @@ from typing import Iterator
 import pytest
 
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
+from utils.model_text import DisplayClock, format_span
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 TOOLS_DIR = BACKEND_DIR / "utils" / "retrieval" / "tools"
@@ -110,6 +111,7 @@ def calendar_tools() -> Iterator[ModuleType]:
     with stub_modules(stubs):
         # The real date parsing and max_results capping the tool relies on.
         load_module_fresh("utils.retrieval.tools.integration_base", str(TOOLS_DIR / "integration_base.py"))
+        load_module_fresh("utils.retrieval.tools.calendar_render", str(TOOLS_DIR / "calendar_render.py"))
         module = load_module_fresh("utils.retrieval.tools.calendar_tools", str(TOOLS_DIR / "calendar_tools.py"))
         module.prepare_access = lambda *_args: ("uid-1", {"connected": True, "access_token": "token"}, "token", None)
         yield module
@@ -122,7 +124,7 @@ def _use_calendar(calendar_tools: ModuleType, events: list[dict]) -> _FakeGoogle
 
 
 def _shown(start: datetime) -> str:
-    return f"Start: {start.astimezone(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC"
+    return f"When: {format_span(start, start + timedelta(minutes=30), DisplayClock.utc())}"
 
 
 def _now_minute() -> datetime:
@@ -141,7 +143,7 @@ def test_range_into_the_future_lists_the_soonest_events_first(calendar_tools):
         )
     )
 
-    assert result.startswith("Calendar Events (10 found)")
+    assert result.startswith("Calendar Events (10 shown;")
     shown = [start for start in starts if _shown(start) in result]
     assert shown == starts[:10]
     positions = [result.index(_shown(start)) for start in shown]
