@@ -66,6 +66,7 @@ class _FakeRingDevice implements DeviceConnection {
 
   RingInfo ringInfo;
   Object? ringInfoError;
+  Object? readError;
   final int caps;
   void Function(List<int>)? onBytes;
   final controller = StreamController<List<int>>.broadcast();
@@ -103,8 +104,12 @@ class _FakeRingDevice implements DeviceConnection {
   @override
   Future<bool> readRingFromSeq(int startSeq, {int? packetCount}) async {
     if (!_readReady.isCompleted) _readReady.complete();
+    if (readError != null) throw readError!;
     return true;
   }
+
+  @override
+  Future<bool> stopStorageSync() async => true;
 
   @override
   Future<RingCommandAck?> advanceRingCustody(
@@ -243,42 +248,52 @@ void main() {
         storageTotalBytes: records * 444,
       );
 
-  test('syncAll persists the failure cause, original stack and phase while returning a response', () async {
+  test('syncAll persists the failure cause, original stack and phase for list and transfer errors', () async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     await DebugLogManager.setEnabled(true);
     addTearDown(() => DebugLogManager.setEnabled(false));
-    final error = StateError('ring INFO read failed');
-    final card = _FakeRingDevice(ringInfo: _info())..ringInfoError = error;
-    addTearDown(card.controller.close);
-    final wal = ringWal()..deviceDownloadFraction = 0.5;
-    final sync = syncWith(_FakeLocalSync(), card, wal);
-
-    final response = await sync.syncAll();
-
-    // Logging is fire-and-forget in production; wait for the actual persisted record.
-    Map<String, dynamic>? failure;
-    for (var attempt = 0; attempt < 100 && failure == null; attempt++) {
-      final logFiles = await DebugLogManager.listLogFiles();
-      final lines = logFiles.isEmpty ? <String>[] : await logFiles.first.readAsLines();
-      for (final line in lines) {
-        final record = jsonDecode(line) as Map<String, dynamic>;
-        if (record['message'] == 'RingStorageSync failed') failure = record;
+    // DebugLogManager caches its log file. Exercise both phases in the same
+    // test directory, clearing through its ordered writer between failures.
+    for (final phase in ['list-read', 'transfer']) {
+      await DebugLogManager.clear();
+      final error = StateError('ring $phase failed');
+      final card = _FakeRingDevice(ringInfo: _info());
+      if (phase == 'list-read') {
+        card.ringInfoError = error;
+      } else {
+        card.readError = error;
       }
-      if (failure == null) await Future<void>.delayed(const Duration(milliseconds: 20));
-    }
+      addTearDown(card.controller.close);
+      final wal = ringWal()..deviceDownloadFraction = 0.5;
+      final sync = syncWith(_FakeLocalSync(), card, wal);
 
-    expect(failure, isNotNull);
-    expect(failure!['level'], 'ERROR');
-    expect(failure['extra'], {'device': 'devkit-1', 'error': error.toString(), 'phase': 'list-read'});
-    expect(failure['stack'], contains('_FakeRingDevice.getRingInfo'));
-    expect(response, isNotNull);
-    expect(response!.newConversationIds, isEmpty);
-    expect(response.updatedConversationIds, isEmpty);
-    expect(sync.isSyncing, isFalse);
-    expect(wal.status, WalStatus.miss);
-    expect(wal.deviceDownloadFraction, isNull);
-    expect(card.advances, isEmpty);
+      final response = await sync.syncAll();
+
+      // Logging is fire-and-forget in production; wait for the actual persisted record.
+      Map<String, dynamic>? failure;
+      for (var attempt = 0; attempt < 100 && failure == null; attempt++) {
+        final logFiles = await DebugLogManager.listLogFiles();
+        final lines = logFiles.isEmpty ? <String>[] : await logFiles.first.readAsLines();
+        for (final line in lines) {
+          final record = jsonDecode(line) as Map<String, dynamic>;
+          if (record['message'] == 'RingStorageSync failed') failure = record;
+        }
+        if (failure == null) await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+
+      expect(failure, isNotNull, reason: '$phase failure must retain its diagnostic cause after cleanup');
+      expect(failure!['level'], 'ERROR');
+      expect(failure['extra'], {'device': 'devkit-1', 'error': error.toString(), 'phase': phase});
+      expect(failure['stack'], contains('_FakeRingDevice.${phase == 'list-read' ? 'getRingInfo' : 'readRingFromSeq'}'));
+      expect(response, isNotNull);
+      expect(response!.newConversationIds, isEmpty);
+      expect(response.updatedConversationIds, isEmpty);
+      expect(sync.isSyncing, isFalse);
+      expect(wal.status, WalStatus.miss);
+      expect(wal.deviceDownloadFraction, isNull);
+      expect(card.advances, isEmpty);
+    }
   });
 
   test('caps-0 legacy flow: durable records then a single anonymous advance after validated DONE', () async {

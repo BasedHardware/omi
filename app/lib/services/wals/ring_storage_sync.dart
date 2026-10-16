@@ -810,10 +810,13 @@ class RingStorageSyncImpl implements RingStorageSync {
         'RingStorageSync: reading from seq=${ringInfo.readSeq} (write=${ringInfo.writeSeq}, unread=${ringInfo.unreadPackets})',
       );
       reachedDone = await completer.future.timeout(const Duration(minutes: 30));
-    } on TimeoutException catch (e) {
-      Logger.debug('RingStorageSync: transfer timeout: $e');
-    } catch (e) {
+    } catch (e, st) {
       Logger.debug('RingStorageSync: transfer error: $e');
+      DebugLogManager.logError(e, st, 'RingStorageSync failed', {
+        'device': custodyDeviceId,
+        'error': e.toString(),
+        'phase': _syncPhase,
+      });
     } finally {
       acceptingNotifications = false;
       firstDataTimer.cancel();

@@ -52,6 +52,8 @@ firmware risk or guarantee recovery of incomplete records.
 - [x] Keep received records when local custody work is delayed past idle expiry.
 - [x] Retain the pending WAL and send no unproven advance after an idle stop.
 - [x] Keep healthy DONE and normal durable frontier advancement working.
+- [x] Preserve read-command errors with their original stack, cause and phase
+  in diagnostic exports while still running transfer cleanup.
 - [x] Wait for read admission in custody fixtures instead of guessing with a
   startup sleep; keep the incremental durable-advance assertion unchanged.
 - [x] Run ring/custody/capture regressions (129 passed), the selected capture
