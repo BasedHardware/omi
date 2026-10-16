@@ -12,6 +12,7 @@ from config.dream_agent import (
     auto_apply_kinds,
     concurrency,
     enabled,
+    may_be_eligible,
     on_demand_enabled,
     PASS_TIMEOUT_SECONDS,
     DRAIN_TIMEOUT_SECONDS,
@@ -382,6 +383,14 @@ async def run_pass(
     caps = caps or Caps.from_env()
     if bootstrap_tools is not None and not canary:
         raise ValueError('dream_bootstrap_requires_synthetic_canary')
+    # Reject stale queue entries before capacity waits or owner-data loading.
+    # Synthetic canaries have separate, authoritative admission in acquire().
+    if not canary and not may_be_eligible(uid):
+        report = {'status': 'not_admitted', 'reason': 'ineligible'}
+        record_pass(report)
+        if not dry_run:
+            await run_blocking(db_executor, dream_scheduler.remove_due, uid)
+        return report
     mode, allowlisted = admission_for(uid)
     slot = (
         await dream_capacity.claim(
