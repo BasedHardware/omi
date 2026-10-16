@@ -39,7 +39,10 @@ must retain/retry their source audio. V1 adds `held_audio` and `held_files` to t
 exhausted acknowledgment; v2 adds `held_audio` to its durable result.
 
 Batch compute authorization checks current funded allowance. The worker calls
-that authority again after decode/VAD and before each ASR microbatch. Missing
+that authority again after decode/VAD, before each ASR microbatch and immediately
+before the full-capture empty-ASR recovery dispatch. Oversized recovery does not
+reauthorize or record audio it never submits; accepted recovery counts actual
+synthetic padding. Missing
 worker policy authority holds work. Held work uses the scheduler's existing
 `defer`, preserving raw artifacts and refunding the provider-failure attempt.
 Quarantine recovery rechecks both before fetching audio and before claiming its

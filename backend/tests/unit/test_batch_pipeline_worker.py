@@ -5,6 +5,7 @@ import logging
 import sys
 import wave
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
@@ -214,6 +215,124 @@ def test_empty_asr_on_vad_speech_stays_failure_with_numeric_shape(caplog):
     message = next(r.getMessage() for r in caplog.records if 'event=batch_worker_failed' in r.getMessage())
     assert 'stage=assemble_words' in message and 'reason=empty_asr' in message
     assert 'samples=126400 vad_spans=1 windows=1 asr_words=0 owned_words=0' in message
+
+
+@pytest.mark.parametrize('first_words', [[], [{'word': 'context', 'timestamp': [4.5, 4.8]}]])
+def test_empty_unit_retries_full_capture_once_and_preserves_speech_accounting(first_words, caplog):
+    class Model:
+        def __init__(self):
+            self.calls = []
+
+        def transcribe(self, arrays, **kwargs):
+            self.calls.append(arrays)
+            if len(self.calls) == 1:
+                entries = [dict(word=w['word'], start=w['timestamp'][0], end=w['timestamp'][1]) for w in first_words]
+            else:
+                assert kwargs['batch_size'] == 1
+                assert len(arrays[0]) == 14 * 16000
+                np.testing.assert_array_equal(arrays[0][32000:-32000], samples)
+                assert not arrays[0][:32000].any() and not arrays[0][-32000:].any()
+                entries = [{'word': 'recovered', 'start': 8, 'end': 9}]
+            return [SimpleNamespace(text='synthetic' if entries else '', timestamp={'word': entries})]
+
+    samples = np.ones(10 * 16000, dtype=np.float32)
+    model = Model()
+    provider = ParakeetWords(model)
+    worker, _, saved, decoded, diarized, failures = setup_worker(
+        decode=lambda work: samples,
+        vad=lambda s: [(1, 2)],
+        words_providers={'parakeet': provider},
+        recover_words=provider.recover_empty,
+    )
+    with caplog.at_level(logging.INFO):
+        assert worker.process_batch([item(duration=10)])[0].outcome == 'success'
+    assert len(model.calls) == 2 and not failures
+    assert saved['a']['words'] == [{'word': 'recovered', 'timestamp': [6, 7]}]
+    assert saved['a']['speech_spans'] == [{'start': 1, 'end': 2}]
+    assert saved['a']['speech_seconds'] == 1 and saved['a']['audio_seconds'] == 10
+    assert diarized == [160000]
+    assert 'event=batch_asr_recovery' in caplog.text and 'outcome=recovered' in caplog.text
+    event = next(r for r in caplog.records if 'event=batch_asr_recovery' in r.getMessage())
+    assert all(isinstance(value, (str, int)) for value in event.args) and event.exc_info is None
+    assert 'windows=1 window_min_samples=96000 window_max_samples=96000 speech_samples=16000' in event.getMessage()
+
+
+def test_recovery_padding_clocks_and_minimum_input():
+    class Model:
+        def transcribe(self, arrays, **kwargs):
+            assert len(arrays) == 1 and arrays[0].dtype == np.float32
+            assert len(arrays[0]) == 8 * 16000
+            entries = [
+                {'word': 'padding', 'start': 0, 'end': 1},
+                {'word': 'edge', 'start': 1.8, 'end': 2.4},
+                {'word': 'tail', 'start': 3.8, 'end': 4.1},
+                {'word': 'padding', 'start': 5, 'end': 6},
+            ]
+            return [SimpleNamespace(text='synthetic', timestamp={'word': entries})]
+
+    words = ParakeetWords(Model()).recover_empty(np.ones(32000, dtype=np.float32), 272)
+    assert [w['word'] for w in words] == ['edge', 'tail']
+    assert words[0]['timestamp'] == pytest.approx([0, 0.4])
+    assert words[1]['timestamp'] == pytest.approx([1.8, 2])
+
+
+def test_recovery_never_truncates_audio_to_fit_budget():
+    class Model:
+        def transcribe(self, *args, **kwargs):
+            pytest.fail('oversized recovery must stay held, never transcribe a prefix')
+
+    provider = ParakeetWords(Model())
+    assert provider.recover_empty(np.ones(117 * 16000, dtype=np.float32), 272) == []
+    assert provider.recover_empty(np.ones(31 * 16000, dtype=np.float32), 34) == []
+
+
+def test_empty_recovery_remains_failure_and_healthy_sibling_survives(caplog):
+    calls = []
+
+    class EmptyWords:
+        def transcribe_batch(self, arrays):
+            return [[] for _ in arrays]
+
+    def recover(samples, budget):
+        calls.append(len(samples))
+        return [] if len(samples) == 32000 else [{'word': 'synthetic', 'timestamp': [0, 1]}]
+
+    worker, _, saved, _, diarized, failures = setup_worker(
+        words_providers={'parakeet': EmptyWords()}, recover_words=recover
+    )
+    assert [r.segment_id for r in worker.process_batch([item(), item('b', 3)])] == ['b']
+    assert calls == [32000, 48000] and set(saved) == {'b'}
+    assert failures == [('a', 'BatchValidationError')] and diarized == [48000]
+    assert 'reason=empty_asr' in caplog.text
+
+
+@pytest.mark.parametrize('mode', ['silence', 'nonempty', 'invalid'])
+def test_recovery_only_runs_for_valid_empty_speech(mode):
+    class Provider:
+        def transcribe_batch(self, arrays):
+            return [[{'word': 'synthetic', 'timestamp': [-1 if mode == 'invalid' else 0, 1]}] for _ in arrays]
+
+    worker, *_ = setup_worker(
+        vad=lambda s: [] if mode == 'silence' else [(0, 2)],
+        words_providers={'parakeet': Provider()},
+        recover_words=lambda *args: pytest.fail('must not retry silence, successful words or malformed clocks'),
+    )
+    assert bool(worker.process_batch([item()])) == (mode != 'invalid')
+
+
+def test_recovery_fatal_cuda_quarantines_chain():
+    class EmptyWords:
+        def transcribe_batch(self, arrays):
+            return [[] for _ in arrays]
+
+    def recover(*args):
+        raise RuntimeError('CUDA error: illegal memory access')
+
+    worker, *_ = setup_worker(words_providers={'parakeet': EmptyWords()}, recover_words=recover)
+    with pytest.raises(RuntimeError, match='fatal CUDA'):
+        worker.process_batch([item()])
+    with pytest.raises(RuntimeError, match='restart required'):
+        worker.process_batch([item('b')])
 
 
 def test_validation_reason_rejects_free_form_content():
@@ -639,3 +758,58 @@ def test_worker_missing_authority_does_not_spend_at_cap(monkeypatch):
     worker, words, saved, _, _, _ = setup_worker()
     assert worker.process_batch([item('a', 2)]) == [HeldWork('a')]
     assert not words.calls and not saved
+
+
+@pytest.mark.parametrize('enforce', [False, True])
+@pytest.mark.parametrize('recovery_allowed', [False, True])
+def test_full_capture_retry_rechecks_cap_and_counts_actual_padding(monkeypatch, enforce, recovery_allowed):
+    from utils.batch_pipeline.contracts import HeldWork
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
+    calls, checks = [], []
+
+    class Model:
+        def transcribe(self, arrays, **kwargs):
+            calls.append([len(samples) / 16000 for samples in arrays])
+            entries = [] if len(calls) == 1 else [{'word': 'recovered', 'start': 2.25, 'end': 2.75}]
+            return [SimpleNamespace(text='recovered' if entries else '', timestamp={'word': entries})]
+
+    provider = ParakeetWords(Model())
+    worker, _, saved, _, diarized, failures = setup_worker(
+        decode=lambda work: np.ones(int(work.duration_seconds * 16000), dtype=np.float32),
+        words_providers={'parakeet': provider},
+        recover_words=provider.recover_empty,
+    )
+
+    def authorize(ids):
+        checks.append(ids)
+        return ids if len(checks) == 1 or recovery_allowed else set()
+
+    result = worker.process_batch([item('a', 2)], authorize_dispatch=authorize)
+    if enforce and not recovery_allowed:
+        assert result == [HeldWork('a')]
+        assert calls == [[2]]
+        assert not saved and not diarized and not failures
+    else:
+        assert result[0].outcome == 'success'
+        assert calls == [[2], [8]]
+        assert saved['a']['words'] == [{'word': 'recovered', 'timestamp': [0.25, 0.75]}]
+        assert not failures
+        if enforce:
+            assert saved['a']['cap_dispatch']['omi_funded_accepted_provider_audio_seconds'] == 10
+        else:
+            assert 'cap_dispatch' not in saved['a']
+    assert checks == ([{'a'}, {'a'}] if enforce else [])
+
+
+def test_oversized_recovery_neither_rechecks_nor_counts_unsubmitted_audio():
+    provider = ParakeetWords(SimpleNamespace(transcribe=lambda *a, **kw: pytest.fail('oversized provider request')))
+    before, after = Mock(), Mock()
+    assert (
+        provider.recover_empty(
+            np.ones(117 * 16000, dtype=np.float32), 272, before_dispatch=before, after_dispatch=after
+        )
+        == []
+    )
+    before.assert_not_called()
+    after.assert_not_called()
