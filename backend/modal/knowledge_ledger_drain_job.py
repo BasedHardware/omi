@@ -9,6 +9,7 @@ import os
 
 import firebase_admin
 
+from database.firestore_read_origin import read_origin
 from utils.memory.knowledge_ledger_drain import (
     ledger_drain_enabled_from_environment,
     ledger_drain_uid_allowlist_from_environment,
@@ -30,6 +31,7 @@ def _init_firebase() -> None:
         firebase_admin.initialize_app(options=firebase_admin_options())
 
 
+@read_origin('job:knowledge_ledger_drain')
 def main() -> None:
     if not ledger_drain_enabled_from_environment():
         logger.info("knowledge-ledger-drain-job disabled")

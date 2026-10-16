@@ -18,6 +18,17 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+          FSR_QUEUE_AGE_PUBLISHER: {value: '1', category: rollout}
+          FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+          FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+          DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+          FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+          FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+          FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+          FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+          ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+          CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_UID_ALLOWLIST: {value: '', category: rollout}
           BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
@@ -328,6 +339,17 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
+          FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+          FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+          FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+          FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+          DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+          FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+          FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+          FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+          FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+          ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+          CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
@@ -601,6 +623,17 @@ environments:
         LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
         FIRESTORE_READ_LEDGER:
           value: '1'
+        FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+        FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+        FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+        FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+        DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+        FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+        FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+        FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+        FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+        ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+        CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
         FIRESTORE_READ_LEDGER_SERVICE:
           value: desktop-backend
         PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
@@ -706,6 +739,17 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
+            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+            FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+            FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+            DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+            FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+            ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+            CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend
             OMI_VERTEX_RESERVATION_PROJECT:
@@ -964,6 +1008,17 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
+            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+            FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+            FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+            DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+            FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+            ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+            CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend-sync
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
@@ -1218,6 +1273,17 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
+            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+            FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+            FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+            DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+            FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+            ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+            CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend-sync-backfill
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
@@ -1460,6 +1526,17 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
+            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+            FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+            FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+            DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+            FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+            ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+            CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend-integration
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
@@ -1596,6 +1673,17 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
+            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+            FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+            FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+            DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+            FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+            ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+            CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             FIRESTORE_READ_LEDGER_SERVICE:
               value: notifications-job
             OMI_LLM_GATEWAY_URL:
@@ -1645,6 +1733,17 @@ environments:
               secret: REDIS_DB_PASSWORD
               version: latest
           env:
+            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+            FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+            FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+            DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+            FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+            ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+            CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -1709,6 +1808,17 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
+            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+            FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+            FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+            DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+            FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+            ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+            CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             BUCKET_FRAME_REQUESTS:
               env_var: BUCKET_FRAME_REQUESTS
               default: dev-omi-frame-requests
@@ -1764,6 +1874,17 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
+            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+            FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+            FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+            DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+            FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+            ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+            CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             FIRESTORE_READ_LEDGER_SERVICE:
               value: frame-request-retention-job
             OMI_ENV_STAGE:
@@ -1805,6 +1926,17 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
+            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+            FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+            FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+            DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+            FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+            ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+            CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             FIRESTORE_READ_LEDGER_SERVICE:
               value: daily-memory-sweep-job
             OMI_ENV_STAGE:
@@ -1869,6 +2001,17 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
+            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+            FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+            FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+            DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+            FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+            ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+            CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             FIRESTORE_READ_LEDGER_SERVICE:
               value: knowledge-ledger-drain-job
             OMI_ENV_STAGE:
@@ -1908,6 +2051,17 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
+            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+            FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+            FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+            DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+            FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+            ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+            CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             FIRESTORE_READ_LEDGER_SERVICE:
               value: day3-reengagement-email-job
             OMI_ENV_STAGE:
@@ -1978,6 +2132,17 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+          FSR_QUEUE_AGE_PUBLISHER: {value: '1', category: rollout}
+          FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+          FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+          DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+          FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+          FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+          FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+          FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+          ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+          CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
@@ -2363,6 +2528,17 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
         env:
+          FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+          FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+          FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+          FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+          DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+          FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+          FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+          FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+          FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+          ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+          CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
@@ -2564,6 +2740,17 @@ environments:
         LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
         FIRESTORE_READ_LEDGER:
           value: '1'
+        FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+        FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+        FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+        FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+        DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+        FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+        FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+        FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+        FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+        ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+        CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
         FIRESTORE_READ_LEDGER_SERVICE:
           value: desktop-backend
         PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
@@ -2699,6 +2886,17 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
+            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+            FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+            FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+            DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+            FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+            ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+            CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend
             OMI_VERTEX_RESERVATION_PROJECT:
@@ -3037,6 +3235,17 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
+            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+            FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+            FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+            DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+            FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+            ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+            CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend-sync
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
@@ -3337,6 +3546,17 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
+            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+            FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+            FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+            DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+            FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+            ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+            CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend-sync-backfill
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
@@ -3625,6 +3845,17 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
+            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+            FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+            FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+            DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+            FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+            ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+            CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend-integration
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
@@ -3774,6 +4005,17 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
+            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+            FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+            FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+            DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+            FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+            ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+            CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             FIRESTORE_READ_LEDGER_SERVICE:
               value: notifications-job
             OMI_LLM_GATEWAY_URL:
@@ -3818,6 +4060,17 @@ environments:
               secret: REDIS_DB_PASSWORD
               version: latest
           env:
+            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+            FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+            FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+            DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+            FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+            ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+            CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -3880,6 +4133,17 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
+            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+            FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+            FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+            DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+            FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+            ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+            CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             BUCKET_FRAME_REQUESTS:
               env_var: BUCKET_FRAME_REQUESTS
               default: prod-omi-frame-requests
@@ -3935,6 +4199,17 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
+            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+            FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+            FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+            DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+            FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+            ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+            CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             FIRESTORE_READ_LEDGER_SERVICE:
               value: frame-request-retention-job
             OMI_ENV_STAGE:
@@ -3977,6 +4252,17 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
+            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+            FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+            FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+            DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+            FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+            ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+            CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             FIRESTORE_READ_LEDGER_SERVICE:
               value: daily-memory-sweep-job
             OMI_ENV_STAGE:
@@ -4043,6 +4329,17 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
+            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+            FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+            FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+            DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+            FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+            ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+            CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             FIRESTORE_READ_LEDGER_SERVICE:
               value: knowledge-ledger-drain-job
             OMI_ENV_STAGE:
@@ -4082,6 +4379,17 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
+            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+            FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+            FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+            DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+            FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+            ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+            CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             FIRESTORE_READ_LEDGER_SERVICE:
               value: day3-reengagement-email-job
             OMI_ENV_STAGE:

@@ -9,6 +9,7 @@ from typing import Any
 
 from google.cloud import firestore
 
+from database.fsr_read_cache import writing
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import assert_batch_write_allowed
 from database.sync_ledger import (
@@ -338,4 +339,5 @@ class ProjectionStore:
                 transaction.update(self.ref('jobs', sibling), {'client_status': 'completed', 'client_result': result})
             return result
 
-        return self.run(commit)
+        with writing('usage_month_cache', binding.owner_id):
+            return self.run(commit)

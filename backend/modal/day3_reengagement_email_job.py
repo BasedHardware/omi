@@ -18,6 +18,7 @@ import firebase_admin
 
 from database._client import db as default_db_client
 from database.auth import get_user_from_uid
+from database.firestore_read_origin import read_origin
 from utils.env_loader import firebase_admin_options
 from utils.email.day3_reengagement import (
     authority_from_environment,
@@ -74,6 +75,7 @@ def run_day3_reengagement_email_job() -> None:
         raise RuntimeError(f"day3-reengagement-email completed with {summary.failed} failure(s)")
 
 
+@read_origin('job:day3_reengagement_email')
 def main() -> None:
     _init_firebase()
     logger.info("Starting day3-reengagement-email-job...")

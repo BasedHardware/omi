@@ -3,6 +3,8 @@ import re
 import threading
 from typing import Any
 
+from database.fsr_cache_telemetry import OMI_FALLBACK_TOTAL as OMI_FALLBACK_TOTAL
+
 from fastapi import Response
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
@@ -940,12 +942,6 @@ LLM_GATEWAY_CLIENT_FIRST_BYTE_SECONDS = Histogram(
     'Client time until the gateway returns a non-streaming response, first stream event, or transport failure',
     ['feature', 'outcome'],
     buckets=(0.1, 0.25, 0.5, 1, 2, 3, 5, 10, 15, 30),
-)
-
-OMI_FALLBACK_TOTAL = Counter(
-    'omi_fallback_total',
-    'Fallback / resilience transitions by component, path, reason, and outcome',
-    ['component', 'from_mode', 'to_mode', 'reason', 'outcome'],
 )
 
 DESKTOP_UPDATE_RESOLUTION_TOTAL = Counter(

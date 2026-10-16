@@ -75,6 +75,7 @@ overlay:
         BATCH_PIPELINE_SHARED_LIVE_ENABLED:
           value: "false"
           category: rollout
+        FSR_QUEUE_AGE_PUBLISHER: {value: '1', category: rollout}
         DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
         DREAM_AGENT_ELIGIBILITY: {value: 'allowlist', category: rollout}
         DREAM_AGENT_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
