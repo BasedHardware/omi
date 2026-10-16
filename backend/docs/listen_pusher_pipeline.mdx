@@ -4965,3 +4965,20 @@ pending and no unproven frontier advance or processing success is invented.
 This neither changes cloud job dispatch nor makes legacy firmware's early
 reclaim durable. Scope and acceptance checklist:
 `app/docs/offline-sync-stall-recovery.md`.
+
+### Demand-processing intent and sync settlement
+
+Demand processing (default off) accepts only an explicit boolean `surface_open`
+from opted-in clients. Legacy listen `foreground` / `transcript_visible` frames
+remain telemetry when server flags turn on. Phone foreground and Mac main-window
+visibility also report independently of listen sockets. In-flight reports retain
+close/occlusion changes; failed closes retry on the next 30-second heartbeat.
+Mac visibility is sampled again after asynchronous header preparation.
+
+Tier priority does not bypass sync append settlement: the existing
+`SYNC_REPROCESS_SETTLE_SECONDS` (production 600 seconds) extends one durable
+reprocess obligation, with a 59-minute demand ceiling for continuous appends.
+Redis scheduling, open-time priority promotion, Redis-loss fallback and worker
+claims all retain this content boundary. Invisible effects remain independently
+coalesced and may run immediately on explicit demand. See the
+[demand-processing runbook](runbooks/demand-driven-processing.md).

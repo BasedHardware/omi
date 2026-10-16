@@ -505,3 +505,45 @@ def test_repaired_delivery_token_always_gets_a_new_cloud_task_name(state, monkey
     _ENQUEUE(row)
     assert enqueue.call_args.args[2] != first
     assert enqueue.call_args.args[3]['task_token'] == 'new-fenced-delivery'
+
+
+@pytest.mark.parametrize('redis_available', [False, True])
+@pytest.mark.parametrize('opened', [False, True])
+def test_demand_master_preserves_production_settle_and_one_pass(state, monkeypatch, redis_available, opened):
+    import fakeredis
+    from utils import cloud_tasks
+    from utils.conversations import demand_processing as demand
+
+    rows, _ = state
+    clock = [1000000]
+    monkeypatch.setattr(reprocess.time, 'time', lambda: clock[0])
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'true')
+    monkeypatch.setenv('DEMAND_PROCESSING_PERCENT', '100')
+    monkeypatch.setenv('DEMAND_PROCESSING_LAZY_ENABLED', 'false')
+    monkeypatch.setenv('DEMAND_PROCESSING_TOOL_ENABLED', 'false')
+    monkeypatch.setenv('DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED', 'true')
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(demand, 'client', (lambda: redis) if redis_available else Mock(side_effect=ConnectionError()))
+    enqueue = Mock()
+    monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
+    monkeypatch.setattr(reprocess, '_enqueue', _ENQUEUE)
+    if opened:
+        demand.observe_surface('u', 'phone', {'surface_open': True, 'transcript_visible': False})
+    for offset in range(0, 500, 100):
+        clock[0] = 1000000 + offset
+        reprocess.mark('u', 'c', 'en')
+    key = reprocess.key('u', 'c')
+    assert enqueue.call_count == 1
+    assert enqueue.call_args.kwargs['schedule_at'] == 1000600
+    assert rows[key]['due_at'] == 1001000
+    process = Mock()
+    clock[0] = 1000600
+    assert reprocess.run(key, rows[key]['task_token'], process) == 'deferred'
+    process.assert_not_called()
+    assert enqueue.call_count == 2
+    assert enqueue.call_args.kwargs['schedule_at'] == 1001000
+    clock[0] = 1001000
+    assert reprocess.run(key, rows[key]['task_token'], process) == 'processed'
+    process.assert_called_once_with('u', 'c', 'en')
+    assert not rows

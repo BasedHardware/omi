@@ -223,3 +223,36 @@ def test_byok_enrichment_stays_in_the_request_context(runtime, monkeypatch):
     assert not demand.lazy_enrichment_enabled('owner')
     monkeypatch.setattr(byok, 'has_byok_keys', lambda: False)
     assert demand.lazy_enrichment_enabled('owner')
+
+
+@pytest.mark.parametrize('opened', [False, True])
+def test_visible_sync_settle_survives_tier_zero_and_promotion(runtime, opened):
+    redis, wake = runtime
+    if opened:
+        report('owner', now=1000)
+    schedule('owner', 'sync-notes', now=1000, not_before=1600)
+    row = json.loads(redis.get(demand.prefix() + 'sync-notes'))
+    assert row['due_at'] == 1600
+    assert wake.call_args.kwargs['schedule_at'] == 1600
+    report('owner', now=1100)
+    demand.promote('owner', now=1100)
+    row = json.loads(redis.get(demand.prefix() + 'sync-notes'))
+    assert row['tier'] == 0 and row['due_at'] == 1600
+    assert wake.call_args.kwargs['schedule_at'] == 1600
+    assert not demand.admit('sync-notes', now=1100)
+    assert demand.admit('sync-notes', now=1600)
+
+
+@pytest.mark.parametrize('surface_open', [None, 'true', 1])
+def test_legacy_or_malformed_foreground_is_not_surface_intent(runtime, surface_open):
+    redis, wake = runtime
+    schedule('owner', 'pending')
+    wake.reset_mock()
+    payload = dict(foreground=True, transcript_visible=True)
+    if surface_open is not None:
+        payload['surface_open'] = surface_open
+    demand.observe_surface('owner', 'released-phone', payload, now=1000)
+    assert demand.user_tier('owner', now=1000) == 2
+    assert redis.get(demand.owner_key('owner') + ':last_surface_open_at') is None
+    assert json.loads(redis.get(demand.prefix() + 'pending'))['tier'] == 2
+    wake.assert_not_called()

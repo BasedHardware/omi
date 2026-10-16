@@ -11,18 +11,31 @@ foreground and Mac main-window visibility are reported on state changes, with 30
 open, including when there is no recording socket. The client reporters
 require `DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED=true` (Dart define on mobile,
 process environment on Mac); server flags alone do not activate client reporting.
-Mac activation and ordinary authenticated/background requests are not open intent.
+Only an explicit boolean `surface_open` is intent. Released listen frames that
+contain only `foreground` and `transcript_visible` remain telemetry, even with all
+server flags on. Mac activation and ordinary authenticated/background requests
+are not open intent. Both reporters retain state changes during an in-flight
+request and drain the latest state immediately afterward; Mac rechecks visibility
+after URL/header preparation. Failed closes remain owed for the next 30-second
+heartbeat, including while closed, instead of waiting for the 90-second lease.
 
 The existing `conversation-finalization`, fresh sync and backfill Cloud Tasks
 queues retain their OIDC workers and durable job/token fences. Redis indexes only
-opaque obligations and scheduling metadata. Visible work is dispatched immediately for every tier. Keep warm capacity: tiers
+opaque obligations and scheduling metadata. Finalization is dispatched immediately
+for every tier. Sync append reprocessing retains its existing trailing-edge
+`SYNC_REPROCESS_SETTLE_SECONDS` (600 seconds in production), including tier 0,
+open/tool priority promotion, Redis failure and durable worker claims. Each append
+extends the same outbox obligation instead of causing another processing pass;
+continuous appends retain the 59-minute ceiling. This content-settlement boundary
+is separate from priority admission. Keep warm capacity: tiers
 order ready work only under contention and never impose an idle-capacity timer.
 Future lazy enrichment does not block ready visible work. Ready work drains tiers
 0, 1, 2; 59-minute debt escapes starvation with one minute of processing headroom,
 not a demonstrated completion SLO. Priority
 waits create scheduled wakeups without consuming processing attempts. Already
 running work is not preempted. Queue-age gauges use scrape-time Redis reads and
-return NaN when the dependency is unavailable. Redis loss uses eager recovery;
+return NaN when the dependency is unavailable. Redis loss uses eager recovery
+for finalization/effects and retains sync's ordinary settle deadline;
 Firestore jobs and outbox reconciliation retain the obligation.
 
 Visible notes and speaker resolution use the existing pipeline. Invisible memory,
@@ -76,7 +89,8 @@ and does not add GPU capacity or a speaker-refinement executor.
    synthetic/evaluator fixtures; exercise concurrent append/merge, Process Now,
    duplicate deliveries, Redis outage and worker restart. Compare memory/notes
    calls per effective settled revision and outbox repair/unbound counters.
-4. Admit 1%, then 5% for at least three hours including busy load. Qualify visible
+4. Admit 1%, then 5%, with at least 30 minutes of clean sentinel readouts on the
+   watch metrics at each step (David's 2026-10-16 ruling 11). Qualify visible
    tier 0 <=1 minute, tier 1 p95 <=5 minutes, tier 2 <=60 minutes; newest 20 minutes
    visible <=2 minutes and newest hour <=4 minutes on simultaneous opens. Include
    a warm-capacity and backlog receipt. Stop on quality, live p95, ceiling or

@@ -32,57 +32,106 @@ final class ListenClientState: ObservableObject {
 
   private var heartbeat: Timer?
   private let surfaceSession = UUID().uuidString
+  typealias SurfaceTransport = (@MainActor () -> [String: Any]) async throws -> Bool
+
+  private var reportTask: Task<Void, Never>?
   private var reportInFlight = false
+  private var reportPending = false
+  private var lastReportedOpen = false
+  private let surfaceReportingEnabled: Bool
+  private let surfaceOpen: (() -> Bool)?
+  private let surfaceTransport: SurfaceTransport
+  private weak var closingWindow: NSWindow?
 
   static func surfaceReportURL(baseURL: String) -> URL? {
     URL(string: baseURL)?.appendingPathComponent("v1/users/client-state")
   }
 
-  private func reportSurface(heartbeat: Bool = false) {
-    guard ProcessInfo.processInfo.environment["DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED"] == "true",
-      !reportInFlight
-    else { return }
-    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
-    let clientState = snapshot
+  private func isSurfaceOpen() -> Bool {
+    if let surfaceOpen { return surfaceOpen() }
     let window = ShellSummon.shellWindow()
-    let open =
-      window?.isVisible == true && window?.isMiniaturized == false
-      && window?.occlusionState.contains(.visible) == true && !NSApp.isHidden
-    if heartbeat && !open { return }
+    return window != nil && window !== closingWindow && window?.isVisible == true
+      && window?.isMiniaturized == false && window?.occlusionState.contains(.visible) == true && !NSApp.isHidden
+  }
+
+  func reportSurface(heartbeat: Bool = false) {
+    guard surfaceReportingEnabled else { return }
+    if heartbeat && !isSurfaceOpen() && !reportPending && !lastReportedOpen { return }
+    // Keep a latest-state report owed while auth or transport is suspended.
+    reportPending = true
+    guard !reportInFlight else { return }
     reportInFlight = true
-    Task { @MainActor [weak self] in
+    reportTask = Task { @MainActor [weak self] in
       guard let self else { return }
       defer { self.reportInFlight = false }
-      do {
-        let baseURL = await APIClient.shared.baseURL
-        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization),
-          let url = Self.surfaceReportURL(baseURL: baseURL)
-        else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 5
-        request.allHTTPHeaderFields = try await APIClient.shared.buildHeaders(
-          requireAuth: true, includeBYOK: false, expectedAuthOwnerId: authorization.ownerID)
-        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-          "session_id": self.surfaceSession, "surface_open": open,
-          "foreground": clientState.foreground, "transcript_visible": clientState.transcriptVisible,
-        ])
-        _ = try await URLSession.shared.data(for: request)
-      } catch { /* Best effort; the server lease expires without renewal. */  }
+      while self.reportPending {
+        self.reportPending = false
+        var sentOpen = false
+        do {
+          let delivered = try await self.surfaceTransport {
+            // Read visibility after asynchronous URL/header preparation, just before send.
+            sentOpen = self.isSurfaceOpen()
+            return [
+              "session_id": self.surfaceSession, "surface_open": sentOpen,
+              "foreground": self.snapshot.foreground, "transcript_visible": self.snapshot.transcriptVisible,
+            ]
+          }
+          guard delivered else {
+            if self.reportPending { continue }
+            self.reportPending = true
+            break
+          }
+          self.lastReportedOpen = sentOpen
+        } catch {
+          if self.reportPending { continue }
+          // Retry even a closed surface on the next heartbeat; never spin on network failure.
+          self.reportPending = true
+          break
+        }
+      }
     }
+  }
+
+  func waitForSurfaceReportsForTest() async {
+    await reportTask?.value
+  }
+
+  private static func postSurface(_ latest: @MainActor () -> [String: Any]) async throws -> Bool {
+    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return false }
+    let baseURL = await APIClient.shared.baseURL
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization),
+      let url = surfaceReportURL(baseURL: baseURL)
+    else { return false }
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.timeoutInterval = 5
+    request.allHTTPHeaderFields = try await APIClient.shared.buildHeaders(
+      requireAuth: true, includeBYOK: false, expectedAuthOwnerId: authorization.ownerID)
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return false }
+    request.httpBody = try JSONSerialization.data(withJSONObject: latest())
+    let (_, response) = try await URLSession.shared.data(for: request)
+    return (response as? HTTPURLResponse).map { (200..<300).contains($0.statusCode) } ?? false
   }
 
   private var foreground: Bool
   private var visibleSurfaces: Set<UUID> = []
   private var observers: [NSObjectProtocol] = []
 
-  init(foreground: Bool? = nil, observeApplication: Bool = true) {
+  init(
+    foreground: Bool? = nil, observeApplication: Bool = true,
+    surfaceReportingEnabled: Bool? = nil, surfaceOpen: (() -> Bool)? = nil,
+    surfaceTransport: SurfaceTransport? = nil
+  ) {
+    self.surfaceReportingEnabled =
+      surfaceReportingEnabled
+      ?? (ProcessInfo.processInfo.environment["DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED"] == "true")
+    self.surfaceOpen = surfaceOpen
+    self.surfaceTransport = surfaceTransport ?? Self.postSurface
     let initial = foreground ?? NSApplication.shared.isActive
     self.foreground = initial
     self.snapshot = Snapshot(foreground: initial, transcriptVisible: false)
     guard observeApplication else { return }
-    if ProcessInfo.processInfo.environment["DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED"] == "true" {
+    if self.surfaceReportingEnabled {
       heartbeat = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
         Task { @MainActor in self?.reportSurface(heartbeat: true) }
       }
@@ -99,14 +148,26 @@ final class ListenClientState: ObservableObject {
         MainActor.assumeIsolated { self?.setForeground(false) }
       },
     ]
-    if ProcessInfo.processInfo.environment["DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED"] == "true" {
+    if self.surfaceReportingEnabled {
       for name in [
         NSWindow.didChangeOcclusionStateNotification, NSWindow.didMiniaturizeNotification,
-        NSWindow.didDeminiaturizeNotification, NSWindow.willCloseNotification,
+        NSWindow.didDeminiaturizeNotification, NSWindow.willCloseNotification, NSWindow.didBecomeKeyNotification,
+        NSApplication.didHideNotification, NSApplication.didUnhideNotification,
       ] {
         observers.append(
-          center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reportSurface() }
+          center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+            let window = notification.object as? NSWindow
+            MainActor.assumeIsolated {
+              if name == NSWindow.willCloseNotification {
+                self?.closingWindow = window
+              } else if let window,
+                window === self?.closingWindow, window.isVisible,
+                window.occlusionState.contains(.visible)
+              {
+                self?.closingWindow = nil
+              }
+              self?.reportSurface()
+            }
           })
       }
     }

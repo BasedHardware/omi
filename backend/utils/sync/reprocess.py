@@ -174,7 +174,7 @@ def _enqueue(row: dict[str, Any]) -> None:
         return
     from config.demand_processing import enabled
 
-    eager_recovery = enabled(row['uid'])
+    eager_recovery = bool(row.get('effects_only')) and enabled(row['uid'])
     enqueue_named_task(
         dispatch['queue'],
         handler,
@@ -256,7 +256,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         if old.get('lease_until', 0) > current:
             return old, ('busy', None)
         row = dict(old)
-        if row['due_at'] > current and not enabled(row['uid']):
+        if row['due_at'] > current and (not row.get('effects_only') or not enabled(row['uid'])):
             row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
             return row, ('deferred', row)
         row.update(lease_until=current + LEASE_SECONDS, owner=owner)

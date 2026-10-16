@@ -2097,7 +2097,7 @@ class ListenReceiver(ReplayFilterMixin):
                 demand_enabled()
                 and surface_reporting_enabled()
                 and demand_enabled(self.host.request.uid)
-                and ('surface_open' in payload or self._telemetry_platform() in {'ios', 'android', 'mobile'})
+                and isinstance(payload.get('surface_open'), bool)
             ):
                 from utils.conversations.demand_processing import observe_surface
 

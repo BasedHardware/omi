@@ -94,7 +94,7 @@ def _wake(row: dict, *, immediate: bool = False, now: float | None = None) -> No
         row['payload'],
         audience=binding['audience'],
         invoker_sa=binding['invoker_sa'],
-        schedule_at=int(now if immediate else row['due_at']),
+        schedule_at=int(max(now, row['due_at']) if immediate else row['due_at']),
     )
 
 
@@ -122,15 +122,19 @@ def schedule(
         priority = user_tier(uid, now=now, redis=r)
         if immediate:
             priority = 0
-        due = now
-        if effects_only and priority != 0:
-            due = min(started + CEILING_HEADROOM_SECONDS, max(now, not_before or now))
+        # Sync's trailing-edge settle is a content boundary, not an idle-capacity
+        # delay. Only invisible effects may bypass it on explicit demand.
+        settle_at = max(now, not_before or now)
+        due = now if effects_only and priority == 0 else settle_at
+        if effects_only:
+            due = min(started + CEILING_HEADROOM_SECONDS, due)
         row = dict(
             obligation=obligation,
             owner=owner_key(uid),
             started_at=started,
             tier=priority,
             due_at=due,
+            not_before=now if effects_only else settle_at,
             payload=payload,
             binding=binding,
             name=name,
@@ -183,7 +187,8 @@ def _promote_member(uid: str, obligation: str, r: Any, now: float) -> bool:
     row = json.loads(value)
     if row['owner'] != owner_key(uid):
         return False
-    row.update(tier=0, due_at=now)
+    due = max(now, row.get('not_before', now))
+    row.update(tier=0, due_at=due)
     p = r.pipeline()
     p.set(prefix() + obligation, json.dumps(row), ex=TTL)
     for priority in range(3):
@@ -191,7 +196,7 @@ def _promote_member(uid: str, obligation: str, r: Any, now: float) -> bool:
         p.zrem(prefix() + f'ready:{priority}', obligation)
     p.zadd(prefix() + 'queue:0', {obligation: row['started_at']})
     p.expire(prefix() + 'queue:0', TTL)
-    p.zadd(prefix() + 'ready:0', {obligation: now})
+    p.zadd(prefix() + 'ready:0', {obligation: due})
     p.expire(prefix() + 'ready:0', TTL)
     p.execute()
     _wake(row, immediate=True, now=now)
@@ -212,7 +217,7 @@ def promote_conversation_effects(uid: str, conversation_id: str) -> None:
 def observe_surface(uid: str, session: str, payload: dict, *, now: float | None = None) -> None:
     if not enabled(uid) or not surface_reporting_enabled():
         return
-    foreground = payload.get('surface_open', payload.get('foreground'))
+    foreground = payload.get('surface_open')
     if not isinstance(foreground, bool) or not isinstance(payload.get('transcript_visible'), bool):
         return
     now = time.time() if now is None else now

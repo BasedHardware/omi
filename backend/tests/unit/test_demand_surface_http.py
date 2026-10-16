@@ -128,3 +128,32 @@ async def test_websocket_surface_signal_uses_the_executor_only_when_enabled(
     else:
         report.assert_not_called()
     receiver.host.state.realtime_demand.observe.assert_called_once_with(payload)
+
+
+@pytest.mark.parametrize('platform', ['ios', 'android', 'mobile', 'macos'])
+@pytest.mark.asyncio
+async def test_released_listen_state_remains_telemetry_with_all_server_flags_on(
+    endpoint, listen_receiver_module, monkeypatch, platform
+):
+    import json
+    from types import SimpleNamespace
+
+    module = listen_receiver_module
+    _, _, report = endpoint
+    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'true')
+    monkeypatch.setenv('DEMAND_PROCESSING_PERCENT', '100')
+    monkeypatch.setenv('DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED', 'true')
+    monkeypatch.setattr(
+        module, 'resolve_ondemand_config', lambda: SimpleNamespace(shadow_enabled=False, gate_enabled=False)
+    )
+    receiver = module.ListenReceiver.__new__(module.ListenReceiver)
+    receiver.host = SimpleNamespace(
+        request=SimpleNamespace(uid='synthetic-owner'),
+        state=SimpleNamespace(realtime_demand=Mock(observe=Mock(return_value=True))),
+        session_id='released-socket',
+    )
+    monkeypatch.setattr(receiver, '_telemetry_platform', lambda: platform)
+    payload = {'type': 'client_state', 'foreground': True, 'transcript_visible': True}
+    await receiver._handle_text(json.dumps(payload))
+    report.assert_not_called()
+    receiver.host.state.realtime_demand.observe.assert_called_once_with(payload)
