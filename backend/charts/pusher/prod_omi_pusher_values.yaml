@@ -129,9 +129,9 @@ env:
   - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
-    value: "0"
+    value: "100"
   - name: AUDIO_ARCHIVE_UID_ALLOWLIST
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+    value: ""
   - name: BUCKET_AUDIO_DERIVED
     value: ""
   - name: AUDIO_MERGE_WORKER_URL

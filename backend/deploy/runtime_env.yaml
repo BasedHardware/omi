@@ -2173,8 +2173,8 @@ environments:
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
           AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
-          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+          AUDIO_ARCHIVE_PERCENT: {value: '100', category: rollout}
+          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
           AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           AUDIO_TIMELINE_SPANS: {value: 'true', category: rollout}
@@ -2546,8 +2546,8 @@ environments:
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
           AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
-          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+          AUDIO_ARCHIVE_PERCENT: {value: '100', category: rollout}
+          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
           AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           AUDIO_TIMELINE_SPANS: {value: 'true', category: rollout}
@@ -2877,8 +2877,8 @@ environments:
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
-            AUDIO_ARCHIVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            AUDIO_ARCHIVE_PERCENT: {value: '100', category: rollout}
+            AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
             BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
             AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
@@ -3220,8 +3220,8 @@ environments:
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
-            AUDIO_ARCHIVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            AUDIO_ARCHIVE_PERCENT: {value: '100', category: rollout}
+            AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
             BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
             AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             OMI_VERTEX_RESERVATION_PROJECT:
@@ -3329,15 +3329,15 @@ environments:
               provisional: true
               value: '2592000'
               category: rollout
-            SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
-            SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'false', category: rollout}
-            SYNC_LEGACY_FRESH_UID_ALLOWLIST: {value: '', category: rollout}
-            SYNC_LEGACY_FRESH_PERCENT: {value: '0', category: rollout}
+            SYNC_LEGACY_FRESH_ENABLED: {value: 'true', category: rollout}
+            SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'true', category: rollout}
+            SYNC_LEGACY_FRESH_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            SYNC_LEGACY_FRESH_PERCENT: {value: '100', category: rollout}
             SYNC_LEGACY_FRESH_HOURLY_TOKENS:
-              value: '60'
+              value: '120'
               category: reliability
             SYNC_LEGACY_FRESH_BURST_TOKENS:
-              value: '10'
+              value: '60'
               category: reliability
             SYNC_FRESH_MAX_AGE_SECONDS:
               provisional: true
@@ -3537,8 +3537,8 @@ environments:
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
-            AUDIO_ARCHIVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            AUDIO_ARCHIVE_PERCENT: {value: '100', category: rollout}
+            AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
             BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
             AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
@@ -3641,15 +3641,15 @@ environments:
               provisional: true
               value: '2592000'
               category: rollout
-            SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
-            SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'false', category: rollout}
-            SYNC_LEGACY_FRESH_UID_ALLOWLIST: {value: '', category: rollout}
-            SYNC_LEGACY_FRESH_PERCENT: {value: '0', category: rollout}
+            SYNC_LEGACY_FRESH_ENABLED: {value: 'true', category: rollout}
+            SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'true', category: rollout}
+            SYNC_LEGACY_FRESH_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            SYNC_LEGACY_FRESH_PERCENT: {value: '100', category: rollout}
             SYNC_LEGACY_FRESH_HOURLY_TOKENS:
-              value: '60'
+              value: '120'
               category: reliability
             SYNC_LEGACY_FRESH_BURST_TOKENS:
-              value: '10'
+              value: '60'
               category: reliability
             SYNC_FRESH_MAX_AGE_SECONDS:
               provisional: true
@@ -3836,8 +3836,8 @@ environments:
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
-            AUDIO_ARCHIVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            AUDIO_ARCHIVE_PERCENT: {value: '100', category: rollout}
+            AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
             BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
             AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
