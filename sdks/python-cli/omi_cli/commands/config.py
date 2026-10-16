@@ -146,16 +146,19 @@ def profile_use(
     name: str = typer.Argument(..., help="Profile name to make active."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    cleaned_name = name.strip()
+    if not cleaned_name:
+        raise UsageError(message="Invalid profile name", detail="Profile name cannot be empty or whitespace.")
     config = ctx.load_config()
-    if name not in config.profiles:
+    if cleaned_name not in config.profiles:
         # Allow switching to a brand-new (yet-unconfigured) profile so users can
         # bootstrap a fresh context: `omi config profile use work && omi auth login`
-        config.profiles[name] = cfg.Profile(name=name)
-    config.active_profile = name
+        config.profiles[cleaned_name] = cfg.Profile(name=cleaned_name)
+    config.active_profile = cleaned_name
     cfg.save(config)
-    ctx.renderer.success(f"Active profile: [bold]{escape(name)}[/bold].")
+    ctx.renderer.success(f"Active profile: [bold]{escape(cleaned_name)}[/bold].")
     if ctx.renderer.json_mode:
-        ctx.renderer.emit({"ok": True, "active_profile": name})
+        ctx.renderer.emit({"ok": True, "active_profile": cleaned_name})
 
 
 @profile_app.command("delete", help="Delete a profile and its credentials.")
@@ -165,13 +168,16 @@ def profile_delete(
     confirm: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    cleaned_name = name.strip()
+    if not cleaned_name:
+        raise UsageError(message="Invalid profile name", detail="Profile name cannot be empty or whitespace.")
     config = ctx.load_config()
-    if name not in config.profiles:
-        raise UsageError(message=f"No such profile: '{name}'")
+    if cleaned_name not in config.profiles:
+        raise UsageError(message=f"No such profile: '{cleaned_name}'")
     if not confirm:
-        typer.confirm(f"Delete profile '{name}'?", abort=True)
-    config.delete_profile(name)
+        typer.confirm(f"Delete profile '{cleaned_name}'?", abort=True)
+    config.delete_profile(cleaned_name)
     cfg.save(config)
-    ctx.renderer.success(f"Deleted profile [bold]{escape(name)}[/bold].")
+    ctx.renderer.success(f"Deleted profile [bold]{escape(cleaned_name)}[/bold].")
     if ctx.renderer.json_mode:
-        ctx.renderer.emit({"ok": True, "deleted_profile": name})
+        ctx.renderer.emit({"ok": True, "deleted_profile": cleaned_name})
