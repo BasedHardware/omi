@@ -7,6 +7,8 @@ from typing import Any, Callable, Mapping
 
 from config.live_demand import language_qualified, resolve_live_demand
 from utils.observability.fallback import record_fallback
+from utils.observability.demand_cohort import DemandTelemetry, attach_demand_telemetry, host_telemetry, telemetry_call
+from config.live_stt_recovery import session_recovery_enabled
 from utils.stt.live_rollout import managed_chain_enabled
 from utils.stt.demand_consumers import realtime_consumer_active
 from utils.stt.demand_presence import update_presence
@@ -144,7 +146,7 @@ class LiveDemandRouting:
 
     def meter(self) -> None:
         if self.eligible:
-            self.receiver.lane_meter.flush(reason=self.policy.reason)
+            telemetry_call(self.receiver, 'lane_meter', 'flush', reason=self.policy.reason)
 
     async def run(self) -> None:
         host = self.receiver.host
@@ -195,9 +197,17 @@ def attach_live_demand(receiver) -> LiveDemandRouting | None:
     host = receiver.host
     if not resolve_live_demand().enabled:
         return None
+    capture_demand_admission(host)
+    return LiveDemandRouting(receiver, eligible=getattr(host, '_demand_cohort', None) == 'admitted')
+
+
+def capture_demand_admission(host) -> DemandTelemetry | None:
+    existing = host_telemetry(host)
+    if getattr(host, '_demand_cohort', None) is not None:
+        return existing
+    config = resolve_live_demand()
     eligible = (
-        resolve_live_demand().admits(host.request.uid)
-        and receiver.recovery_enabled
+        session_recovery_enabled(host)
         and managed_chain_enabled(host)
         and not host.is_multi_channel
         and not host.use_custom_stt
@@ -205,4 +215,6 @@ def attach_live_demand(receiver) -> LiveDemandRouting | None:
         and host.request.source != 'phone_call'
         and language_qualified(host)
     )
-    return LiveDemandRouting(receiver, eligible=eligible)
+    cohort = ('admitted' if config.admits(host.request.uid) else 'eligible_control') if eligible else 'ineligible'
+    host._demand_cohort = cohort
+    return attach_demand_telemetry(host, cohort)
