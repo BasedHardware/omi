@@ -100,6 +100,10 @@ Never increase admission from 2/35 merely because an average GPU is low.
    replica fraction: measure caller routing. At least 3h and a busy period at
    <=5%, then expand only if delivery, quality, refusals and queue deadlines
    hold. No caller-routing canary is installed by this PR.
+   Deploy the marker-producing backend/listen/pusher image before including
+   older streaming-shaped HTTP callers in that canary; otherwise restrict it
+   to modern windows which already send `live-window`. An old unmarked caller
+   cannot be distinguished from historical v1 work by the GPU service.
 4. After the whole serving fleet exposes fresh queue gauges, enable
    `autoscaling.demand.enabled=true` with max12, min3, requests2 and *existing*
    900s behavior first. Compare recommendations with the old HPA off-line.
