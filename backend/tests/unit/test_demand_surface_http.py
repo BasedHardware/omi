@@ -14,6 +14,7 @@ def endpoint(monkeypatch):
 
     app = FastAPI()
     app.add_api_route('/v1/users/client-state', users.report_surface_state, methods=['POST'])
+    monkeypatch.setattr(users.auth, '_enforce_rate_limit', Mock())
     report = Mock()
     monkeypatch.setattr(demand_processing, 'observe_surface', report)
     return app, users, report
