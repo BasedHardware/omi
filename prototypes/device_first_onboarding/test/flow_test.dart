@@ -46,8 +46,13 @@ void main() {
       for (final direction in DfDirection.values) {
         for (final step in DfStep.values) {
           testWidgets('${direction.label} ${size.width.toInt()}x${size.height.toInt()} ${step.title}', (tester) async {
-            await pumpFlow(tester,
-                direction: direction, step: step, size: size, searchDuration: const Duration(hours: 1));
+            await pumpFlow(
+              tester,
+              direction: direction,
+              step: step,
+              size: size,
+              searchDuration: const Duration(hours: 1),
+            );
             expect(tester.takeException(), isNull);
           });
         }

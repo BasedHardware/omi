@@ -16,7 +16,10 @@ class WelcomeScreen extends StatelessWidget {
     return DfPage(
       header: const DfHeroArt(height: 420),
       children: <Widget>[
-        Text('Omi', style: t.label(color: t.textTertiary, weight: FontWeight.w600)),
+        Text(
+          'Omi',
+          style: t.label(color: t.textTertiary, weight: FontWeight.w600),
+        ),
         const DfHeadline('Your AI companion that remembers.', size: 34),
         const DfBody('Omi records your conversations and writes the summary and to-dos for you.'),
         const Spacer(),

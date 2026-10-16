@@ -44,9 +44,7 @@ class _FindDeviceScreenState extends State<FindDeviceScreen> {
         const DfProgress(step: 1),
         const DfHeadline('Turn on your Omi'),
         const DfBody('Press its button once and hold it near your phone.'),
-        const Center(
-          child: DfPulseRings(size: 260, child: DfPendant(size: 116, showCord: false, glow: true)),
-        ),
+        const Center(child: DfPulseRings(size: 260, child: DfPendant(size: 116, showCord: false, glow: true))),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[

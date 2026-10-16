@@ -259,12 +259,18 @@ class _VoiceOrb extends StatelessWidget {
     return Container(
       width: 150,
       height: 150,
-      decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: t.border)),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: t.border),
+      ),
       alignment: Alignment.center,
       child: Container(
         width: 100,
         height: 100,
-        decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: t.textTertiary)),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: t.textTertiary),
+        ),
         alignment: Alignment.center,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 250),
@@ -331,15 +337,12 @@ class _SetupScreenState extends State<SetupScreen> with SingleTickerProviderStat
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Row(children: <Widget>[
-                    for (var i = 0; i < 5; i++) Icon(Icons.star_rounded, size: 16, color: t.text)
-                  ]),
+                  Row(
+                    children: <Widget>[for (var i = 0; i < 5; i++) Icon(Icons.star_rounded, size: 16, color: t.text)],
+                  ),
                   const SizedBox(height: 6),
                   // Placeholder: swap in a real App Store review.
-                  Text(
-                    "“I haven't missed a follow-up since I started wearing it.”",
-                    style: t.label(size: 14),
-                  ),
+                  Text("“I haven't missed a follow-up since I started wearing it.”", style: t.label(size: 14)),
                   const SizedBox(height: 4),
                   Text('Trusted by 300,000+ professionals', style: t.body(size: 12, color: t.textTertiary)),
                 ],
@@ -364,8 +367,11 @@ class _SetupStep extends StatelessWidget {
     final t = DfThemeScope.of(context);
     return Row(
       children: <Widget>[
-        Icon(done ? Icons.check_circle : Icons.radio_button_unchecked,
-            size: 18, color: done ? t.success : t.textTertiary),
+        Icon(
+          done ? Icons.check_circle : Icons.radio_button_unchecked,
+          size: 18,
+          color: done ? t.success : t.textTertiary,
+        ),
         const SizedBox(width: 10),
         Expanded(
           child: Text(

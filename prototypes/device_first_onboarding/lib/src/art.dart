@@ -118,10 +118,7 @@ class DfOrb extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = DfThemeScope.of(context);
-    return CustomPaint(
-      size: Size.square(size),
-      painter: _OrbPainter(t.glow ?? <Color>[t.accent, t.accent, t.accent]),
-    );
+    return CustomPaint(size: Size.square(size), painter: _OrbPainter(t.glow ?? <Color>[t.accent, t.accent, t.accent]));
   }
 }
 
@@ -250,10 +247,8 @@ class DfPulseRings extends StatefulWidget {
 }
 
 class _DfPulseRingsState extends State<DfPulseRings> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 2),
-  )..repeat();
+  late final AnimationController _controller = AnimationController(vsync: this, duration: const Duration(seconds: 2))
+    ..repeat();
 
   @override
   void dispose() {
@@ -296,7 +291,10 @@ class _PulsePainter extends CustomPainter {
       final colors = glow;
       if (colors != null) {
         paint.shader = SweepGradient(
-          colors: <Color>[for (final g in colors) g.withValues(alpha: alpha), colors.first.withValues(alpha: alpha)],
+          colors: <Color>[
+            for (final g in colors) g.withValues(alpha: alpha),
+            colors.first.withValues(alpha: alpha),
+          ],
         ).createShader(Rect.fromCircle(center: c, radius: r));
       } else {
         paint.color = color.withValues(alpha: alpha);

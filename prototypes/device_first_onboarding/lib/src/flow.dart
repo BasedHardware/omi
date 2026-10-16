@@ -99,11 +99,11 @@ class _DeviceFirstFlowState extends State<DeviceFirstFlow> {
   }
 
   void _restart() => setState(() {
-        _history.clear();
-        _step = DfStep.welcome;
-        _outcome = '';
-        _path = 'Has an Omi';
-      });
+    _history.clear();
+    _step = DfStep.welcome;
+    _outcome = '';
+    _path = 'Has an Omi';
+  });
 
   @override
   Widget build(BuildContext context) {

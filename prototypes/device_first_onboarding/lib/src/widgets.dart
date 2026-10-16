@@ -84,7 +84,10 @@ class DfButton extends StatelessWidget {
           child: SizedBox(
             height: 54,
             child: Center(
-              child: Text(label, style: t.label(size: 17, color: foreground, weight: FontWeight.w600)),
+              child: Text(
+                label,
+                style: t.label(size: 17, color: foreground, weight: FontWeight.w600),
+              ),
             ),
           ),
         ),
@@ -153,7 +156,11 @@ class DfCaption extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = DfThemeScope.of(context);
-    return Text(text, textAlign: TextAlign.center, style: t.body(size: 12, color: t.textTertiary));
+    return Text(
+      text,
+      textAlign: TextAlign.center,
+      style: t.body(size: 12, color: t.textTertiary),
+    );
   }
 }
 
@@ -223,7 +230,13 @@ class DfListRow extends StatelessWidget {
         child: Row(
           children: <Widget>[
             if (icon != null) ...<Widget>[Icon(icon, size: 20, color: iconColor ?? t.text), const SizedBox(width: 12)],
-            Expanded(flex: 3, child: Text(label, style: t.label(weight: weight, color: labelColor))),
+            Expanded(
+              flex: 3,
+              child: Text(
+                label,
+                style: t.label(weight: weight, color: labelColor),
+              ),
+            ),
             if (value != null) const SizedBox(width: 12),
             // Right-aligned value that wraps (rather than overflows) when it is long.
             if (value != null)
@@ -283,7 +296,10 @@ class DfCompareTable extends StatelessWidget {
                 children: <Widget>[
                   Expanded(child: Text(row.first, style: t.label(size: 13))),
                   for (var i = 1; i < row.length; i++)
-                    SizedBox(width: width, child: Center(child: _cell(t, row[i], highlight: i == row.length - 1))),
+                    SizedBox(
+                      width: width,
+                      child: Center(child: _cell(t, row[i], highlight: i == row.length - 1)),
+                    ),
                 ],
               ),
             ),
@@ -355,7 +371,10 @@ class DfBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(borderRadius: BorderRadius.circular(6), gradient: t.badgeGradient),
-      child: Text(text.toUpperCase(), style: t.label(size: 10, weight: FontWeight.w700, color: t.onAccent)),
+      child: Text(
+        text.toUpperCase(),
+        style: t.label(size: 10, weight: FontWeight.w700, color: t.onAccent),
+      ),
     );
   }
 }

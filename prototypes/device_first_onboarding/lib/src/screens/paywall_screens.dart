@@ -126,7 +126,8 @@ class TrialStartedScreen extends StatelessWidget {
         ),
         DfHeadline("You're all set, $name.", size: 34),
         DfBody(
-            "Unlimited is on. We'll remind you on day ${trial.reminderDay}, $notice before ${trial.endingNoun} ends."),
+          "Unlimited is on. We'll remind you on day ${trial.reminderDay}, $notice before ${trial.endingNoun} ends.",
+        ),
         DfCard(
           padding: const EdgeInsets.all(16),
           child: Column(

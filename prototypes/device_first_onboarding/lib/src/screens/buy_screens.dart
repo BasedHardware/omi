@@ -95,12 +95,20 @@ class CheckoutScreen extends StatelessWidget {
                 child: Container(
                   width: 40,
                   height: 40,
-                  decoration:
-                      BoxDecoration(shape: BoxShape.circle, border: Border.all(color: t.textTertiary, width: 5)),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: t.textTertiary, width: 5),
+                  ),
                 ),
               ),
-              _BoxItem(label: 'Lanyard', child: Icon(Icons.all_inclusive, size: 40, color: t.textTertiary)),
-              _BoxItem(label: 'Charger', child: Icon(Icons.cable, size: 40, color: t.textTertiary)),
+              _BoxItem(
+                label: 'Lanyard',
+                child: Icon(Icons.all_inclusive, size: 40, color: t.textTertiary),
+              ),
+              _BoxItem(
+                label: 'Charger',
+                child: Icon(Icons.cable, size: 40, color: t.textTertiary),
+              ),
             ],
           ),
         ),
@@ -119,7 +127,9 @@ class CheckoutScreen extends StatelessWidget {
           children: <Widget>[
             Icon(Icons.verified_user_outlined, size: 16, color: t.textTertiary),
             const SizedBox(width: 8),
-            Expanded(child: Text('1-year limited warranty', style: t.body(size: 13, color: t.textTertiary))),
+            Expanded(
+              child: Text('1-year limited warranty', style: t.body(size: 13, color: t.textTertiary)),
+            ),
           ],
         ),
         const Spacer(),
@@ -146,7 +156,11 @@ class _BoxItem extends StatelessWidget {
           const SizedBox(height: 8),
           FittedBox(
             fit: BoxFit.scaleDown,
-            child: Text(label, textAlign: TextAlign.center, style: t.body(size: 12, color: t.textTertiary)),
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: t.body(size: 12, color: t.textTertiary),
+            ),
           ),
         ],
       ),
@@ -178,28 +192,21 @@ class WaitingRoomScreen extends StatelessWidget {
                 child: Row(
                   children: <Widget>[
                     // Placeholder: real order number and dates come from the store.
-                    Text('Order #1042', style: t.label(size: 13, weight: FontWeight.w600, color: t.textTertiary)),
+                    Text(
+                      'Order #1042',
+                      style: t.label(size: 13, weight: FontWeight.w600, color: t.textTertiary),
+                    ),
                   ],
                 ),
               ),
-              DfListRow(
-                icon: Icons.check_circle,
-                iconColor: t.success,
-                label: 'Ordered',
-                value: 'Today',
-              ),
+              DfListRow(icon: Icons.check_circle, iconColor: t.success, label: 'Ordered', value: 'Today'),
               DfListRow(
                 icon: Icons.local_shipping_outlined,
                 label: 'Shipped',
                 value: 'Expected tomorrow',
                 labelColor: t.textSecondary,
               ),
-              DfListRow(
-                icon: Icons.home_outlined,
-                label: 'Delivered',
-                value: 'In 3 days',
-                labelColor: t.textSecondary,
-              ),
+              DfListRow(icon: Icons.home_outlined, label: 'Delivered', value: 'In 3 days', labelColor: t.textSecondary),
             ],
           ),
         ),
@@ -284,7 +291,9 @@ class ArrivalNotificationScreen extends StatelessWidget {
                               children: <Widget>[
                                 Row(
                                   children: <Widget>[
-                                    Expanded(child: Text('Omi', style: t.label(size: 14, weight: FontWeight.w600))),
+                                    Expanded(
+                                      child: Text('Omi', style: t.label(size: 14, weight: FontWeight.w600)),
+                                    ),
                                     Text('now', style: t.body(size: 13, color: t.textTertiary)),
                                   ],
                                 ),
