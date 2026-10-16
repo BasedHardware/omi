@@ -142,13 +142,16 @@ grafana:
   # starved: /api/health returned 502 externally and alert provisioning timed
   # out. Requests give the alerting UI a guaranteed CPU share; sized from
   # measured peaks (214m CPU, 241Mi during the 2026-10-14 evaluation storm).
+  # Grafana 13 was OOMKilled at 1Gi three times on 2026-10-16 (15:18, 15:19,
+  # 15:51Z), each at the end of an internet scanner burst (~300 unauthenticated
+  # .env/secrets probes in ~70s) while steady-state working set stays ~260-510Mi.
   resources:
     requests:
       cpu: 250m
       memory: 384Mi
     limits:
       cpu: "1"
-      memory: 1Gi
+      memory: 2Gi
   serviceAccount:
     create: true
     annotations:
