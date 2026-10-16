@@ -11,7 +11,7 @@ import threading
 from contextlib import ContextDecorator
 from contextvars import ContextVar
 from functools import wraps
-from typing import Any
+from typing import Any, Callable, Literal, TypeVar, cast
 
 from prometheus_client import Counter
 
@@ -37,6 +37,8 @@ _TASK_FAMILIES = (
     'sync:uid-lease',
     'sync:inline-lease',
 )
+_F = TypeVar('_F', bound=Callable[..., Any])
+
 _read_origin: ContextVar[Any] = ContextVar('firestore_read_origin', default=None)
 _SCOPE_ORIGIN_CACHE = '_omi_firestore_read_origin'
 
@@ -86,26 +88,26 @@ class read_origin(ContextDecorator):
     def __init__(self, name: str):
         self.name = name
 
-    def _recreate_cm(self):
+    def _recreate_cm(self) -> 'read_origin':
         return type(self)(self.name)
 
-    def __enter__(self):
+    def __enter__(self) -> 'read_origin':
         self.token = _read_origin.set(self.name)
         return self
 
-    def __exit__(self, *exc):
+    def __exit__(self, *exc: object) -> Literal[False]:
         _read_origin.reset(self.token)
         return False
 
-    def __call__(self, func):
+    def __call__(self, func: _F) -> _F:
         if inspect.iscoroutinefunction(func):
 
             @wraps(func)
-            async def wrapped(*args, **kwargs):
+            async def wrapped(*args: Any, **kwargs: Any) -> Any:
                 with self._recreate_cm():
                     return await func(*args, **kwargs)
 
-            return wrapped
+            return cast(_F, wrapped)
         return super().__call__(func)
 
 
