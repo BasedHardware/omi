@@ -98,19 +98,16 @@ Future<void> _pump(WidgetTester tester, Widget page, WalStatus status, {List<Wal
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  final sync = _Sync(
-    recordings ??
-        [
-          Wal(
+  final sync = _Sync(recordings ??
+      [
+        Wal(
             timerStart: 1790730000,
             codec: BleAudioCodec.opus,
             seconds: 30,
             status: status,
             storage: WalStorage.disk,
-            device: 'phone',
-          ),
-        ],
-  );
+            device: 'phone')
+      ]);
   final device = _Device(), user = _User();
   addTearDown(sync.dispose);
   addTearDown(device.dispose);
@@ -135,29 +132,24 @@ Future<void> _pump(WidgetTester tester, Widget page, WalStatus status, {List<Wal
     platform: TargetPlatform.iOS,
     textTheme: baseTheme.textTheme.apply(fontFamily: 'SF Pro Display'),
     primaryTextTheme: baseTheme.primaryTextTheme.apply(fontFamily: 'SF Pro Display'),
-    appBarTheme: baseTheme.appBarTheme.copyWith(
-      titleTextStyle: baseTheme.appBarTheme.titleTextStyle?.copyWith(fontFamily: 'SF Pro Display'),
-    ),
+    appBarTheme: baseTheme.appBarTheme
+        .copyWith(titleTextStyle: baseTheme.appBarTheme.titleTextStyle?.copyWith(fontFamily: 'SF Pro Display')),
   );
-  await tester.pumpWidget(
-    MultiProvider(
+  await tester.pumpWidget(MultiProvider(
       providers: [
         ChangeNotifierProvider<SyncProvider>.value(value: sync),
         ChangeNotifierProvider<DeviceProvider>.value(value: device),
         ChangeNotifierProvider<UserProvider>.value(value: user),
       ],
       child: RepaintBoundary(
-        key: const ValueKey('sync-completion-evidence'),
-        child: MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          theme: theme,
-          debugShowCheckedModeBanner: false,
-          home: page,
-        ),
-      ),
-    ),
-  );
+          key: const ValueKey('sync-completion-evidence'),
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            theme: theme,
+            debugShowCheckedModeBanner: false,
+            home: page,
+          ))));
   if (status == WalStatus.uploaded) {
     // An indeterminate processing spinner is expected until the server settles.
     await tester.pump();
@@ -201,25 +193,19 @@ void main() {
     await _capture(tester, '004-mobile-ios-sync-processed.png');
   });
 
-  testWidgets('127 uploaded recordings remain processing, not complete or a queue-clearing instruction', (
-    tester,
-  ) async {
-    await _pump(
-      tester,
-      const AutoSyncPage(),
-      WalStatus.uploaded,
-      recordings: [
-        for (var i = 0; i < 127; i++)
-          Wal(
+  testWidgets('127 uploaded recordings remain processing, not complete or a queue-clearing instruction',
+      (tester) async {
+    await _pump(tester, const AutoSyncPage(), WalStatus.uploaded, recordings: [
+      for (var i = 0; i < 127; i++)
+        Wal(
             timerStart: 1790730000 + i * 10,
             codec: BleAudioCodec.opus,
             seconds: 10,
             status: WalStatus.uploaded,
             storage: WalStorage.disk,
-            device: 'pendant',
-          )..jobId = 'job-$i',
-      ],
-    );
+            device: 'pendant')
+          ..jobId = 'job-$i',
+    ]);
     final l = AppLocalizations.of(tester.element(find.byType(AutoSyncPage)));
     expect(find.text(l.syncCardTranscribingAmount(OmiDuration.compact(1270, l))), findsOneWidget);
     expect(find.text('All recordings synced'), findsNothing);

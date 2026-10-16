@@ -12,45 +12,34 @@ import 'package:omi/ui/ui.dart';
 import '../../helpers/proactivity_fakes.dart';
 
 final recap = DailySummary(
-  id: 'recovered',
-  date: '2026-10-04',
-  createdAt: DateTime.utc(2026, 10, 13),
-  headline: 'Recovered October day',
-  overview: 'Saved conversations',
-  stats: DayStats(totalConversations: 1),
-);
+    id: 'recovered',
+    date: '2026-10-04',
+    createdAt: DateTime.utc(2026, 10, 13),
+    headline: 'Recovered October day',
+    overview: 'Saved conversations',
+    stats: DayStats(totalConversations: 1));
 typedef Page = ({List<DailySummary> items, bool ok});
 
 Future<void> pump(WidgetTester tester, RecentRecapsLoader load, {bool recover = false}) async {
   final h = OutcomeHarness();
   addTearDown(h.outbox.dispose);
   await h.bind();
-  await tester.pumpWidget(
-    MaterialApp(
-      theme: buildOmiTheme(),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
+  await tester.pumpWidget(MaterialApp(
+    theme: buildOmiTheme(),
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: Scaffold(
         body: SingleChildScrollView(
-          child: Column(
-            children: [
-              if (recover)
-                DailyRecapRecoveryAction(
-                  now: () => DateTime(2026, 10, 13),
-                  create: (_) async => ApiSuccess(recap),
-                  onCreated: (_) async {},
-                ),
-              HomeDailyRecaps(
-                load: load,
-                outbox: h.outbox,
-                loadFeed: (_) async => ApiSuccess(feedResponse(enabled: false)),
-              ),
-            ],
-          ),
+            child: Column(children: [
+      if (recover)
+        DailyRecapRecoveryAction(
+          now: () => DateTime(2026, 10, 13),
+          create: (_) async => ApiSuccess(recap),
+          onCreated: (_) async {},
         ),
-      ),
-    ),
-  );
+      HomeDailyRecaps(load: load, outbox: h.outbox, loadFeed: (_) async => ApiSuccess(feedResponse(enabled: false))),
+    ]))),
+  ));
   await tester.pump();
 }
 

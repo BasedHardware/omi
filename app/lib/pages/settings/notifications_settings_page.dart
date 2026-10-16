@@ -112,7 +112,11 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   Future<void> _updateNotificationFrequency(int value) async {
     if (value > 0 &&
         _notificationFrequency == 0 &&
-        await showProGateUpsell(context, feature: 'proactive_agent', source: 'proactive_agent_gate')) {
+        await showProGateUpsell(
+          context,
+          feature: 'proactive_agent',
+          source: 'proactive_agent_gate',
+        )) {
       return;
     }
     if (!mounted) return;

@@ -22,13 +22,12 @@ Widget _app(DailyRecapCreator create, Future<void> Function(DailySummary) create
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
-        body: DailyRecapRecoveryAction(
-          create: create,
-          onCreated: created,
-          settingsRow: settings,
-          now: () => DateTime(2026, 10, 13),
-        ),
-      ),
+          body: DailyRecapRecoveryAction(
+        create: create,
+        onCreated: created,
+        settingsRow: settings,
+        now: () => DateTime(2026, 10, 13),
+      )),
     );
 
 Future<void> _pick(WidgetTester tester) async {
@@ -44,18 +43,12 @@ void main() {
     final pending = Completer<ApiResult<DailySummary>>();
     final dates = <String>[];
     final created = <DailySummary>[];
-    await tester.pumpWidget(
-      _app(
-        (date) {
-          dates.add(date);
-          return pending.future;
-        },
-        (summary) async {
-          created.add(summary);
-        },
-        settings: true,
-      ),
-    );
+    await tester.pumpWidget(_app((date) {
+      dates.add(date);
+      return pending.future;
+    }, (summary) async {
+      created.add(summary);
+    }, settings: true));
     await _pick(tester);
     expect(dates, ['2026-10-04']);
     expect(find.byType(OmiSpinner), findsOneWidget);
@@ -68,12 +61,10 @@ void main() {
 
   testWidgets('cancelling the date picker does not send a request', (tester) async {
     var calls = 0;
-    await tester.pumpWidget(
-      _app((date) async {
-        calls++;
-        return ApiSuccess(_summary);
-      }, (_) async {}),
-    );
+    await tester.pumpWidget(_app((date) async {
+      calls++;
+      return ApiSuccess(_summary);
+    }, (_) async {}));
     await tester.tap(find.byKey(const Key('daily_recap_generate')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Cancel'));
@@ -90,10 +81,9 @@ void main() {
     testWidgets('status ${entry.key} is shown honestly without publishing a recap', (tester) async {
       var published = false;
       await tester.pumpWidget(
-        _app((_) async => ApiFailure(ApiProblem(ApiProblemKind.server, statusCode: entry.key)), (_) async {
-          published = true;
-        }, settings: true),
-      );
+          _app((_) async => ApiFailure(ApiProblem(ApiProblemKind.server, statusCode: entry.key)), (_) async {
+        published = true;
+      }, settings: true));
       await _pick(tester);
       await tester.pumpAndSettle();
       expect(find.text(entry.value), findsOneWidget);

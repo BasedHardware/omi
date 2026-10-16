@@ -44,13 +44,11 @@ void main() {
     '{"summary_id":"old-test-envelope"}',
     '[]',
     '{"id":3,"date":"2026-10-04"}',
-    '{"id":"wrong-date","date":"2026-10-05"}',
+    '{"id":"wrong-date","date":"2026-10-05"}'
   ]) {
     test('rejects malformed or legacy test response $body', () async {
-      final api = DailySummaryCreationApi(
-        baseUrl: 'https://recap.test.invalid/',
-        send: (_) async => http.Response(body, 200),
-      );
+      final api =
+          DailySummaryCreationApi(baseUrl: 'https://recap.test.invalid/', send: (_) async => http.Response(body, 200));
       final result = await api.create('2026-10-04') as ApiFailure<DailySummary>;
       expect(result.problem.kind, ApiProblemKind.decode);
     });

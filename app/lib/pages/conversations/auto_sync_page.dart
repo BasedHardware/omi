@@ -39,7 +39,7 @@ import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
 /// clear that failed part-way still deleted files and leaves the card just as
 /// wrong; the failure itself still propagates to the caller.
 ({Future<void> Function() synced, Future<void> Function() pending, Future<void> Function() all})
-buildStorageClearActions({
+    buildStorageClearActions({
   required Future<void> Function() clearSynced,
   required Future<void> Function() clearPending,
   required Future<void> Function() clearAll,
@@ -107,13 +107,16 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         final filteredWals = !hasAnyRecording
             ? const <Wal>[]
             : _filter == WalDisplayFilter.synced
-            ? syncProvider.walsForDisplayFilter(WalDisplayFilter.synced)
-            : toSync;
+                ? syncProvider.walsForDisplayFilter(WalDisplayFilter.synced)
+                : toSync;
 
         return Scaffold(
           // One name for the device-storage sync screen everywhere: "Offline Sync", as Settings calls it.
           // No app bar actions: "How syncing works" lives in Sync details, Manage Storage in the Storage group.
-          appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.offlineSync)),
+          appBar: AppBar(
+            leading: const OmiBackButton(),
+            title: Text(context.l10n.offlineSync),
+          ),
           body: CustomScrollView(
             slivers: [
               SliverPadding(
@@ -278,7 +281,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               if (action != null) ...[const SizedBox(width: 10), action],
             ],
           ),
-          if (barStep != null) ...[const SizedBox(height: 14), SyncStepBar(step: barStep, fraction: barFraction)],
+          if (barStep != null) ...[
+            const SizedBox(height: 14),
+            SyncStepBar(step: barStep, fraction: barFraction),
+          ],
           const SizedBox(height: 6),
           if (created > 0) ...[
             Divider(height: 1, color: OmiColors.border),
@@ -301,9 +307,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         padding: const EdgeInsets.symmetric(vertical: 12),
         child: Row(
           children: [
-            Expanded(
-              child: Text(label, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
-            ),
+            Expanded(child: Text(label, style: TextStyle(color: Colors.grey.shade400, fontSize: 14))),
             FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12),
           ],
         ),
@@ -456,7 +460,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(10)),
       child: Row(
-        children: [chip(WalDisplayFilter.pending, pendingLabel), chip(WalDisplayFilter.synced, context.l10n.synced)],
+        children: [
+          chip(WalDisplayFilter.pending, pendingLabel),
+          chip(WalDisplayFilter.synced, context.l10n.synced),
+        ],
       ),
     );
   }
@@ -469,9 +476,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   /// corners, its last rounded bottom corners, with dividers between.
   Widget _buildWalListSliver(SyncProvider syncProvider, List<RecordingBlock> blocks) {
     if (blocks.isEmpty) {
-      final emptyMsg = _filter == WalDisplayFilter.synced
-          ? context.l10n.noSyncedRecordingsYet
-          : context.l10n.noPendingRecordings;
+      final emptyMsg =
+          _filter == WalDisplayFilter.synced ? context.l10n.noSyncedRecordingsYet : context.l10n.noPendingRecordings;
       return SliverPadding(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
         sliver: SliverToBoxAdapter(
@@ -493,19 +499,14 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         itemCount: items.length,
         itemBuilder: (context, i) => switch (items[i]) {
           _DayLabel(:final label) => Padding(
-            padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
-            child: Text(
-              label,
-              style: OmiType.footnote.copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w600),
+              padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
+              child: Text(
+                label,
+                style: OmiType.footnote.copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w600),
+              ),
             ),
-          ),
-          _DayRow(:final block, :final isFirst, :final isLast) => _buildBlockListItem(
-            syncProvider,
-            block,
-            i,
-            isFirst: isFirst,
-            isLast: isLast,
-          ),
+          _DayRow(:final block, :final isFirst, :final isLast) =>
+            _buildBlockListItem(syncProvider, block, i, isFirst: isFirst, isLast: isLast),
         },
       ),
     );
@@ -611,7 +612,12 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                     style: _rowTitleStyle(synced: state == WalSyncDisplayState.synced),
                   ),
                   const SizedBox(height: 3),
-                  Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: _rowSubtitleStyle(color)),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _rowSubtitleStyle(color),
+                  ),
                 ],
               ),
             ),
@@ -654,10 +660,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   static const _rowDivider = Divider(height: 1, color: Color(0xFF2C2C2E), indent: 16, endIndent: 16);
 
   static TextStyle _rowTitleStyle({required bool synced}) => TextStyle(
-    color: synced ? Colors.grey.shade500 : OmiColors.textPrimary,
-    fontSize: 15,
-    fontWeight: FontWeight.w500,
-  );
+        color: synced ? Colors.grey.shade500 : OmiColors.textPrimary,
+        fontSize: 15,
+        fontWeight: FontWeight.w500,
+      );
 
   static TextStyle _rowSubtitleStyle(Color color) => TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w400);
 
@@ -750,10 +756,19 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                     style: _rowTitleStyle(synced: isSynced),
                   ),
                   const SizedBox(height: 3),
-                  Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: _rowSubtitleStyle(color)),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _rowSubtitleStyle(color),
+                  ),
                   if (_rowDownloadFraction(wal) != null) ...[
                     const SizedBox(height: 8),
-                    DeviceDownloadMeter(fraction: _rowDownloadFraction(wal)!, showReadout: false, barHeight: 4),
+                    DeviceDownloadMeter(
+                      fraction: _rowDownloadFraction(wal)!,
+                      showReadout: false,
+                      barHeight: 4,
+                    ),
                   ],
                 ],
               ),

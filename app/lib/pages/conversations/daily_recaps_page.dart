@@ -30,11 +30,9 @@ class _DailyRecapsPageState extends State<DailyRecapsPage> {
     // first page and making its length skip a row on the next page.
     await _listKey.currentState?.refresh();
     if (!mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => DailySummaryDetailPage(summaryId: summary.id, summary: summary),
-      ),
-    );
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => DailySummaryDetailPage(summaryId: summary.id, summary: summary),
+    ));
     if (mounted) await _listKey.currentState?.refresh();
   }
 

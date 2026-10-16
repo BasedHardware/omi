@@ -106,23 +106,20 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> with WidgetsBindingObs
 
   @override
   Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      _buildRecaps(context),
-      widget.loadFeed == null
-          ? HomeForYou(key: _forYouKey, outbox: widget.outbox, open: widget.openTarget)
-          : HomeForYou(key: _forYouKey, load: widget.loadFeed!, outbox: widget.outbox, open: widget.openTarget),
-    ],
-  );
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildRecaps(context),
+          widget.loadFeed == null
+              ? HomeForYou(key: _forYouKey, outbox: widget.outbox, open: widget.openTarget)
+              : HomeForYou(key: _forYouKey, load: widget.loadFeed!, outbox: widget.outbox, open: widget.openTarget),
+        ],
+      );
 
   Widget _buildRecaps(BuildContext context) {
     if (!_loading && _recaps.isEmpty) {
       return _loadFailed
           ? OmiErrorState(
-              title: context.l10n.dailyRecaps,
-              message: context.l10n.somethingWentWrong,
-              onRetry: _refreshRecaps,
-            )
+              title: context.l10n.dailyRecaps, message: context.l10n.somethingWentWrong, onRetry: _refreshRecaps)
           : const SizedBox.shrink();
     }
     return Column(
@@ -161,17 +158,12 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> with WidgetsBindingObs
         if (_loadFailed && !_loading)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    context.l10n.somethingWentWrong,
-                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-                  ),
-                ),
-                OmiButton.tertiary(label: context.l10n.tryAgain, onPressed: _refreshRecaps),
-              ],
-            ),
+            child: Row(children: [
+              Expanded(
+                  child: Text(context.l10n.somethingWentWrong,
+                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary))),
+              OmiButton.tertiary(label: context.l10n.tryAgain, onPressed: _refreshRecaps),
+            ]),
           ),
       ],
     );
