@@ -1303,6 +1303,62 @@ def get_manual_speaker_receipt(uid: str, conversation_id: str, *, firestore_clie
     )
 
 
+def discover_public_conversation_owner(conversation_id: str, cached_uid: str = '') -> str:
+    """Resolve a public owner from Firestore; cached hints never authorize access.
+
+    IDs are not globally unique. Discovery accepts exactly one stored-id match,
+    including private/deleted matches in the ambiguity check, and validates the
+    actual users/{uid}/conversations/{id} path before trusting owner_uid.
+    """
+    from .firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
+
+    fields = ['id', 'owner_uid', 'visibility', 'deleted', 'is_locked']
+    if cached_uid:
+        snapshot = (
+            db.collection('users')
+            .document(cached_uid)
+            .collection(conversations_collection)
+            .document(conversation_id)
+            .get(field_paths=fields)
+        )
+        record_document_read(
+            FirestoreReadSite.PUBLIC_CONVERSATION_OWNER_CACHE,
+            FirestoreReadOutcome.HIT if snapshot.exists else FirestoreReadOutcome.MISS,
+        )
+        if snapshot.exists:
+            candidates = [snapshot]
+        else:
+            candidates = []
+    else:
+        candidates = []
+    if not candidates:
+        candidates = list(
+            db.collection_group(conversations_collection)
+            .where(filter=FieldFilter('id', '==', conversation_id))
+            .select(fields)
+            .limit(2)
+            .stream()
+        )
+        record_firestore_read(FirestoreReadFamily.PUBLIC_CONVERSATION_OWNER, FirestoreReadMode.BOUNDED, len(candidates))
+    if len(candidates) != 1:
+        return ''
+    snapshot = candidates[0]
+    path = snapshot.reference.path.split('/')
+    if len(path) != 4 or path[0] != 'users' or path[2:] != [conversations_collection, conversation_id]:
+        return ''
+    raw = snapshot.to_dict() or {}
+    uid = path[1]
+    if (
+        raw.get('id') != conversation_id
+        or raw.get('owner_uid', uid) != uid
+        or raw.get('visibility') not in {'shared', 'public'}
+        or is_soft_deleted(raw)
+        or raw.get('is_locked', False)
+    ):
+        return ''
+    return uid
+
+
 def get_public_shared_conversation_bounded(
     uid: str,
     conversation_id: str,
@@ -1316,16 +1372,24 @@ def get_public_shared_conversation_bounded(
     snapshot = conversation_ref.get(
         field_paths=[
             'visibility',
+            'deleted',
             'is_locked',
             'transcript_segments_compressed',
             'transcript_segments',
             'has_transcript_corrections',
         ]
     )
+    record_document_read(
+        FirestoreReadSite.PUBLIC_SHARED_CHAT,
+        FirestoreReadOutcome.HIT if snapshot.exists else FirestoreReadOutcome.MISS,
+    )
     if not snapshot.exists:
         return None
     raw = snapshot.to_dict()
     if not isinstance(raw, dict):
+        return None
+
+    if is_soft_deleted(raw):
         return None
 
     visibility = raw.get('visibility')
@@ -3548,10 +3612,17 @@ def release_share_email_recipients(uid: str, conversation_id: str, emails: list[
     conversation_ref.update({_in_flight_field(email): gc_firestore.DELETE_FIELD for email in emails})
 
 
+def _visibility_patch(uid: str, visibility: str) -> dict:
+    return {
+        'visibility': visibility,
+        'owner_uid': uid if visibility in ('shared', 'public') else firestore.DELETE_FIELD,
+    }
+
+
 def set_conversation_visibility(uid: str, conversation_id: str, visibility: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.update({'visibility': visibility})
+    conversation_ref.update(_visibility_patch(uid, visibility))
 
 
 def publish_conversation_visibility_if_private(uid: str, conversation_id: str):
@@ -3576,7 +3647,7 @@ def publish_conversation_visibility_if_private(uid: str, conversation_id: str):
             return (False, None)
         try:
             result = conversation_ref.update(
-                {'visibility': 'shared'},
+                _visibility_patch(uid, 'shared'),
                 option=db.write_option(last_update_time=snapshot.update_time),
             )
             return (True, getattr(result, 'update_time', None))
@@ -3607,7 +3678,7 @@ def set_conversation_visibility_if_unchanged(uid: str, conversation_id: str, vis
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     try:
         conversation_ref.update(
-            {'visibility': visibility},
+            _visibility_patch(uid, visibility),
             option=db.write_option(last_update_time=last_update_time),
         )
         return True
