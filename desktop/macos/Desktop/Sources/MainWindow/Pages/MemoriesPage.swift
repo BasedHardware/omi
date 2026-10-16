@@ -997,8 +997,8 @@ class MemoriesViewModel: ObservableObject {
           selectedTags.contains { tag in tag.matches(memory) }
         }
       }
-    } else if !filteredFromDatabase.isEmpty {
-      // Tag filters applied: use SQLite filtered results
+    } else if !selectedTags.isEmpty {
+      // Tag filters applied: use SQLite filtered results, even when none match
       result = filteredFromDatabase
     } else {
       // No filters: use loaded memories
