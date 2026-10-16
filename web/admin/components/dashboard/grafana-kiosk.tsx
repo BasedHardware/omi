@@ -78,6 +78,15 @@ function TvEmbedFrame({ token }: { token: string }) {
       ),
     errorRetryCount: 3,
     errorRetryInterval: 5000,
+    // Override the app-wide handler, which uses its own backoff and limit.
+    onErrorRetry: (failure, _key, config, revalidate, { retryCount }) => {
+      if ([400, 401, 403].includes(failure?.status)) return;
+      if (retryCount > (config.errorRetryCount ?? 3)) return;
+      setTimeout(
+        () => revalidate({ retryCount }),
+        config.errorRetryInterval ?? 5000
+      );
+    },
   });
   useEffect(() => {
     const resume = () => {
