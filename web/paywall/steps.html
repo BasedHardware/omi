@@ -329,6 +329,8 @@
     onCheckout: function (outcome) {
       omiTrack('Web Paywall Checkout Result', { interval: selected, outcome: outcome });
       $('cta').disabled = false;
+      // The app shows its own message when checkout fails; "unavailable" means it had no plan to sell.
+      if (outcome === 'unavailable') $('fine').textContent = "Couldn't start checkout. Please try again in a moment.";
     },
     onRestore: function () {}
   };
