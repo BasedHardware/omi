@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 import re
-from typing import Any, Optional, Sequence, TypeGuard
+from typing import Any, Optional, Protocol, Sequence, TypeGuard, runtime_checkable
 
 MCP_API_KEY_AUTH_CONTEXT_VERSION = 3
 DEV_API_KEY_AUTH_CONTEXT_VERSION = 1
@@ -75,6 +75,13 @@ class ApiKeyCacheReadResult:
     data: Optional[dict[str, Any]] = None
 
 
+@runtime_checkable
+class _HasToDatetime(Protocol):
+    """Firestore timestamp-shaped objects (DatetimeWithNanoseconds)."""
+
+    def to_datetime(self) -> object: ...  # narrowed at the call boundary
+
+
 def _coerce_utc_datetime(value: object) -> Optional[datetime]:
     try:
         parsed: Optional[datetime]
@@ -85,13 +92,20 @@ def _coerce_utc_datetime(value: object) -> Optional[datetime]:
             if candidate.endswith("Z"):
                 candidate = f"{candidate[:-1]}+00:00"
             parsed = datetime.fromisoformat(candidate)
+        elif isinstance(value, _HasToDatetime):
+            # Firestore timestamp objects expose to_datetime(); coerce it
+            # rather than dropping the field when the SDK hands us one.
+            parsed_dt = value.to_datetime()
+            if not isinstance(parsed_dt, datetime):
+                return None
+            parsed = parsed_dt
         else:
             return None
 
         if parsed.tzinfo is None:
             return parsed.replace(tzinfo=timezone.utc)
         return parsed.astimezone(timezone.utc)
-    except (OverflowError, ValueError):
+    except (OverflowError, ValueError, OSError, TypeError):
         return None
 
 
@@ -119,6 +133,7 @@ def project_api_key_metadata(
     """
     if key_kind not in _PREFIX_PATTERNS:
         raise ValueError(f"Unsupported API key kind: {key_kind}")
+    document_id = document_id.strip() if isinstance(document_id, str) else document_id
     if not isinstance(document_id, str) or not document_id:
         raise ValueError("Firestore API key document must have an ID")
 
@@ -131,6 +146,7 @@ def project_api_key_metadata(
         repairs.add(ApiKeyMetadataRepair.NAME)
 
     raw_prefix = data.get("key_prefix")
+    raw_prefix = raw_prefix.strip() if isinstance(raw_prefix, str) else raw_prefix
     prefix = raw_prefix if isinstance(raw_prefix, str) and _PREFIX_PATTERNS[key_kind].fullmatch(raw_prefix) else None
     if prefix is None:
         repairs.add(ApiKeyMetadataRepair.KEY_PREFIX)
@@ -169,7 +185,11 @@ def normalize_api_key_scopes(
 
     selected = set(required_scopes)
     if isinstance(value, list):
-        selected.update(scope for scope in value if isinstance(scope, str) and scope in allowed_scopes)
+        selected.update(
+            scope
+            for scope in (scope.strip() if isinstance(scope, str) else scope for scope in value)
+            if isinstance(scope, str) and scope in allowed_scopes
+        )
     return [scope for scope in allowed_scopes if scope in selected]
 
 
