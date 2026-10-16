@@ -112,7 +112,6 @@ env:
     value: "false"
   - name: DEMAND_PROCESSING_TOOL_ENABLED
     value: "false"
-    value: "false"
   - name: DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
     value: "false"
   - name: DEMAND_PROCESSING_UID_ALLOWLIST

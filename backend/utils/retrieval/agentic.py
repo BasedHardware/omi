@@ -75,6 +75,7 @@ from utils.retrieval.tools import (
     save_playbook,
     create_standing_trigger,
     close_fact_tool,
+    process_recent_conversations,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.tools.conversation_jit_gate import (
@@ -276,10 +277,7 @@ AGENT_EMPTY_ANSWER_MESSAGE = "I wasn't able to put a response together for that.
 # Anthropic caches the tools array as part of the request prefix.  If the tool
 # definitions are identical across requests they are cached automatically.
 # Dynamic per-user app tools are appended AFTER this list so the prefix stays stable.
-from utils.retrieval.tools.demand_processing_tools import process_recent_conversations
-
 CORE_TOOLS = [
-    process_recent_conversations,
     get_conversations_tool,
     search_conversations_tool,
     get_memories_tool,
@@ -318,6 +316,7 @@ CORE_TOOLS = [
     save_playbook,
     create_standing_trigger,
     close_fact_tool,
+    process_recent_conversations,
 ]
 
 # JIT-only tools: schemas must not reach the model for users outside the JIT

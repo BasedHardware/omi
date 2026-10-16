@@ -70812,7 +70812,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
               }
             },
             "description": "Successful Response"

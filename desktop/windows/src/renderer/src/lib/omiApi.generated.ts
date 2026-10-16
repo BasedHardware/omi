@@ -10815,7 +10815,7 @@ export interface OmiApiPaths {
     post: {
       operationId: "report_surface_state_v1_users_client_state_post";
       responses: {
-        "200": unknown;
+        "200": UserStatusResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -19558,7 +19558,7 @@ export async function put_budget_choice_v1_users_budget_choice_put(header: { X_A
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function report_surface_state_v1_users_client_state_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: SurfaceStateRequest, init?: OmiApiClientInit): Promise<unknown> {
+export async function report_surface_state_v1_users_client_state_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: SurfaceStateRequest, init?: OmiApiClientInit): Promise<UserStatusResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/client-state`;
   const _search = "";

@@ -2584,7 +2584,9 @@ class SurfaceStateRequest(BaseModel):
     transcript_visible: bool
 
 
-@router.post('/v1/users/client-state', tags=['users'])
+@router.post(
+    '/v1/users/client-state', tags=['users'], response_model=UserStatusResponse, response_model_exclude_none=True
+)
 async def report_surface_state(
     body: SurfaceStateRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'users:surface_state', fail_closed=True)),

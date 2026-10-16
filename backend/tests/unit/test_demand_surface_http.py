@@ -13,7 +13,7 @@ def endpoint(monkeypatch):
     from utils.conversations import demand_processing
 
     app = FastAPI()
-    app.add_api_route('/v1/users/client-state', users.report_surface_state, methods=['POST'])
+    app.include_router(users.router)
     monkeypatch.setattr(users.auth, '_enforce_rate_limit', Mock())
     report = Mock()
     monkeypatch.setattr(demand_processing, 'observe_surface', report)
