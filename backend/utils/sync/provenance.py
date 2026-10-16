@@ -17,7 +17,11 @@ def capture_matches_server_conversation(
     if not conversation_id or not client_device_id:
         return False
     conversation = conversations_db.get_conversation(uid, conversation_id)
-    if not conversation or conversation.get('client_device_id') != client_device_id:
+    if (
+        not conversation
+        or conversations_db.is_soft_deleted(conversation)
+        or conversation.get('client_device_id') != client_device_id
+    ):
         return False
     started_at = conversation.get('started_at')
     finished_at = conversation.get('finished_at') or started_at
