@@ -108,7 +108,7 @@ it("finishes multi-page extraction with a shared page budget across feature kind
   const result = await extractDay(day, key, query);
   expect(result.pages).toBe(6);
   expect(query.mock.calls[1][0]).toContain("00004999");
-});
+}, 60_000); // Full production-size page under background CPU/IO scheduling.
 it("daily repair is capped and explicit backfills always extract exactly one day", () => {
   expect(datesForRun(end, new Set())).toEqual([
     "2026-10-12",
