@@ -276,7 +276,10 @@ AGENT_EMPTY_ANSWER_MESSAGE = "I wasn't able to put a response together for that.
 # Anthropic caches the tools array as part of the request prefix.  If the tool
 # definitions are identical across requests they are cached automatically.
 # Dynamic per-user app tools are appended AFTER this list so the prefix stays stable.
+from utils.retrieval.tools.demand_processing_tools import process_recent_conversations
+
 CORE_TOOLS = [
+    process_recent_conversations,
     get_conversations_tool,
     search_conversations_tool,
     get_memories_tool,
@@ -1620,6 +1623,10 @@ async def execute_agentic_chat_stream(
             # branches copy CORE_TOOLS (never mutate it) per the prompt-cache
             # optimization contract.
             core_tools = list(CORE_TOOLS)
+            from config.demand_processing import tool_enabled
+
+            if not tool_enabled():
+                core_tools = [tool for tool in core_tools if tool.name != 'process_recent_conversations']
             if not jit_conversation_retrieval_enabled and surface_runtime.get() is None:
                 core_tools = [tool for tool in core_tools if tool.name not in JIT_ONLY_TOOL_NAMES]
 
