@@ -4,6 +4,12 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: firmware-software-vad-tests
+    command: ["bash", "omi/firmware/omi/tests/software_vad/run_test.sh"]
+    triggers: ["omi/firmware/omi/src/software_vad.*", "omi/firmware/omi/src/vad_gate.h", "omi/firmware/omi/src/main.c", "omi/firmware/omi/src/mic.c", "omi/firmware/omi/src/lib/core/config.h", "omi/firmware/omi/tests/software_vad/**", "omi/firmware/omi/Kconfig", "omi/firmware/omi/omi.conf", "omi/firmware/omi/CMakeLists.txt", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "#7206: run production software VAD pre-roll, hardware-wake passthrough, and codec emit-failure regressions in Hygiene; host policy evidence does not replace CV1 power/backpressure qualification"
   - id: monitoring-alert-backtest-lint
     command: ["python3", "backend/scripts/alert_backtest.py", "--lint"]
     triggers: ["backend/charts/monitoring/alerts/**", "backend/charts/monitoring/metric-inventory.prod.json", "backend/scripts/alert_backtest.py", "backend/tests/unit/test_monitoring_alert_backtest.py", ".github/checks-manifest.yaml"]
