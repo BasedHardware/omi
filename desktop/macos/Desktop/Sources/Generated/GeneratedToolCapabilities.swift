@@ -670,7 +670,7 @@ enum GeneratedToolCapabilities {
       summary: "Capture a live current-screen image after the user asks about what is visible now.",
       bullets: [
       "For a direct current-screen question, use this live capture instead of treating screen history as current evidence.",
-      "Use capture_screen only when raw pixels are necessary; it requires explicit approval before image bytes are shared.",
+      "Use capture_screen only when raw pixels are necessary. Call it directly: Omi asks the person to approve each screenshot in the app before it captures anything, so capture once and reuse the image.",
       "The result lists the full-screen image path plus native-resolution detail tiles on large screens; use Read to view them.",
       "For a direct current-screen question, capture a live image instead of using get_work_context as current visual evidence.",
       "After capture_screen returns, use Read to view the full-screen image.",
@@ -947,7 +947,7 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Send an iMessage or SMS through Messages.app after an explicit approval.",
       bullets: [
-      "Always requires an approval dispatch showing the resolved recipient and exact text.",
+      "Call it directly: Omi asks the person to approve it in the app, showing the resolved recipient and exact text, before it runs.",
       "Resolve named recipients with search_contacts first.",
       "Leave service unset unless the user explicitly asked for SMS or iMessage.",
       "Resolve the recipient with search_contacts first unless the user gave a raw handle.",
@@ -964,7 +964,7 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Run an AppleScript snippet against local macOS apps after an explicit approval.",
       bullets: [
-      "Always requires an approval dispatch showing the exact script.",
+      "Call it directly: Omi asks the person to approve it in the app, showing the exact script, before it runs.",
       "Prefer a dedicated tool when one exists — send_message rather than scripting Messages.app.",
       "Requires Automation permission for every app the script targets.",
       "Prefer a dedicated tool when one exists — use send_message for messaging rather than scripting Messages.app.",

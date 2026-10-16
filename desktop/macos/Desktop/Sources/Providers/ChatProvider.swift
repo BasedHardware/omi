@@ -505,6 +505,9 @@ enum ChatContentBlock: Identifiable {
 
 enum ToolCallStatus: CaseIterable {
   case running
+  /// The tool's device approval card is up and the person has not answered.
+  /// Still in flight, never a stall: no banner, no no-progress abort.
+  case waitingApproval
   /// Promoted by `StallDetector` after the per-tool / inter-event
   /// timer crosses `StallThresholds.slowGapMs`. Still in flight.
   case slow
@@ -520,7 +523,7 @@ enum ToolCallStatus: CaseIterable {
   /// so `.slow` and `.stalled` don't accidentally look complete.
   var isInFlight: Bool {
     switch self {
-    case .running, .slow, .stalled:
+    case .running, .waitingApproval, .slow, .stalled:
       return true
     case .completed, .failed:
       return false
@@ -4302,6 +4305,8 @@ class ChatProvider: ObservableObject {
     // terminal cause and correlation survive the bridge interruption.
     let turnStartMs = ChatProvider.monotonicNowMs()
     let stallDetector = StallDetector(thresholds: .v1Defaults, startedAtMs: turnStartMs)
+    // The session this turn runs on; a card for it pauses the stall clocks below.
+    let turnSessionId = pinnedSession.sessionId
     let watchdogAIMessageId = Self.messageIds(forAttemptId: turnAttemptId).assistant
     let genericWatchdogTask = Task { [weak self] in
       while !Task.isCancelled {
@@ -4940,7 +4945,11 @@ class ChatProvider: ObservableObject {
           try? await Task.sleep(nanoseconds: 500_000_000)  // 500ms
           if Task.isCancelled { break }
           let nowMs = ChatProvider.monotonicNowMs()
-          let transitions = await stallDetector.tick(atMs: nowMs)
+          let waitingOnUser = await MainActor.run {
+            ChatProvider.hasPendingToolApproval(sessionId: turnSessionId)
+          }
+          var transitions = await stallDetector.setWaitingOnUser(waitingOnUser, atMs: nowMs)
+          transitions.append(contentsOf: await stallDetector.tick(atMs: nowMs))
           if !transitions.isEmpty {
             await MainActor.run { [weak self] in
               guard let self,
@@ -6421,6 +6430,7 @@ class ChatProvider: ObservableObject {
   private func mapDetectorState(_ state: StallDetector.State) -> ToolCallStatus {
     switch state {
     case .running: return .running
+    case .waitingOnUser: return .waitingApproval
     case .slow: return .slow
     case .stalled: return .stalled
     }

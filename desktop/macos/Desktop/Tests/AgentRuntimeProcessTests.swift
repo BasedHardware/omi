@@ -490,7 +490,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
   func testRuntimeHandshakeRejectsStaleV2RuntimeWithoutRequiredCapability() throws {
     let valid = try XCTUnwrap(
       AgentRuntimeProcess.RuntimeMessage.parse(
-        #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability","chat_first_capability_projection","request_scoped_model_credentials"]}"#
+        #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability","chat_first_capability_projection","request_scoped_model_credentials","desktop_tool_approval_requests"]}"#
       ))
     let handshake = try AgentRuntimeProcess.validateRuntimeHandshake(valid)
     XCTAssertEqual(handshake.protocolVersion, AgentRuntimeProcess.expectedProtocolVersion)
@@ -502,11 +502,43 @@ final class AgentRuntimeProcessTests: XCTestCase {
       ))
     XCTAssertThrowsError(try AgentRuntimeProcess.validateRuntimeHandshake(stale))
 
+    // A runtime that predates approval cards cannot be paired with a shell that
+    // offers them: the shell would declare a capability nobody honors.
+    let withoutApprovals = try XCTUnwrap(
+      AgentRuntimeProcess.RuntimeMessage.parse(
+        #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability","chat_first_capability_projection","request_scoped_model_credentials"]}"#
+      ))
+    // An older daemon that cannot park calls still runs the chat; it just gets no
+    // card declaration, and keeps its immediate approval_required.
+    let olderHandshake = try AgentRuntimeProcess.validateRuntimeHandshake(withoutApprovals)
+    XCTAssertFalse(olderHandshake.capabilities.contains("desktop_tool_approval_requests"))
+    XCTAssertNil(AgentRuntimeProcess.clientCapabilitiesWireMessage(for: olderHandshake))
+    let declared = try XCTUnwrap(AgentRuntimeProcess.clientCapabilitiesWireMessage(for: handshake))
+    XCTAssertEqual(declared["type"] as? String, "client_capabilities")
+    XCTAssertEqual(declared["capabilities"] as? [String], ["desktop_tool_approval_cards"])
+
     let wrongProtocol = try XCTUnwrap(
       AgentRuntimeProcess.RuntimeMessage.parse(
-        #"{"type":"init","protocolVersion":1,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability","chat_first_capability_projection","request_scoped_model_credentials"]}"#
+        #"{"type":"init","protocolVersion":1,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability","chat_first_capability_projection","request_scoped_model_credentials","desktop_tool_approval_requests"]}"#
       ))
     XCTAssertThrowsError(try AgentRuntimeProcess.validateRuntimeHandshake(wrongProtocol))
+  }
+
+  func testShellDeclaresApprovalCardsAfterTheHandshake() {
+    let message = AgentRuntimeProcess.clientCapabilitiesWireMessage(requestId: "caps-1")
+
+    XCTAssertEqual(message["type"] as? String, "client_capabilities")
+    XCTAssertEqual(message["protocolVersion"] as? Int, AgentRuntimeProcess.expectedProtocolVersion)
+    XCTAssertEqual(message["requestId"] as? String, "caps-1")
+    XCTAssertEqual(message["clientId"] as? String, "desktop-shell")
+    XCTAssertEqual(message["capabilities"] as? [String], ["desktop_tool_approval_cards"])
+
+    let requested = AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"approval_requested","protocolVersion":2,"approvalId":"disp_1"}"#)
+    let resolved = AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"approval_resolved","protocolVersion":2,"approvalId":"disp_1"}"#)
+    XCTAssertEqual(requested?.kind, .approvalRequested)
+    XCTAssertEqual(resolved?.kind, .approvalResolved)
   }
 
   func testJournalDeadlineAcceptsResultAfterSQLiteBusyWindowWithoutWallClockDelay() {
@@ -1990,5 +2022,28 @@ final class AgentRuntimeProcessTests: XCTestCase {
       .appendingPathComponent("Sources")
       .appendingPathComponent(relativePath)
     return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  /// A card belongs to one daemon process and one owner. The process drops
+  /// every card through one method that the handshake, the daemon exit and an
+  /// owner revoke each call, so a thread never keeps buttons whose kernel is
+  /// gone.
+  @MainActor
+  func testClearingToolApprovalCardsEmptiesTheSharedStore() async throws {
+    let store = DesktopToolApprovalStore.shared
+    store.reset()
+    defer { store.reset() }
+    let frame = try XCTUnwrap(
+      AgentRuntimeProcess.RuntimeMessage.parse(
+        #"{"type":"approval_requested","protocolVersion":2,"approvalId":"disp_clear","ownerId":"o","sessionId":"s","runId":"r","attemptId":"a","invocationId":"i","toolName":"send_message","capability":"desktop.messaging.send","operation":"send_message","resourceRef":"+1","title":"Send a message","decisionPrompt":"Send?","preview":{"to":"+1","text":"hi"},"options":[{"id":"allow_once","effect":"allow","scope":"once"},{"id":"deny","effect":"deny","scope":"once"}],"defaultOptionId":"deny","requestedAtMs":1,"expiresAtMs":9999999999999}"#
+      ))
+    store.ingest(message: frame)
+    XCTAssertEqual(store.pendingApprovals.count, 1)
+
+    await AgentRuntimeProcess().clearToolApprovalCards()
+    for _ in 0..<200 where !store.approvals.isEmpty {
+      await Task.yield()
+    }
+    XCTAssertTrue(store.approvals.isEmpty, "a handshake, exit or owner revoke must drop every card")
   }
 }

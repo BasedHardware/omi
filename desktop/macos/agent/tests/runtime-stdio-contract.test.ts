@@ -294,6 +294,77 @@ describe("runtime stdio contract", () => {
     store.close();
   });
 
+  it("revokes the chat's user grants when the app clears that chat", async () => {
+    fixture = new RuntimeProcessFixture();
+    await fixture.waitForMessage((message) => message.type === "init");
+    fixture.send({ type: "refresh_owner", ownerId: "owner-clear" });
+    const surface = { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "default" };
+    fixture.send({
+      type: "journal_list_turns",
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: "list-before-clear",
+      clientId: "contract-smoke",
+      ownerId: "owner-clear",
+      ...surface,
+      afterTurnSeq: 0,
+      limit: 1,
+    });
+    const listed = await fixture.waitForMessage(
+      (message) => message.type === "journal_operation_result" && message.requestId === "list-before-clear",
+    );
+    if (listed.type !== "journal_operation_result") throw new Error("missing journal list result");
+    fixture.send({
+      type: "resolve_surface_session",
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: "resolve-clear",
+      clientId: "contract-smoke",
+      ownerId: "owner-clear",
+      ...surface,
+    });
+    const resolved = await fixture.waitForMessage(
+      (message) => message.type === "surface_session_resolved" && message.requestId === "resolve-clear",
+    );
+    if (resolved.type !== "surface_session_resolved") throw new Error("missing main chat session");
+
+    // A grant "Allow for This Chat" minted, written beside the running daemon.
+    const writer = new SqliteAgentStore({ stateDir: join(fixture.root, "state"), reconcileOnOpen: false });
+    const minted = writer.insertGrant({
+      sessionId: resolved.sessionId,
+      runId: null,
+      capability: "desktop.mail.read",
+      operation: "list_mail_messages",
+      resourcePattern: "mail:inbox",
+      effect: "allow",
+      source: "user",
+      expiresAtMs: Date.now() + 60 * 60_000,
+    });
+    writer.close();
+
+    fixture.send({
+      type: "journal_clear_turns",
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: "clear-chat",
+      clientId: "contract-smoke",
+      ownerId: "owner-clear",
+      ...surface,
+      expectedGeneration: listed.conversationGeneration,
+      deleteBackend: false,
+    });
+    const cleared = await fixture.waitForMessage(
+      (message) => message.type === "journal_operation_result" && message.requestId === "clear-chat",
+    );
+    expect(cleared).toMatchObject({ operation: "clear" });
+
+    await fixture.stop();
+    const store = new SqliteAgentStore({ stateDir: join(fixture.root, "state"), reconcileOnOpen: false });
+    expect(store.getRow("SELECT revoked_at_ms FROM grants WHERE grant_id = ?", [minted.grantId]).revoked_at_ms).not.toBeNull();
+    expect(store.getRow(
+      "SELECT COUNT(*) AS count FROM events WHERE type = 'grants.revoked' AND session_id = ?",
+      [resolved.sessionId],
+    ).count).toBe(1);
+    store.close();
+  });
+
   it("accepts typed appendEvidence through the journal update RPC", async () => {
     fixture = new RuntimeProcessFixture();
     await fixture.waitForMessage((message) => message.type === "init");
