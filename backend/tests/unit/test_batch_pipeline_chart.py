@@ -33,10 +33,8 @@ def enabled_arguments():
         'serviceAccountName=synthetic-worker',
         '--set',
         'gcpServiceAccount=synthetic-worker@example.invalid',
-        '--set-json',
-        'nodeSelector={"cloud.google.com/gke-nodepool":"diarizer-batch-pool","service":"diarizer-batch","env":"dev"}',
-        '--set-json',
-        'tolerations=[{"key":"omi.ai/diarizer-batch","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Equal","value":"present","effect":"NoSchedule"}]',
+        '--set',
+        'nodeSelector.env=dev',
         '--set',
         'bucket=synthetic-batch',
         '--set',
@@ -63,8 +61,15 @@ def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
     assert result.returncode == 0, result.stderr
     manifests = {doc['kind']: doc for doc in yaml.safe_load_all(result.stdout) if doc}
     pod = manifests['Deployment']['spec']['template']['spec']
-    assert pod['nodeSelector']['cloud.google.com/gke-nodepool'] == 'diarizer-batch-pool'
-    assert pod['tolerations'][1]['key'] == 'nvidia.com/gpu'
+    assert pod['nodeSelector'] == {
+        'cloud.google.com/gke-nodepool': 'batch-pipeline-pool',
+        'service': 'batch-pipeline',
+        'env': 'dev',
+    }
+    assert {(item['key'], item['operator'], item['value'], item['effect']) for item in pod['tolerations']} == {
+        ('omi.ai/batch-pipeline', 'Equal', 'true', 'NoSchedule'),
+        ('nvidia.com/gpu', 'Equal', 'present', 'NoSchedule'),
+    }
     assert manifests['ServiceAccount']['metadata']['annotations'] == {
         'iam.gke.io/gcp-service-account': 'synthetic-worker@example.invalid'
     }
@@ -149,11 +154,14 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     assert deployment['spec']['replicas'] == 1
     assert pod['serviceAccountName'] == 'batch-pipeline-worker'
     assert pod['nodeSelector'] == {
-        'cloud.google.com/gke-nodepool': 'diarizer-batch-pool',
-        'service': 'diarizer-batch',
+        'cloud.google.com/gke-nodepool': 'batch-pipeline-pool',
+        'service': 'batch-pipeline',
         'env': stage,
     }
-    assert {item['key'] for item in pod['tolerations']} == {'omi.ai/diarizer-batch', 'nvidia.com/gpu'}
+    assert {(item['key'], item['operator'], item['value'], item['effect']) for item in pod['tolerations']} == {
+        ('omi.ai/batch-pipeline', 'Equal', 'true', 'NoSchedule'),
+        ('nvidia.com/gpu', 'Equal', 'present', 'NoSchedule'),
+    }
     container = pod['containers'][0]
     project_env = {item['name']: item for item in container['env']}
     assert project_env['OMI_FIRESTORE_DATA_PLANE_PROJECT']['value'] == project

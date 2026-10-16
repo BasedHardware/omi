@@ -2,6 +2,9 @@
 # Python 3.11 and matching torch/torchaudio avoid the NGC Python3.12 ABI stubs.
 FROM python:3.11.15-slim-bookworm
 WORKDIR /app
+# GKE mounts the host driver here; CUDA userspace stays in the pinned torch wheels.
+ENV PATH="/usr/local/nvidia/bin:/usr/local/cuda/bin:$PATH"
+ENV LD_LIBRARY_PATH="/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/lib/x86_64-linux-gnu"
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg libsndfile1 libgomp1 build-essential git && rm -rf /var/lib/apt/lists/*
 COPY backend/diarizer/pylock.batch-pipeline.toml /app/pylock.batch-pipeline.toml
