@@ -108,6 +108,9 @@ def calendar_tools() -> Iterator[ModuleType]:
 
     with stub_modules(stubs):
         # The real date parsing and max_results capping the tool relies on.
+        load_module_fresh("utils.model_text", str(BACKEND_DIR / "utils" / "model_text.py"))
+        load_module_fresh("utils.user_clock", str(BACKEND_DIR / "utils" / "user_clock.py"))
+        load_module_fresh("utils.retrieval.tools.calendar_render", str(TOOLS_DIR / "calendar_render.py"))
         load_module_fresh("utils.retrieval.tools.integration_base", str(TOOLS_DIR / "integration_base.py"))
         module = load_module_fresh("utils.retrieval.tools.calendar_tools", str(TOOLS_DIR / "calendar_tools.py"))
         module.prepare_access = lambda *_args: ("uid-1", {"connected": True, "access_token": "token"}, "token", None)
@@ -121,7 +124,7 @@ def _use_calendar(calendar_tools: ModuleType, events: list[dict]) -> _FakeGoogle
 
 
 def _shown(start: datetime) -> str:
-    return f"Start: {start.astimezone(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC"
+    return start.astimezone(timezone.utc).strftime("%a %d %b %Y, %H:%M")
 
 
 def _now_minute() -> datetime:
