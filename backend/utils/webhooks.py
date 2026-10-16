@@ -56,6 +56,38 @@ def _is_deterministic_rejection(status_code: int) -> bool:
     return status_code in _DEV_WEBHOOK_NO_RETRY_STATUSES
 
 
+async def _record_dev_webhook_probe_failure(uid: Optional[str], wtype) -> bool:
+    """Advance the developer-webhook disable counter for a delivery that was skipped.
+
+    The per-URL circuit breaker and the deterministic-rejection latch stop wasted
+    network calls, but they are keyed to a URL / response, not to the uid — so a
+    delivery they skip used to return without ever touching the per-uid failure
+    counter in database.webhook_health. On a shared dead endpoint the breaker
+    stays open nearly always (it only half-opens for one probe per 30s), so
+    almost every delivery for every subscribing uid was an uncounted skip and the
+    100-consecutive-failure auto-disable could not converge: dead endpoints were
+    probed forever with one ERROR log per delivery.
+
+    Counting the skip inside the existing ladder keeps a single disable path and
+    a single recovery control (the developer's own re-enable). No HTTP response
+    exists, so the counter records the transport-failure convention (status 0,
+    ``CircuitBreakerOpen``), like the ConnectError path. Returns the threshold
+    transition exactly like ``record_dev_webhook_failure`` so callers drive
+    ``_handle_dev_webhook_disable`` — including the disable notification —
+    through the same code path a counted delivery uses.
+    """
+    if not uid:
+        return False
+    return await run_blocking(
+        db_executor,
+        record_dev_webhook_failure,
+        uid,
+        wtype,
+        0,
+        'CircuitBreakerOpen',
+    )
+
+
 _AUDIO_BYTES_WEBHOOK_CHUNK_SECONDS = 1
 _AUDIO_BYTES_WEBHOOK_MIN_SAMPLE_RATE = 1000
 _AUDIO_BYTES_WEBHOOK_MAX_SAMPLE_RATE = 192000
@@ -171,7 +203,12 @@ async def _post_dev_webhook(
     idempotency_key: Optional[str] = None,
     dlq_uid: Optional[str] = None,
     **request_kwargs,
-):
+) -> Optional[httpx.Response]:
+    """POST a developer-webhook delivery through the pinned client.
+
+    Returns the final HTTP response, or ``None`` when the URL's circuit breaker
+    was open and the delivery was skipped without any request (see below).
+    """
     if retry_delays is None:
         retry_delays = _get_dev_webhook_retry_delays()
 
@@ -184,6 +221,17 @@ async def _post_dev_webhook(
     last_response = None
     last_exception = None
     log_url = _redact_webhook_url(webhook_url)
+
+    dial_attempts = 0
+    cb = get_webhook_circuit_breaker(webhook_url)
+    if not cb.allow_request():
+        # The URL's circuit breaker is open. Skip the whole schedule and return
+        # None: no request was sent, so no HTTP response exists, and a synthetic
+        # status would be indistinguishable from a receiver's real answer. The
+        # caller counts the skip against the per-uid disable ladder via
+        # _record_dev_webhook_probe_failure.
+        logger.info(f'{webhook_name}: delivery skipped, circuit breaker open for {log_url[:80]}')
+        return None
 
     for attempt_index in range(attempts):
         attempt_number = attempt_index + 1
@@ -210,6 +258,7 @@ async def _post_dev_webhook(
                     }
                     attempt_kwargs['follow_redirects'] = False
                     try:
+                        dial_attempts += 1
                         response = await client.post(pinned_url, **attempt_kwargs)
                     except Exception as exc:
                         # Try the next safe resolved address before giving up
@@ -256,8 +305,9 @@ async def _post_dev_webhook(
             await asyncio.sleep(delay)
 
     if last_response is not None:
+        attempts_sent = max(dial_attempts, 1)
         logger.error(
-            f'{webhook_name}: delivery failed status={last_response.status_code} attempts={attempts} url={log_url}'
+            f'{webhook_name}: delivery failed status={last_response.status_code} attempts={attempts_sent} url={log_url}'
         )
         await run_blocking(
             db_executor,
@@ -274,7 +324,8 @@ async def _post_dev_webhook(
 
     if last_exception is None:
         raise RuntimeError(f'{webhook_name}: delivery failed without a response or exception')
-    logger.error(f'{webhook_name}: delivery failed error={type(last_exception).__name__} attempts={attempts}')
+    attempts_sent = max(dial_attempts, 1)
+    logger.error(f'{webhook_name}: delivery failed error={type(last_exception).__name__} attempts={attempts_sent}')
     await run_blocking(
         db_executor,
         enqueue_dev_webhook_dlq,
@@ -329,10 +380,6 @@ async def conversation_created_webhook(uid, memory: Conversation):
             resolve_client_kind(x_app_platform=getattr(memory, 'client_platform', None), user_agent=None),
         )
         cb = get_webhook_circuit_breaker(webhook_url)
-        if not cb.allow_request():
-            journey_attempt.fail('dependency_unavailable')
-            logger.info(f'memory_created_webhook: circuit breaker open for {_redact_webhook_url(webhook_url)[:80]}')
-            return
         try:
             payload = await run_blocking(db_executor, _build_conversation_webhook_payload_sync, uid, memory)
             response = await _post_dev_webhook(
@@ -342,7 +389,15 @@ async def conversation_created_webhook(uid, memory: Conversation):
                 headers={'Content-Type': 'application/json'},
                 dlq_uid=uid,
             )
-            if response.status_code >= 200 and response.status_code < 300:
+            if response is None:
+                # Breaker-skipped delivery: no request was sent. Count the skip
+                # so the per-uid disable ladder converges even while the shared
+                # breaker blocks POSTs; do not poison the breaker — the half-open
+                # probe must be able to close the circuit on recovery.
+                journey_attempt.fail('dependency_unavailable')
+                should_disable = await _record_dev_webhook_probe_failure(uid, WebhookType.memory_created)
+                await _handle_dev_webhook_disable(uid, WebhookType.memory_created, should_disable)
+            elif response.status_code >= 200 and response.status_code < 300:
                 journey_attempt.succeed()
                 cb.record_success()
                 await run_blocking(db_executor, record_dev_webhook_success, uid, WebhookType.memory_created)
@@ -385,9 +440,6 @@ async def day_summary_webhook(uid, summary: str, summary_json: Optional[dict] = 
             return
         webhook_url = _append_query_params(webhook_url, {'uid': uid})
         cb = get_webhook_circuit_breaker(webhook_url)
-        if not cb.allow_request():
-            logger.info(f'day_summary_webhook: circuit breaker open for {_redact_webhook_url(webhook_url)[:80]}')
-            return
         try:
             response = await _post_dev_webhook(
                 'day_summary_webhook',
@@ -401,7 +453,13 @@ async def day_summary_webhook(uid, summary: str, summary_json: Optional[dict] = 
                 headers={'Content-Type': 'application/json'},
                 dlq_uid=uid,
             )
-            if response.status_code >= 200 and response.status_code < 300:
+            if response is None:
+                # Breaker-skipped delivery: count the skip (see
+                # _record_dev_webhook_probe_failure) without poisoning the
+                # breaker the recovery probe depends on.
+                should_disable = await _record_dev_webhook_probe_failure(uid, WebhookType.day_summary)
+                await _handle_dev_webhook_disable(uid, WebhookType.day_summary, should_disable)
+            elif response.status_code >= 200 and response.status_code < 300:
                 cb.record_success()
                 await run_blocking(db_executor, record_dev_webhook_success, uid, WebhookType.day_summary)
             else:
@@ -437,12 +495,6 @@ async def realtime_transcript_webhook(uid, segments: List[dict], *, client_kind:
         webhook_url = _append_query_params(webhook_url, {'uid': uid})
         journey_attempt = ClientJourneyAttempt('app_webhook_delivery', bounded_client_kind(client_kind))
         cb = get_webhook_circuit_breaker(webhook_url)
-        if not cb.allow_request():
-            journey_attempt.fail('dependency_unavailable')
-            logger.info(
-                f'realtime_transcript_webhook: circuit breaker open for {_redact_webhook_url(webhook_url)[:80]}'
-            )
-            return
         try:
             response = await _post_dev_webhook(
                 'realtime_transcript_webhook',
@@ -451,7 +503,16 @@ async def realtime_transcript_webhook(uid, segments: List[dict], *, client_kind:
                 headers={'Content-Type': 'application/json'},
                 dlq_uid=uid,
             )
-            if response.status_code >= 200 and response.status_code < 300:
+            if response is None:
+                # Breaker-skipped delivery: no request was sent, so no HTTP
+                # response exists. Count the skip so the per-uid disable ladder
+                # converges even while the shared breaker blocks POSTs; do not
+                # poison the breaker — the half-open probe must be able to close
+                # the circuit when the endpoint recovers.
+                journey_attempt.fail('dependency_unavailable')
+                should_disable = await _record_dev_webhook_probe_failure(uid, WebhookType.realtime_transcript)
+                await _handle_dev_webhook_disable(uid, WebhookType.realtime_transcript, should_disable)
+            elif response.status_code >= 200 and response.status_code < 300:
                 journey_attempt.succeed()
                 cb.record_success()
                 await run_blocking(db_executor, record_dev_webhook_success, uid, WebhookType.realtime_transcript)
@@ -530,11 +591,6 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
 
     webhook_url = _append_query_params(webhook_url, {'sample_rate': sample_rate, 'uid': uid})
     cb = get_webhook_circuit_breaker(webhook_url)
-    if not cb.allow_request():
-        logger.info(
-            f'send_audio_bytes_developer_webhook: circuit breaker open for {_redact_webhook_url(webhook_url)[:80]}'
-        )
-        return
 
     lock = await _get_audio_bytes_send_lock(uid)
     async with lock:
@@ -547,6 +603,15 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
                     headers={'Content-Type': 'application/octet-stream'},
                     dlq_uid=uid,
                 )
+                if response is None:
+                    # Breaker-skipped delivery: count the skip so the per-uid
+                    # disable ladder converges even while the shared breaker
+                    # blocks POSTs, and stop this delivery's chunk loop without
+                    # poisoning the breaker. The threshold transition drives the
+                    # same disable path as a counted delivery.
+                    should_disable = await _record_dev_webhook_probe_failure(uid, WebhookType.audio_bytes)
+                    await _handle_dev_webhook_disable(uid, WebhookType.audio_bytes, should_disable)
+                    return
                 if not (200 <= response.status_code < 300):
                     cb.record_failure()
                     should_disable = await run_blocking(
@@ -609,9 +674,6 @@ async def _button_event_webhook_serialized(
         return
     webhook_url = _append_query_params(webhook_url, {'uid': uid})
     cb = get_webhook_circuit_breaker(webhook_url)
-    if not cb.allow_request():
-        logger.info(f'button_event_webhook: circuit breaker open for {_redact_webhook_url(webhook_url)[:80]}')
-        return
     payload = {
         'event_type': 'button_event',
         'button_event': button_event,
@@ -628,7 +690,13 @@ async def _button_event_webhook_serialized(
             headers={'Content-Type': 'application/json'},
             idempotency_key=event_id,
         )
-        if 200 <= response.status_code < 300:
+        if response is None:
+            # Breaker-skipped delivery: count the skip (see
+            # _record_dev_webhook_probe_failure) without poisoning the breaker
+            # the recovery probe depends on.
+            should_disable = await _record_dev_webhook_probe_failure(uid, WebhookType.button_event)
+            await _handle_dev_webhook_disable(uid, WebhookType.button_event, should_disable)
+        elif 200 <= response.status_code < 300:
             cb.record_success()
             await run_blocking(db_executor, record_dev_webhook_success, uid, WebhookType.button_event)
         else:

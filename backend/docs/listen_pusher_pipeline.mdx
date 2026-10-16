@@ -4899,3 +4899,32 @@ IDs in the surviving conversation; a zero-success ACK alone is not proof of
 no loss. User-deletion/assignment supersession is a different path and must not
 be treated as evidence that content landed. Qualification requires every
 synthetic uploaded segment to appear exactly once, including these cases.
+
+### Developer webhook retire-on-dead convergence
+
+Developer webhooks (memory created, day summary, realtime transcript, audio
+bytes, button event) have three independent guards: the deterministic-rejection
+latch (a 4xx other than 408/429 stops the retry schedule — a repeat post cannot
+converge), the per-URL circuit breaker (5 failures → 30s open, half-open probe
+per recovery window), and the per-uid disable ladder
+(`record_dev_webhook_failure`, 100 consecutive failures → auto-disable + one
+notification; the developer's own re-enable or a manual enable is the clearing
+control). The first two guards are keyed to the URL, not the uid, so a delivery
+they skip used to return without advancing the per-uid ladder. On a shared dead
+endpoint the breaker stays open nearly always (half-open admits one probe per
+30s), so almost every delivery for every subscribing uid was an uncounted skip:
+the disable ladder could not converge and dead endpoints were probed forever
+(one `delivery failed status=... attempts=4` ERROR per trigger). Since
+2026-10-16, `_post_dev_webhook` signals the breaker skip by returning None — a
+skipped delivery has no HTTP response, and a synthetic status would be
+indistinguishable from a receiver's real answer — and every dev-webhook caller
+counts the skip through `_record_dev_webhook_probe_failure` →
+`record_dev_webhook_failure` (status 0, `CircuitBreakerOpen`), driving
+`_handle_dev_webhook_disable` exactly like a counted delivery. The final
+`delivery failed` ERROR reports `attempts=` as the dials actually made (a
+single-attempt deterministic 404 or an unsafe-target refusal no longer claims
+the full retry schedule). `record_dev_webhook_success` still resets the ladder,
+so a recovered endpoint stays enabled; the breaker keeps bounding network waste.
+Disable latching is unchanged in kind — only its convergence is new — and the
+skip INFO line (`delivery skipped, circuit breaker open`) replaces the former
+silent outer skip.
