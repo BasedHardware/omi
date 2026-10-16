@@ -669,12 +669,15 @@ _FILTER_TRIM_LUA = """#!lua flags=allow-oom
 local key = KEYS[1]
 local cap = tonumber(ARGV[1])
 local batch = tonumber(ARGV[2])
+local ttl = tonumber(ARGV[3])
 local n = redis.call('SCARD', key)
 if n <= cap then
+  redis.call('EXPIRE', key, ttl)
   return {n, 0}
 end
 local to_remove = math.min(n - cap, batch)
 redis.call('SPOP', key, to_remove)
+redis.call('EXPIRE', key, ttl)
 return {redis.call('SCARD', key), to_remove}
 """
 
@@ -732,14 +735,19 @@ def add_filter_category_item(uid: str, category: str, item: str) -> None:
     """SADD chat-search filters with a 500-cap and 7-day TTL; SPOP-trim oversized sets.
 
     Redis SETs have no insertion order. Trim is random, one batch per call.
-    Accepted additions refresh the TTL. Fail-open on Redis errors: never fall back to an uncapped SADD.
+    The trim script refreshes the TTL for every existing set; the admit script
+    also expires newly created sets. Fail-open on Redis errors: never fall back
+    to an uncapped SADD.
     """
     if category not in FILTER_CATEGORIES or not item:
         return
     key = f'users:{uid}:filters:{category}'
     try:
         trim, admit = _filter_category_scripts()
-        after, removed = trim(keys=[key], args=[FILTER_CATEGORY_CAP, FILTER_CATEGORY_TRIM_BATCH])
+        after, removed = trim(
+            keys=[key],
+            args=[FILTER_CATEGORY_CAP, FILTER_CATEGORY_TRIM_BATCH, FILTER_CATEGORY_TTL_SECONDS],
+        )
         after_n = int(after)
         removed_n = int(removed)
         if removed_n:
