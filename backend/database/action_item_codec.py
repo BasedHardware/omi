@@ -12,6 +12,9 @@ def prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial: 
     action_item_data = dict(action_item_data)
     if not partial or 'status' in action_item_data or 'completed' in action_item_data:
         status = action_item_data.get('status')
+        if isinstance(status, str):
+            status = status.strip()
+            action_item_data['status'] = status
         completed = action_item_data.get('completed')
         if status is None:
             status = 'completed' if completed is True else 'active'
@@ -30,6 +33,10 @@ def prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial: 
         for field in ('description', 'owner', 'source', 'provenance', 'sort_order', 'indent_level', 'exported'):
             if field in action_item_data and action_item_data.get(field) is None:
                 action_item_data.pop(field)
+
+    if 'provenance' in action_item_data and not isinstance(action_item_data['provenance'], list):
+        action_item_data['provenance'] = []
+
     # Normalize date fields to timezone-aware UTC datetimes. These can arrive as
     # ISO strings or datetime objects from tool-/LLM-created action items (extraction
     # models use plain ``datetime``, not ``AwareDatetime``). Firestore rejects
@@ -76,6 +83,8 @@ def prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial: 
 
 def prepare_action_item_for_read(action_item_data: Dict[str, Any]) -> Dict[str, Any]:
     """Prepare action item data for reading from database"""
+    # Create shallow copy to prevent in-place mutation of caller's dictionary
+    action_item_data = dict(action_item_data)
     # `completed` may be missing OR explicitly null (legacy/partial writes). setdefault
     # won't overwrite an existing null, so drop it first and let status derive a concrete
     # bool — strict client parsers reject a null `completed` and drop the whole page.
@@ -88,8 +97,27 @@ def prepare_action_item_for_read(action_item_data: Dict[str, Any]) -> Dict[str, 
     action_item_data.setdefault('provenance', [])
     action_item_data.setdefault('sort_order', 0)
     action_item_data.setdefault('indent_level', 0)
+
+    if not isinstance(action_item_data.get('provenance'), list):
+        action_item_data['provenance'] = []
+
     for field in ['created_at', 'updated_at', 'due_at', 'completed_at']:
         if field in action_item_data and action_item_data[field]:
-            if hasattr(action_item_data[field], 'timestamp'):
-                action_item_data[field] = datetime.fromtimestamp(action_item_data[field].timestamp(), tz=timezone.utc)
+            val = action_item_data[field]
+            try:
+                if isinstance(val, datetime):
+                    action_item_data[field] = (
+                        val.replace(tzinfo=timezone.utc) if val.tzinfo is None else val.astimezone(timezone.utc)
+                    )
+                elif hasattr(val, 'timestamp'):
+                    action_item_data[field] = datetime.fromtimestamp(val.timestamp(), tz=timezone.utc)
+                elif isinstance(val, str):
+                    parsed = datetime.fromisoformat(val.replace('Z', '+00:00'))
+                    action_item_data[field] = (
+                        parsed.replace(tzinfo=timezone.utc)
+                        if parsed.tzinfo is None
+                        else parsed.astimezone(timezone.utc)
+                    )
+            except (OverflowError, ValueError, OSError, TypeError):
+                logger.warning("Dropping or retaining unparsable %s=%r on action item read", field, val)
     return action_item_data
