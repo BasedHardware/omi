@@ -647,7 +647,7 @@ def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list
 
 
 def _validate_stt_serving_model_policy(env: str, env_config: ConfigDict) -> list[ValidationError]:
-    """Require deployable model values to match the code-owned serving policy."""
+    """Require deployed STT lists to follow the code-owned serving policy."""
     errors: list[ValidationError] = []
     model_policy = {
         'STT_PRERECORDED_MODEL': canonical_model_config(STTServingSurface.PRERECORDED),
@@ -668,10 +668,17 @@ def _validate_stt_serving_model_policy(env: str, env_config: ConfigDict) -> list
 
     for scope, env_map in surfaces:
         for env_name, expected_value in model_policy.items():
-            if scope == f'{env}/gke/backend-listen' and env_name == 'STT_SERVICE_MODELS':
-                models = (_manifest_literal_env_value(env_map, env_name) or '').split(',')
-                if models and all(model_is_enabled(model.strip(), STTServingSurface.STREAMING) for model in models):
-                    continue
+            if env_name == 'STT_SERVICE_MODELS':
+                models = [model.strip() for model in (_manifest_literal_env_value(env_map, env_name) or '').split(',')]
+                if scope == f'{env}/gke/backend-listen':
+                    # The live listener may also use reviewed route aliases such as parakeet-window.
+                    if models and all(model_is_enabled(model, STTServingSurface.STREAMING) for model in models):
+                        continue
+                else:
+                    # Other services may omit providers while retaining canonical policy order.
+                    ordered_subset = [model for model in expected_value.split(',') if model in models]
+                    if models and models == ordered_subset:
+                        continue
             if env_name not in env_map:
                 continue
             actual_value = _manifest_literal_env_value(env_map, env_name)

@@ -128,6 +128,10 @@ env:
     value: "3600"
   - name: BATCH_PIPELINE_SHARED_LIVE_ENABLED
     value: "false"
+  - name: BATCH_PIPELINE_RECOVERY_MODE
+    value: "off"
+  - name: BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST
+    value: ""
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_READ_ENABLED
@@ -139,13 +143,13 @@ env:
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_COALESCE_ENABLED
-    value: "false"
+    value: "true"
   - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
     value: "0"
   - name: AUDIO_ARCHIVE_UID_ALLOWLIST
-    value: ""
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: BUCKET_AUDIO_DERIVED
     value: ""
   - name: AUDIO_MERGE_WORKER_URL
@@ -192,7 +196,7 @@ env:
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
     value: "shadow"
   - name: DESKTOP_PENDANT_CALL_LINK_MODE
-    value: "off"
+    value: "shadow"
   - name: DESKTOP_PENDANT_CALL_LINK_PERCENT
     value: "100"
   # Keep these aligned with the development GitHub environment variables used
@@ -517,7 +521,7 @@ env:
   - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
     value: "30"
   - name: STT_SERVICE_MODELS
-    value: "parakeet-window,modulate-velma-2,soniox,dg-nova-3"
+    value: "parakeet-window,modulate-velma-2,soniox"
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: HOSTED_PUSHER_API_URL
