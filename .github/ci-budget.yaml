@@ -2497,6 +2497,24 @@
       },
       "runs_on": "windows-latest"
     },
+    "reid_onboarding_vercel.yml/deploy": {
+      "budget_p50_minutes": 8,
+      "display_name": "Build web and deploy",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "kodjima33",
+      "rationale": "Flutter SDK setup plus a release web build of a small prototype and one Vercel CLI upload; runs only on main pushes touching the prototype, roughly a few times a month",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "release-eligibility.yml/release-eligibility": {
       "budget_p50_minutes": 7,
       "display_name": "Release Eligibility",
@@ -5175,6 +5193,23 @@
             ".github/workflows/publish_omi_cli.yml"
           ]
         }
+      }
+    },
+    "reid_onboarding_vercel.yml": {
+      "name": "Deploy Reid onboarding prototype to Vercel",
+      "owner": "kodjima33",
+      "rationale": "Publishes prototypes/device_first_onboarding to omi-reid-onboarding.vercel.app (the reid arm of the onboarding-variant flag) only when that path changes on main; Vercel cannot build Flutter",
+      "triggers": {
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "prototypes/device_first_onboarding/**",
+            ".github/workflows/reid_onboarding_vercel.yml"
+          ]
+        },
+        "workflow_dispatch": ""
       }
     },
     "release-eligibility.yml": {
