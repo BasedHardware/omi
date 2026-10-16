@@ -36,6 +36,18 @@ except ImportError:
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
 
+def upsert_action_item_vector(uid: str, action_item_id: str, description: str) -> Any:
+    from database.vector_db import upsert_action_item_vector as _upsert_action_item_vector
+
+    return _upsert_action_item_vector(uid, action_item_id, description)
+
+
+def delete_action_item_vector(uid: str, action_item_id: str) -> None:
+    from database.vector_db import delete_action_item_vector as _delete_action_item_vector
+
+    _delete_action_item_vector(uid, action_item_id)
+
+
 # Bound the chat tool result so a broad request ("show me all my tasks") cannot flood the chat
 # model's context and make it freeze or refuse (issue #4927; the same fix already shipped for the
 # conversations tool in #8503). A single page can hold up to 500 items, each rendered over several
@@ -515,6 +527,10 @@ def create_action_item_tool(
 
         # Build concise confirmation message
         task_desc = created_item.get('description', 'Task')
+        try:
+            upsert_action_item_vector(uid, action_item_id, task_desc)
+        except Exception as vec_error:
+            logger.warning(f"⚠️ Failed to index action item vector: {vec_error}")
         result = f"✅ Added: {task_desc}"
         reminder_state = None
 
@@ -712,6 +728,20 @@ def update_action_item_tool(
         updated_item = action_items_db.get_action_item(uid, action_item_id)
         if not updated_item:
             return f"Successfully updated action item '{action_item_id}', but couldn't retrieve details."
+        if bool(updated_item.get('deleted')) or bool(update_data.get('deleted')):
+            try:
+                delete_action_item_vector(uid, action_item_id)
+            except Exception as vec_error:
+                logger.warning(f"⚠️ Failed to delete action item vector: {vec_error}")
+        elif 'description' in update_data:
+            try:
+                upsert_action_item_vector(
+                    uid,
+                    action_item_id,
+                    updated_item.get('description') or update_data['description'],
+                )
+            except Exception as vec_error:
+                logger.warning(f"⚠️ Failed to update action item vector: {vec_error}")
         result = f"Successfully updated action item: {updated_item.get('description', 'Unknown')}\n"
         result += f"Changes: {', '.join(changes)}"
         result += record_write(

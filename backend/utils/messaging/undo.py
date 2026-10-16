@@ -1,6 +1,7 @@
 """Five-minute surface-scoped inverse receipts. Never replay ambiguous inverses."""
 
 import json
+import logging
 from hashlib import sha256
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
@@ -13,6 +14,7 @@ from utils.messaging.projection import surface_runtime, chat_write_runtime
 from utils.messaging.contracts import ActionReceipt, UndoResult
 from models.chat import EditReceiptBlock, UndoChatReceiptResponse
 
+logger = logging.getLogger(__name__)
 UNDO_MINUTES = 5
 APP_RECEIPT_SCOPE = '__app_receipts__'
 
@@ -463,6 +465,18 @@ def apply_inverse(uid, payload):
         elif kind == 'task':
             action_items.bump_action_items_list_version(uid)
             restored = action_items.get_action_item(uid, object_id) or {}
+            after_snapshot = payload['after']['_snapshot']
+            try:
+                from database import vector_db
+
+                if restored.get('deleted'):
+                    vector_db.delete_action_item_vector(uid, object_id)
+                elif (
+                    after_snapshot.get('deleted') or restored.get('description') != after_snapshot.get('description')
+                ) and restored.get('description'):
+                    vector_db.upsert_action_item_vector(uid, object_id, restored['description'])
+            except Exception as vec_error:
+                logger.warning('Task undo vector sync failed uid=%s id=%s: %s', uid, object_id, vec_error)
             sync_action_item_reminder(
                 uid,
                 object_id,
@@ -481,6 +495,17 @@ def apply_inverse(uid, payload):
         if not action_items.restore_channel_write(uid, object_id, payload['after'], before):
             raise PermissionError('Task changed after this write; undo refused')
         restored = before or {}
+        try:
+            from database import vector_db
+
+            if before is None or restored.get('deleted'):
+                vector_db.delete_action_item_vector(uid, object_id)
+            elif restored.get('description') != (payload.get('after') or {}).get('description') and restored.get(
+                'description'
+            ):
+                vector_db.upsert_action_item_vector(uid, object_id, restored['description'])
+        except Exception as vec_error:
+            logger.warning('Task channel undo vector sync failed uid=%s id=%s: %s', uid, object_id, vec_error)
         sync_action_item_reminder(
             uid,
             object_id,
