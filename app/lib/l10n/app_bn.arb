@@ -11562,5 +11562,7 @@
     "activityNewItem": "নতুন",
     "activityNeedsAttention": "মনোযোগ প্রয়োজন",
     "activityRetryAll": "সবগুলো আবার চেষ্টা করুন",
-    "attentionSummaryFailed": "এই কথোপকথনের সারাংশ তৈরি করা যায়নি"
+    "attentionSummaryFailed": "এই কথোপকথনের সারাংশ তৈরি করা যায়নি",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

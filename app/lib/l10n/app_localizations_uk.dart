@@ -13529,4 +13529,10 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Не вдалося підсумувати цю розмову';
+
+  @override
+  String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
+
+  @override
+  String get onboardingChatOnTelegramBody => 'Text Omi like you do in the app — right from Telegram.';
 }

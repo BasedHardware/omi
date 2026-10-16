@@ -4174,5 +4174,7 @@
     "activityNewItem": "Baru",
     "activityNeedsAttention": "Perlu perhatian",
     "activityRetryAll": "Coba lagi semua",
-    "attentionSummaryFailed": "Percakapan ini tidak dapat diringkas"
+    "attentionSummaryFailed": "Percakapan ini tidak dapat diringkas",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

@@ -11562,5 +11562,7 @@
     "activityNewItem": "కొత్తది",
     "activityNeedsAttention": "శ్రద్ధ అవసరం",
     "activityRetryAll": "అన్నింటినీ మళ్లీ ప్రయత్నించండి",
-    "attentionSummaryFailed": "ఈ సంభాషణను సంగ్రహించలేకపోయాం"
+    "attentionSummaryFailed": "ఈ సంభాషణను సంగ్రహించలేకపోయాం",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

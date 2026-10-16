@@ -11562,5 +11562,7 @@
     "activityNewItem": "புதியது",
     "activityNeedsAttention": "கவனம் தேவை",
     "activityRetryAll": "அனைத்தையும் மீண்டும் முயலவும்",
-    "attentionSummaryFailed": "இந்த உரையாடலைச் சுருக்க முடியவில்லை"
+    "attentionSummaryFailed": "இந்த உரையாடலைச் சுருக்க முடியவில்லை",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

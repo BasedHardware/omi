@@ -16277,5 +16277,13 @@
     "attentionSummaryFailed": "Couldn't summarize this conversation",
     "@attentionSummaryFailed": {
         "description": "Needs attention row: the server gave up summarizing a conversation"
+    },
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "@onboardingChatOnTelegramTitle": {
+        "description": "Title for the optional onboarding step that invites connecting Telegram"
+    },
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram.",
+    "@onboardingChatOnTelegramBody": {
+        "description": "Supporting line for the optional onboarding Telegram connect step"
     }
 }

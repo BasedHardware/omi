@@ -4139,5 +4139,7 @@
     "activityNewItem": "ใหม่",
     "activityNeedsAttention": "ต้องดำเนินการ",
     "activityRetryAll": "ลองใหม่ทั้งหมด",
-    "attentionSummaryFailed": "ไม่สามารถสรุปบทสนทนานี้ได้"
+    "attentionSummaryFailed": "ไม่สามารถสรุปบทสนทนานี้ได้",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

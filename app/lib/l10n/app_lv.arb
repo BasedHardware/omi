@@ -4139,5 +4139,7 @@
     "activityNewItem": "Jauns",
     "activityNeedsAttention": "Nepieciešama uzmanība",
     "activityRetryAll": "Mēģināt visu vēlreiz",
-    "attentionSummaryFailed": "Šo sarunu neizdevās apkopot"
+    "attentionSummaryFailed": "Šo sarunu neizdevās apkopot",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

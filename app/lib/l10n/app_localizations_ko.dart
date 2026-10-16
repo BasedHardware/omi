@@ -13317,4 +13317,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => '이 대화를 요약하지 못했습니다';
+
+  @override
+  String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
+
+  @override
+  String get onboardingChatOnTelegramBody => 'Text Omi like you do in the app — right from Telegram.';
 }

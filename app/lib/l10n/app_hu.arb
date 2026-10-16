@@ -4235,5 +4235,7 @@
     "activityNewItem": "Új",
     "activityNeedsAttention": "Figyelmet igényel",
     "activityRetryAll": "Összes újrapróbálása",
-    "attentionSummaryFailed": "Ezt a beszélgetést nem sikerült összefoglalni"
+    "attentionSummaryFailed": "Ezt a beszélgetést nem sikerült összefoglalni",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

@@ -13539,4 +13539,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'No se pudo resumir esta conversación';
+
+  @override
+  String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
+
+  @override
+  String get onboardingChatOnTelegramBody => 'Text Omi like you do in the app — right from Telegram.';
 }

@@ -13,6 +13,7 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/ai_consent_widget.dart';
 import 'package:omi/pages/onboarding/auth.dart';
+import 'package:omi/pages/onboarding/chat_on_telegram_step.dart';
 import 'package:omi/pages/onboarding/found_omi/found_omi_widget.dart';
 import 'package:omi/pages/onboarding/knowledge_graph_step.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
@@ -31,6 +32,7 @@ import 'package:omi/pages/onboarding/guided_voice_controller.dart';
 import 'package:omi/pages/onboarding/guided_voice_io.dart';
 import 'package:omi/pages/onboarding/widgets/onboarding_step_layout.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/messaging_channels_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/experiments/onboarding_setup_rating_prompt.dart';
@@ -272,6 +274,40 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     routeToPage(context, const HomePageWrapper(), replace: true);
     return true;
   }
+
+  /// Reached when the first-capture screen finishes. Offers the optional "Chat with Omi on
+  /// Telegram" step when the channel is actually available, then finishes onboarding. The offer
+  /// never blocks completion: a failed or slow gate read, a skip, or a dismissed sheet all fall
+  /// through to [_finishOnboarding].
+  Future<void> _completeOnboarding() async {
+    final provider = context.read<MessagingChannelsProvider>();
+    if (!provider.configLoaded) {
+      try {
+        await provider.load().timeout(const Duration(seconds: 2));
+      } catch (_) {
+        // Fail-open: no Telegram offer, straight to completion.
+      }
+    }
+    if (!mounted) return;
+    if (_shouldOfferTelegram(provider)) {
+      await routeToPage(
+        context,
+        OnboardingChatOnTelegramStep(onContinue: () {
+          if (mounted) Navigator.of(context).pop();
+        }),
+      );
+      if (!mounted) return;
+    }
+    await _finishOnboarding();
+  }
+
+  /// Mirror the chat-apps Integrations entry's `showEntry` gate, and additionally require that
+  /// Telegram has a usable endpoint and is not already linked, so the invite only appears when
+  /// connecting Telegram would actually work.
+  bool _shouldOfferTelegram(MessagingChannelsProvider provider) =>
+      provider.showEntry &&
+      provider.config.endpoint(ChatChannel.telegram) != null &&
+      provider.linkFor(ChatChannel.telegram) == null;
 
   /// The experiment's end-of-onboarding placement: only arms whose payload asks for it, never
   /// control, and never when subscription UI is hidden (the router checks that).
@@ -653,7 +689,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       ),
       OnboardingCompleteScreen(
         onSkipped: () => _stepTelemetry.skipped = true,
-        onComplete: _finishOnboarding,
+        onComplete: _completeOnboarding,
       ),
     ];
 

@@ -11562,5 +11562,7 @@
     "activityNewItem": "חדש",
     "activityNeedsAttention": "דורש תשומת לב",
     "activityRetryAll": "נסה הכול שוב",
-    "attentionSummaryFailed": "לא ניתן היה לסכם את השיחה הזו"
+    "attentionSummaryFailed": "לא ניתן היה לסכם את השיחה הזו",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

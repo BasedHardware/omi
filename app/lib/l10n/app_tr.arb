@@ -4174,5 +4174,7 @@
     "activityNewItem": "Yeni",
     "activityNeedsAttention": "İlgi gerekiyor",
     "activityRetryAll": "Tümünü yeniden dene",
-    "attentionSummaryFailed": "Bu konuşma özetlenemedi"
+    "attentionSummaryFailed": "Bu konuşma özetlenemedi",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

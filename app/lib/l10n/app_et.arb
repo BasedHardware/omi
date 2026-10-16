@@ -4139,5 +4139,7 @@
     "activityNewItem": "Uus",
     "activityNeedsAttention": "Vajab tähelepanu",
     "activityRetryAll": "Proovi kõiki uuesti",
-    "attentionSummaryFailed": "Seda vestlust ei õnnestunud kokku võtta"
+    "attentionSummaryFailed": "Seda vestlust ei õnnestunud kokku võtta",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

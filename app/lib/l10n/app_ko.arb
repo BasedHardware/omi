@@ -4139,5 +4139,7 @@
     "activityNewItem": "새 항목",
     "activityNeedsAttention": "확인 필요",
     "activityRetryAll": "모두 다시 시도",
-    "attentionSummaryFailed": "이 대화를 요약하지 못했습니다"
+    "attentionSummaryFailed": "이 대화를 요약하지 못했습니다",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

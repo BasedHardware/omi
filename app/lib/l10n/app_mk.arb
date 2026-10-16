@@ -11562,5 +11562,7 @@
     "activityNewItem": "Ново",
     "activityNeedsAttention": "Потребно е внимание",
     "activityRetryAll": "Обиди ги сите повторно",
-    "attentionSummaryFailed": "Овој разговор не можеше да се сумира"
+    "attentionSummaryFailed": "Овој разговор не можеше да се сумира",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

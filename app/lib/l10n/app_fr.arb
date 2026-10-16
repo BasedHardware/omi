@@ -4174,5 +4174,7 @@
     "activityNewItem": "Nouveau",
     "activityNeedsAttention": "Nécessite votre attention",
     "activityRetryAll": "Tout réessayer",
-    "attentionSummaryFailed": "Impossible de résumer cette conversation"
+    "attentionSummaryFailed": "Impossible de résumer cette conversation",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

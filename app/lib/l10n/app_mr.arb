@@ -11562,5 +11562,7 @@
     "activityNewItem": "नवीन",
     "activityNeedsAttention": "लक्ष देणे आवश्यक",
     "activityRetryAll": "सर्व पुन्हा प्रयत्न करा",
-    "attentionSummaryFailed": "या संभाषणाचा सारांश तयार करता आला नाही"
+    "attentionSummaryFailed": "या संभाषणाचा सारांश तयार करता आला नाही",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

@@ -13292,4 +13292,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => '无法总结这段对话';
+
+  @override
+  String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
+
+  @override
+  String get onboardingChatOnTelegramBody => 'Text Omi like you do in the app — right from Telegram.';
 }

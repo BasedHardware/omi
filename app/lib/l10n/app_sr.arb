@@ -11562,5 +11562,7 @@
     "activityNewItem": "Ново",
     "activityNeedsAttention": "Потребна пажња",
     "activityRetryAll": "Покушај све поново",
-    "attentionSummaryFailed": "Овај разговор није могуће сажети"
+    "attentionSummaryFailed": "Овај разговор није могуће сажети",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

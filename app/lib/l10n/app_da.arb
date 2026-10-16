@@ -4181,5 +4181,7 @@
     "activityNewItem": "Ny",
     "activityNeedsAttention": "Kræver opmærksomhed",
     "activityRetryAll": "Prøv alle igen",
-    "attentionSummaryFailed": "Samtalen kunne ikke opsummeres"
+    "attentionSummaryFailed": "Samtalen kunne ikke opsummeres",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

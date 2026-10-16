@@ -4139,5 +4139,7 @@
     "activityNewItem": "Нове",
     "activityNeedsAttention": "Потребує уваги",
     "activityRetryAll": "Повторити все",
-    "attentionSummaryFailed": "Не вдалося підсумувати цю розмову"
+    "attentionSummaryFailed": "Не вдалося підсумувати цю розмову",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

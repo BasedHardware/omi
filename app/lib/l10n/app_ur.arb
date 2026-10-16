@@ -11562,5 +11562,7 @@
     "activityNewItem": "نیا",
     "activityNeedsAttention": "توجہ درکار ہے",
     "activityRetryAll": "سب دوبارہ کوشش کریں",
-    "attentionSummaryFailed": "اس گفتگو کا خلاصہ نہیں بن سکا"
+    "attentionSummaryFailed": "اس گفتگو کا خلاصہ نہیں بن سکا",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }
