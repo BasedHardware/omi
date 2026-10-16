@@ -255,49 +255,99 @@ export function establishedQuery(end: Date, periods = 6) {
     SELECT period,p,countIf(eligible),countIf(eligible AND returned) FROM people GROUP BY period,p LIMIT 100`;
 }
 
-/** Explicit blocking reads, bounded transient retries, and safe failure categories. */
+/** PostHog's blocking budget (~10 s since 2026-10-16) is far below what the
+ * wall's multi-week scans need, while async queries run to completion. */
+export const ASYNC_POLL_MS = 2_000;
+export const ASYNC_DEADLINE_MS = 240_000;
+
+function httpFailure(status: number) {
+  // Never expose/log the response body, SQL, headers or credential values.
+  const reason =
+    status === 429
+      ? "rate limited"
+      : status === 504
+      ? "execution time limit exceeded"
+      : [401, 403].includes(status)
+      ? "access denied"
+      : status === 400
+      ? "query rejected"
+      : "service request failed";
+  return new WallSourceError(
+    `PostHog ${reason} (HTTP ${status})`,
+    [429, 502, 503, 504].includes(status)
+  );
+}
+
+type QueryStatus = {
+  id?: unknown;
+  complete?: unknown;
+  error?: unknown;
+  error_message?: unknown;
+  results?: unknown;
+};
+
+/** Poll an async HogQL query until it completes, fails or the deadline passes. */
+async function awaitAsync(
+  url: string,
+  key: string,
+  initial: QueryStatus
+): Promise<Record<string, unknown>> {
+  const deadline = Date.now() + ASYNC_DEADLINE_MS;
+  let status = initial;
+  for (;;) {
+    if (status.complete === true) {
+      if (status.error)
+        throw new WallSourceError(
+          /execution time/i.test(String(status.error_message ?? ""))
+            ? "PostHog execution time limit exceeded (async)"
+            : "PostHog async query failed",
+          true
+        );
+      if (status.results && typeof status.results === "object")
+        return status.results as Record<string, unknown>;
+      throw new WallSourceError("PostHog aggregate response missing", true);
+    }
+    if (typeof status.id !== "string" || Date.now() >= deadline)
+      throw new WallSourceError("PostHog request timed out", true);
+    await new Promise((resolve) => setTimeout(resolve, ASYNC_POLL_MS));
+    const res = await fetch(`${url}${encodeURIComponent(status.id)}/`, {
+      headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) throw httpFailure(res.status);
+    const body = await res.json();
+    status = (body?.query_status ?? body) as QueryStatus;
+  }
+}
+
+/** Async reads polled to completion (cached results return at once), bounded
+ * transient retries, and safe failure categories. */
 export const queryPosthog: Query = async (query) => {
   const key = process.env.POSTHOG_PERSONAL_API_KEY;
   const project = process.env.POSTHOG_PROJECT_ID;
   if (!key || !project)
     throw new WallSourceError("PostHog credentials unavailable");
+  const url = `${
+    process.env.POSTHOG_HOST || "https://us.posthog.com"
+  }/api/projects/${project}/query/`;
   for (let attempt = 0; ; attempt++) {
     try {
-      const res = await fetch(
-        `${
-          process.env.POSTHOG_HOST || "https://us.posthog.com"
-        }/api/projects/${project}/query/`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${key}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            query: { kind: "HogQLQuery", query: withRowLimit(query) },
-            refresh: "blocking",
-          }),
-          signal: AbortSignal.timeout(120_000),
-        }
-      );
-      if (!res.ok) {
-        // Never expose/log the response body, SQL, headers or credential values.
-        const reason =
-          res.status === 429
-            ? "rate limited"
-            : res.status === 504
-            ? "execution time limit exceeded"
-            : [401, 403].includes(res.status)
-            ? "access denied"
-            : res.status === 400
-            ? "query rejected"
-            : "service request failed";
-        throw new WallSourceError(
-          `PostHog ${reason} (HTTP ${res.status})`,
-          [429, 502, 503, 504].includes(res.status)
-        );
-      }
-      const data = await res.json();
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          query: { kind: "HogQLQuery", query: withRowLimit(query) },
+          refresh: "async",
+        }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!res.ok) throw httpFailure(res.status);
+      let data = await res.json();
+      if (!Array.isArray(data.results) && data.query_status)
+        data = await awaitAsync(url, key, data.query_status);
       if (!Array.isArray(data.results))
         throw new WallSourceError(
           data.query_status

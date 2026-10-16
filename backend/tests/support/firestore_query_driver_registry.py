@@ -2068,7 +2068,7 @@ _add(
             'database.sync_backfill_sequencer.has_pending',
             'database.sync_backfill_sequencer.pending_head',
         ),
-        reason='oldest-pending probe observed inside the listed claim, inspection and presence consumers',
+        reason='configured pending probe observed inside the listed claim, inspection and presence consumers',
     )
 )
 _add(
@@ -2098,12 +2098,26 @@ def _seed_sync_retirement(client, combo, trial):
 
 
 _SYNC_PROD = (_stub('database.sync_backfill_sequencer.production_stage', True),)
+
+
+def _sync_order_trial(client, combo, trial):
+    client.backfill_newest_first = bool(trial % 2)
+
+
+def _sync_order_patch(client):
+    return unittest.mock.patch(
+        'database.sync_backfill_sequencer.newest_first', side_effect=lambda uid: client.backfill_newest_first
+    )
+
+
 _add(
     DriverEntry(
         'database.sync_backfill_sequencer.claim_next',
         base={'uid': UID},
         domains={'now': [None, T0], 'expected_job_id': [None, 'expected-job']},
-        patchers=_SYNC_PROD,
+        trials=2,
+        setup=_sync_order_trial,
+        patchers=(*_SYNC_PROD, _sync_order_patch),
     )
 )
 _add(
@@ -2156,7 +2170,7 @@ _add(
     DriverEntry(
         'database.sync_backfill_sequencer.retire_expired',
         base={'uid': UID, 'job_id': 'shape-job'},
-        domains={'now': [None, T0], 'epoch': [None, 1]},
+        domains={'now': [None, T0], 'epoch': [None, 1], 'allow_active_owner': [False, True]},
         setup=_seed_sync_retirement,
         patchers=_SYNC_PROD,
     )
@@ -2170,8 +2184,16 @@ _add(
         patchers=_SYNC_PROD,
     )
 )
-_add(DriverEntry('database.sync_backfill_sequencer.pending_head', base={'uid': UID}, patchers=_SYNC_PROD))
-_add(DriverEntry('database.sync_backfill_sequencer.has_pending', base={'uid': UID}, patchers=_SYNC_PROD))
+for _sync_probe in ('pending_head', 'has_pending'):
+    _add(
+        DriverEntry(
+            f'database.sync_backfill_sequencer.{_sync_probe}',
+            base={'uid': UID},
+            trials=2,
+            setup=_sync_order_trial,
+            patchers=(*_SYNC_PROD, _sync_order_patch),
+        )
+    )
 _add(
     DriverEntry(
         'database.sync_backfill_sequencer.waiting_sample',

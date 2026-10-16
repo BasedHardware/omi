@@ -20,6 +20,7 @@ from prometheus_client import Counter
 from database._client import get_firestore_client
 from config.firestore_read_levers import lever_enabled
 from utils.sync import stage as sync_stage
+from utils.sync.backfill_order import newest_first
 
 logger = logging.getLogger(__name__)
 OWNER_REPAIRED = Counter('sync_backfill_owner_repaired', 'Missing backfill owners recreated')
@@ -219,7 +220,13 @@ def register_job(
 
 
 def _first_pending(client: Any, uid: str, *, transaction: Any = None) -> Optional[dict[str, Any]]:
-    docs = list(_pending_for_uid(client, uid).order_by('sort_at').limit(1).stream(transaction=transaction))
+    query = _pending_for_uid(client, uid)
+    query = (
+        query.order_by('sort_at', direction=firestore.Query.DESCENDING)
+        if newest_first(uid)
+        else query.order_by('sort_at')
+    )
+    docs = list(query.limit(1).stream(transaction=transaction))
     return {'id': docs[0].id, **_data(docs[0])} if docs else None
 
 
@@ -300,6 +307,7 @@ def retire_expired(
     job_id: str,
     *,
     epoch: Optional[int] = None,
+    allow_active_owner: bool = False,
     firestore_client: Any = None,
     now: Optional[datetime] = None,
 ) -> bool:
@@ -319,7 +327,9 @@ def retire_expired(
     def commit(transaction: Any) -> bool:
         owner = _data(root.get(transaction=transaction))
         if epoch is None:
-            if owner.get('active_job_id') or _repair_waiting(owner, current):
+            if (owner.get('active_job_id') and not allow_active_owner) or _repair_waiting(owner, current):
+                return False
+            if owner.get('active_job_id') == job_id:
                 return False
             job = _data(pending.get(transaction=transaction))
             payload = job.get('payload') or {}
@@ -341,8 +351,11 @@ def retire_expired(
             claim = _data(ledger.get(transaction=transaction))
         elif content_id is not None:
             return False
-        has_pending = _has_pending(
-            client, uid, transaction=transaction, excluding_job_id=job_id if epoch is None else None
+        preserve_owner = epoch is None and bool(owner.get('active_job_id'))
+        has_pending = (
+            False
+            if preserve_owner
+            else _has_pending(client, uid, transaction=transaction, excluding_job_id=job_id if epoch is None else None)
         )
         if claim.get('job_id') == job_id:
             if (
@@ -359,7 +372,8 @@ def retire_expired(
                     'updated_at': current,
                 },
             )
-        _release_owner(transaction, root, owner, current, has_pending=has_pending)
+        if not preserve_owner:
+            _release_owner(transaction, root, owner, current, has_pending=has_pending)
         if epoch is None:
             transaction.delete(pending)
         return True
@@ -370,7 +384,7 @@ def retire_expired(
 def claim_next(
     uid: str, *, expected_job_id: Optional[str] = None, firestore_client: Any = None, now: Optional[datetime] = None
 ) -> Optional[dict[str, Any]]:
-    """Promote the oldest waiting capture into a fenced dispatch reservation."""
+    """Promote the configured waiting capture into a fenced dispatch reservation."""
     _require_production()
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
