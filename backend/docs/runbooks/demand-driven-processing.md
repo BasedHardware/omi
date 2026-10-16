@@ -32,7 +32,9 @@ that slot without a new Firestore read. Closed-surface settlement waits to the 5
 the indexed obligation; open intent, Process Now and the tool wake it immediately.
 The worker reloads the current settled row and uses the existing canonical memory,
 task-suggestion and vector writers. An effective-input checkpoint suppresses a
-completed replay without regenerating notes. Provider failures remain retryable.
+completed replay without regenerating notes. Provider failures remain retryable. Request-scoped BYOK work stays eager in
+the live authenticated context; credentials never enter the outbox and a
+deferred task never substitutes platform keys for those requests.
 Daytime merge decisions are unchanged; survivor vectors join lazy work. Its
 existing maximum gap is 60 minutes, so the completion ceiling takes precedence
 at the boundary: a legitimate later merge creates a new effective revision.

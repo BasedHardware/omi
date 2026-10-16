@@ -3159,9 +3159,9 @@ def process_conversation(
         )
         return conversation
 
-    from config.demand_processing import lazy_enabled
+    from utils.conversations.demand_processing import lazy_enrichment_enabled
 
-    lazy_effects = lazy_enabled(uid) and not discarded
+    lazy_effects = lazy_enrichment_enabled(uid) and not discarded
     if lazy_effects and not defer_derived_effects:
         from utils.sync.reprocess import mark_effects
 

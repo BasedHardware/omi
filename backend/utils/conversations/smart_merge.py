@@ -1072,9 +1072,9 @@ def _refresh_claimed(uid: str, survivor_id: str, claimed: int, *, owner: str) ->
             raise SmartMergeIncomplete('processing_checkpoint_fenced')
     try:
         # Reprocess never re-embeds; the merged occasion must be findable as a whole.
-        from config.demand_processing import lazy_enabled
+        from utils.conversations.demand_processing import lazy_enrichment_enabled
 
-        if not lazy_enabled(uid):
+        if not lazy_enrichment_enabled(uid):
             save_structured_vector(uid, processed)
     except Exception as error:
         logger.warning(

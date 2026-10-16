@@ -195,3 +195,13 @@ def test_mcp_tool_rejects_an_owner_argument(runtime, tool_adapters):
 
     with pytest.raises(ToolExecutionError):
         other.process_recent_conversations('owner', {'uid': 'other'})
+
+
+def test_byok_enrichment_stays_in_the_request_context(runtime, monkeypatch):
+    from utils import byok
+
+    monkeypatch.setenv('DEMAND_PROCESSING_LAZY_ENABLED', 'true')
+    monkeypatch.setattr(byok, 'has_byok_keys', lambda: True)
+    assert not demand.lazy_enrichment_enabled('owner')
+    monkeypatch.setattr(byok, 'has_byok_keys', lambda: False)
+    assert demand.lazy_enrichment_enabled('owner')

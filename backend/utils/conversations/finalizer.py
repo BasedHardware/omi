@@ -349,9 +349,9 @@ async def finalize_persisted_conversation(
         # (§1.7) and must still run so a free-tier desktop meeting wakes Chat.
         skip_derived_effects = derived_disposition[0] == DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
         stage = 'derived_effects'
-        from config.demand_processing import lazy_enabled
+        from utils.conversations.demand_processing import lazy_enrichment_enabled
 
-        lazy_effects = lazy_enabled(uid) and not skip_derived_effects and not conversation.discarded
+        lazy_effects = lazy_enrichment_enabled(uid) and not skip_derived_effects and not conversation.discarded
         if lazy_effects:
             from utils.sync.reprocess import mark_effects
 

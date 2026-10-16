@@ -317,3 +317,15 @@ def queue_age(priority: int) -> float:
 
 for _tier in range(3):
     AGE.labels(str(_tier)).set_function(lambda priority=_tier: queue_age(priority))
+
+
+def lazy_enrichment_enabled(uid: str) -> bool:
+    from config.demand_processing import lazy_enabled
+
+    if not lazy_enabled(uid):
+        return False
+    # Request-scoped credentials cannot enter a durable task. Preserve the live
+    # BYOK path rather than silently substituting platform credentials later.
+    from utils.byok import has_byok_keys
+
+    return not has_byok_keys()
