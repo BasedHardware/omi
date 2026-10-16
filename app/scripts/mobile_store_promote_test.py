@@ -135,6 +135,7 @@ class IOSChecks(unittest.TestCase):
         def lookup(*args):
             if args[:2] == ("apps", "app-store-versions"):
                 return [
+                    {"id": "v1", "attributes": {"versionString": "1.0"}},
                     {"id": "v562", "attributes": {"versionString": "1.0.562"}},
                     {"id": "v563", "attributes": {"versionString": "1.0.563"}},
                 ]
