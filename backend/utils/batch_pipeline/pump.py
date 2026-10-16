@@ -206,7 +206,8 @@ class Pump:
                 try:
                     result = result_map.get(segment)
                     if result is None:
-                        await run_blocking(db_executor, self.scheduler.fail, segment, lease.token, time.time())
+                        if await run_blocking(db_executor, self.scheduler.fail, segment, lease.token, time.time()):
+                            await self.drain_owner(lease.item.owner_id)
                         continue
                     accepted = await run_blocking(
                         db_executor, self.scheduler.complete, result, lease.token, time.time()

@@ -4868,6 +4868,11 @@ twin. Admission rollback leaves accepted work draining with 20s heartbeats.
 Compute failures retain the ordered head and retry with a 600s backoff cap;
 historical dead heads can be redriven by authenticated internal RPC or owner
 polling. Privacy-fenced recovery is isolated without clearing deletion fences.
+Model VAD ends are cropped to the actual sample buffer, and ASR window clocks
+use the integer slice origin. Empty ASR on detected speech is an observable
+failure, never silence; safe reason/count diagnostics are specified in the
+[worker runtime](../diarizer/batch_pipeline_runtime.md). No attempt ceiling or
+automatic legacy takeover of accepted batch claims is implemented.
 Late captures receive 202, retain their original clock and append after the
 committed tail; no unsupported 409 or capture-watermark regression occurs.
 Conversation projection, deletion, indexes READY and GPU qualification remain

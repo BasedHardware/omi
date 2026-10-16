@@ -59,3 +59,12 @@ SCHEDULER_SHARDS = 64
 def scheduler_control_key(hashed_owner: str) -> str:
     """Pure shard identity shared by scheduling and privacy cleanup."""
     return f'scheduler_{int(hashed_owner[:8], 16) % SCHEDULER_SHARDS:02d}'
+
+
+def max_worker_attempts() -> int:
+    """Bound charged worker failures; malformed configuration keeps the safe default."""
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_MAX_ATTEMPTS', '5'))
+    except ValueError:
+        return 5
+    return value if 1 <= value <= 20 else 5
