@@ -44,6 +44,8 @@ for p in ["google", "google.api_core", "google.cloud", "models"]:
 _exc = _mod("google.api_core.exceptions")
 if not hasattr(_exc, "InvalidArgument"):
     _exc.InvalidArgument = type("InvalidArgument", (Exception,), {})
+if not hasattr(_exc, "Aborted"):
+    _exc.Aborted = type("Aborted", (Exception,), {})
 
 _fs = _mod("google.cloud.firestore")
 if not hasattr(_fs, "Query"):

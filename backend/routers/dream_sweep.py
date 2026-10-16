@@ -5,6 +5,7 @@ from collections import Counter
 
 from fastapi import APIRouter, Depends
 
+from database.firestore_read_origin import read_origin
 from utils import dream_agent, dream_canary
 from utils.cloud_tasks import verify_cloud_tasks_oidc
 
@@ -13,11 +14,13 @@ logger = logging.getLogger(__name__)
 
 
 @router.post('/v2/dream-agent/canary', include_in_schema=False)
+@read_origin('job:dream_agent_canary')
 async def canary_dream_agent(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     return await dream_canary.check()
 
 
 @router.post('/v2/dream-agent/sweep', include_in_schema=False)
+@read_origin('job:dream_agent_sweep')
 async def sweep_dream_agent(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     reports = await dream_agent.drain()
     counts = {

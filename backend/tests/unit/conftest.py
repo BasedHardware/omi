@@ -2,6 +2,23 @@
 
 from contextlib import contextmanager
 import importlib.util
+import os
+import tempfile
+
+# Unit tests never build a real Google client from the developer's or agent's ambient credentials:
+# an unstubbed Firestore read would reach whatever project those credentials grant (prod read-only
+# on agent hosts). ADC points at a file google-auth rejects without any network call, and gcloud
+# gets an empty config, so an accidental client fails at once instead of authenticating.
+# Integration suites keep their configured credentials; emulator-backed runs are left alone.
+if not os.environ.get('FIRESTORE_EMULATOR_HOST'):
+    _no_credentials_dir = tempfile.mkdtemp(prefix='omi-unit-no-adc-')
+    _no_credentials_file = os.path.join(_no_credentials_dir, 'adc.json')
+    with open(_no_credentials_file, 'w', encoding='utf-8') as handle:
+        handle.write('{"type": "omi_unit_tests_have_no_google_credentials"}')
+    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = _no_credentials_file
+    os.environ['CLOUDSDK_CONFIG'] = _no_credentials_dir
+    os.environ.pop('GOOGLE_CLOUD_PROJECT', None)
+
 import sys
 import types
 from unittest.mock import MagicMock

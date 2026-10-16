@@ -3,9 +3,9 @@
 
 The self-driving posture (2026-10-14): iOS submits AFTER_APPROVAL with the
 phased-release brake (pausable in App Store Connect), Android writes a staged
-production rollout at 5% (haltable in Play Console). Apple strips the
-appStoreVersion relationship from items of COMPLETED review submissions, so
-the replace-path lookup reads items?include=appStoreVersion over REST.
+production rollout at 5% (haltable in Play Console). An approved but
+unreleased iOS version blocks the train for a human: Apple refuses to cancel
+its COMPLETE review submission.
 """
 
 from __future__ import annotations
@@ -13,9 +13,11 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -103,7 +105,6 @@ class PlanTests(unittest.TestCase):
         plan = train.plan_ios(self.state(in_flight=(train.IOSVersion("v", "1.0.554", "WAITING_FOR_REVIEW"),)))
         self.assertEqual(plan.action, "hold")
         self.assertIsNone(plan.submit)
-        self.assertIsNone(plan.reject)
 
     def test_no_newer_build_does_nothing(self):
         self.assertEqual(train.plan_ios(self.state(candidate=None)).action, "nothing")
@@ -112,18 +113,21 @@ class PlanTests(unittest.TestCase):
         pending = train.IOSVersion("pend", "1.0.554", "PENDING_DEVELOPER_RELEASE")
         plan = train.plan_ios(self.state(pending=(pending,), candidate_version_id="pend"))
         self.assertEqual(plan.action, "leave")
-        self.assertIsNone(plan.reject)
+        self.assertIsNone(plan.submit)
 
-    def test_pending_with_older_build_is_replaced(self):
+    def test_pending_with_older_build_blocks_for_a_human(self):
+        # Apple 409s a cancel of the approved version's COMPLETE submission and
+        # has no developer-reject API, so the train must stop, not replace.
         pending = train.IOSVersion("pend", "1.0.554", "PENDING_DEVELOPER_RELEASE")
         plan = train.plan_ios(self.state(pending=(pending,), candidate_version_id=None))
-        self.assertEqual(plan.action, "replace")
-        self.assertEqual(plan.reject, pending)
-        self.assertEqual(plan.submit, self.candidate)
+        self.assertEqual(plan.action, "blocked")
+        self.assertIsNone(plan.submit)
+        self.assertIn("ACTION REQUIRED", plan.reason)
+        self.assertIn("releases 1.0.554 or rejects its binary", plan.reason)
 
-    def test_pending_newer_than_testflight_is_never_rejected(self):
+    def test_pending_newer_than_testflight_is_never_offered_for_rejection(self):
         pending = train.IOSVersion("pend", "1.0.560", "PENDING_DEVELOPER_RELEASE")
-        with self.assertRaisesRegex(train.TrainError, "refusing to reject"):
+        with self.assertRaisesRegex(train.TrainError, "never reject it"):
             train.plan_ios(self.state(pending=(pending,)))
 
     def test_two_pending_versions_need_a_human(self):
@@ -262,6 +266,40 @@ class RunIOSTests(unittest.TestCase):
         ):
             self.assertFalse(train.ios_phased_release_paused("live-version-id"))
 
+    def test_phased_release_null_data_is_not_a_pause(self):
+        # Apple's live answer for a version released without a phased rollout.
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def read(self):
+                return json.dumps({"data": None, "links": {"self": "https://example"}}).encode()
+
+        with patch.object(train.urllib.request, "urlopen", return_value=Response()), patch.object(
+            train, "_asc_rest_token", return_value="faketoken"
+        ):
+            self.assertFalse(train.ios_phased_release_paused("live-version-id"))
+
+    def test_phased_release_without_data_still_fails_closed(self):
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def read(self):
+                return json.dumps({"errors": []}).encode()
+
+        with patch.object(train.urllib.request, "urlopen", return_value=Response()), patch.object(
+            train, "_asc_rest_token", return_value="faketoken"
+        ):
+            with self.assertRaisesRegex(train.TrainError, "invalid resource"):
+                train.ios_phased_release_paused("live-version-id")
+
     def test_phased_release_lookup_failure_fails_closed(self):
         import email.message
         import urllib.error as urlerror
@@ -334,141 +372,199 @@ class RunIOSTests(unittest.TestCase):
         with self.assertRaisesRegex(promote.PromotionError, "MANUAL or AFTER_APPROVAL"):
             promote.submit_ios(build, "- n", locales=["en-US"], release_type="WHENEVER")
 
-    def test_replace_cancels_the_completed_submission_before_submitting(self):
+    def test_paused_brake_holds_instead_of_asking_for_a_release(self):
         pending = version("pend", "1.0.554", "PENDING_DEVELOPER_RELEASE")
-        get_states = iter(["PENDING_DEVELOPER_RELEASE", "DEVELOPER_REJECTED", "WAITING_FOR_REVIEW"])
-        order = []
-
-        def build_version(args):
-            # Candidate build 1335 was never submitted (the pending version carries 1334);
-            # after the submission it is attached to the new App Store version.
-            return {"id": "v-new", "attributes": {}} if "submit" in order else None
-
-        def rest_items(request, headers=None, timeout=60):
-            # Apple strips the item relationship on COMPLETED submissions; the
-            # include=appStoreVersion REST lookup is the only surviving linkage.
-            url = request.full_url if hasattr(request, "full_url") else request
-
-            class Response:
-                def __enter__(self):
-                    return self
-
-                def __exit__(self, *exc):
-                    return False
-
-                def read(self):
-                    # rs-new sorts first (newest submittedDate) and carries the pending version
-                    body = (
-                        {"included": [{"type": "appStoreVersions", "id": "pend"}]}
-                        if "rs-new" in url
-                        else {"included": [{"type": "appStoreVersions", "id": "older"}]}
-                    )
-                    return json.dumps(body).encode()
-
-            return Response()
-
         asc = FakeASC(
             live_responses(
                 states={"PENDING_DEVELOPER_RELEASE": [pending]},
                 builds={"1.0.554": [build("b1335", "1335"), build("b1334", "1334")]},
-                extra={
-                    ("builds", "app-store-version"): build_version,
-                    ("apps", "list-review-submissions"): [
-                        {"id": "rs-old", "attributes": {"state": "COMPLETE", "submittedDate": "2026-09-01T00:00:00Z"}},
-                        {"id": "rs-new", "attributes": {"state": "COMPLETE", "submittedDate": "2026-10-01T00:00:00Z"}},
-                    ],
-                    ("review-submissions", "cancel"): {"id": "rs-new", "attributes": {"state": "CANCELING"}},
-                    ("app-store-versions", "get"): lambda args: {"id": args[-1], "attributes": {"appStoreState": next(get_states)}},
-                }
+                extra={("builds", "app-store-version"): None},
             )
         )
+        with patch.object(promote.subprocess, "run") as run, patch.object(train, "ios_phased_release_paused", return_value=True):
+            summary = train.run_ios(dry_run=False, release_date="2026-10-06", asc=asc)
+        run.assert_not_called()
+        self.assertTrue(summary.startswith("ios=hold (live 1.0.553 phased rollout is PAUSED"))
 
-        def fake_run(command, **kwargs):
-            order.append("submit")
-            return Mock(returncode=0)
-
-        original_call = asc.__call__
-
-        def recording_call(*args):
-            if args[:2] == ("review-submissions", "cancel"):
-                order.append("cancel")
-            return original_call(*args)
-
-        with patch.object(train, "ios_phased_release_paused", return_value=False), patch.object(
-            train.urllib.request, "urlopen", side_effect=rest_items
-        ), patch.object(
-            train, "_asc_rest_token", return_value="faketoken"
-        ), patch.object(promote.subprocess, "run", side_effect=fake_run), patch.object(train.time, "sleep"):
-            summary = train.run_ios(dry_run=False, release_date="2026-10-06", asc=recording_call)
-        self.assertEqual(order, ["cancel", "submit"])
-        self.assertIn(("review-submissions", "cancel", "rs-new"), asc.calls)
-        self.assertNotIn(("review-submissions", "cancel", "rs-old"), asc.calls)
-        self.assertTrue(summary.startswith("ios=replace 1.0.554 (1335)"))
-
-    def test_review_submission_lookup_follows_pagination(self):
+    def test_blocked_pending_version_touches_nothing(self):
+        pending = version("pend", "1.0.554", "PENDING_DEVELOPER_RELEASE")
         asc = FakeASC(
-            {
-                ("apps", "list-review-submissions"): [
-                    {"id": "rs", "attributes": {"state": "COMPLETE", "submittedDate": "x"}}
-                ],
-            }
+            live_responses(
+                states={"PENDING_DEVELOPER_RELEASE": [pending]},
+                builds={"1.0.554": [build("b1335", "1335"), build("b1334", "1334")]},
+                extra={("builds", "app-store-version"): None},
+            )
         )
+        with patch.object(promote.subprocess, "run") as run, patch.object(train, "ios_phased_release_paused", return_value=False):
+            summary = train.run_ios(dry_run=False, release_date="2026-10-06", asc=asc)
+        run.assert_not_called()
+        self.assertTrue(summary.startswith("ios=blocked (ACTION REQUIRED: 1.0.554 is approved"))
+        self.assertEqual([c for c in asc.calls if c[:2] == ("review-submissions", "cancel")], [])
 
-        def rest_items(request, headers=None, timeout=60):
-            url = request.full_url if hasattr(request, "full_url") else request
+    def _generate_openssl_ec_pem(self) -> str:
+        result = subprocess.run(
+            ["openssl", "ecparam", "-name", "prime256v1", "-genkey", "-noout"],
+            capture_output=True,
+            check=True,
+            timeout=30,
+        )
+        return result.stdout.decode()
 
-            class Response:
-                def __enter__(self):
-                    return self
+    DER_SIG = b"\x30\x44\x02\x20" + b"\x01" * 32 + b"\x02\x20" + b"\x02" * 32
 
-                def __exit__(self, *exc):
-                    return False
+    def _install_fake_cryptography(self, load_behavior):
+        """Install a fake cryptography module tree so the signer's function-local
+        imports resolve without the real package (not installed everywhere)."""
+        import types
 
-                def read(self):
-                    if "page=2" not in url:
-                        # First page holds a different version; the target is on page 2.
-                        return json.dumps(
-                            {
-                                "included": [{"type": "appStoreVersions", "id": "other"}],
-                                "links": {"next": "https://api.appstoreconnect.apple.com/v1/reviewSubmissions/rs/items?include=appStoreVersion&limit=200&page=2"},
-                            }
-                        ).encode()
-                    return json.dumps({"included": [{"type": "appStoreVersions", "id": "target"}]}).encode()
-
-            return Response()
-
-        with patch.object(train.urllib.request, "urlopen", side_effect=rest_items), patch.object(
-            train, "_asc_rest_token", return_value="faketoken"
+        modules = {}
+        for name in (
+            "cryptography",
+            "cryptography.hazmat",
+            "cryptography.hazmat.primitives",
+            "cryptography.hazmat.primitives.serialization",
+            "cryptography.hazmat.primitives.asymmetric",
+            "cryptography.hazmat.primitives.hashes",
         ):
-            self.assertEqual(train.review_submission_for_version(asc, "target"), "rs")
+            modules[name] = types.ModuleType(name)
+        modules["cryptography.hazmat.primitives.serialization"].load_pem_private_key = load_behavior
+        modules["cryptography.hazmat.primitives"].serialization = modules[
+            "cryptography.hazmat.primitives.serialization"
+        ]
+        modules["cryptography.hazmat.primitives"].hashes = modules["cryptography.hazmat.primitives.hashes"]
+        modules["cryptography.hazmat.primitives"].asymmetric = modules["cryptography.hazmat.primitives.asymmetric"]
+        saved = {name: train.sys.modules.get(name) for name in modules}
+        train.sys.modules.update(modules)
+        return saved
 
-    def test_rejection_that_does_not_reach_developer_rejected_fails_loudly(self):
-        asc = FakeASC(
-            {
-                ("apps", "list-review-submissions"): [{"id": "rs", "attributes": {"state": "COMPLETE", "submittedDate": "x"}}],
-                ("review-submissions", "cancel"): {"id": "rs", "attributes": {}},
-                ("app-store-versions", "get"): {"id": "pend", "attributes": {"appStoreState": "PENDING_DEVELOPER_RELEASE"}},
-            }
-        )
+    def _restore_cryptography(self, saved):
+        for name, module in saved.items():
+            if module is None:
+                train.sys.modules.pop(name, None)
+            else:
+                train.sys.modules[name] = module
 
-        def rest_items(url, headers=None, timeout=60):
-            class Response:
-                def __enter__(self):
-                    return self
+    def test_rest_token_falls_back_to_openssl_when_cryptography_rejects_the_key(self):
+        # Some CI OpenSSL builds import fine and then raise at key-load time
+        # (unsupported key type / explicit EC parameters) — observed live on the
+        # Codemagic train 2026-10-15. The fallback must catch ANY cryptography
+        # failure, not only ImportError, or every REST read fails closed.
+        pem = self._generate_openssl_ec_pem()
+        real_run = subprocess.run
 
-                def __exit__(self, *exc):
-                    return False
+        def reject(_data, password=None):
+            raise ValueError("Could not deserialize key data. The data may be in an incorrect format")
 
-                def read(self):
-                    return json.dumps({"included": [{"type": "appStoreVersions", "id": "pend"}]}).encode()
+        def reject_and_fall_back(command, **kwargs):
+            if command[:2] == ["openssl", "ecparam"]:
+                return real_run(command, **kwargs)
+            self.assertEqual(command[:3], ["openssl", "dgst", "-sha256"])
+            self.assertIn("-sign", command)
+            return Mock(returncode=0, stdout=self.DER_SIG)
 
-            return Response()
+        saved = self._install_fake_cryptography(reject)
+        try:
+            with patch.dict(train.os.environ, {
+                "APP_STORE_CONNECT_ISSUER_ID": "iss",
+                "APP_STORE_CONNECT_KEY_IDENTIFIER": "kid",
+                "APP_STORE_CONNECT_PRIVATE_KEY": pem,
+            }), patch.object(train, "log"), patch.object(train.subprocess, "run", side_effect=reject_and_fall_back):
+                token = train._asc_rest_token()
+        finally:
+            self._restore_cryptography(saved)
+        import base64 as b64
 
-        with patch.object(train.urllib.request, "urlopen", side_effect=rest_items), patch.object(
-            train, "_asc_rest_token", return_value="faketoken"
-        ), patch.object(train, "STATE_POLL_ATTEMPTS", 2), patch.object(train.time, "sleep"):
-            with self.assertRaisesRegex(train.TrainError, "did not reach DEVELOPER_REJECTED"):
-                train.reject_pending_ios(asc, train.IOSVersion("pend", "1.0.554", "PENDING_DEVELOPER_RELEASE"))
+        header, _, signature = token.split(".")
+        self.assertEqual(json.loads(b64.urlsafe_b64decode(header + "=="))["kid"], "kid")
+        self.assertEqual(len(b64.urlsafe_b64decode(signature + "==")), 64)
+
+    def test_rest_token_uses_cryptography_directly_when_key_loads(self):
+        pem = self._generate_openssl_ec_pem()
+        openssl_calls = []
+
+        def record_non_ecparam(command, **kwargs):
+            if command[:2] == ["openssl", "ecparam"]:
+                return subprocess.run(command, **kwargs)
+            openssl_calls.append(list(command))
+            return Mock(returncode=0, stdout=b"")
+
+        fake_key = Mock()
+        fake_key.sign = Mock(return_value=self.DER_SIG)
+
+        def load_ok(_data, password=None):
+            return fake_key
+
+        modules_fake_ec = Mock()
+        modules_fake_hashes = Mock()
+
+        def make_fake_tree():
+            import types
+
+            tree = {}
+            for name in (
+                "cryptography",
+                "cryptography.hazmat",
+                "cryptography.hazmat.primitives",
+                "cryptography.hazmat.primitives.serialization",
+                "cryptography.hazmat.primitives.asymmetric",
+                "cryptography.hazmat.primitives.hashes",
+            ):
+                tree[name] = types.ModuleType(name)
+            tree["cryptography.hazmat.primitives.serialization"].load_pem_private_key = load_ok
+            tree["cryptography.hazmat.primitives"].serialization = tree[
+                "cryptography.hazmat.primitives.serialization"
+            ]
+            tree["cryptography.hazmat.primitives"].hashes = modules_fake_hashes
+            tree["cryptography.hazmat.primitives"].asymmetric = tree["cryptography.hazmat.primitives.asymmetric"]
+            tree["cryptography.hazmat.primitives.asymmetric"].ec = modules_fake_ec
+            tree["cryptography.hazmat.primitives.hashes"].SHA256 = Mock(return_value="sha256")
+            tree["cryptography.hazmat.primitives.asymmetric"].ECDSA = Mock(return_value="ecdsa")
+            return tree
+
+        tree = make_fake_tree()
+        saved = {name: train.sys.modules.get(name) for name in tree}
+        train.sys.modules.update(tree)
+        try:
+            with patch.dict(train.os.environ, {
+                "APP_STORE_CONNECT_ISSUER_ID": "iss",
+                "APP_STORE_CONNECT_KEY_IDENTIFIER": "kid",
+                "APP_STORE_CONNECT_PRIVATE_KEY": pem,
+            }), patch.object(train, "log"), patch.object(train.subprocess, "run", side_effect=record_non_ecparam):
+                token = train._asc_rest_token()
+        finally:
+            self._restore_cryptography(saved)
+        self.assertEqual(openssl_calls, [])  # cryptography path, no CLI fallback
+        fake_key.sign.assert_called_once()
+        import base64 as b64
+
+        header, _, signature = token.split(".")
+        self.assertEqual(json.loads(b64.urlsafe_b64decode(header + "=="))["alg"], "ES256")
+        self.assertEqual(len(b64.urlsafe_b64decode(signature + "==")), 64)
+
+    def test_rest_token_raises_when_both_cryptography_and_openssl_fail(self):
+        pem = self._generate_openssl_ec_pem()
+
+        def reject(_data, password=None):
+            raise ValueError("Could not deserialize key data")
+
+        def fail_cli(command, **kwargs):
+            if command[:2] == ["openssl", "ecparam"]:
+                return subprocess.run(command, **kwargs)
+            raise subprocess.CalledProcessError(1, "openssl")
+
+        saved = self._install_fake_cryptography(reject)
+        try:
+            with patch.dict(train.os.environ, {
+                "APP_STORE_CONNECT_ISSUER_ID": "iss",
+                "APP_STORE_CONNECT_KEY_IDENTIFIER": "kid",
+                "APP_STORE_CONNECT_PRIVATE_KEY": pem,
+            }), patch.object(train, "log"), patch.object(train.subprocess, "run", side_effect=fail_cli):
+                with self.assertRaises(train.TrainError) as ctx:
+                    train._asc_rest_token()
+        finally:
+            self._restore_cryptography(saved)
+        self.assertIn("cryptography", str(ctx.exception))
+        self.assertIn("openssl", str(ctx.exception))
 
     def test_missing_credentials_fail_before_any_store_call(self):
         asc = FakeASC({})
@@ -998,6 +1094,89 @@ class MainTests(unittest.TestCase):
                 self.assertEqual(train.main(["--platform", "ios", "--date", "2026-10-06"]), 0)
         ios.assert_called_once()
         android.assert_not_called()
+
+
+class AscKeyNormalizationTest(unittest.TestCase):
+    """The REST signer must read the integration key in every shape CI stores it in.
+
+    Live 2026-10-15: on the Codemagic train both cryptography and `openssl dgst`
+    rejected the key text the same machine's publishing CLI accepts, so the
+    iOS REST surface (phased-release brake reads) failed closed.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        # Apple's .p8 is PKCS#8 ("BEGIN PRIVATE KEY") on P-256.
+        cls.pem = subprocess.run(
+            ["openssl", "genpkey", "-algorithm", "EC", "-pkeyopt", "ec_paramgen_curve:P-256"],
+            capture_output=True,
+            check=True,
+            text=True,
+        ).stdout
+
+    def _signs_with_openssl(self, pem: str) -> bool:
+        with tempfile.NamedTemporaryFile("w", suffix=".pem", delete=False) as key_file:
+            key_file.write(pem)
+        try:
+            result = subprocess.run(
+                ["openssl", "dgst", "-sha256", "-sign", key_file.name], input=b"payload", capture_output=True
+            )
+            return result.returncode == 0 and len(result.stdout) > 8
+        finally:
+            Path(key_file.name).unlink()
+
+    def test_every_stored_shape_signs(self):
+        import base64
+
+        body = "".join(line for line in self.pem.splitlines() if "-----" not in line)
+        shapes = {
+            "as-is": self.pem,
+            "escaped newlines": self.pem.replace("\n", "\\n"),
+            "folded to spaces": self.pem.replace("\n", " "),
+            "quoted": '"' + self.pem.replace("\n", "\\n") + '"',
+            "bare base64 body": body,
+            "base64 of the .p8 file": base64.b64encode(self.pem.encode()).decode(),
+            "crlf": self.pem.replace("\n", "\r\n"),
+        }
+        self.assertTrue(self._signs_with_openssl(self.pem))
+        for name, text in shapes.items():
+            with self.subTest(shape=name):
+                self.assertTrue(self._signs_with_openssl(train._normalize_pem(text)), name)
+
+    def test_codemagic_key_references_resolve_to_a_signing_key(self):
+        # Live 2026-10-15: the codemagic_v4 integration's variable was a 72-character
+        # single-line reference, not key text.
+        with tempfile.NamedTemporaryFile("w", suffix=".p8", delete=False) as key_file:
+            key_file.write(self.pem)
+        try:
+            ref = "@file:" + key_file.name
+            self.assertIn("ref=@file", train._pem_shape(ref))
+            self.assertTrue(self._signs_with_openssl(train._normalize_pem(train._resolve_key_ref(ref))))
+            with unittest.mock.patch.dict(train.os.environ, {"CM_ASC_KEY": ref}):
+                resolved = train._resolve_key_ref("@env:CM_ASC_KEY")
+            self.assertTrue(self._signs_with_openssl(train._normalize_pem(resolved)))
+        finally:
+            Path(key_file.name).unlink()
+        self.assertEqual(train._resolve_key_ref(self.pem), self.pem)
+
+    def test_unreadable_key_reference_fails_closed(self):
+        with self.assertRaises(train.TrainError):
+            train._resolve_key_ref("@file:/nonexistent/AuthKey.p8")
+        with unittest.mock.patch.dict(train.os.environ, {}, clear=False):
+            with self.assertRaises(train.TrainError):
+                train._resolve_key_ref("@env:OMI_DEFINITELY_UNSET_KEY")
+
+    def test_garbage_fails_closed_without_echoing_the_key(self):
+        with self.assertRaises(train.TrainError) as ctx:
+            train._normalize_pem("not a key at all!")
+        self.assertIn("len=", str(ctx.exception))
+        self.assertNotIn("not a key", str(ctx.exception))
+
+    def test_shape_never_contains_key_material(self):
+        shape = train._pem_shape(self.pem)
+        body = "".join(line for line in self.pem.splitlines() if "-----" not in line)
+        self.assertNotIn(body[:16], shape)
+        self.assertIn("armored=True", shape)
 
 
 if __name__ == "__main__":

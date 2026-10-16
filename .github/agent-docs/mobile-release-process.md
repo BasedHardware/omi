@@ -92,11 +92,9 @@ to pile up). Android candidates go to production as a staged rollout at 5%
 (`inProgress`, `userFraction 0.05`; haltable in Play Console). The posture
 lives in three constants at the top of `mobile_daily_train.py`
 (`RELEASE_TYPE`, `PHASED_RELEASE`, `STAGED_ROLLOUT_FRACTION`); setting them to
-`MANUAL` / `False` / `None` restores the queue-for-a-human behavior. The
-replace path for an approved-but-unreleased version looks up its completed
-review submission via `GET /v1/reviewSubmissions/{id}/items?include=appStoreVersion`
-(REST, stdlib JWT signer) because Apple strips that relationship from items of
-completed submissions. Nothing here releases without the store's own approval;
+`MANUAL` / `False` / `None` restores the queue-for-a-human behavior. An
+approved-but-unreleased iOS version cannot be replaced by the train (see the
+`PENDING_DEVELOPER_RELEASE` rule below). Nothing here releases without the store's own approval;
 the gate's evidence audit always runs first.
 
 Audited-candidate pins: the operator release gate audits a specific
@@ -129,11 +127,15 @@ listing only returns live versions):
   `PENDING_APPLE_RELEASE` or `PROCESSING_FOR_APP_STORE` → hold; one submission
   is in flight at a time.
 - `PENDING_DEVELOPER_RELEASE` (approved, not released): if the candidate build
-  is already attached to it, leave it for the human. Otherwise cancel its
-  completed review submission (`PATCH /v1/reviewSubmissions/{id}
-  canceled=true`, i.e. `app-store-connect review-submissions cancel`), wait for
-  `DEVELOPER_REJECTED`, then submit the candidate. A pending version newer than
-  every TestFlight build, or two pending versions, stops the train.
+  is already attached to it, leave it for the human. Otherwise the iOS train is
+  `blocked` (exit 0, `ACTION REQUIRED` in the summary) until a human releases
+  that version or rejects its binary in App Store Connect. The train cannot do
+  either: the version's review submission is `COMPLETE` and Apple answers a
+  cancel (`PATCH /v1/reviewSubmissions/{id} canceled=true`) with 409, and the
+  API has no developer-reject or developer-release command (observed
+  2026-10-16 on 1.0.563). A paused live phased rollout turns that into a plain
+  hold. A pending version newer than every TestFlight build, or two pending
+  versions, stops the train.
 - Submission: `builds submit-to-app-store` with
   `--app-store-version-localizations` carrying the derived iOS notes for
   every locale of the live version (a bare `--whats-new` covers only the

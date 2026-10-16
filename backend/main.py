@@ -1,4 +1,3 @@
-# slice-2 impersonated-mint bake trigger (2026-09-18)
 import asyncio
 import json
 import logging
@@ -30,8 +29,10 @@ from database.google_credentials import prepare_google_credentials
 prepare_google_credentials()
 install_firebase_auth_mutation_guard()
 
+from utils.observability.sync_upload import SyncUploadMetricsMiddleware
 from routers import messaging
 from routers import (
+    fleet_telemetry,
     budget_choice,
     candidate_integration_sweep,
     chat_receipts,
@@ -56,6 +57,7 @@ from routers import (
     support,
     trends,
     sync,
+    batch_pipeline,
     apps,
     payment,
     storefront,
@@ -122,6 +124,7 @@ from routers import (
     memory_product,
     task_recommendations,
     conversation_finalization,
+    pending_work,
     commitment_followup,
     public_shared_conversation_chat,
     screen_frames,
@@ -150,6 +153,7 @@ from utils.executors import (
     db_executor,
 )
 from utils.executors import start_background_task
+from utils.batch_pipeline.serving import start_serving_from_env, stop_serving
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
 from utils.stt.streaming import validate_streaming_stt_env
 from utils.stt.soniox_runway import poll_forever
@@ -278,6 +282,7 @@ app.include_router(mobile_feedback.router)
 app.include_router(device_diagnostics.router)
 app.include_router(desktop_prompts.router)
 app.include_router(conversation_finalization.router)
+app.include_router(pending_work.router)
 app.include_router(commitment_followup.router)
 app.include_router(trends.router)
 
@@ -286,14 +291,14 @@ app.include_router(other.router)
 app.include_router(firmware.router)
 app.include_router(updates.router)
 app.include_router(sync.router)
+app.include_router(batch_pipeline.router)
 
 app.include_router(apps.router)
 app.include_router(calendar_meetings.router)
 app.include_router(google_calendar.router)
 app.include_router(calendar_onboarding.router)
-app.include_router(oauth.router)  # Added oauth router (for Omi Apps)
-app.include_router(auth.router)  # Added auth router (for the main Omi App, this is the core auth router)
-
+app.include_router(oauth.router)
+app.include_router(auth.router)
 
 app.include_router(payment.router)
 app.include_router(storefront.router)
@@ -316,6 +321,7 @@ app.include_router(agent_tools.router)
 app.include_router(tools.router)
 app.include_router(metrics.router)
 app.include_router(client_telemetry.router)
+app.include_router(fleet_telemetry.router)
 app.include_router(fair_use_admin.router)
 app.include_router(staged_tasks.router)
 app.include_router(focus_sessions.router)
@@ -343,7 +349,6 @@ app.include_router(screen_frames.router)
 app.include_router(review.router)
 jit_rollout.validate_jit_rollout_contract(app)
 
-
 methods_timeout = {
     "GET": os.environ.get('HTTP_GET_TIMEOUT'),
     "POST": os.environ.get('HTTP_POST_TIMEOUT'),
@@ -352,9 +357,7 @@ methods_timeout = {
     "DELETE": os.environ.get('HTTP_DELETE_TIMEOUT'),
 }
 
-# The Cloud Tasks sync-job handler runs the whole pipeline inside the request,
-# so it needs a much higher cap than the default. Must stay below the job run
-# lock TTL (1800s) so a lock can never expire under a live run.
+# Keep the in-request Cloud Tasks pipeline cap below its 1800s lock TTL so no lock expires under live work.
 paths_timeout = {
     "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
     "/v2/dream-agent/sweep": 150,  # Drain has its own 120s bound; Scheduler allows 180s.
@@ -374,12 +377,29 @@ paths_timeout = {
 app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout, paths_timeout=paths_timeout)
 
 from utils.byok import BYOKMiddleware
+from utils.llm.desktop_proxy_lifetime import DesktopProxyDeadlineMiddleware
 
 app.add_middleware(BYOKMiddleware)
 
 from database.firestore_tier_context import FirestoreTierMiddleware
 
 app.add_middleware(FirestoreTierMiddleware)
+app.add_middleware(SyncUploadMetricsMiddleware)
+app.add_middleware(DesktopProxyDeadlineMiddleware)
+
+
+def _run_fsr_loop(loop_name, callback, interval_seconds):
+    """Run on the DB executor, including Redis admission and origin attribution."""
+    from database.firestore_read_origin import read_origin
+    from database.durable_queue_age import withdraw_queue_oldest_ready_ages
+    from utils.other.fsr_leader_lease import loop_lease
+
+    def attributed():
+        with read_origin(f'job:{loop_name}'):
+            return callback()
+
+    on_skip = withdraw_queue_oldest_ready_ages if loop_name == 'publish_all_queue_oldest_ready_ages' else None
+    return loop_lease(loop_name).run(attributed, interval_seconds, on_skip=on_skip) or {}
 
 
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
@@ -390,6 +410,7 @@ async def startup_event():
     start_metrics_sidecar_server()
     start_background_task(live_stt_health.refresh_forever(), name='live_stt_fleet_health')
     batch_pressure.start_from_env()
+    app.state.batch_pipeline_serving = start_serving_from_env()
     if os.getenv('SONIOX_MONTHLY_CEILING_USD', '0') not in ('', '0'):
         start_background_task(poll_forever(), name='soniox_runway')
     validate_account_deletion_dispatch_configuration()
@@ -421,6 +442,7 @@ async def startup_event():
         name='startup_byok_abandonment_reconcile',
     )
     start_background_task(_periodic_listen_finalization_reconcile(), name='periodic_listen_finalization_reconcile')
+    start_background_task(_periodic_durable_queue_age_publish(), name='periodic_durable_queue_age_publish')
     start_background_task(
         proactive_message_dispatcher(),
         name='proactive_message_dispatcher',
@@ -430,23 +452,45 @@ async def startup_event():
 def _drain_pending_deletion_wipes():
     """Best-effort reconciliation of pending/failed account-deletion wipes on startup."""
     try:
-        result = reconcile_pending_deletion_wipes()
+        result = _run_fsr_loop(
+            'reconcile_pending_deletion_wipes',
+            reconcile_pending_deletion_wipes,
+            _deletion_wipe_reconcile_interval_seconds(),
+        )
         if result.get('requeued'):
             logger.info(f"Startup deletion-wipe reconciliation: {result}")
     except Exception as e:
         logger.error(f"Startup deletion-wipe reconciliation failed: {e}")
 
 
-async def _periodic_deletion_wipe_reconcile(interval_seconds: int = 300):
+def _deletion_wipe_reconcile_interval_seconds() -> int:
+    try:
+        seconds = int(os.getenv('DELETION_WIPE_RECONCILE_INTERVAL_SECONDS', '300'))
+    except ValueError:
+        seconds = 300
+    return max(1, seconds)
+
+
+async def _periodic_deletion_wipe_reconcile(interval_seconds: int | None = None):
     """Periodically reconcile orphaned or failed account-deletion wipes.
 
     Runs every 5 minutes (default) so stale retrying claims and new
     pending/failed wipes are retried without requiring a restart.
     """
+    if interval_seconds is None:
+        interval_seconds = _deletion_wipe_reconcile_interval_seconds()
+    from utils.other.fsr_leader_lease import poll_delay
+
     while True:
-        await asyncio.sleep(interval_seconds)
+        await asyncio.sleep(poll_delay(interval_seconds, deletion=True))
         try:
-            result = await run_blocking(db_executor, reconcile_pending_deletion_wipes)
+            result = await run_blocking(
+                db_executor,
+                _run_fsr_loop,
+                'reconcile_pending_deletion_wipes',
+                reconcile_pending_deletion_wipes,
+                interval_seconds,
+            )
             if result.get('requeued'):
                 logger.info(f"Periodic deletion-wipe reconciliation: {result}")
         except Exception as e:
@@ -456,7 +500,11 @@ async def _periodic_deletion_wipe_reconcile(interval_seconds: int = 300):
 def _drain_listen_finalization_jobs():
     """Best-effort durable finalization recovery after a restart/deploy."""
     try:
-        result = reconcile_listen_finalization_jobs()
+        result = _run_fsr_loop(
+            'reconcile_listen_finalization_jobs',
+            reconcile_listen_finalization_jobs,
+            _listen_finalization_reconcile_interval_seconds(),
+        )
         if result.get('requeued'):
             logger.info(f"Startup listen-finalization reconciliation: {result}")
     except Exception as e:
@@ -466,7 +514,11 @@ def _drain_listen_finalization_jobs():
 def _drain_stale_processing_conversations():
     """Best-effort recovery of bare-`processing` conversations orphaned by a sync-route crash."""
     try:
-        result = reconcile_stale_processing_conversations()
+        result = _run_fsr_loop(
+            'reconcile_stale_processing_conversations',
+            reconcile_stale_processing_conversations,
+            _listen_finalization_reconcile_interval_seconds(),
+        )
         if result.get('completed') or result.get('migrated'):
             logger.info(f"Startup stale-processing reconciliation: {result}")
     except Exception as e:
@@ -476,7 +528,11 @@ def _drain_stale_processing_conversations():
 def _drain_stale_in_progress_conversations():
     """Best-effort durable admission of content-bearing listen zombies."""
     try:
-        result = reconcile_stale_in_progress_conversations()
+        result = _run_fsr_loop(
+            'reconcile_stale_in_progress_conversations',
+            reconcile_stale_in_progress_conversations,
+            _listen_finalization_reconcile_interval_seconds(),
+        )
         if result.get('enqueued') or result.get('verified'):
             logger.info(f"Startup stale-in-progress reconciliation: {result}")
     except Exception as e:
@@ -486,7 +542,11 @@ def _drain_stale_in_progress_conversations():
 def _drain_abandoned_byok_finalization_jobs():
     """Best-effort disposition of BYOK finalization jobs no live session can claim."""
     try:
-        result = reconcile_abandoned_byok_finalization_jobs()
+        result = _run_fsr_loop(
+            'reconcile_abandoned_byok_finalization_jobs',
+            reconcile_abandoned_byok_finalization_jobs,
+            _listen_finalization_reconcile_interval_seconds(),
+        )
         if result.get('abandoned'):
             logger.info(f"Startup byok-abandonment reconciliation: {result}")
     except Exception as e:
@@ -506,40 +566,99 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
     """Replay stale finalization leases and publish durable backlog metrics."""
     if interval_seconds is None:
         interval_seconds = _listen_finalization_reconcile_interval_seconds()
+    from utils.other.fsr_leader_lease import poll_delay, singleton_loops_enabled
+
     while True:
-        await asyncio.sleep(interval_seconds)
+        await asyncio.sleep(poll_delay(interval_seconds))
         try:
-            result = await run_blocking(db_executor, reconcile_listen_finalization_jobs)
+            result = await run_blocking(
+                db_executor,
+                _run_fsr_loop,
+                'reconcile_listen_finalization_jobs',
+                reconcile_listen_finalization_jobs,
+                interval_seconds,
+            )
             if result.get('requeued'):
                 logger.info(f"Periodic listen-finalization reconciliation: {result}")
         except Exception as e:
             logger.error(f"Periodic listen-finalization reconciliation failed: {e}")
         try:
-            stale_result = await run_blocking(db_executor, reconcile_stale_processing_conversations)
+            stale_result = await run_blocking(
+                db_executor,
+                _run_fsr_loop,
+                'reconcile_stale_processing_conversations',
+                reconcile_stale_processing_conversations,
+                interval_seconds,
+            )
             if stale_result.get('completed') or stale_result.get('migrated'):
                 logger.info(f"Periodic stale-processing reconciliation: {stale_result}")
         except Exception as e:
             logger.error(f"Periodic stale-processing reconciliation failed: {e}")
         try:
-            in_progress_result = await run_blocking(db_executor, reconcile_stale_in_progress_conversations)
+            in_progress_result = await run_blocking(
+                db_executor,
+                _run_fsr_loop,
+                'reconcile_stale_in_progress_conversations',
+                reconcile_stale_in_progress_conversations,
+                interval_seconds,
+            )
             if in_progress_result.get('enqueued') or in_progress_result.get('verified'):
                 logger.info(f"Periodic stale-in-progress reconciliation: {in_progress_result}")
         except Exception as e:
             logger.error(f"Periodic stale-in-progress reconciliation failed: {e}")
         try:
-            byok_result = await run_blocking(db_executor, reconcile_abandoned_byok_finalization_jobs)
+            byok_result = await run_blocking(
+                db_executor,
+                _run_fsr_loop,
+                'reconcile_abandoned_byok_finalization_jobs',
+                reconcile_abandoned_byok_finalization_jobs,
+                interval_seconds,
+            )
             if byok_result.get('abandoned'):
                 logger.info(f"Periodic byok-abandonment reconciliation: {byok_result}")
         except Exception as e:
             logger.error(f"Periodic byok-abandonment reconciliation failed: {e}")
+        if singleton_loops_enabled():
+            continue  # The alert publisher has an independent takeover clock.
         try:
-            await run_blocking(db_executor, publish_all_queue_oldest_ready_ages)
+            await run_blocking(
+                db_executor,
+                _run_fsr_loop,
+                'publish_all_queue_oldest_ready_ages',
+                publish_all_queue_oldest_ready_ages,
+                interval_seconds,
+            )
         except Exception as e:
             logger.error(f"Periodic durable-queue age publish failed: {e}")
 
 
+async def _periodic_durable_queue_age_publish(interval_seconds: int | None = None):
+    """Sample immediately and retry ownership independently of recovery scans."""
+    from utils.other.fsr_leader_lease import poll_delay, singleton_loops_enabled
+
+    if interval_seconds is None:
+        interval_seconds = _listen_finalization_reconcile_interval_seconds()
+    while True:
+        if singleton_loops_enabled():
+            try:
+                await run_blocking(
+                    db_executor,
+                    _run_fsr_loop,
+                    'publish_all_queue_oldest_ready_ages',
+                    publish_all_queue_oldest_ready_ages,
+                    interval_seconds,
+                )
+            except Exception as e:
+                logger.error(f"Periodic durable-queue age publish failed: {e}")
+        await asyncio.sleep(poll_delay(interval_seconds, queue_age=True))
+
+
 @app.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def shutdown_event():
+    # Keep the shutdown cleanup self-contained for isolated lifecycle callers.
+    import logging
+    from utils.executors import db_executor, run_blocking
+
     runtime = getattr(app.state, 'messaging_runtime', None)
     if runtime:
         stop, task = runtime
@@ -549,8 +668,20 @@ async def shutdown_event():
             await task
         except asyncio.CancelledError:
             pass
+    if (serving_task := getattr(app.state, 'batch_pipeline_serving', None)) is not None:
+        await stop_serving(serving_task)
     await batch_pressure.stop()
     await drain_background_tasks(timeout=10.0)
+    from utils.other.fsr_leader_lease import release_loop_leases
+    from utils.other.fsr_leader_lease import singleton_loops_enabled
+    from database.durable_queue_age import withdraw_queue_oldest_ready_ages
+
+    try:
+        await run_blocking(db_executor, release_loop_leases)
+    except Exception:
+        logging.getLogger(__name__).warning('fsr_leader_lease release scheduling failed; leases will expire')
+    if singleton_loops_enabled():
+        withdraw_queue_oldest_ready_ages()
     await shutdown_managed_spend_ledger()
     await shutdown_sync_metrics()
     await close_all_clients()

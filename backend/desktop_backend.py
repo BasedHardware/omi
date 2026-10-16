@@ -9,7 +9,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import Response
 
+from database.firestore_tier_context import FirestoreTierMiddleware
 from utils.byok import BYOKMiddleware
+from utils.llm.desktop_proxy_lifetime import DesktopProxyDeadlineMiddleware
 from utils.env_loader import firebase_admin_options, load_backend_env
 from utils.firebase_admin_runtime import (
     firebase_verify_only_credential,
@@ -120,6 +122,7 @@ def _cors_allowed_origins_from_env() -> list[str]:
 
 def _build_app() -> FastAPI:
     app = FastAPI(lifespan=lifespan)
+    app.add_middleware(FirestoreTierMiddleware)
     watchdog = DesktopLoopWatchdog(enabled=os.getenv("DESKTOP_LOOP_WATCHDOG_ENABLED", "true").lower() != "false")
     app.state.loop_watchdog = watchdog
     app.add_middleware(InFlightRequestsMiddleware, watchdog=watchdog)
@@ -154,6 +157,7 @@ def _build_app() -> FastAPI:
     # always returns None here and BYOK users silently ride the managed/quota
     # lane instead of their own keys. main.py installs the same middleware.
     app.add_middleware(BYOKMiddleware)
+    app.add_middleware(DesktopProxyDeadlineMiddleware)
     app.include_router(desktop_core.router)
     app.include_router(auth.router)
     app.include_router(desktop_agent_vm.router)

@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { countFirestoreReads } from "./read-counter";
 
 export type FirebaseAdminCredentialMode =
   | "service-account-key"
@@ -110,7 +111,7 @@ function ensureInitialized() {
 
 export function getDb() {
   ensureInitialized();
-  return admin.firestore();
+  return countFirestoreReads(admin.firestore());
 }
 
 export function getAdminAuth() {

@@ -327,7 +327,10 @@ def list_memory_updated_or_created_index(
 
     Streams two candidate windows of ``min(limit+offset, 5000)`` metadata
     documents (``updated_at`` DESC and ``created_at`` DESC), merges them, and
-    returns the requested slice. Callers hydrate only the page they will emit.
+    returns the requested slice. A window that hidden rows leave short of
+    ``limit+offset`` visible rows is re-read at double size, by at most the
+    scoring scan's flat slack beyond the rows the page needs.
+    Callers hydrate only the page they will emit.
     With a ``budget`` both windows charge their fetched rows and each stream
     gets the budget's per-RPC timeout (#11831).
     """
@@ -340,8 +343,24 @@ def list_memory_updated_or_created_index(
     if end_date:
         memories_ref = memories_ref.where(filter=FieldFilter('created_at', '<=', end_date))
     candidate_limit = max(1, min(int(limit) + max(int(offset), 0), _MEMORY_LIST_CANDIDATE_WINDOW_MAX))
-    candidate_docs = _stream_memory_list_index_window(memories_ref, 'updated_at', candidate_limit, budget=budget)
-    candidate_docs.extend(_stream_memory_list_index_window(memories_ref, 'created_at', candidate_limit, budget=budget))
+    window_cap = candidate_limit + _MEMORY_SCORING_VISIBLE_PAGE_SCAN_SLACK
+    candidate_docs: List[Any] = []
+    for order_field in ('updated_at', 'created_at'):
+        # Hidden rows (user-rejected, invalidated) take window slots. A window short of
+        # visible rows returns a short page that callers read as end-of-data, so grow it
+        # until it holds the page, its order is exhausted, or it spends the flat slack.
+        window_limit = candidate_limit
+        while True:
+            window_docs = _stream_memory_list_index_window(memories_ref, order_field, window_limit, budget=budget)
+            visible = sum(
+                1
+                for doc in window_docs
+                if _memory_passes_list_visibility(_typed_doc(doc), include_invalidated=include_invalidated)
+            )
+            if visible >= candidate_limit or len(window_docs) < window_limit or window_limit >= window_cap:
+                break
+            window_limit = min(window_limit * 2, window_cap)
+        candidate_docs.extend(window_docs)
     memories = _merge_memory_list_index_docs(candidate_docs, include_invalidated=include_invalidated)
     return memories[max(0, int(offset)) : max(0, int(offset)) + max(1, int(limit))]
 

@@ -44,6 +44,8 @@ from utils.messaging.memory_privacy import (
 )
 from utils.memory.knowledge_ledger import LEDGER_SCHEMA_VERSION
 from utils.memory.memory_service import MAX_LEDGER_HISTORY_PROVIDER_WINDOW, MemoryService
+from utils.model_text import DisplayClock, format_instant, truncation_note
+from utils.user_clock import clock_for_config
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +53,25 @@ MAX_KNOWLEDGE_QUERY_CHARACTERS = 500
 MAX_KNOWLEDGE_SEARCH_LIMIT = 20
 MAX_KNOWLEDGE_RESULT_CHARACTERS = 12_000
 MAX_HISTORICAL_FACT_CONTENT_CHARACTERS = 600
-HISTORICAL_OUTPUT_TRUNCATION_NOTICE = "[Historical output is bounded; use a narrower exact-token query.]"
+HISTORICAL_OUTPUT_TRUNCATION_NOTICE = truncation_note(
+    shown=MAX_KNOWLEDGE_SEARCH_LIMIT,
+    total=None,
+    unit="historical facts",
+    how_to_get_more="use a narrower exact-token query",
+    cut=True,
+)
+
+
+def _historical_truncation_notice(shown: int) -> str:
+    return truncation_note(
+        shown=shown,
+        total=None,
+        unit="historical facts",
+        how_to_get_more="use a narrower exact-token query",
+        cut=True,
+    )
+
+
 HISTORICAL_PROVIDER_PARTIAL_NOTICE = (
     "[Partial historical search: the result limit, canonical provider window, or read budget ended; "
     "this is not exhaustive.]"
@@ -120,15 +140,40 @@ def _format_search_results(rows: Iterable[MemoryDB], *, query: str) -> str:
     lines = [f"Current knowledge matching {query!r}:"]
     count = 0
     truncated = False
+    truncation_reserve = (
+        len(
+            truncation_note(
+                shown=MAX_KNOWLEDGE_SEARCH_LIMIT,
+                total=None,
+                unit="knowledge entries",
+                how_to_get_more="use a narrower query or kind filter",
+                cut=True,
+            )
+        )
+        + 2
+    )
     for row in rows:
         kind = row.kind.value if isinstance(row.kind, MemoryKind) else str(row.kind or "unknown")
         if kind == MemoryKind.document.value:
-            content = normalize_playbook_handle(row.content)[:PLAYBOOK_HANDLE_CHARACTER_LIMIT]
+            normalized = normalize_playbook_handle(row.content)
+            content = normalized[:PLAYBOOK_HANDLE_CHARACTER_LIMIT]
         else:
+            normalized = row.content or ""
             content = " ".join((row.content or "").split())
         suffix = f" slot={row.slot}" if row.slot else ""
-        candidate = f"- [{kind}] {row.id}{suffix}: {content}"
-        if len("\n".join(lines + [candidate])) > MAX_KNOWLEDGE_RESULT_CHARACTERS:
+        truncation = (
+            "\n  "
+            + truncation_note(
+                shown=len(content),
+                total=len(normalized),
+                unit="knowledge characters",
+                how_to_get_more="use a narrower query or kind filter",
+            )
+            if len(normalized) > len(content)
+            else ""
+        )
+        candidate = f"- [{kind}] {row.id}{suffix}: {content}{truncation}"
+        if len("\n".join(lines + [candidate])) + truncation_reserve > MAX_KNOWLEDGE_RESULT_CHARACTERS:
             truncated = True
             break
         lines.append(candidate)
@@ -136,7 +181,15 @@ def _format_search_results(rows: Iterable[MemoryDB], *, query: str) -> str:
     if count == 0:
         return "No current knowledge ledger entries found."
     if truncated:
-        lines.append("[Knowledge output is bounded; use a narrower query or kind filter.]")
+        lines.append(
+            truncation_note(
+                shown=count,
+                total=None,
+                unit="knowledge entries",
+                how_to_get_more="use a narrower query or kind filter",
+                cut=True,
+            )
+        )
     return "\n".join(lines)
 
 
@@ -184,6 +237,7 @@ def _format_historical_fact_results(
     truncated: bool,
     next_offset: Optional[int],
     include_rejected: bool,
+    clock: Optional[DisplayClock] = None,
 ) -> str:
     """Render bounded historical fact handles without claiming exhaustive retrieval."""
 
@@ -220,19 +274,32 @@ def _format_historical_fact_results(
             state = "historical"
         # Bound the raw string before normalization; a malformed oversized
         # document must not make whitespace splitting unbounded.
-        bounded_content = (row.content or "")[: MAX_HISTORICAL_FACT_CONTENT_CHARACTERS * 2]
-        content = " ".join(bounded_content.split())[:MAX_HISTORICAL_FACT_CONTENT_CHARACTERS]
+        raw_content = row.content or ""
+        bounded_content = raw_content[: MAX_HISTORICAL_FACT_CONTENT_CHARACTERS * 2]
+        normalized_content = " ".join(bounded_content.split())
+        content = normalized_content[:MAX_HISTORICAL_FACT_CONTENT_CHARACTERS]
+        content_truncation = (
+            "\n  "
+            + truncation_note(
+                shown=len(content),
+                total=len(raw_content),
+                unit="fact characters",
+                how_to_get_more="search the fact by a narrower exact token",
+            )
+            if len(raw_content) > len(content)
+            else ""
+        )
         suffix = f" slot={row.slot}" if row.slot else ""
         validity: list[str] = []
         for label, value in (("valid_at", row.valid_at), ("invalid_at", row.invalid_at)):
             if isinstance(value, datetime):
-                validity.append(f"{label}={value.isoformat(timespec='seconds')}")
+                validity.append(f"{label}={format_instant(value, clock or DisplayClock.utc())}")
         validity_suffix = f" ({', '.join(validity)})" if validity else ""
-        candidate = f"- [fact/{state}] {row.id}{suffix}{validity_suffix}: {content}"
+        candidate = f"- [fact/{state}] {row.id}{suffix}{validity_suffix}: {content}{content_truncation}"
         if not fits(candidate) and validity_suffix:
             # Keep the compact validity fields opportunistic: if only their
             # metadata would cross the hard cap, retain the bounded fact line.
-            candidate = f"- [fact/{state}] {row.id}{suffix}: {content}"
+            candidate = f"- [fact/{state}] {row.id}{suffix}: {content}{content_truncation}"
         if not fits(candidate):
             output_truncated = True
             break
@@ -242,7 +309,7 @@ def _format_historical_fact_results(
     if count == 0:
         lines.append("No canonical historical facts found in the bounded provider window.")
     if output_truncated:
-        lines.append(HISTORICAL_OUTPUT_TRUNCATION_NOTICE)
+        lines.append(_historical_truncation_notice(count))
     if truncated:
         lines.append(HISTORICAL_PROVIDER_PARTIAL_NOTICE)
     if next_offset is not None:
@@ -261,7 +328,7 @@ def _format_historical_fact_results(
             [
                 lines[0],
                 "Historical result omitted because the bounded output budget was reached.",
-                HISTORICAL_OUTPUT_TRUNCATION_NOTICE,
+                _historical_truncation_notice(0),
                 *([HISTORICAL_PROVIDER_PARTIAL_NOTICE] if truncated else []),
                 *(
                     [
@@ -409,6 +476,7 @@ def search_historical_facts(
             truncated=page.truncated,
             next_offset=page.next_offset,
             include_rejected=include_rejected,
+            clock=clock_for_config(config, uid),
         )
     except ValueError:
         return "Error: historical query must contain a searchable exact token"
@@ -446,9 +514,32 @@ def read_playbook(
         item = read_current_playbook(uid, normalized_id, db_client=get_firestore_client())
         if item is None or (channel_private_filter_active(_configurable(config)) and is_channel_private_memory(item)):
             return "Playbook unavailable."
-        description = " ".join((item.content or "").split())[:MAX_PLAYBOOK_DESCRIPTION_CHARACTERS]
-        body = (item.body or "")[:MAX_LEDGER_PLAYBOOK_BODY_CHARACTERS]
-        return f"Playbook {item.memory_id}: {description}\n\n{body}".rstrip()
+        raw_description = " ".join((item.content or "").split())
+        description = raw_description[:MAX_PLAYBOOK_DESCRIPTION_CHARACTERS]
+        raw_body = item.body or ""
+        body = raw_body[:MAX_LEDGER_PLAYBOOK_BODY_CHARACTERS]
+        notes = []
+        if len(raw_description) > len(description):
+            notes.append(
+                truncation_note(
+                    shown=len(description),
+                    total=len(raw_description),
+                    unit="playbook description characters",
+                    how_to_get_more="ask to read the playbook description in full",
+                )
+            )
+        if len(raw_body) > len(body):
+            notes.append(
+                truncation_note(
+                    shown=len(body),
+                    total=len(raw_body),
+                    unit="playbook body characters",
+                    how_to_get_more="read the playbook in smaller sections",
+                )
+            )
+        return f"Playbook {item.memory_id}: {description}\n\n{body}".rstrip() + (
+            "\n\n" + "\n".join(notes) if notes else ""
+        )
     except Exception as exc:
         logger.error("read_playbook failed error_type=%s", type(exc).__name__)
         return "Playbook unavailable."

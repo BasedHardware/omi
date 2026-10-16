@@ -71,6 +71,23 @@ def _item(
     return MemoryItem(**data)
 
 
+def test_timeline_timestamp_is_local_and_labelled():
+    instant = datetime(2026, 9, 26, 7, 18, tzinfo=timezone.utc)
+    entry = timeline_tools.TimelineEntry(record_id="rec1", content="Fact", occurred_at=instant)
+    timeline = timeline_tools.EntityTimeline(
+        entity=timeline_tools.EntityReference(kind="person", identifier="alice"),
+        entries=(entry,),
+        requested_sources=(timeline_tools.TimelineSource.ledger,),
+    )
+
+    result = timeline_tools.format_entity_timeline(
+        timeline,
+        clock=timeline_tools.DisplayClock.from_name("Asia/Ho_Chi_Minh"),
+    )
+
+    assert "Sat 26 Sep 2026, 14:18 Asia/Ho_Chi_Minh (UTC+07:00)" in result
+
+
 class _TimelineSnapshot:
     def __init__(self, document_id: str, payload: dict):
         self.id = document_id
@@ -302,7 +319,7 @@ def test_character_budget_truncation_is_always_disclosed():
     rendered = timeline_tools.format_entity_timeline(timeline)
 
     assert len(rendered) <= timeline_tools.MAX_TIMELINE_RESULT_CHARS
-    assert "Timeline output is bounded" in rendered
+    assert "more were omitted, not absent" in rendered
     assert "Source windows were partial" in rendered
     assert "Sources unavailable" in rendered
     assert "No owner-scoped alias record" in rendered
@@ -426,7 +443,7 @@ def test_tool_scan_is_hard_bounded(monkeypatch):
     )
 
     assert len(consumed) == timeline_tools.MAX_TIMELINE_SCAN + 1
-    assert "Timeline output is bounded" in result
+    assert "more were omitted, not absent" in result
 
 
 class _AliasSnapshot:

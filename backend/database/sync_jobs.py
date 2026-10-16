@@ -203,6 +203,15 @@ def create_sync_job(
     }
     key = _key(f'{JOB_KEY_PREFIX}{job_id}')
     r.set(key, json.dumps(job, default=str), ex=JOB_TTL_SECONDS)
+    index_key = _key(f'pending_sync_jobs:{uid}')
+    try:
+        r.zadd(index_key, {job_id: now})
+        r.zremrangebyrank(index_key, 0, -101)
+        r.expire(index_key, JOB_TTL_SECONDS)
+    except Exception:
+        record_fallback(
+            component='sync_dispatch', from_mode='redis', to_mode='none', reason='other', outcome='degraded'
+        )
     return job
 
 
@@ -1196,3 +1205,35 @@ def try_mark_once(job_id: str, tag: str) -> bool:
     except Exception as e:
         logger.warning('try_mark_once failed for %s:%s: %s', job_id, tag, e)
         return True
+
+
+def pending_sync_jobs(uid: str) -> list[dict[str, Any]]:
+    """Read at most 100 owner-indexed Redis jobs, without scanning global keys."""
+    from datetime import datetime, timezone
+
+    index_key = _key(f'pending_sync_jobs:{uid}')
+    ids = r.zrevrange(index_key, 0, 99) or []
+    result = []
+    for raw_id in ids:
+        job_id = raw_id.decode() if isinstance(raw_id, bytes) else raw_id
+        job = get_sync_job(job_id)
+        if not job or job.get('uid') != uid or job.get('status') not in {'queued', 'processing'}:
+            r.zrem(index_key, job_id)
+            continue
+        start = job.get('started_at') or job['created_at']
+        job_result = job.get('result') or {}
+        conversations = sorted(
+            set(job_result.get('new_memories') or []) | set(job_result.get('updated_memories') or [])
+        )
+        result.append(
+            {
+                'id': 'sync:' + job_id,
+                'kind': 'sync_job',
+                'state': 'queued' if job['status'] == 'queued' else 'transcribing',
+                'conversation_ids': conversations,
+                'started_at': datetime.fromtimestamp(start, timezone.utc),
+                'duration_seconds': 0,
+                'updated_at': datetime.fromtimestamp(job['updated_at'], timezone.utc),
+            }
+        )
+    return result

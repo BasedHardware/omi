@@ -66,6 +66,18 @@ def _load_turnstile_class():
 # ---------------------------------------------------------------------------
 
 
+def test_newest_backfill_still_assigns_one_recording_chronologically(monkeypatch):
+    monkeypatch.setenv('SYNC_BACKFILL_ORDER', 'newest')
+    turnstile = _load_turnstile_class()(['earlier', 'middle', 'later'])
+    assert not turnstile.wait_turn('later', timeout=0)
+    assert turnstile.wait_turn('earlier', timeout=0)
+    turnstile.complete('earlier')
+    assert not turnstile.wait_turn('later', timeout=0)
+    assert turnstile.wait_turn('middle', timeout=0)
+    turnstile.complete('middle')
+    assert turnstile.wait_turn('later', timeout=0)
+
+
 @pytest.mark.slow
 class TestOrderedTurnstile:
     def test_serializes_in_given_order_despite_reverse_readiness(self):

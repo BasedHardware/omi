@@ -1195,6 +1195,12 @@ def _mark_finalization_dead_letter_txn(
         conversation_updates = dead_letter_conversation_updates(
             uid, conversation, conversation_ref, transaction, failure_code, time_zone_for_uid
         )
+    if conversation_updates is not None and isinstance(uid, str) and isinstance(conversation, Mapping):
+        from database.processing_attention import create_in_transaction
+
+        create_in_transaction(
+            transaction, uid, conversation_ref, dict(conversation), conversation_updates, failure_code, now
+        )
     transaction.update(
         job_ref,
         {

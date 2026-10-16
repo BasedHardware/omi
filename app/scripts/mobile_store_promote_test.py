@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -129,6 +130,38 @@ class IOSChecks(unittest.TestCase):
         self.assertFalse(captured["path"].exists())
         with self.assertRaises(promote.PromotionError):
             promote.ios_localizations([], "- New line")
+
+    def test_live_locales_come_from_the_newest_live_version(self):
+        def lookup(*args):
+            if args[:2] == ("apps", "app-store-versions"):
+                return [
+                    {"id": "v1", "attributes": {"versionString": "1.0"}},
+                    {"id": "v562", "attributes": {"versionString": "1.0.562"}},
+                    {"id": "v563", "attributes": {"versionString": "1.0.563"}},
+                ]
+            self.assertEqual(args, ("app-store-versions", "localizations", "v563"))
+            return {"data": [{"attributes": {"locale": "en-US"}}, {"attributes": {"locale": "fr-FR"}}, {"attributes": {"locale": "en-US"}}]}
+
+        with patch.object(promote, "cli_json", side_effect=lookup):
+            self.assertEqual(promote.ios_live_locales(), ["en-US", "fr-FR"])
+
+    def test_live_locales_fail_closed_without_a_live_version_or_locales(self):
+        with patch.object(promote, "cli_json", return_value=[]):
+            with self.assertRaisesRegex(promote.PromotionError, "no live iOS version"):
+                promote.ios_live_locales()
+
+        def no_locales(*args):
+            return [{"id": "v1", "attributes": {"versionString": "1.0.1"}}] if args[0] == "apps" else []
+
+        with patch.object(promote, "cli_json", side_effect=no_locales):
+            with self.assertRaisesRegex(promote.PromotionError, "no localizations"):
+                promote.ios_live_locales()
+
+    def test_rejected_submission_reports_apple_reason(self):
+        error = subprocess.CalledProcessError(1, ["app-store-connect"], stderr="409: missing whatsNew for de-DE")
+        with patch.object(promote.subprocess, "run", side_effect=error):
+            with self.assertRaisesRegex(promote.PromotionError, "missing whatsNew for de-DE"):
+                promote.submit_ios(promote.IOSBuild("selected-id", "1.2.3", "23"), "- New line", locales=["de-DE"])
 
 
 class AndroidChecks(unittest.TestCase):

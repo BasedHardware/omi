@@ -129,3 +129,13 @@ def test_stalled_redis_socket_returns_legacy_and_releases_slot(monkeypatch):
     finally:
         release.set()
         peer.join(3)
+
+
+def test_sync_final_pass_exception_log_contains_class_without_message(caplog):
+    with caplog.at_level('WARNING', logger=sync.__name__):
+        assert sync.run_sync_final_pass(
+            'synthetic', b'secret malformed audio', [], [], {}, scope='synthetic', owner_reserved=False
+        ) == (None, {'outcome': 'failed:sync_audio'})
+    matching = [record.getMessage() for record in caplog.records if 'exception_type=' in record.getMessage()]
+    assert len(matching) == 1 and 'exception_type=' in matching[0]
+    assert 'secret malformed audio' not in matching[0] and 'synthetic' not in matching[0]

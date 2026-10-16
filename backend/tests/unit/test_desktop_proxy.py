@@ -1096,8 +1096,9 @@ async def test_disconnect_cancels_in_flight_provider_call():
     cancelled = asyncio.Event()
 
     class DisconnectingRequest:
-        async def is_disconnected(self):
-            return disconnected.is_set()
+        async def receive(self):
+            await disconnected.wait()
+            return {'type': 'http.disconnect'}
 
     async def provider_call():
         try:
@@ -1120,8 +1121,8 @@ async def test_outer_cancellation_cleans_up_in_flight_provider_call():
     cancelled = asyncio.Event()
 
     class ConnectedRequest:
-        async def is_disconnected(self):
-            return False
+        async def receive(self):
+            await asyncio.Event().wait()
 
     async def provider_call():
         started.set()
@@ -1600,9 +1601,9 @@ async def test_generic_rate_limiting_is_not_converted_into_extra_spend(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_streaming_overflow_falls_back_and_leaks_no_provider_slot(monkeypatch):
-    """The streaming ladder must close every refused attempt and release its
-    slot, or a saturated reservation would drain the concurrency pool."""
+async def test_streaming_reservation_overflow_stops_and_leaks_no_provider_slot(monkeypatch):
+    """Paid recovery belongs to gateway Luna. A refused direct attempt must
+    release its slot without purchasing a Gemini PayGo fallback."""
     opened: list[str] = []
     closed = 0
 
@@ -1680,12 +1681,9 @@ async def test_streaming_overflow_falls_back_and_leaks_no_provider_slot(monkeypa
         )
     ]
 
-    assert b"usageMetadata" in b"".join(emitted)
-    assert [url.rsplit("/", 1)[-1] for url in opened] == [
-        "gemini-2.5-flash",
-        "gemini-3.1-flash-lite",
-    ]
-    assert closed == 2
+    assert b'"error":"provider_rate_limited"' in b"".join(emitted)
+    assert [url.rsplit("/", 1)[-1] for url in opened] == ["gemini-2.5-flash"]
+    assert closed == 1
     assert semaphore.locked() is False
 
 
@@ -1843,20 +1841,28 @@ def test_byok_traffic_never_teaches_the_reachability_table(monkeypatch):
     assert desktop_proxy._recovery_plan("gemini-3.1-flash-lite", 404, "publisher model was not found") == []
 
 
-@pytest.mark.parametrize("pt_model", ["gemini-2.5-flash", "gemini-3.1-flash-lite"])
-def test_no_recovery_plan_ever_routes_onto_the_reservation(monkeypatch, pt_model):
+@pytest.mark.parametrize("old_state", list(State))
+@pytest.mark.parametrize("target_state", list(State))
+def test_no_recovery_plan_ever_routes_onto_the_reservation(monkeypatch, old_state, target_state):
     """FC-degraded-fallback-consumes-protected-budget, through the proxy rather
-    than the policy module, at both PT states."""
+    than the policy module, across both declared orders' evidence states."""
     monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
     monkeypatch.delenv(desktop_proxy._OVERFLOW_MODEL_OVERRIDE_ENV, raising=False)
-    monkeypatch.setenv(desktop_proxy._PT_MODEL_OVERRIDE_ENV, pt_model)
+    monkeypatch.delenv(desktop_proxy._PT_MODEL_OVERRIDE_ENV, raising=False)
+    monkeypatch.setenv(
+        "OMI_VERTEX_RESERVATION_STATES",
+        json.dumps({"gemini-2.5-flash": old_state.value, "gemini-3.8-flash": target_state.value}),
+    )
+    protected = desktop_proxy._protected_models()
     not_found = "Publisher model was not found or your project does not have access to it."
     exhausted = "Too many requests. Exceeded the provisioned throughput."
     for model in sorted(desktop_proxy.ptr.MODEL_FALLBACKS):
         desktop_proxy._model_unavailable_at.clear()
         for status, message in ((404, not_found), (429, exhausted)):
             plan = desktop_proxy._recovery_plan(model, status, message)
-            assert pt_model not in [rung for rung, _ in plan], (model, status, plan)
+            assert not protected.intersection(rung for rung, _ in plan), (model, status, plan)
+            if model in {desktop_proxy.ptr.PT_MODEL_CURRENT, desktop_proxy.ptr.PT_MODEL_TARGET}:
+                assert plan == []
 
 
 def test_a_dead_model_is_never_offered_its_own_name_as_a_fallback(monkeypatch):

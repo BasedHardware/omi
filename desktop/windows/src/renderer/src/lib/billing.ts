@@ -223,8 +223,11 @@ export function currentPlanSubtitle(
  */
 export function currentPlanPeriodText(sub: BillingSubscription): string {
   if (!hasPaidSubscription(sub) || !sub.current_period_end) return ''
-  const prefix = sub.cancel_at_period_end ? 'Access ends' : 'Renews'
-  return `${prefix} on ${formatMediumDate(sub.current_period_end)}`
+  const date = formatMediumDate(sub.current_period_end)
+  if (sub.cancel_at_period_end) {
+    return `Your ${planDisplayName(sub.plan)} plan ends ${date}.`
+  }
+  return `Renews on ${date}`
 }
 
 export function formatMediumDate(epochSeconds: number | null | undefined): string {
@@ -483,9 +486,12 @@ export function trialTimeTone(remainingSeconds: number): 'amber' | 'yellow' | 'g
 
 // ── Checkout orchestration (BillingHelpers.startCheckout) ───────────────────
 
+export const RESUBSCRIBE_FIRST = 'Resubscribe first to change plans.'
+
 export type StartCheckoutResult =
   | { kind: 'upgraded' }
-  | { kind: 'reactivated' }
+  | { kind: 'reactivated'; message?: string }
+  | { kind: 'blocked' }
   | { kind: 'completed' }
   | { kind: 'refresh_lagging' }
   | { kind: 'cancelled' }
@@ -522,6 +528,11 @@ export async function startCheckout(
 ): Promise<StartCheckoutResult> {
   const { priceId, promotionCode, currentSubscription: sub } = args
 
+  if (sub.cancel_at_period_end) {
+    const current = sub.current_price_id
+    if (!current || priceId !== current) return { kind: 'blocked' }
+  }
+
   const upgradeInPlace = hasPaidSubscription(sub) && sub.cancel_at_period_end === false
   if (upgradeInPlace) {
     await deps.upgradeSubscription(priceId, promotionCode)
@@ -529,7 +540,14 @@ export async function startCheckout(
   }
 
   const session = await deps.createCheckoutSession(priceId, promotionCode)
-  if (session.status === 'reactivated') return { kind: 'reactivated' }
+  if (session.status === 'reactivated') {
+    const seconds = session.next_billing_date ?? sub.current_period_end
+    const date = formatMediumDate(seconds)
+    return {
+      kind: 'reactivated',
+      ...(date ? { message: `Your ${planDisplayName(sub.plan)} plan will renew on ${date}.` } : {})
+    }
+  }
   if (!session.url) return { kind: 'cancelled' }
 
   const outcome = await deps.openCheckout(session.url)

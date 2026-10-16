@@ -73,13 +73,13 @@ def test_build_transcript_chunks_handles_iso_string_and_numeric_timestamps():
     # ISO string with UTC 'Z'
     chunks_iso = transcript_chunks.build_transcript_chunks(segs, '2026-08-14T21:30:00Z')
     assert len(chunks_iso) == 1
-    assert '[Conversation on 14 Aug 2026, 21:30]' in chunks_iso[0]['text']
+    assert '[Conversation on Fri 14 Aug 2026, 21:30 UTC]' in chunks_iso[0]['text']
     assert chunks_iso[0]['created_at'] == int(STARTED_AT.timestamp())
 
     # Numeric integer epoch timestamp
     chunks_int = transcript_chunks.build_transcript_chunks(segs, int(STARTED_AT.timestamp()))
     assert len(chunks_int) == 1
-    assert '[Conversation on 14 Aug 2026, 21:30]' in chunks_int[0]['text']
+    assert '[Conversation on Fri 14 Aug 2026, 21:30 UTC]' in chunks_int[0]['text']
     assert chunks_int[0]['created_at'] == int(STARTED_AT.timestamp())
 
     # Numeric float epoch timestamp
@@ -123,7 +123,7 @@ def test_hydrate_chunk_texts_handles_iso_string_and_timestamp_in_conversation(co
         ],
     )
     assert len(rows) == 2
-    assert '[Conversation on 14 Aug 2026, 21:30]' in rows[0]['text']
+    assert '[Conversation on Fri 14 Aug 2026, 21:30 UTC]' in rows[0]['text']
     assert rows[0]['conversation_title'] == 'ISO Chat'
-    assert '[Conversation on 14 Aug 2026, 21:30]' in rows[1]['text']
+    assert '[Conversation on Fri 14 Aug 2026, 21:30 UTC]' in rows[1]['text']
     assert rows[1]['conversation_title'] == 'Timestamp Chat'

@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import argparse
 import base64
-import json
 import re
 import sys
+import subprocess
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -38,7 +38,9 @@ def load_manifest(path: Path = MANIFEST) -> Mapping[str, Any]:
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(data, Mapping) or data.get("version") != 1:
         raise ReconcileError("scheduler manifest must be a version 1 mapping")
-    environments = _mapping(data.get("environments"))
+    environments = data.get("environments")
+    if not isinstance(environments, Mapping):
+        raise ReconcileError("scheduler environments must be a mapping")
     for env, config in environments.items():
         if not isinstance(env, str) or not isinstance(_mapping(config).get("project"), str):
             raise ReconcileError("each environment must declare a project")
@@ -224,7 +226,7 @@ def reconcile(
     if not config:
         raise ReconcileError(f"environment {environment!r} is not declared")
     project = config.get("project")
-    if project_override != project:
+    if not isinstance(project, str) or project_override != project:
         raise ReconcileError(f"project mismatch: manifest requires {project}; received {project_override}")
     jobs = [job for job in config["jobs"] if selected_jobs is None or job["name"] in selected_jobs]
     selected_names = {job["name"] for job in jobs}
@@ -298,6 +300,11 @@ def _parser() -> argparse.ArgumentParser:
     mode.add_argument("--check", action="store_true", help="Read-only diff; exits nonzero on drift")
     mode.add_argument("--apply", action="store_true", help="Create or update listed jobs; never deletes")
     parser.add_argument("--jobs", nargs="+", help="Limit reconciliation to these declared job names")
+    parser.add_argument(
+        "--gcloud-auth",
+        action="store_true",
+        help="Use the explicitly selected gcloud identity, without relying on a separate ADC login",
+    )
     return parser
 
 
@@ -306,8 +313,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         from google.auth import default
         from google.auth.transport.requests import AuthorizedSession
+        from google.oauth2.credentials import Credentials
 
-        credentials, _ = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+        if args.gcloud_auth:
+            token = subprocess.run(
+                ["gcloud", "auth", "print-access-token", "--quiet"],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            if token.returncode or not token.stdout.strip():
+                raise ReconcileError("Selected gcloud identity has no usable access token")
+            credentials = Credentials(token=token.stdout.strip())
+        else:
+            credentials, _ = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
         session = AuthorizedSession(credentials)
         manifest = load_manifest(args.manifest)
         differences, messages = reconcile(

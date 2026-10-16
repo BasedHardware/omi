@@ -3,7 +3,7 @@
 from datetime import datetime, timezone, timedelta
 from google.cloud import firestore
 from database._client import get_firestore_client
-from config.dream_agent import eligible, enabled
+from config.dream_agent import allowlist_uids, eligibility, eligible, enabled, hunt_interval
 
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
@@ -21,7 +21,7 @@ def due_time(state, now):
         last = EPOCH
     if state.get('score', 0) > 0:
         return last - timedelta(minutes=min(500, state['score']))
-    return last + timedelta(hours=6 if state.get('size_bucket') == 'heavy' else 24)
+    return last + hunt_interval(state.get('size_bucket'))
 
 
 def candidate_page(*, after=None, limit=499, transaction=None, firestore_client=None):
@@ -44,11 +44,22 @@ def discover(database, now, *, pages=20):
     owners and repairs missing queue rows. Future hunts remain in the queue.
     """
     cursor = database.collection('dream_scheduler').document('discovery')
-    after = (cursor.get(timeout=3).to_dict() or {}).get('after')
-    for _ in range(pages):
-        rows = candidate_page(after=after, firestore_client=database)
+    listed = allowlist_uids() if eligibility() == 'allowlist' else None
+    after = None if listed is not None else (cursor.get(timeout=3).to_dict() or {}).get('after')
+    for _ in range(1 if listed is not None else pages):
+        if listed is not None:
+            # Allowlist rollout: read only listed owners instead of scanning every user each sweep.
+            users = database.collection('users')
+            rows = [
+                snapshot
+                for snapshot in database.get_all([users.document(uid) for uid in listed[:499]], timeout=3)
+                if snapshot.exists
+            ]
+        else:
+            rows = candidate_page(after=after, firestore_client=database)
         if not rows:
-            cursor.set({'after': None})
+            if listed is None:
+                cursor.set({'after': None})
             break
 
         @firestore.transactional
@@ -73,10 +84,20 @@ def discover(database, now, *, pages=20):
                         tx.set(target, {'due_at': due_time(states.get(row.id, {}), now)})
                 else:
                     tx.delete(target)
-            tx.set(cursor, {'after': rows[-1].id})
+            if listed is None:
+                tx.set(cursor, {'after': rows[-1].id})
 
         initialize(database.transaction())
         after = rows[-1].id
+
+
+def remove_due(uid, *, firestore_client=None):
+    """Drop an ineligible scheduler row, retaining owner state and dirty work.
+
+    Discovery recreates the row if the owner becomes eligible again.
+    """
+    database = firestore_client if firestore_client is not None else get_firestore_client()
+    database.collection('dream_due').document(uid).delete()
 
 
 def candidates(*, limit=5000, now=None, firestore_client=None):

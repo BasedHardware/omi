@@ -9,6 +9,7 @@ import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
+import 'package:omi/pages/home/widgets/home_daily_recaps.dart' show RecentRecapsLoader;
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -19,6 +20,8 @@ import 'package:omi/models/sync_state.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/providers/speaker_tag_prompts_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/backend/schema/pending_work.dart';
+import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/services/wals/wal.dart' show Wal;
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
@@ -76,6 +79,8 @@ class _InertSyncProvider extends ChangeNotifier implements SyncProvider {
   @override
   List<Wal> get uploadedWals => const [];
   @override
+  List<Wal> get displaySortedWals => const [];
+  @override
   bool get isRateLimited => false;
   @override
   ({int doneSeconds, int totalSeconds, bool tracked}) get offlineServerProcessingSeconds =>
@@ -92,7 +97,19 @@ class _InertSyncProvider extends ChangeNotifier implements SyncProvider {
 /// Home's recaps row with nothing to show, and no I/O.
 Future<({List<DailySummary> items, bool ok})> _noRecaps() async => (items: const <DailySummary>[], ok: true);
 
-Future<Widget> buildTypedConversationScreen(ConversationProvider provider) async {
+/// Server pending work and attention items with nothing to show, and no I/O.
+PendingWorkStore inertPendingWorkStore() => PendingWorkStore(
+      loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
+      loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
+    );
+
+/// [sync] defaults to nothing in flight; [loadRecaps] to no recaps; [pendingWork] to no server work.
+Future<Widget> buildTypedConversationScreen(
+  ConversationProvider provider, {
+  SyncProvider? sync,
+  RecentRecapsLoader loadRecaps = _noRecaps,
+  PendingWorkStore? pendingWork,
+}) async {
   SharedPreferences.setMockInitialValues({});
   await SharedPreferencesUtil.init();
 
@@ -124,11 +141,14 @@ Future<Widget> buildTypedConversationScreen(ConversationProvider provider) async
         ChangeNotifierProvider<PhoneCallProvider>.value(value: phone),
         ChangeNotifierProvider<CaptureProvider>.value(value: capture),
         ChangeNotifierProvider<SpeakerTagPromptsProvider>.value(value: speakerTagPrompts),
-        ChangeNotifierProvider<SyncProvider>.value(value: _InertSyncProvider()),
+        ChangeNotifierProvider<SyncProvider>.value(value: sync ?? _InertSyncProvider()),
       ],
-      child: const Scaffold(
-        body: ConversationsPage(requestInitialLoad: false, loadRecaps: _noRecaps),
-      ),
+      child: Scaffold(
+          body: ConversationsPage(
+        requestInitialLoad: false,
+        loadRecaps: loadRecaps,
+        pendingWork: pendingWork ?? inertPendingWorkStore(),
+      )),
     ),
   );
 }

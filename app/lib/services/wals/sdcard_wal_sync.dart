@@ -175,7 +175,13 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       storageOffset = 0;
     }
 
-    BleAudioCodec codec = await _getAudioCodec(deviceId);
+    final BleAudioCodec codec;
+    try {
+      codec = await _getAudioCodec(deviceId);
+    } catch (e) {
+      Logger.debug('SDCardWalSync: failed to get audio codec, skipping listing: ');
+      return [];
+    }
     if (totalBytes - storageOffset > 10 * codec.getFramesLengthInBytes() * codec.getFramesPerSecond()) {
       var seconds = ((totalBytes - storageOffset) / codec.getFramesLengthInBytes()) ~/ codec.getFramesPerSecond();
       // Use device-provided recording start timestamp if available (firmware >= 3.0.16), otherwise estimate

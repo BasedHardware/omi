@@ -47,6 +47,15 @@ interface DailyCostPoint {
   mobile: number;
   unknown: number;
   total: number;
+  /** Billing mode only: the provider legs that sum to `total`. */
+  components?: {
+    gcpInfra: number;
+    vertexLlm: number;
+    openai: number;
+    anthropic: number;
+    /** GCP net by service; the TV's one-time incident detector reads it. */
+    gcpServices?: Record<string, number>;
+  };
 }
 
 interface ServiceCostRow {
@@ -525,6 +534,15 @@ export async function computeBillingInfraCosts(
       mobile: round(mobile),
       unknown: 0,
       total: round(desktop + mobile),
+      // Provider legs of the same total (TV cost stack). Vertex/Gemini LLM is
+      // inside the GCP bill; OpenAI and Anthropic are their own invoices.
+      components: {
+        gcpInfra: round(otherPool),
+        vertexLlm: round(row.llmNetUsd),
+        openai: round(openaiByDay.get(row.date) ?? 0),
+        anthropic: round(chatPool),
+        gcpServices: row.services,
+      },
     };
   });
 

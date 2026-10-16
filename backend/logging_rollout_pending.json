@@ -1,0 +1,107 @@
+{
+  "backend/desktop_backend.py::docker:backend/Dockerfile.desktop_backend:desktop_backend": {
+    "missing_setup": 1
+  },
+  "backend/diarizer/batch_main.py::docker:backend/diarizer/Dockerfile:batch_main": {
+    "missing_setup": 1
+  },
+  "backend/diarizer/batch_main.py::helm:backend/charts/diarizer/dev_omi_diarizer_batch_values.yaml:0:diarizer:batch_main": {
+    "missing_setup": 1
+  },
+  "backend/diarizer/batch_main.py::helm:backend/charts/diarizer/prod_omi_diarizer_batch_values.yaml:0:diarizer:batch_main": {
+    "missing_setup": 1
+  },
+  "backend/diarizer/batch_pipeline_runtime.py::docker:backend/diarizer/Dockerfile.batch-pipeline:diarizer.batch_pipeline_runtime": {
+    "basicConfig": 1,
+    "missing_setup": 1
+  },
+  "backend/diarizer/batch_pipeline_runtime.py::helm:backend/charts/batch-pipeline-worker/templates/deployment.yaml:0:batch-pipeline-worker:diarizer.batch_pipeline_runtime": {
+    "basicConfig": 1,
+    "missing_setup": 1
+  },
+  "backend/llm_gateway/main.py::docker:backend/Dockerfile:llm_gateway.main": {
+    "missing_setup": 1
+  },
+  "backend/llm_gateway/main.py::helm:backend/charts/llm-gateway/templates/deployment.yaml:0:backend:llm_gateway.main": {
+    "missing_setup": 1
+  },
+  "backend/main.py::docker:backend/Dockerfile:main": {
+    "missing_setup": 1
+  },
+  "backend/modal/daily_memory_sweep_job.py::docker:backend/modal/Dockerfile.daily_memory_sweep_job:daily_memory_sweep_job": {
+    "basicConfig": 1,
+    "missing_setup": 1
+  },
+  "backend/modal/daily_memory_sweep_job.py::docker:backend/modal/Dockerfile.daily_memory_sweep_job:daily_memory_sweep_job.py": {
+    "basicConfig": 1,
+    "missing_setup": 1
+  },
+  "backend/modal/day3_reengagement_email_job.py::docker:backend/modal/Dockerfile.day3_reengagement_email_job:day3_reengagement_email_job": {
+    "basicConfig": 1,
+    "missing_setup": 1
+  },
+  "backend/modal/day3_reengagement_email_job.py::docker:backend/modal/Dockerfile.day3_reengagement_email_job:day3_reengagement_email_job.py": {
+    "basicConfig": 1,
+    "missing_setup": 1
+  },
+  "backend/modal/frame_request_retention_job.py::docker:backend/modal/Dockerfile.frame_request_retention_job:frame_request_retention_job": {
+    "basicConfig": 1,
+    "missing_setup": 1
+  },
+  "backend/modal/frame_request_retention_job.py::docker:backend/modal/Dockerfile.frame_request_retention_job:frame_request_retention_job.py": {
+    "basicConfig": 1,
+    "missing_setup": 1
+  },
+  "backend/modal/job.py::docker:backend/modal/Dockerfile.notifications_job:job": {
+    "basicConfig": 1,
+    "missing_setup": 1
+  },
+  "backend/modal/job.py::docker:backend/modal/Dockerfile.notifications_job:job.py": {
+    "basicConfig": 1,
+    "missing_setup": 1
+  },
+  "backend/modal/knowledge_ledger_drain_job.py::docker:backend/modal/Dockerfile.knowledge_ledger_drain_job:knowledge_ledger_drain_job": {
+    "basicConfig": 1,
+    "missing_setup": 1
+  },
+  "backend/modal/knowledge_ledger_drain_job.py::docker:backend/modal/Dockerfile.knowledge_ledger_drain_job:knowledge_ledger_drain_job.py": {
+    "basicConfig": 1,
+    "missing_setup": 1
+  },
+  "backend/modal/main.py::docker:backend/modal/Dockerfile:main": {
+    "missing_setup": 1
+  },
+  "backend/modal/memory_maintenance_job.py::docker:backend/modal/Dockerfile.memory_maintenance_job:memory_maintenance_job": {
+    "basicConfig": 1,
+    "missing_setup": 1
+  },
+  "backend/modal/memory_maintenance_job.py::docker:backend/modal/Dockerfile.memory_maintenance_job:memory_maintenance_job.py": {
+    "basicConfig": 1,
+    "missing_setup": 1
+  },
+  "backend/modal/x_connector_sync_job.py::docker:backend/modal/Dockerfile.x_connector_sync_job:x_connector_sync_job": {
+    "basicConfig": 1,
+    "missing_setup": 1
+  },
+  "backend/modal/x_connector_sync_job.py::docker:backend/modal/Dockerfile.x_connector_sync_job:x_connector_sync_job.py": {
+    "basicConfig": 1,
+    "missing_setup": 1
+  },
+  "backend/parakeet/main.py::docker:backend/parakeet/Dockerfile.nim:main": {
+    "missing_setup": 1
+  },
+  "backend/parakeet/main.py::docker:backend/parakeet/Dockerfile:main": {
+    "missing_setup": 1
+  },
+  "backend/pusher/main.py::docker:backend/pusher/Dockerfile:pusher.main": {
+    "missing_setup": 1
+  },
+  "backend/scripts/finops/cloudrun_entry.py::docker:backend/modal/Dockerfile.finops_unit_cost_job:/app/monorepo/backend/scripts/finops/cloudrun_entry.py": {
+    "print": 1,
+    "missing_setup": 1
+  },
+  "backend/utils/messaging/maintenance.py::helm:backend/charts/messaging-maintenance/templates/cronjob.yaml:0:backend:utils.messaging.maintenance": {
+    "basicConfig": 1,
+    "missing_setup": 1
+  }
+}

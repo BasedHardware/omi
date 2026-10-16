@@ -165,7 +165,7 @@ runs:
         image: ${{ inputs.image }}
         no_traffic: true
         flags: >-
-          --revision-suffix=${{ inputs.revision_suffix }}
+          --revision-suffix=${{ inputs.revision_suffix }}-base
           ${{ steps.candidate-tag.outputs.flag }}
           --min-instances=3
           --max-instances=40
@@ -460,7 +460,9 @@ runs:
             LOG_FILTER='resource.type="cloud_scheduler_job" AND resource.labels.job_id="sync-backfill-uid-sequencer" AND severity>=ERROR AND jsonPayload."@type"="type.googleapis.com/google.cloud.scheduler.logging.AttemptFinished"'
             CONDITION_FILTER="metric.type=\"logging.googleapis.com/user/${METRIC}\" AND resource.type=\"cloud_scheduler_job\""
             CONDITION='> 0'
-            DURATION='0s'
+            # Sustained failure for 10 minutes (about five sweeps) pages; one failed
+            # two-minute sweep does not. Matches the live policy set by the alert owner.
+            DURATION='600s'
           else
             DISPLAY_NAME='Sync backfill UID sequencer Scheduler heartbeat missing'
             LOG_FILTER='resource.type="cloud_run_revision" AND resource.labels.service_name="backend-sync" AND "event=sync_uid_sequencer action=sweep_summary outcome=done"'
@@ -497,7 +499,7 @@ runs:
             DURATION_SECONDS=600
           else
             CONDITION_KIND=threshold
-            DURATION_SECONDS=0
+            DURATION_SECONDS=600
           fi
           python3 "$DEPLOY_CONTROL_SCRIPTS/reconcile_sync_backfill_alert_policy.py" \
             --project='${{ inputs.project_id }}' --policy="$POLICY" \

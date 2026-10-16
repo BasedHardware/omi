@@ -7,6 +7,7 @@ covers:
   - desktop/macos/Desktop/Sources/Services/SubscriptionEntitlementService.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+AccountBilling.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+BillingHelpers.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/SettingsViewModel.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/BillingWebFlow.swift
   - desktop/macos/Desktop/Sources/UsageLimitPopupView.swift
   - desktop/macos/Desktop/Sources/TrialBannerService.swift
