@@ -31964,6 +31964,17 @@
             "title": "Failed Segments",
             "type": "integer"
           },
+          "held_audio": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Held Audio"
+          },
           "new_memories": {
             "items": {
               "type": "string"
