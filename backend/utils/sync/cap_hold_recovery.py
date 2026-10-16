@@ -152,7 +152,16 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                 if errors or outcome.get('cap_held'):
                     return False
                 seconds = await run_blocking(sync_executor, get_wav_duration, segment_path) if ok else 0
-                receipt = {'response': _stored(response), 'seconds': seconds, 'has_content': bool(ok)}
+                receipt = {
+                    'response': _stored(response),
+                    'seconds': seconds,
+                    'has_content': bool(ok),
+                    'usage_metadata': {
+                        'funding': 'omi',
+                        'provider': outcome.get('provider') or 'unknown',
+                        'source': 'sync_v2',
+                    },
+                }
                 receipts[name] = receipt
                 # Paid STT/content is now durable BEFORE usage or enrichment.
                 # A settlement retry reuses this receipt without dispatching STT.
@@ -167,7 +176,9 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                     transcription_seconds=seconds,
                     speech_seconds=seconds,
                     idempotency_key=f'cap-hold-{snapshot.id}-{name}',
-                    usage_metadata={'funding': 'omi', 'provider': 'unknown', 'source': 'sync_v2'},
+                    usage_metadata=receipt.get(
+                        'usage_metadata', {'funding': 'omi', 'provider': 'unknown', 'source': 'sync_v2'}
+                    ),
                 )
             processed.add(name)
             if not await _save(uid, snapshot, row, {'processed_paths': sorted(processed)}):

@@ -23,7 +23,7 @@ from google.api_core.exceptions import AlreadyExists
 from database import redis_db
 from config.stt_cap_dispatch import enabled
 from utils.sync.files import get_timestamp_from_path
-from utils.stt_cap_dispatch import sync_allowed
+from utils.executors import db_executor, storage_executor, run_blocking
 from database._client import get_firestore_client
 from database.legal_holds import external_write_fence
 from utils.encryption import encrypt, decrypt, encrypt_audio_chunk, decrypt_audio_chunk
@@ -53,22 +53,26 @@ def capture_identity(path: str, metadata: dict[str, Any]) -> str:
     return digest.hexdigest()
 
 
-def hold_segment(uid: str, path: str, metadata: dict[str, Any], *, receipt: dict | None = None) -> float:
+def _describe(path: str, metadata: dict[str, Any]) -> tuple[str, float, dict]:
     metadata = dict(metadata)
     geolocation = metadata.get('geolocation')
     if geolocation is not None and hasattr(geolocation, 'model_dump'):
         metadata['geolocation'] = geolocation.model_dump(mode='json')
     identity = capture_identity(path, metadata)
-    blob_path = f'chunks/{uid}/cap-held/{identity}.wav.enc'
-    bucket = get_private_cloud_sync_bucket()
     with wave.open(path, 'rb') as wav:
         seconds = wav.getnframes() / wav.getframerate()
+    return identity, seconds, metadata
+
+
+def _exists(uid: str, identity: str) -> bool:
+    with external_write_fence(uid):
+        return bool(holds(uid).document(identity).get().exists)
+
+
+def _upload(uid: str, path: str, identity: str, metadata: dict) -> dict:
+    blob_path = f'chunks/{uid}/cap-held/{identity}.wav.enc'
+    bucket = get_private_cloud_sync_bucket()
     with external_write_fence(uid), owner_storage_write_gate(uid, bucket):
-        ref = holds(uid).document(identity)
-        if ref.get().exists:
-            if receipt is not None:
-                receipt.update(id=identity, seconds=seconds)
-            return seconds
         blob = bucket.blob(blob_path)
         blob.chunk_size = 8 * AUDIO_CHUNK_BYTES
         with recovery_directory(uid) as directory, TemporaryFile(dir=directory) as encrypted:
@@ -78,18 +82,23 @@ def hold_segment(uid: str, path: str, metadata: dict[str, Any], *, receipt: dict
             encrypted.seek(0)
             blob.upload_from_file(encrypted, content_type='application/octet-stream')
         encoded_metadata = encrypt(json.dumps(metadata), uid)
-        metadata_fields = {'metadata': encoded_metadata}
+        fields = {'audio_path': blob_path, 'metadata': encoded_metadata}
         if len(encoded_metadata.encode()) > 512 * 1024:
-            # Bounded source-frame maps can exceed Firestore's document limit.
             metadata_digest = hashlib.sha256(encoded_metadata.encode()).hexdigest()
             metadata_path = f'chunks/{uid}/cap-held/{identity}.{metadata_digest}.metadata.enc'
             bucket.blob(metadata_path).upload_from_string(encoded_metadata, content_type='application/octet-stream')
-            metadata_fields = {'metadata_path': metadata_path}
+            fields = {'audio_path': blob_path, 'metadata_path': metadata_path}
+        return fields
+
+
+def _publish(uid: str, identity: str, seconds: float, fields: dict) -> bool:
+    # Reacquire the account fence after upload: deletion may have started while
+    # the async coordinator switched pools. Never acknowledge a refused manifest.
+    with external_write_fence(uid):
         try:
-            ref.create(
+            holds(uid).document(identity).create(
                 {
-                    'audio_path': blob_path,
-                    **metadata_fields,
+                    **fields,
                     'seconds': seconds,
                     'state': 'held',
                     'created_at': time.time(),
@@ -98,14 +107,36 @@ def hold_segment(uid: str, path: str, metadata: dict[str, Any], *, receipt: dict
                 }
             )
         except AlreadyExists:
-            if receipt is not None:
-                receipt.update(id=identity, seconds=seconds)
-            return seconds  # A concurrent upload owns the immutable recovery checkpoint.
+            return False  # Preserve the winner's immutable progress checkpoint.
+    return True
+
+
+def _finish(identity: str, seconds: float, reason: str, receipt: dict | None, created: bool) -> float:
     if receipt is not None:
-        receipt.update(id=identity, seconds=seconds)
-    record_audio('sync', 'held', 'unknown', seconds, funded_allowance(uid).reason == 'plan_allowance_exhausted')
-    logger.info('event=stt_cap_dispatch path=sync outcome=held seconds=%.3f', seconds)
+        receipt.update(id=identity, seconds=seconds, reason=reason)
+    if created:
+        record_audio('sync', 'held', 'unknown', seconds, reason == 'plan_allowance_exhausted')
+        logger.info('event=stt_cap_dispatch path=sync outcome=held seconds=%.3f', seconds)
     return seconds
+
+
+def hold_segment(uid: str, path: str, metadata: dict[str, Any], *, receipt: dict | None = None) -> float:
+    identity, seconds, metadata = _describe(path, metadata)
+    created = False
+    if not _exists(uid, identity):
+        fields = _upload(uid, path, identity, metadata)
+        created = _publish(uid, identity, seconds, fields)
+    return _finish(identity, seconds, funded_allowance(uid).reason, receipt, created)
+
+
+async def _hold_capture(uid: str, path: str, metadata: dict, reason: str, receipt: dict) -> None:
+    # Pool workers are leaves; no sync worker waits for another executor.
+    identity, seconds, metadata = await run_blocking(storage_executor, _describe, path, metadata)
+    created = False
+    if not await run_blocking(db_executor, _exists, uid, identity):
+        fields = await run_blocking(storage_executor, _upload, uid, path, identity, metadata)
+        created = await run_blocking(db_executor, _publish, uid, identity, seconds, fields)
+    _finish(identity, seconds, reason, receipt, created)
 
 
 def claim(uid: str, ref: Any, now: float) -> dict[str, Any] | None:
@@ -176,21 +207,27 @@ def release(uid: str, ref: Any, token: str) -> None:
     return commit(client.transaction())
 
 
-def hold_capture_if_exhausted(
+async def hold_capture_if_exhausted(
     uid: str,
     paths: list[str],
     source: ConversationSource,
     *,
     receipts: dict | None = None,
     source_frame_maps: dict | None = None,
+    admission: dict | None = None,
     **context: Any,
 ) -> bool:
     # Shared by v1 intake and v2 execution, before VAD can discard silence.
-    if not paths or not enabled() or sync_allowed(uid):
+    if not paths or not enabled():
         return False
+    allowance = await run_blocking(db_executor, funded_allowance, uid)
+    if allowance.managed:
+        return False
+    if admission is not None:
+        admission['reason'] = allowance.reason
     for path in paths:
         receipt: dict = {}
-        hold_segment(
+        await _hold_capture(
             uid,
             path,
             {
@@ -201,7 +238,8 @@ def hold_capture_if_exhausted(
                 'file_name': Path(path).name,
                 'source_frame_map': (source_frame_maps or {}).get(path),
             },
-            receipt=receipt,
+            allowance.reason,
+            receipt,
         )
         if receipts is not None:
             receipts[receipt['id']] = receipt

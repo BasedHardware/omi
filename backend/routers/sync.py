@@ -639,13 +639,13 @@ async def sync_local_files(
             raise HTTPException(status_code=e.status_code, detail=e.detail, headers=_V1_DEPRECATION_HEADERS)
 
         cap_held = False
+        cap_admission: dict = {}
         if cap_dispatch_enabled():
-            cap_held = await run_blocking(
-                sync_executor,
-                hold_capture_if_exhausted,
+            cap_held = await hold_capture_if_exhausted(
                 uid,
                 wav_paths,
                 source,
+                admission=cap_admission,
                 target_conversation_id=conversation_id,
                 client_device_id=client_device_context.client_device_id,
                 client_platform=client_device_context.platform,
@@ -657,7 +657,7 @@ async def sync_local_files(
                 content={
                     'new_memories': [],
                     'updated_memories': [],
-                    'credits_exhausted': True,
+                    'credits_exhausted': cap_admission.get('reason') == 'plan_allowance_exhausted',
                     'held_audio': True,
                     'held_files': len(wav_paths),
                 },
@@ -848,7 +848,11 @@ async def sync_local_files(
             'updated_memories': sorted(response['updated_memories']),
         }
         if cap_holds:
-            result.update(held_audio=True, credits_exhausted=True, held_segments=len(cap_holds))
+            result.update(
+                held_audio=True,
+                credits_exhausted=any(item.get('reason') == 'plan_allowance_exhausted' for item in cap_holds.values()),
+                held_segments=len(cap_holds),
+            )
 
         failed_segments = len(segment_errors)
         successful_segments = total_segments - failed_segments

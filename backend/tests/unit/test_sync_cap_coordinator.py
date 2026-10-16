@@ -1,6 +1,7 @@
 """Exercise real v2 coordination: coverage precedes custody and late holds do not bill."""
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 from database import sync_cap_holds
@@ -60,14 +61,16 @@ async def test_full_hold_contains_only_wal_audio_not_already_committed(coordinat
         lineage_rows=[generation(1, capture_evidence=_committed_envelope(range(7)))],
     )
     writer = _ledger(pipeline, monkeypatch)
-    monkeypatch.setattr(cap_hold, 'sync_allowed', lambda uid: False)
+    monkeypatch.setattr(
+        cap_hold, 'funded_allowance', lambda uid: SimpleNamespace(managed=False, reason='plan_allowance_exhausted')
+    )
     retained = []
 
-    def retain(uid, path, metadata, *, receipt):
+    async def retain(uid, path, metadata, reason, receipt):
         retained.append((_read_payload(path), metadata))
         receipt.update(id='held-source', seconds=1.5)
 
-    monkeypatch.setattr(cap_hold, 'hold_segment', retain)
+    monkeypatch.setattr(cap_hold, '_hold_capture', retain)
     await _run(module, tmp_path)
     assert len(retained) == 1
     assert retained[0][0] == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in (7, 8, 9))
@@ -87,7 +90,7 @@ async def test_late_hold_reports_custody_and_charges_only_dispatched_speech(coor
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[])
     writer = _ledger(pipeline, monkeypatch)
-    monkeypatch.setattr(cap_hold, 'sync_allowed', lambda uid: True)
+    monkeypatch.setattr(cap_hold, 'funded_allowance', lambda uid: SimpleNamespace(managed=True, reason='available'))
     paths = [tmp_path / '1760000000.wav', tmp_path / '1760000002.5.wav']
     for path in paths:
         _write_labeled_wav(path, range(5))

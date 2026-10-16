@@ -72,16 +72,20 @@ def test_hold_failure_cannot_acknowledge_audio_or_dispatch_provider(tmp_path, mo
 
 
 @pytest.mark.parametrize('enforce', [False, True])
-def test_full_capture_hold_precedes_vad_and_has_default_off_parity(tmp_path, monkeypatch, enforce):
+async def test_full_capture_hold_precedes_vad_and_has_default_off_parity(tmp_path, monkeypatch, enforce):
     from utils.sync import cap_hold
     from models.conversation_enums import ConversationSource
 
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
-    monkeypatch.setattr(cap_hold, 'sync_allowed', Mock(return_value=False))
-    hold = Mock()
-    monkeypatch.setattr(cap_hold, 'hold_segment', hold)
+    monkeypatch.setattr(
+        cap_hold,
+        'funded_allowance',
+        Mock(return_value=SimpleNamespace(managed=False, reason='plan_allowance_exhausted')),
+    )
+    hold = AsyncMock()
+    monkeypatch.setattr(cap_hold, '_hold_capture', hold)
     paths = [str(tmp_path / '1792152000.wav')]
-    assert cap_hold.hold_capture_if_exhausted('synthetic', paths, ConversationSource.omi) is enforce
+    assert await cap_hold.hold_capture_if_exhausted('synthetic', paths, ConversationSource.omi) is enforce
     if enforce:
         assert hold.call_args.args[2] == {
             'timestamp': 1792152000,
@@ -92,7 +96,7 @@ def test_full_capture_hold_precedes_vad_and_has_default_off_parity(tmp_path, mon
         }
     else:
         hold.assert_not_called()
-        cap_hold.sync_allowed.assert_not_called()
+        cap_hold.funded_allowance.assert_not_called()
 
 
 def test_hold_manifest_fences_concurrent_recovery_and_stale_release(monkeypatch):
@@ -109,6 +113,9 @@ def test_hold_manifest_fences_concurrent_recovery_and_stale_release(monkeypatch)
     assert first and first['lease_token']
     assert cap_hold.claim('synthetic', ref, 101) is None
     next_claim = cap_hold.claim('synthetic', ref, 2000)
+    monkeypatch.setattr(cap_hold.time, 'time', lambda: 2000)
+    assert not cap_hold.checkpoint('synthetic', ref, first['lease_token'], {'state': 'completed'})
+    assert cap_hold.checkpoint('synthetic', ref, next_claim['lease_token'], {'finalized': True})
     cap_hold.release('synthetic', ref, first['lease_token'])
     assert client.rows[path]['lease_token'] == next_claim['lease_token']
     cap_hold.release('synthetic', ref, next_claim['lease_token'])
@@ -199,3 +206,36 @@ def test_large_hold_streams_bounded_authenticated_chunks(tmp_path, monkeypatch, 
         with output.open('rb') as recovered:
             assert recovered.read() == expected
     blob.delete.assert_not_called()
+
+
+async def test_capture_hold_coordinates_db_and_storage_leaves(monkeypatch):
+    from models.conversation_enums import ConversationSource
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setattr(
+        cap_hold, 'funded_allowance', Mock(return_value=SimpleNamespace(managed=False, reason='allowance_unavailable'))
+    )
+    monkeypatch.setattr(cap_hold, '_describe', Mock(return_value=('held', 20, {'source': 'omi'})))
+    monkeypatch.setattr(cap_hold, '_exists', Mock(return_value=False))
+    monkeypatch.setattr(cap_hold, '_upload', Mock(return_value={'audio_path': 'synthetic'}))
+    monkeypatch.setattr(cap_hold, '_publish', Mock(return_value=True))
+    calls = []
+
+    async def leaf(pool, fn, *args, **kwargs):
+        calls.append((pool, fn))
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(cap_hold, 'run_blocking', leaf)
+    receipts, admission = {}, {}
+    assert await cap_hold.hold_capture_if_exhausted(
+        'synthetic', ['1792152000.wav'], ConversationSource.omi, receipts=receipts, admission=admission
+    )
+    assert calls == [
+        (cap_hold.db_executor, cap_hold.funded_allowance),
+        (cap_hold.storage_executor, cap_hold._describe),
+        (cap_hold.db_executor, cap_hold._exists),
+        (cap_hold.storage_executor, cap_hold._upload),
+        (cap_hold.db_executor, cap_hold._publish),
+    ]
+    assert admission == {'reason': 'allowance_unavailable'}
+    assert receipts['held']['reason'] == 'allowance_unavailable'

@@ -26,7 +26,12 @@ def state(monkeypatch, tmp_path):
     monkeypatch.setattr(recovery, 'sync_allowed', Mock(return_value=True))
     monkeypatch.setattr(recovery, 'get_hard_restriction_status', Mock(return_value=(False, None)))
     monkeypatch.setattr(recovery, 'is_daily_audio_ceiling_exceeded', Mock(return_value=False))
-    monkeypatch.setattr(recovery, 'process_segment', Mock(return_value=True))
+
+    def processed(*args, **kwargs):
+        kwargs['deferred_outcome']['provider'] = 'modulate'
+        return True
+
+    monkeypatch.setattr(recovery, 'process_segment', Mock(side_effect=processed))
     monkeypatch.setattr(recovery, 'build_person_embeddings_cache', Mock(return_value={'known': 'embedding'}))
     monkeypatch.setattr(
         recovery,
@@ -50,6 +55,7 @@ async def test_reset_or_upgrade_reuses_sync_and_settles_stable_usage_key(state):
     usage = recovery.record_usage.call_args.kwargs
     assert usage['idempotency_key'] == 'cap-hold-hold-1792152000.wav'
     assert usage['transcription_seconds'] == 20
+    assert usage['usage_metadata'] == {'funding': 'omi', 'provider': 'modulate', 'source': 'sync_v2'}
     assert state.row['processed_paths'] == ['1792152000.wav']
     assert state.row['finalized']
     assert state.row['piece_receipts']['1792152000.wav']['has_content']
@@ -110,6 +116,7 @@ async def test_usage_failure_reuses_persisted_transcription_receipt(state):
     recovery.process_segment.assert_called_once()
     recovery.finalize_recovered_sync_segment.assert_called_once()
     assert recovery.record_usage.call_count == 2
+    assert recovery.record_usage.call_args.kwargs['usage_metadata']['provider'] == 'modulate'
     assert recovery.record_usage.call_args_list[0] == recovery.record_usage.call_args_list[1]
 
 
@@ -162,3 +169,17 @@ async def test_recovery_cannot_bypass_current_abuse_restrictions(state, restrict
     assert not await recovery._recover_row('synthetic', state.snapshot, state.row)
     recovery.process_segment.assert_not_called()
     recovery.cap_hold.read_audio.assert_not_called()
+
+
+async def test_lost_completion_lease_cannot_settle_or_erase_audio(state, monkeypatch):
+    state.snapshot.to_dict = Mock(return_value={'state': 'held'})
+    monkeypatch.setattr(recovery.cap_hold, 'recovery_cooldown', Mock(return_value=True))
+    monkeypatch.setattr(recovery.cap_hold, 'pending_holds', Mock(return_value=[state.snapshot]))
+    monkeypatch.setattr(recovery.cap_hold, 'claim', Mock(return_value=state.row))
+    monkeypatch.setattr(recovery.cap_hold, 'release', Mock())
+    monkeypatch.setattr(recovery, '_recover_row', AsyncMock(return_value=True))
+    monkeypatch.setattr(recovery, '_settle_and_erase', Mock())
+    recovery.cap_hold.checkpoint.return_value = False
+    await recovery.recover('synthetic')
+    recovery._settle_and_erase.assert_not_called()
+    recovery.cap_hold.release.assert_called_once_with('synthetic', state.snapshot.reference, 'owner-token')

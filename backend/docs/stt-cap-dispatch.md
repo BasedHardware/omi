@@ -31,7 +31,9 @@ audio is not enrolled as new recoverable work. Source maps, recording identity
 and geolocation travel with the encrypted hold.
 The shared segment processor rechecks immediately before each STT invocation,
 including its empty-result retry. Late exhaustion holds the remaining segment.
-No denied segment reaches cloud STT. A successfully persisted hold is acknowledged
+No denied segment reaches cloud STT. Initial holds coordinate database and storage
+leaves asynchronously; GCS work does not occupy the sync pipeline pool.
+Transient admission/configuration holds do not claim credits are exhausted. A successfully persisted hold is acknowledged
 without creating a locked transcript. Hold failures fail the upload/job; callers
 must retain/retry their source audio. V1 adds `held_audio` and `held_files` to the
 exhausted acknowledgment; v2 adds `held_audio` to its durable result.
@@ -76,7 +78,7 @@ every new recovered provider request. Already persisted receipts can settle at
 the cap without another provider call. Recovery
 replays WAL coverage and lineage planning, loads speaker embeddings, and reuses
 VAD, segment intake, enrichment and optional playback finalization. Token-fenced
-piece receipts checkpoint persisted transcription before usage settlement; a
+piece receipts checkpoint persisted transcription and serving-provider provenance before usage settlement; a
 usage retry cannot repeat paid STT. Finalization runs once after all pieces join,
 with the retained geolocation and source-position context. Piece
 receipts and idempotent usage keys preserve progress across retries. Completed

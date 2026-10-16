@@ -2408,9 +2408,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             if stt_cap_dispatch_enabled():
                 from utils.sync.cap_hold import hold_capture_if_exhausted
 
-                cap_held = await run_blocking(
-                    sync_executor,
-                    hold_capture_if_exhausted,
+                cap_held = await hold_capture_if_exhausted(
                     uid,
                     wav_paths,
                     source,

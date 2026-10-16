@@ -1,7 +1,7 @@
 """Actual sync HTTP routing with local fake persistence/provider boundaries."""
 
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, AsyncMock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -37,7 +37,12 @@ def client(monkeypatch):
     monkeypatch.setattr(router, 'archive_mobile_batch_raw_files', lambda *_: [])
     monkeypatch.setattr(router, 'decode_files_to_wav', lambda _: ['1792152000.wav'])
     monkeypatch.setattr(router, '_cleanup_files', Mock())
-    monkeypatch.setattr(router, 'hold_capture_if_exhausted', Mock(return_value=True))
+
+    async def held(*args, **kwargs):
+        kwargs['admission']['reason'] = router.resolve_transcription_allowance('synthetic').reason
+        return True
+
+    monkeypatch.setattr(router, 'hold_capture_if_exhausted', AsyncMock(side_effect=held))
     monkeypatch.setattr(router, 'retrieve_vad_segments', Mock(side_effect=AssertionError('denied audio reached VAD')))
     app = FastAPI()
     app.include_router(router.router)
@@ -101,6 +106,7 @@ def test_flag_off_http_result_retains_main_shape_without_hold_dispatch(client, m
 @pytest.mark.parametrize('accepted', [False, True])
 def test_late_v1_hold_is_reported_and_only_processed_speech_is_metered(client, monkeypatch, accepted):
     monkeypatch.setattr(router, 'FAIR_USE_ENABLED', False)
+    router.hold_capture_if_exhausted.side_effect = None
     router.hold_capture_if_exhausted.return_value = False
     paths = ['1792152000.wav', '1792152020.wav'] if accepted else ['1792152020.wav']
     monkeypatch.setattr(router, 'retrieve_vad_segments', lambda path, segments, errors, **kw: segments.update(paths))
@@ -117,7 +123,7 @@ def test_late_v1_hold_is_reported_and_only_processed_speech_is_metered(client, m
         if path == '1792152000.wav':
             response['new_memories'].add('accepted')
             return True
-        response['_cap_holds'] = {'late': {'id': 'late', 'seconds': 20}}
+        response['_cap_holds'] = {'late': {'id': 'late', 'seconds': 20, 'reason': 'plan_allowance_exhausted'}}
         return False
 
     monkeypatch.setattr(router, 'process_segment', process)
@@ -134,3 +140,13 @@ def test_late_v1_hold_is_reported_and_only_processed_speech_is_metered(client, m
         assert usage.call_args.kwargs == {'transcription_seconds': 20, 'speech_seconds': 20}
     else:
         usage.assert_not_called()
+
+
+@pytest.mark.parametrize('reason', ['allowance_unavailable', 'launch_config_missing', 'launch_config_invalid'])
+def test_transient_policy_hold_does_not_claim_credits_exhausted(client, monkeypatch, reason):
+    monkeypatch.setattr(router, 'resolve_transcription_allowance', lambda _: SimpleNamespace(reason=reason))
+    response = client.post('/v1/sync-local-files', files={'files': ('omi_1792152000.bin', b'synthetic')})
+    assert response.status_code == 200, response.text
+    assert response.json()['held_audio'] is True
+    assert response.json()['credits_exhausted'] is False
+    router.retrieve_vad_segments.assert_not_called()
