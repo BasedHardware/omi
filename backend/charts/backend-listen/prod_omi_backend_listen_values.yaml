@@ -91,6 +91,28 @@ envFrom:
       name: prod-omi-backend-config
 
 env:
+  - name: BATCH_PIPELINE_ENABLED
+    value: "true"
+  - name: BATCH_PIPELINE_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: BATCH_PIPELINE_PERCENT
+    value: "0"
+  - name: BATCH_PIPELINE_SERVING_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_WORKER_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_API_URL
+    value: "https://backend-sync-hhibjajaja-uc.a.run.app"
+  - name: BATCH_PIPELINE_WORKER_AUDIENCE
+    value: ""
+  - name: BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT
+    value: ""
+  - name: BUCKET_BATCH_PIPELINE
+    value: "based-hardware-batch-pipeline-staging"
+  - name: BATCH_PIPELINE_UNIT_SECONDS
+    value: "3600"
+  - name: BATCH_PIPELINE_SHARED_LIVE_ENABLED
+    value: "false"
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_READ_ENABLED

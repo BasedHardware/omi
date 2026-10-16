@@ -89,6 +89,23 @@ _DEMAND_LISTEN_ONLY = frozenset(
         'STT_LIVE_DEMAND_MIN_DWELL_SECONDS',
     }
 )
+# main.py mounts sync intake/worker RPC and owns serving startup. pusher.main
+# mounts none of those surfaces and never starts the dedicated GPU process.
+_BATCH_PIPELINE_LISTEN_ONLY = frozenset(
+    {
+        'BATCH_PIPELINE_ENABLED',
+        'BATCH_PIPELINE_UID_ALLOWLIST',
+        'BATCH_PIPELINE_PERCENT',
+        'BATCH_PIPELINE_SERVING_ENABLED',
+        'BATCH_PIPELINE_API_URL',
+        'BATCH_PIPELINE_WORKER_ENABLED',
+        'BATCH_PIPELINE_WORKER_AUDIENCE',
+        'BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT',
+        'BATCH_PIPELINE_UNIT_SECONDS',
+        'BATCH_PIPELINE_SHARED_LIVE_ENABLED',
+        'BUCKET_BATCH_PIPELINE',
+    }
+)
 LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset(
         {
@@ -187,7 +204,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     )
     | _TRANSLATION_LISTEN_ONLY
     | _REVIEW_SURFACE_LISTEN_ONLY
-    | _DEMAND_LISTEN_ONLY,
+    | _DEMAND_LISTEN_ONLY
+    | _BATCH_PIPELINE_LISTEN_ONLY,
     "prod": frozenset(
         {
             # Only listen's runtime reads these to advertise mobile control-channel
@@ -298,7 +316,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     )
     | _TRANSLATION_LISTEN_ONLY
     | _REVIEW_SURFACE_LISTEN_ONLY
-    | _DEMAND_LISTEN_ONLY,
+    | _DEMAND_LISTEN_ONLY
+    | _BATCH_PIPELINE_LISTEN_ONLY,
 }
 
 # Pusher owns the process-local shadow worker; sync/backfill also runs the

@@ -1,4 +1,9 @@
 {{- if .Values.enabled }}
+{{- if eq .Values.stage "prod" }}
+{{- if or (not (regexMatch "^https://[^/]+/?$" .Values.worker.apiUrl)) (ne .Values.worker.audience .Values.worker.apiUrl) }}
+{{- fail "production worker requires an HTTPS service base and matching OIDC audience" }}
+{{- end }}
+{{- end }}
 {{- if lt (int .Values.replicaCount) 1 }}
 {{- fail "queue sampling runs in workers: replicaCount must be >=1" }}
 {{- end }}
@@ -52,6 +57,8 @@ spec:
             - name: POD_NAMESPACE
               valueFrom:
                 fieldRef: {fieldPath: metadata.namespace}
+            - {name: BATCH_PIPELINE_API_URL, value: {{ .Values.worker.apiUrl | quote }}}
+            - {name: BATCH_PIPELINE_WORKER_AUDIENCE, value: {{ .Values.worker.audience | quote }}}
             - {name: BATCH_PIPELINE_WORKER_ENABLED, value: "true"}
             - {name: BATCH_PIPELINE_ENABLED, value: "false"}
             - {name: BATCH_PIPELINE_PERCENT, value: "0"}

@@ -6,7 +6,7 @@ allowlist/percentage after qualification. Agent A does not deploy or apply index
 
 ## Host settings and rollback
 
-On the backend sync host, `BATCH_PIPELINE_SERVING_ENABLED=true` starts a supervised
+On the selected always-CPU backend host, `BATCH_PIPELINE_SERVING_ENABLED=true` starts a supervised
 20-second reconciliation loop. It recovers leases/retries, drains ordered log
 entries, projects C's durable outbox and refreshes queue-age metrics. Configure
 an explicit prod/dev runtime stage, customer data-plane project, shared encryption
@@ -171,3 +171,47 @@ Idle-shard activation reads the maximum retained per-class service frontier
 through its single-field descending index. No global document is written; an
 empty/rejoin cycle cannot reset credit, and an old shard cannot penalize newly
 active owners because another shard restarted its virtual clock from zero.
+
+## David-only production config train (2026-10-16)
+
+The production runtime overlay admits only `vi7SA9ckQCe4ccobWNxlbdcNdC23`:
+`BATCH_PIPELINE_ENABLED=true`, that single UID allowlist, and
+`BATCH_PIPELINE_PERCENT=0`. Code defaults remain off. Development admission,
+serving and worker RPC identity bindings are explicitly off/empty. The existing
+dev GPU qualification release is independent of this cohort configuration.
+Merging config is not a deployment or a successful production E2E receipt.
+
+| Consumer | Deployed host / setting |
+| --- | --- |
+| `routers/sync.py` → `intake.accept_upload` → `database.batch_pipeline_intake.admit` → `config.batch_pipeline.enabled_for` | Cloud Run `backend`, `backend-sync`, `backend-sync-backfill`, `backend-integration`, and the same backend image on GKE `backend-listen`; identical David-only gate on each |
+| `main.py` → `start_serving_from_env` → recovery/projection/cleanup | Only Cloud Run `backend-integration`; existing deployment has minimum three instances and CPU throttling disabled. Other CPU hosts keep the pump off |
+| `compute_client.from_env` | Dedicated GPU worker; HTTPS base `https://backend-sync-hhibjajaja-uc.a.run.app`, exact same OIDC audience |
+| `routers/batch_pipeline.verify_worker` → spend admission | Only Cloud Run `backend-sync` is configured to accept `batch-pipeline-worker@based-hardware.iam.gserviceaccount.com` with that audience |
+| `diarizer.batch_pipeline_runtime` | Separate prod worker chart: process on, one replica, autoscaling off, L4 `batch-pipeline-pool`; worker's own upload-admission gate stays false |
+| `pusher.main` | No batch upload admission, serving-loop or dedicated-worker consumer; no pusher flag change |
+
+Intake and worker ceilings both stay at 3600 seconds, ASR/segmentation/VAD model
+batch stays 8, and shared-live stays off. All CPU admission/projection hosts use
+`based-hardware-batch-pipeline-staging` and the existing shared encryption-secret
+binding. The worker chart uses the same bucket and explicit customer data plane.
+The prod values intentionally leave `image.digest` empty: `gcp_diarizer.yml`
+builds the prod image from merged source, resolves its immutable digest and
+passes it to Helm. Never paste the dev registry digest into prod values.
+
+Before admission deploy, the operator takes a private raw-document snapshot,
+checks source-bound Firestore indexes/TTLs, confirms worker Workload Identity,
+data-plane/bucket rights, and Cloud Run invoker access, then deploys the worker
+and waits for joint readiness. Deploy the Cloud Run/backend-listen config only
+after those gates. No account data, snapshot, IAM grant, index/TTL apply or
+workload deployment is performed by this config PR. The local qualification
+handoff contains the operator's snapshot, aggregate verification and restore
+procedure; snapshots must never enter Git or CI artifacts.
+
+Admission rollback sets the gate false on every sync host and clears the
+allowlist/percentage. Keep the worker and integration serving loop running until
+all accepted jobs and projection receipts drain. Only then stop the serving
+loop/worker before any snapshot restore; otherwise a late projection could
+rewrite restored data. Do not delete durable content claims to force a retry.
+The 14-day snapshot covers only its recorded conversation IDs: targets outside
+that set and post-snapshot live/user edits require their own before-image or
+manual reconciliation, never an assumed full-account restore.

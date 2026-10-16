@@ -26,6 +26,9 @@ tolerations:
     value: present
     effect: NoSchedule
 worker:
+  # HTTPS policy host and exact OIDC audience; admission remains on CPU hosts.
+  apiUrl: ""
+  audience: ""
   batchSize: 8
   unitSeconds: 3600
   paddedSeconds: 272

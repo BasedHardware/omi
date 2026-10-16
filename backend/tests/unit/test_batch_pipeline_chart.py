@@ -37,6 +37,10 @@ def enabled_arguments():
         '--set',
         'nodeSelector.env=dev',
         '--set',
+        'stage=dev',
+        '--set',
+        'namespace=batch_pipeline_dev',
+        '--set',
         'bucket=synthetic-batch',
         '--set',
         'secretName=synthetic-secret',
@@ -224,3 +228,26 @@ def test_rollout_wait_covers_worker_startup_and_still_fails_on_timeout(tmp_path,
         f'deploy/synthetic-{service}',
         f'--timeout={timeout}',
     ]
+
+
+def test_production_worker_refuses_missing_or_mismatched_policy_binding():
+    values = CHART / 'prod_omi_batch-pipeline-worker_values.yaml'
+    args = ['-f', str(values), '--set-string', 'image.digest=sha256:' + 'c' * 64]
+    for override in ['worker.apiUrl=', 'worker.apiUrl=http://insecure.invalid', 'worker.audience=wrong']:
+        result = render(*args, '--set-string', override)
+        assert result.returncode != 0 and 'matching OIDC audience' in result.stderr
+
+
+def test_production_worker_policy_binding_matches_accepted_identity():
+    values = CHART / 'prod_omi_batch-pipeline-worker_values.yaml'
+    config = yaml.safe_load(values.read_text())
+    assert config['image']['digest'] == ''  # Workflow supplies the built prod digest.
+    result = render('-f', str(values), '--set-string', 'image.digest=sha256:' + 'c' * 64)
+    assert result.returncode == 0, result.stderr
+    docs = {doc['kind']: doc for doc in yaml.safe_load_all(result.stdout) if doc}
+    env = {e['name']: e.get('value') for e in docs['Deployment']['spec']['template']['spec']['containers'][0]['env']}
+    assert env['BATCH_PIPELINE_WORKER_ENABLED'] == 'true'
+    assert env['BATCH_PIPELINE_ENABLED'] == 'false'
+    assert env['BATCH_PIPELINE_API_URL'] == config['worker']['apiUrl'] == config['worker']['audience']
+    assert env['BATCH_PIPELINE_WORKER_AUDIENCE'] == config['worker']['audience']
+    assert 'HorizontalPodAutoscaler' not in docs

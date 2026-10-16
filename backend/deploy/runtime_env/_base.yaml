@@ -12,6 +12,39 @@ environment_shared:
       - conversation.finalize.persisted
       - memory.canonical.mutate
       env:
+        BATCH_PIPELINE_ENABLED:
+          value: "false"
+          category: rollout
+        BATCH_PIPELINE_UID_ALLOWLIST:
+          value: ""
+          category: rollout
+        BATCH_PIPELINE_PERCENT:
+          value: "0"
+          category: rollout
+        BATCH_PIPELINE_SERVING_ENABLED:
+          value: "false"
+          category: rollout
+        BATCH_PIPELINE_WORKER_ENABLED:
+          value: "false"
+          category: ops_kill
+        BATCH_PIPELINE_API_URL:
+          value: ""
+          category: service_discovery
+        BATCH_PIPELINE_WORKER_AUDIENCE:
+          value: ""
+          category: service_auth
+        BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
+          value: ""
+          category: service_auth
+        BUCKET_BATCH_PIPELINE:
+          value: ""
+          category: service_discovery
+        BATCH_PIPELINE_UNIT_SECONDS:
+          value: "3600"
+          category: reliability
+        BATCH_PIPELINE_SHARED_LIVE_ENABLED:
+          value: "false"
+          category: rollout
         AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
         AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
         AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
@@ -542,6 +575,39 @@ environment_shared:
             secret: MEMORY_V3_CURSOR_SECRET
             version: latest
         env:
+          BATCH_PIPELINE_ENABLED:
+            value: "false"
+            category: rollout
+          BATCH_PIPELINE_UID_ALLOWLIST:
+            value: ""
+            category: rollout
+          BATCH_PIPELINE_PERCENT:
+            value: "0"
+            category: rollout
+          BATCH_PIPELINE_SERVING_ENABLED:
+            value: "false"
+            category: rollout
+          BATCH_PIPELINE_WORKER_ENABLED:
+            value: "false"
+            category: ops_kill
+          BATCH_PIPELINE_API_URL:
+            value: ""
+            category: service_discovery
+          BATCH_PIPELINE_WORKER_AUDIENCE:
+            value: ""
+            category: service_auth
+          BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
+            value: ""
+            category: service_auth
+          BUCKET_BATCH_PIPELINE:
+            value: ""
+            category: service_discovery
+          BATCH_PIPELINE_UNIT_SECONDS:
+            value: "3600"
+            category: reliability
+          BATCH_PIPELINE_SHARED_LIVE_ENABLED:
+            value: "false"
+            category: rollout
           BUCKET_TEMPORAL_SYNC_LOCAL: {value: syncing-local, category: storage_retention}
           AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
@@ -739,6 +805,39 @@ environment_shared:
             secret: GOOGLE_MAPS_API_KEY
             version: latest
         env:
+          BATCH_PIPELINE_ENABLED:
+            value: "false"
+            category: rollout
+          BATCH_PIPELINE_UID_ALLOWLIST:
+            value: ""
+            category: rollout
+          BATCH_PIPELINE_PERCENT:
+            value: "0"
+            category: rollout
+          BATCH_PIPELINE_SERVING_ENABLED:
+            value: "false"
+            category: rollout
+          BATCH_PIPELINE_WORKER_ENABLED:
+            value: "false"
+            category: ops_kill
+          BATCH_PIPELINE_API_URL:
+            value: ""
+            category: service_discovery
+          BATCH_PIPELINE_WORKER_AUDIENCE:
+            value: ""
+            category: service_auth
+          BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
+            value: ""
+            category: service_auth
+          BUCKET_BATCH_PIPELINE:
+            value: ""
+            category: service_discovery
+          BATCH_PIPELINE_UNIT_SECONDS:
+            value: "3600"
+            category: reliability
+          BATCH_PIPELINE_SHARED_LIVE_ENABLED:
+            value: "false"
+            category: rollout
           PROMETHEUS_SIDECAR_PORT: {value: '9090', category: telemetry}
           AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
@@ -937,6 +1036,39 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          BATCH_PIPELINE_ENABLED:
+            value: "false"
+            category: rollout
+          BATCH_PIPELINE_UID_ALLOWLIST:
+            value: ""
+            category: rollout
+          BATCH_PIPELINE_PERCENT:
+            value: "0"
+            category: rollout
+          BATCH_PIPELINE_SERVING_ENABLED:
+            value: "false"
+            category: rollout
+          BATCH_PIPELINE_WORKER_ENABLED:
+            value: "false"
+            category: ops_kill
+          BATCH_PIPELINE_API_URL:
+            value: ""
+            category: service_discovery
+          BATCH_PIPELINE_WORKER_AUDIENCE:
+            value: ""
+            category: service_auth
+          BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
+            value: ""
+            category: service_auth
+          BUCKET_BATCH_PIPELINE:
+            value: ""
+            category: service_discovery
+          BATCH_PIPELINE_UNIT_SECONDS:
+            value: "3600"
+            category: reliability
+          BATCH_PIPELINE_SHARED_LIVE_ENABLED:
+            value: "false"
+            category: rollout
           PROMETHEUS_SIDECAR_PORT: {value: '9090', category: telemetry}
           AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
@@ -1123,6 +1255,39 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          BATCH_PIPELINE_ENABLED:
+            value: "false"
+            category: rollout
+          BATCH_PIPELINE_UID_ALLOWLIST:
+            value: ""
+            category: rollout
+          BATCH_PIPELINE_PERCENT:
+            value: "0"
+            category: rollout
+          BATCH_PIPELINE_SERVING_ENABLED:
+            value: "false"
+            category: rollout
+          BATCH_PIPELINE_WORKER_ENABLED:
+            value: "false"
+            category: ops_kill
+          BATCH_PIPELINE_API_URL:
+            value: ""
+            category: service_discovery
+          BATCH_PIPELINE_WORKER_AUDIENCE:
+            value: ""
+            category: service_auth
+          BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
+            value: ""
+            category: service_auth
+          BUCKET_BATCH_PIPELINE:
+            value: ""
+            category: service_discovery
+          BATCH_PIPELINE_UNIT_SECONDS:
+            value: "3600"
+            category: reliability
+          BATCH_PIPELINE_SHARED_LIVE_ENABLED:
+            value: "false"
+            category: rollout
           PROMETHEUS_SIDECAR_PORT: {value: '9090', category: telemetry}
           AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}

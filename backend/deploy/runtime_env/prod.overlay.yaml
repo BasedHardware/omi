@@ -42,6 +42,39 @@ overlay:
   gke:
     backend-listen:
       env:
+        BATCH_PIPELINE_ENABLED:
+          value: "true"
+          category: rollout
+        BATCH_PIPELINE_UID_ALLOWLIST:
+          value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+          category: rollout
+        BATCH_PIPELINE_PERCENT:
+          value: "0"
+          category: rollout
+        BATCH_PIPELINE_SERVING_ENABLED:
+          value: "false"
+          category: rollout
+        BATCH_PIPELINE_WORKER_ENABLED:
+          value: "false"
+          category: ops_kill
+        BATCH_PIPELINE_API_URL:
+          value: "https://backend-sync-hhibjajaja-uc.a.run.app"
+          category: service_discovery
+        BATCH_PIPELINE_WORKER_AUDIENCE:
+          value: ""
+          category: service_auth
+        BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
+          value: ""
+          category: service_auth
+        BUCKET_BATCH_PIPELINE:
+          value: "based-hardware-batch-pipeline-staging"
+          category: service_discovery
+        BATCH_PIPELINE_UNIT_SECONDS:
+          value: "3600"
+          category: reliability
+        BATCH_PIPELINE_SHARED_LIVE_ENABLED:
+          value: "false"
+          category: rollout
         DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
         DREAM_AGENT_ELIGIBILITY: {value: 'allowlist', category: rollout}
         DREAM_AGENT_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
@@ -558,6 +591,39 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          BATCH_PIPELINE_ENABLED:
+            value: "true"
+            category: rollout
+          BATCH_PIPELINE_UID_ALLOWLIST:
+            value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+            category: rollout
+          BATCH_PIPELINE_PERCENT:
+            value: "0"
+            category: rollout
+          BATCH_PIPELINE_SERVING_ENABLED:
+            value: "false"
+            category: rollout
+          BATCH_PIPELINE_WORKER_ENABLED:
+            value: "false"
+            category: ops_kill
+          BATCH_PIPELINE_API_URL:
+            value: "https://backend-sync-hhibjajaja-uc.a.run.app"
+            category: service_discovery
+          BATCH_PIPELINE_WORKER_AUDIENCE:
+            value: ""
+            category: service_auth
+          BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
+            value: ""
+            category: service_auth
+          BUCKET_BATCH_PIPELINE:
+            value: "based-hardware-batch-pipeline-staging"
+            category: service_discovery
+          BATCH_PIPELINE_UNIT_SECONDS:
+            value: "3600"
+            category: reliability
+          BATCH_PIPELINE_SHARED_LIVE_ENABLED:
+            value: "false"
+            category: rollout
           <<: *batch_cohort
           # Telegram all-paid launch; iMessage retains the exact legacy cohort without a seat counter.
           OMI_MESSAGING_CHANNELS: {value: 'on', category: rollout}
@@ -785,6 +851,39 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          BATCH_PIPELINE_ENABLED:
+            value: "true"
+            category: rollout
+          BATCH_PIPELINE_UID_ALLOWLIST:
+            value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+            category: rollout
+          BATCH_PIPELINE_PERCENT:
+            value: "0"
+            category: rollout
+          BATCH_PIPELINE_SERVING_ENABLED:
+            value: "false"
+            category: rollout
+          BATCH_PIPELINE_WORKER_ENABLED:
+            value: "false"
+            category: ops_kill
+          BATCH_PIPELINE_API_URL:
+            value: "https://backend-sync-hhibjajaja-uc.a.run.app"
+            category: service_discovery
+          BATCH_PIPELINE_WORKER_AUDIENCE:
+            value: "https://backend-sync-hhibjajaja-uc.a.run.app"
+            category: service_auth
+          BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
+            value: "batch-pipeline-worker@based-hardware.iam.gserviceaccount.com"
+            category: service_auth
+          BUCKET_BATCH_PIPELINE:
+            value: "based-hardware-batch-pipeline-staging"
+            category: service_discovery
+          BATCH_PIPELINE_UNIT_SECONDS:
+            value: "3600"
+            category: reliability
+          BATCH_PIPELINE_SHARED_LIVE_ENABLED:
+            value: "false"
+            category: rollout
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'true'
             category: rollout
@@ -978,6 +1077,39 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          BATCH_PIPELINE_ENABLED:
+            value: "true"
+            category: rollout
+          BATCH_PIPELINE_UID_ALLOWLIST:
+            value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+            category: rollout
+          BATCH_PIPELINE_PERCENT:
+            value: "0"
+            category: rollout
+          BATCH_PIPELINE_SERVING_ENABLED:
+            value: "false"
+            category: rollout
+          BATCH_PIPELINE_WORKER_ENABLED:
+            value: "false"
+            category: ops_kill
+          BATCH_PIPELINE_API_URL:
+            value: "https://backend-sync-hhibjajaja-uc.a.run.app"
+            category: service_discovery
+          BATCH_PIPELINE_WORKER_AUDIENCE:
+            value: ""
+            category: service_auth
+          BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
+            value: ""
+            category: service_auth
+          BUCKET_BATCH_PIPELINE:
+            value: "based-hardware-batch-pipeline-staging"
+            category: service_discovery
+          BATCH_PIPELINE_UNIT_SECONDS:
+            value: "3600"
+            category: reliability
+          BATCH_PIPELINE_SHARED_LIVE_ENABLED:
+            value: "false"
+            category: rollout
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'true'
             category: rollout
@@ -1148,6 +1280,39 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          BATCH_PIPELINE_ENABLED:
+            value: "true"
+            category: rollout
+          BATCH_PIPELINE_UID_ALLOWLIST:
+            value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+            category: rollout
+          BATCH_PIPELINE_PERCENT:
+            value: "0"
+            category: rollout
+          BATCH_PIPELINE_SERVING_ENABLED:
+            value: "true"
+            category: rollout
+          BATCH_PIPELINE_WORKER_ENABLED:
+            value: "false"
+            category: ops_kill
+          BATCH_PIPELINE_API_URL:
+            value: "https://backend-sync-hhibjajaja-uc.a.run.app"
+            category: service_discovery
+          BATCH_PIPELINE_WORKER_AUDIENCE:
+            value: ""
+            category: service_auth
+          BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
+            value: ""
+            category: service_auth
+          BUCKET_BATCH_PIPELINE:
+            value: "based-hardware-batch-pipeline-staging"
+            category: service_discovery
+          BATCH_PIPELINE_UNIT_SECONDS:
+            value: "3600"
+            category: reliability
+          BATCH_PIPELINE_SHARED_LIVE_ENABLED:
+            value: "false"
+            category: rollout
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout
