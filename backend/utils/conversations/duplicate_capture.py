@@ -27,13 +27,19 @@ from config.capture_shared_speech import shared_speech_mode
 from utils.conversations.desktop_pendant_call_link import link_call_pair, reserved_for_call
 from database import capture_groups as capture_groups_db
 from database import conversations as conversations_db
+from database.capture_speech import get_shared_speech_snapshot
 from utils.conversations.capture_containment import (
     capture_group_containment_mode,
     measure_capture_containment,
     record_capture_containment,
 )
 from utils.conversations.shared_speech import measure_shared_speech
-from utils.conversations.overlap_shared_speech import measure_overlap_shared_speech, pair_category, VERSION
+from utils.conversations.overlap_shared_speech import (
+    measure_overlap_shared_speech,
+    pair_category,
+    shared_speech_group_guard,
+    VERSION,
+)
 from utils.conversations.capture_jev_shadow import submit_resummary, submit_same_scene
 from utils.observability.fallback import record_fallback
 from utils.product_metrics import record_product_event
@@ -207,7 +213,7 @@ def _group_with_overlap_speech(
         if cid not in snapshots:
             if len(snapshots) >= MAX_CONTENT_CHECKS + 1:
                 return None, None
-            snapshots[cid] = conversations_db.get_conversation_for_capture_check(uid, cid)
+            snapshots[cid] = get_shared_speech_snapshot(uid, cid)
         return snapshots[cid]
 
     remaining_checks = MAX_SHARED_SPEECH_CHECKS
@@ -236,10 +242,16 @@ def _group_with_overlap_speech(
             elapsed_ms = (time.perf_counter() - started) * 1000
             incumbent = False
             if other.conversation_id in legacy_ids:
-                incumbent = measure_shared_speech(_segments_of(own), _segments_of(row)).confirms()
-                if not incumbent and capture_group_containment_mode() == 'on':
-                    containment = measure_capture_containment(own, row, mode='on')
-                    incumbent = containment.would_join and containment.basis == 'full'
+                if any(
+                    record.get('has_transcript_corrections') or record.get('transcript_correction_overlay') is not None
+                    for record in (own or {}, row)
+                ):
+                    incumbent = None  # no mutable overlay reads to simulate the incumbent
+                else:
+                    incumbent = measure_shared_speech(_segments_of(own), _segments_of(row)).confirms()
+                    if not incumbent and capture_group_containment_mode() == 'on':
+                        containment = measure_capture_containment(own, row, mode='on')
+                        incumbent = containment.would_join and containment.basis == 'full'
             own_group = (own or {}).get('capture_group') or {}
             other_group = (row or {}).get('capture_group') or {}
             already_grouped = bool(own_group.get('id') and own_group.get('id') == other_group.get('id'))
@@ -262,7 +274,10 @@ def _group_with_overlap_speech(
                             continue
                         member_row, member_fingerprint = load(cid)
                         record = capture_record(member_row)
-                        confirmation = confirms(entrant, member_row) if record else None
+                        if record is None:
+                            would_join, reason = False, 'group_unconfirmed'
+                            break
+                        confirmation = confirms(entrant, member_row)
                         if confirmation is None or not confirmation.would_join:
                             would_join, reason = False, 'group_unconfirmed'
                             break
@@ -278,6 +293,7 @@ def _group_with_overlap_speech(
                     expected_windows=windows,
                     expected_fingerprints=fingerprints,
                     expected_group_revision=expected_revision,
+                    join_guard=shared_speech_group_guard,
                 )
                 outcome = 'applied' if group_id else 'conflict'
                 record_product_event('capture_group_joined', outcome=outcome)
@@ -292,7 +308,7 @@ def _group_with_overlap_speech(
                         'first_id': candidate.conversation_id,
                         'second_id': other.conversation_id,
                         'category': pair_category(own, row),
-                        'current_would_join': bool(incumbent),
+                        'current_would_join': incumbent,
                         'already_grouped': already_grouped,
                         'would_join': would_join,
                         'reason': reason,

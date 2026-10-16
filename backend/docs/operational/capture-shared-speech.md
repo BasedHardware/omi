@@ -53,13 +53,14 @@ Smart merge and EXP-003 Jev remain separate and unchanged.
 
 1. Validate completed, retained captures and compatible lock partitions. Reject
    unknown/nonfinite/unplaced/out-of-capture timing. Select whole segments inside
-   the wall intersection plus a five-second margin. A boundary-straddling segment
+   the actual wall intersection. Only sub-microsecond epoch-rounding noise is
+   clamped to those bounds; it never contributes outside duration. A boundary-straddling segment
    cannot borrow all its words from outside the overlap.
 2. Normalize Unicode NFKC, case, punctuation and straight/curly apostrophes. Ignore
    all speaker/own-voice labels. Require at least 30 words on each side in the
    intersection and token-set Jaccard at least 0.25. Jaccard alone never folds.
 3. Compare lines whose wall starts differ by at most 15 seconds. Each accepted
-   pair needs at least eight distinct words per line, six shared distinct words,
+   pair needs at least one second and eight distinct words per line, six shared distinct words,
    two shared ordered bigrams, token Jaccard at least 0.5, and an ordered LCS of
    at least 60% of the longer line's tokens.
 4. Assign lines one-to-one, require monotonic line order, and count each normalized
@@ -69,7 +70,11 @@ Smart merge and EXP-003 Jev remain separate and unchanged.
    matched lines on each side. Gaps/silence and overlapping duplicate lines do not
    add duration. Line duration is transcript evidence, not acoustic ground truth.
 
-Unknown layouts and overflow abstain, rather than truncate and claim a match.
+Captures with transcript correction flags/overlays abstain. A dedicated
+single-snapshot read strictly decodes immutable stored segments without projecting
+or reading mutable correction overlays. The transaction guard rechecks every
+member's effective discard, completion, deletion/closed, correction markers and
+lock partition. Unknown layouts and overflow abstain rather than claim a match.
 Bounds per capture: 4,096 segments, 524,288 text characters, 64,000 selected words, 4,096
 characters and 90 seconds per selected segment. Each pair check is capped at 16,384
 line comparisons, 524,288 token-set operations and 262,144 LCS cells. The core is
@@ -93,14 +98,16 @@ The cards omit segment ends, but the existing local pilot export retains them.
 Joining the original timed transcripts through the existing prospective event
 records, with September exports filling missing rows, reproduces the transcript
 text in all 29 labeled cards exactly. No account read or new export was needed.
-An earlier synthetic-duration lexical proxy was discarded; the table below uses
-original segment ends and the unchanged production matcher.
+Earlier synthetic-duration and boundary-slop prototypes were discarded; the table below uses
+original segment ends and the current strict-overlap matcher. Minimal exports
+omit lifecycle/lock/correction metadata; content replays assume completed,
+retained, unlocked, uncorrected rows. Serving admission may abstain further.
 
 | Data and class | Decisive n (same/different) | TP/FP | Precision (95% Wilson) | Recall (95% Wilson) |
 | --- | --- | --- | --- | --- |
-| David, cross-source | 7 (5/2) | 1/0 | 100% (20.7–100%) | 20.0% (3.6–62.4%) |
+| David, cross-source | 7 (5/2) | 0/0 | undefined, no folds | 0% (0–43.4%) |
 | David, same-source same-device | 12 (8/4) | 0/0 | undefined, no folds | 0% (0–32.4%) |
-| David, all | 19 (13/6) | 1/0 | 100% (20.7–100%) | 7.7% (1.4–33.3%) |
+| David, all | 19 (13/6) | 0/0 | undefined, no folds | 0% (0–22.8%) |
 | September agent benchmark, cross-source | 52 (32/20) | 1/0 | 100% (20.7–100%) | 3.1% (0.6–15.7%) |
 | September agent benchmark, same-source same-device | 43 (24/19) | 0/0 | undefined, no folds | 0% (0–13.8%) |
 | September agent benchmark, same-source different-device | 1 (0/1) | 0/0 | undefined, no folds | undefined, no positives |
@@ -124,19 +131,28 @@ folds; held-out recall is 0% (Wilson 0–16.1%). Cases share captures, so Wilson
 intervals assume independence that the actual sample does not establish; report
 them as descriptive only.
 
-Two David negatives defeat a bag-of-words rule. Their window Jaccards are 0.398
+Two David negatives defeat a bag-of-words rule. Their start-only overlap-window bag-of-words Jaccards are 0.398
 and 0.653. The former has zero strong line pairs anywhere; the latter has 16
 strong line combinations, all at least 35.8 seconds apart (best exact line pair
 47.8 seconds apart). Neither has a strong line pair within 15 seconds. Both remain
 separate. These observations do not establish a TV/background-audio diagnosis.
 
-David's positive abstentions: four bounds, two timing, five sentence support,
-one window text, one confirmed. Across the six timing/bounds positive pairs,
-five capture instances contain lines longer than 90 seconds, two contain text
-with zero/negative duration, and one has a segment past its capture end
-(nonexclusive counts). These layouts cannot establish matched speech duration;
-upstream quality fixes should be evaluated before relaxing the rule.
+The stricter capture bounds leave zero accepted David pairs. This does not
+establish precision: the automatic-fold denominator is zero. Quality and weak
+sentence evidence dominate abstentions; do not relax safety to manufacture recall.
+Negative start values as small as 0.55 microseconds were verified to be epoch
+subtraction noise and are clamped within one microsecond. Actual end overruns of
+0.468 and 2.184 seconds occur among positive-pair captures and remain ineligible.
+Long compacted lines and zero/negative-duration text also need upstream repair.
 
+The first Luna review found out-of-capture boundary evidence, commit-time
+eligibility/lock races and unfenced correction projections. The revised matcher
+uses actual capture/overlap bounds (with only clamped microsecond arithmetic),
+requires each supporting line to last at least one second, rejects mutable
+correction captures without overlay reads, and checks all member eligibility and
+locks inside the transaction. Early incumbent snapshot-conflict exits retain
+their original read budget. New synthetic regressions cover each failure. A
+second Luna review is required before merge.
 Thresholds favor false-fold avoidance: ordered, timed, distinct sentence evidence
 and actual line duration are mandatory. Low global lexical overlap is allowed to
 remain a false negative. Current evidence supports dark/shadow deployment only.
@@ -156,7 +172,9 @@ window on every touched service, readiness/restarts, and appearance of the new
 `capture_shared_speech` line. Its JSON contains IDs, static categories/reasons,
 numeric evidence, new verdict, incumbent ordinary would-join, existing-group
 observation and write outcome; no text or lexical hashes. `current_would_join`
-is the incumbent ordinary policy on checked discovery candidates, not proof a
+is the incumbent ordinary policy on checked discovery candidates; it is null
+for corrected captures whose mutable overlay was intentionally not read. It is
+not proof a
 transaction would commit; `already_grouped` is a separate observation. The
 complementary-call policy is separately identifiable through existing call logs.
 Exceptions emit fixed `outcome=error` without exception text. Aggregate/deduplicate
@@ -182,5 +200,6 @@ re-read David's latest labels, freeze a versioned evaluation snapshot, and rerun
 the unchanged matcher. Compare abstention reasons, precision/recall and labeled
 background-audio negatives per class. Speaker attribution must remain irrelevant
 to the decision. Use capture-component-disjoint held-out labels before tuning;
+preserve the old input/label snapshot and re-label cards whose meaning changes;
 do not silently loosen cutoffs to recover old noisy positives. Requalify any
 threshold/normalization/timing change in shadow before further activation.

@@ -10,7 +10,8 @@ import pytest
 
 from database import capture_groups as groups_db
 from database import conversations as conversations_db
-from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from database import capture_speech as speech_db
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 from utils.conversations import duplicate_capture as policy
 from utils.conversations.overlap_shared_speech import VERSION
 
@@ -49,6 +50,7 @@ def store(monkeypatch):
     store = StrictFirestore()
     monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(groups_db, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(speech_db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(policy, 'submit_same_scene', MagicMock())
     monkeypatch.setattr(policy, 'submit_resummary', MagicMock())
     monkeypatch.setenv('CAPTURE_SHARED_SPEECH_PERCENT', '100')
@@ -171,8 +173,8 @@ def test_on_does_not_allow_complementary_call_policy_to_bypass_speech(store, mon
 def test_selected_candidate_budget_is_bounded(store, monkeypatch):
     monkeypatch.setenv('CAPTURE_SHARED_SPEECH_MODE', 'on')
     store.rows.update({path(str(i)): row(str(i)) for i in range(20)})
-    read = MagicMock(wraps=conversations_db.get_conversation_for_capture_check)
-    monkeypatch.setattr(conversations_db, 'get_conversation_for_capture_check', read)
+    read = MagicMock(wraps=policy.get_shared_speech_snapshot)
+    monkeypatch.setattr(policy, 'get_shared_speech_snapshot', read)
     policy.link_duplicate_captures(UID, store.rows[path('0')])
     assert read.call_count == 1 + policy.MAX_CONTENT_CHECKS
 
@@ -214,7 +216,21 @@ def test_pairwise_match_does_not_bridge_different_speech_through_long_capture(st
     assert len(store.rows[path('a')]['capture_group']['members']) == 2
 
 
-@pytest.mark.parametrize('change', ['third_transcript', 'group_revision'])
+@pytest.mark.parametrize(
+    'change',
+    [
+        'third_transcript',
+        'group_revision',
+        'discarded',
+        'is_locked',
+        'deleted',
+        'capture_group_closed',
+        'status',
+        'correction',
+        'pair_locked',
+        'pair_correction',
+    ],
+)
 def test_group_wide_evidence_is_fenced_at_commit(store, monkeypatch, change):
     monkeypatch.setenv('CAPTURE_SHARED_SPEECH_MODE', 'on')
     seed_group(store, ['a', 'b'])
@@ -225,9 +241,15 @@ def test_group_wide_evidence_is_fenced_at_commit(store, monkeypatch, change):
         if change == 'third_transcript':
             # The queried pair is c/a; b was checked as the additional member.
             store.rows[path('b')]['transcript_segments'][0]['text'] = 'an edited third transcript'
-        else:
+        elif change == 'group_revision':
             for cid in ('a', 'b'):
                 store.rows[path(cid)]['capture_group']['revision'] += 1
+        elif change in ('correction', 'pair_correction'):
+            store.rows[path('c' if change == 'pair_correction' else 'b')]['has_transcript_corrections'] = True
+        elif change == 'pair_locked':
+            store.rows[path('c')]['is_locked'] = True
+        else:
+            store.rows[path('b')][change] = 'processing' if change == 'status' else True
         return original(*args, **kwargs)
 
     monkeypatch.setattr(groups_db, 'join_capture_group', race)
@@ -239,8 +261,63 @@ def test_large_group_abstains_without_exceeding_read_budget(store, monkeypatch):
     monkeypatch.setenv('CAPTURE_SHARED_SPEECH_MODE', 'on')
     seed_group(store, [str(i) for i in range(8)])
     store.rows[path('entrant')] = row('entrant')
-    read = MagicMock(wraps=conversations_db.get_conversation_for_capture_check)
-    monkeypatch.setattr(conversations_db, 'get_conversation_for_capture_check', read)
+    read = MagicMock(wraps=policy.get_shared_speech_snapshot)
+    monkeypatch.setattr(policy, 'get_shared_speech_snapshot', read)
     policy.link_duplicate_captures(UID, store.rows[path('entrant')])
     assert not store.rows[path('entrant')].get('capture_group')
     assert read.call_count <= policy.MAX_CONTENT_CHECKS + 1
+
+
+def test_corrected_capture_abstains_without_decoding_or_overlay_reads(store, monkeypatch):
+    record = row('a')
+    record['has_transcript_corrections'] = True
+    store.rows[path('a')] = record
+    decode = MagicMock(side_effect=AssertionError('corrected capture must not be decoded'))
+    project = MagicMock(side_effect=AssertionError('no correction projection'))
+    monkeypatch.setattr(conversations_db, 'decode_transcript_segments_verified', decode)
+    monkeypatch.setattr(conversations_db, 'prepare_conversation_for_read', project)
+    snapshot, fingerprint = speech_db.get_shared_speech_snapshot(UID, 'a')
+    assert snapshot['has_transcript_corrections'] and snapshot['transcript_segments'] == []
+    assert fingerprint == groups_db.transcript_fingerprint(record)
+    decode.assert_not_called()
+    project.assert_not_called()
+
+
+def test_incumbent_snapshot_conflict_does_not_read_additional_group_members(store, monkeypatch):
+    seed_group(store, ['a', 'b', 'c'])
+    store.rows[path('d')] = row('d')
+    reads = []
+    original = StrictFirestoreDocument.get
+
+    def observe(reference, *args, **kwargs):
+        if kwargs.get('transaction') is not None:
+            reads.append(reference.path)
+        return original(reference, *args, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', observe)
+    assert groups_db.join_capture_group(UID, 'a', 'd', {}, expected_fingerprints={'a': 'stale'}) is None
+    assert reads == [path('a'), path('d')]
+
+
+def test_zero_revision_requires_absence_of_any_existing_group(store, monkeypatch):
+    monkeypatch.setenv('CAPTURE_SHARED_SPEECH_MODE', 'on')
+    seed_group(store, ['a', 'b'])
+    for cid in ('a', 'b'):
+        store.rows[path(cid)]['capture_group'].pop('revision')
+    store.rows[path('c')] = row('c')
+    policy.link_duplicate_captures(UID, store.rows[path('c')])
+    assert not store.rows[path('c')].get('capture_group')
+
+
+def test_correction_comparison_is_unknown_instead_of_fabricating_incumbent_false(store, monkeypatch, caplog):
+    monkeypatch.setenv('CAPTURE_SHARED_SPEECH_MODE', 'on')
+    first, second = row('a'), row('b', 'desktop', 'mac')
+    first['has_transcript_corrections'] = True
+    store.rows.update({path('a'): first, path('b'): second})
+    with caplog.at_level(logging.INFO, logger=policy.logger.name):
+        policy.link_duplicate_captures(UID, first)
+    data = next(
+        json.loads(r.message.split(' ', 1)[1]) for r in caplog.records if r.message.startswith('capture_shared_speech ')
+    )
+    assert data['current_would_join'] is None
+    assert not data['would_join'] and data['reason'] == 'transcript_corrections'

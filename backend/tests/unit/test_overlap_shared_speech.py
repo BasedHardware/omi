@@ -112,6 +112,56 @@ def test_brief_shared_phrases_cannot_borrow_silence_for_speech_duration():
     assert not decision.would_join and decision.matched_speech_seconds == 3
 
 
+def test_out_of_capture_sentence_cannot_complete_short_overlap_evidence():
+    first, second = row(), row()
+    first['transcript_segments'] = [
+        {'start': 0, 'end': 15, 'text': SENTENCES[0] + ' bright stars shimmer overhead'},
+        {'start': 15, 'end': 17, 'text': SENTENCES[1]},
+    ]
+    second['transcript_segments'] = deepcopy(first['transcript_segments'])
+    second['finished_at'] = T0 + timedelta(seconds=15)
+    assert not matcher.measure_overlap_shared_speech(first, second).would_join
+
+
+def test_overlap_boundary_margin_cannot_supply_whole_sentence_words():
+    first, second = row(), row()
+    second['started_at'] = T0 + timedelta(seconds=65)
+    second['finished_at'] = T0 + timedelta(seconds=300)
+    # Only the final original line fits wholly in the actual intersection on both sides.
+    first['transcript_segments'] = first['transcript_segments'][:2]
+    second['transcript_segments'] = [
+        {'start': 0, 'end': 8, 'text': SENTENCES[0]},
+        {'start': 35, 'end': 43, 'text': SENTENCES[1]},
+    ]
+    decision = matcher.measure_overlap_shared_speech(first, second)
+    assert not decision.would_join
+
+
+@pytest.mark.parametrize('field,value', [('has_transcript_corrections', True), ('transcript_correction_overlay', {})])
+def test_mutable_transcript_corrections_abstain(field, value):
+    first, second = row(), row()
+    second[field] = value
+    assert matcher.measure_overlap_shared_speech(first, second).reason == 'transcript_corrections'
+
+
+def test_epoch_rounding_is_clamped_to_capture_and_overlap_bounds():
+    first, second = row(), row()
+    first['transcript_segments'][0].update(start=-0.0000005, end=8)
+    second['transcript_segments'][0].update(start=0, end=8)
+    decision = matcher.measure_overlap_shared_speech(first, second)
+    assert decision.would_join and decision.matched_speech_seconds == 24
+
+
+def test_sub_microsecond_line_cannot_supply_sentence_evidence():
+    first, second = row(), row()
+    for record in (first, second):
+        record['transcript_segments'] = [
+            {'start': 0, 'end': 15, 'text': SENTENCES[0] + ' bright stars shimmer overhead'},
+            {'start': 15, 'end': 15.0000005, 'text': SENTENCES[1]},
+        ]
+    assert not matcher.measure_overlap_shared_speech(first, second).would_join
+
+
 def test_dense_layout_abstains_at_bounded_comparison_budget(monkeypatch):
     monkeypatch.setattr(matcher, 'MAX_COMPARISONS', 1)
     assert matcher.measure_overlap_shared_speech(row(), row()).reason == 'bounds'

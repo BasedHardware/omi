@@ -14,8 +14,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
+from utils.conversations.fragment_visibility import is_completed_rule_discard
+
 VERSION = 'overlap_shared_speech_v1'
-MARGIN_SECONDS = 5.0
 SKEW_SECONDS = 15.0
 MIN_WORDS = 30
 MIN_WINDOW_JACCARD = 0.25
@@ -24,6 +25,9 @@ MIN_SHARED_WORDS = 20
 MIN_SHARED_BIGRAMS = 8
 MIN_SUPPORT_SECONDS = 10.0
 MIN_MATCHED_SPEECH_SECONDS = 15.0
+MIN_LINE_SECONDS = 1.0
+# Datetimes have microsecond resolution; epoch subtraction can add <1us noise.
+ROUNDING_SECONDS = 0.000001
 MAX_SEGMENTS = 4096
 MAX_CHARS = 524288
 MAX_WORDS = 64000
@@ -42,8 +46,9 @@ def field(row: Any, name: str) -> Any:
 def pair_category(first: Any, second: Any) -> str:
     if field(first, 'source') != field(second, 'source'):
         return 'cross_source'
-    a = field(first, 'client_device_id') or (field(first, 'external_data') or {}).get('device_id')
-    b = field(second, 'client_device_id') or (field(second, 'external_data') or {}).get('device_id')
+    external_a, external_b = field(first, 'external_data'), field(second, 'external_data')
+    a = field(first, 'client_device_id') or (external_a.get('device_id') if isinstance(external_a, Mapping) else None)
+    b = field(second, 'client_device_id') or (external_b.get('device_id') if isinstance(external_b, Mapping) else None)
     if not a or not b:
         return 'same_source_unknown_device'
     return 'same_source_same_device' if a == b else 'same_source_different_device'
@@ -99,10 +104,24 @@ def _window(row: Any) -> tuple[float, float]:
         raise _Rejected('ineligible')
     if field(row, 'status') != 'completed' or not field(row, 'source'):
         raise _Rejected('ineligible')
+    if isinstance(row, Mapping) and is_completed_rule_discard(row):
+        raise _Rejected('ineligible')
+    if field(row, 'has_transcript_corrections') or field(row, 'transcript_correction_overlay') is not None:
+        raise _Rejected('transcript_corrections')
     start, end = _epoch(field(row, 'started_at')), _epoch(field(row, 'finished_at'))
     if end <= start:
         raise _Rejected('timing')
     return start, end
+
+
+def shared_speech_group_guard(rows: Mapping[str, Any], _transaction: Any, _client: Any) -> bool:
+    """Recheck every member's current eligibility without decrypting in the transaction."""
+    try:
+        for row in rows.values():
+            _window(row)
+        return bool(rows) and len({bool(field(row, 'is_locked')) for row in rows.values()}) == 1
+    except _Rejected:
+        return False
 
 
 def _lines(row: Any, window: tuple[float, float], lo: float, hi: float) -> list:
@@ -126,10 +145,21 @@ def _lines(row: Any, window: tuple[float, float], lo: float, hi: float) -> list:
         if not _number(start) or not _number(end) or end <= start:
             raise _Rejected('timing')
         duration = window[1] - window[0]
-        if start < -2 or end > duration + 2 or field(segment, 'audio_alignment') == 'unplaced':
+        if (
+            start < -ROUNDING_SECONDS
+            or end > duration + ROUNDING_SECONDS
+            or field(segment, 'audio_alignment') == 'unplaced'
+        ):
+            raise _Rejected('timing')
+        start, end = max(0.0, start), min(duration, end)
+        if end <= start:
             raise _Rejected('timing')
         # Do not borrow words from a segment straddling the overlap boundary.
-        if window[0] + start < lo - MARGIN_SECONDS or window[0] + end > hi + MARGIN_SECONDS:
+        wall_start, wall_end = window[0] + start, window[0] + end
+        if wall_start < lo - ROUNDING_SECONDS or wall_end > hi + ROUNDING_SECONDS:
+            continue
+        wall_start, wall_end = max(lo, wall_start), min(hi, wall_end)
+        if wall_end <= wall_start:
             continue
         if end - start > MAX_SEGMENT_SECONDS:
             raise _Rejected('bounds')
@@ -139,9 +169,7 @@ def _lines(row: Any, window: tuple[float, float], lo: float, hi: float) -> list:
         if word_count > MAX_WORDS:
             raise _Rejected('bounds')
         if words:
-            result.append(
-                (window[0] + start, words, frozenset(words), frozenset(zip(words, words[1:])), window[0] + end)
-            )
+            result.append((wall_start, words, frozenset(words), frozenset(zip(words, words[1:])), wall_end))
     return sorted(result)
 
 
@@ -203,7 +231,7 @@ def measure_overlap_shared_speech(first: Any, second: Any) -> OverlapSharedSpeec
         proposals = []
         comparisons = token_work = cells = 0
         for i, line in enumerate(a):
-            if len(line[2]) < 8:
+            if len(line[2]) < 8 or line[4] - line[0] < MIN_LINE_SECONDS:
                 continue
             left = bisect.bisect_left(starts, line[0] - SKEW_SECONDS)
             right = bisect.bisect_right(starts, line[0] + SKEW_SECONDS)
@@ -212,6 +240,8 @@ def measure_overlap_shared_speech(first: Any, second: Any) -> OverlapSharedSpeec
                 raise _Rejected('bounds')
             for j in range(left, right):
                 target = b[j]
+                if target[4] - target[0] < MIN_LINE_SECONDS:
+                    continue
                 token_work += len(line[2]) + len(target[2])
                 if token_work > MAX_TOKEN_WORK:
                     raise _Rejected('bounds')
