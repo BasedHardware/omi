@@ -185,3 +185,36 @@ def test_history_mutations_erase_summary_in_the_atomic_write(store, monkeypatch,
     assert 'shaped_context' not in row and row['shaped_context_revision'] > stale['revision']
     with pytest.raises(PermissionError, match='changed'):
         store.save('u', 's', stale, stale['revision'])
+
+
+def test_app_auto_document_id_is_resolved_by_wire_id(store, monkeypatch):
+    monkeypatch.setattr(chat_db, 'db', store.messaging.db)
+    chat_db.add_message(
+        'u',
+        {
+            'id': 'wire-anchor',
+            'chat_session_id': 's',
+            'text': 'Synthetic app turn',
+            'sender': 'human',
+            'plugin_id': None,
+            'memories': [],
+            'data_protection_level': 'standard',
+            'created_at': datetime(2026, 10, 15, tzinfo=timezone.utc),
+        },
+    )
+    # The original reader found no document here and raised PermissionError.
+    assert not store.messaging.user('u').collection('messages').document('wire-anchor').get().exists
+    rows, _, _ = store.source_page('u', 's', 'wire-anchor')
+    assert len(rows) == 25
+    with pytest.raises(PermissionError):
+        store.source_page('u', 's', 'nonexistent')
+    # A matching wire ID in a foreign session never grants continuity access.
+    store.messaging.user('u').collection('messages').document('other').set(
+        {
+            'id': 'foreign',
+            'chat_session_id': 'other',
+            'created_at': datetime.now(timezone.utc),
+        }
+    )
+    with pytest.raises(PermissionError, match='outside session'):
+        store.source_page('u', 's', 'foreign')

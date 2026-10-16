@@ -1,0 +1,252 @@
+[
+  {
+    "displayName": "Messaging: worker failures by reason",
+    "combiner": "OR",
+    "enabled": true,
+    "conditions": [
+      {
+        "displayName": "worker failures by reason",
+        "conditionMatchedLog": {
+          "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend\" AND textPayload:\"Messaging job failed\"",
+          "labelExtractors": {
+            "reason": "REGEXP_EXTRACT(textPayload, \"reason=([a-z_]+)\")"
+          }
+        }
+      }
+    ],
+    "alertStrategy": {
+      "notificationRateLimit": {
+        "period": "3600s"
+      },
+      "autoClose": "3600s"
+    },
+    "documentation": {
+      "mimeType": "text/markdown",
+      "content": "Inspect content-free aggregate logs and backend/docs/runbooks/messaging-channels.md. Do not replay running inbox rows or print provider payloads."
+    }
+  },
+  {
+    "displayName": "Messaging: webhook 5xx",
+    "combiner": "OR",
+    "enabled": true,
+    "conditions": [
+      {
+        "displayName": "webhook 5xx",
+        "conditionMatchedLog": {
+          "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend\" AND httpRequest.requestUrl:\"/v1/messaging/webhooks/\" AND httpRequest.status>=500"
+        }
+      }
+    ],
+    "alertStrategy": {
+      "notificationRateLimit": {
+        "period": "3600s"
+      },
+      "autoClose": "3600s"
+    },
+    "documentation": {
+      "mimeType": "text/markdown",
+      "content": "Inspect content-free aggregate logs and backend/docs/runbooks/messaging-channels.md. Do not replay running inbox rows or print provider payloads."
+    }
+  },
+  {
+    "displayName": "Messaging: decoder unavailable",
+    "combiner": "OR",
+    "enabled": true,
+    "conditions": [
+      {
+        "displayName": "decoder unavailable",
+        "conditionMatchedLog": {
+          "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend\" AND textPayload:\"Messaging audio decoder unavailable\""
+        }
+      }
+    ],
+    "alertStrategy": {
+      "notificationRateLimit": {
+        "period": "3600s"
+      },
+      "autoClose": "3600s"
+    },
+    "documentation": {
+      "mimeType": "text/markdown",
+      "content": "Inspect content-free aggregate logs and backend/docs/runbooks/messaging-channels.md. Do not replay running inbox rows or print provider payloads."
+    }
+  },
+  {
+    "displayName": "Messaging: outbound delivery failures",
+    "combiner": "OR",
+    "enabled": true,
+    "conditions": [
+      {
+        "displayName": "outbound delivery failures",
+        "conditionMatchedLog": {
+          "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend\" AND (textPayload:\"Messaging failure reply failed\" OR textPayload:\"reason=delivery_uncertain\" OR (textPayload:\"Messaging job failed\" AND textPayload:\"error_type=ProviderError\"))"
+        }
+      }
+    ],
+    "alertStrategy": {
+      "notificationRateLimit": {
+        "period": "3600s"
+      },
+      "autoClose": "3600s"
+    },
+    "documentation": {
+      "mimeType": "text/markdown",
+      "content": "Inspect content-free aggregate logs and backend/docs/runbooks/messaging-channels.md. Do not replay running inbox rows or print provider payloads."
+    }
+  },
+  {
+    "displayName": "Messaging: maintenance failure by reason",
+    "combiner": "OR",
+    "enabled": true,
+    "conditions": [
+      {
+        "displayName": "maintenance failure by reason",
+        "conditionMatchedLog": {
+          "filter": "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"messaging-maintenance-job\" AND textPayload:\"Messaging maintenance outcome=failed\"",
+          "labelExtractors": {
+            "reason": "REGEXP_EXTRACT(textPayload, \"reason=([a-z_]+)\")"
+          }
+        }
+      }
+    ],
+    "alertStrategy": {
+      "notificationRateLimit": {
+        "period": "3600s"
+      },
+      "autoClose": "3600s"
+    },
+    "documentation": {
+      "mimeType": "text/markdown",
+      "content": "Inspect content-free aggregate logs and backend/docs/runbooks/messaging-channels.md. Do not replay running inbox rows or print provider payloads."
+    }
+  },
+  {
+    "displayName": "Messaging: shaped context degraded above 5%",
+    "combiner": "OR",
+    "enabled": true,
+    "conditions": [
+      {
+        "displayName": "shaped context degraded above 5%",
+        "conditionPrometheusQueryLanguage": {
+          "query": "(sum by (surface) (rate(omi_chat_context_turns_total{cluster=\"__run__\",namespace=\"backend\",outcome=\"degraded\"}[30m])) / clamp_min(sum by (surface) (rate(omi_chat_context_turns_total{cluster=\"__run__\",namespace=\"backend\",outcome!=\"unscoped\"}[30m])), 0.000001) > 0.05) and on (surface) (sum by (surface) (increase(omi_chat_context_turns_total{cluster=\"__run__\",namespace=\"backend\",outcome!=\"unscoped\"}[30m])) >= 20)",
+          "duration": "600s",
+          "evaluationInterval": "60s",
+          "labels": {
+            "severity": "warning"
+          }
+        }
+      }
+    ],
+    "alertStrategy": {
+      "autoClose": "3600s"
+    },
+    "documentation": {
+      "mimeType": "text/markdown",
+      "content": "Inspect backend/docs/runbooks/messaging-channels.md. Cloud Run metrics use the existing GMP sidecar. Missing data is not evidence of health."
+    }
+  },
+  {
+    "displayName": "Messaging: queue p95 above five minutes",
+    "combiner": "OR",
+    "enabled": true,
+    "conditions": [
+      {
+        "displayName": "queue p95 above five minutes",
+        "conditionPrometheusQueryLanguage": {
+          "query": "histogram_quantile(0.95, sum by (channel, le) (rate(omi_messaging_queue_age_seconds_bucket{cluster=\"__run__\",namespace=\"backend\"}[30m]))) > 300",
+          "duration": "600s",
+          "evaluationInterval": "60s",
+          "labels": {
+            "severity": "warning"
+          }
+        }
+      }
+    ],
+    "alertStrategy": {
+      "autoClose": "3600s"
+    },
+    "documentation": {
+      "mimeType": "text/markdown",
+      "content": "Inspect backend/docs/runbooks/messaging-channels.md. Cloud Run metrics use the existing GMP sidecar. Missing data is not evidence of health."
+    }
+  },
+  {
+    "displayName": "Messaging: stale queue head",
+    "combiner": "OR",
+    "enabled": true,
+    "conditions": [
+      {
+        "displayName": "stale queue head",
+        "conditionMatchedLog": {
+          "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend\" AND textPayload:\"Messaging queue\" AND (textPayload:\"reason=stale_pending\" OR textPayload:\"reason=stale_running\")"
+        }
+      }
+    ],
+    "alertStrategy": {
+      "notificationRateLimit": {
+        "period": "3600s"
+      },
+      "autoClose": "3600s"
+    },
+    "documentation": {
+      "mimeType": "text/markdown",
+      "content": "Inspect content-free aggregate logs and backend/docs/runbooks/messaging-channels.md. Do not replay running inbox rows or print provider payloads."
+    }
+  },
+  {
+    "displayName": "Messaging: cleanup execution failed",
+    "combiner": "OR",
+    "enabled": true,
+    "conditions": [
+      {
+        "displayName": "Cleanup process failure including import or OOM",
+        "conditionThreshold": {
+          "filter": "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"messaging-maintenance-job\" AND metric.type=\"run.googleapis.com/job/completed_execution_count\" AND metric.labels.result!=\"succeeded\"",
+          "aggregations": [
+            {
+              "alignmentPeriod": "300s",
+              "perSeriesAligner": "ALIGN_SUM",
+              "crossSeriesReducer": "REDUCE_SUM"
+            }
+          ],
+          "comparison": "COMPARISON_GT",
+          "thresholdValue": 0,
+          "duration": "0s",
+          "trigger": {
+            "count": 1
+          }
+        }
+      }
+    ],
+    "alertStrategy": {
+      "autoClose": "3600s"
+    },
+    "documentation": {
+      "mimeType": "text/markdown",
+      "content": "Inspect content-free maintenance failure logs. Verify indexes, runtime identity and image imports. No provider sends occur in cleanup."
+    }
+  },
+  {
+    "displayName": "Messaging: pending recovery unavailable",
+    "combiner": "OR",
+    "enabled": true,
+    "conditions": [
+      {
+        "displayName": "Pending recovery failing",
+        "conditionMatchedLog": {
+          "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend\" AND textPayload:\"Messaging recovery paused\""
+        }
+      }
+    ],
+    "alertStrategy": {
+      "notificationRateLimit": {
+        "period": "3600s"
+      },
+      "autoClose": "3600s"
+    },
+    "documentation": {
+      "mimeType": "text/markdown",
+      "content": "Recovery may be stalled; check readiness and indexes. Never reset running rows or leases blindly."
+    }
+  }
+]

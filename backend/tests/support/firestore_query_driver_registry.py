@@ -54,7 +54,6 @@ from models.task_recommendation import (
     TaskIntelligenceOutcomeCode,
     WhatMattersNowProjection,
 )
-from models.workstream import TaskGoalLinkImportRequest
 from database.memory_outbox_worker import CanonicalMemoryOutboxSideEffects, CanonicalMemoryOutboxWorkerConfig
 from utils.other.list_budget import ListReadBudget
 from database.memory_vector_repair_outbox_worker import VectorRepairOutboxWorkerTickConfig
@@ -1118,6 +1117,17 @@ _FRAME_REQUEST_DOC = {
 }
 _FRAME_LIMIT = (32, 'bounded frame-request window cap; fixed, not filter-affecting')
 
+
+def _seed_attached_frame_request(client, combo, trial):
+    client.documents[f'users/{UID}/frame_requests/req-1'] = {
+        **_FRAME_REQUEST_DOC,
+        'state': 'uploaded',
+        'storage_id': 'store-1',
+        'conversation_id': 'conv-1',
+    }
+    client.documents[f'users/{UID}/conversations/conv-1'] = {'status': 'completed'}
+
+
 _add(
     DriverEntry(
         'database.frame_requests.attach_frame_request_to_conversation',
@@ -1130,13 +1140,7 @@ _add(
             'permanent_storage_id': 'store-1',
         },
         domains={'now': [None, T0]},
-        setup=lambda client, combo, trial: (
-            client.documents.__setitem__(
-                f'users/{UID}/frame_requests/req-1',
-                {**_FRAME_REQUEST_DOC, 'state': 'uploaded', 'storage_id': 'store-1', 'conversation_id': 'conv-1'},
-            ),
-            client.documents.__setitem__(f'users/{UID}/conversations/conv-1', {'status': 'completed'}),
-        ),
+        setup=_seed_attached_frame_request,
     )
 )
 _add(
@@ -2897,7 +2901,19 @@ _context_store = ChatContextStore(messaging=_messaging_store)
 def _context_boundary(client, combo, trial):
     client.documents['users/' + UID] = {'name': 'synthetic'}
     client.documents['users/' + UID + '/chat_sessions/session'] = {'id': 'session'}
-    client.documents['users/' + UID + '/messages/boundary'] = {'chat_session_id': 'session', 'created_at': T0}
+    client.documents['users/' + UID + '/messages/boundary'] = {
+        'id': 'boundary',
+        'chat_session_id': 'session',
+        'created_at': T0,
+    }
+    client.queue_results(
+        [
+            client.snapshot(
+                'users/' + UID + '/messages/boundary',
+                client.documents['users/' + UID + '/messages/boundary'],
+            )
+        ]
+    )
 
 
 _add(
