@@ -127,4 +127,3 @@ describe("requestProviderAuthFromHost", () => {
     expect(source).toMatch(/case "start_provider_auth": \{\s*requestProviderAuthFromHost\(/);
   });
 });
-
