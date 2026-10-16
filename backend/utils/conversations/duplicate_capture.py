@@ -243,7 +243,9 @@ def _group_with_overlap_speech(
             incumbent = False
             if other.conversation_id in legacy_ids:
                 if any(
-                    record.get('has_transcript_corrections') or record.get('transcript_correction_overlay') is not None
+                    record.get('has_transcript_corrections')
+                    or record.get('transcript_correction_overlay') is not None
+                    or record.get('_shared_speech_rejection')
                     for record in (own or {}, row)
                 ):
                     incumbent = None  # no mutable overlay reads to simulate the incumbent

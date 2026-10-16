@@ -14,6 +14,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
+from config.capture_shared_speech import (
+    MAX_CAPTURE_SEGMENTS as MAX_SEGMENTS,
+    MAX_CAPTURE_CHARS as MAX_CHARS,
+    MAX_CAPTURE_SEGMENT_CHARS as MAX_SEGMENT_CHARS,
+)
 from utils.conversations.fragment_visibility import is_completed_rule_discard
 
 VERSION = 'overlap_shared_speech_v1'
@@ -28,10 +33,7 @@ MIN_MATCHED_SPEECH_SECONDS = 15.0
 MIN_LINE_SECONDS = 1.0
 # Datetimes have microsecond resolution; epoch subtraction can add <1us noise.
 ROUNDING_SECONDS = 0.000001
-MAX_SEGMENTS = 4096
-MAX_CHARS = 524288
 MAX_WORDS = 64000
-MAX_SEGMENT_CHARS = 4096
 MAX_SEGMENT_SECONDS = 90.0
 MAX_COMPARISONS = 16384
 MAX_TOKEN_WORK = 524288
@@ -108,6 +110,9 @@ def _window(row: Any) -> tuple[float, float]:
         raise _Rejected('ineligible')
     if field(row, 'has_transcript_corrections') or field(row, 'transcript_correction_overlay') is not None:
         raise _Rejected('transcript_corrections')
+    unavailable = field(row, '_shared_speech_rejection')
+    if unavailable in ('decode_bounds', 'decode_invalid'):
+        raise _Rejected(unavailable)
     start, end = _epoch(field(row, 'started_at')), _epoch(field(row, 'finished_at'))
     if end <= start:
         raise _Rejected('timing')

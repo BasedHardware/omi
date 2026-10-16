@@ -71,13 +71,14 @@ Smart merge and EXP-003 Jev remain separate and unchanged.
    add duration. Line duration is transcript evidence, not acoustic ground truth.
 
 Captures with transcript correction flags/overlays abstain. A dedicated
-single-snapshot read strictly decodes immutable stored segments without projecting
+single-snapshot read bounds stored encrypted/compressed input at 1 MiB and
+decoded JSON at 2 MiB before parsing, then strictly decodes immutable segments without projecting
 or reading mutable correction overlays. The transaction guard rechecks every
 member's effective discard, completion, deletion/closed, correction markers and
 lock partition. Unknown layouts and overflow abstain rather than claim a match.
 Bounds per capture: 4,096 segments, 524,288 text characters, 64,000 selected words, 4,096
 characters and 90 seconds per selected segment. Each pair check is capped at 16,384
-line comparisons, 524,288 token-set operations and 262,144 LCS cells. The core is
+line comparisons, 524,288 token-set operations and 262,144 LCS cells. Literal stored lists are checked for segment/text/field bounds before use. The core is
 pure CPU, uses no provider and persists no lexical fingerprint or transcript.
 At most 12 matcher calls run per completion, including group-member confirmation.
 Changing cutoffs/version requires recalibration.
@@ -152,7 +153,12 @@ requires each supporting line to last at least one second, rejects mutable
 correction captures without overlay reads, and checks all member eligibility and
 locks inside the transaction. Early incumbent snapshot-conflict exits retain
 their original read budget. New synthetic regressions cover each failure. A
-second Luna review is required before merge.
+second Luna review confirmed those fixes and found an additional pre-matcher
+unbounded-decompression risk. The storage reader now caps encoded input and
+uses bounded streaming decompression with EOF/trailing-data checks before JSON
+parsing; overflow returns a static abstention. Synthetic tests verify that a
+high-expansion payload never reaches the parser. A further Luna review is
+required before merge.
 Thresholds favor false-fold avoidance: ordered, timed, distinct sentence evidence
 and actual line duration are mandatory. Low global lexical overlap is allowed to
 remain a false negative. Current evidence supports dark/shadow deployment only.
@@ -173,7 +179,8 @@ window on every touched service, readiness/restarts, and appearance of the new
 numeric evidence, new verdict, incumbent ordinary would-join, existing-group
 observation and write outcome; no text or lexical hashes. `current_would_join`
 is the incumbent ordinary policy on checked discovery candidates; it is null
-for corrected captures whose mutable overlay was intentionally not read. It is
+for corrected captures whose mutable overlay was intentionally not read, or
+for snapshots that could not be decoded within the storage bounds. It is
 not proof a
 transaction would commit; `already_grouped` is a separate observation. The
 complementary-call policy is separately identifiable through existing call logs.

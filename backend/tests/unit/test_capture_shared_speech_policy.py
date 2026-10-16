@@ -274,11 +274,11 @@ def test_corrected_capture_abstains_without_decoding_or_overlay_reads(store, mon
     store.rows[path('a')] = record
     decode = MagicMock(side_effect=AssertionError('corrected capture must not be decoded'))
     project = MagicMock(side_effect=AssertionError('no correction projection'))
-    monkeypatch.setattr(conversations_db, 'decode_transcript_segments_verified', decode)
+    monkeypatch.setattr(speech_db, 'decode_capture_segments', decode)
     monkeypatch.setattr(conversations_db, 'prepare_conversation_for_read', project)
     snapshot, fingerprint = speech_db.get_shared_speech_snapshot(UID, 'a')
     assert snapshot['has_transcript_corrections'] and snapshot['transcript_segments'] == []
-    assert fingerprint == groups_db.transcript_fingerprint(record)
+    assert fingerprint is None
     decode.assert_not_called()
     project.assert_not_called()
 
