@@ -1,5 +1,8 @@
+import { basename } from "node:path";
+
 import { agentControlCapabilityManifest } from "./control-tool-manifest.js";
 import { toolManifestEntry, type OmiToolManifestEntry } from "./omi-tool-manifest.js";
+import { utf8Excerpt } from "./tool-result-projector.js";
 
 export type DesktopCoordinatorBundle =
   | "desktop.agent_control.read"
@@ -71,6 +74,7 @@ export interface DesktopToolPolicyResult {
 
 const EXTERNAL_SEND_TOOLS = new Set(["fill_cloud_connector_form"]);
 const TASK_WRITE_TOOLS = new Set([
+  "create_canonical_goal",
   "complete_task",
   "delete_task",
   "create_action_item",
@@ -85,8 +89,18 @@ const MEMORY_WRITE_TOOLS = new Set(["create_memory"]);
 // close_fact) mutate the same backend memory/knowledge store as create_memory,
 // so they share its bundle rather than inventing a new one.
 const LEDGER_WRITE_TOOLS = new Set(["save_playbook", "create_standing_trigger", "close_fact"]);
-const SCREEN_IMAGE_TOOLS = new Set(["get_screenshot", "look_at_frame", "capture_screen"]);
-const SCREEN_SUMMARY_TOOLS = new Set(["semantic_search", "get_work_context"]);
+// `screenshot` is the realtime voice capture; it is offered only to realtime
+// voice runs, never to a chat relay.
+const SCREEN_IMAGE_TOOLS = new Set(["get_screenshot", "look_at_frame", "capture_screen", "screenshot"]);
+// show_rewind_evidence returns the model only the stored frame's title, app
+// and OCR excerpt (the same text a screen-history search already returned for
+// that screenshot_id); the pixels go to the person's own Chat turn as
+// evidence, behind the screenshot-sharing setting, and never to the model.
+const SCREEN_SUMMARY_TOOLS = new Set(["semantic_search", "get_work_context", "show_rewind_evidence"]);
+// A live screenshot holds whatever is on screen at that moment, including
+// windows the person keeps out of capture elsewhere, so each one is asked for
+// on its own: the card never offers a session grant and no grant covers one.
+const ALLOW_ONCE_ONLY_TOOLS = new Set(["capture_screen"]);
 // Coordinator policy classifies this as a production user-approved operation;
 // ChatToolExecutor independently enforces the current-turn consent at execution.
 const PERMISSION_REQUEST_TOOLS = new Set(["request_permission"]);
@@ -119,7 +133,23 @@ const LOCAL_READ_TOOLS = new Set([
   "read_playbook",
   "search_historical_facts",
   "get_entity_timeline_tool",
+  "read_conversation_evidence",
+  "search_conversation_evidence",
+  "search_chat_history",
+  "get_canonical_goals",
+  "scan_files",
 ]);
+/**
+ * Relay tools declared to need no capability bundle: they read or touch none
+ * of the person's local data. Declaring them keeps every relay-callable tool
+ * explicitly classified (a test enforces it); an undeclared tool no longer
+ * slides into `local_read` by default unnoticed.
+ */
+const UNBUNDLED_TOOLS: Readonly<Record<string, string>> = {
+  web_search: "a public web search; only the query leaves the Mac",
+  render_chat_blocks: "renders the model's own reply as blocks in the current turn",
+  ask_followup: "shows the person an onboarding question with quick replies",
+};
 
 function isSqlWrite(sql: string): boolean {
   const stripped = sql
@@ -169,6 +199,19 @@ function bundlesForOmiTool(tool: OmiToolManifestEntry): DesktopCoordinatorBundle
   }
   if (bundles.size === 0 && tool.annotations.readOnlyHint) bundles.add("desktop.context.local_read");
   return [...bundles];
+}
+
+/// Whether a tool is classified on purpose: named in one of the sets above,
+/// a runtime-control tool with declared bundles, or declared unbundled. The
+/// read-only fallback in `bundlesForOmiTool` does not count.
+function isExplicitlyClassified(toolName: string): boolean {
+  if (Object.hasOwn(UNBUNDLED_TOOLS, toolName)) return true;
+  if ((controlDescriptor(toolName)?.bundles.length ?? 0) > 0) return true;
+  return [
+    LOCAL_READ_TOOLS, SCREEN_SUMMARY_TOOLS, SCREEN_IMAGE_TOOLS, TASK_WRITE_TOOLS, MEMORY_WRITE_TOOLS,
+    LEDGER_WRITE_TOOLS, AUTOMATION_READ_TOOLS, CONTACTS_READ_TOOLS, MESSAGING_READ_TOOLS, MAIL_READ_TOOLS,
+    MESSAGING_SEND_TOOLS, AUTOMATION_ACT_TOOLS, PERMISSION_REQUEST_TOOLS, EXTERNAL_SEND_TOOLS,
+  ].some((set) => set.has(toolName));
 }
 
 /// Bundles whose data or effects are sensitive enough that the request is
@@ -236,13 +279,20 @@ function descriptorFromBundles(bundles: readonly DesktopCoordinatorBundle[]): De
   };
 }
 
+/// Bundles whose grants must name the exact resource they cover; an unscoped
+/// or `*` row never authorizes them.
+const RESOURCE_SCOPED_GRANT_BUNDLES: ReadonlySet<DesktopCoordinatorBundle> = new Set([
+  "desktop.messaging.send",
+  "desktop.automation.act",
+  "desktop.context.screenshot_image",
+]);
+
 function hasAllowGrant(request: DesktopToolPolicyRequest, bundle: DesktopCoordinatorBundle): boolean {
   const nowMs = request.nowMs ?? Date.now();
   return (request.grants ?? []).some((grant) => {
     if (grant.effect !== "allow" || grant.bundle !== bundle || grant.expiresAtMs <= nowMs) return false;
-    if ((bundle === "desktop.messaging.send" || bundle === "desktop.automation.act") && !grant.resourceRef) {
-      return false;
-    }
+    if (RESOURCE_SCOPED_GRANT_BUNDLES.has(bundle) && !grant.resourceRef) return false;
+    if (ALLOW_ONCE_ONLY_TOOLS.has(request.toolName ?? request.operation ?? "")) return false;
     if (grant.operation && grant.operation !== request.operation) return false;
     if (grant.resourceRef && grant.resourceRef !== request.resourceRef) return false;
     return true;
@@ -317,7 +367,186 @@ export function evaluateDesktopToolPolicy(request: DesktopToolPolicyRequest): De
 export const desktopToolPolicyInternals = {
   isSqlWrite,
   descriptorFromToolName,
+  isSensitiveBundle,
+  isExplicitlyClassified,
 };
+
+// --- Per-invocation user approval -------------------------------------------
+//
+// A `dispatch_required` decision for a sensitive device tool becomes an
+// `approval` dispatch bound to one prepared invocation. The user resolves it
+// through signed direct control; the model never chooses allow or deny. Only
+// this module decides what the user is asked and which answers exist.
+
+export const DESKTOP_APPROVAL_POLICY = "default_user_approval" as const;
+
+/**
+ * How long a parked invocation waits for the user before it fails closed as
+ * denied. Matches the mobile device-tool transport's 180s: roughly how long a
+ * person plausibly takes to read a card and answer it. It must stay below the
+ * pi-mono `long` tool wait (10 min) minus the Swift executor timeout (120s),
+ * or a late approval could run an effect the model already reported as failed.
+ */
+export const DESKTOP_APPROVAL_TTL_MS = 180_000;
+
+export type DesktopApprovalOptionId = "allow_once" | "allow_session" | "deny";
+export type DesktopApprovalDecision = "allow" | "deny" | "expired" | "cancelled";
+
+export interface DesktopApprovalOption {
+  id: DesktopApprovalOptionId;
+  effect: "allow" | "deny";
+  scope: "run" | "session" | "request";
+  /** For `allow_session`: plain words for what the grant would cover, so the card never over-promises. */
+  covers?: string;
+}
+
+export const DESKTOP_APPROVAL_ALLOW_ONCE_OPTION: DesktopApprovalOption = Object.freeze({ id: "allow_once", effect: "allow", scope: "run" });
+export const DESKTOP_APPROVAL_DENY_OPTION: DesktopApprovalOption = Object.freeze({ id: "deny", effect: "deny", scope: "request" });
+
+export const DESKTOP_APPROVAL_DEFAULT_OPTION_ID: DesktopApprovalOptionId = "deny";
+
+/**
+ * What an `allow_session` grant would actually cover, per tool. The grant is
+ * matched on the exact resource ref, so for a script it covers only that
+ * identical script, never "AppleScript in general".
+ */
+const APPROVAL_SESSION_GRANT_COVERS: Record<string, string> = {
+  send_message: "any message or attachment to this recipient",
+  run_applescript: "only this exact script",
+  read_message_history: "this conversation",
+  list_message_chats: "your recent Messages conversations",
+  list_mail_messages: "your Mail inbox headers",
+};
+
+/**
+ * `allow_session` is the only answer that mints a grant, and a grant needs the
+ * exact resource it covers. Without one (a thread read with neither chat_id
+ * nor handle), and for a live screenshot, the card offers only allow once and
+ * deny.
+ */
+export function desktopApprovalOptions(toolName: string, resourceRef: string | null): readonly DesktopApprovalOption[] {
+  if (resourceRef === null || ALLOW_ONCE_ONLY_TOOLS.has(toolName)) {
+    return Object.freeze([DESKTOP_APPROVAL_ALLOW_ONCE_OPTION, DESKTOP_APPROVAL_DENY_OPTION]);
+  }
+  return Object.freeze([
+    DESKTOP_APPROVAL_ALLOW_ONCE_OPTION,
+    {
+      id: "allow_session",
+      effect: "allow",
+      scope: "session",
+      covers: APPROVAL_SESSION_GRANT_COVERS[toolName] ?? "only this exact request",
+    },
+    DESKTOP_APPROVAL_DENY_OPTION,
+  ]);
+}
+
+export type DesktopApprovalPreviewValue = string | number | boolean;
+
+export interface DesktopToolApprovalRequest {
+  policy: typeof DESKTOP_APPROVAL_POLICY;
+  capability: DesktopCoordinatorBundle;
+  operation: string;
+  resourceRef: string | null;
+  title: string;
+  decisionPrompt: string;
+  /** Bounded, display-safe projection of the tool input; never the raw input. */
+  preview: Record<string, DesktopApprovalPreviewValue>;
+  previewTruncated: boolean;
+  options: readonly DesktopApprovalOption[];
+  defaultOptionId: DesktopApprovalOptionId;
+  reason: string;
+  requestedAtMs: number;
+  expiresAtMs: number;
+}
+
+/** Fields each tool may show on its card. Anything else in the input stays out of the preview. */
+const APPROVAL_PREVIEW_FIELDS: Record<string, readonly string[]> = {
+  send_message: ["to", "text", "service", "file_path"],
+  run_applescript: ["script", "timeout_seconds"],
+  read_message_history: ["chat_id", "handle", "limit"],
+  list_message_chats: ["limit"],
+  list_mail_messages: ["limit"],
+  // Takes no input: the card's question says everything the capture does.
+  capture_screen: [],
+};
+/** Paths are redacted to their final component: the card needs the file name, not the user's directory layout. */
+const APPROVAL_PREVIEW_PATH_FIELDS = new Set(["file_path"]);
+/** The card shows message text and scripts verbatim, so the bound is generous; the input hash binds the exact content. */
+const APPROVAL_PREVIEW_FIELD_BYTES = 4_096;
+
+function approvalCopy(toolName: string, preview: Record<string, DesktopApprovalPreviewValue>): { title: string; decisionPrompt: string } {
+  switch (toolName) {
+    case "send_message":
+      return { title: "Send a message", decisionPrompt: `Send this message to ${preview.to ?? "the recipient"}?` };
+    case "run_applescript":
+      return { title: "Run an AppleScript", decisionPrompt: "Run this AppleScript on your Mac?" };
+    case "read_message_history":
+      return {
+        title: "Read a Messages conversation",
+        decisionPrompt: preview.handle !== undefined
+          ? `Read recent messages with ${preview.handle}?`
+          : preview.chat_id !== undefined
+            ? `Read recent messages in chat ${preview.chat_id}?`
+            : "Read recent messages from this conversation?",
+      };
+    case "list_message_chats":
+      return { title: "List Messages conversations", decisionPrompt: "List your recent Messages conversations?" };
+    case "list_mail_messages":
+      return { title: "List Mail messages", decisionPrompt: "List recent Mail messages (headers only, no bodies)?" };
+    case "capture_screen":
+      return { title: "Take a screenshot", decisionPrompt: "Let Omi take a screenshot of your whole screen?" };
+    default:
+      return { title: `Allow ${toolName}`, decisionPrompt: `Allow the agent to run ${toolName}?` };
+  }
+}
+
+export function buildDesktopToolApprovalRequest(input: {
+  toolName: string;
+  toolInput: Record<string, unknown>;
+  policy: DesktopToolPolicyResult;
+  resourceRef: string | undefined;
+  nowMs: number;
+  ttlMs?: number;
+}): DesktopToolApprovalRequest {
+  if (input.policy.decision !== "dispatch_required") {
+    throw new Error("Approval requests are built only for dispatch_required policy decisions");
+  }
+  const capability = input.policy.requiredBundles.find(isSensitiveBundle) ?? input.policy.requiredBundles[0];
+  if (!capability) throw new Error("Approval requests require at least one capability bundle");
+  const ttlMs = input.ttlMs ?? DESKTOP_APPROVAL_TTL_MS;
+  if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0) throw new Error("Approval TTL must be a positive integer");
+
+  const preview: Record<string, DesktopApprovalPreviewValue> = {};
+  let previewTruncated = false;
+  for (const field of APPROVAL_PREVIEW_FIELDS[input.toolName] ?? []) {
+    const value = input.toolInput[field];
+    if (typeof value === "number" || typeof value === "boolean") {
+      preview[field] = value;
+    } else if (typeof value === "string" && value.trim()) {
+      const shown = APPROVAL_PREVIEW_PATH_FIELDS.has(field) ? basename(value) : value;
+      const bounded = utf8Excerpt(shown, APPROVAL_PREVIEW_FIELD_BYTES);
+      if (bounded !== shown) previewTruncated = true;
+      preview[field] = bounded;
+    }
+  }
+  const copy = approvalCopy(input.toolName, preview);
+  const resourceRef = input.resourceRef ?? null;
+  return {
+    policy: DESKTOP_APPROVAL_POLICY,
+    capability,
+    operation: input.toolName,
+    resourceRef,
+    title: copy.title,
+    decisionPrompt: copy.decisionPrompt,
+    preview,
+    previewTruncated,
+    options: desktopApprovalOptions(input.toolName, resourceRef),
+    defaultOptionId: DESKTOP_APPROVAL_DEFAULT_OPTION_ID,
+    reason: input.policy.reason,
+    requestedAtMs: input.nowMs,
+    expiresAtMs: input.nowMs + ttlMs,
+  };
+}
 
 export interface AcpPermissionOption {
   kind: string;

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { evaluateDesktopToolPolicy } from "../src/runtime/desktop-tool-policy.js";
+import {
+  DESKTOP_APPROVAL_TTL_MS,
+  buildDesktopToolApprovalRequest,
+  evaluateDesktopToolPolicy,
+} from "../src/runtime/desktop-tool-policy.js";
 
 describe("desktop tool policy", () => {
   it("allows selected read-only local context tools", () => {
@@ -285,6 +289,198 @@ describe("desktop tool policy", () => {
 
     expect(granted.decision).toBe("allow");
     expect(otherScreenshot.decision).toBe("dispatch_required");
+  });
+});
+
+describe("desktop tool approval requests", () => {
+  const nowMs = 1_700_000_000_000;
+
+  function dispatchRequired(toolName: string, resourceRef?: string) {
+    const policy = evaluateDesktopToolPolicy({
+      toolName,
+      operation: toolName,
+      resourceRef,
+      selectedBundles: toolName === "send_message"
+        ? ["desktop.messaging.send"]
+        : toolName === "run_applescript"
+          ? ["desktop.automation.act"]
+          : toolName === "list_mail_messages"
+            ? ["desktop.mail.read"]
+            : toolName === "capture_screen"
+              ? ["desktop.context.screenshot_image"]
+              : ["desktop.messaging.read"],
+      nowMs,
+    });
+    expect(policy.decision).toBe("dispatch_required");
+    return policy;
+  }
+
+  it("asks a yes/no question bound to the exact send with deny as the default", () => {
+    const request = buildDesktopToolApprovalRequest({
+      toolName: "send_message",
+      toolInput: { to: "+15551234567", text: "Running 10 minutes late", service: "auto", file_path: "/Users/me/Documents/receipt.pdf" },
+      policy: dispatchRequired("send_message", "+15551234567"),
+      resourceRef: "+15551234567",
+      nowMs,
+    });
+
+    expect(request).toMatchObject({
+      policy: "default_user_approval",
+      capability: "desktop.messaging.send",
+      operation: "send_message",
+      resourceRef: "+15551234567",
+      defaultOptionId: "deny",
+      requestedAtMs: nowMs,
+      expiresAtMs: nowMs + DESKTOP_APPROVAL_TTL_MS,
+      previewTruncated: false,
+    });
+    expect(request.options.map((option) => option.id)).toEqual(["allow_once", "allow_session", "deny"]);
+    expect(request.options.find((option) => option.id === "allow_session")).toEqual({
+      id: "allow_session",
+      effect: "allow",
+      scope: "session",
+      covers: "any message or attachment to this recipient",
+    });
+    expect(request.decisionPrompt).toContain("+15551234567");
+    // The recipient and the exact text are what the user approves; the
+    // attachment path is reduced to its file name.
+    expect(request.preview).toEqual({
+      to: "+15551234567",
+      text: "Running 10 minutes late",
+      service: "auto",
+      file_path: "receipt.pdf",
+    });
+  });
+
+  it("offers a session grant only when there is an exact resource for it to cover", () => {
+    const unscopedRead = buildDesktopToolApprovalRequest({
+      toolName: "read_message_history",
+      toolInput: { limit: 5 },
+      policy: dispatchRequired("read_message_history"),
+      resourceRef: undefined,
+      nowMs,
+    });
+    const script = "tell application \"Finder\" to activate";
+    const scriptRun = buildDesktopToolApprovalRequest({
+      toolName: "run_applescript",
+      toolInput: { script },
+      policy: dispatchRequired("run_applescript", script),
+      resourceRef: script,
+      nowMs,
+    });
+
+    // Nothing to mint a grant against: allow once or deny.
+    expect(unscopedRead.options.map((option) => option.id)).toEqual(["allow_once", "deny"]);
+    // A script grant covers that script byte for byte, and the card says so.
+    expect(scriptRun.options.find((option) => option.id === "allow_session")?.covers).toBe("only this exact script");
+  });
+
+  it("keeps fields outside the tool's allowlist out of the preview and bounds long values", () => {
+    const script = "tell application \"Finder\"\n".repeat(400);
+    const request = buildDesktopToolApprovalRequest({
+      toolName: "run_applescript",
+      toolInput: { script, timeout_seconds: 10, secret_context: "never shown", nested: { token: "x" } },
+      policy: dispatchRequired("run_applescript", script),
+      resourceRef: script,
+      nowMs,
+    });
+
+    expect(Object.keys(request.preview).sort()).toEqual(["script", "timeout_seconds"]);
+    expect(request.previewTruncated).toBe(true);
+    expect(Buffer.byteLength(String(request.preview.script), "utf8")).toBeLessThanOrEqual(4_096);
+    expect(String(request.preview.script).endsWith("…")).toBe(true);
+    expect(request.title).toBe("Run an AppleScript");
+  });
+
+  it("names the thread for reads and never asks the model's question for it", () => {
+    const byHandle = buildDesktopToolApprovalRequest({
+      toolName: "read_message_history",
+      toolInput: { handle: "alice@example.com", limit: 20 },
+      policy: dispatchRequired("read_message_history", "alice@example.com"),
+      resourceRef: "alice@example.com",
+      nowMs,
+    });
+    const mail = buildDesktopToolApprovalRequest({
+      toolName: "list_mail_messages",
+      toolInput: { limit: 30 },
+      policy: dispatchRequired("list_mail_messages", "mail:inbox"),
+      resourceRef: "mail:inbox",
+      nowMs,
+    });
+
+    expect(byHandle.capability).toBe("desktop.messaging.read");
+    expect(byHandle.decisionPrompt).toContain("alice@example.com");
+    expect(mail.capability).toBe("desktop.mail.read");
+    expect(mail.resourceRef).toBe("mail:inbox");
+    expect(mail.decisionPrompt).toContain("headers only");
+  });
+
+  it("asks in plain words before a live screenshot, with nothing technical on the card", () => {
+    const request = buildDesktopToolApprovalRequest({
+      toolName: "capture_screen",
+      toolInput: {},
+      policy: dispatchRequired("capture_screen", "screen"),
+      resourceRef: "screen",
+      nowMs,
+    });
+
+    expect(request).toMatchObject({
+      capability: "desktop.context.screenshot_image",
+      operation: "capture_screen",
+      resourceRef: "screen",
+      title: "Take a screenshot",
+      decisionPrompt: "Let Omi take a screenshot of your whole screen?",
+      preview: {},
+      previewTruncated: false,
+      defaultOptionId: "deny",
+    });
+    // Each screenshot is asked for on its own: no "Allow for This Chat".
+    expect(request.options.map((option) => option.id)).toEqual(["allow_once", "deny"]);
+  });
+
+  it("never lets a grant cover a live screenshot, and needs an exact resource for any screen-image grant", () => {
+    const grant = {
+      bundle: "desktop.context.screenshot_image" as const,
+      operation: "capture_screen",
+      resourceRef: "screen",
+      expiresAtMs: nowMs + 60_000,
+      effect: "allow" as const,
+    };
+    const capture = evaluateDesktopToolPolicy({
+      toolName: "capture_screen",
+      operation: "capture_screen",
+      resourceRef: "screen",
+      selectedBundles: ["desktop.context.screenshot_image"],
+      grants: [grant],
+      nowMs,
+    });
+    expect(capture.decision).toBe("dispatch_required");
+
+    const storedFrame = (resourceRef: string | undefined) => evaluateDesktopToolPolicy({
+      toolName: "get_screenshot",
+      operation: "get_screenshot",
+      resourceRef: "frame:42",
+      selectedBundles: ["desktop.context.screenshot_image"],
+      grants: [{ ...grant, operation: "get_screenshot", resourceRef }],
+      nowMs,
+    });
+    expect(storedFrame(undefined).decision).toBe("dispatch_required");
+    expect(storedFrame("frame:42").decision).toBe("allow");
+  });
+
+  it("refuses to build a request for a decision that was not dispatch_required", () => {
+    const allowed = evaluateDesktopToolPolicy({
+      toolName: "get_memories",
+      selectedBundles: ["desktop.context.local_read"],
+    });
+    expect(allowed.decision).toBe("allow");
+    expect(() => buildDesktopToolApprovalRequest({
+      toolName: "get_memories",
+      toolInput: {},
+      policy: allowed,
+      resourceRef: undefined,
+      nowMs,
+    })).toThrow("dispatch_required");
   });
 });
 
