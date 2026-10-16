@@ -80,7 +80,7 @@ def install(monkeypatch, records):
             collection=lambda _: SimpleNamespace(document=lambda _: SimpleNamespace(collection=lambda _: query))
         ),
     )
-    monkeypatch.setattr(cache.redis_db, 'r', Redis())
+    monkeypatch.setattr(cache, '_redis', lambda fake=Redis(): fake)
     monkeypatch.setattr(router, '_CANDIDATE_PAGE_SIZE', 4)
     monkeypatch.setattr(router, '_control', lambda _: TaskWorkflowControl(workflow_mode='read', account_generation=7))
     monkeypatch.setattr(
@@ -133,7 +133,7 @@ def test_ten_polls_scan_once_and_writes_invalidate(monkeypatch):
 
 
 def test_concurrent_fill_is_not_blessed_with_new_version(monkeypatch):
-    monkeypatch.setattr(cache.redis_db, 'r', Redis())
+    monkeypatch.setattr(cache, '_redis', lambda fake=Redis(): fake)
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"candidates_page":100}')
     calls = []
 
@@ -153,7 +153,7 @@ def test_concurrent_fill_is_not_blessed_with_new_version(monkeypatch):
 
 def test_generation_uid_empty_and_redis_failure(monkeypatch):
     fake = Redis()
-    monkeypatch.setattr(cache.redis_db, 'r', fake)
+    monkeypatch.setattr(cache, '_redis', lambda: fake)
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"candidates_page":100}')
     calls = []
 
@@ -171,7 +171,7 @@ def test_generation_uid_empty_and_redis_failure(monkeypatch):
 
 def test_off_has_no_redis_io(monkeypatch):
     monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
-    monkeypatch.setattr(cache.redis_db, 'r', SimpleNamespace(set=lambda *a, **kw: pytest.fail('off Redis IO')))
+    monkeypatch.setattr(cache, '_redis', lambda: SimpleNamespace(set=lambda *a, **kw: pytest.fail('off Redis IO')))
     assert cache.load_compatibility_candidates('u', 7, lambda: []) == []
     assert cache.invalidate_after_write(lambda uid: 'ok')('u') == 'ok'
 
@@ -179,7 +179,7 @@ def test_off_has_no_redis_io(monkeypatch):
 @pytest.mark.parametrize('generation', [7, 8])
 def test_real_score_writer_invalidates_only_after_generation_fence(monkeypatch, generation):
     fake = Redis()
-    monkeypatch.setattr(cache.redis_db, 'r', fake)
+    monkeypatch.setattr(cache, '_redis', lambda: fake)
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"candidates_page":100}')
     payload = candidate(1).model_dump(mode='python')
     candidate_ref = SimpleNamespace(get=lambda **kw: SimpleNamespace(exists=True, to_dict=lambda: payload))

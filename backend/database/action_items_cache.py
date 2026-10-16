@@ -40,6 +40,7 @@ Rollback: ``ACTION_ITEMS_LIST_CACHE_TTL_SECONDS=0`` disables the cache entirely
 from __future__ import annotations
 
 import hashlib
+from functools import lru_cache
 import json
 import logging
 import os
@@ -64,6 +65,12 @@ _VERSION_TTL_SECONDS = 7 * 24 * 3600
 
 _VERSION_KEY_PREFIX = 'ail:ver'
 _ENTRY_KEY_PREFIX = 'ail'
+
+
+@lru_cache(maxsize=1)
+def _redis():
+    """Lazy, bounded I/O for every best-effort cache operation."""
+    return redis_db.create_bounded_redis_client(0.1)
 
 
 def list_cache_ttl_seconds(uid: str = '') -> int:
@@ -100,7 +107,7 @@ def bump_action_items_list_version(uid: str) -> None:
         return
     try:
         key = _version_key(uid)
-        pipe = redis_db.r.pipeline()
+        pipe = _redis().pipeline()
         pipe.incr(key)
         pipe.expire(key, _VERSION_TTL_SECONDS)
         pipe.execute()
@@ -115,7 +122,7 @@ def get_action_items_list_version(uid: str) -> Optional[int]:
     as version 0, which is a legitimate never-written-yet user.
     """
     try:
-        raw = redis_db.r.get(_version_key(uid))
+        raw = _redis().get(_version_key(uid))
     except redis_pkg.exceptions.RedisError as e:  # type: ignore[attr-defined]
         logger.warning('action-items list cache: version read failed uid=%s: %s', uid, e)
         return None
@@ -144,7 +151,7 @@ def compute_etag(body: Dict[str, Any]) -> str:
 def read_cached_list(key: str) -> Optional[Dict[str, Any]]:
     """Return ``{"etag": str, "body": dict}`` or ``None``. Never raises."""
     try:
-        raw = redis_db.r.get(key)
+        raw = _redis().get(key)
     except redis_pkg.exceptions.RedisError as e:  # type: ignore[attr-defined]
         logger.warning('action-items list cache: read failed: %s', e)
         return None
@@ -164,7 +171,7 @@ def write_cached_list(key: str, *, body: Dict[str, Any], etag: str, ttl: int) ->
     if ttl <= 0:
         return
     try:
-        redis_db.r.set(key, json.dumps({'etag': etag, 'body': body}, default=str), ex=ttl)
+        _redis().set(key, json.dumps({'etag': etag, 'body': body}, default=str), ex=ttl)
     except redis_pkg.exceptions.RedisError as e:  # type: ignore[attr-defined]
         logger.warning('action-items list cache: write failed: %s', e)
     except (TypeError, ValueError) as e:

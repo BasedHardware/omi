@@ -1,8 +1,9 @@
 import admin, { getDb } from "@/lib/firebase/admin";
 import { getRedis } from "@/lib/redis";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
-// Same cohort and generation/writer protocol as backend/utils/s4_read_cache.py.
+// Same generation/writer protocol as backend/utils/s4_read_cache.py.
+// Always fence admin writes, including when the backend rollout is off.
 const BEGIN = `
 redis.call('SADD', KEYS[2], ARGV[1])
 redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
@@ -14,30 +15,12 @@ redis.call('SREM', KEYS[2], ARGV[1])
 return 1
 `;
 
-function subscriptionCacheEnabled(uid: string): boolean {
-  try {
-    const percent = JSON.parse(
-      process.env.FIRESTORE_READ_LEVERS || "{}"
-    )?.subscription_cache;
-    if (!Number.isInteger(percent) || percent < 0 || percent > 100)
-      return false;
-    const bucket =
-      createHash("sha256")
-        .update(`subscription_cache:${uid}`)
-        .digest()
-        .readBigUInt64BE() % BigInt(100);
-    return bucket < BigInt(percent);
-  } catch {
-    return false;
-  }
-}
-
 async function withSubscriptionInvalidation(
   uids: string[],
   write: () => Promise<unknown>
 ): Promise<void> {
-  const enabled = Array.from(new Set(uids)).filter(subscriptionCacheEnabled);
-  if (!enabled.length) {
+  const writers = Array.from(new Set(uids));
+  if (!writers.length) {
     await write();
     return;
   }
@@ -48,7 +31,7 @@ async function withSubscriptionInvalidation(
   } catch {
     console.warn("Subscription cache client unavailable");
   }
-  const fences = enabled.map((uid) => ({
+  const fences = writers.map((uid) => ({
     // Python json.dumps uses ASCII escapes, including surrogate pairs.
     root:
       "fsr:s4:v2:" +

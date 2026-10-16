@@ -99,7 +99,7 @@ def installed(monkeypatch):
             collection=lambda _: SimpleNamespace(document=lambda _: SimpleNamespace(collection=lambda _: query))
         ),
     )
-    monkeypatch.setattr(cache.redis_db, 'r', fake)
+    monkeypatch.setattr(cache, '_redis', lambda: fake)
     monkeypatch.setattr(router, 'enforce_stale_client_list_refusal', lambda *_: None)
     monkeypatch.setattr(router, 'enforce_hot_client_list_ceiling', lambda *_: None)
     monkeypatch.setattr(

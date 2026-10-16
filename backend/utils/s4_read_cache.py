@@ -17,7 +17,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime
-from functools import wraps
+from functools import lru_cache, wraps
 from typing import Any
 
 from utils.firestore_read_levers import lever_enabled
@@ -160,10 +160,12 @@ def ttl(name, default):
     return min(value, maximum) if maximum is not None else value
 
 
+@lru_cache(maxsize=1)
 def _redis():
-    from database.redis_db import r
+    from database.redis_db import create_bounded_redis_client
 
-    return r
+    # Optional caches and writer fences must not hold auth or durable writes open.
+    return create_bounded_redis_client(0.1)
 
 
 def _failure(family, operation):

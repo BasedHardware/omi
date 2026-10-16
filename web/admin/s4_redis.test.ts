@@ -33,6 +33,11 @@ describe("shared admin Redis accessor", () => {
     await cache.setJsonCache("key", { value: 2 }, 60);
     await cache.invalidateEnforcementCache("u");
     expect(mocks.construct).toHaveBeenCalledTimes(1);
+    const options = mocks.construct.mock.calls[0][0];
+    expect(options.connectTimeout).toBe(100);
+    expect(options.commandTimeout).toBe(100);
+    expect(options.maxRetriesPerRequest).toBe(0);
+    expect(options.autoResendUnfulfilledCommands).toBe(false);
     expect(mocks.set).toHaveBeenCalledWith("key", '{"value":2}', "EX", 60);
     expect(mocks.del).toHaveBeenCalledWith("fair_use:stage:u");
   });

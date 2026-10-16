@@ -19,6 +19,11 @@ export function getRedis(): Redis | null {
     port,
     password: password || undefined,
     lazyConnect: true,
+    // Best-effort invalidation must release durable writes during a blackhole.
+    connectTimeout: 100,
+    commandTimeout: 100,
+    maxRetriesPerRequest: 0,
+    autoResendUnfulfilledCommands: false,
   });
   _redis.on("error", (err) => console.error("Redis error:", err.message));
   return _redis;

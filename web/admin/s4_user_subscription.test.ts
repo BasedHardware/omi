@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createHash } from "node:crypto";
 import {
   updateUserSubscriptionDetails,
   removeUserSubscriptionDetails,
@@ -31,7 +30,7 @@ const subscription = {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.unstubAllEnvs();
-  vi.stubEnv("FIRESTORE_READ_LEVERS", '{"subscription_cache":100}');
+  vi.stubEnv("FIRESTORE_READ_LEVERS", "");
   mocks.events.length = 0;
   mocks.getRedis.mockImplementation(() => ({ eval: mocks.eval }));
   mocks.eval.mockImplementation(async (script: string) => {
@@ -91,33 +90,27 @@ describe("subscription writer cache fences", () => {
     "invalid",
     '{"subscription_cache":true}',
     '{"subscription_cache":101}',
-  ])("skips Redis for off/invalid lever %s", async (config) => {
-    vi.stubEnv("FIRESTORE_READ_LEVERS", config);
-    await updateSingleUserSubscription("u", subscription);
-    expect(mocks.getRedis).not.toHaveBeenCalled();
-    expect(mocks.events).toEqual(["write"]);
-  });
-  it("matches Python percentage cohorts", async () => {
+  ])(
+    "fences writes regardless of off/invalid backend lever %s",
+    async (config) => {
+      vi.stubEnv("FIRESTORE_READ_LEVERS", config);
+      await updateSingleUserSubscription("u", subscription);
+      expect(mocks.getRedis).toHaveBeenCalledOnce();
+      expect(mocks.events).toEqual(["begin", "write", "end"]);
+    }
+  );
+  it("fences every writer regardless of the backend percentage cohort", async () => {
     vi.stubEnv("FIRESTORE_READ_LEVERS", '{"subscription_cache":50}');
     const uids = Array.from({ length: 20 }, (_, i) => `user-${i}`);
     await updateUserSubscriptionDetails(
       uids.map((uid) => ({ uid })),
       subscription
     );
-    const expected = uids.filter(
-      (uid) =>
-        createHash("sha256")
-          .update(`subscription_cache:${uid}`)
-          .digest()
-          .readBigUInt64BE() %
-          BigInt(100) <
-        BigInt(50)
-    );
     const actual = mocks.eval.mock.calls
       .filter(([script]) => script.includes("SADD"))
       .map((call) => call[2]);
     expect(actual).toEqual(
-      expected.map(
+      uids.map(
         (uid) =>
           "fsr:s4:v2:" +
           JSON.stringify(["subscription_cache", uid]) +

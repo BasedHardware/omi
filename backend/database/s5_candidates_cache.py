@@ -41,6 +41,12 @@ def _cache_unavailable(outcome: str) -> None:
     )
 
 
+@functools.lru_cache(maxsize=1)
+def _redis():
+    """Lazy, bounded I/O for every best-effort cache operation."""
+    return redis_db.create_bounded_redis_client(0.1)
+
+
 def _ttl() -> int:
     try:
         return max(0, min(300, int(os.getenv('CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS', '30'))))
@@ -60,7 +66,7 @@ def invalidate_after_write(fn):
             try:
                 # Random generations cannot expire back onto a live entry or
                 # reuse an old counter following version-key eviction.
-                redis_db.r.set(_version_key(uid), uuid4().hex, ex=7 * 86400)
+                _redis().set(_version_key(uid), uuid4().hex, ex=7 * 86400)
                 CACHE_OPERATIONS.labels(outcome='invalidated').inc()
             except RedisError:
                 _cache_unavailable('invalidation_unavailable')
@@ -76,13 +82,13 @@ def load_compatibility_candidates(uid: str, generation: int, loader) -> list[Can
         return loader()
     try:
         version_key = _version_key(uid)
-        redis_db.r.set(version_key, uuid4().hex, nx=True, ex=7 * 86400)
-        version = redis_db.r.get(version_key)
+        _redis().set(version_key, uuid4().hex, nx=True, ex=7 * 86400)
+        version = _redis().get(version_key)
         if not version:
             return loader()
         token = version.decode() if isinstance(version, bytes) else str(version)
         key = f'fsr:s5:candidates:{uid}:{generation}:{token}'
-        raw = redis_db.r.get(key)
+        raw = _redis().get(key)
         if raw:
             try:
                 payload = json.loads(raw)
@@ -92,7 +98,7 @@ def load_compatibility_candidates(uid: str, generation: int, loader) -> list[Can
                     ]
                     if (
                         all(row.account_generation == generation for row in records)
-                        and redis_db.r.get(version_key) == version
+                        and _redis().get(version_key) == version
                     ):
                         CACHE_OPERATIONS.labels(outcome='hit').inc()
                         return records
@@ -108,8 +114,8 @@ def load_compatibility_candidates(uid: str, generation: int, loader) -> list[Can
     try:
         # Always address the version captured BEFORE Firestore. A concurrent
         # write cannot bless an older scan under its new invalidation version.
-        if redis_db.r.get(version_key) == version:
-            redis_db.r.set(key, json.dumps([row.model_dump(mode='json') for row in records]), ex=ttl)
+        if _redis().get(version_key) == version:
+            _redis().set(key, json.dumps([row.model_dump(mode='json') for row in records]), ex=ttl)
     except (RedisError, TypeError, ValueError):
         # Fill is best-effort: a serialization or Redis fault must never fail a request the scan already served.
         _cache_unavailable('unavailable')

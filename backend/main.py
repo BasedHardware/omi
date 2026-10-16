@@ -653,6 +653,10 @@ async def _periodic_durable_queue_age_publish(interval_seconds: int | None = Non
 
 @app.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def shutdown_event():
+    # Keep the shutdown cleanup self-contained for isolated lifecycle callers.
+    import logging
+    from utils.executors import db_executor, run_blocking
+
     runtime = getattr(app.state, 'messaging_runtime', None)
     if runtime:
         stop, task = runtime
@@ -673,7 +677,7 @@ async def shutdown_event():
     try:
         await run_blocking(db_executor, release_loop_leases)
     except Exception:
-        logger.warning('fsr_leader_lease release scheduling failed; leases will expire')
+        logging.getLogger(__name__).warning('fsr_leader_lease release scheduling failed; leases will expire')
     if singleton_loops_enabled():
         withdraw_queue_oldest_ready_ages()
     await shutdown_managed_spend_ledger()
