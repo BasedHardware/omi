@@ -30,6 +30,7 @@ from google.protobuf import duration_pb2
 from google.protobuf import timestamp_pb2
 
 from utils.log_sanitizer import sanitize
+from utils.sync.backfill_order import direct_schedule_at
 
 logger = logging.getLogger(__name__)
 
@@ -320,6 +321,8 @@ def enqueue_sync_job(payload: Dict[str, Any]) -> None:
     if sequencer_epoch is not None and (not isinstance(sequencer_epoch, int) or sequencer_epoch <= 0):
         raise ValueError('sync job sequencer epoch must be a positive integer')
     task_id = f"{payload['job_id']}-s{sequencer_epoch}" if sequencer_epoch is not None else str(payload['job_id'])
+    schedule_at = direct_schedule_at(payload)
+    schedule_options: Dict[str, Any] = {'schedule_at': schedule_at} if schedule_at is not None else {}
     if payload.get('lane') == 'backfill' and is_sync_backfill_routing_enabled():
         queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip()
         handler_url = os.getenv('SYNC_BACKFILL_TASKS_HANDLER_URL', '').strip()
@@ -330,9 +333,10 @@ def enqueue_sync_job(payload: Dict[str, Any]) -> None:
                 task_id,
                 payload,
                 audience=os.getenv('SYNC_BACKFILL_TASKS_OIDC_AUDIENCE') or handler_url,
+                **schedule_options,
             )
             return
-    enqueue_named_task(os.getenv('SYNC_TASKS_QUEUE', ''), _handler_url(), task_id, payload)
+    enqueue_named_task(os.getenv('SYNC_TASKS_QUEUE', ''), _handler_url(), task_id, payload, **schedule_options)
 
 
 def enqueue_sync_uid_wake(uid: str, uid_hash: str, deadline: int) -> None:
