@@ -21,7 +21,6 @@ environments:
           DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
           DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
@@ -349,7 +348,6 @@ environments:
           DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
           DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
@@ -606,7 +604,6 @@ environments:
         DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
         DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
         DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-        DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED: {value: 'false', category: rollout}
         DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
         DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
         DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
@@ -721,7 +718,6 @@ environments:
             DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
@@ -991,7 +987,6 @@ environments:
             DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
@@ -1269,7 +1264,6 @@ environments:
             DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
@@ -1529,7 +1523,6 @@ environments:
             DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
@@ -1723,7 +1716,6 @@ environments:
             DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
@@ -2191,7 +2183,6 @@ environments:
           DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
           DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
@@ -2594,7 +2585,6 @@ environments:
           DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
           DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
@@ -2781,7 +2771,6 @@ environments:
         DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
         DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
         DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-        DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED: {value: 'false', category: rollout}
         DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
         DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
         DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
@@ -2924,7 +2913,6 @@ environments:
             DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
@@ -3274,7 +3262,6 @@ environments:
             DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
@@ -3598,7 +3585,6 @@ environments:
             DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
@@ -3904,7 +3890,6 @@ environments:
             DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
@@ -4117,7 +4102,6 @@ environments:
             DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
-            DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}

@@ -30,8 +30,9 @@ def tool_enabled(uid: str | None = None) -> bool:
 
 OPEN_LEASE_SECONDS = 90
 RECENT_SECONDS = 7 * 86400
-# Reserve one minute for processing before the product's completion target.
-DISPATCH_DELAY = (0, 240, 3540)
+# Priority orders contention; idle capacity must never wait for a tier timer.
+# Reserve one minute for processing before the hard completion ceiling.
+CEILING_HEADROOM_SECONDS = 3540
 CEILING_SECONDS = 3600
 
 

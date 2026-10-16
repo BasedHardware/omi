@@ -20,7 +20,7 @@ from config.demand_processing import (
     surface_reporting_enabled,
     OPEN_LEASE_SECONDS,
     RECENT_SECONDS,
-    DISPATCH_DELAY,
+    CEILING_HEADROOM_SECONDS,
 )
 
 logger = logging.getLogger(__name__)
@@ -118,9 +118,9 @@ def schedule(
         priority = user_tier(uid, now=now, redis=r)
         if immediate:
             priority = 0
-        due = started + DISPATCH_DELAY[priority]
+        due = now
         if effects_only and priority != 0:
-            due = min(started + DISPATCH_DELAY[2], max(now, not_before or now))
+            due = min(started + CEILING_HEADROOM_SECONDS, max(now, not_before or now))
         row = dict(
             obligation=obligation,
             owner=owner_key(uid),
@@ -137,8 +137,11 @@ def schedule(
         p.expire(owner_key(uid) + ':pending', TTL)
         for t in range(3):
             p.zrem(prefix() + f'queue:{t}', obligation)
+            p.zrem(prefix() + f'ready:{t}', obligation)
         p.zadd(prefix() + f'queue:{priority}', {obligation: started})
         p.expire(prefix() + f'queue:{priority}', TTL)
+        p.zadd(prefix() + f'ready:{priority}', {obligation: due})
+        p.expire(prefix() + f'ready:{priority}', TTL)
         p.execute()
         _wake(row)
         EVENTS.labels('scheduled').inc()
@@ -181,8 +184,11 @@ def _promote_member(uid: str, obligation: str, r: Any, now: float) -> bool:
     p.set(prefix() + obligation, json.dumps(row), ex=TTL)
     for priority in range(3):
         p.zrem(prefix() + f'queue:{priority}', obligation)
+        p.zrem(prefix() + f'ready:{priority}', obligation)
     p.zadd(prefix() + 'queue:0', {obligation: row['started_at']})
     p.expire(prefix() + 'queue:0', TTL)
+    p.zadd(prefix() + 'ready:0', {obligation: now})
+    p.expire(prefix() + 'ready:0', TTL)
     p.execute()
     _wake(row, immediate=True, now=now)
     return True
@@ -264,18 +270,21 @@ def admit(obligation: str, *, now: float | None = None, token: str | int | None 
 
         if row['due_at'] > now:
             return postpone()
-        overdue = now - row['started_at'] >= DISPATCH_DELAY[2]
+        overdue = now - row['started_at'] >= CEILING_HEADROOM_SECONDS
         for priority in range(3):
             queue = prefix() + f'queue:{priority}'
             # Prune expired rows without allowing stale index entries to block drain.
             r.zremrangebyscore(queue, '-inf', now - TTL)
             oldest = r.zrange(queue, 0, 0, withscores=True)
             AGE.labels(str(priority)).set(max(0, now - oldest[0][1]) if oldest else 0)
-            if priority < row['tier'] and oldest and not overdue:
+            ready = prefix() + f'ready:{priority}'
+            r.zremrangebyscore(ready, '-inf', now - TTL)
+            if priority < row['tier'] and r.zcount(ready, '-inf', now) and not overdue:
                 return postpone()
         p = r.pipeline()
         for priority in range(3):
             p.zrem(prefix() + f'queue:{priority}', obligation)
+            p.zrem(prefix() + f'ready:{priority}', obligation)
         p.zrem(row['owner'] + ':pending', obligation)
         p.delete(prefix() + obligation)
         p.execute()

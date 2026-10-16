@@ -8,7 +8,6 @@ import pytest
 
 from config import demand_processing as config
 from utils.conversations import demand_processing as demand
-from utils.conversations.day_merge_pass import engaged, shadow_day
 
 
 @pytest.fixture
@@ -76,7 +75,7 @@ def test_default_off_and_owner_cohort(monkeypatch):
 def test_surface_promotes_only_owner_and_session_leases_union(runtime):
     redis, wake = runtime
     assert schedule('owner', 'pending') and schedule('other', 'other')
-    assert wake.call_args.kwargs['schedule_at'] == 4540
+    assert wake.call_args.kwargs['schedule_at'] == 1000
     report('owner')
     assert demand.user_tier('owner', now=1001) == 0
     assert json.loads(redis.get(demand.prefix() + 'pending'))['tier'] == 0
@@ -99,11 +98,12 @@ def test_ready_priority_and_ceiling_escape(runtime):
     assert not demand.admit('middle', now=1240)
     assert demand.admit('high', now=1240)
     assert demand.admit('middle', now=1240)
-    assert not demand.admit('low', now=4539)
+    assert demand.admit('low', now=1240)
+    schedule('dormant', 'starved', now=1000)
     report('new-active', now=4540)
     schedule('new-active', 'new-high', now=4540)
     # Reserving 60 seconds prevents perpetual tier-0 traffic starving old work.
-    assert demand.admit('low', now=4540)
+    assert demand.admit('starved', now=4540)
 
 
 def test_ceiling_not_reset_by_revision_or_redis_repair(runtime):
@@ -111,7 +111,7 @@ def test_ceiling_not_reset_by_revision_or_redis_repair(runtime):
     schedule('owner', 'pending', now=1000)
     schedule('owner', 'pending', now=4400)
     row = json.loads(redis.get(demand.prefix() + 'pending'))
-    assert row['started_at'] == 1000 and row['due_at'] == 4540
+    assert row['started_at'] == 1000 and row['due_at'] == 4400
     assert redis.ttl(demand.prefix() + 'queue:2') > config.CEILING_SECONDS
     assert demand.admit('pending', now=4540)
 
@@ -122,6 +122,15 @@ def test_lazy_settlement_and_open_bypass(runtime):
     assert json.loads(redis.get(demand.prefix() + 'effects'))['due_at'] == 1600
     report('owner', now=1100)
     assert demand.admit('effects', now=1100)
+
+
+def test_future_lazy_work_is_not_contention_for_ready_visible_work(runtime):
+    report('recent', now=500)
+    report('recent', False, now=501)
+    schedule('recent', 'future-effects', now=1000, not_before=1600, effects_only=True)
+    schedule('dormant', 'visible', now=1000)
+    assert demand.admit('visible', now=1000)
+    assert not demand.admit('future-effects', now=1000)
 
 
 def test_tool_auth_bounds_and_progress(runtime):
@@ -138,15 +147,14 @@ def test_tool_auth_bounds_and_progress(runtime):
     assert json.loads(runtime[0].get(demand.prefix() + 'other'))['tier'] == 2
 
 
-def test_merge_pass_is_shadow_and_unknown_engagement_protected(monkeypatch, caplog):
-    for key in ['opened_at', 'edited_at', 'shared_at', 'acted_at']:
-        assert engaged({'engagement_unobserved': True, key: 'receipt'})
-    assert engaged({})
-    monkeypatch.setenv('DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED', 'true')
-    rows = [{'id': 'opaque', 'summary': 'PRIVATE'}, {'engagement_unobserved': True}]
-    with caplog.at_level('INFO'):
-        assert shadow_day(rows) == {'link_only': 1, 'candidate': 1}
-    assert 'PRIVATE' not in caplog.text and 'opaque' not in caplog.text
+@pytest.mark.parametrize('recent', [False, True])
+def test_idle_capacity_processes_every_tier_without_delay(runtime, recent):
+    if recent:
+        report('owner', now=500)
+        report('owner', False, now=501)
+    schedule('owner', 'pending', now=1000)
+    assert runtime[1].call_args.kwargs['schedule_at'] == 1000
+    assert demand.admit('pending', now=1000)
 
 
 def test_redis_outage_is_eager_not_lost(runtime, monkeypatch):

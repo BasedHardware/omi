@@ -120,7 +120,6 @@ env:
     value: "false"
   - name: DEMAND_PROCESSING_TOOL_ENABLED
     value: "false"
-  - name: DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED
     value: "false"
   - name: DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
     value: "false"
