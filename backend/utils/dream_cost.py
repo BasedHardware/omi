@@ -11,6 +11,7 @@ and never a zero dollar cost. Cache storage uses the card's
 """
 
 import math
+from fractions import Fraction
 from pathlib import Path
 
 import yaml
@@ -107,6 +108,55 @@ def price_attempt(
     return micro, 'priced'
 
 
+def cached_input_price_ratio(provider, model, prompt_tokens):
+    """Return cached-input cost as a fraction of uncached input cost.
+
+    This deliberately reads the same active rate card and context tier as
+    ``price_attempt``. ``None`` means there is no verified ratio, so callers
+    must count cached input at the full uncached rate.
+    """
+    if type(prompt_tokens) is not int or prompt_tokens < 0:
+        return None
+    card = rate_card_for(provider or '', model or '')
+    if card is None:
+        return None
+    rates = card.effective_rates(prompt_tokens)
+    uncached_rate = rates.input_micro_usd_per_million
+    cached_rate = rates.cached_input_micro_usd_per_million
+    if type(uncached_rate) is not int or uncached_rate <= 0 or type(cached_rate) is not int or cached_rate < 0:
+        return None
+    return Fraction(cached_rate, uncached_rate)
+
+
+def price_weighted_tokens(
+    provider,
+    model,
+    *,
+    prompt_tokens,
+    cached_tokens,
+    completion_tokens,
+    cache_reported=True,
+):
+    """Convert usage to uncached-input-price-equivalent tokens.
+
+    Missing or unreported cache usage gets no discount. Rounding up keeps the
+    pass budget conservative while preserving exact rate-card ratios.
+    """
+    if any(type(count) is not int or count < 0 for count in (prompt_tokens, completion_tokens)):
+        raise ValueError('dream_invalid_usage')
+    if cached_tokens is not None and (type(cached_tokens) is not int or cached_tokens < 0):
+        raise ValueError('dream_invalid_cache_usage')
+    if cached_tokens is not None and cached_tokens > prompt_tokens:
+        raise ValueError('dream_invalid_cache_usage')
+    discountable = cached_tokens or 0
+    if not cache_reported or cached_tokens is None:
+        discountable = 0
+    ratio = cached_input_price_ratio(provider, model, prompt_tokens) if discountable else Fraction(1, 1)
+    if ratio is None:
+        ratio = Fraction(1, 1)
+    return math.ceil(prompt_tokens - discountable + completion_tokens + discountable * ratio)
+
+
 def conservative_attempt_micro(provider, model, input_tokens, completion_tokens):
     """Unknown billed usage: the whole input at the uncached rate, plus completion.
 
@@ -150,6 +200,7 @@ def charge_attempts(attempts, *, ceiling, provider, model):
     completion = 0
     unreported = 0
     micros = 0
+    price_weighted = 0
     priced = True
     for attempt in attempts:
         if not isinstance(attempt, dict):
@@ -164,6 +215,18 @@ def charge_attempts(attempts, *, ceiling, provider, model):
         partial = prompt_tokens + completion_tokens
         take = partial if complete else max(ceiling, partial)
         tokens += take
+        if complete:
+            price_weighted += price_weighted_tokens(
+                attempt.get('provider') or provider,
+                attempt.get('model') or model,
+                prompt_tokens=prompt_tokens,
+                cached_tokens=cached_tokens,
+                completion_tokens=completion_tokens,
+                cache_reported=attempt.get('cache_field_reported') is True,
+            )
+        else:
+            # Partial or missing cache data is deliberately charged at full price.
+            price_weighted += take
         if complete:
             prompt += prompt_tokens
             completion += completion_tokens
@@ -190,6 +253,7 @@ def charge_attempts(attempts, *, ceiling, provider, model):
             micros += micro
     return {
         'tokens': tokens,
+        'price_weighted_tokens': price_weighted,
         'prompt_tokens': prompt,
         'completion_tokens': completion,
         'cached_tokens': cached,

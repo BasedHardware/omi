@@ -87,6 +87,10 @@ overlay:
         PROACTIVITY_V2_POSTHOG_HOST:
           value: https://us.posthog.com
           category: rollout
+        # Public product-capture token; shared POSTHOG_PROJECT_API_KEY stays disabled to keep flag rollouts dark.
+        POSTHOG_PRODUCT_CAPTURE_TOKEN:
+          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+          category: telemetry
         POSTHOG_PROJECT_API_KEY:
           secret:
             name: prod-omi-backend-secrets
@@ -358,6 +362,10 @@ overlay:
         PROACTIVITY_V2_POSTHOG_HOST:
           value: https://us.posthog.com
           category: rollout
+        # Public product-capture token; shared POSTHOG_PROJECT_API_KEY stays disabled to keep flag rollouts dark.
+        POSTHOG_PRODUCT_CAPTURE_TOKEN:
+          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+          category: telemetry
         POSTHOG_PROJECT_API_KEY:
           secret:
             name: prod-omi-backend-secrets
@@ -529,6 +537,10 @@ overlay:
         category: telemetry
       MENTOR_PIPELINE:
         value: cohort
+        category: rollout
+      # First released macOS build with the Jev+3.8 screen pipeline and #20374 (Beta 12435, Stable 12447)
+      OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD:
+        value: '12435'
         category: rollout
       FREE_TIER_LOCAL_PROCESSING:
         value: 'false'

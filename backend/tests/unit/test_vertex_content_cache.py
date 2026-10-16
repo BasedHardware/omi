@@ -88,6 +88,15 @@ async def test_cache_wire_reuse_owner_isolation_expiry_and_refresh():
         cache = VertexContentCache(client, now=lambda: clock[0])
         req = request()
         payload = _vertex_request(req)
+        assert payload['contents'] == [
+            {
+                'role': 'user',
+                'parts': [
+                    {'text': 'synthetic stable context ' * 1100},
+                    {'text': 'invented continuation'},
+                ],
+            }
+        ]
 
         async def prepare(owner='synthetic-owner-a'):
             receipt = CacheReceipt()
@@ -113,6 +122,7 @@ async def test_cache_wire_reuse_owner_isolation_expiry_and_refresh():
         assert created['model'].endswith('/models/gemini-3.8-flash')
         assert created['systemInstruction'] == payload['systemInstruction']
         assert created['tools'] == payload['tools']
+        assert created['contents'] == [{'role': 'user', 'parts': [{'text': 'synthetic stable context ' * 1100}]}]
         assert (await prepare())[2].write_tokens == 0
         assert len(calls) == 1
         assert (await prepare('synthetic-owner-b'))[1] != key

@@ -367,6 +367,7 @@ jobs:
             BASE_API_URL=${{ env.PRODUCTION_DESKTOP_BACKEND_URL }}
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.admitted-source.outputs.source_sha }}
             OMI_DESKTOP_BACKEND_RELEASE_CHANNEL=production
+            OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD=12435
             OMI_LLM_GATEWAY_URL=${{ steps.gateway-serving.outputs.gateway_url }}
             OMI_LLM_GATEWAY_FEATURE_MODE=gateway
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true

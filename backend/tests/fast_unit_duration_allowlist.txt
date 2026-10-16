@@ -451,3 +451,7 @@ tests/unit/test_conversation_notes_v2_beta_rollout.py::test_dev_enables_every_ro
 # 2026-10-16: parses the full runtime-env manifest per env (0.41-0.49s CPU at load avg ~4). Assertions still run.
 tests/unit/test_plan_quota_env_retirement.py::test_manifest_forbids_plan_quota_overlays_on_every_cloud_run_conversation_service[dev]
 tests/unit/test_plan_quota_env_retirement.py::test_manifest_forbids_plan_quota_overlays_on_every_cloud_run_conversation_service[prod]
+# 2026-10-16: parses the full listen chart values plus rendered runtime env (0.30-0.34s CPU at load avg ~20 on the pre-push host). Assertions still run.
+tests/unit/test_backend_listen_helm_defaults.py::test_windowed_live_rollout_is_prod_canary_and_bounded
+# 2026-10-16: builds both Vertex cache request shapes through the provider boundary (0.30s CPU at load avg ~20). Assertions still run.
+tests/unit/test_vertex_content_cache.py::test_provider_boundary_caches_both_traffic_types[False-dedicated]

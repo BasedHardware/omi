@@ -275,3 +275,70 @@ def test_verify_lane_is_not_used_as_the_cheap_turn(runtime, monkeypatch):
     assert report['outcomes'][0]['status'] == 'suggested'
     assert lanes == [MAIN_LANE]
     assert _proposals(runtime)[0]['item']['title'] == 'Dismiss person'
+
+
+def test_price_weighted_cache_usage_allows_more_main_turns_than_raw_tokens(runtime, monkeypatch):
+    limits = SessionLimits(bucket='light', turns=8, tools=8, read_bytes=64000, read_call_bytes=64000, tokens=10000)
+    owner_records = EvidenceRecords(records(runtime))
+    monkeypatch.setattr(
+        dream_seed,
+        'load',
+        lambda uid, caps: ({'targets': list(owner_records), 'vocabulary': []}, owner_records, [], limits),
+    )
+    main_calls = []
+
+    async def model(uid, lane, mount, messages):
+        if lane != MAIN_LANE:
+            pytest.fail('No staged work should need verification')
+        main_calls.append(messages)
+        if len(main_calls) <= 5:
+            tool_call = call('read', {'refs': ['conversations/one']}, index=len(main_calls))
+            return Turn(
+                tokens=4000,
+                prompt_tokens=4000,
+                completion_tokens=0,
+                cached_tokens=3500,
+                tool_calls=(tool_call,),
+                messages=({'role': 'assistant', 'content': None, 'tool_calls': [tool_call]},),
+            )
+        return turn([call('finish', {'summary': 'Checked cached records', 'notes': ''}, index=99)], tokens=4000)
+
+    report = asyncio.run(dream_agent.run_pass(UID, turn=model, dry_run=True))
+    assert report['status'] == 'complete', report
+    assert report['turns'] == 6
+    assert report['tokens'] == 24000 and report['cached_tokens'] == 17500
+    assert report['price_weighted_tokens'] == 8250 < limits.tokens
+    assert report['accounted_tokens'] == report['tokens']
+
+
+def test_unreported_cache_is_full_price_in_real_run_pass(runtime, monkeypatch):
+    limits = SessionLimits(bucket='light', turns=3, tools=2, read_bytes=64000, read_call_bytes=64000, tokens=10000)
+    owner_records = EvidenceRecords(records(runtime))
+    monkeypatch.setattr(
+        dream_seed,
+        'load',
+        lambda uid, caps: ({'targets': list(owner_records), 'vocabulary': []}, owner_records, [], limits),
+    )
+    main_calls = 0
+
+    async def model(uid, lane, mount, messages):
+        nonlocal main_calls
+        if lane != MAIN_LANE:
+            pytest.fail('No staged work should need verification')
+        main_calls += 1
+        if main_calls == 1:
+            tool_call = call('read', {'refs': ['conversations/one']})
+            return Turn(
+                tokens=4000,
+                prompt_tokens=4000,
+                completion_tokens=0,
+                cached_tokens=None,
+                tool_calls=(tool_call,),
+                messages=({'role': 'assistant', 'content': None, 'tool_calls': [tool_call]},),
+            )
+        return Turn(tokens=4000, prompt_tokens=4000, completion_tokens=0, cached_tokens=None)
+
+    report = asyncio.run(dream_agent.run_pass(UID, turn=model, dry_run=True))
+    assert report['status'] == 'complete', report
+    assert main_calls == 2
+    assert report['tokens'] == report['price_weighted_tokens'] == 8000
