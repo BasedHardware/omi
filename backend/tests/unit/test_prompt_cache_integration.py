@@ -1262,7 +1262,13 @@ def test_datetime_injected_into_user_turn_not_system():
         {"role": "assistant", "content": "let me check"},
         {"role": "user", "content": "thanks, and today?"},
     ]
-    block = "<current_datetime>\nCurrent date time in UTC: 2024-01-19 14:23:45\n</current_datetime>"
+    block = (
+        "<current_datetime>\nCurrent date time in UTC: Fri 19 Jan 2024, 14:23 UTC\n"
+        "Current date time ISO format: 2024-01-19T14:23:45+00:00\n"
+        "Tool timestamps are already converted and labelled with their zone; report them as written and do not convert them again. "
+        "Transcript times like [+H:MM:SS] are elapsed offsets, not clock times. Relative time words (morning, afternoon, evening, tonight) are in UTC.\n"
+        "</current_datetime>"
+    )
     result = agentic_mod._inject_current_datetime(list(messages), block)
 
     # The block must be attached to the LAST user message, not the earlier one.
@@ -1283,7 +1289,13 @@ def test_datetime_injected_into_list_content_user_turn():
         {"role": "assistant", "content": "ok"},
         {"role": "user", "content": [{"type": "image", "source": {"type": "base64", "data": "..."}}]},
     ]
-    block = "<current_datetime>\nCurrent date time in UTC: 2024-01-19 14:23:45\n</current_datetime>"
+    block = (
+        "<current_datetime>\nCurrent date time in UTC: Fri 19 Jan 2024, 14:23 UTC\n"
+        "Current date time ISO format: 2024-01-19T14:23:45+00:00\n"
+        "Tool timestamps are already converted and labelled with their zone; report them as written and do not convert them again. "
+        "Transcript times like [+H:MM:SS] are elapsed offsets, not clock times. Relative time words (morning, afternoon, evening, tonight) are in UTC.\n"
+        "</current_datetime>"
+    )
     result = agentic_mod._inject_current_datetime(list(messages), block)
 
     # No extra trailing message was appended; the last turn is still the image turn.

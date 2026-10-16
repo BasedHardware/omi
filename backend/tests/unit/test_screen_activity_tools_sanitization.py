@@ -62,6 +62,18 @@ def sa():
         "utils.retrieval.agentic": _leaf("utils.retrieval.agentic", ["agent_config_context"]),
     }
     with stub_modules(fakes):
+        # screen_activity_tools imports utils.model_text and utils.user_clock at module
+        # scope; the stubbed "utils" package has an empty path, so load the real (stdlib-only)
+        # model_text first, then user_clock (its database.notifications import hits the fake
+        # above). Same sanctioned pattern as test_calendar_tools_sanitization.
+        load_module_fresh(
+            "utils.model_text",
+            os.path.join(str(_BACKEND), "utils", "model_text.py"),
+        )
+        load_module_fresh(
+            "utils.user_clock",
+            os.path.join(str(_BACKEND), "utils", "user_clock.py"),
+        )
         yield load_module_fresh(
             "utils.retrieval.tools.screen_activity_tools",
             os.path.join(str(_BACKEND), "utils", "retrieval", "tools", "screen_activity_tools.py"),

@@ -331,6 +331,22 @@ class TestHelperMethods:
         assert "[14:30:45]" in result
         assert '"A dog"' in result
 
+    def test_model_facing_photo_timestamp_uses_labelled_clock(self):
+        from models.conversation_photo import ConversationPhoto
+        from utils.model_text import DisplayClock
+
+        photos = [
+            ConversationPhoto(
+                base64='abc',
+                description='A dog',
+                created_at=datetime(2026, 9, 26, 7, 18, tzinfo=timezone.utc),
+            )
+        ]
+        result = ConversationPhoto.photos_as_string(
+            photos, include_timestamps=True, clock=DisplayClock.from_name('Asia/Ho_Chi_Minh')
+        )
+        assert 'Sat 26 Sep 2026, 14:18 Asia/Ho_Chi_Minh (UTC+07:00)' in result
+
     def test_photo_to_string_no_description(self):
         """Photos with no description should be excluded."""
         from models.conversation_photo import ConversationPhoto

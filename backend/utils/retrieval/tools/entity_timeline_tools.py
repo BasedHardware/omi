@@ -35,6 +35,9 @@ from utils.messaging.memory_privacy import channel_private_filter_active, is_cha
 from utils.memory.canonical_memory_adapter import memory_item_to_memorydb
 from utils.memory.ledger_history_policy import is_ledger_history_item
 from utils.retrieval.turn_refs import register_record_ref
+from utils.model_text import DisplayClock, format_instant
+from utils.user_clock import clock_for_config
+from utils.model_text import truncation_note
 
 logger = logging.getLogger(__name__)
 
@@ -585,10 +588,16 @@ def _timeline_record_collection(entry: TimelineEntry) -> Optional[str]:
     return {TimelineSource.ledger: 'memories', TimelineSource.conversations: 'conversations'}.get(entry.source)
 
 
-def format_entity_timeline(timeline: EntityTimeline, *, included_entries: Optional[List[TimelineEntry]] = None) -> str:
+def format_entity_timeline(
+    timeline: EntityTimeline,
+    *,
+    included_entries: Optional[List[TimelineEntry]] = None,
+    clock: Optional[DisplayClock] = None,
+) -> str:
     """Render only bounded timeline facts and opaque/stable evidence refs."""
     if included_entries is not None:
         included_entries.clear()
+    clock = clock or DisplayClock.utc()
     person_ref = (
         f'ref: people/{timeline.entity.identifier}'
         if timeline.entity.kind == 'person' and timeline.aliases_resolved
@@ -619,7 +628,14 @@ def format_entity_timeline(timeline: EntityTimeline, *, included_entries: Option
     if person_ref:
         lines.insert(1, person_ref)
     output_truncated = False
-    truncation_notice = "[Timeline output is bounded; ask for a narrower entity or date range.]"
+    shown_entries = 0
+    truncation_notice = truncation_note(
+        shown=len(timeline.entries),
+        total=None,
+        unit="timeline entries",
+        how_to_get_more="ask for a narrower entity or date range",
+        cut=True,
+    )
     postambles: List[str] = []
     if timeline.truncated_sources:
         postambles.append(
@@ -640,14 +656,14 @@ def format_entity_timeline(timeline: EntityTimeline, *, included_entries: Option
     for entry in timeline.entries:
         status = f"/{entry.status.value}" if entry.status is not None else ""
         block = [
-            f"- {entry.occurred_at.isoformat()} [{entry.source.value}{status}] {entry.record_id}",
+            f"- {format_instant(entry.occurred_at, clock)} [{entry.source.value}{status}] {entry.record_id}",
             f"  {entry.content}",
         ]
         collection = _timeline_record_collection(entry)
         if collection:
             block.append(f'  ref: {collection}/{entry.record_id}')
         if entry.valid_to:
-            block.append(f"  valid_to: {entry.valid_to.isoformat()}")
+            block.append(f"  valid_to: {format_instant(entry.valid_to, clock)}")
         if entry.evidence_refs:
             block.append("  evidence: " + ", ".join(entry.evidence_refs))
         if entry.source_refs:
@@ -659,10 +675,22 @@ def format_entity_timeline(timeline: EntityTimeline, *, included_entries: Option
             output_truncated = True
             break
         lines.extend(block)
+        shown_entries += 1
         if included_entries is not None:
             included_entries.append(entry)
     if timeline.truncated or output_truncated:
-        lines.extend(["", truncation_notice])
+        lines.extend(
+            [
+                "",
+                truncation_note(
+                    shown=shown_entries,
+                    total=None,
+                    unit="timeline entries",
+                    how_to_get_more="ask for a narrower entity or date range",
+                    cut=True,
+                ),
+            ]
+        )
     lines.extend(postambles)
     return "\n".join(lines).strip()
 
@@ -854,7 +882,11 @@ def get_entity_timeline_tool(
         unavailable_sources=tuple(unavailable_sources),
     )
     included_entries: List[TimelineEntry] = []
-    result = format_entity_timeline(timeline, included_entries=included_entries)
+    result = format_entity_timeline(
+        timeline,
+        included_entries=included_entries,
+        clock=clock_for_config(config or _agent_config(), uid),
+    )
     cfg = config or _agent_config()
     configurable = (cfg or {}).get('configurable') or {}
     if reference.kind == 'person' and aliases.resolved:
