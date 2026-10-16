@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/home/firmware_update.dart';
+import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -62,6 +63,18 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   bool onFirmwareUpdatePage = false;
 
   @override
+  int batteryLevel = 100;
+
+  @override
+  bool isCharging = false;
+
+  @override
+  bool isConnected = true;
+
+  @override
+  bool isConnecting = false;
+
+  @override
   Future<void> initiateConnection(String caller, {bool boundDeviceOnly = false}) async {
     initiateConnectionCalls++;
     callers.add(caller);
@@ -94,11 +107,15 @@ Widget _wrap(DeviceProvider provider, Widget child) {
 }
 
 void main() {
+  Future<bool> stubOpener(String route, {bool Function()? canOpen}) async => true;
+
   setUp(() {
     HttpOverrides.global = _FakeHttpOverrides();
+    HomeNavigation.register(stubOpener);
   });
 
   tearDown(() {
+    HomeNavigation.unregister(stubOpener);
     HttpOverrides.global = null;
   });
 
