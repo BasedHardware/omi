@@ -47,16 +47,20 @@ def test_notice_is_appended_once_when_a_main_turn_starts_at_threshold(runtime, m
 
     report = asyncio.run(dream_agent.run_pass(UID, turn=model, dry_run=True))
     notice = (
-        "About 20% of this pass's budget remains. Stage your strongest findings now with propose_* "
+        "BUDGET NOTICE: about 20% of this pass's budget remains. Stage your strongest findings now with propose_* "
         '(or finish if there is nothing worth proposing); avoid new broad searches.'
     )
     assert report['status'] == 'complete', report
     assert len(seen_messages) == 11
-    notice_counts = [sum(notice in str(message) for message in messages) for messages in seen_messages]
+
+    def has_notice(message):
+        return isinstance(message, dict) and isinstance(message.get('content'), str) and notice in message['content']
+
+    notice_counts = [sum(has_notice(message) for message in messages) for messages in seen_messages]
     assert notice_counts[:9] == [0] * 9
     assert notice_counts[9:] == [1, 1]
     first_notice = seen_messages[9]
-    notice_index = next(index for index, message in enumerate(first_notice) if notice in str(message))
+    notice_index = next(index for index, message in enumerate(first_notice) if has_notice(message))
     cache_breakpoint_index = next(
         index
         for index, message in enumerate(first_notice)
@@ -71,6 +75,7 @@ def test_notice_is_appended_once_when_a_main_turn_starts_at_threshold(runtime, m
     vertex_roles = [content['role'] for content in vertex_contents]
     assert all(previous != current for previous, current in zip(vertex_roles, vertex_roles[1:]))
     final_parts = vertex_contents[-1]['parts']
-    assert 'functionResponse' in final_parts[-2]
-    assert final_parts[-1] == {'text': notice}
+    # Gemini rejects free text beside functionResponse parts; the notice rides inside the tool result.
+    assert all('functionResponse' in part for part in final_parts)
+    assert notice in final_parts[-1]['functionResponse']['response']['result']
     assert report['price_weighted_tokens'] == 91100
