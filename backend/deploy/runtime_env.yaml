@@ -2883,7 +2883,7 @@ environments:
             OMI_MESSAGING_LINK_TARGETS: {value: '{"telegram":{"provider":"telegram","address":"omi_chat_bot","deep_link_template":"https://t.me/{address}?start={proof}"},"imessage":{"provider":"linq","address":"+12062808403"}}',
               category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-            DREAM_AGENT_PASSES_PER_DAY: {value: '2', category: rollout}
+            DREAM_AGENT_PASSES_PER_DAY: {value: '48', category: rollout}
             DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
             DREAM_AGENT_DAILY_USD: {value: '10', category: rollout}
             DREAM_AGENT_TOKENS_PER_MINUTE: {value: '2000000', category: rollout}
@@ -2964,6 +2964,7 @@ environments:
             CONVERSATION_RELEVANCE_JEV_RESCUE: {value: shadow, category: rollout}
             NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            DREAM_AGENT_HUNT_INTERVAL_HOURS: {value: '2', category: rollout}
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-sync:
           capabilities:
@@ -3219,7 +3220,7 @@ environments:
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
             REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
-            DREAM_AGENT_PASSES_PER_DAY: {value: '2', category: rollout}
+            DREAM_AGENT_PASSES_PER_DAY: {value: '48', category: rollout}
             DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
             DREAM_AGENT_DAILY_USD: {value: '10', category: rollout}
             DREAM_AGENT_TOKENS_PER_MINUTE: {value: '2000000', category: rollout}
@@ -3279,6 +3280,7 @@ environments:
             CONVERSATION_RELEVANCE_JEV_RESCUE: {value: shadow, category: rollout}
             NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            DREAM_AGENT_HUNT_INTERVAL_HOURS: {value: '2', category: rollout}
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL

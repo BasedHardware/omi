@@ -237,9 +237,6 @@ overlay:
           value: 'true'
         SONIOX_WIRE_LEDGER:
           value: 'true'
-        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-          value: shadow
-          category: rollout
         FREE_TIER_LOCAL_PROCESSING:
           value: 'false'
         FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -248,6 +245,15 @@ overlay:
           value: 'false'
         HOSTED_SPEAKER_EMBEDDING_API_URL:
           value: http://172.16.160.20/diarizer
+        DREAM_AGENT_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+        BUCKET_SCREEN_FRAMES:
+          value: based-hardware-prod-screen-frames
+        CONVERSATION_RELEVANCE_JEV_PERCENT:
+          value: '100'
+        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+          value: shadow
+          category: rollout
         HOSTED_DIARIZATION_API_URL:
           value: http://172.16.160.20/diarizer-batch
           category: service_discovery
@@ -293,8 +299,6 @@ overlay:
         DREAM_AGENT_ENABLED:
           value: 'true'
           category: rollout
-        DREAM_AGENT_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
         POSTHOG_PRODUCT_CAPTURE_TOKEN:
           value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
           category: telemetry
@@ -339,13 +343,9 @@ overlay:
           category: rollout
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
-        BUCKET_SCREEN_FRAMES:
-          value: based-hardware-prod-screen-frames
         CONVERSATION_RELEVANCE_JEV_RESCUE:
           value: shadow
           category: rollout
-        CONVERSATION_RELEVANCE_JEV_PERCENT:
-          value: '100'
         NOTES_TIER_ESCALATION_ENABLED:
           value: 'true'
           category: rollout
@@ -570,7 +570,7 @@ overlay:
           DREAM_AGENT_UID_ALLOWLIST:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           DREAM_AGENT_PASSES_PER_DAY:
-            value: '2'
+            value: '48'
             category: rollout
           DREAM_AGENT_MANUAL_RUNS_PER_DAY:
             value: '3'
@@ -686,6 +686,9 @@ overlay:
           SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
+          DREAM_AGENT_HUNT_INTERVAL_HOURS:
+            value: '2'
+            category: rollout
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
       backend-sync:
         forbidden_env:
@@ -789,7 +792,7 @@ overlay:
             value: 'on'
             category: rollout
           DREAM_AGENT_PASSES_PER_DAY:
-            value: '2'
+            value: '48'
             category: rollout
           DREAM_AGENT_MANUAL_RUNS_PER_DAY:
             value: '3'
@@ -890,15 +893,11 @@ overlay:
           SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
+          DREAM_AGENT_HUNT_INTERVAL_HOURS:
+            value: '2'
+            category: rollout
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
       backend-sync-backfill:
-        forbidden_env:
-        - DEEPGRAM_SELF_HOSTED_ENABLED
-        - DEEPGRAM_SELF_HOSTED_URL
-        - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-        - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
-        - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
-        - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
           BATCH_PIPELINE_UID_ALLOWLIST:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
@@ -908,9 +907,6 @@ overlay:
             value: based-hardware-batch-pipeline-staging
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'true'
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-            value: shadow
-            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             value: 'false'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -931,6 +927,15 @@ overlay:
             value: https://us.posthog.com
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'false'
+          DREAM_AGENT_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '100'
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '100'
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
+            category: rollout
           HOSTED_DIARIZATION_API_URL:
             value: http://172.16.160.20/diarizer-batch
             category: service_discovery
@@ -979,8 +984,6 @@ overlay:
           DREAM_AGENT_ENABLED:
             value: 'true'
             category: rollout
-          DREAM_AGENT_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           MENTOR_PIPELINE:
             value: cohort
             category: rollout
@@ -1045,10 +1048,6 @@ overlay:
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
-          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-            value: '100'
-          MEMORY_OWNER_JEV_SHADOW_PERCENT:
-            value: '100'
           CONVERSATION_RELEVANCE_JEV_RESCUE:
             value: shadow
             category: rollout
@@ -1064,6 +1063,13 @@ overlay:
           SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
+        forbidden_env:
+        - DEEPGRAM_SELF_HOSTED_ENABLED
+        - DEEPGRAM_SELF_HOSTED_URL
+        - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+        - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+        - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+        - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
       backend-integration:
         env:
