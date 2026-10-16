@@ -27,7 +27,7 @@ from config.vertex_reservations import State
 from llm_gateway.gateway.accounting import ProviderResponseMetadata, vertex_usage_from_response
 from llm_gateway.gateway.request_context import resolve_request_id
 from utils.journey_metrics_contract import resolve_client_kind_from_headers
-from utils.llm import desktop_gemini_gateway, vertex_pt_routing as ptr
+from utils.llm import desktop_gemini_gateway, desktop_proxy_lifetime, vertex_pt_routing as ptr
 from utils.llm.managed_spend_ledger import DESKTOP_PROXY_CALLER, ManagedAttempt, schedule_managed_attempt
 
 ALLOWED_ACTIONS = frozenset({'generateContent', 'streamGenerateContent', 'embedContent', 'batchEmbedContents'})
@@ -136,10 +136,13 @@ class ProxyTelemetry:
         self.cached_content_token_count: int | None = None
         self.thoughts_token_count: int | None = None
         self.traffic_type = 'unknown'
-        self.phase = 'validation'
+        self.phase: str = 'validation'
         self.shape = desktop_gemini_gateway.PayloadShape('unknown', 'unknown', 'unknown')
         self.started = time.monotonic()
+        self.request_deadline = self.started + desktop_proxy_lifetime.REQUEST_TIMEOUT_SECONDS
         self.completed = False
+        self.defer_terminal = False
+        self.pending_terminal: dict[str, Any] | None = None
         # Ledger attribution only. Never written to the log event above. One
         # invocation per request; one attempt per provider dispatch.
         self.uid: str | None = None
@@ -189,6 +192,41 @@ class ProxyTelemetry:
         if self.completed:
             return
         self.completed = True
+        values: dict[str, Any] = dict(
+            outcome=outcome, status_code=status_code, retryable=retryable, upstream_status=upstream_status, phase=phase
+        )
+        # Settle the provider attempt when its result is known. Delivery can
+        # later fail independently and must not rewrite immutable spend evidence.
+        self.record_attempt(*_canonical_outcome(outcome))
+        if self.defer_terminal:
+            self.pending_terminal = values
+            return
+        self._emit_terminal(**values)
+
+    def fail_request(self, *, outcome: str, status_code: int, phase: str, retryable: bool = False) -> None:
+        """Override deferred delivery disposition without rewriting a known provider result."""
+        values: dict[str, Any] = dict(outcome=outcome, status_code=status_code, retryable=retryable, phase=phase)
+        self.complete(**values)
+        if self.defer_terminal:
+            self.pending_terminal = {**(self.pending_terminal or {}), **values}
+
+    def flush_terminal(self, **override: Any) -> None:
+        values = {**(self.pending_terminal or {}), **override} if override else self.pending_terminal
+        self.pending_terminal = None
+        self.defer_terminal = False
+        if values is not None:
+            self.completed = False
+            self.complete(**values)
+
+    def _emit_terminal(
+        self,
+        *,
+        outcome: str,
+        status_code: int,
+        retryable: bool,
+        upstream_status: int | None = None,
+        phase: str | None = None,
+    ) -> None:
         phase = phase or self.phase
         event: dict[str, object] = {
             'severity': 'INFO' if 200 <= status_code < 400 else 'WARNING',
@@ -239,7 +277,6 @@ class ProxyTelemetry:
         # URLs, headers, tokens, raw exceptions, and upstream response bodies.
         sys.stdout.write(json.dumps(event, separators=(',', ':'), sort_keys=True) + '\n')
         sys.stdout.flush()
-        self.record_attempt(*_canonical_outcome(outcome))
 
     def note_dispatch(self, route: UpstreamRoute, *, reservation_state=None, reservation_states=None) -> None:
         """A provider request is about to leave for `route`. Only these become ledger rows.
@@ -345,13 +382,13 @@ class DesktopGeminiProxyRoute(APIRoute):
             if route_streaming or telemetry.action == 'streamGenerateContent':
                 telemetry.route = 'stream'
             try:
-                response = await original(request)
+                response = await desktop_proxy_lifetime.run_request(request, original, telemetry)
             except HTTPException as exc:
                 telemetry.complete(
-                    outcome=_dependency_outcome(exc),
+                    outcome='validation_rejected' if telemetry.phase == 'upload' else _dependency_outcome(exc),
                     status_code=exc.status_code,
                     retryable=exc.status_code == 429,
-                    phase='authorization',
+                    phase=telemetry.phase,
                 )
                 raise
             except asyncio.CancelledError:
@@ -364,6 +401,7 @@ class DesktopGeminiProxyRoute(APIRoute):
                 raise
             if isinstance(response, StreamingResponse):
                 response.body_iterator = _terminal_stream_guard(response.body_iterator, telemetry)
+                response = desktop_proxy_lifetime.DeadlinedStreamingResponse(response, telemetry)
             elif not telemetry.completed:
                 telemetry.complete(
                     outcome='success' if response.status_code < 400 else 'unobserved_error',

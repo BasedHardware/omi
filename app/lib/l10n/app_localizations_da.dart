@@ -4361,6 +4361,16 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Dit $plan-abonnement slutter $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Gentilmeld dig nu for at beholde dine fordele - ingen opkrævning indtil $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Dit abonnement er sat til at blive annulleret $date.\nGentilmeld dig nu for at beholde dine fordele - ingen opkrævning indtil $date.';
   }
@@ -4368,6 +4378,11 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Dit årlige abonnement starter automatisk, når dit månedlige abonnement slutter.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Dit $plan-abonnement fornys $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4400,6 +4415,9 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get continueText => 'Fortsæt';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Gentilmelding først for at skifte abonnement.';
 
   @override
   String get resubscribe => 'Gentilmeld';
@@ -5011,9 +5029,6 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get content => 'Indhold';
-
-  @override
-  String get noContentToDisplay => 'Intet indhold at vise';
 
   @override
   String get noSummary => 'Ingen oversigt';
@@ -9797,9 +9812,6 @@ class AppLocalizationsDa extends AppLocalizations {
       'Tale til tekst er ikke tilgængelig lige nu. Kontrollér din internetforbindelse og enhedens indstillinger for talegenkendelse, og prøv igen.';
 
   @override
-  String get processingTakingLonger => 'Arbejder stadig — det tager længere end normalt.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Så Omi ved, hvilken stemme der er din — tal om hvad som helst i cirka 5 sekunder.';
 
@@ -12417,6 +12429,59 @@ class AppLocalizationsDa extends AppLocalizations {
   String get reviewNoChangesBody => 'Når Omi rydder op i dine noter, vises ændringerne her.';
 
   @override
+  String get reviewChangesSectionTerms => 'Navne og termer';
+
+  @override
+  String get reviewChangesSectionTitles => 'Titler og resuméer';
+
+  @override
+  String get reviewChangesSectionOther => 'Andre ændringer';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count samtaler',
+      one: '1 samtale',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count steder',
+      one: '1 sted',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Vis alle $count';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Fortryd alle';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Se belæg';
+
+  @override
+  String get reviewChangeViewConversation => 'Vis samtale';
+
+  @override
+  String get reviewChangeViewTask => 'Vis opgave';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Kunne ikke fortryde $failed af $total. Prøv igen.';
+  }
+
+  @override
   String get reviewShowMore => 'Vis mere';
 
   @override
@@ -13412,4 +13477,13 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Ny';
+
+  @override
+  String get activityNeedsAttention => 'Kræver opmærksomhed';
+
+  @override
+  String get activityRetryAll => 'Prøv alle igen';
+
+  @override
+  String get attentionSummaryFailed => 'Samtalen kunne ikke opsummeres';
 }

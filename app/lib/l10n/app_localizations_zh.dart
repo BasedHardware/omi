@@ -4300,12 +4300,27 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return '您的 $plan 套餐将于 $date 结束。';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return '立即重新订阅以保留您的权益 - $date之前不收费。';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return '您的计划将于$date取消。\n立即重新订阅以保留您的权益 - $date之前不收费。';
   }
 
   @override
   String get annualPlanStartsAutomatically => '您的年度计划将在月度计划结束时自动开始。';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return '您的 $plan 套餐将于 $date 续订。';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4338,6 +4353,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get continueText => '继续';
+
+  @override
+  String get resubscribeFirstToChangePlans => '请先重新订阅再更改套餐。';
 
   @override
   String get resubscribe => '重新订阅';
@@ -4936,9 +4954,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get content => '内容';
-
-  @override
-  String get noContentToDisplay => '没有可显示的内容';
 
   @override
   String get noSummary => '无摘要';
@@ -9640,9 +9655,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get speechToTextUnavailableDesc => '目前无法将语音转换为文字。请检查网络连接和设备的语音识别设置，然后重试。';
 
   @override
-  String get processingTakingLonger => '仍在处理中——比平时耗时更长。';
-
-  @override
   String get speechProfileEnrollmentPrompt => '让 Omi 知道哪个声音是你的——随便聊点什么，说大约 5 秒就好。';
 
   @override
@@ -12231,6 +12243,59 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reviewNoChangesBody => 'Omi 整理你的笔记后，更改会显示在这里。';
 
   @override
+  String get reviewChangesSectionTerms => '名称和术语';
+
+  @override
+  String get reviewChangesSectionTitles => '标题和摘要';
+
+  @override
+  String get reviewChangesSectionOther => '其他更改';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 段对话',
+      one: '1 段对话',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 处',
+      one: '1 处',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return '显示全部 $count 处';
+  }
+
+  @override
+  String get reviewChangeUndoAll => '全部撤销';
+
+  @override
+  String get reviewChangeSeeEvidence => '查看依据';
+
+  @override
+  String get reviewChangeViewConversation => '查看对话';
+
+  @override
+  String get reviewChangeViewTask => '查看任务';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return '无法撤销 $failed/$total 项，请重试。';
+  }
+
+  @override
   String get reviewShowMore => '显示更多';
 
   @override
@@ -13218,4 +13283,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get activityNewItem => '新';
+
+  @override
+  String get activityNeedsAttention => '需要处理';
+
+  @override
+  String get activityRetryAll => '全部重试';
+
+  @override
+  String get attentionSummaryFailed => '无法总结这段对话';
 }

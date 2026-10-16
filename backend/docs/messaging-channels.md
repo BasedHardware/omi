@@ -163,7 +163,7 @@ session. Account deletion calls `MessagingStore.delete_account` in
 and the user tree. It removes reverse indexes and pending proof records; recursive user
 wipe removes mirrors, session events and leases. Deletion markers block further channel
 admission. External provider retention/deletion is an adapter-specific Stage B obligation.
-The opt-in hourly messaging-maintenance chart bounds cleanup of expired proofs, unknown identities, completed inbox markers and waitlists; it sends nothing.
+The hourly Cloud Run messaging-maintenance job bounds cleanup of expired proofs, unknown identities, completed inbox markers and waitlists; it sends nothing.
 
 ## Cross-surface continuity and cache behavior
 

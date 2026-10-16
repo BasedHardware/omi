@@ -11,6 +11,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from database._client import get_firestore_client
 from utils.durable_queue_policy import oldest_ready_age_seconds
+from utils.other.fsr_leader_lease import check_leader_lease, LeaseLost, queue_age_publisher_eligible
 
 # Metadata-only reads: at most 5 pages x 200 rows per status. Document-name
 # order is not age order; reaching the cap cannot prove the oldest ready age.
@@ -155,6 +156,7 @@ def _sample_status_page(client: Any, spec: Mapping[str, Any], *, now: datetime) 
             )
         )
         for page in range(_STORE_WIDE_MAX_PAGES):
+            check_leader_lease()
             snapshots = list(query.limit(_STORE_WIDE_PAGE).stream())
             created_ats.extend(
                 _created_ats_from_page(
@@ -194,6 +196,7 @@ def sample_store_wide_oldest_ready_ages(
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ages: Dict[str, Optional[float]] = {}
     for queue, spec in QUEUE_AGE_SAMPLERS.items():
+        check_leader_lease()
         try:
             if spec.get('ephemeral'):
                 ages[queue] = 0.0
@@ -206,6 +209,8 @@ def sample_store_wide_oldest_ready_ages(
             created_ats = _sample_status_page(client, spec, now=observed)
             if created_ats is not None:
                 ages[queue] = oldest_ready_age_seconds(created_ats, now=observed)
+        except LeaseLost:
+            raise
         except Exception:
             continue
     return ages
@@ -220,18 +225,40 @@ def publish_all_queue_oldest_ready_ages(
     """Periodic publisher. Call from the service metrics tick only, never a request path."""
     from utils.durable_queue_metrics import publish_sampled_queue_oldest_ready_ages
 
+    if not queue_age_publisher_eligible():
+        withdraw_queue_oldest_ready_ages()
+        return
+    check_leader_lease()
     summary = finalization_summary
     if summary is None:
         try:
             from database.conversation_finalization_jobs import get_finalization_job_summary
 
             summary = get_finalization_job_summary(firestore_client=firestore_client)
+        except LeaseLost:
+            raise
         except Exception:
             summary = None
-    publish_sampled_queue_oldest_ready_ages(
-        sample_store_wide_oldest_ready_ages(
-            now=now,
-            firestore_client=firestore_client,
-            finalization_summary=summary,
-        )
+    check_leader_lease()
+    ages = sample_store_wide_oldest_ready_ages(
+        now=now,
+        firestore_client=firestore_client,
+        finalization_summary=summary,
     )
+    check_leader_lease(require_ownership=True)
+    if not queue_age_publisher_eligible():
+        withdraw_queue_oldest_ready_ages()
+        return
+    publish_sampled_queue_oldest_ready_ages(ages)
+
+
+def withdraw_queue_oldest_ready_ages() -> None:
+    """A former publisher must not leave stale gauges on a still-scraped pod."""
+    from utils.metrics import OMI_QUEUE_NAMES, OMI_QUEUE_OLDEST_READY_AGE_SECONDS, OMI_QUEUE_OLDEST_READY_SAMPLE_UNKNOWN
+
+    for queue in OMI_QUEUE_NAMES:
+        for gauge in (OMI_QUEUE_OLDEST_READY_AGE_SECONDS, OMI_QUEUE_OLDEST_READY_SAMPLE_UNKNOWN):
+            try:
+                gauge.remove(queue)
+            except KeyError:
+                pass

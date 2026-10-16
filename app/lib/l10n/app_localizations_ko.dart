@@ -4305,12 +4305,27 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return '$plan 플랜은 $date에 종료됩니다.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return '혜택을 유지하려면 지금 재구독하세요 - $date까지 요금이 청구되지 않습니다.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return '플랜이 $date에 취소될 예정입니다.\n혜택을 유지하려면 지금 재구독하세요 - $date까지 요금이 청구되지 않습니다.';
   }
 
   @override
   String get annualPlanStartsAutomatically => '월간 플랜이 종료되면 연간 플랜이 자동으로 시작됩니다.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return '$plan 플랜은 $date에 갱신됩니다.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4343,6 +4358,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get continueText => '계속';
+
+  @override
+  String get resubscribeFirstToChangePlans => '플랜을 변경하려면 먼저 다시 구독하세요.';
 
   @override
   String get resubscribe => '재구독';
@@ -4942,9 +4960,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get content => '콘텐츠';
-
-  @override
-  String get noContentToDisplay => '표시할 콘텐츠가 없습니다';
 
   @override
   String get noSummary => '요약 없음';
@@ -9658,9 +9673,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get speechToTextUnavailableDesc => '지금은 음성을 텍스트로 변환할 수 없습니다. 인터넷 연결과 기기의 음성 인식 설정을 확인한 후 다시 시도해주세요.';
 
   @override
-  String get processingTakingLonger => '아직 처리 중입니다. 평소보다 더 오래 걸리고 있어요.';
-
-  @override
   String get speechProfileEnrollmentPrompt => 'Omi가 내 목소리를 구별할 수 있도록 아무 주제로나 약 5초 동안 말해 주세요.';
 
   @override
@@ -12253,6 +12265,59 @@ class AppLocalizationsKo extends AppLocalizations {
   String get reviewNoChangesBody => 'Omi가 노트를 정리하면 변경 사항이 여기에 표시돼요.';
 
   @override
+  String get reviewChangesSectionTerms => '이름 및 용어';
+
+  @override
+  String get reviewChangesSectionTitles => '제목 및 요약';
+
+  @override
+  String get reviewChangesSectionOther => '기타 변경 사항';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '대화 $count개',
+      one: '대화 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count곳',
+      one: '1곳',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return '$count개 모두 보기';
+  }
+
+  @override
+  String get reviewChangeUndoAll => '모두 실행 취소';
+
+  @override
+  String get reviewChangeSeeEvidence => '근거 보기';
+
+  @override
+  String get reviewChangeViewConversation => '대화 보기';
+
+  @override
+  String get reviewChangeViewTask => '할 일 보기';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return '실행 취소하지 못함: $failed/$total개. 다시 시도하세요.';
+  }
+
+  @override
   String get reviewShowMore => '더 보기';
 
   @override
@@ -13243,4 +13308,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get activityNewItem => '새 항목';
+
+  @override
+  String get activityNeedsAttention => '확인 필요';
+
+  @override
+  String get activityRetryAll => '모두 다시 시도';
+
+  @override
+  String get attentionSummaryFailed => '이 대화를 요약하지 못했습니다';
 }

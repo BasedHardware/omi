@@ -4384,12 +4384,27 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Ваш план $plan заканчивается $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Подпишитесь снова, чтобы сохранить преимущества - без оплаты до $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Ваш план будет отменен $date.\nПодпишитесь снова, чтобы сохранить преимущества - без оплаты до $date.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'Ваш годовой план начнется автоматически по окончании месячного плана.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Ваш план $plan продлится $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4422,6 +4437,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get continueText => 'Продолжить';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Сначала оформите подписку снова, чтобы сменить план.';
 
   @override
   String get resubscribe => 'Подписаться снова';
@@ -5036,9 +5054,6 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get content => 'Контент';
-
-  @override
-  String get noContentToDisplay => 'Нет контента для отображения';
 
   @override
   String get noSummary => 'Нет сводки';
@@ -9848,9 +9863,6 @@ class AppLocalizationsRu extends AppLocalizations {
       'Преобразование речи в текст сейчас недоступно. Проверьте подключение к интернету и настройки распознавания речи на устройстве, затем попробуйте ещё раз.';
 
   @override
-  String get processingTakingLonger => 'Ещё обрабатывается — это занимает больше обычного.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Чтобы Omi знал, какой голос ваш, говорите о чём угодно примерно 5 секунд.';
 
@@ -12472,6 +12484,59 @@ class AppLocalizationsRu extends AppLocalizations {
   String get reviewNoChangesBody => 'Когда Omi наведёт порядок в ваших заметках, изменения появятся здесь.';
 
   @override
+  String get reviewChangesSectionTerms => 'Имена и термины';
+
+  @override
+  String get reviewChangesSectionTitles => 'Названия и сводки';
+
+  @override
+  String get reviewChangesSectionOther => 'Другие изменения';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Разговоров: $count',
+      one: '1 разговор',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Мест: $count',
+      one: '1 место',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Показать все ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Отменить все';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Показать доказательства';
+
+  @override
+  String get reviewChangeViewConversation => 'Открыть разговор';
+
+  @override
+  String get reviewChangeViewTask => 'Открыть задачу';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Не удалось отменить $failed из $total. Попробуйте ещё раз.';
+  }
+
+  @override
   String get reviewShowMore => 'Показать ещё';
 
   @override
@@ -13471,4 +13536,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Новое';
+
+  @override
+  String get activityNeedsAttention => 'Требует внимания';
+
+  @override
+  String get activityRetryAll => 'Повторить все';
+
+  @override
+  String get attentionSummaryFailed => 'Не удалось подвести итоги этого разговора';
 }

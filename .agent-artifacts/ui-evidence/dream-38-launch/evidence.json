@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-recent-changes-grouped.png",
+      "platform": "mobile-ios",
+      "description": "Recent changes in dark mode, grouped into Names and terms, Memories, Tasks and Titles sections, with struck-through before values and highlighted after values (invented content).",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-recent-changes-show-all.png",
+      "platform": "mobile-ios",
+      "description": "Show all sheet in dark mode for one term change, listing each conversation with the occurrence in context, the old span struck through and the new span highlighted, plus View conversation and Undo (invented content).",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-recent-changes-light.png",
+      "platform": "mobile-ios",
+      "description": "Recent changes grouped list in light mode with the same invented changes, including an undone title change offering Redo.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

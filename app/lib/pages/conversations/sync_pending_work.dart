@@ -90,7 +90,20 @@ abstract final class SyncPendingWork {
 
   /// One pass over the unsorted index, stopping at the threshold: Home's row asks this on every
   /// SyncProvider notify, which streams progress during a sync.
+  /// Per WAL list: SyncProvider replaces the list whenever a status changes (see its partition
+  /// caches), and progress notifications reuse it, so a sync's ticks do not redo the scan.
+  static final Expando<(int, bool)> _backlogMemo = Expando('largeSyncBacklog');
+
   static bool isLargeBacklog(SyncProvider p) {
+    final wals = p.allWals;
+    final memo = _backlogMemo[wals];
+    if (memo != null && memo.$1 == wals.length) return memo.$2;
+    final large = _computeLargeBacklog(p);
+    _backlogMemo[wals] = (wals.length, large);
+    return large;
+  }
+
+  static bool _computeLargeBacklog(SyncProvider p) {
     var seconds = 0;
     for (final w in p.allWals) {
       if (w.status != WalStatus.uploaded) continue;

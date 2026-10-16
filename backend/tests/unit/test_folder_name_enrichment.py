@@ -225,10 +225,10 @@ class TestAddSpeakerNames:
         render.populate_speaker_names('uid1', conversations)
         assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'Speaker 2'
 
-    def test_missing_speaker_id_defaults_to_zero(self, render):
+    def test_missing_speaker_id_renders_unknown_speaker(self, render):
         conversations = [{'transcript_segments': [{'text': 'hi'}]}]
         render.populate_speaker_names('uid1', conversations)
-        assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'Speaker 0'
+        assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'Unknown speaker'
 
     def test_user_profile_missing_name_falls_back_to_user(self, render):
         _mock_get_user_name.return_value = None

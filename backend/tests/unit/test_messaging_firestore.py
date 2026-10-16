@@ -150,12 +150,18 @@ def test_album_atomic_coalescing_dedup_fifo_and_late_part(store):
     assert 'Second caption' in payload['text']
     assert store.claim_next(path, now=now) is None
     late = replace(message, provider_message_id='late')
-    late_path = store.enqueue(late)
+    assert store.enqueue(late) == path
+    refreshed = store.seal_album(path, 2)
+    assert refreshed is not None and len(refreshed['attachments']) == 3
+    assert store.seal_album(path, 3) is None
+    latest = replace(message, provider_message_id='after-generation')
+    late_path = store.enqueue(latest)
+    assert store.enqueue(replace(message, provider_message_id='out-of-order')) == late_path
     assert late_path != path and store.claim_next(late_path, now=now) is None
     store.complete(path)
     assert store.enqueue(second) is None
     late_claim = store.claim_next(late_path, now=now)
-    assert late_claim is not None and late_claim[1]['provider_message_id'] == 'late'
+    assert late_claim is not None and len(late_claim[1]['attachments']) == 2
     store.complete(late_path)
     assert not store.pending(message)
 
@@ -175,3 +181,66 @@ def test_no_cap_imessage_redemption_never_reads_capacity(store, monkeypatch):
     store.assert_link_capacity(message, link)
     store.unlink('u', key(message.channel, message.provider, message.external_user_id))
     assert store.lookup(message) is None
+
+
+def test_album_seal_races_late_admission_without_losing_a_part(store):
+    from dataclasses import replace
+    from utils.messaging.contracts import InboundAttachment
+
+    adapter = LoopbackAdapter()
+    first = replace(
+        adapter.parse(adapter.signed()[0])[0],
+        media_group_id='race',
+        attachments=(InboundAttachment('first', 'first.jpg', 'image/jpeg'),),
+    )
+    path = store.enqueue(first)
+    assert store.claim_next(path, now=datetime.now(timezone.utc) + timedelta(seconds=4))
+    late = replace(
+        first, provider_message_id='racing', attachments=(InboundAttachment('late', 'late.jpg', 'image/jpeg'),)
+    )
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        seal = executor.submit(store.seal_album, path, 1)
+        append = executor.submit(store.enqueue, late)
+        updated, admitted_path = seal.result(), append.result()
+    if updated is None:
+        # Sealing won; admission must durably create the shared follow-up.
+        assert admitted_path != path
+        assert len(store.db.document(admitted_path).get().to_dict()['payload']) > 0
+    else:
+        assert admitted_path == path and len(updated['attachments']) == 2
+        assert store.seal_album(path, 2) is None
+    assert store.enqueue(late) is None
+
+
+def test_album_claimed_by_old_worker_is_never_appendable(store):
+    from dataclasses import replace
+    from utils.messaging.contracts import InboundAttachment
+
+    adapter = LoopbackAdapter()
+    message = replace(
+        adapter.parse(adapter.signed()[0])[0],
+        media_group_id='rolling-deploy',
+        attachments=(InboundAttachment('file', 'p.jpg', 'image/jpeg'),),
+    )
+    path = store.enqueue(message)
+    # Old workers only stamp status/started_at, even if a new instance admitted the row.
+    store.db.document(path).update({'status': 'running', 'started_at': datetime.now(timezone.utc)})
+    late_path = store.enqueue(replace(message, provider_message_id='late'))
+    assert late_path != path
+
+
+def test_cleanup_preserves_unknown_running_reconciliation(store):
+    adapter = LoopbackAdapter()
+    message = adapter.parse(adapter.signed()[0])[0]
+    path = store.enqueue(message)
+    assert store.claim(path) is not None
+    identity = store.identity(message.channel, message.provider, message.external_user_id)
+    old = datetime.now(timezone.utc) - timedelta(days=40)
+    identity.update({'last_inbound_at': old})
+    store.db.document(path).update({'started_at': old, 'fifo_settled_at': old})
+    # Even a settled ambiguous send retains running status until reconciliation.
+    assert store.cleanup()['identities'] == 0
+    assert identity.get().exists and store.db.document(path).get().to_dict()['payload']
+    store.complete(path)
+    assert store.cleanup()['identities'] == 1
+    assert not identity.get().exists

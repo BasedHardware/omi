@@ -5065,6 +5065,8 @@
             }
         }
     },
+    "yourPlanEndsOn": "طرح {plan} شما در {date} به پایان می‌رسد.",
+    "resubscribeNowNoChargeUntil": "همین الآن مجددا مشترک شوید تا از مزایای خود محروم نشوید - تا {date} هیچ هزینه‌ای نخواهید داشت.",
     "planSetToCancelOn": "طرح شما برای لغو در تاریخ {date} برنامه‌ریزی شده است.\nهمین الآن مجددا مشترک شوید تا از مزایای خود محروم نشوید - تا {date} هیچ هزینه‌ای نخواهید داشت.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5079,6 +5081,7 @@
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
     },
+    "yourPlanWillRenewOn": "طرح {plan} شما در {date} تمدید می‌شود.",
     "planRenewsOn": "طرح شما در تاریخ {date} تمدید خواهد شد.",
     "@planRenewsOn": {
         "description": "Message showing plan renewal date",
@@ -5125,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "resubscribeFirstToChangePlans": "برای تغییر طرح، ابتدا دوباره مشترک شوید.",
     "resubscribe": "مجددا مشترک شوید",
     "@resubscribe": {
         "description": "Button to resubscribe"
@@ -5967,10 +5971,6 @@
     "content": "محتوا",
     "@content": {
         "description": "Tab label for content"
-    },
-    "noContentToDisplay": "محتوایی برای نمایش نیست",
-    "@noContentToDisplay": {
-        "description": "Message when there is no content available"
     },
     "noSummary": "بدون خلاصه",
     "@noSummary": {
@@ -10593,7 +10593,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "برای شروع ضبط روی دکمه ضبط بزنید",
-    "processingTakingLonger": "هنوز در حال انجام است — بیشتر از حد معمول طول می‌کشد.",
     "speechProfileEnrollmentPrompt": "برای اینکه Omi بداند کدام صدا متعلق به شماست — حدود ۵ ثانیه درباره هر چیزی صحبت کنید.",
     "home": "خانه",
     "failedToUpdateBaselineStatus": "این یادداشت به‌روز نشد. دوباره امتحان کنید.",
@@ -11268,6 +11267,17 @@
     "reviewChangesLoadFailed": "تغییرات اخیر بارگذاری نشد.",
     "reviewNoChangesTitle": "هنوز تغییری نیست",
     "reviewNoChangesBody": "وقتی Omi یادداشت‌های شما را مرتب کند، تغییرات اینجا نمایش داده می‌شود.",
+    "reviewChangesSectionTerms": "نام‌ها و اصطلاحات",
+    "reviewChangesSectionTitles": "عنوان‌ها و خلاصه‌ها",
+    "reviewChangesSectionOther": "تغییرات دیگر",
+    "reviewChangeConversationCount": "{count, plural, =1{۱ گفتگو} other{{count} گفتگو}}",
+    "reviewChangePlaceCount": "{count, plural, =1{۱ مورد} other{{count} مورد}}",
+    "reviewChangeShowAll": "نمایش همه ({count})",
+    "reviewChangeUndoAll": "لغو همه",
+    "reviewChangeSeeEvidence": "مشاهده شواهد",
+    "reviewChangeViewConversation": "مشاهده گفتگو",
+    "reviewChangeViewTask": "مشاهده کار",
+    "reviewChangesUndoPartial": "لغو {failed} از {total} ممکن نشد. دوباره امتحان کنید.",
     "reviewShowMore": "نمایش بیشتر",
     "entityKeptCurrent": "به‌روز نگه‌داشته‌شده توسط Omi",
     "entityNotRight": "درست نیست؟",
@@ -11549,5 +11559,8 @@
     "activityEmpty": "هنوز فعالیتی نیست",
     "activityNewSemantics": "فعالیت، موارد جدید",
     "activityLoadFailed": "بارگیری همه فعالیت‌های شما ممکن نشد",
-    "activityNewItem": "جدید"
+    "activityNewItem": "جدید",
+    "activityNeedsAttention": "نیاز به توجه",
+    "activityRetryAll": "تلاش دوباره برای همه",
+    "attentionSummaryFailed": "خلاصه‌سازی این گفتگو ممکن نشد"
 }

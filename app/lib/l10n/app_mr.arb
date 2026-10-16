@@ -5065,6 +5065,8 @@
             }
         }
     },
+    "yourPlanEndsOn": "तुमची {plan} योजना {date} रोजी संपेल.",
+    "resubscribeNowNoChargeUntil": "आपले फायदे कायम राखण्यासाठी आता पुन्हा सदस्यता घ्या - {date} पर्यंत कोणतीही शुल्क नाही.",
     "planSetToCancelOn": "आपली योजना {date} ला रद्द होण्यासाठी सेट केली आहे.\nआपले फायदे कायम राखण्यासाठी आता पुन्हा सदस्यता घ्या - {date} पर्यंत कोणतीही शुल्क नाही.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5079,6 +5081,7 @@
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
     },
+    "yourPlanWillRenewOn": "तुमची {plan} योजना {date} रोजी नूतनीकरण होईल.",
     "planRenewsOn": "आपली योजना {date} ला नवीकरण होईल.",
     "@planRenewsOn": {
         "description": "Message showing plan renewal date",
@@ -5125,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "resubscribeFirstToChangePlans": "योजना बदलण्यासाठी आधी पुन्हा सदस्यता घ्या.",
     "resubscribe": "पुन्हा सदस्यता घ्या",
     "@resubscribe": {
         "description": "Button to resubscribe"
@@ -5967,10 +5971,6 @@
     "content": "सामग्री",
     "@content": {
         "description": "Tab label for content"
-    },
-    "noContentToDisplay": "प्रदर्शन करण्यासाठी कोणतीही सामग्री नाही",
-    "@noContentToDisplay": {
-        "description": "Message when there is no content available"
     },
     "noSummary": "कोणतेही सारांश नाही",
     "@noSummary": {
@@ -10593,7 +10593,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "रेकॉर्डिंग सुरू करण्यासाठी रेकॉर्ड बटण टॅप करा",
-    "processingTakingLonger": "अजूनही काम सुरू आहे — याला नेहमीपेक्षा जास्त वेळ लागत आहे.",
     "speechProfileEnrollmentPrompt": "Omi ला तुमचा आवाज ओळखता यावा म्हणून — कोणत्याही विषयावर सुमारे 5 सेकंद बोला.",
     "home": "मुख्यपृष्ठ",
     "failedToUpdateBaselineStatus": "हे स्मृती अद्यतनित करता आले नाही. पुन्हा प्रयत्न करा.",
@@ -11268,6 +11267,17 @@
     "reviewChangesLoadFailed": "अलीकडील बदल लोड करता आले नाहीत.",
     "reviewNoChangesTitle": "अजून कोणतेही बदल नाहीत",
     "reviewNoChangesBody": "Omi ने तुमच्या नोट्स नीट लावल्या की बदल येथे दिसतील.",
+    "reviewChangesSectionTerms": "नावे आणि संज्ञा",
+    "reviewChangesSectionTitles": "शीर्षके आणि सारांश",
+    "reviewChangesSectionOther": "इतर बदल",
+    "reviewChangeConversationCount": "{count, plural, =1{1 संभाषण} other{{count} संभाषणे}}",
+    "reviewChangePlaceCount": "{count, plural, =1{1 ठिकाण} other{{count} ठिकाणे}}",
+    "reviewChangeShowAll": "सर्व {count} दाखवा",
+    "reviewChangeUndoAll": "सर्व पूर्ववत करा",
+    "reviewChangeSeeEvidence": "पुरावा पहा",
+    "reviewChangeViewConversation": "संभाषण पहा",
+    "reviewChangeViewTask": "कार्य पहा",
+    "reviewChangesUndoPartial": "पूर्ववत करता आले नाहीत: {failed}/{total}. पुन्हा प्रयत्न करा.",
     "reviewShowMore": "आणखी दाखवा",
     "entityKeptCurrent": "Omi द्वारे अद्ययावत ठेवलेले",
     "entityNotRight": "बरोबर नाही?",
@@ -11549,5 +11559,8 @@
     "activityEmpty": "अद्याप कोणतीही क्रिया नाही",
     "activityNewSemantics": "क्रिया, नवीन आयटम",
     "activityLoadFailed": "तुमची सर्व क्रिया लोड करता आली नाही",
-    "activityNewItem": "नवीन"
+    "activityNewItem": "नवीन",
+    "activityNeedsAttention": "लक्ष देणे आवश्यक",
+    "activityRetryAll": "सर्व पुन्हा प्रयत्न करा",
+    "attentionSummaryFailed": "या संभाषणाचा सारांश तयार करता आला नाही"
 }

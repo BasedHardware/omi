@@ -5065,6 +5065,8 @@
             }
         }
     },
+    "yourPlanEndsOn": "আপনার {plan} প্ল্যান {date} এ শেষ হবে।",
+    "resubscribeNowNoChargeUntil": "আপনার সুবিধা রাখতে এখনই পুনরায় সাবস্ক্রাইব করুন - {date} পর্যন্ত কোনও চার্জ নেই।",
     "planSetToCancelOn": "আপনার পরিকল্পনা {date} তে বাতিল হওয়ার জন্য নির্ধারিত হয়েছে।\nআপনার সুবিধা রাখতে এখনই পুনরায় সাবস্ক্রাইব করুন - {date} পর্যন্ত কোনও চার্জ নেই।",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5079,6 +5081,7 @@
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
     },
+    "yourPlanWillRenewOn": "আপনার {plan} প্ল্যান {date} এ নবায়ন হবে।",
     "planRenewsOn": "আপনার পরিকল্পনা {date} তে পুনর্নবীকরণ হয়।",
     "@planRenewsOn": {
         "description": "Message showing plan renewal date",
@@ -5125,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "resubscribeFirstToChangePlans": "প্ল্যান বদলাতে আগে পুনরায় সাবস্ক্রাইব করুন।",
     "resubscribe": "পুনরায় সাবস্ক্রাইব করুন",
     "@resubscribe": {
         "description": "Button to resubscribe"
@@ -5967,10 +5971,6 @@
     "content": "বিষয়বস্তু",
     "@content": {
         "description": "Tab label for content"
-    },
-    "noContentToDisplay": "প্রদর্শন করার জন্য কোনো বিষয়বস্তু নেই",
-    "@noContentToDisplay": {
-        "description": "Message when there is no content available"
     },
     "noSummary": "কোনো সারাংশ নেই",
     "@noSummary": {
@@ -10593,7 +10593,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "রেকর্ডিং শুরু করতে রেকর্ড বোতাম চাপুন",
-    "processingTakingLonger": "এখনও কাজ চলছে — এটি স্বাভাবিকের চেয়ে বেশি সময় নিচ্ছে।",
     "speechProfileEnrollmentPrompt": "Omi যেন আপনার কণ্ঠ চিনতে পারে — যেকোনো বিষয়ে প্রায় ৫ সেকেন্ড কথা বলুন।",
     "home": "হোম",
     "failedToUpdateBaselineStatus": "এই স্মৃতি আপডেট করা যায়নি। আবার চেষ্টা করুন।",
@@ -11268,6 +11267,17 @@
     "reviewChangesLoadFailed": "সাম্প্রতিক পরিবর্তন লোড করা যায়নি।",
     "reviewNoChangesTitle": "এখনও কোনো পরিবর্তন নেই",
     "reviewNoChangesBody": "Omi আপনার নোট গুছিয়ে দিলে পরিবর্তনগুলো এখানে দেখা যাবে।",
+    "reviewChangesSectionTerms": "নাম ও শব্দ",
+    "reviewChangesSectionTitles": "শিরোনাম ও সারাংশ",
+    "reviewChangesSectionOther": "অন্যান্য পরিবর্তন",
+    "reviewChangeConversationCount": "{count, plural, =1{১টি কথোপকথন} other{{count}টি কথোপকথন}}",
+    "reviewChangePlaceCount": "{count, plural, =1{১টি জায়গা} other{{count}টি জায়গা}}",
+    "reviewChangeShowAll": "সব {count}টি দেখুন",
+    "reviewChangeUndoAll": "সব পূর্বাবস্থায় ফেরান",
+    "reviewChangeSeeEvidence": "প্রমাণ দেখুন",
+    "reviewChangeViewConversation": "কথোপকথন দেখুন",
+    "reviewChangeViewTask": "কাজ দেখুন",
+    "reviewChangesUndoPartial": "ফেরানো যায়নি: {failed}/{total}। আবার চেষ্টা করুন।",
     "reviewShowMore": "আরও দেখুন",
     "entityKeptCurrent": "Omi হালনাগাদ রাখে",
     "entityNotRight": "ঠিক নয়?",
@@ -11549,5 +11559,8 @@
     "activityEmpty": "এখনও কোনো কার্যকলাপ নেই",
     "activityNewSemantics": "কার্যকলাপ, নতুন আইটেম",
     "activityLoadFailed": "আপনার সব কার্যকলাপ লোড করা যায়নি",
-    "activityNewItem": "নতুন"
+    "activityNewItem": "নতুন",
+    "activityNeedsAttention": "মনোযোগ প্রয়োজন",
+    "activityRetryAll": "সবগুলো আবার চেষ্টা করুন",
+    "attentionSummaryFailed": "এই কথোপকথনের সারাংশ তৈরি করা যায়নি"
 }

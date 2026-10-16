@@ -2,9 +2,11 @@
 
 import json
 import asyncio
+import time
 
 from models.agent_tools import VerificationBatch
 from models.agent_refs import base_ref, cited_value
+from utils.agent_capabilities import verifiers
 from utils.agent_capabilities.session import serialized_bytes
 from utils.llm.shaped_agent import Budget, Mount, run_loop
 
@@ -74,6 +76,44 @@ def batches(staged, byte_limit=24000):
 
 
 async def verify(
+    staged,
+    model_turn,
+    *,
+    tokens,
+    deadline_seconds,
+    completion_tokens=4096,
+    verifier_seconds=120,
+    telemetry=None,
+    cheap_turn=None,
+):
+    """Run the configured chain. The default chain is the two strong verifiers."""
+    kinds = [verifiers.item_kind(item) for item in staged]
+    if all(verifiers.is_default_policy(verifiers.policy_for(kind)) for kind in kinds):
+        started = time.monotonic()
+        support, calls, used = await verify_two(
+            staged,
+            model_turn,
+            tokens=tokens,
+            deadline_seconds=deadline_seconds,
+            completion_tokens=completion_tokens,
+            verifier_seconds=verifier_seconds,
+            telemetry=telemetry,
+        )
+        _record_strong(staged, support, used, time.monotonic() - started)
+        return support, calls
+    return await verify_chain(
+        staged,
+        model_turn,
+        tokens=tokens,
+        deadline_seconds=deadline_seconds,
+        completion_tokens=completion_tokens,
+        verifier_seconds=verifier_seconds,
+        telemetry=telemetry,
+        cheap_turn=cheap_turn,
+    )
+
+
+async def verify_two(
     staged, model_turn, *, tokens, deadline_seconds, completion_tokens=4096, verifier_seconds=120, telemetry=None
 ):
     support = {item.id: [] for item in staged}
@@ -106,7 +146,11 @@ async def verify(
                 turn = await model_turn(active, messages)
                 if telemetry is not None:
                     telemetry['transport_responses'] = telemetry.get('transport_responses', 0) + 1
-                used += turn.tokens if turn.accounted_tokens is None else turn.accounted_tokens
+                used += (
+                    turn.price_weighted_tokens
+                    if turn.price_weighted_tokens is not None
+                    else turn.tokens if turn.accounted_tokens is None else turn.accounted_tokens
+                )
                 return turn
 
             try:
@@ -120,6 +164,118 @@ async def verify(
             except Exception:
                 for id_ in ids:
                     support[id_].append(None)
+    return support, calls, used
+
+
+def _record_strong(staged, support, used, elapsed):
+    kinds = {verifiers.item_kind(item) or 'other' for item in staged}
+    label = next(iter(kinds)) if len(kinds) == 1 else 'mixed'
+    verifiers.record_batch(label, 'strong_model', tokens=used, latency_seconds=elapsed)
+    for item in staged:
+        votes = support[item.id]
+        verifiers.record_verdict(
+            verifiers.item_kind(item),
+            verifiers.Verdict(
+                disposition(votes),
+                'two_verifier' if votes else 'evidence_not_sent',
+                'strong_model',
+            ),
+        )
+
+
+async def verify_chain(
+    staged,
+    model_turn,
+    *,
+    tokens,
+    deadline_seconds,
+    completion_tokens=4096,
+    verifier_seconds=120,
+    telemetry=None,
+    cheap_turn=None,
+):
+    """Fail closed. Deterministic agreement does not authorize unless the kind is marked sufficient."""
+    support = {item.id: [] for item in staged}
+    calls = 0
+    used = 0
+    default_items = []
+    strong_items = []
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + deadline_seconds
+    for item in staged:
+        policy = verifiers.policy_for(verifiers.item_kind(item))
+        if verifiers.is_default_policy(policy):
+            default_items.append(item)
+            continue
+        if not policy.steps:
+            support[item.id] = verifiers.votes_for('unverified')
+            verifiers.record_verdict(
+                verifiers.item_kind(item), verifiers.Verdict('unverified', 'policy_invalid', 'policy')
+            )
+            continue
+        terminal = None
+        for step in policy.steps:
+            if step.strategy == 'strong_model':
+                strong_items.append(item)
+                terminal = 'deferred'
+                break
+            remaining = deadline - loop.time()
+            if step.strategy == 'deterministic':
+                verdict = verifiers.run_deterministic(item, step)
+            elif step.strategy == 'cheap_model':
+                verdict = await verifiers.run_cheap(
+                    item,
+                    lane=step.lane,
+                    model_turn=cheap_turn,
+                    tokens=max(0, tokens - used),
+                    deadline_seconds=max(0, remaining),
+                    evidence_row=evidence,
+                )
+            elif step.strategy == 'jev':
+                verdict = await verifiers.run_jev(item, evidence, INSTRUCTIONS)
+            else:
+                verdict = verifiers.Verdict('uncertain', 'unknown_strategy', 'policy')
+            verifiers.record_verdict(verifiers.item_kind(item), verdict)
+            used += verdict.tokens
+            calls += verdict.calls
+            if verdict.status == 'disagree':
+                terminal = 'disagree'
+                break
+            if verifiers.authorizes(step, policy, verdict):
+                terminal = 'agree'
+                break
+        if terminal == 'disagree':
+            support[item.id] = verifiers.votes_for('disagree')
+        elif terminal == 'agree':
+            support[item.id] = verifiers.votes_for('agree')
+        elif terminal != 'deferred':
+            support[item.id] = verifiers.votes_for('unverified')
+    pending = [*default_items, *strong_items]
+    if pending:
+        started = time.monotonic()
+        raw, strong_calls, strong_used = await verify_two(
+            pending,
+            model_turn,
+            tokens=max(0, tokens - used),
+            deadline_seconds=max(0, deadline - loop.time()),
+            completion_tokens=completion_tokens,
+            verifier_seconds=verifier_seconds,
+            telemetry=telemetry,
+        )
+        calls += strong_calls
+        used += strong_used
+        _record_strong(pending, raw, strong_used, time.monotonic() - started)
+        for item in default_items:
+            support[item.id] = raw[item.id]
+        for item in strong_items:
+            decision = disposition(raw[item.id])
+            # A split or malformed strong result is uncertainty, not agreement.
+            if decision == 'agree':
+                support[item.id] = verifiers.votes_for('agree')
+            elif decision == 'disagree':
+                support[item.id] = verifiers.votes_for('disagree')
+            else:
+                support[item.id] = verifiers.votes_for('unverified')
     return support, calls
 
 

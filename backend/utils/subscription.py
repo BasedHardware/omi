@@ -1,4 +1,5 @@
 import os
+from database.fsr_read_cache import fresh_reader
 from dataclasses import dataclass
 import time
 from datetime import datetime, timezone
@@ -1485,6 +1486,7 @@ def is_pending_cancellation(subscription: Optional[Subscription], now: Optional[
     return subscription.current_period_end > (now or int(time.time()))
 
 
+@fresh_reader
 def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tuple[bool, str]:
     """
     Checks if a user can make a new payment based on their current subscription status.
@@ -1900,12 +1902,22 @@ def get_remaining_transcription_seconds(uid: str, source: Optional[str] = None) 
     return resolve_transcription_allowance(uid, source).remaining_seconds
 
 
+def _stored_paid_period_lapsed(subscription: Subscription) -> bool:
+    end = subscription.current_period_end
+    return not end or datetime.fromtimestamp(end, tz=timezone.utc) < datetime.now(timezone.utc)
+
+
 def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None) -> Subscription | None:
     """
-    If Firestore says `basic` but there is a Stripe subscription with a future period end
-    that actually maps to an unlimited plan, fix it once by reconciling with Stripe.
+    If Firestore says `basic`, or a paid plan whose period has passed, but Stripe holds an
+    active paid subscription, fix it once by reconciling with Stripe.
     """
-    if not subscription or subscription.plan != PlanType.basic:
+    if not subscription:
+        return subscription
+    # A stored paid plan whose period has passed reads as Basic everywhere
+    # (get_user_valid_subscription), so heal it the same way: a missed renewal
+    # webhook otherwise leaves a paying subscriber on Free indefinitely.
+    if subscription.plan != PlanType.basic and not _stored_paid_period_lapsed(subscription):
         return subscription
 
     try:

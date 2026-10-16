@@ -5065,6 +5065,8 @@
             }
         }
     },
+    "yourPlanEndsOn": "ನಿಮ್ಮ {plan} ಯೋಜನೆ {date} ರಂದು ಕೊನೆಗೊಳ್ಳುತ್ತದೆ.",
+    "resubscribeNowNoChargeUntil": "ನಿಮ್ಮ ಪ್ರಯೋಜನಗಳನ್ನು ಮುಂದುವರಿಸಲು ಈಗ ಮರುಸದಸ್ಯಗೊಳಿಸಿ - {date} ವರೆಗೆ ಯಾವುದೇ ಶುಲ್ಕ ಇಲ್ಲ.",
     "planSetToCancelOn": "ನಿಮ್ಮ ಯೋಜನೆ {date} ಮೇಲೆ ರದ್ದುಗೊಳಿಸುವ ನಿರ್ಧಾರವನ್ನು ಹೊಂದಿದೆ.\nನಿಮ್ಮ ಪ್ರಯೋಜನಗಳನ್ನು ಮುಂದುವರಿಸಲು ಈಗ ಮರುಸದಸ್ಯಗೊಳಿಸಿ - {date} ವರೆಗೆ ಯಾವುದೇ ಶುಲ್ಕ ಇಲ್ಲ.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5079,6 +5081,7 @@
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
     },
+    "yourPlanWillRenewOn": "ನಿಮ್ಮ {plan} ಯೋಜನೆ {date} ರಂದು ನವೀಕರಿಸಲಾಗುತ್ತದೆ.",
     "planRenewsOn": "ನಿಮ್ಮ ಯೋಜನೆ {date} ಮೇಲೆ ನವೀಕರಣವಾಗುತ್ತದೆ.",
     "@planRenewsOn": {
         "description": "Message showing plan renewal date",
@@ -5125,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "resubscribeFirstToChangePlans": "ಯೋಜನೆ ಬದಲಾಯಿಸಲು ಮೊದಲು ಮರುಸದಸ್ಯರಾಗಿ.",
     "resubscribe": "ಮರುಸದಸ್ಯಗೊಳಿಸಿ",
     "@resubscribe": {
         "description": "Button to resubscribe"
@@ -5967,10 +5971,6 @@
     "content": "ವಿಷಯವಸ್ತು",
     "@content": {
         "description": "Tab label for content"
-    },
-    "noContentToDisplay": "ತೋರಿಸಲು ವಿಷಯವಸ್ತು ಇಲ್ಲ",
-    "@noContentToDisplay": {
-        "description": "Message when there is no content available"
     },
     "noSummary": "ಯಾವುದೇ ಸಾರಾಂಶ ಇಲ್ಲ",
     "@noSummary": {
@@ -10593,7 +10593,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಲು ರೆಕಾರ್ಡ್ ಬಟನ್ ಟ್ಯಾಪ್ ಮಾಡಿ",
-    "processingTakingLonger": "ಇನ್ನೂ ಕೆಲಸ ನಡೆಯುತ್ತಿದೆ — ಇದು ಸಾಮಾನ್ಯಕ್ಕಿಂತ ಹೆಚ್ಚು ಸಮಯ ತೆಗೆದುಕೊಳ್ಳುತ್ತಿದೆ.",
     "speechProfileEnrollmentPrompt": "Omi ನಿಮ್ಮ ಧ್ವನಿಯನ್ನು ಗುರುತಿಸಲು — ಯಾವುದೇ ವಿಷಯದ ಬಗ್ಗೆ ಸುಮಾರು 5 ಸೆಕೆಂಡುಗಳ ಕಾಲ ಮಾತನಾಡಿ.",
     "home": "ಮುಖಪುಟ",
     "failedToUpdateBaselineStatus": "ಈ ಸ್ಮೃತಿಯನ್ನು ನವೀಕರಿಸಲಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
@@ -11268,6 +11267,17 @@
     "reviewChangesLoadFailed": "ಇತ್ತೀಚಿನ ಬದಲಾವಣೆಗಳನ್ನು ಲೋಡ್ ಮಾಡಲು ಆಗಲಿಲ್ಲ.",
     "reviewNoChangesTitle": "ಇನ್ನೂ ಬದಲಾವಣೆಗಳಿಲ್ಲ",
     "reviewNoChangesBody": "Omi ನಿಮ್ಮ ಟಿಪ್ಪಣಿಗಳನ್ನು ಜೋಡಿಸಿದಾಗ, ಬದಲಾವಣೆಗಳು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ.",
+    "reviewChangesSectionTerms": "ಹೆಸರುಗಳು ಮತ್ತು ಪದಗಳು",
+    "reviewChangesSectionTitles": "ಶೀರ್ಷಿಕೆಗಳು ಮತ್ತು ಸಾರಾಂಶಗಳು",
+    "reviewChangesSectionOther": "ಇತರ ಬದಲಾವಣೆಗಳು",
+    "reviewChangeConversationCount": "{count, plural, =1{1 ಸಂಭಾಷಣೆ} other{{count} ಸಂಭಾಷಣೆಗಳು}}",
+    "reviewChangePlaceCount": "{count, plural, =1{1 ಸ್ಥಳ} other{{count} ಸ್ಥಳಗಳು}}",
+    "reviewChangeShowAll": "ಎಲ್ಲಾ {count} ತೋರಿಸಿ",
+    "reviewChangeUndoAll": "ಎಲ್ಲವನ್ನೂ ರದ್ದುಮಾಡಿ",
+    "reviewChangeSeeEvidence": "ಸಾಕ್ಷ್ಯ ನೋಡಿ",
+    "reviewChangeViewConversation": "ಸಂಭಾಷಣೆ ನೋಡಿ",
+    "reviewChangeViewTask": "ಕಾರ್ಯ ನೋಡಿ",
+    "reviewChangesUndoPartial": "ರದ್ದುಮಾಡಲಾಗಲಿಲ್ಲ: {failed}/{total}. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     "reviewShowMore": "ಇನ್ನಷ್ಟು ತೋರಿಸಿ",
     "entityKeptCurrent": "Omi ನಿಂದ ನವೀಕೃತವಾಗಿ ಇರಿಸಲಾಗಿದೆ",
     "entityNotRight": "ಸರಿಯಿಲ್ಲವೇ?",
@@ -11549,5 +11559,8 @@
     "activityEmpty": "ಇನ್ನೂ ಯಾವುದೇ ಚಟುವಟಿಕೆ ಇಲ್ಲ",
     "activityNewSemantics": "ಚಟುವಟಿಕೆ, ಹೊಸ ಐಟಂಗಳು",
     "activityLoadFailed": "ನಿಮ್ಮ ಎಲ್ಲಾ ಚಟುವಟಿಕೆಯನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
-    "activityNewItem": "ಹೊಸದು"
+    "activityNewItem": "ಹೊಸದು",
+    "activityNeedsAttention": "ಗಮನ ಅಗತ್ಯವಿದೆ",
+    "activityRetryAll": "ಎಲ್ಲವನ್ನೂ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ",
+    "attentionSummaryFailed": "ಈ ಸಂಭಾಷಣೆಯ ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ"
 }

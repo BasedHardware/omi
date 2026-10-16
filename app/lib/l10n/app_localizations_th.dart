@@ -4348,12 +4348,27 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'แผน $plan ของคุณสิ้นสุดวันที่ $date';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'สมัครใหม่ตอนนี้เพื่อรักษาสิทธิประโยชน์ - ไม่มีค่าใช้จ่ายจนถึง $date';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'แพ็คเกจของคุณถูกตั้งค่าให้ยกเลิกในวันที่ $date\nสมัครใหม่ตอนนี้เพื่อรักษาสิทธิประโยชน์ - ไม่มีค่าใช้จ่ายจนถึง $date';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'แพ็คเกจรายปีของคุณจะเริ่มโดยอัตโนมัติเมื่อแพ็คเกจรายเดือนของคุณสิ้นสุด';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'แผน $plan ของคุณจะต่ออายุวันที่ $date';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4386,6 +4401,9 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get continueText => 'ดำเนินการต่อ';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'สมัครใหม่ก่อนเพื่อเปลี่ยนแผน';
 
   @override
   String get resubscribe => 'สมัครใหม่';
@@ -4995,9 +5013,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get content => 'เนื้อหา';
-
-  @override
-  String get noContentToDisplay => 'ไม่มีเนื้อหาที่จะแสดง';
 
   @override
   String get noSummary => 'ไม่มีสรุป';
@@ -9750,9 +9765,6 @@ class AppLocalizationsTh extends AppLocalizations {
       'ขณะนี้ไม่สามารถแปลงเสียงเป็นข้อความได้ โปรดตรวจสอบการเชื่อมต่ออินเทอร์เน็ตและการตั้งค่าการรู้จำเสียงของอุปกรณ์ แล้วลองอีกครั้ง';
 
   @override
-  String get processingTakingLonger => 'ยังทำงานอยู่ — ใช้เวลานานกว่าปกติ';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'เพื่อให้ Omi รู้ว่าเสียงไหนเป็นของคุณ — พูดเรื่องอะไรก็ได้ประมาณ 5 วินาที';
 
@@ -12364,6 +12376,59 @@ class AppLocalizationsTh extends AppLocalizations {
   String get reviewNoChangesBody => 'เมื่อ Omi จัดระเบียบบันทึกของคุณ การเปลี่ยนแปลงจะแสดงที่นี่';
 
   @override
+  String get reviewChangesSectionTerms => 'ชื่อและคำศัพท์';
+
+  @override
+  String get reviewChangesSectionTitles => 'ชื่อเรื่องและสรุป';
+
+  @override
+  String get reviewChangesSectionOther => 'การเปลี่ยนแปลงอื่นๆ';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count บทสนทนา',
+      one: '1 บทสนทนา',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ตำแหน่ง',
+      one: '1 ตำแหน่ง',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'แสดงทั้งหมด $count';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'เลิกทำทั้งหมด';
+
+  @override
+  String get reviewChangeSeeEvidence => 'ดูหลักฐาน';
+
+  @override
+  String get reviewChangeViewConversation => 'ดูบทสนทนา';
+
+  @override
+  String get reviewChangeViewTask => 'ดูงาน';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'เลิกทำไม่ได้ $failed จาก $total รายการ ลองอีกครั้ง';
+  }
+
+  @override
   String get reviewShowMore => 'แสดงเพิ่มเติม';
 
   @override
@@ -13359,4 +13424,13 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get activityNewItem => 'ใหม่';
+
+  @override
+  String get activityNeedsAttention => 'ต้องดำเนินการ';
+
+  @override
+  String get activityRetryAll => 'ลองใหม่ทั้งหมด';
+
+  @override
+  String get attentionSummaryFailed => 'ไม่สามารถสรุปบทสนทนานี้ได้';
 }

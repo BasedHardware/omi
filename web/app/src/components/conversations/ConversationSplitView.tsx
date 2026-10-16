@@ -29,6 +29,8 @@ import {
 } from '@/components/conversations/FolderDialog';
 import { MoveFolderDialog } from '@/components/conversations/MoveFolderDialog';
 import { RecapDetailPanel } from '@/components/recaps/RecapDetailPanel';
+import { GenerateRecapAction } from '@/components/recaps/GenerateRecapAction';
+import { Button } from '@/components/ui/button';
 import { ConversationGallery, ConversationGallerySkeleton } from './ConversationGallery';
 import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { PageToolbar } from '@/components/layout/PageToolbar';
@@ -172,10 +174,13 @@ export function ConversationSplitView() {
   const {
     recaps,
     loading: recapsLoading,
+    error: recapsError,
+    refresh: refreshRecaps,
     hasMore: recapsHasMore,
     loadMore: loadMoreRecaps,
     getRecapDetail,
-  } = useRecaps();
+    generateForDate,
+  } = useRecaps({ accountId: user?.uid });
 
   const {
     conversation: selectedConversation,
@@ -699,6 +704,15 @@ export function ConversationSplitView() {
         }
         actions={
           <>
+            <GenerateRecapAction
+              key={user?.uid}
+              generate={generateForDate}
+              onCreated={(recap) => {
+                preventAutoSelect.current = true;
+                setSelectedRecap(recap);
+                setSelection({ kind: 'recap', id: recap.id });
+              }}
+            />
             <DateFilter selectedDate={filterDate} onDateChange={handleDateFilterChange} />
 
             {/* Select/Cancel button for merge mode */}
@@ -796,7 +810,26 @@ export function ConversationSplitView() {
           )}
 
           {/* Empty state */}
-          {isEmpty && !listError && (
+          {recapsError &&
+            !isSearching &&
+            !filterDate &&
+            selectedFolderId === FOLDER_ALL && (
+              <div
+                role="alert"
+                className="m-5 flex items-center justify-between gap-3 rounded-section border border-stroke p-4 text-sm text-text-secondary"
+              >
+                <span>Daily Recaps couldn’t load. Try again.</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={recapsLoading}
+                  onClick={() => void refreshRecaps()}
+                >
+                  Retry recaps
+                </Button>
+              </div>
+            )}
+          {isEmpty && !listError && !recapsError && (
             <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
               <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-section bg-bg-tertiary">
                 {isSearching ? (

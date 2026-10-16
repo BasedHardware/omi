@@ -9,8 +9,8 @@ import pytest
 from config.vertex_reservations import State
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.credentials import build_omi_managed_credential_context
-from llm_gateway.gateway.providers import VertexGeminiProvider
-from llm_gateway.gateway.schemas import ProviderRef
+from llm_gateway.gateway.providers import VertexGeminiProvider, ProviderFailure
+from llm_gateway.gateway.schemas import ProviderRef, FailureClass
 from utils.llm import vertex_pt_routing as ptr
 from utils.llm.vertex_reservation_probe import probe_reservation
 from utils.llm.vertex_reservation_state import ReservationState
@@ -18,7 +18,7 @@ from utils.llm.vertex_reservation_state import ReservationState
 
 @pytest.mark.parametrize('location', ['us', 'us-central1', 'global'])
 @pytest.mark.asyncio
-async def test_moved_order_routes_every_alias_to_declared_dedicated_endpoint(monkeypatch, location):
+async def test_moved_order_sends_every_non_dream_alias_to_luna_without_vertex_http(monkeypatch, location):
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
     monkeypatch.setenv(ptr.PT_TARGET_LOCATION_ENV, location)
     monkeypatch.delenv('OMI_VERTEX_RESERVATION_STATES', raising=False)
@@ -43,18 +43,15 @@ async def test_moved_order_routes_every_alias_to_declared_dedicated_endpoint(mon
             AsyncMock(return_value={ptr.PT_MODEL_CURRENT: State.INACTIVE, ptr.PT_MODEL_TARGET: State.ACTIVE}),
         )
         for anchor in ptr.DESKTOP_TEXT_LANES:
-            await provider.create_chat_completion(
-                {'messages': [{'role': 'user', 'content': 'synthetic'}]},
-                provider_ref=ProviderRef(provider='gemini', model=anchor),
-                credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
-                timeout_ms=1000,
-            )
-    assert len(seen) == len(ptr.DESKTOP_TEXT_LANES)
-    for request in seen:
-        assert f'/locations/{location}/' in request.url.path
-        assert ptr.PT_MODEL_TARGET + ':generateContent' in request.url.path
-        assert request.headers[ptr.REQUEST_TYPE_HEADER] == 'dedicated'
-        assert json.loads(request.content)['generationConfig']['thinkingConfig'] == {'thinkingLevel': 'low'}
+            with pytest.raises(ProviderFailure) as raised:
+                await provider.create_chat_completion(
+                    {'messages': [{'role': 'user', 'content': 'synthetic'}]},
+                    provider_ref=ProviderRef(provider='gemini', model=anchor),
+                    credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+                    timeout_ms=1000,
+                )
+            assert raised.value.failure_class == FailureClass.RESERVED_CAPACITY_UNAVAILABLE
+    assert not seen
 
 
 @pytest.mark.parametrize(

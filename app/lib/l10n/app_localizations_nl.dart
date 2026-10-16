@@ -4384,12 +4384,27 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Je $plan-abonnement eindigt op $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Abonneer nu opnieuw om uw voordelen te behouden - geen kosten tot $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Uw plan wordt geannuleerd op $date.\nAbonneer nu opnieuw om uw voordelen te behouden - geen kosten tot $date.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'Uw jaarabonnement start automatisch wanneer uw maandabonnement eindigt.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Je $plan-abonnement wordt verlengd op $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4422,6 +4437,9 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get continueText => 'Doorgaan';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Abonneer je eerst opnieuw om van abonnement te wisselen.';
 
   @override
   String get resubscribe => 'Opnieuw abonneren';
@@ -5035,9 +5053,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get content => 'Inhoud';
-
-  @override
-  String get noContentToDisplay => 'Geen inhoud om weer te geven';
 
   @override
   String get noSummary => 'Geen samenvatting';
@@ -9832,9 +9847,6 @@ class AppLocalizationsNl extends AppLocalizations {
       'Spraak naar tekst is momenteel niet beschikbaar. Controleer je internetverbinding en de instellingen voor spraakherkenning op je apparaat en probeer het opnieuw.';
 
   @override
-  String get processingTakingLonger => 'Nog bezig — dit duurt langer dan normaal.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Zodat Omi weet welke stem van jou is — praat ongeveer 5 seconden over wat je maar wilt.';
 
@@ -12464,6 +12476,59 @@ class AppLocalizationsNl extends AppLocalizations {
   String get reviewNoChangesBody => 'Als Omi je notities opruimt, verschijnen de wijzigingen hier.';
 
   @override
+  String get reviewChangesSectionTerms => 'Namen en termen';
+
+  @override
+  String get reviewChangesSectionTitles => 'Titels en samenvattingen';
+
+  @override
+  String get reviewChangesSectionOther => 'Overige wijzigingen';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gesprekken',
+      one: '1 gesprek',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count plekken',
+      one: '1 plek',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Alle $count tonen';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Alles ongedaan maken';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Bewijs bekijken';
+
+  @override
+  String get reviewChangeViewConversation => 'Gesprek bekijken';
+
+  @override
+  String get reviewChangeViewTask => 'Taak bekijken';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return '$failed van $total konden niet ongedaan worden gemaakt. Probeer het opnieuw.';
+  }
+
+  @override
   String get reviewShowMore => 'Meer tonen';
 
   @override
@@ -13461,4 +13526,13 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nieuw';
+
+  @override
+  String get activityNeedsAttention => 'Vraagt aandacht';
+
+  @override
+  String get activityRetryAll => 'Alles opnieuw proberen';
+
+  @override
+  String get attentionSummaryFailed => 'Dit gesprek kon niet worden samengevat';
 }

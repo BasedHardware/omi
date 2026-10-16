@@ -8,7 +8,7 @@ stackdriver:
       - 'prometheus.googleapis.com/omi_'
       - 'custom.googleapis.com/omi_sync_phase_'
     filters:
-      - 'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND resource.labels.namespace=one_of("backend","desktop-backend","backend-sync","backend-sync-backfill","notifications-job")'
+      - 'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND resource.labels.namespace=one_of("backend","desktop-backend","notifications-job")'
       - 'custom.googleapis.com/omi_sync_phase_:resource.labels.job=one_of("backend-sync","backend-sync-backfill")'
     interval: '10m'
     offset: '1m'
@@ -17,9 +17,24 @@ serviceAccount:
   create: false
   name: "dev-omi-prometheus-stackdriver-exporter"
 
-# Sized from measurement, not from the idle case. A prod scrape returns ~28MB /
-# ~52k series and takes 6-10s of mostly-CPU work, and steady-state usage is
-# ~238m CPU / ~331Mi -- already above the previous 200m/256Mi ceiling. Under that
+# Sync namespaces are deliberately absent. backend-sync, backend-sync-backfill and
+# backend-integration run the full backend codebase, so once #21696 attached the GMP
+# sidecar to them every omi_* family arrived once per instance of those services:
+# 187,367 series per 10-minute window on 2026-10-16 (88% from the three sync
+# namespaces; omi_fallback_total alone 53.5k, 47k of it sync), up from ~52k. The
+# exporter holds a whole collection in memory and was OOMKilled at 2Gi a minute after
+# every start. The families consumers read from those namespaces come from the
+# separate <env>-omi-cloud-run-sync-metrics-exporter release instead
+# (<env>_sync_omi_cloud_run_metrics_exporter.yaml; the workflow path glob covers it).
+# One filter cannot express "everything from these namespaces, a few families from
+# those": the exporter ANDs every filter whose prefix matches a descriptor, and Cloud
+# Monitoring rejects an OR across resource.labels with HTTP 400 (verified live).
+#
+# Sized from measurement, not from the idle case. With this filter a prod collection
+# is ~22.4k series (2026-10-16, timeSeries.list HEADERS, exactly the
+# `metric.type="<type>" AND (<filter>)` the exporter builds, over all 291 omi_ types).
+# The earlier ~52k-series / ~28MB scrape took 6-10s of mostly-CPU work at a
+# steady ~238m CPU / ~331Mi -- already above the previous 200m/256Mi ceiling. Under that
 # ceiling the process was throttled hard enough to miss both the 10s scrape
 # timeout and the 10s liveness timeout, so kubelet killed it before it could ever
 # deliver a sample: 120 restarts, up=0, scrape_samples_scraped=0. It looked

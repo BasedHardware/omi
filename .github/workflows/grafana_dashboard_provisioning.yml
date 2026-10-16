@@ -13,6 +13,9 @@ on:
     paths:
       - 'backend/charts/monitoring/dashboards/**'
       - '.github/workflows/grafana_dashboard_provisioning.yml'
+      - '.github/scripts/provision_grafana_dashboards.py'
+      - '.github/scripts/grafana_business.py'
+      - 'web/admin/grafana/dashboards/omi-tv-v2.json'
   workflow_dispatch:
     inputs:
       environment:
@@ -91,7 +94,7 @@ jobs:
           GIT_SHORT_SHA: ${{ github.sha }}
           # First land provisions only the custom repo-first boards (string
           # uids). Community/helm-managed boards keep their manual flow.
-          DASHBOARD_ALLOWLIST: omi-core-features.json,omi-translation.json,resilience-fallbacks.json
+          DASHBOARD_ALLOWLIST: omi-core-features.json,omi-translation.json,resilience-fallbacks.json,fleet-telemetry.json
         run: |
           set -euo pipefail
           umask 077
@@ -102,3 +105,20 @@ jobs:
             --token-env MONITOR_GRAFANA_TOKEN \
             --source-sha "$GIT_SHORT_SHA" \
             --allowlist "$DASHBOARD_ALLOWLIST"
+
+      - name: Provision private Business board (prod only)
+        if: steps.gate.outputs.skip != 'true' && matrix.environment == 'prod'
+        env:
+          BUSINESS_GRAFANA_TOKEN: ${{ secrets.BUSINESS_GRAFANA_TOKEN }}
+          GRAFANA_URL: ${{ matrix.url }}
+          GIT_SHORT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 .github/scripts/provision_grafana_dashboards.py \
+            --dashboards-dir web/admin/grafana/dashboards \
+            --grafana-url "$GRAFANA_URL" \
+            --token-env BUSINESS_GRAFANA_TOKEN \
+            --source-sha "$GIT_SHORT_SHA" \
+            --allowlist omi-tv-v2.json \
+            --folder-uid business

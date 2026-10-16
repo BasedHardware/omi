@@ -277,6 +277,9 @@ def conversations_db():
     fakes["utils.firestore_document_size"] = load_module_fresh(
         "utils.firestore_document_size", str(_BACKEND / "utils" / "firestore_document_size.py")
     )
+    fakes["utils.other.playback_identity"] = load_module_fresh(
+        "utils.other.playback_identity", str(_BACKEND / "utils" / "other" / "playback_identity.py")
+    )
 
     with stub_modules(fakes):
         module = load_module_fresh(

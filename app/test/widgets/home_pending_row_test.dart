@@ -14,8 +14,11 @@ import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
 import 'package:omi/pages/conversations/conversations_page.dart' show dateFilterIncludesToday;
 import 'package:omi/pages/conversations/on_the_way_page.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart';
+import 'package:omi/pages/conversations/widgets/empty_conversations.dart' show NoConversationsHero;
 import 'package:omi/pages/conversations/widgets/home_pending_row.dart';
+import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -23,6 +26,8 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/wal.dart';
+
+import '../support/typed_conversation_screen.dart';
 
 /// Home's pending row and the On the Way page: recordings still becoming
 /// conversations stay visible in Today as one calm row, with the detail one
@@ -134,7 +139,10 @@ Wal _wal(String id, int minutes, WalStatus status) => Wal(
     );
 
 Widget _app(SyncProvider sync, Widget child, {List<SingleChildWidget> extras = const []}) => MultiProvider(
-      providers: [...extras, ChangeNotifierProvider<SyncProvider>.value(value: sync)],
+      providers: [
+        ...extras,
+        ChangeNotifierProvider<SyncProvider>.value(value: sync),
+      ],
       child: MaterialApp(
         localizationsDelegates: const [
           AppLocalizations.delegate,
@@ -148,11 +156,13 @@ Widget _app(SyncProvider sync, Widget child, {List<SingleChildWidget> extras = c
     );
 
 Future<void> _pumpRow(WidgetTester tester, SyncProvider sync, {List<SingleChildWidget> extras = const []}) async {
-  await tester.pumpWidget(_app(
-    sync,
-    const Scaffold(body: SingleChildScrollView(child: HomePendingRow(multiFileSync: true))),
-    extras: extras,
-  ));
+  await tester.pumpWidget(
+    _app(
+      sync,
+      const Scaffold(body: SingleChildScrollView(child: HomePendingRow(multiFileSync: true))),
+      extras: extras,
+    ),
+  );
   await tester.pump();
 }
 
@@ -216,7 +226,9 @@ void main() {
 
     testWidgets('keeps the transcribing copy through the post-sync conversation fetch', (tester) async {
       await _pumpRow(
-          tester, _FakeSync(wals: [_wal('processing', 4, WalStatus.uploaded)], fetchingWithUploadPhase: true));
+        tester,
+        _FakeSync(wals: [_wal('processing', 4, WalStatus.uploaded)], fetchingWithUploadPhase: true),
+      );
       expect(find.text('Transcribing…'), findsOneWidget);
     });
 
@@ -285,10 +297,12 @@ void main() {
       Widget host(SyncProvider sync) => _app(
             sync,
             const Scaffold(
-              body: CustomScrollView(slivers: [
-                SliverToBoxAdapter(child: CaptureRecoveryBanner()),
-                SliverToBoxAdapter(child: HomePendingRow(showTodayHeader: true)),
-              ]),
+              body: CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(child: CaptureRecoveryBanner()),
+                  SliverToBoxAdapter(child: HomePendingRow(showTodayHeader: true)),
+                ],
+              ),
             ),
           );
 
@@ -327,91 +341,130 @@ void main() {
     });
 
     testWidgets('counts fragments of one recording as one row', (tester) async {
-      final a =
-          Wal(timerStart: 1000, codec: BleAudioCodec.opus, seconds: 60, status: WalStatus.miss, device: 'pendant');
-      final b =
-          Wal(timerStart: 1060, codec: BleAudioCodec.opus, seconds: 60, status: WalStatus.miss, device: 'pendant');
+      final a = Wal(
+        timerStart: 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        status: WalStatus.miss,
+        device: 'pendant',
+      );
+      final b = Wal(
+        timerStart: 1060,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        status: WalStatus.miss,
+        device: 'pendant',
+      );
       await _pumpPage(tester, _FakeSync(wals: [b, a]));
       expect(find.text('Waiting to sync'), findsOneWidget);
     });
 
     test('a device drain in progress lists the recording once, not its copied pieces too', () {
       final source = Wal(
-          timerStart: 1000,
-          codec: BleAudioCodec.opus,
-          seconds: 600,
-          status: WalStatus.miss,
-          storage: WalStorage.sdcard,
-          device: 'pendant');
+        timerStart: 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 600,
+        status: WalStatus.miss,
+        storage: WalStorage.sdcard,
+        device: 'pendant',
+      );
       Wal piece(int start) => Wal(
-          timerStart: start,
-          codec: BleAudioCodec.opus,
-          seconds: 60,
-          status: WalStatus.miss,
-          storage: WalStorage.disk,
-          originalStorage: WalStorage.sdcard,
-          device: 'pendant');
-      final phoneOnly =
-          Wal(timerStart: 5000, codec: BleAudioCodec.opus, seconds: 60, status: WalStatus.miss, device: 'pendant');
-      final ids = SyncPendingWork.syncing(_FakeSync(wals: [source, piece(1000), piece(1060), phoneOnly]))
-          .map((w) => w.timerStart)
-          .toList();
+            timerStart: start,
+            codec: BleAudioCodec.opus,
+            seconds: 60,
+            status: WalStatus.miss,
+            storage: WalStorage.disk,
+            originalStorage: WalStorage.sdcard,
+            device: 'pendant',
+          );
+      final phoneOnly = Wal(
+        timerStart: 5000,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        status: WalStatus.miss,
+        device: 'pendant',
+      );
+      final ids = SyncPendingWork.syncing(
+        _FakeSync(wals: [source, piece(1000), piece(1060), phoneOnly]),
+      ).map((w) => w.timerStart).toList();
       expect(ids, [5000, 1000]);
       expect(SyncPendingWork.syncing(_FakeSync(wals: [source, piece(1000)])).single.storage, WalStorage.sdcard);
     });
 
-    testWidgets('a stalled device drain reads as one recording: copied pieces and the rest on the device',
-        (tester) async {
+    testWidgets('a stalled device drain reads as one recording: copied pieces and the rest on the device', (
+      tester,
+    ) async {
       final rest = Wal(
-          timerStart: 1300,
-          codec: BleAudioCodec.opus,
-          seconds: 300,
-          status: WalStatus.miss,
-          storage: WalStorage.flashPage,
-          device: 'pendant');
+        timerStart: 1300,
+        codec: BleAudioCodec.opus,
+        seconds: 300,
+        status: WalStatus.miss,
+        storage: WalStorage.flashPage,
+        device: 'pendant',
+      );
       Wal piece(int start) => Wal(
-          timerStart: start,
-          codec: BleAudioCodec.opus,
-          seconds: 150,
-          status: WalStatus.miss,
-          storage: WalStorage.disk,
-          originalStorage: WalStorage.flashPage,
-          device: 'pendant');
+            timerStart: start,
+            codec: BleAudioCodec.opus,
+            seconds: 150,
+            status: WalStatus.miss,
+            storage: WalStorage.disk,
+            originalStorage: WalStorage.flashPage,
+            device: 'pendant',
+          );
       await _pumpPage(tester, _FakeSync(wals: [rest, piece(1000), piece(1150)]));
       expect(find.textContaining('· 10m'), findsOneWidget);
       expect(find.textContaining('·'), findsOneWidget);
     });
 
+    test('the catching-up check is answered once per WAL list, not per progress tick', () {
+      final wals = [_wal('long', 40, WalStatus.miss)];
+      final sync = _FakeSync(wals: wals);
+      expect(SyncPendingWork.isLargeBacklog(sync), isTrue);
+      // Same list, same answer, even though nothing re-scans it.
+      wals.first.seconds = 60;
+      expect(SyncPendingWork.isLargeBacklog(sync), isTrue);
+      // A new list, as SyncProvider publishes on any status change, is read afresh.
+      expect(SyncPendingWork.isLargeBacklog(_FakeSync(wals: [...wals])), isFalse);
+    });
+
     test('a device drain counts its audio once toward catching up', () {
       final source = Wal(
-          timerStart: 1000,
-          codec: BleAudioCodec.opus,
-          seconds: 20 * 60,
-          status: WalStatus.miss,
-          storage: WalStorage.sdcard,
-          device: 'pendant');
+        timerStart: 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 20 * 60,
+        status: WalStatus.miss,
+        storage: WalStorage.sdcard,
+        device: 'pendant',
+      );
       final copied = Wal(
-          timerStart: 1000,
-          codec: BleAudioCodec.opus,
-          seconds: 15 * 60,
-          status: WalStatus.miss,
-          storage: WalStorage.disk,
-          originalStorage: WalStorage.sdcard,
-          device: 'pendant');
+        timerStart: 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 15 * 60,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.sdcard,
+        device: 'pendant',
+      );
       expect(SyncPendingWork.isLargeBacklog(_FakeSync(wals: [source, copied])), isFalse);
     });
 
     testWidgets('keeps refused recordings one tap away, on the Sync Details row', (tester) async {
-      await _pumpPage(tester,
-          _FakeSync(wals: [_wal('ready', 5, WalStatus.miss), _wal('too-old', 3, WalStatus.outsideRecoveryWindow)]));
+      await _pumpPage(
+        tester,
+        _FakeSync(wals: [_wal('ready', 5, WalStatus.miss), _wal('too-old', 3, WalStatus.outsideRecoveryWindow)]),
+      );
       expect(find.text('1 recording need attention'), findsOneWidget);
     });
 
     testWidgets('Sync Details opens the Offline Sync page the device settings open', (tester) async {
-      await _pumpPage(tester, _FakeSync(wals: [_wal('processing', 4, WalStatus.uploaded)]), extras: [
-        ChangeNotifierProvider<UserProvider>(create: (_) => UserProvider()),
-        ChangeNotifierProvider<DeviceProvider>(create: (_) => _Device()),
-      ]);
+      await _pumpPage(
+        tester,
+        _FakeSync(wals: [_wal('processing', 4, WalStatus.uploaded)]),
+        extras: [
+          ChangeNotifierProvider<UserProvider>(create: (_) => UserProvider()),
+          ChangeNotifierProvider<DeviceProvider>(create: (_) => _Device()),
+        ],
+      );
       await tester.tap(find.byKey(const Key('on_the_way_sync_details')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
@@ -420,10 +473,14 @@ void main() {
 
     testWidgets('Sync Details shows the v2 alert when device-resident work has no storage support', (tester) async {
       final device = _wal('device', 2, WalStatus.miss)..storage = WalStorage.sdcard;
-      await _pumpPage(tester, _FakeSync(wals: [device]), extras: [
-        ChangeNotifierProvider<UserProvider>(create: (_) => UserProvider()),
-        ChangeNotifierProvider<DeviceProvider>(create: (_) => _Device(storageSupport: false)),
-      ]);
+      await _pumpPage(
+        tester,
+        _FakeSync(wals: [device]),
+        extras: [
+          ChangeNotifierProvider<UserProvider>(create: (_) => UserProvider()),
+          ChangeNotifierProvider<DeviceProvider>(create: (_) => _Device(storageSupport: false)),
+        ],
+      );
       await tester.tap(find.byKey(const Key('on_the_way_sync_details')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
@@ -445,18 +502,23 @@ void main() {
     testWidgets('a live capture still processing is listed once, not again as its uploaded audio', (tester) async {
       final now = DateTime.now();
       final conversations = ConversationProvider(
-          conversationListFetcher: () async => (items: <ServerConversation>[], ok: true), isSignedIn: () => true)
-        ..processingConversations = [
+        conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+        isSignedIn: () => true,
+      )..processingConversations = [
           ServerConversation(
-              id: 'conv-1',
-              createdAt: now,
-              startedAt: now,
-              structured: Structured('', ''),
-              status: ConversationStatus.processing),
+            id: 'conv-1',
+            createdAt: now,
+            startedAt: now,
+            structured: Structured('', ''),
+            status: ConversationStatus.processing,
+          ),
         ];
       final uploaded = _wal('live', 4, WalStatus.uploaded)..conversationId = 'conv-1';
-      await _pumpPage(tester, _FakeSync(wals: [uploaded]),
-          extras: [ChangeNotifierProvider<ConversationProvider>.value(value: conversations)]);
+      await _pumpPage(
+        tester,
+        _FakeSync(wals: [uploaded]),
+        extras: [ChangeNotifierProvider<ConversationProvider>.value(value: conversations)],
+      );
       expect(find.text('Processing'), findsOneWidget);
       expect(find.text('Transcribing…'), findsNothing);
     });
@@ -464,27 +526,42 @@ void main() {
     testWidgets('a live capture still processing is not repeated as its not-yet-uploaded audio', (tester) async {
       final now = DateTime.now();
       final conversations = ConversationProvider(
-          conversationListFetcher: () async => (items: <ServerConversation>[], ok: true), isSignedIn: () => true)
-        ..processingConversations = [
+        conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+        isSignedIn: () => true,
+      )..processingConversations = [
           ServerConversation(
-              id: 'conv-2',
-              createdAt: now,
-              startedAt: now,
-              structured: Structured('', ''),
-              status: ConversationStatus.processing),
+            id: 'conv-2',
+            createdAt: now,
+            startedAt: now,
+            structured: Structured('', ''),
+            status: ConversationStatus.processing,
+          ),
         ];
       final safety = _wal('safety', 4, WalStatus.miss)..conversationId = 'conv-2';
-      await _pumpPage(tester, _FakeSync(wals: [safety]),
-          extras: [ChangeNotifierProvider<ConversationProvider>.value(value: conversations)]);
+      await _pumpPage(
+        tester,
+        _FakeSync(wals: [safety]),
+        extras: [ChangeNotifierProvider<ConversationProvider>.value(value: conversations)],
+      );
       expect(find.text('Processing'), findsOneWidget);
       expect(find.text('SYNCING'), findsNothing);
     });
 
     testWidgets('one recording straddling an upload batch is listed once, by its least advanced part', (tester) async {
-      final done =
-          Wal(timerStart: 1000, codec: BleAudioCodec.opus, seconds: 300, status: WalStatus.uploaded, device: 'pendant');
-      final next =
-          Wal(timerStart: 1300, codec: BleAudioCodec.opus, seconds: 120, status: WalStatus.miss, device: 'pendant');
+      final done = Wal(
+        timerStart: 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 300,
+        status: WalStatus.uploaded,
+        device: 'pendant',
+      );
+      final next = Wal(
+        timerStart: 1300,
+        codec: BleAudioCodec.opus,
+        seconds: 120,
+        status: WalStatus.miss,
+        device: 'pendant',
+      );
       await _pumpPage(tester, _FakeSync(wals: [next, done]));
       expect(find.text('ALMOST READY'), findsNothing);
       expect(find.text('Waiting to sync'), findsOneWidget);
@@ -500,6 +577,155 @@ void main() {
     testWidgets('says so when everything has landed', (tester) async {
       await _pumpPage(tester, _FakeSync(wals: [_wal('done', 15, WalStatus.synced)]));
       expect(find.text('All recordings are synced'), findsOneWidget);
+    });
+  });
+
+  // Home's order holds from the first frame: Daily Recaps, then Today (the pending row first in it),
+  // then the rest. Before the list loads, the row opens Today exactly where the list's Today lands.
+  group('Home order', () {
+    final now = DateTime.now();
+    DateTime at(int daysAgo, int hour) => DateTime(now.year, now.month, now.day - daysAgo, hour);
+    ServerConversation convo(String id, DateTime when) => ServerConversation(
+          id: id,
+          createdAt: when,
+          startedAt: when,
+          finishedAt: when.add(const Duration(minutes: 5)),
+          structured: Structured('Conversation $id', 'Overview', emoji: '🙂', category: 'work'),
+          status: ConversationStatus.completed,
+        );
+    // Dated three days back so its card never reads "Today" or "Yesterday".
+    Future<({List<DailySummary> items, bool ok})> recaps() async => (
+          items: [
+            DailySummary(
+              id: 'r1',
+              date: at(3, 0).toIso8601String().substring(0, 10),
+              createdAt: at(2, 4),
+              headline: 'Dashboards and paperwork',
+              overview: 'A day of dashboards and forms.',
+              stats: DayStats(totalConversations: 6, actionItemsCount: 2),
+            ),
+          ],
+          ok: true,
+        );
+    SyncProvider pending() => _FakeSync(wals: [_wal('processing', 4, WalStatus.uploaded)]);
+
+    Future<ConversationProvider> pumpHome(
+      WidgetTester tester,
+      SyncProvider sync, {
+      List<ServerConversation> items = const [],
+      bool loading = false,
+      DateTime? start,
+      DateTime? end,
+    }) async {
+      tester.view.physicalSize = const Size(390, 2000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final provider =
+          ConversationProvider(conversationListFetcher: () async => (items: items, ok: true), isSignedIn: () => true)
+            ..conversations = [...items]
+            ..isLoadingConversations = loading
+            ..selectedStartDate = start
+            ..selectedEndDate = end
+            ..groupConversationsByDate();
+      final screen = await tester.runAsync(
+        () => buildTypedConversationScreen(provider, sync: sync, loadRecaps: recaps),
+      );
+      await tester.pumpWidget(screen!);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      return provider;
+    }
+
+    Future<void> unmount(WidgetTester tester, ConversationProvider provider) async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 1));
+      provider.dispose();
+    }
+
+    void expectTopToBottom(WidgetTester tester, List<Finder> order) {
+      for (var i = 0; i + 1 < order.length; i++) {
+        expect(
+          tester.getRect(order[i]).bottom,
+          lessThanOrEqualTo(tester.getRect(order[i + 1]).top),
+          reason: '${order[i]} must sit above ${order[i + 1]}',
+        );
+      }
+    }
+
+    final recapsRow = find.byType(HomeDailyRecaps);
+    final today = find.text('Today');
+    final yesterday = find.text('Yesterday');
+
+    testWidgets('while the list loads: recaps, then Today, then the pending row', (tester) async {
+      final provider = await pumpHome(tester, pending(), loading: true);
+      expect(today, findsOneWidget);
+      expectTopToBottom(tester, [recapsRow, today, find.byKey(_row)]);
+      await unmount(tester, provider);
+    });
+
+    testWidgets('today\'s conversations arrive under the pending row and nothing above it moves', (tester) async {
+      final provider = await pumpHome(tester, pending(), loading: true);
+      final todayAt = tester.getRect(today);
+      final rowAt = tester.getRect(find.byKey(_row));
+
+      provider
+        ..conversations = [convo('t1', at(0, 0)), convo('y1', at(1, 18))]
+        ..isLoadingConversations = false
+        ..groupConversationsByDate();
+      await tester.pump();
+
+      expect(today, findsOneWidget);
+      expect(tester.getRect(today), todayAt);
+      expect(tester.getRect(find.byKey(_row)), rowAt);
+      expectTopToBottom(tester, [
+        recapsRow,
+        today,
+        find.byKey(_row),
+        find.text('Conversation t1'),
+        yesterday,
+        find.text('Conversation y1'),
+      ]);
+      await unmount(tester, provider);
+    });
+
+    testWidgets('with nothing today yet, the pending row opens Today above Yesterday', (tester) async {
+      final provider = await pumpHome(tester, pending(), items: [convo('y1', at(1, 18))]);
+      expect(today, findsOneWidget);
+      expectTopToBottom(tester, [recapsRow, today, find.byKey(_row), yesterday, find.text('Conversation y1')]);
+      await unmount(tester, provider);
+    });
+
+    testWidgets('with nothing pending, the list starts at its own first day', (tester) async {
+      final provider = await pumpHome(
+        tester,
+        _FakeSync(wals: [_wal('done', 15, WalStatus.synced)]),
+        items: [convo('y1', at(1, 18))],
+      );
+      expect(find.byKey(_row), findsNothing);
+      expect(today, findsNothing);
+      expectTopToBottom(tester, [recapsRow, yesterday, find.text('Conversation y1')]);
+      await unmount(tester, provider);
+    });
+
+    testWidgets('a new account keeps its hero, below Today\'s pending row', (tester) async {
+      final provider = await pumpHome(tester, pending());
+      expect(find.byType(NoConversationsHero), findsOneWidget);
+      expectTopToBottom(tester, [recapsRow, today, find.byKey(_row), find.byType(NoConversationsHero)]);
+      await unmount(tester, provider);
+    });
+
+    testWidgets('a date range without today shows no pending row', (tester) async {
+      final provider = await pumpHome(
+        tester,
+        pending(),
+        items: [convo('o1', at(3, 10))],
+        start: DateTime(now.year, now.month, now.day - 4),
+        end: at(2, 0),
+      );
+      expect(find.byKey(_row), findsNothing);
+      expect(today, findsNothing);
+      await unmount(tester, provider);
     });
   });
 }

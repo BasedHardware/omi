@@ -8355,6 +8355,18 @@ abstract class AppLocalizations {
   /// **'Your plan ended on {date}.\nResubscribe now - you\'ll be charged immediately for a new billing period.'**
   String planEndedOn(String date);
 
+  /// Pending cancellation shown beside the current plan
+  ///
+  /// In en, this message translates to:
+  /// **'Your {plan} plan ends {date}.'**
+  String yourPlanEndsOn(String plan, String date);
+
+  /// Reassurance under a pending cancellation that resubscribing is not charged until the end date
+  ///
+  /// In en, this message translates to:
+  /// **'Resubscribe now to keep your plan. No charge until {date}.'**
+  String resubscribeNowNoChargeUntil(String date);
+
   /// Message when plan is set to cancel
   ///
   /// In en, this message translates to:
@@ -8366,6 +8378,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your annual plan will start automatically when your monthly plan ends.'**
   String get annualPlanStartsAutomatically;
+
+  /// Confirmation after resubscribing a plan that was set to cancel
+  ///
+  /// In en, this message translates to:
+  /// **'Your {plan} plan will renew on {date}.'**
+  String yourPlanWillRenewOn(String plan, String date);
 
   /// Message showing plan renewal date
   ///
@@ -8426,6 +8444,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Continue'**
   String get continueText;
+
+  /// Why another price is refused while cancellation is pending
+  ///
+  /// In en, this message translates to:
+  /// **'Resubscribe first to change plans.'**
+  String get resubscribeFirstToChangePlans;
 
   /// Button to resubscribe
   ///
@@ -9548,12 +9572,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Content'**
   String get content;
-
-  /// Message when there is no content available
-  ///
-  /// In en, this message translates to:
-  /// **'No content to display'**
-  String get noContentToDisplay;
 
   /// Message when no summary is available
   ///
@@ -18267,12 +18285,6 @@ abstract class AppLocalizations {
   /// **'Speech-to-text isn\'t available right now. Check your internet connection and your device\'s speech recognition settings, then try again.'**
   String get speechToTextUnavailableDesc;
 
-  /// Shown on the homepage processing card after ~2 minutes with a Retry action (#5481).
-  ///
-  /// In en, this message translates to:
-  /// **'Still working — this is taking longer than usual.'**
-  String get processingTakingLonger;
-
   /// First-run onboarding instruction: why Omi needs a short voice sample and the approximate duration.
   ///
   /// In en, this message translates to:
@@ -22239,6 +22251,72 @@ abstract class AppLocalizations {
   /// **'When Omi tidies your notes, the changes appear here.'**
   String get reviewNoChangesBody;
 
+  /// Recent changes section: spelling fixes to names and terms
+  ///
+  /// In en, this message translates to:
+  /// **'Names and terms'**
+  String get reviewChangesSectionTerms;
+
+  /// Recent changes section: conversation titles and summaries
+  ///
+  /// In en, this message translates to:
+  /// **'Titles and summaries'**
+  String get reviewChangesSectionTitles;
+
+  /// Recent changes section: changes that fit no other section
+  ///
+  /// In en, this message translates to:
+  /// **'Other changes'**
+  String get reviewChangesSectionOther;
+
+  /// How many conversations one change touched
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 conversation} other{{count} conversations}}'**
+  String reviewChangeConversationCount(int count);
+
+  /// How many places in transcripts one change touched
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 place} other{{count} places}}'**
+  String reviewChangePlaceCount(int count);
+
+  /// Button opening every place a change landed
+  ///
+  /// In en, this message translates to:
+  /// **'Show all {count}'**
+  String reviewChangeShowAll(int count);
+
+  /// Button undoing every instance of one change
+  ///
+  /// In en, this message translates to:
+  /// **'Undo all'**
+  String get reviewChangeUndoAll;
+
+  /// Button showing the conversation evidence behind a change
+  ///
+  /// In en, this message translates to:
+  /// **'See evidence'**
+  String get reviewChangeSeeEvidence;
+
+  /// Button opening the conversation a change came from
+  ///
+  /// In en, this message translates to:
+  /// **'View conversation'**
+  String get reviewChangeViewConversation;
+
+  /// Button opening the tasks list from a task change
+  ///
+  /// In en, this message translates to:
+  /// **'View task'**
+  String get reviewChangeViewTask;
+
+  /// Undo all finished with some failures
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t undo {failed} of {total}. Try again.'**
+  String reviewChangesUndoPartial(int failed, int total);
+
   /// Button (Title Case)
   ///
   /// In en, this message translates to:
@@ -23930,6 +24008,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'New'**
   String get activityNewItem;
+
+  /// Activity section header for work that could not finish and needs the user
+  ///
+  /// In en, this message translates to:
+  /// **'Needs attention'**
+  String get activityNeedsAttention;
+
+  /// Button in Activity's Needs attention section that retries every failed item once
+  ///
+  /// In en, this message translates to:
+  /// **'Retry all'**
+  String get activityRetryAll;
+
+  /// Needs attention row: the server gave up summarizing a conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t summarize this conversation'**
+  String get attentionSummaryFailed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

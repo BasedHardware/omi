@@ -568,18 +568,46 @@ def remove_daily_summary_to_uid(summary_id: str) -> None:
 
 # VISIIBILTIY OF CONVERSATIONS
 def store_conversation_to_uid(conversation_id: str, uid: str) -> None:
-    r.set(f'memories-visibility:{conversation_id}', uid)
+    r.set(f'memories-visibility:{conversation_id}', uid, ex=86400)
 
 
 def remove_conversation_to_uid(conversation_id: str) -> None:
-    r.delete(f'memories-visibility:{conversation_id}')
+    with r.pipeline(transaction=True) as pipe:
+        pipe.delete(f'memories-visibility:{conversation_id}')
+        pipe.srem('public-memories', conversation_id)
+        pipe.execute()
 
 
 def get_conversation_uid(conversation_id: str) -> str:
-    uid = r.get(f'memories-visibility:{conversation_id}')
-    if not uid:
-        return ''
-    return uid.decode()
+    """Redis is a hint only; Firestore must authorize every public read."""
+    from database.conversations import discover_public_conversation_owner
+    from fastapi import HTTPException
+
+    try:
+        cached = r.get(f'memories-visibility:{conversation_id}')
+    except redis.exceptions.RedisError:  # type: ignore[attr-defined]
+        from utils.observability.fallback import record_fallback
+
+        record_fallback(
+            component='other',
+            from_mode='cache_read',
+            to_mode='firestore',
+            reason='other',
+            outcome='recovered',
+            log=logger,
+        )
+        cached = None
+    cached_uid = cached.decode() if isinstance(cached, bytes) else (cached or '')
+    try:
+        uid = discover_public_conversation_owner(conversation_id, cached_uid)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail='Shared conversation unavailable') from exc
+    if uid:
+        try:
+            store_conversation_to_uid(conversation_id, uid)
+        except redis.exceptions.RedisError:  # type: ignore[attr-defined]
+            _record_cache_write_skipped(f'memories-visibility:{conversation_id}', 'other')
+    return uid
 
 
 def add_public_conversation(conversation_id: str) -> None:
@@ -657,104 +685,6 @@ def get_user_webhook_db(uid: str, wtype: str) -> str:
     if not url:
         return ''
     return url.decode()
-
-
-FILTER_CATEGORY_CAP = 500
-FILTER_CATEGORY_TRIM_BATCH = 128
-FILTER_CATEGORIES = frozenset({'people', 'topics', 'entities', 'dates'})
-
-# allow-oom: trim must still run when the box is at maxmemory (the incident).
-_FILTER_TRIM_LUA = """#!lua flags=allow-oom
-local key = KEYS[1]
-local cap = tonumber(ARGV[1])
-local batch = tonumber(ARGV[2])
-local n = redis.call('SCARD', key)
-if n <= cap then
-  return {n, 0}
-end
-local to_remove = math.min(n - cap, batch)
-redis.call('SPOP', key, to_remove)
-return {redis.call('SCARD', key), to_remove}
-"""
-
-_FILTER_ADMIT_LUA = """
-local key = KEYS[1]
-local member = ARGV[1]
-local cap = tonumber(ARGV[2])
-if redis.call('SISMEMBER', key, member) == 1 then
-  return 0
-end
-if redis.call('SCARD', key) >= cap then
-  return 0
-end
-return redis.call('SADD', key, member)
-"""
-
-_filter_trim_script = None
-_filter_admit_script = None
-
-
-def _filter_category_scripts() -> tuple[Any, Any]:
-    global _filter_trim_script, _filter_admit_script
-    if _filter_trim_script is None or _filter_admit_script is None:
-        # Register into locals first; publish the globals only after both
-        # registrations succeed so a concurrent caller can never observe a
-        # half-initialized pair (which would raise TypeError outside the
-        # RedisError handler in add_filter_category_item).
-        trim = r.register_script(_FILTER_TRIM_LUA)
-        admit = r.register_script(_FILTER_ADMIT_LUA)
-        _filter_trim_script = trim
-        _filter_admit_script = admit
-    return _filter_trim_script, _filter_admit_script
-
-
-def get_filter_category_items(uid: str, category: str, limit: Optional[int] = None) -> List[str]:
-    key = f'users:{uid}:filters:{category}'
-    if limit:
-        # Get random sample if limit specified
-        val = r.srandmember(key, limit)
-    else:
-        # Get all items (existing behavior)
-        val = r.smembers(key)
-
-    if not val:
-        return []
-    return [x.decode() for x in val]
-
-
-def add_filter_category_item(uid: str, category: str, item: str) -> None:
-    """SADD chat-search filter members with a 500-cap; SPOP-trim oversized sets.
-
-    Redis SETs have no insertion order. Trim is random, one batch per call.
-    Fail-open on Redis errors: never fall back to an uncapped SADD.
-    """
-    if category not in FILTER_CATEGORIES or not item:
-        return
-    key = f'users:{uid}:filters:{category}'
-    try:
-        trim, admit = _filter_category_scripts()
-        after, removed = trim(keys=[key], args=[FILTER_CATEGORY_CAP, FILTER_CATEGORY_TRIM_BATCH])
-        after_n = int(after)
-        removed_n = int(removed)
-        if removed_n:
-            logger.info('filter_category_trim removed=%s after=%s', removed_n, after_n)
-        if after_n < FILTER_CATEGORY_CAP:
-            admit(keys=[key], args=[item, FILTER_CATEGORY_CAP])
-    except redis.exceptions.RedisError:  # type: ignore[attr-defined]
-        try:
-            from utils.observability.fallback import record_fallback
-
-            record_fallback(
-                component='other',
-                from_mode='filter_sadd',
-                to_mode='skip',
-                reason='other',
-                outcome='degraded',
-                log=logger,
-            )
-        except Exception:
-            pass
-        return
 
 
 def save_migrated_retrieval_conversation_id(conversation_id: str) -> None:
@@ -1205,15 +1135,15 @@ def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> t
     return allowed, remaining, retry_after
 
 
-def reserve_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
+def reserve_rate_limit(
+    key: str, policy: str, max_requests: int, window: int, *, redis_client: Any = None
+) -> tuple[bool, int, int]:
     """Atomically reserve one reversible slot without counting denied attempts.
 
-    Returns ``(allowed, remaining, reset_seconds)``. ``reset_seconds`` is the
-    key TTL on both admit and deny so callers can advertise window reset without
-    a second Redis round-trip. Denied attempts still do not increment the counter.
+    Returns (allowed, remaining, reset_seconds); denied attempts never increment.
     """
     redis_key = f'rl:{policy}:{key}'
-    admitted, current, ttl = _RATE_LIMIT_RESERVE_LUA(keys=[redis_key], args=[window, max_requests])
+    admitted, current, ttl = _RATE_LIMIT_RESERVE_LUA(keys=[redis_key], args=[window, max_requests], client=redis_client)
     allowed = bool(admitted)
     remaining = max(0, max_requests - current)
     reset_seconds = max(0, int(ttl))

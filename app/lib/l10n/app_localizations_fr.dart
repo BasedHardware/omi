@@ -4415,6 +4415,16 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Votre forfait $plan se termine le $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Réabonnez-vous maintenant pour conserver vos avantages - pas de frais jusqu\'au $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Votre forfait est programmé pour être annulé le $date.\nRéabonnez-vous maintenant pour conserver vos avantages - pas de frais jusqu\'au $date.';
   }
@@ -4422,6 +4432,11 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Votre forfait annuel débutera automatiquement à la fin de votre forfait mensuel.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Votre forfait $plan sera renouvelé le $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4455,6 +4470,9 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get continueText => 'Continuer';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Réabonnez-vous d\'abord pour changer de forfait.';
 
   @override
   String get resubscribe => 'Se réabonner';
@@ -5073,9 +5091,6 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get content => 'Contenu';
-
-  @override
-  String get noContentToDisplay => 'Aucun contenu à afficher';
 
   @override
   String get noSummary => 'Pas de résumé';
@@ -9894,9 +9909,6 @@ class AppLocalizationsFr extends AppLocalizations {
       'La transcription vocale est indisponible pour le moment. Vérifiez votre connexion Internet et les réglages de reconnaissance vocale de votre appareil, puis réessayez.';
 
   @override
-  String get processingTakingLonger => 'Toujours en cours — cela prend plus de temps que d’habitude.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Pour qu’Omi reconnaisse votre voix — parlez de ce que vous voulez pendant environ 5 secondes.';
 
@@ -12529,6 +12541,59 @@ class AppLocalizationsFr extends AppLocalizations {
   String get reviewNoChangesBody => 'Quand Omi range vos notes, les modifications apparaissent ici.';
 
   @override
+  String get reviewChangesSectionTerms => 'Noms et termes';
+
+  @override
+  String get reviewChangesSectionTitles => 'Titres et résumés';
+
+  @override
+  String get reviewChangesSectionOther => 'Autres modifications';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversations',
+      one: '1 conversation',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count endroits',
+      one: '1 endroit',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Tout afficher ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Tout annuler';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Voir les preuves';
+
+  @override
+  String get reviewChangeViewConversation => 'Voir la conversation';
+
+  @override
+  String get reviewChangeViewTask => 'Voir la tâche';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Impossible d’annuler $failed sur $total. Réessayez.';
+  }
+
+  @override
   String get reviewShowMore => 'Afficher plus';
 
   @override
@@ -13531,4 +13596,13 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nouveau';
+
+  @override
+  String get activityNeedsAttention => 'Nécessite votre attention';
+
+  @override
+  String get activityRetryAll => 'Tout réessayer';
+
+  @override
+  String get attentionSummaryFailed => 'Impossible de résumer cette conversation';
 }

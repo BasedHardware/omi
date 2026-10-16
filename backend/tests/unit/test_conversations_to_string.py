@@ -52,6 +52,8 @@ from models.conversation import AppResult, Conversation
 from models.conversation_enums import CategoryEnum
 from models.structured import Structured
 from utils.conversations.render import conversations_to_string
+from models.transcript_segment import TranscriptSegment
+from utils.model_text import DisplayClock, ELAPSED_LEGEND, truncation_note
 
 
 def _make_conversation(overview="Test overview", apps_results=None, title="Test Title"):
@@ -152,29 +154,95 @@ class TestConversationsToStringTimezone:
         # created_at is 10:00 UTC
         conv = _make_conversation()
         result = conversations_to_string([conv])
-        assert "15 Jan 2026 at 10:00 UTC" in result
-        assert "Started: 15 Jan 2026 at 10:00 UTC" in result
-        assert "Finished: 15 Jan 2026 at 10:30 UTC" in result
+        assert "Thu 15 Jan 2026 (Personal)" in result
+        assert "When: Thu 15 Jan 2026, 10:00–10:30 UTC, 30m" in result
+
+    def test_missing_start_uses_created_at_for_when_line_in_user_zone(self):
+        conv = _make_conversation()
+        conv.started_at = None
+        result = conversations_to_string([conv], clock=DisplayClock.from_name('Asia/Ho_Chi_Minh'))
+        assert 'When: Thu 15 Jan 2026, 17:00–17:30 Asia/Ho_Chi_Minh (UTC+07:00), 30m' in result
+
+    def test_elapsed_legend_once_and_only_when_timestamps_show(self):
+        first = _make_conversation()
+        second = _make_conversation()
+        first.transcript_segments = [TranscriptSegment(text='hello', is_user=True, start=12, end=15)]
+        second.transcript_segments = [TranscriptSegment(text='again', is_user=True, start=20, end=23)]
+        rendered = conversations_to_string([first, second], use_transcript=True, include_timestamps=True)
+        assert rendered.count(ELAPSED_LEGEND) == 1
+        without_timestamps = conversations_to_string([first], use_transcript=True, include_timestamps=False)
+        assert ELAPSED_LEGEND not in without_timestamps
+
+    def test_truncation_note_is_rendered_only_when_supplied(self):
+        conv = _make_conversation()
+        note = truncation_note(
+            shown=1,
+            total=2,
+            unit='transcript segments',
+            how_to_get_more='Increase max_transcript_segments or set it to -1.',
+        )
+        shown = conversations_to_string([conv], use_transcript=True, truncation_notes={conv.id: note})
+        complete = conversations_to_string([conv], use_transcript=True, truncation_notes={})
+        assert 'omitted, not absent' in shown
+        assert 'omitted, not absent' not in complete
 
     def test_converts_to_user_timezone(self):
         # 10:00 UTC -> 07:00 in America/Sao_Paulo (UTC-3), matching the issue's "off by 3 hours" report
         conv = _make_conversation()
         result = conversations_to_string([conv], tz="America/Sao_Paulo")
-        assert "15 Jan 2026 at 07:00 America/Sao_Paulo" in result
-        assert "Started: 15 Jan 2026 at 07:00 America/Sao_Paulo" in result
-        assert "Finished: 15 Jan 2026 at 07:30 America/Sao_Paulo" in result
-        assert "UTC" not in result
+        assert "When: Thu 15 Jan 2026, 07:00–07:30 America/Sao_Paulo (UTC-03:00), 30m" in result
+        assert "America/Sao_Paulo (UTC-03:00)" in result
 
     def test_kolkata_half_hour_offset(self):
         # 10:00 UTC -> 15:30 IST (UTC+5:30)
         conv = _make_conversation()
         result = conversations_to_string([conv], tz="Asia/Kolkata")
-        assert "15 Jan 2026 at 15:30 Asia/Kolkata" in result
+        assert "15:30–16:00 Asia/Kolkata (UTC+05:30), 30m" in result
 
     def test_invalid_timezone_falls_back_to_utc(self):
         conv = _make_conversation()
         result = conversations_to_string([conv], tz="Not/AZone")
-        assert "15 Jan 2026 at 10:00 UTC" in result
+        assert "10:00–10:30 UTC, 30m" in result
+
+
+class TestConversationsToStringEventTimes:
+    """structured.events[].start must render in the user's tz with a label.
+
+    The Events line used to str() the raw stored datetime ('2026-09-26 07:18:00+00:00'),
+    an unlabelled UTC wall clock on an otherwise tz-labelled card. The chat model read it
+    as the local a.m. time and stated the wrong time of day for the event (reported as
+    'event was in the morning, actually in the afternoon', UTC+7). Same contract as the
+    Started/Finished lines: user-local wall clock + tz label, with duration stated as a
+    bare number so a clock pair can never be misread as start-to-end times.
+    """
+
+    def _make_event_conversation(self):
+        from models.structured import Event
+
+        conv = _make_conversation()
+        conv.structured.events = [
+            Event(
+                title="Grokbot demo",
+                description="",
+                start=datetime(2026, 9, 26, 7, 18, tzinfo=timezone.utc),
+                duration=130,
+            )
+        ]
+        return conv
+
+    def test_event_start_converts_to_user_tz_with_label(self):
+        conv = self._make_event_conversation()
+        result = conversations_to_string([conv], tz="Asia/Ho_Chi_Minh")
+        assert "14:18 Asia/Ho_Chi_Minh" in result
+        assert "07:18" not in result
+        # Duration is a bare value (format_duration), not a second clock pair.
+        assert "2h 10m" in result
+
+    def test_event_start_defaults_to_utc_label(self):
+        conv = self._make_event_conversation()
+        result = conversations_to_string([conv])
+        assert "07:18 UTC" in result
+        assert "+00:00" not in result
 
 
 def _make_naive_conversation(created, started, finished):
@@ -226,9 +294,7 @@ class TestConversationsToStringNaiveTimestamps:
             finished=datetime(2026, 1, 15, 20, 30),
         )
         result = conversations_to_string([conv])
-        assert "15 Jan 2026 at 20:00 UTC" in result
-        assert "Started: 15 Jan 2026 at 20:00 UTC" in result
-        assert "Finished: 15 Jan 2026 at 20:30 UTC" in result
+        assert "When: Thu 15 Jan 2026, 20:00–20:30 UTC, 30m" in result
         assert "16 Jan" not in result
 
     def test_naive_timestamps_convert_to_user_tz(self):
@@ -241,5 +307,4 @@ class TestConversationsToStringNaiveTimestamps:
             finished=datetime(2026, 1, 15, 20, 30),
         )
         result = conversations_to_string([conv], tz="America/Sao_Paulo")
-        assert "15 Jan 2026 at 17:00 America/Sao_Paulo" in result
-        assert "Finished: 15 Jan 2026 at 17:30 America/Sao_Paulo" in result
+        assert "17:00–17:30 America/Sao_Paulo (UTC-03:00), 30m" in result

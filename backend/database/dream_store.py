@@ -19,6 +19,7 @@ from config.dream_agent import (
     canary_eligible,
     canary_uid,
     eligible,
+    hunt_interval,
     may_be_eligible,
     mode,
     DRAIN_TIMEOUT_SECONDS,
@@ -170,6 +171,42 @@ class AdmissionDenied(Exception):
         super().__init__(reason)
 
 
+def _abandoned_usage(abandoned):
+    """Receipt for a lease that died after one or more settled turns.
+
+    Numeric ``cost_usd`` is present only when every receipt is priced. Otherwise
+    the run keeps the conservative ``budget_charge_usd`` and omits a dollar cost.
+    """
+    receipts = abandoned.get('turn_receipts') or []
+    tokens = 0
+    micros = 0
+    priced = bool(receipts)
+    for row in receipts:
+        if not isinstance(row, dict):
+            priced = False
+            continue
+        accounted = row.get('accounted_tokens', row.get('tokens', 0))
+        if type(accounted) is int and accounted >= 0:
+            tokens += accounted
+        else:
+            priced = False
+        micro = row.get('cost_micro_usd')
+        if row.get('cost_status') == 'priced' and type(micro) is int and micro >= 0:
+            micros += micro
+        else:
+            priced = False
+    charge = abandoned.get('budget_charge_usd', abandoned.get('reservation_usd', 0))
+    usage = {
+        'tokens': tokens,
+        'usage_unknown': not priced,
+        'cost_status': 'priced' if priced else 'unpriced',
+        'budget_charge_usd': float(charge),
+    }
+    if priced:
+        usage['cost_usd'] = micros / 1000000
+    return usage
+
+
 def acquire(
     uid,
     caps: Caps,
@@ -190,9 +227,8 @@ def acquire(
     spend = spend_ref(database, uid, day)
     owner = database.collection('users').document(uid)
     run_id = str(uuid4())
-    global_spend = global_spend_ref(database, uid, day, shards=caps.global_spend_shards)
 
-    def admit(tx, data, budget, user, global_budget):
+    def admit(tx, data, budget, user):
         passes = int(data.get('passes', 0)) if data.get('day') == day else 0
         manual_runs = int(data.get('manual_runs', 0)) if data.get('day') == day else 0
         if trigger == 'manual' and data.get('lease'):
@@ -200,7 +236,7 @@ def acquire(
         if trigger == 'manual' and manual_runs >= caps.manual_runs:
             raise AdmissionDenied('dream_manual_limit')
         last_pass = data.get('last_attempt_at') or data.get('last_pass_at') or EPOCH
-        interval = timedelta(hours=6 if data.get('size_bucket') == 'heavy' else 24)
+        interval = hunt_interval(data.get('size_bucket'))
         hunt_due = not canary and (not isinstance(last_pass, datetime) or now - last_pass >= interval)
         has_dirty = dirty_count(uid, transaction=tx, firestore_client=database) > 0
         tomorrow = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
@@ -219,10 +255,7 @@ def acquire(
             or (trigger == 'manual' and manual_runs >= caps.manual_runs)
             or caps.tokens < 1024
             or caps.edits < 1
-            or caps.max_usd_per_token <= 0
-            or float(budget.get('reserved_usd', 0)) + caps.reservation_usd > caps.daily_usd
-            or float(global_budget.get('reserved_usd', 0)) + caps.reservation_usd
-            > caps.global_daily_usd / caps.global_spend_shards
+            or float(budget.get('reserved_usd', 0)) >= caps.daily_usd
         ):
             if trigger == 'manual':
                 raise AdmissionDenied('dream_budget_unavailable')
@@ -235,15 +268,11 @@ def acquire(
             'watermark': data.get('watermark') if isinstance(data.get('watermark'), datetime) else EPOCH,
             'dirty_dropped': int(data.get('dirty_dropped', 0)),
             'dirty_dropped_reported': int(data.get('dirty_dropped_reported', 0)),
-            'reservation_usd': caps.reservation_usd,
-            'budget_charge_usd': caps.reservation_usd,
+            'reservation_usd': 0.0,
+            'budget_charge_usd': 0.0,
             'admission_refunded': False,
-            'max_usd_per_token': caps.max_usd_per_token,
             'spend_scope': 'user',
             'score': data.get('score', 0),
-            'global_spend_scope': True,
-            'global_shard': int(sha256(uid.encode()).hexdigest(), 16) % caps.global_spend_shards,
-            'global_shard_cap': caps.global_daily_usd / caps.global_spend_shards,
             'daily_cap': caps.daily_usd,
             'passes_per_day': caps.passes,
             'hunt': not has_dirty,
@@ -265,7 +294,6 @@ def acquire(
     def claim(tx):
         data = state.get(transaction=tx).to_dict() or {}
         budget = spend.get(transaction=tx).to_dict() or {}
-        global_budget = global_spend.get(transaction=tx).to_dict() or {}
         user = owner.get(transaction=tx).to_dict() or {}
         abandoned = data.get('lease') or {}
         started = abandoned.get('started_at')
@@ -292,8 +320,6 @@ def acquire(
                 old_global_budget['reserved_usd'] = (
                     float(old_global_budget.get('reserved_usd', 0)) + reservation - previous_charge
                 )
-                if old_global_spend.path == global_spend.path:
-                    global_budget = old_global_budget
             if old_spend.path == spend.path:
                 budget = old_budget
             data = {
@@ -306,22 +332,26 @@ def acquire(
         queued_count = dirty_count(uid, transaction=tx, firestore_client=database) if reclaimed else None
         denial = None
         try:
-            lease, patch = admit(tx, data, budget, user, global_budget)
+            lease, patch = admit(tx, data, budget, user)
         except AdmissionDenied as exc:
             # A denial must not roll back reclamation (including manual caps).
             lease, patch, denial = None, {}, exc.reason
         # All reads, including admission's dirty count, precede settlement writes.
         if old_spend is not None and isinstance(started, datetime):
+            usage = _abandoned_usage(abandoned)
             source = {
                 'status': 'failed',
                 'reason': 'abandoned',
-                'usage_unknown': True,
+                'usage_unknown': usage['usage_unknown'],
                 'size_bucket': bucket,
                 'abandoned': 1,
-                'tokens': 0,
+                'tokens': usage['tokens'],
                 'records_queued_after': queued_count,
-                'budget_charge_usd': float(abandoned['reservation_usd']),
+                'budget_charge_usd': usage['budget_charge_usd'],
+                'cost_status': usage['cost_status'],
             }
+            if 'cost_usd' in usage:
+                source['cost_usd'] = usage['cost_usd']
             run = owner.collection('dream_runs').document(abandoned['run_id'])
             tx.set(
                 run,
@@ -334,21 +364,18 @@ def acquire(
                     'success': False,
                     'records_read': 0,
                     'records_queued_after': queued_count,
-                    'tokens': 0,
-                    'cost_usd': 0,
+                    'tokens': usage['tokens'],
+                    'cost_status': usage['cost_status'],
+                    **({'cost_usd': usage['cost_usd']} if 'cost_usd' in usage else {}),
                 },
             )
             if old_spend.path != spend.path or lease is None:
                 tx.set(old_spend, old_budget)
-            if old_global_spend and (old_global_spend.path != global_spend.path or lease is None):
+            if old_global_spend:
                 tx.set(old_global_spend, old_global_budget)
         if lease:
             tx.set(state, {**data, **patch})
-            tx.set(spend, {**budget, 'reserved_usd': float(budget.get('reserved_usd', 0)) + caps.reservation_usd})
-            tx.set(
-                global_spend,
-                {**global_budget, 'reserved_usd': float(global_budget.get('reserved_usd', 0)) + caps.reservation_usd},
-            )
+            tx.set(spend, {**budget, 'reserved_usd': float(budget.get('reserved_usd', 0))})
         elif reclaimed or patch:
             tx.set(state, {**data, **patch})
         if patch.get('next_due_at'):
@@ -410,18 +437,28 @@ def finish(
             raise RuntimeError('dream_lease_lost')
         budget = spend.get(transaction=tx).to_dict() or {}
         global_budget = global_spend.get(transaction=tx).to_dict() or {} if global_spend else {}
-        reservation = float(current_lease['reservation_usd'])
+        reservation = float(current_lease.get('reservation_usd', 0))
         previous_charge = float(current_lease.get('budget_charge_usd', reservation))
         tokens = report.get('accounted_tokens', report.get('tokens'))
         rate = current_lease.get('max_usd_per_token')
+        micro = report.get('cost_micro_usd')
         known = report.get('usage_unknown') is not True and (
             report.get('usage_unknown') is False or report.get('usage_complete') is True
         )
         zero_refund = refund and report.get('usage_unknown') is not True and report.get('tokens', 0) == 0
+        # Unknown or unpriced usage keeps the dollars already held. A known
+        # priced pass replaces that hold. In-flight leases that still carry
+        # max_usd_per_token settle with that frozen rate.
         charge = reservation
         actual_cost = None
         if zero_refund:
             charge = 0.0
+        elif known and report.get('cost_status') == 'priced' and type(micro) is int and micro >= 0:
+            actual_cost = micro / 1000000
+            if math.isfinite(actual_cost):
+                charge = actual_cost
+            else:
+                actual_cost = None
         elif known and type(tokens) is int and tokens >= 0 and isinstance(rate, (int, float)) and rate > 0:
             actual_cost = tokens * rate
             if math.isfinite(actual_cost):
@@ -491,6 +528,9 @@ def finish(
         settled['budget_charge_usd'] = charge
         if actual_cost is not None:
             settled['cost_usd'] = actual_cost
+            settled['cost_status'] = 'priced'
+        elif report.get('cost_status') == 'unpriced':
+            settled['cost_status'] = 'unpriced'
         watermark = lease['watermark']
         if acknowledged:
             frontier = max(snapshot.to_dict()['last_changed_at'] for snapshot in acknowledged)
@@ -536,7 +576,8 @@ def finish(
                     'records_read': int(report.get('records_read', report.get('dirty_read', 0))),
                     'records_queued_after': queued_after,
                     'tokens': int(report.get('tokens', 0)),
-                    'cost_usd': float(settled.get('cost_usd', 0)),
+                    **({'cost_usd': float(settled['cost_usd'])} if settled.get('cost_status') == 'priced' else {}),
+                    'cost_status': settled.get('cost_status', 'unpriced'),
                     'poisoned': len(poisoned),
                 },
             )

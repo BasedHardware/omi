@@ -8,11 +8,44 @@ from pathlib import Path
 import pytest
 import yaml
 
-from scripts.diff_prod_adapter import API_SERVICES, NLLB_RULE, DIARIZER_BATCH_RULE, compare, expected_config
+from scripts.diff_prod_adapter import (
+    API_SERVICES,
+    NLLB_RULE,
+    DIARIZER_BATCH_RULE,
+    PARAKEET_QUEUE_RULES,
+    compare,
+    expected_config,
+)
 from scripts import select_backend_unit_tests as selector
 
 CHARTS = Path(__file__).resolve().parents[2] / 'charts'
 ADAPTER = CHARTS / 'monitoring/prometheus-adapter/prod_omi_prometheus_adapter.yaml'
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_queue_rules_live_under_adapter_rules_and_keep_both_lanes(environment):
+    values = yaml.safe_load(
+        (CHARTS / f'monitoring/prometheus-adapter/{environment}_omi_prometheus_adapter.yaml').read_text()
+    )
+    rules = {rule['name']['as']: rule for rule in values['rules']['custom']}
+    for rule in PARAKEET_QUEUE_RULES:
+        assert rules[rule['name']['as']] == rule
+    assert 'parakeet_active_requests_total' in rules
+    assert isinstance(values['extraArguments'], list)
+
+
+def test_diff_accepts_only_exact_new_parakeet_queue_rules():
+    rules = yaml.safe_load(ADAPTER.read_text())['rules']
+    live = {'rules': rules['custom'], 'externalRules': rules['external']}
+    old = copy.deepcopy(live)
+    old['rules'] = [r for r in old['rules'] if r['name']['as'] not in {q['name']['as'] for q in PARAKEET_QUEUE_RULES}]
+    assert expected_config(old) == expected_config(live)
+    broken = copy.deepcopy(live)
+    next(r for r in broken['rules'] if r['name']['as'] == 'parakeet_live_queue_age_seconds')[
+        'metricsQuery'
+    ] = 'vector(0)'
+    with pytest.raises(ValueError, match='Unexpected live Parakeet queue rule'):
+        expected_config(broken)
 
 
 @pytest.mark.parametrize('service', ['parakeet', 'backend-listen', 'pusher', 'vad', 'diarizer', 'nllb-translation'])

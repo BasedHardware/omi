@@ -26,7 +26,9 @@ provider or database IO. See `backend/docs/messaging-channels.md` for Stage A an
 - `adapters/telegram.py`: private-chat Bot API verification, parsing, drafts and delivery.
 - `adapters/linq.py`: replaceable `IMessageProvider` and Linq implementation.
 - `adapters/transport.py`: bounded, redacted provider IO and retry semantics.
-- `albums.py`: bounded durable album merge and debounce rules on the existing inbox/lease.
+- `albums.py`: pure album merge/debounce rules; `album_turn.py`: incremental media
+  preparation and generation sealing on the channel worker path.
+  `database/messaging_albums.py` owns transactional batch append/seal on the existing inbox/lease.
 - `adapters/modalities.py`: lightweight acknowledgements and untrusted location evidence.
 - `adapters/media.py`: Omi's existing chat file store and prerecorded STT bridge.
 - `adapters/delivery.py`: content-free provider receipts and atomic send/receive guard.

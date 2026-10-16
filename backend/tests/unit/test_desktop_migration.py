@@ -132,6 +132,7 @@ sys.modules["google.cloud.firestore_v1"].transactional = lambda f: f
 
 redis_stub = sys.modules["database.redis_db"]
 redis_stub.r = MagicMock()
+redis_stub.create_bounded_redis_client = MagicMock(return_value=redis_stub.r)
 redis_stub.delete_cached_user_geolocation = MagicMock()
 setattr(redis_stub, 'try_acquire_client_device_write_lock', MagicMock(return_value=True))
 redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
@@ -171,7 +172,8 @@ models_users_stub.LocationContextConsentStatus = MagicMock()
 models_users_stub.LOCATION_CONTEXT_DISCLOSED_PROVIDERS = ()
 models_users_stub.LOCATION_CONTEXT_PURPOSE = "city_context"
 
-_stub_package("utils")
+# Resolve pure read-cache/lever helpers while retaining explicit heavy-dependency stubs.
+_ensure_package_path("utils", BACKEND_DIR / "utils")
 _stub_package("utils.other")
 _stub_package("utils.observability")
 profile_authority_stub = _stub_module("database.speaker_profile_authority")
@@ -233,6 +235,7 @@ request_validation_stub = _stub_module("utils.request_validation")
 request_validation_stub.validate_calendar_date = lambda value, field_name='date': value
 redis_stub = _stub_module("database.redis_db")
 redis_stub.r = MagicMock()
+redis_stub.create_bounded_redis_client = MagicMock(return_value=redis_stub.r)
 redis_stub.delete_cached_user_geolocation = MagicMock()
 setattr(redis_stub, 'try_acquire_client_device_write_lock', MagicMock(return_value=True))
 redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)

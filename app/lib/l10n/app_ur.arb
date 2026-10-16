@@ -5065,6 +5065,8 @@
             }
         }
     },
+    "yourPlanEndsOn": "آپ کا {plan} پلان {date} کو ختم ہوگا۔",
+    "resubscribeNowNoChargeUntil": "اپنے فوائل کو برقرار رکھنے کے لیے اب دوبارہ رکنیت حاصل کریں - {date} تک کوئی چارج نہیں۔",
     "planSetToCancelOn": "آپ کا منصوبہ {date} کو منسوخ ہونے کے لیے طے شدہ ہے۔\nاپنے فوائل کو برقرار رکھنے کے لیے اب دوبارہ رکنیت حاصل کریں - {date} تک کوئی چارج نہیں۔",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5079,6 +5081,7 @@
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
     },
+    "yourPlanWillRenewOn": "آپ کا {plan} پلان {date} کو تجدید ہوگا۔",
     "planRenewsOn": "آپ کا منصوبہ {date} کو تازہ ہوگا۔",
     "@planRenewsOn": {
         "description": "Message showing plan renewal date",
@@ -5125,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "resubscribeFirstToChangePlans": "پلان بدلنے کے لیے پہلے دوبارہ رکنیت حاصل کریں۔",
     "resubscribe": "دوبارہ رکنیت حاصل کریں",
     "@resubscribe": {
         "description": "Button to resubscribe"
@@ -5967,10 +5971,6 @@
     "content": "مواد",
     "@content": {
         "description": "Tab label for content"
-    },
-    "noContentToDisplay": "دکھانے کے لیے کوئی مواد نہیں",
-    "@noContentToDisplay": {
-        "description": "Message when there is no content available"
     },
     "noSummary": "کوئی خلاصہ نہیں",
     "@noSummary": {
@@ -10593,7 +10593,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "ریکارڈنگ شروع کرنے کے لیے ریکارڈ بٹن پر ٹیپ کریں",
-    "processingTakingLonger": "ابھی کام جاری ہے — اس میں معمول سے زیادہ وقت لگ رہا ہے۔",
     "speechProfileEnrollmentPrompt": "تاکہ Omi آپ کی آواز پہچان سکے — کسی بھی موضوع پر تقریباً 5 سیکنڈ بات کریں۔",
     "home": "ہوم",
     "failedToUpdateBaselineStatus": "یہ یاد اپ ڈیٹ نہیں ہو سکی۔ دوبارہ کوشش کریں۔",
@@ -11268,6 +11267,17 @@
     "reviewChangesLoadFailed": "حالیہ تبدیلیاں لوڈ نہیں ہو سکیں۔",
     "reviewNoChangesTitle": "ابھی تک کوئی تبدیلی نہیں",
     "reviewNoChangesBody": "جب Omi آپ کے نوٹس ترتیب دے گا تو تبدیلیاں یہاں نظر آئیں گی۔",
+    "reviewChangesSectionTerms": "نام اور اصطلاحات",
+    "reviewChangesSectionTitles": "عنوانات اور خلاصے",
+    "reviewChangesSectionOther": "دیگر تبدیلیاں",
+    "reviewChangeConversationCount": "{count, plural, =1{1 گفتگو} other{{count} گفتگوئیں}}",
+    "reviewChangePlaceCount": "{count, plural, =1{1 جگہ} other{{count} جگہیں}}",
+    "reviewChangeShowAll": "تمام {count} دکھائیں",
+    "reviewChangeUndoAll": "سب کالعدم کریں",
+    "reviewChangeSeeEvidence": "ثبوت دیکھیں",
+    "reviewChangeViewConversation": "گفتگو دیکھیں",
+    "reviewChangeViewTask": "کام دیکھیں",
+    "reviewChangesUndoPartial": "کالعدم نہیں ہو سکے: {failed}/{total}۔ دوبارہ کوشش کریں۔",
     "reviewShowMore": "مزید دکھائیں",
     "entityKeptCurrent": "Omi کی طرف سے تازہ رکھا گیا",
     "entityNotRight": "درست نہیں؟",
@@ -11549,5 +11559,8 @@
     "activityEmpty": "ابھی تک کوئی سرگرمی نہیں",
     "activityNewSemantics": "سرگرمی، نئے آئٹمز",
     "activityLoadFailed": "آپ کی تمام سرگرمی لوڈ نہیں ہو سکی",
-    "activityNewItem": "نیا"
+    "activityNewItem": "نیا",
+    "activityNeedsAttention": "توجہ درکار ہے",
+    "activityRetryAll": "سب دوبارہ کوشش کریں",
+    "attentionSummaryFailed": "اس گفتگو کا خلاصہ نہیں بن سکا"
 }

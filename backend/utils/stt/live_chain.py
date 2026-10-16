@@ -20,6 +20,8 @@ from utils.stt.live_failure import PendingLiveFailover, fallback_metric_reason
 from utils.stt.live_outcome import LiveLegOutcome, record_managed_leg_handoff
 from utils.stt.live_reason import normalize_live_stt_reason
 from utils.stt.live_signal import provider_observation
+from utils.observability.demand_cohort import record_metric
+from utils.observability.demand_cohort import demand_cohort
 from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS, ROUTING_DECISION_LATENCY, WINDOW_ADMISSION
 from utils.stt.live_health import health, bounded_language, mode as routing_mode
 from utils.stt.live_router import (
@@ -1067,7 +1069,7 @@ async def connect_configured_chain(
             break
     if optional_handover:
         raise RejectedStream(prior_reason)
-    CHAIN_EXHAUSTED.inc()
+    record_metric(CHAIN_EXHAUSTED, {'demand_cohort': demand_cohort()}, 1)
     pending = PendingLiveFailover(
         component='stt_selection',
         from_mode=origin,

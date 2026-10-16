@@ -4384,6 +4384,16 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Ваш план $plan заканчваецца $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Падпішыцеся яшчэ раз, каб сахаваць свае прывілеі - плата адсуцная да $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Ваш план пастаўлены на скасаванне $date.\nПадпішыцеся яшчэ раз, каб сахаваць свае прывілеі - плата адсуцная да $date.';
   }
@@ -4391,6 +4401,11 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Ваш гадавы план пачнецца аўтаматычна, калі скончыцца ваш штомесячны план.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Ваш план $plan будзе падаўжацца $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4423,6 +4438,9 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get continueText => 'Прыступіць';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Спачатку падпішыцеся зноў, каб змяніць план.';
 
   @override
   String get resubscribe => 'Падпішыцеся яшчэ раз';
@@ -5036,9 +5054,6 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get content => 'Змест';
-
-  @override
-  String get noContentToDisplay => 'Нема зместу для адлюстравання';
 
   @override
   String get noSummary => 'Нема рэзюмэ';
@@ -9840,9 +9855,6 @@ class AppLocalizationsBe extends AppLocalizations {
       'Пераўтварэнне маўлення ў тэкст зараз недаступнае. Праверце падключэнне да інтэрнэту і налады распазнавання маўлення на прыладзе, затым паспрабуйце яшчэ раз.';
 
   @override
-  String get processingTakingLonger => 'Яшчэ апрацоўваецца — гэта доўжыцца даўжэй, чым звычайна.';
-
-  @override
   String get speechProfileEnrollmentPrompt => 'Каб Omi ведаў, які голас ваш, гаварыце пра што заўгодна каля 5 секунд.';
 
   @override
@@ -12461,6 +12473,59 @@ class AppLocalizationsBe extends AppLocalizations {
   String get reviewNoChangesBody => 'Калі Omi наведзе парадак у нататках, змены з’явяцца тут.';
 
   @override
+  String get reviewChangesSectionTerms => 'Імёны і тэрміны';
+
+  @override
+  String get reviewChangesSectionTitles => 'Назвы і зводкі';
+
+  @override
+  String get reviewChangesSectionOther => 'Іншыя змены';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Размоў: $count',
+      one: '1 размова',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Месцаў: $count',
+      one: '1 месца',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Паказаць усе ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Адрабіць усё';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Паказаць доказы';
+
+  @override
+  String get reviewChangeViewConversation => 'Адкрыць размову';
+
+  @override
+  String get reviewChangeViewTask => 'Адкрыць задачу';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Не ўдалося адрабіць $failed з $total. Паспрабуйце яшчэ раз.';
+  }
+
+  @override
   String get reviewShowMore => 'Паказаць больш';
 
   @override
@@ -13460,4 +13525,13 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Новае';
+
+  @override
+  String get activityNeedsAttention => 'Патрабуе ўвагі';
+
+  @override
+  String get activityRetryAll => 'Паўтарыць усё';
+
+  @override
+  String get attentionSummaryFailed => 'Не ўдалося падсумаваць гэту размову';
 }
