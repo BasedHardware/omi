@@ -312,6 +312,7 @@ def test_lazy_mark_blind_write_preserves_live_lease(monkeypatch):
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
     monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: client)
     monkeypatch.setattr(reprocess, '_effects_binding', lambda: {'queue': 'existing'})
+    monkeypatch.setattr(reprocess.time, 'time', lambda: 1000)
     wake = Mock()
     monkeypatch.setattr(reprocess, '_enqueue', wake)
     reprocess.mark_effects('owner', 'conversation', 'en')
@@ -319,6 +320,7 @@ def test_lazy_mark_blind_write_preserves_live_lease(monkeypatch):
     ref.set.assert_called_once()
     body = ref.set.call_args.args[0]
     assert body['effects_only'] is True and 'lease_until' not in body and 'owner' not in body
+    assert body['due_at'] == 4540 and body['task_due_at'] == 4540
     assert ref.set.call_args.kwargs == {'merge': True}
     assert wake.call_args.args[0]['document_id'] == reprocess.key('owner', 'conversation\0effects')
 

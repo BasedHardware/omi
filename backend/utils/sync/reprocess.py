@@ -342,7 +342,7 @@ def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bo
 
     Increment preserves concurrent dirtying; merge preserves an active worker's
     lease. The existing CAS completion sees that increment and retains the debt.
-    Old deliveries may join the newest debt; all effects read the settled row.
+    Token changes fence older deliveries; all effects read the settled row.
     """
     if not owns_runtime():
         raise RuntimeError('lazy enrichment requires production or a Firestore emulator')
