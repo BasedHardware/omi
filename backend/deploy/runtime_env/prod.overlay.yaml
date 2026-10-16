@@ -161,7 +161,7 @@ overlay:
         PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
           value: '3'
         STT_SERVICE_MODELS:
-          value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
+          value: parakeet-window,modulate-velma-2,soniox
         STT_RESILIENT_RECONNECT:
           value: 'false'
         # Publish presence with an empty allowlist and drain old sockets before deploying this cohort.
@@ -507,7 +507,7 @@ overlay:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
+          value: parakeet-window,modulate-velma-2,soniox
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:

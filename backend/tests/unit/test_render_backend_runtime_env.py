@@ -278,26 +278,29 @@ def test_memory_maintenance_entrypoint_does_not_invoke_daily_sweep_job():
     assert 'memory_maintenance_job.py' in dockerfile
 
 
-def _without_named_env(node, name: str):
+def _contains_uid_outside_approved_allowlists(node, uid: str) -> bool:
+    approved_allowlists = {'CAPTURE_JEV_SHADOW_UID_ALLOWLIST', 'AUDIO_ARCHIVE_UID_ALLOWLIST'}
     if isinstance(node, dict):
-        return {key: _without_named_env(value, name) for key, value in node.items() if key != name}
+        for key, value in node.items():
+            if key in approved_allowlists or key == 'knowledge-ledger-drain-job':
+                continue
+            if _contains_uid_outside_approved_allowlists(value, uid):
+                return True
+        return False
     if isinstance(node, list):
-        return [_without_named_env(item, name) for item in node]
-    return node
+        return any(_contains_uid_outside_approved_allowlists(item, uid) for item in node)
+    return node == uid
 
 
 def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admission():
-    dev = deepcopy(_MANIFEST['environments']['dev'])
     # The dev-only ledger drain has an explicit operational fence for the two
     # owner test accounts. Product/runtime surfaces must still contain no
-    # first-user or capture admission lists. EXP-003 is the one approved
-    # allowlist-only vendor shadow for this UID.
-    dev['cloud_run']['jobs'].pop('knowledge-ledger-drain-job', None)
-    serialized = json.dumps(
-        _without_named_env(dev, 'CAPTURE_JEV_SHADOW_UID_ALLOWLIST'),
-        sort_keys=True,
+    # first-user or capture admission lists. COALESCE and EXP-003 are the only
+    # approved David-only allowlists.
+    assert not _contains_uid_outside_approved_allowlists(
+        _MANIFEST['environments']['dev'],
+        'vi7SA9ckQCe4ccobWNxlbdcNdC23',
     )
-    assert 'vi7SA9ckQCe4ccobWNxlbdcNdC23' not in serialized
 
     cloud_run = _MANIFEST['environments']['dev']['cloud_run']
     services = cloud_run['services']

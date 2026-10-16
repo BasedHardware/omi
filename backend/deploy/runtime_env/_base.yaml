@@ -63,10 +63,10 @@ environment_shared:
         AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
         AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
         AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-        AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
         AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
         AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
-        AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+        AUDIO_ARCHIVE_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
         BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
         AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
         AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
@@ -85,7 +85,7 @@ environment_shared:
         SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
         LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
         CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
-        DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
+        DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'shadow', category: rollout}
         DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
         TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
         TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
@@ -263,7 +263,7 @@ environment_shared:
           value: '30'
           category: rollout
         STT_SERVICE_MODELS:
-          value: modulate-velma-2,soniox,dg-nova-3,parakeet
+          value: modulate-velma-2,soniox,parakeet
           category: stt_policy
         CONVERSATION_SUMMARIZED_APP_IDS:
           config_map:
@@ -417,10 +417,10 @@ environment_shared:
         AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
         AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
         AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-        AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
         AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
         AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
-        AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+        AUDIO_ARCHIVE_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
         BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
         AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
         AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
@@ -438,7 +438,7 @@ environment_shared:
         CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'off', category: rollout}
         LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
         CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
-        DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
+        DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'shadow', category: rollout}
         DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
         FREE_TIER_LOCAL_PROCESSING:
           category: rollout
@@ -496,7 +496,7 @@ environment_shared:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: modulate-velma-2,soniox,dg-nova-3,parakeet
+          value: modulate-velma-2,soniox,parakeet
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
@@ -657,10 +657,10 @@ environment_shared:
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
           AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
-          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
           AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           REDIS_DB_PORT:
@@ -700,7 +700,7 @@ environment_shared:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'off', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
-          DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
+          DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'shadow', category: rollout}
           DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
@@ -902,10 +902,10 @@ environment_shared:
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
           AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
-          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
           AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           OMI_VERTEX_RESERVATION_PROJECT:
@@ -950,7 +950,7 @@ environment_shared:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'off', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
-          DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
+          DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'shadow', category: rollout}
           DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
@@ -1148,10 +1148,10 @@ environment_shared:
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
           AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
-          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
           AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           REDIS_DB_PORT:
@@ -1190,7 +1190,7 @@ environment_shared:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'off', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
-          DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
+          DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'shadow', category: rollout}
           DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
@@ -1382,10 +1382,10 @@ environment_shared:
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
           AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
-          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
           AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           REDIS_DB_PORT:
@@ -1424,7 +1424,7 @@ environment_shared:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'off', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
-          DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
+          DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'shadow', category: rollout}
           DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:

@@ -112,7 +112,7 @@ overlay:
         FREE_TIER_EMERGENCY_STOP:
           value: 'false'
         STT_SERVICE_MODELS:
-          value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
+          value: parakeet-window,modulate-velma-2,soniox
         STT_RESILIENT_RECONNECT:
           value: 'false'
         STT_FAILOVER_RECOVERY_ENABLED:
@@ -375,7 +375,7 @@ overlay:
           value: parakeet,modulate-velma-2
           category: stt_policy
         STT_SERVICE_MODELS:
-          value: modulate-velma-2,soniox,dg-nova-3,parakeet
+          value: modulate-velma-2,soniox,parakeet
           category: stt_policy
         GOOGLE_CLOUD_PROJECT:
           value: based-hardware-dev
@@ -454,7 +454,7 @@ overlay:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: modulate-velma-2,soniox,dg-nova-3,parakeet
+          value: modulate-velma-2,soniox,parakeet
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
