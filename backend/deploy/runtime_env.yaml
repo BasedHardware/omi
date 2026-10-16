@@ -18,6 +18,10 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":0,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":0,"subscription_cache":5,"usage_month_cache":5}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '1', category: rollout}
@@ -342,6 +346,10 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":0,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":0,"subscription_cache":5,"usage_month_cache":5}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
@@ -702,6 +710,10 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_UID_ALLOWLIST: {category: rollout, value: ''}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
@@ -960,6 +972,10 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_UID_ALLOWLIST: {category: rollout, value: ''}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
@@ -1234,6 +1250,10 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_UID_ALLOWLIST: {category: rollout, value: ''}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
@@ -1490,6 +1510,10 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_UID_ALLOWLIST: {category: rollout, value: ''}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
@@ -2156,6 +2180,10 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":0,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":0,"subscription_cache":5,"usage_month_cache":5}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '1', category: rollout}
@@ -2555,6 +2583,10 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
         env:
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":0,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":0,"subscription_cache":5,"usage_month_cache":5}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
@@ -2873,6 +2905,10 @@ environments:
               secret: MCP_OAUTH_CLIENTS_JSON
               version: latest
           env:
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
@@ -3212,6 +3248,10 @@ environments:
               secret: DREAM_AGENT_FEEDBACK_SALT
               version: latest
           env:
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
@@ -3532,6 +3572,10 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
@@ -3834,6 +3878,10 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}

@@ -22,6 +22,7 @@ from google.api_core.exceptions import AlreadyExists, FailedPrecondition, NotFou
 from prometheus_client import Counter
 
 from config.sync_reprocess import settle_seconds
+from config.repeat_work import revision_reuse
 from database._client import get_firestore_client
 
 Row: TypeAlias = dict[str, Any]
@@ -159,6 +160,11 @@ def mark(
             version=row.get('version', 0) + 1,
             due_at=max(row.get('due_at', 0), current + settle_seconds()),
         )
+        if revision_reuse():
+            # Extend the existing quiet window, but never postpone a dirty
+            # obligation indefinitely under a continuous trickle of revisions.
+            row['first_pending_at'] = row.get('first_pending_at', current)
+            row['due_at'] = min(row['due_at'], row['first_pending_at'] + 3600)
         if old is None:
             row.update(
                 task_token=uuid.uuid4().hex, task_due_at=row['due_at'], lease_until=0, dispatch=_dispatch_binding()
