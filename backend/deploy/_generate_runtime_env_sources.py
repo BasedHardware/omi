@@ -56,8 +56,8 @@ STT_LITERALS = {
 }
 
 OVERLAY_ENV_KEYS = {
+    'CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE',
     'OMI_SHAPED_AGENT_MODE',
-    'STT_SERVICE_MODELS',
     'TRANSCRIPTION_SHADOW_ENABLED',
     'TRANSCRIPTION_SHADOW_KILL_SWITCH',
     'TRANSCRIPTION_SHADOW_UID_ALLOWLIST',
@@ -280,7 +280,6 @@ def main() -> int:
     norm_prod = _normalize(prod, 'prod')
     shared = _extract_common(norm_dev, norm_prod) or {}
     _seed_recovery_defaults(shared, norm_dev)
-    _seed_wallclock_defaults(shared)
     _seed_stt_service_models_default(shared)
     _remove_overlay_env_keys(shared)
 
@@ -303,6 +302,10 @@ def main() -> int:
     # Ensure config_map sections live in overlays (env-specific names).
     dev_overlay_body = _deep_merge(dev_overlay_body, {'gke': {'config_map': _build_config_map_section('dev', dev)}})
     prod_overlay_body = _deep_merge(prod_overlay_body, {'gke': {'config_map': _build_config_map_section('prod', prod)}})
+
+    # Keep wallclock mode fully explicit in each overlay while retaining the
+    # safe `off` value in base for consumers that do not apply an environment overlay.
+    _seed_wallclock_defaults(shared)
 
     base = {
         'schema_version': monolith['schema_version'],

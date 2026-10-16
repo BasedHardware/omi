@@ -121,9 +121,6 @@ environment_shared:
         CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
           value: 'true'
           category: ops_kill
-        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-          value: 'off'
-          category: rollout
         SYNC_ASSIGNMENT_RECOVERY_ENABLED:
           value: 'true'
           category: rollout
@@ -508,6 +505,12 @@ environment_shared:
         REVIEW_SURFACE_MODE:
           value: 'on'
           category: rollout
+        STT_SERVICE_MODELS:
+          value: modulate-velma-2,soniox,dg-nova-3,parakeet
+          category: stt_policy
+        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+          value: 'off'
+          category: rollout
       values_file: backend/charts/backend-listen/{env}_omi_backend_listen_values.yaml
     parakeet:
       env:
@@ -587,9 +590,6 @@ environment_shared:
         CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
           value: 'true'
           category: ops_kill
-        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-          value: 'off'
-          category: rollout
         LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
           value: 'true'
           category: rollout
@@ -680,6 +680,9 @@ environment_shared:
           category: rollout
         CAPTURE_JEV_SHADOW_PERCENT:
           value: '0'
+          category: rollout
+        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+          value: 'off'
           category: rollout
     config_map:
       name: '{env}-omi-backend-config'
@@ -942,9 +945,6 @@ environment_shared:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-            value: 'off'
-            category: rollout
           CAPTURE_GROUP_CONTAINMENT_MODE:
             value: shadow
             category: rollout
@@ -1179,6 +1179,9 @@ environment_shared:
           CAPTURE_JEV_SHADOW_PERCENT:
             value: '0'
             category: rollout
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: 'off'
+            category: rollout
       backend-sync:
         capabilities:
         - conversation.finalize.persisted
@@ -1330,9 +1333,6 @@ environment_shared:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-            value: 'off'
-            category: rollout
           CAPTURE_GROUP_CONTAINMENT_MODE:
             value: shadow
             category: rollout
@@ -1548,6 +1548,9 @@ environment_shared:
           CAPTURE_JEV_SHADOW_PERCENT:
             value: '0'
             category: rollout
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: 'off'
+            category: rollout
       backend-sync-backfill:
         secrets:
           GOOGLE_CLIENT_SECRET:
@@ -1683,9 +1686,6 @@ environment_shared:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-            value: 'off'
-            category: rollout
           CAPTURE_GROUP_CONTAINMENT_MODE:
             value: shadow
             category: rollout
@@ -1882,6 +1882,9 @@ environment_shared:
           CAPTURE_JEV_SHADOW_PERCENT:
             value: '0'
             category: rollout
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: 'off'
+            category: rollout
         provisional: true
       backend-integration:
         secrets:
@@ -2020,9 +2023,6 @@ environment_shared:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-            value: 'off'
-            category: rollout
           CAPTURE_GROUP_CONTAINMENT_MODE:
             value: shadow
             category: rollout
@@ -2135,6 +2135,9 @@ environment_shared:
             category: rollout
           SONIOX_ORDERED_FINALIZE:
             value: 'false'
+            category: rollout
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: 'off'
             category: rollout
     jobs:
       notifications-job:

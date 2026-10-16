@@ -68,7 +68,6 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
@@ -303,6 +302,7 @@ environments:
           STT_SERVICE_MODELS:
             value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
             category: stt_policy
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           TRANSCRIPTION_SHADOW_ENABLED: {value: 'false', category: rollout}
           TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
@@ -355,7 +355,6 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
           DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
@@ -398,6 +397,7 @@ environments:
           CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
           CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
           TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
@@ -729,7 +729,6 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
             DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
@@ -854,6 +853,7 @@ environments:
             CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
             CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
@@ -980,7 +980,6 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
             DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
@@ -1120,6 +1119,7 @@ environments:
             CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
             CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             TRANSCRIPTION_SHADOW_ENABLED: {category: rollout, value: 'false'}
             TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
@@ -1236,7 +1236,6 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
             DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
@@ -1367,6 +1366,7 @@ environments:
             CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
             CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
@@ -1480,7 +1480,6 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
             DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
@@ -1556,6 +1555,7 @@ environments:
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
@@ -2038,7 +2038,6 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
@@ -2269,6 +2268,7 @@ environments:
           STT_SERVICE_MODELS:
             value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
             category: stt_policy
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
           POSTHOG_PRODUCT_CAPTURE_TOKEN:
@@ -2400,7 +2400,6 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
           DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
@@ -2439,6 +2438,7 @@ environments:
           CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
           CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
           TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
@@ -2732,7 +2732,6 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
             DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
@@ -2854,6 +2853,7 @@ environments:
             CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
             CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             HOSTED_DIARIZATION_API_URL:
               value: http://172.16.160.20/diarizer-batch
@@ -3063,7 +3063,6 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
             DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
@@ -3200,6 +3199,7 @@ environments:
             CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
             CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             TRANSCRIPTION_SHADOW_ENABLED: {category: rollout, value: 'true'}
             TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
@@ -3364,7 +3364,6 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
             DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
@@ -3492,6 +3491,7 @@ environments:
             CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
             CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             HOSTED_DIARIZATION_API_URL:
               value: http://172.16.160.20/diarizer-batch
@@ -3654,7 +3654,6 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
             DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
@@ -3727,6 +3726,7 @@ environments:
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}

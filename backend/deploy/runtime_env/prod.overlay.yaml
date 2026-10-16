@@ -52,6 +52,7 @@ overlay:
           value: 'true'
         CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
           value: shadow
+          category: rollout
         FREE_TIER_LOCAL_PROCESSING:
           value: 'false'
         FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -74,9 +75,6 @@ overlay:
           value: '16'
         PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
           value: '3'
-        STT_SERVICE_MODELS:
-          value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
-          category: stt_policy
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'false'
         HOSTED_PARAKEET_API_URL:
@@ -97,6 +95,8 @@ overlay:
           value: based-hardware-prod-screen-frames
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '100'
+        STT_SERVICE_MODELS:
+          value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
         OMI_SHAPED_AGENT_MODE:
           value: 'on'
           category: rollout
@@ -239,6 +239,7 @@ overlay:
           value: 'true'
         CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
           value: shadow
+          category: rollout
         FREE_TIER_LOCAL_PROCESSING:
           value: 'false'
         FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -474,6 +475,7 @@ overlay:
             value: 'true'
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
             value: shadow
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             value: 'false'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -705,6 +707,7 @@ overlay:
             value: 'true'
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
             value: shadow
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             value: 'false'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -900,6 +903,7 @@ overlay:
             value: 'true'
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
             value: shadow
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             value: 'false'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -1079,6 +1083,7 @@ overlay:
             value: 'true'
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
             value: shadow
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             value: 'false'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
