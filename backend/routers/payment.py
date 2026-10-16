@@ -1,3 +1,4 @@
+from utils.s4_read_cache import fresh_reader
 import os
 from datetime import datetime, timezone
 
@@ -299,6 +300,7 @@ def _build_subscription_from_stripe_object(
     return project_subscription(stripe_sub, plan, get_plan_limits(plan))
 
 
+@fresh_reader
 def _update_subscription_from_session(uid: str, session: stripe.checkout.Session) -> bool:
     customer_id = session.get('customer')
     subscription_id = session.get('subscription')
@@ -323,6 +325,7 @@ def _update_subscription_from_session(uid: str, session: stripe.checkout.Session
     return True
 
 
+@fresh_reader
 def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
     """
     Attempts to reactivate a canceled subscription if possible.
@@ -614,6 +617,7 @@ def _validate_price_id(price_id: str) -> None:
     response_model=PaymentCheckoutSessionResponse,
     response_model_exclude_none=True,
 )
+@fresh_reader
 def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = Depends(auth.get_current_user_uid)):
     _validate_price_id(request.price_id)
     # Check if user can make a new payment
@@ -694,6 +698,7 @@ def _unlock_paid_content(uid: str) -> None:
 
 
 @router.post('/v1/payments/upgrade-subscription', response_model=PaymentUpgradeSubscriptionResponse)
+@fresh_reader
 def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Upgrade or change a user's subscription plan.
 
@@ -856,6 +861,7 @@ class CancelSubscriptionRequest(BaseModel):
 
 
 @router.delete('/v1/payments/subscription', response_model=PaymentStatusMessageResponse)
+@fresh_reader
 def cancel_subscription_endpoint(
     request: CancelSubscriptionRequest = CancelSubscriptionRequest(),
     uid: str = Depends(auth.get_current_user_uid),
@@ -946,6 +952,7 @@ async def stripe_webhook(
     return await dispatch_with_ledger(event, lambda: _handle_stripe_event(event, background_tasks), run_db)
 
 
+@fresh_reader
 async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | None = None):
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']

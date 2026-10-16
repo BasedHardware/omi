@@ -334,4 +334,7 @@ class ProjectionStore:
                 transaction.update(self.ref('jobs', sibling), {'client_status': 'completed', 'client_result': result})
             return result
 
-        return self.run(commit)
+        from utils.s4_read_cache import writing
+
+        with writing('usage_month_cache', binding.owner_id):
+            return self.run(commit)

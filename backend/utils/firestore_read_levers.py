@@ -30,6 +30,10 @@ KNOWN_LEVERS = frozenset(
         'usage_month_cache',
         'request_read_dedupe',
         'serving_config_cache',
+        'candidates_page',
+        'action_items_page',
+        'conversation_page',
+        'backfill_task_reads',
     }
 )
 

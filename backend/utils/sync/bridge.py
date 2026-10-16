@@ -27,6 +27,7 @@ from utils.metrics import OMI_SYNC_BRIDGE_RETRACTION_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentSuperseded
 from utils.sync.telemetry import bounded_exception_reason, bounded_exception_type
+from utils.sync.fsr_metadata import read_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +71,7 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
         if conversation_id in visited:
             raise SyncAssignmentConflict('sync redirect cycle', subtype='redirect_cycle')
         visited.add(conversation_id)
-        row = conversations_db.get_conversation(uid, conversation_id)
+        row = read_metadata(conversations_db, uid, conversation_id, operation='bridge')
         if not row or (row.get('deleted') and not row.get('sync_merged_into')):
             raise SyncAssignmentSuperseded('sync conversation deleted during bridge')
         if row.get('sync_merged_into'):
@@ -78,7 +79,7 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
             continue
         flatten = smart_merge_flatten_enabled() and (row.get('smart_merge') or {}).get('role') == 'survivor'
         for source_id in row.get('sync_merged_from', []):
-            source = conversations_db.get_conversation(uid, source_id)
+            source = read_metadata(conversations_db, uid, source_id, operation='bridge')
             if (
                 not source
                 or not source.get('deleted')
@@ -144,7 +145,7 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
                 if needs_cleanup:
                     _record_bridge_retraction('converged')
                     logger.info('event=sync_bridge outcome=converged uid=%s source_id=%s', uid, source_id)
-        current = conversations_db.get_conversation(uid, conversation_id)
+        current = read_metadata(conversations_db, uid, conversation_id, operation='bridge')
         if current and current.get('sync_merged_into'):
             conversation_id = current['sync_merged_into']
             continue

@@ -48,6 +48,7 @@ from typing import Any, Dict, Optional
 import redis as redis_pkg
 
 from database import redis_db
+from utils.firestore_read_levers import lever_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ _VERSION_KEY_PREFIX = 'ail:ver'
 _ENTRY_KEY_PREFIX = 'ail'
 
 
-def list_cache_ttl_seconds() -> int:
+def list_cache_ttl_seconds(uid: str = '') -> int:
     """Read the TTL at call time so the env var is a live operational knob."""
     raw = os.getenv('ACTION_ITEMS_LIST_CACHE_TTL_SECONDS', str(_TTL_DEFAULT_SECONDS)).strip()
     try:
@@ -75,7 +76,13 @@ def list_cache_ttl_seconds() -> int:
         return _TTL_DEFAULT_SECONDS
     if ttl <= 0:
         return 0
-    return min(ttl, _TTL_MAX_SECONDS)
+    if uid and lever_enabled('action_items_page', uid):
+        override = os.getenv('ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS', str(ttl)).strip()
+        try:
+            ttl = int(override)
+        except ValueError:
+            logger.warning('ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS is not an integer; using base TTL')
+    return max(0, min(ttl, _TTL_MAX_SECONDS))
 
 
 def _version_key(uid: str) -> str:

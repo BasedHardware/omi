@@ -16,6 +16,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from firebase_admin import credentials
 
+from database.firestore_tier_context import FirestoreTierMiddleware
 from routers import pusher, metrics
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from utils.http_client import close_all_clients
@@ -75,6 +76,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(FirestoreTierMiddleware)
 app.include_router(pusher.router)
 app.include_router(metrics.router)
 
