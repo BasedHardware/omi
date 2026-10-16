@@ -2,12 +2,13 @@
 
 This directory contains three distinct things:
 
-## 1. `omi-plugin-sdk/` — shared SDK (models only)
+## 1. `omi-plugin-sdk/` — shared SDK (models + signature verifier)
 
 `omi-plugin-sdk` is a small Python package that owns the Omi webhook
 payload models (`omi_plugin_sdk.models`: `Conversation`, `TranscriptSegment`,
-`ActionItem`, ...). It is intentionally models-only — auth/webhook/FastAPI
-helpers were removed in July 2026.
+`ActionItem`, ...) and `verify_signature`, the receiver-side check for the
+`X-Omi-Signature` header Omi puts on signed deliveries. Everything else stays
+out on purpose — auth/webhook/FastAPI helpers were removed in July 2026.
 
 SDK installation differs by consumer:
 

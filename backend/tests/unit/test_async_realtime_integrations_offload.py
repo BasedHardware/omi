@@ -47,6 +47,7 @@ _database_stubs = [
     "database.chat",
     "database.goals",
     "database.webhook_health",
+    "database.webhook_signing",
 ]
 _utils_stubs = [
     "utils.apps",
@@ -140,6 +141,7 @@ for submod in [
     "chat",
     "goals",
     "webhook_health",
+    "webhook_signing",
 ]:
     mod = types.ModuleType(f"database.{submod}")
     _install_module(f"database.{submod}", mod)
@@ -174,6 +176,9 @@ sys.modules["database.webhook_health"].disable_app_in_firestore = MagicMock()
 sys.modules["database.webhook_health"].record_dev_webhook_failure = MagicMock(return_value=False)
 sys.modules["database.webhook_health"].record_dev_webhook_success = MagicMock()
 sys.modules["database.webhook_health"]._DEV_FAILURE_THRESHOLD = 100
+# utils.app_integrations loads each app's signing secret per delivery; no secret means unsigned.
+sys.modules["database.webhook_signing"].get_app_webhook_signing_db = MagicMock(return_value=None)
+sys.modules["database.webhook_signing"].note_unsigned_delivery = MagicMock()
 # Graduated-response action codes; mirror database.webhook_health. utils.app_integrations
 # imports these by name, so the stub has to carry them or the module fails to import.
 sys.modules["database.webhook_health"].ACTION_NONE = 0
