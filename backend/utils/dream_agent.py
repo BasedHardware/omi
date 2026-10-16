@@ -34,6 +34,8 @@ from utils.executors import db_executor, run_blocking
 
 TAIL_BUDGET_NOTICE_THRESHOLD = 0.20
 PROVIDER_STOP_CODES = frozenset({'dream_gateway_rejected', 'dream_gateway_failure'})
+# A billed but unusable model reply late in a pass; staged work is still verified.
+MODEL_OUTPUT_STOP_CODES = frozenset({'dream_response_truncated', 'dream_invalid_tool_calls'})
 BUDGET_STOP_CODES = frozenset(
     {
         'dream_input_token_budget',
@@ -287,14 +289,16 @@ async def run_session(
                     report['stop_reason'] = result.reason
             except Exception as exc:
                 stop_code = error_code(exc)
-                provider_stop = (
-                    type(exc) in (dream_harness_transport.PreTokenFailure, RuntimeError)
-                    and str(exc) in PROVIDER_STOP_CODES
-                    and bool(session.staged)
+                provider_stop = bool(session.staged) and (
+                    (
+                        type(exc) in (dream_harness_transport.PreTokenFailure, RuntimeError)
+                        and str(exc) in PROVIDER_STOP_CODES
+                    )
+                    or stop_code in MODEL_OUTPUT_STOP_CODES
                 )
                 if provider_stop:
                     # A late provider failure must not discard work already staged this pass.
-                    stop_code = str(exc)
+                    stop_code = stop_code or str(exc)
                 elif stop_code not in BUDGET_STOP_CODES:
                     raise
                 # Budget exhaustion is a normal terminal outcome even when it

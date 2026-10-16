@@ -87,8 +87,13 @@ def test_non_budget_value_error_with_staged_work_still_fails(runtime, monkeypatc
 
 @pytest.mark.parametrize(
     'failure',
-    [PreTokenFailure('dream_gateway_rejected'), RuntimeError('dream_gateway_failure')],
-    ids=['rejected', 'failure'],
+    [
+        PreTokenFailure('dream_gateway_rejected'),
+        RuntimeError('dream_gateway_failure'),
+        ValueError('dream_response_truncated'),
+        ValueError('dream_invalid_tool_calls'),
+    ],
+    ids=['rejected', 'failure', 'truncated', 'invalid_tool_calls'],
 )
 def test_late_provider_failure_still_verifies_staged_work(runtime, failure):
     main_calls = 0
@@ -124,3 +129,22 @@ def test_provider_failure_without_staged_work_still_fails(runtime):
 
     report = asyncio.run(dream_agent.run_pass(UID, turn=model, dry_run=True))
     assert report['status'] == 'failed'
+
+
+def test_status_log_carries_bounded_error_code_and_stop_reason(caplog):
+    from utils.dream_metrics import record_pass
+
+    caplog.set_level('INFO', logger='utils.dream_metrics')
+    record_pass(
+        {
+            'status': 'failed',
+            'error_type': 'ValueError',
+            'error_code': 'dream_response_truncated',
+            'stop_reason': 'free text from somewhere',
+            'price_weighted_tokens': 1234,
+            'cost_usd': 0.5,
+        }
+    )
+    line = caplog.records[-1].getMessage()
+    assert 'error_type=ValueError error_code=dream_response_truncated stop_reason=other' in line
+    assert 'weighted_tokens=1234 cost_usd=0.5000' in line
