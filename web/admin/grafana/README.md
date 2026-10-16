@@ -205,18 +205,25 @@ Charts read the admin-authenticated `GET /api/omi/stats/wall/series/<name>`
   (`lib/wall-series-store.ts`). Each leg's last-good value, retry schedule and
   the day's successful reads live in one doc in the admin Firestore payload cache
   (`admin_stats_payload_cache`, keys `wall-series:v1:leg:<leg>`), so any instance
-  serves the shared value at once. A Firestore-transaction lease
-  (`wall-series:v1:lease:<leg>`, 3 min, renewed by the holder) lets one instance
-  refresh a leg; a fill an instance abandons resumes from its persisted reads. A
-  cold request answers within five seconds while `after()` retains the work;
-  failed legs keep their last good value (≤24h, marked stale); partial legs retry
-  only their missing reads after two minutes with exponential backoff; PostHog
-  reads run one at a time per instance after any snapshot refresh. 30-day MAU is
-  split into `mauRecent` (headline) and `mauHistory` (charts) so a slow older
-  window never holds back the headline. Store calls are bounded (2 s) and fail
-  open to per-process behaviour.
+  serves the shared value at once. One instance fills a leg under a fenced
+  lease (`wall-series:v1:lease:<leg>`: holder, token, expiry; 3 min, renewed by
+  the holder). A timed-out, failed or contended lease call never counts as
+  ownership; the instance serves last-good instead. Every leg-doc write is a
+  transaction that checks the lease still carries the writer's token, and merges
+  the day's reads by SQL hash (newer wins), so a stale or slow writer can neither
+  land nor drop completed reads. A failed renewal or refused write stops the fill
+  at its next read; the final write is awaited (inside `after()`) before the
+  token-checked release. A fill an instance abandons resumes from its persisted
+  reads. Only after the store fails 5 times within 10 minutes does an instance
+  fill from process memory, still single-flight. A cold request answers within
+  five seconds; failed legs keep their last good value (≤24h, marked stale);
+  partial legs retry only their missing reads after two minutes with
+  exponential backoff; PostHog reads run one at a time per instance after any
+  snapshot refresh. 30-day MAU is split into `mauRecent` (headline) and
+  `mauHistory` (charts) so a slow older window never holds back the headline.
+  Request-path store calls are bounded at 2 s.
 - Observability: one `wall_series_leg` log line per leg attempt (leg, outcome
-  `ok|partial:<class>|timeout|http_<status>|error`, error class, duration_ms,
+  `ok|partial:<class>|timeout|http_<status>|error|lease_lost|store_unavailable`, error class, duration_ms,
   rows, failures, served_stale, instance = revision + process id) and one
   `wall_series_read` line per PostHog read. Aggregates only: no SQL, no ids.
 - The headline payload's `status` (and the first row of the "Data & coverage"

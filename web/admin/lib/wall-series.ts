@@ -39,10 +39,12 @@ import {
   firestoreSeriesStore,
   INSTANCE_ID,
   LEASE_MS,
-  leaseKey,
-  legKey,
+  LegDoc,
   memorySeriesStore,
+  mergeLegDoc,
   SeriesStore,
+  StoredRead,
+  WriteResult,
 } from "./wall-series-store";
 
 export const SERIES_NAMES = [
@@ -860,12 +862,13 @@ export function assembleSeries(
 
 // ------------------------------------------------------------------- cache
 //
-// Two tiers. The shared store (Firestore via `wall-series-store`) holds each
-// leg's last-good value, its retry schedule and the day's successful reads, so
-// every Cloud Run instance serves the same data and a fill one instance
-// abandons resumes on the next. A lease lets one instance refresh a leg at a
-// time. Process memory only caches the shared doc briefly and tracks the
-// local flight.
+// The shared store (Firestore via `wall-series-store`) holds each leg's
+// last-good value, retry schedule and the day's successful reads, so every
+// Cloud Run instance serves the same data and a fill one instance abandons
+// resumes on the next. One instance fills a leg at a time under a fenced
+// lease; an unknown lease state never counts as ownership. Only when the store
+// has failed repeatedly (STORE_FAIL_LIMIT within STORE_FAIL_WINDOW) does an
+// instance fall back to filling from process memory, still single-flight.
 
 interface LegEntry {
   day: string;
@@ -877,36 +880,57 @@ interface LegEntry {
   /** Consecutive incomplete refreshes; drives exponential backoff. */
   failures: number;
 }
-type StoredRead = { rows: unknown[][]; refreshedAt: string | null };
-interface LegDoc {
-  entry: LegEntry | null;
-  /** Successful reads for `day`, keyed by SQL hash. */
-  reads: { day: string; rows: Record<string, StoredRead> };
-}
+type Doc = LegDoc<LegEntry>;
 interface LocalLeg {
-  doc: LegDoc | null;
+  doc: Doc | null;
   readAt: number;
   flight?: Promise<void>;
-  /** Another instance holds the lease and the leg is due. */
+  /** Another instance holds a live lease and the leg is due. */
   busy?: boolean;
+  /** The lease could not be checked (timeout or store error). */
+  storeDown?: boolean;
 }
 const SHARED_READ_MS = 10_000;
 const STORE_WAIT = 2_000;
+export const STORE_FAIL_LIMIT = 5;
+export const STORE_FAIL_WINDOW = 10 * 60_000;
 let local = new Map<LegName, LocalLeg>();
 let localStore = memorySeriesStore();
+let storeFailures: number[] = [];
 let lane: Promise<unknown> = Promise.resolve();
 
 const sqlHash = (sql: string) =>
   createHash("sha1").update(sql).digest("hex").slice(0, 16);
 
-function bounded<T>(work: Promise<T>, fallback: T): Promise<T> {
+class StoreTimeout extends Error {}
+class LeaseLost extends Error {}
+
+function withTimeout<T>(work: Promise<T>): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   return Promise.race([
-    work.catch(() => fallback),
+    work,
     new Promise<T>(
-      (resolve) => (timer = setTimeout(() => resolve(fallback), STORE_WAIT))
+      (_, reject) =>
+        (timer = setTimeout(() => reject(new StoreTimeout()), STORE_WAIT))
     ),
   ]).finally(() => clearTimeout(timer));
+}
+
+function storeOk() {
+  storeFailures = [];
+}
+function storeFailed(now: number) {
+  storeFailures = [
+    ...storeFailures.filter((t) => now - t < STORE_FAIL_WINDOW),
+    now,
+  ];
+}
+/** The shared store is known unreachable: sustained failures, no success. */
+function storeDown(now: number) {
+  return (
+    storeFailures.filter((t) => now - t < STORE_FAIL_WINDOW).length >=
+    STORE_FAIL_LIMIT
+  );
 }
 
 /** ok | partial | timeout | http_<status> | error, from a controlled reason. */
@@ -933,6 +957,7 @@ function log(event: string, instance: string, fields: Record<string, unknown>) {
   console.log(JSON.stringify({ event, instance, ...fields }));
 }
 
+/** Cached view of a leg's shared doc; every refresh probes the real store. */
 async function legState(
   name: LegName,
   store: SeriesStore,
@@ -941,12 +966,15 @@ async function legState(
   const cached = local.get(name);
   if (cached && (cached.flight || now - cached.readAt < SHARED_READ_MS))
     return cached;
-  const hit = await bounded(store.get<LegDoc>(legKey(name)), null);
-  const state: LocalLeg = {
-    ...(cached || {}),
-    doc: hit?.data ?? cached?.doc ?? null,
-    readAt: now,
-  };
+  let doc = cached?.doc ?? null;
+  try {
+    const shared = await withTimeout(store.read<LegEntry>(name));
+    storeOk();
+    if (shared) doc = shared;
+  } catch {
+    storeFailed(now); // keep serving the per-process last-good
+  }
+  const state: LocalLeg = { ...(cached || {}), doc, readAt: now };
   local.set(name, state);
   return state;
 }
@@ -988,7 +1016,7 @@ function nextEntry(
   };
 }
 
-/** In-process single flight for starting a leg (the lease is per instance). */
+/** In-process single flight for starting a leg. */
 let starting = new Map<LegName, Promise<{ flight: Promise<void> } | null>>();
 function ensureLeg(
   name: LegName,
@@ -1022,29 +1050,58 @@ async function startLeg(
   const entry = state.doc?.entry ?? null;
   const due =
     !(entry?.day === day && entry.complete) && now >= (entry?.retryAt ?? 0);
-  state.busy = false;
+  state.busy = state.storeDown = false;
   if (!due) return null;
-  const leased = await bounded(store.lease(leaseKey(name), holder, now), true);
-  if (!leased) {
-    state.busy = true;
+
+  // Fill through the shared store; process memory only once the shared store
+  // is known down. Either way the fill needs a lease it positively acquired.
+  const shared = store !== localStore;
+  const fillStore = shared && storeDown(now) ? localStore : store;
+  const attempt = fillStore.acquire(name, holder, now);
+  const lease = await withTimeout(attempt).catch(() => {
+    // Unknown outcome: never ownership. A late grant is handed back.
+    attempt.then((late) => {
+      if (late.status === "acquired") void fillStore.release(name, late.token);
+    });
+    return { status: "unavailable" as const };
+  });
+  if (fillStore === store && shared)
+    lease.status === "unavailable" ? storeFailed(now) : storeOk();
+  if (lease.status !== "acquired") {
+    state.busy = lease.status === "contended";
+    state.storeDown = lease.status === "unavailable";
     return null;
   }
+  const token = lease.token;
   // Re-read under the lease: another holder may have just finished.
-  const fresh = await bounded(store.get<LegDoc>(legKey(name)), null);
-  const doc: LegDoc = fresh?.data ??
-    state.doc ?? {
-      entry: null,
-      reads: { day, rows: {} },
-    };
+  let doc: Doc;
+  try {
+    doc = (await withTimeout(fillStore.read<LegEntry>(name))) ??
+      (fillStore === localStore ? state.doc : null) ?? {
+        entry: null,
+        reads: { day, rows: {} },
+      };
+  } catch {
+    if (fillStore === store && shared) storeFailed(now);
+    void fillStore.release(name, token);
+    state.storeDown = true;
+    return null;
+  }
   if (doc.entry?.day === day && doc.entry.complete) {
     state.doc = doc;
-    await bounded(store.release(leaseKey(name), holder), undefined);
+    void fillStore.release(name, token);
     return null;
   }
+  const previous = doc.entry ?? state.doc?.entry ?? null;
   const reads: Record<string, StoredRead> =
     doc.reads?.day === day ? { ...doc.reads.rows } : {};
+  const started = Date.now();
+  const clock = () => now + (Date.now() - started);
+  // Set when renewal fails or a fenced write is refused: stop at the next read.
+  let lost = false;
   let saving: Promise<unknown> = Promise.resolve();
   const query: Query = async (sql) => {
+    if (lost) throw new LeaseLost();
     const key = sqlHash(sql);
     const hit = reads[key];
     if (hit)
@@ -1052,47 +1109,68 @@ async function startLeg(
         hit.rows.map((r) => [...r]),
         { sourceRefreshedAt: hit.refreshedAt }
       );
-    const started = Date.now();
+    const readStarted = Date.now();
     // One series PostHog read at a time per instance, after any snapshot refresh.
-    const run = lane.then(wallRefreshSettled).then(() => sources.query(sql));
+    const run = lane.then(wallRefreshSettled).then(() => {
+      if (lost) throw new LeaseLost();
+      return sources.query(sql);
+    });
     lane = run.catch(() => undefined);
     try {
       const rows = await run;
       log("wall_series_read", holder, {
         leg: name,
         outcome: "ok",
-        duration_ms: Date.now() - started,
+        duration_ms: Date.now() - readStarted,
         rows: rows.length,
       });
-      reads[key] = {
+      const read: StoredRead = {
         rows: rows.map((r) => [...r]),
         refreshedAt: rows.sourceRefreshedAt ?? null,
+        at: Date.now(),
       };
-      // Persist progress so another instance can resume this fill.
-      saving = saving.then(() =>
-        store.set(legKey(name), {
-          entry: doc.entry,
-          reads: { day, rows: reads },
-        })
-      );
+      reads[key] = read;
+      // Persist progress (fenced, merged) so another instance can resume.
+      saving = saving
+        .then(() =>
+          fillStore.write(
+            name,
+            token,
+            { reads: { day, rows: { [key]: read } } },
+            clock()
+          )
+        )
+        .then(
+          (written) => {
+            if (written !== "written") lost = true;
+          },
+          () => {
+            lost = true;
+          }
+        );
       return rows;
     } catch (error) {
+      if (error instanceof LeaseLost) throw error;
       const reason = wallFailure("PostHog", error);
       log("wall_series_read", holder, {
         leg: name,
         outcome: legOutcome(reason, false),
         error_class: reason,
-        duration_ms: Date.now() - started,
+        duration_ms: Date.now() - readStarted,
         rows: 0,
       });
       throw error;
     }
   };
-  const started = Date.now();
   const renew = setInterval(() => {
-    store
-      .lease(leaseKey(name), holder, now + (Date.now() - started))
-      .catch(() => undefined);
+    fillStore.renew(name, token, clock()).then(
+      (ok) => {
+        if (!ok) lost = true;
+      },
+      () => {
+        lost = true;
+      }
+    );
   }, LEASE_MS / 3);
   const flight = legJobs({ ...sources, query }, nowDate)
     [name]()
@@ -1109,24 +1187,48 @@ async function startLeg(
     )
     .then(async (result) => {
       clearInterval(renew);
-      const next = nextEntry(doc.entry, result, day, now);
-      const stored: LegDoc = { entry: next, reads: { day, rows: reads } };
-      await saving.catch(() => undefined);
-      await bounded(store.set(legKey(name), stored), undefined);
-      await bounded(store.release(leaseKey(name), holder), undefined);
-      local.set(name, { doc: stored, readAt: now });
+      await saving;
+      const next = nextEntry(previous, result, day, now);
+      // The final write is awaited (off the request path, inside after())
+      // before the lease is released, and only lands while my token holds.
+      let outcome: WriteResult | "lease_lost" = "lease_lost";
+      if (!lost)
+        outcome = await fillStore
+          .write(
+            name,
+            token,
+            { entry: next, reads: { day, rows: reads } },
+            clock()
+          )
+          .catch(() => "unavailable" as const);
+      if (outcome === "written") {
+        await fillStore.release(name, token);
+        local.set(name, {
+          doc: mergeLegDoc(doc, { entry: next, reads: { day, rows: reads } }),
+          readAt: now,
+        });
+      } else {
+        // Not mine any more: drop the local flight and re-read the shared doc.
+        local.set(name, { doc: state.doc, readAt: 0 });
+      }
       log("wall_series_leg", holder, {
         leg: name,
-        outcome: result.complete
-          ? "ok"
-          : result.value !== undefined && rowCount(result.value) > 0
-          ? `partial:${legOutcome(result.reason, false)}`
-          : legOutcome(result.reason, false),
+        outcome:
+          outcome !== "written"
+            ? outcome === "unavailable"
+              ? "store_unavailable"
+              : "lease_lost"
+            : result.complete
+            ? "ok"
+            : result.value !== undefined && rowCount(result.value) > 0
+            ? `partial:${legOutcome(result.reason, false)}`
+            : legOutcome(result.reason, false),
         error_class: result.reason ?? null,
         duration_ms: Date.now() - started,
         rows: rowCount(result.value),
         served_stale: next.value !== undefined && next.day !== day,
         failures: next.failures,
+        store: fillStore === localStore && shared ? "process" : "shared",
       });
     });
   state.flight = flight;
@@ -1203,7 +1305,9 @@ export async function seriesPayload(
       gaps[leg] = "Series refresh running";
     if (entry?.reason) gaps[leg] = entry.reason;
     else if (entry?.value === undefined && !running)
-      gaps[leg] = "Series data unavailable";
+      gaps[leg] = state?.storeDown
+        ? "Shared series store unavailable"
+        : "Series data unavailable";
   }
   const frames = assembleSeries(name, legs, wall, now);
   let status: SeriesPayload["status"] = null;
@@ -1239,6 +1343,7 @@ export async function seriesPayload(
 export function resetSeriesCache() {
   local = new Map();
   starting = new Map();
+  storeFailures = [];
   localStore = memorySeriesStore();
   lane = Promise.resolve();
 }
