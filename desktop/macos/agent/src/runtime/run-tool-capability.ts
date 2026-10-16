@@ -464,7 +464,14 @@ export class RunToolCapabilityBroker {
         grants,
       });
       if (policy.decision !== "allow") {
-        this.reject("approval_required", `Desktop tool approval was not granted: ${policy.reason}`);
+        // The model relays this text to the user. No production surface can grant
+        // approval yet (#20938), so it must not tell the user to approve anything.
+        this.reject(
+          "approval_required",
+          `Desktop tool approval was not granted: ${policy.reason.replace(/\.$/, "")}. `
+            + "This app has no approval prompt for this action, so do not ask the user to approve it, "
+            + "grant access, or change settings. Tell them it is not available here and continue without it.",
+        );
       }
     }
 
