@@ -112,7 +112,10 @@ Never increase admission from 2/35 merely because an average GPU is low.
    and `demand.enabled=false` to roll back; requests2/GPU35/p99=3 then return.
 6. Keep max12 until measured peak mixed-work delivery qualifies a smaller cap.
    A higher density is a **separate config change** only after both admission
-   gates pass. Floor below3 needs independent resilience/freshness evidence;
+   gates pass. The unreferenced `packing_density_values.yaml` overlay contains
+   the separate target3/35 step; [dev receipts](../operational/parakeet-packing-qualification-2026-10-16.json)
+   support qualification on the deployed immutable artifact before its canary.
+   Floor below3 needs independent resilience/freshness evidence;
    none is proposed here. Pool renaming yields $0 and is not in this train.
 
 Watch live/pooled POST p95<3s, first/progress text, 503/queue-timeout/refusal rate,
