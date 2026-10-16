@@ -126,12 +126,15 @@ class ProjectionStore:
                         handler = os.getenv('SYNC_BACKFILL_TASKS_HANDLER_URL', '').strip()
                         if not queue or not handler:
                             raise ProjectionBlocked('backfill enrichment dispatch binding required')
-                        row['dispatch'] = {
+                        dispatch = {
                             'queue': queue,
                             'handler': handler,
                             'audience': os.getenv('SYNC_BACKFILL_TASKS_OIDC_AUDIENCE') or handler,
                             'invoker_sa': os.getenv('SYNC_TASKS_INVOKER_SA', ''),
                         }
+                        if not reprocess.valid_dispatch_binding(dispatch):
+                            raise ProjectionBlocked('complete backfill enrichment dispatch binding required')
+                        row['dispatch'] = dispatch
                         result = (row, result[1])
                 # The enrichment obligation and its exactly-once projection
                 # receipt commit together, fenced against account deletion.

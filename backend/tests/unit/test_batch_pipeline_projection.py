@@ -116,3 +116,85 @@ def test_production_result_cannot_invent_vad_groups_from_transcript_gaps():
     payload = {'audio_seconds': 200, 'words': [{'word': 'Text.', 'timestamp': [0, 1]}]}
     with pytest.raises(ValueError, match='speech_spans'):
         split_result(item, payload)
+
+
+@pytest.mark.parametrize('bound', [False, True])
+def test_projection_enrichment_and_receipt_share_transaction_on_unbound_host(binding, monkeypatch, bound):
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from utils.sync import reprocess
+
+    client = StrictFirestore()
+    store = ProjectionStore(Mock(client=client))
+    receipt_ref = client.collection('receipts').document('segment')
+    receipt_ref.create({'state': 'persisted'})
+    session = Mock()
+    session.job = {'priority': 0}
+    session.prepare.side_effect = lambda transaction, **_: receipt_ref.get(transaction=transaction)
+    session.guard.side_effect = lambda transaction, _: receipt_ref.get(transaction=transaction)
+    session.receipt.return_value = {'state': 'persisted'}
+    session.write_receipt.side_effect = lambda transaction, receipt: transaction.set(receipt_ref, receipt)
+    monkeypatch.setattr(store, 'session', lambda *a, **k: session)
+    monkeypatch.setattr(store, 'run', lambda operation: operation(client.transaction()))
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs' if bound else '')
+    monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://fresh.invalid/v2/sync-jobs/run')
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@example.invalid')
+    monkeypatch.delenv('SYNC_TASKS_OIDC_AUDIENCE', raising=False)
+    enqueue = Mock()
+
+    def after_commit(row):
+        assert receipt_ref.get().to_dict()['state'] == 'ready'
+        assert client.collection(reprocess.COLLECTION).document(reprocess.key(binding.owner_id, 'c')).get().exists
+        enqueue(row)
+
+    monkeypatch.setattr(reprocess, '_enqueue', after_commit)
+    store.mark_enrichment('segment', binding, 0, 'c', 'en')
+    transaction = client.transactions[0]
+    assert [path for path, _ in transaction.sets] == [
+        (reprocess.COLLECTION, reprocess.key(binding.owner_id, 'c')),
+        ('receipts', 'segment'),
+    ]
+    outbox = transaction.sets[0][1]
+    assert (outbox['dispatch'] is not None) == bound
+    assert enqueue.call_count == int(bound)
+    session.guard.assert_called_once_with(transaction, ['c'])
+    session.receipt.return_value = {'state': 'ready'}
+    store.mark_enrichment('segment', binding, 1, 'c', 'en')
+    assert not client.transactions[1].sets
+    assert enqueue.call_count == int(bound)
+    assert (
+        client.collection(reprocess.COLLECTION)
+        .document(reprocess.key(binding.owner_id, 'c'))
+        .get()
+        .to_dict()['version']
+        == 1
+    )
+
+
+@pytest.mark.parametrize('invalid_field', ['audience', 'invoker_sa'])
+def test_projection_cannot_override_mark_with_poison_backfill_binding(binding, monkeypatch, invalid_field):
+    from database.batch_pipeline_projection import ProjectionBlocked
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from utils.sync import reprocess
+
+    client = StrictFirestore()
+    store = ProjectionStore(Mock(client=client))
+    session = Mock()
+    session.job = {'priority': 1}
+    session.receipt.return_value = {'state': 'persisted'}
+    monkeypatch.setattr(store, 'session', lambda *a, **k: session)
+    monkeypatch.setattr(store, 'run', lambda operation: operation(client.transaction()))
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setenv('SYNC_BACKFILL_ROUTING_ENABLED', 'true')
+    monkeypatch.setenv('SYNC_BACKFILL_TASKS_QUEUE', 'sync-backfill')
+    monkeypatch.setenv('SYNC_BACKFILL_TASKS_HANDLER_URL', 'https://backfill.invalid/v2/sync-jobs/run')
+    monkeypatch.setenv('SYNC_BACKFILL_TASKS_OIDC_AUDIENCE', 'https://backfill.invalid/v2/sync-jobs/run')
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@example.invalid')
+    monkeypatch.setenv(
+        'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE' if invalid_field == 'audience' else 'SYNC_TASKS_INVOKER_SA',
+        'https://sibling.invalid/v2/sync-jobs/run' if invalid_field == 'audience' else '',
+    )
+    with pytest.raises(ProjectionBlocked, match='complete backfill'):
+        store.mark_enrichment('segment', binding, 0, 'c', 'en')
+    assert not client.transactions[0].sets
+    session.write_receipt.assert_not_called()

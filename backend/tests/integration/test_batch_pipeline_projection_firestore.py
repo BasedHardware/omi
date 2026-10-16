@@ -31,6 +31,10 @@ def lane(monkeypatch):
     from utils.sync.capture import chunk_identity
 
     monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+    monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs')
+    monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://fresh.invalid/v2/sync-jobs/run')
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@example.invalid')
+    monkeypatch.delenv('SYNC_TASKS_OIDC_AUDIENCE', raising=False)
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
     monkeypatch.setenv('SYNC_BACKFILL_ROUTING_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
@@ -687,12 +691,12 @@ def test_backfill_enrichment_retains_configured_worker_queue_and_audience(lane, 
     monkeypatch.setenv('SYNC_BACKFILL_ROUTING_ENABLED', 'true')
     monkeypatch.setenv('SYNC_BACKFILL_TASKS_QUEUE', 'projects/demo/locations/test/queues/backfill')
     monkeypatch.setenv('SYNC_BACKFILL_TASKS_HANDLER_URL', 'https://synthetic.invalid/v2/sync-jobs/run')
-    monkeypatch.setenv('SYNC_BACKFILL_TASKS_OIDC_AUDIENCE', 'https://synthetic.invalid')
+    monkeypatch.setenv('SYNC_BACKFILL_TASKS_OIDC_AUDIENCE', 'https://synthetic.invalid/v2/sync-jobs/run')
     lane.projector.project(batch.ids[0])
     dispatch = lane.tasks[0]['dispatch']
     assert dispatch['queue'].endswith('/queues/backfill')
     assert dispatch['handler'] == 'https://synthetic.invalid/v2/sync-jobs/run'
-    assert dispatch['audience'] == 'https://synthetic.invalid'
+    assert dispatch['audience'] == 'https://synthetic.invalid/v2/sync-jobs/run'
 
 
 def multipart(lane, count):
