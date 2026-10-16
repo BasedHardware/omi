@@ -65,7 +65,7 @@ def user_tier(uid: str, *, now: float | None = None, redis=None) -> int:
 def _fallback() -> None:
     from utils.observability.fallback import record_fallback
 
-    EVENTS.labels('redis_unavailable').inc()
+    EVENTS.labels('dependency_unavailable').inc()
     record_fallback(
         component='demand_processing',
         from_mode='scheduled',
