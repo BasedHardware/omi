@@ -32,6 +32,9 @@ overlay:
   gke:
     backend-listen:
       env:
+        BATCH_PIPELINE_ENABLED:
+          value: "true"
+          category: rollout
         BATCH_PIPELINE_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
         BATCH_PIPELINE_API_URL:
@@ -471,6 +474,9 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
+          BATCH_PIPELINE_ENABLED:
+            value: "true"
+            category: rollout
           BATCH_PIPELINE_UID_ALLOWLIST:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           BATCH_PIPELINE_API_URL:
@@ -715,6 +721,9 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
+          BATCH_PIPELINE_ENABLED:
+            value: "true"
+            category: rollout
           BATCH_PIPELINE_UID_ALLOWLIST:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           BATCH_PIPELINE_API_URL:
@@ -934,6 +943,9 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          BATCH_PIPELINE_ENABLED:
+            value: "true"
+            category: rollout
           BATCH_PIPELINE_UID_ALLOWLIST:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           BATCH_PIPELINE_API_URL:
@@ -1124,6 +1136,9 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          BATCH_PIPELINE_ENABLED:
+            value: "true"
+            category: rollout
           BATCH_PIPELINE_UID_ALLOWLIST:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           BATCH_PIPELINE_SERVING_ENABLED:
