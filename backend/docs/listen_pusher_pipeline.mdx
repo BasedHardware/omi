@@ -4740,6 +4740,16 @@ Backfill ownership and expired-head retirement are defined in [the two-lane runb
 
 Backfill admission transactionally creates or repairs its sequencer owner. Completion and retirement transactionally park empty owners outside the hot reconcile query while retaining their fencing epochs; admission wakes them atomically. The bounded pending reconcile scan self-heals legacy missing owners over a configurable window (default 30 minutes), honors the staggered deadline before claiming or retiring waiting work, and meters `sync_backfill_owner_repaired`. The operator-only dry-run/apply procedure is in [backfill owner repair](runbooks/sync-two-lane.md#backfill-owner-repair).
 
+The default-oldest `SYNC_BACKFILL_ORDER` policy can select descending pending
+capture time for a UID cohort, including persisted work draining while sequencer
+admission is off. Direct tasks receive a bounded newer-first eligibility
+preference; Cloud Tasks does not guarantee order among eligible tasks. Segment
+assignment remains chronological within a job, and atomic interval intake
+merges late earlier chunks across jobs. The existing pending sweep retires
+Redis-expired old tails without modifying a newer active owner, audio or user
+data. Index prerequisites, cohort controls and limitations are in the
+[newest-first rollout](runbooks/sync-two-lane.md#newest-first-rollout).
+
 ### Shared Gateway caller routes
 
 NLLB, VAD and every speaker-embedding host (including Parakeet fallback) use

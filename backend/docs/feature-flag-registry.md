@@ -271,6 +271,9 @@ and an explicit empty literal renders as `''`.
 | `SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED` | Bounded fresh-transaction retries for sync assignment contention | backend | env | closed | false | false | false | — | pending | 2026-11-15 | dazheng |
 | `SYNC_ASSIGNMENT_RECOVERY_ENABLED` | Recover incompatible explicit sync targets through compatible temporal assignment; default on, invalid values off | backend | env | open | true | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | pending | 2026-11-01 | dazheng |
 | `SYNC_BACKFILL_INFLIGHT_LIMIT` | One in-flight backfill upload per uid; excess uploads get 429 backfill_paced | backend | env | closed | false | false | false | — | pending | 2026-10-27 | dazheng |
+| `SYNC_BACKFILL_ORDER` | Default oldest; newest selects descending pending capture time and earlier direct-task eligibility for the selected UID cohort | backend | env | closed | — | — | — | — | pending | 2026-11-15 | dazheng |
+| `SYNC_BACKFILL_ORDER_PERCENT` | Stable SHA-256 UID cohort for newest ordering; default 100 only when order is newest | backend | env | closed | — | — | — | — | pending | 2026-11-15 | dazheng |
+| `SYNC_BACKFILL_ORDER_UID_ALLOWLIST` | Comma-separated UID cohort for newest backfill ordering; empty by default and newest master policy required | backend | env | closed | — | — | — | — | pending | 2026-11-15 | dazheng |
 | `SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM` | Retire Redis-absent unbound backfill heads before dispatch; code/dev off, prod sync services on | backend | env | closed | declared | false | true | — | pending | 2026-11-14 | dazheng |
 | `SYNC_BACKFILL_UID_SEQUENCER` | Accept backfill uploads then dispatch one worker job per uid from durable queue | backend | env | closed | off | off | off | — | pending | 2026-10-27 | dazheng |
 | `SYNC_LEGACY_FRESH_ENABLED` | Admit recent LEGACY offline sync to fresh under an atomic per-user upload and byte budget | backend | env | closed | false | false | false | — | pending | 2026-11-14 | dazheng |
@@ -535,6 +538,9 @@ their code default (`fail` tells you which way a missing value resolves).
 - `STT_PAID_SPILLOVER_DEEPGRAM_PER_MINUTE` — Deepgram fleet paid router promotion cap per UTC minute; default 30; zero refuses promotions (fail: closed)
 - `STT_PAID_SPILLOVER_MODULATE_PER_MINUTE` — Modulate fleet paid router promotion cap per UTC minute; default 30; zero refuses promotions (fail: closed)
 - `STT_PAID_SPILLOVER_SONIOX_PER_MINUTE` — Soniox fleet paid router promotion cap per UTC minute; default 30; zero refuses promotions (fail: closed)
+- `SYNC_BACKFILL_ORDER` — Default oldest; newest selects descending pending capture time and earlier direct-task eligibility for the selected UID cohort (fail: closed)
+- `SYNC_BACKFILL_ORDER_PERCENT` — Stable SHA-256 UID cohort for newest ordering; default 100 only when order is newest (fail: closed)
+- `SYNC_BACKFILL_ORDER_UID_ALLOWLIST` — Comma-separated UID cohort for newest backfill ordering; empty by default and newest master policy required (fail: closed)
 - `SYNC_BACKFILL_ROUTING_ENABLED` — Route eligible sync work to backfill lane (fail: closed)
 - `SYNC_DISPATCH_MODE` — Select sync dispatch lane (fail: closed)
 - `SYNC_LINEAGE_RESOLVE_ENABLED` — Bind each segment of a recording-id safety-WAL upload to the live rollover generation that owns its audio, and stamp live generations with their origin recording id (default on) (fail: open)
