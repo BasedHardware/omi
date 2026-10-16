@@ -1311,6 +1311,8 @@ class ChatProvider: ObservableObject {
   @Published var claudeAuthUrl: String?
   /// Prevent duplicate browser launches for the same explicit User Claude flow.
   private var claudeAuthLaunchRequested = false
+  /// Settings' Connect Claude is waiting for the runtime's sign-in URL.
+  private var claudeConnectRequested = false
   /// The current process has observed a successful explicit OAuth callback.
   /// Passive settings refreshes must not erase that state when Claude stores the
   /// token in its foreign Keychain item instead of the legacy config file.
@@ -2287,6 +2289,24 @@ class ChatProvider: ObservableObject {
     NSWorkspace.shared.open(url)
   }
 
+  /// Settings' Connect Claude. Since the July change that stopped opening the
+  /// browser mid-turn, this is the only control that asks the runtime for a
+  /// sign-in URL and opens it.
+  func connectClaude() async {
+    guard isUserClaudeMode else { return }
+    guard await ensureBridgeStarted() else {
+      errorMessage = "Unable to start Claude sign-in. Try again."
+      return
+    }
+    claudeConnectRequested = true
+    await resolvedAgentClient().requestProviderAuth()
+  }
+
+  /// A turn's `auth_required` never opens the browser by itself; it waits for Connect.
+  nonisolated static func opensClaudeSignIn(connectRequested: Bool, authUrl: String?) -> Bool {
+    connectRequested && authUrl != nil
+  }
+
   private static func providerAuthRequiredUserMessage(isUserClaudeMode: Bool) -> String {
     if isUserClaudeMode {
       return "Claude sign-in is required. Reconnect Claude, then try again."
@@ -2306,6 +2326,11 @@ class ChatProvider: ObservableObject {
     claudeAuthUrl = authUrl
     // Provider auth is distinct from the Pro upgrade sheet.
     isClaudeAuthRequired = false
+    if Self.opensClaudeSignIn(connectRequested: claudeConnectRequested, authUrl: authUrl) {
+      claudeConnectRequested = false
+      claudeAuthLaunchRequested = false
+      startClaudeAuth()
+    }
 
     let sessionAdapterId = activeChatTelemetryAttempt?.attempt.resolvedSessionAdapterId
     AnalyticsManager.shared.providerAuthRequired(
