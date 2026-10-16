@@ -396,10 +396,10 @@ class CaptureGroupMember(BaseModel):
 class CaptureGroup(BaseModel):
     """Conversations from different capture surfaces that recorded one event.
 
-    Server-authored by ``database.capture_groups`` only after the captures are
-    shown to share speech. ``id`` is the event identity and never changes when
-    ``primary_id`` (the longest capture) does. Clients present the group as one
-    row and keep every member reachable.
+    Server-authored by ``database.capture_groups`` after shared-speech or gated
+    desktop-call confirmation. ``id`` is the event identity and never changes
+    when ``primary_id`` does; call groups keep the desktop primary. Grouping
+    preserves every source conversation and its independently readable content.
     """
 
     id: str
