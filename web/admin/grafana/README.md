@@ -129,8 +129,8 @@ repo variable `GRAFANA_URL` pointing at the direct Cloud Run URL.
 
 `omi-tv-v2` is a separate UID. Its source is `build_wall_dashboard.py`, called
 by `build_dashboards.py`; the three legacy board files retain their existing
-contract. `apply_omi_tv_dashboard.py` accepts the new UID and still preserves
-live layout on subsequent applies. This slice does not switch `/dashboard`.
+contract. `apply_omi_tv_dashboard.py` publishes only the legacy UIDs and preserves
+live layout. The private monitoring provisioning workflow owns v2 publication.
 
 The admin-authenticated `/api/omi/stats/wall` returns the 22 contract IDs plus
 explicit capture-week-1 and plan-prepay-cash lines. Definitions, UTC cutoffs,
@@ -276,3 +276,5 @@ Regularity statistics remain inside HogQL; no raw identities leave the aggregate
 This is a daily approximation of the threshold evidence. **Cross-day and separated
 burst regularity detection is deferred**; client names alone never establish intent.
 Activity metrics and derived MAU units carry the MCP schema-2 definition revision.
+
+Private monitor.omi.me cutover, JWT prerequisites and kiosk limits: [platform runbook](../../../backend/charts/monitoring/grafana/README.md).

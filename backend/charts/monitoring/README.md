@@ -1,6 +1,6 @@
 # Monitoring Stack
 
-Prometheus + Grafana + Loki observability stack for the Omi backend on GKE.
+Prometheus + Grafana + Loki observability stack for the Omi backend on GKE. [Private Business dashboards](grafana/README.md).
 
 ## Production telemetry contract (#9587)
 
