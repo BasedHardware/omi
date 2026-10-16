@@ -110,10 +110,17 @@ void main() {
     SharedPreferencesUtil().uid = 'next-account';
     read.complete({
       'id': 'mcp-1',
+      'name': 'Synthetic MCP',
+      'author': 'Omi',
+      'description': 'Fixture',
+      'image': '',
+      'capabilities': <String>[],
+      'category': 'utilities',
       'status': 'approved',
       'enabled': true,
     });
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
     expect(find.byType(AddMcpServerPage), findsOneWidget);
     expect(tester.widget<OmiButton>(find.widgetWithText(OmiButton, 'Connect')).isLoading, isFalse);
     expect(tester.takeException(), isNull);
