@@ -306,22 +306,20 @@ class DeviceHealthTelemetry {
         expected += (diagnostics['audio_packets_expected'] as num?)?.toInt() ?? 0;
       }
     }
-    var packetsThisDay = 0;
     for (final point in (diagnostics['audio_packet_days'] as List? ?? []).whereType<Map>()) {
       final ts = point['ts'] as num?;
       if (ts == null || ts < start || ts >= end) continue;
-      final dayReceived = (point['received'] as num?)?.toInt() ?? 0;
-      packetsThisDay += dayReceived;
-      received += dayReceived;
+      received += (point['received'] as num?)?.toInt() ?? 0;
       expected += (point['expected'] as num?)?.toInt() ?? 0;
     }
     // Lost audio is time without a link. A stale open marker must not bill the
-    // connected part of the day; never-recovered gaps still count in full when
-    // the day has no connection evidence. Packet days outlive disconnect
-    // history, so a pruned day with packets is not a full disconnected budget.
+    // connected part of the day. Disconnect history is pruned at seven days, so
+    // a replayed day that starts before that horizon has an unknown prefix.
+    // Exclude it from the disconnected budget whether or not a packet row
+    // survived; packets are not a precondition for the correction.
     var disconnectedMs = (end - start) - connectedMs.clamp(0, end - start);
     var connectionHistoryIncomplete = false;
-    if (start < retentionHorizon && packetsThisDay > 0) {
+    if (start < retentionHorizon) {
       final prefixMs = retentionHorizon.clamp(start, end) - start;
       final unknownPrefix = (prefixMs - connectedBeforeHorizonMs.clamp(0, prefixMs)).clamp(0, prefixMs);
       disconnectedMs -= unknownPrefix;

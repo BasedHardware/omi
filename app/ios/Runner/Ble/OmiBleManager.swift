@@ -911,9 +911,11 @@ final class OmiBleManager: NSObject {
             let persisted = persistPropertyListRecords(history, forKey: key, in: defaults)
             // Audio resumed. Drop the start marker only after some durable
             // recovery exists. A failed history write keeps the marker unless a
-            // separate small stamp lands, so the outage cannot vanish.
+            // separate small stamp lands, so the outage cannot vanish. A later
+            // success must not delete that stamp until its start is a resolved
+            // history entry; otherwise the earlier outage is recorded nowhere.
             if persisted {
-                defaults.removeObject(forKey: "ble_audio_recovery_\(uuid)")
+                retireRecoveryStampIfDurable(uuid: uuid, history: history, in: defaults)
                 defaults.removeObject(forKey: "ble_audio_outage_\(uuid)")
                 persistPropertyListRecords(packetDays[uuid] ?? [], forKey: "ble_packet_days_\(uuid)", in: defaults)
             } else if persistAudioRecoveryStamp(uuid: uuid, start: marker, resolvedAt: now, in: defaults) {
@@ -933,6 +935,46 @@ final class OmiBleManager: NSObject {
         } catch {
             return false
         }
+    }
+
+    /// A disconnect row can share the stamp's timestamp without
+    /// `lostAudioResolvedAt`. That is not proof the recovery was stored.
+    private static func historyContainsResolvedStart(_ start: Int64, in history: [[String: Any]]) -> Bool {
+        history.contains { ($0["timestamp"] as? Int64) == start && $0["lostAudioResolvedAt"] != nil }
+    }
+
+    /// Delete the fallback stamp only after its resolution is in history.
+    /// Fold a missing start into the ring when that does not evict another
+    /// record; otherwise leave the stamp for Dart's `audio_outage_resolved_start`
+    /// import. A later failed history write may still replace the stamp.
+    private func retireRecoveryStampIfDurable(uuid: String, history: [[String: Any]], in defaults: UserDefaults) {
+        let stampKey = "ble_audio_recovery_\(uuid)"
+        guard let recovery = defaults.dictionary(forKey: stampKey) else { return }
+        guard let start = recovery["start"] as? Int64,
+              let resolvedAt = recovery["resolved_at"] as? Int64 else {
+            defaults.removeObject(forKey: stampKey)
+            return
+        }
+        if Self.historyContainsResolvedStart(start, in: history) {
+            defaults.removeObject(forKey: stampKey)
+            return
+        }
+        var folded = history
+        if let index = folded.lastIndex(where: { ($0["timestamp"] as? Int64) == start }) {
+            folded[index]["lostAudioSeconds"] = Double(max(0, resolvedAt - start)) / 1000
+            folded[index]["lostAudioResolvedAt"] = resolvedAt
+        } else if folded.count < Self.maxDisconnectHistory {
+            folded.append([
+                "timestamp": start,
+                "lostAudioResolvedAt": resolvedAt,
+                "identity_epoch": recovery["identity_epoch"] as? Int64 ?? healthStore.epoch,
+            ])
+        } else {
+            return
+        }
+        guard persistPropertyListRecords(folded, forKey: Self.historyKey(uuid), in: defaults),
+              Self.historyContainsResolvedStart(start, in: folded) else { return }
+        defaults.removeObject(forKey: stampKey)
     }
 
     private func readFirmwareDiagnosticsIfDue(_ peripheral: CBPeripheral, uuid: String) {

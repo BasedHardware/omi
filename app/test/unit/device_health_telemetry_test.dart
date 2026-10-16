@@ -570,7 +570,7 @@ void main() {
     expect(record['last_resolved_start'], start.millisecondsSinceEpoch);
   });
 
-  test('packet evidence bounds a replayed day outside disconnect retention', () {
+  test('replayed days before the retention horizon exclude the unknown prefix', () {
     final day = DateTime(2026, 10, 9);
     final start = day.millisecondsSinceEpoch;
     final observedAt = DateTime(2026, 10, 16, 23).millisecondsSinceEpoch;
@@ -591,13 +591,16 @@ void main() {
     expect(withPackets['connection_history_incomplete'], isTrue);
     expect(withPackets['lost_audio_seconds'], 30 * 60);
     expect(withPackets['unresolved_outage_open'], isTrue);
+    // No packet row: the pruned prefix is still unknown budget, and the
+    // outage stays open. The surviving 30 minutes after the horizon remain.
     final withoutPackets = DeviceHealthTelemetry.rollup({
       'observed_at': observedAt,
       'outage_open_since': start,
       'disconnect_history_v2': [survived],
     }, day);
-    expect(withoutPackets['connection_history_incomplete'], isNull);
-    expect(withoutPackets['lost_audio_seconds'], 24 * 3600 - 30 * 60);
+    expect(withoutPackets['connection_history_incomplete'], isTrue);
+    expect(withoutPackets['lost_audio_seconds'], 30 * 60);
+    expect(withoutPackets['unresolved_outage_open'], isTrue);
   });
 
   test('sign-out sends native retirement before subsequent recording', () async {
