@@ -399,6 +399,24 @@ def test_retry_after_partial_failure_creates_only_missing(tmp_path, store):
     assert store.docs[limitless.conversation_id_for_lifelog(UID, FN_B)]["transcript_segments"][0]["text"] == "ok"
 
 
+def test_macos_archive_metadata_is_not_counted_or_imported(tmp_path, store):
+    zip_data = _zip_bytes(
+        {
+            f"lifelogs/{FN_A}": _lifelog_md(),
+            f"__MACOSX/lifelogs/._{FN_A}": "\x00\x05\x16\x07not utf-8 appledouble bytes",
+            f"lifelogs/._{FN_A}": "\x00\x05\x16\x07not utf-8 appledouble bytes",
+        }
+    )
+
+    _run_import(tmp_path, zip_data)
+
+    assert len(store.docs) == 1, "only the real lifelog should be imported"
+    updates = limitless.import_jobs_db.update_import_job.call_args_list
+    total_files_updates = [u.args[1]['total_files'] for u in updates if 'total_files' in u.args[1]]
+    assert total_files_updates == [1], "macOS metadata entries must not inflate total_files"
+    assert updates[-1].args[1]['status'] == 'completed'
+
+
 def test_cancelling_an_import_stops_the_worker(store, monkeypatch, tmp_path):
     lifelogs = {
         f"lifelogs/2025-10-{day:02d}_07h00m00s_Standup.md": _lifelog_md(start_ms=1000 + day) for day in range(1, 26)
