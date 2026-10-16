@@ -1,6 +1,7 @@
 """One owner session, two independent verifiers, one reversible effect boundary."""
 
 import asyncio
+from datetime import datetime, timezone
 from collections import Counter
 from dataclasses import replace
 from functools import partial
@@ -24,7 +25,12 @@ from models.agent_edit import HarnessEdit
 from utils.agent_capabilities import tools as dream_tools
 from utils.agent_capabilities import verifiers
 from utils import dream_review_policy, dream_capacity, dream_harness_transport, dream_seed, dream_verify
-from utils.dream_cost import conservative_attempt_micro, price_weighted_tokens, verification_reserve_tokens
+from utils.dream_cost import (
+    conservative_attempt_micro,
+    minute_burndown_tokens,
+    price_weighted_tokens,
+    verification_reserve_tokens,
+)
 from utils.agent_capabilities.search import OwnerSearch
 from utils.agent_capabilities.session import Session
 from utils.dream_instructions import INSTRUCTIONS
@@ -33,6 +39,7 @@ from database.dream_effect_fence import ACTIVE_RUN
 from utils.executors import db_executor, run_blocking
 
 TAIL_BUDGET_NOTICE_THRESHOLD = 0.20
+MINUTE_HEADROOM_RETRIES = 3
 PROVIDER_STOP_CODES = frozenset({'dream_gateway_rejected', 'dream_gateway_failure'})
 # A billed but unusable model reply late in a pass; staged work is still verified.
 MODEL_OUTPUT_STOP_CODES = frozenset({'dream_response_truncated', 'dream_invalid_tool_calls'})
@@ -210,18 +217,48 @@ async def run_session(
             cached_tokens_estimate=cached_estimate,
             completion_limit=completion,
         )
-        reserve = estimate + completion_room
+        # The shared minute ceiling counts reserved-capacity burndown (cached input 0.1, output 5x), not raw
+        # tokens: counting every resent cached prefix in full stopped fast passes after a few minutes.
+        reserve = minute_burndown_tokens(
+            'gemini',
+            'gemini-3.8-flash',
+            weighted_tokens=price_weighted_tokens(
+                'gemini',
+                'gemini-3.8-flash',
+                prompt_tokens=estimate,
+                cached_tokens=(
+                    min(cached_estimate, estimate) if type(cached_estimate) is int and cached_estimate >= 0 else None
+                ),
+                completion_tokens=completion_room,
+            ),
+            completion_tokens=completion_room,
+            prompt_tokens=estimate,
+        )
         micro, price_status = conservative_attempt_micro('gemini', 'gemini-3.8-flash', estimate, completion_room)
         if lease is not None:
-            await run_blocking(
-                db_executor,
-                dream_turns.reserve,
-                uid,
-                lease['run_id'],
-                reserve,
-                caps,
-                cost_micro_usd=micro if price_status == 'priced' else None,
-            )
+            for attempt in range(MINUTE_HEADROOM_RETRIES + 1):
+                try:
+                    await run_blocking(
+                        db_executor,
+                        dream_turns.reserve,
+                        uid,
+                        lease['run_id'],
+                        reserve,
+                        caps,
+                        cost_micro_usd=micro if price_status == 'priced' else None,
+                    )
+                    break
+                except ValueError as exc:
+                    # A full minute pauses the pass until the next minute instead of discarding it.
+                    pause = 61 - datetime.now(timezone.utc).second
+                    if (
+                        str(exc) != 'dream_minute_headroom'
+                        or attempt == MINUTE_HEADROOM_RETRIES
+                        or asyncio.get_running_loop().time() + pause + 60 > deadline
+                    ):
+                        raise
+                    await asyncio.sleep(pause)
+                    await active()
         report['model_lanes'].append(lane)
         sink = {}
         try:

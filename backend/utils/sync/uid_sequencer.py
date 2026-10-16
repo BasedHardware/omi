@@ -138,7 +138,7 @@ def enabled() -> bool:
 
 def _dispatch(claim: dict[str, Any]) -> None:
     payload = {**claim['payload'], 'sequencer_epoch': claim['epoch']}
-    enqueue_sync_job(payload)
+    enqueue_sync_job(payload, dispatch_attempt=claim.get('dispatch_attempt', 0))
     latency = max(0.0, (datetime.now(timezone.utc) - claim['accepted_at']).total_seconds())
     logger.info('event=sync_uid_sequencer action=dispatch outcome=enqueued latency_seconds=%.1f', latency)
 
@@ -197,7 +197,7 @@ def kick(uid: str, *, retire_limit: int = MAX_EXPIRED_RETIREMENTS, progress: _Cl
         _dispatch(claim)
     except Exception as error:
         # A named task may exist despite a lost acknowledgement. The periodic
-        # reconciler replaces the dispatch epoch; old deliveries then ACK stale.
+        # reconciler retries dispatch with the same epoch so queued work stays valid.
         logger.error(
             'event=sync_uid_sequencer action=dispatch outcome=uncertain exception_type=%s', type(error).__name__
         )
