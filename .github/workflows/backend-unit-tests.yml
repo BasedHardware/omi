@@ -225,7 +225,8 @@ jobs:
     needs: ci-tier
     runs-on: ubuntu-latest
     if: needs.ci-tier.outputs.full_ci == 'true'
-    timeout-minutes: 10
+    # #21780: all 2040 assertions passed in 535s; setup exhausted the old 10m job ceiling.
+    timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@v7

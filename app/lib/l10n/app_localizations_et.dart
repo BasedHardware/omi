@@ -13754,4 +13754,39 @@ class AppLocalizationsEt extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'Kõne ettevalmistamine · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Teie $plan pakett lõpeb $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Tellige uuesti kohe, et säilitada oma eelised - tasu ei võeta kuni $date.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Teie $plan pakett uueneb $date.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Paketi muutmiseks tellige esmalt uuesti.';
+
+  @override
+  String get noModelDownloadRequired =>
+      'Kasutatakse teie seadme algset kõnemootorit. Mudeli allalaadimine pole vajalik.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Kasutatakse teie seadme natiivset kõnemootorit. Mudeli allalaadimine pole vajalik.';
+
+  @override
+  String get activityNeedsAttention => 'Vajab tähelepanu';
+
+  @override
+  String get activityRetryAll => 'Proovi kõiki uuesti';
+
+  @override
+  String get attentionSummaryFailed => 'Seda vestlust ei õnnestunud kokku võtta';
 }

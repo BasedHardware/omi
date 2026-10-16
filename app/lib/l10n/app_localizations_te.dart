@@ -13816,4 +13816,39 @@ class AppLocalizationsTe extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'మాట సిద్ధమవుతోంది · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'మీ $plan ప్లాన్ $dateన ముగుస్తుంది.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'మీ ప్రయోజనాలను ఉంచడానికి ఇప్పుడే సబ్‌స్క్రిప్ట్ చేయండి - $date వరకు ఛార్జ్ లేదు.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'మీ $plan ప్లాన్ $dateన పునరుద్ధరించబడుతుంది.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'ప్లాన్ మార్చడానికి ముందు మళ్లీ సబ్‌స్క్రైబ్ చేయండి.';
+
+  @override
+  String get noModelDownloadRequired =>
+      'మీ పరికరం యొక్క నేటివ్ స్పీచ్ ఇంజిన్ ఉపయోగించబడుతుంది. మోడల్ డౌన్‌లోడ్ అవసరం లేదు.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'మీ పరికరం యొక్క నేటివ్ స్పీచ్ ఇంజిన్ ఉపయోగించబడుతుంది. మోడల్ డౌన్‌లోడ్ అవసరం లేదు.';
+
+  @override
+  String get activityNeedsAttention => 'శ్రద్ధ అవసరం';
+
+  @override
+  String get activityRetryAll => 'అన్నింటినీ మళ్లీ ప్రయత్నించండి';
+
+  @override
+  String get attentionSummaryFailed => 'ఈ సంభాషణను సంగ్రహించలేకపోయాం';
 }

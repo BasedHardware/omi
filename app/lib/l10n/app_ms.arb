@@ -4216,5 +4216,14 @@
     "onDeviceMeterLineShort": "{percent}% digunakan · {reset}",
     "onDeviceMeterLineHours": "{percent}% digunakan · kira-kira {hours} jam rakaman lagi · {reset}",
     "onDeviceGetMoreUsage": "Dapatkan lebih banyak penggunaan",
-    "onDeviceGettingSpeechReady": "Menyediakan pertuturan · {percent}%"
+    "onDeviceGettingSpeechReady": "Menyediakan pertuturan · {percent}%",
+    "yourPlanEndsOn": "Pelan {plan} anda tamat pada {date}.",
+    "resubscribeNowNoChargeUntil": "Langgan semula sekarang untuk mengekalkan manfaat anda - tiada caj sehingga {date}.",
+    "yourPlanWillRenewOn": "Pelan {plan} anda akan diperbaharui pada {date}.",
+    "resubscribeFirstToChangePlans": "Langgan semula dahulu untuk menukar pelan.",
+    "nativeEngineNoDownload": "Enjin pertuturan asli peranti anda akan digunakan. Tiada muat turun model diperlukan.",
+    "noModelDownloadRequired": "Enjin pertuturan asli peranti anda akan digunakan. Tiada muat turun model diperlukan.",
+    "activityNeedsAttention": "Perlu perhatian",
+    "activityRetryAll": "Cuba semua semula",
+    "attentionSummaryFailed": "Perbualan ini tidak dapat diringkaskan"
 }

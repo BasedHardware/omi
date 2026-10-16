@@ -17,6 +17,7 @@ operator settings, RPCs and index readiness are in
 | Encrypted artifacts | `artifacts.py`, `artifact_policy.py` | Authenticated object IO, immutable generations and privacy-fenced object registration. |
 | Conversation projection | `context.py`, `projection.py`, `projection_parts.py` | Validated encrypted metadata, legacy VAD/assignment grouping and resumable per-part receipts. |
 | Enrichment | `enrichment.py` | Privacy-aware adapter to the existing coalesced sync reprocess outbox. |
+| Quarantine recovery | `quarantine_recovery.py` | Default-off owner-gated per-unit legacy sync STT, single dispatch and encrypted result reconciliation; original batch claim retained. |
 | Cleanup | `retention.py` | Durable erasure outboxes and bounded object/metadata cleanup. |
 | Backend supervisor | `serving.py`, `metrics.py` | Recovery, ordered projection, retention and queue-age export independent of upload admission. |
 

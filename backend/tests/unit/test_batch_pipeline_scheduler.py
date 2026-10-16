@@ -160,11 +160,11 @@ def test_lease_expiry_backoff_and_stale_result_fencing():
     assert not queue.complete(WorkResult('a', 'gs://results/changed'), second.token, 999)
 
 
-def test_failures_retry_forever_with_capped_backoff_and_pending_head():
+def test_failures_stop_at_default_ceiling_without_fabricating_result():
     store = MemoryStore()
     queue = Scheduler(store)
     queue.enqueue(item('a'), 0)
-    for attempt in range(1, 21):
+    for attempt in range(1, 6):
         now = attempt * 1000
         queue.recover(now)
         lease = queue.pull(now)[0]
@@ -172,11 +172,18 @@ def test_failures_retry_forever_with_capped_backoff_and_pending_head():
         assert queue.fail('a', lease.token, now + 1)
         assert not queue.fail('a', lease.token, now + 1)
         job = store.rows['jobs', 'a']
-        assert job['state'] == 'retry' and job['merge_pending']
-        assert 0 < job['available_at'] - (now + 1) <= 600
-        assert job['retry_started_at'] == 1001
-    assert queue.recover(99999) == 1
+        if attempt < 5:
+            assert job['state'] == 'retry' and job['merge_pending']
+            assert 0 < job['available_at'] - (now + 1) <= 600
+            assert job['retry_started_at'] == 1001
+    assert job['state'] == 'quarantined' and not job['merge_pending']
+    assert job['quarantine_reason'] == 'worker_failed' and job['recovery_state'] == 'held'
+    assert 'retry_started_at' not in job and 'result' not in job
+    assert queue.recover(99999) == 0 and queue.pull(99999) == []
+    assert not queue.redrive_dead('a', 99999)
+    assert not queue.complete(WorkResult('a', 'gs://results/stale'), lease.token, 99999)
     assert OrderedMerge(store).commit_next('heavy', 99999) is None
+    assert ('results', 'a') not in store.rows
 
 
 def test_out_of_order_completion_and_idempotent_ordered_commit():

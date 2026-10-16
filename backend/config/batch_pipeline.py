@@ -59,3 +59,27 @@ SCHEDULER_SHARDS = 64
 def scheduler_control_key(hashed_owner: str) -> str:
     """Pure shard identity shared by scheduling and privacy cleanup."""
     return f'scheduler_{int(hashed_owner[:8], 16) % SCHEDULER_SHARDS:02d}'
+
+
+def max_worker_attempts() -> int:
+    """Bound charged worker failures; malformed configuration keeps the safe default."""
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_MAX_ATTEMPTS', '5'))
+    except ValueError:
+        return 5
+    return value if 1 <= value <= 20 else 5
+
+
+def recovery_owners() -> tuple[str, ...]:
+    """Recovery is independent of admission; empty allowlist always denies."""
+    if os.getenv('BATCH_PIPELINE_RECOVERY_MODE', 'off').strip().lower() != 'on':
+        return ()
+    return tuple(
+        sorted(
+            {
+                value.strip()
+                for value in os.getenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', '').split(',')
+                if value.strip() and '/' not in value.strip() and len(value.strip().encode()) <= 256
+            }
+        )
+    )

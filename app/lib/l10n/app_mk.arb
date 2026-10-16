@@ -11636,5 +11636,20 @@
     "onDeviceMeterLineShort": "{percent}% искористено · {reset}",
     "onDeviceMeterLineHours": "{percent}% искористено · преостануваат околу {hours} часа снимање · {reset}",
     "onDeviceGetMoreUsage": "Добијте повеќе употреба",
-    "onDeviceGettingSpeechReady": "Се подготвува говорот · {percent}%"
+    "onDeviceGettingSpeechReady": "Се подготвува говорот · {percent}%",
+    "yourPlanEndsOn": "Вашиот план {plan} завршува на {date}.",
+    "resubscribeNowNoChargeUntil": "Претплатете се сега за да ги задржите вашите бенефиции - без наплата до {date}.",
+    "yourPlanWillRenewOn": "Вашиот план {plan} ќе се обнови на {date}.",
+    "resubscribeFirstToChangePlans": "Прво претплатете се повторно за да го смените планот.",
+    "noModelDownloadRequired": "Ќе се користи нативната говор-машина на твојот уред. Нема потреба од преземање модел.",
+    "@noModelDownloadRequired": {
+        "description": "Info about iOS native speech"
+    },
+    "nativeEngineNoDownload": "Ќе се користи нативната машина за говор на твојот уред. Нема потреба од преземање модел.",
+    "@nativeEngineNoDownload": {
+        "description": "Description of iOS native speech recognition"
+    },
+    "activityNeedsAttention": "Потребно е внимание",
+    "activityRetryAll": "Обиди ги сите повторно",
+    "attentionSummaryFailed": "Овој разговор не можеше да се сумира"
 }

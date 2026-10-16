@@ -13744,4 +13744,38 @@ class AppLocalizationsHi extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'बोली तैयार हो रही है · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'आपका $plan प्लान $date को समाप्त होगा।';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'अपने लाभ बनाए रखने के लिए अभी पुनः सदस्यता लें - $date तक कोई शुल्क नहीं।';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'आपका $plan प्लान $date को नवीनीकृत होगा।';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'प्लान बदलने के लिए पहले पुनः सदस्यता लें।';
+
+  @override
+  String get noModelDownloadRequired =>
+      'आपके डिवाइस का नेटिव स्पीच इंजन उपयोग किया जाएगा। कोई मॉडल डाउनलोड आवश्यक नहीं।';
+
+  @override
+  String get nativeEngineNoDownload => 'आपके डिवाइस का मूल स्पीच इंजन उपयोग किया जाएगा। मॉडल डाउनलोड की आवश्यकता नहीं।';
+
+  @override
+  String get activityNeedsAttention => 'ध्यान देने की ज़रूरत';
+
+  @override
+  String get activityRetryAll => 'सभी को फिर से आज़माएँ';
+
+  @override
+  String get attentionSummaryFailed => 'इस बातचीत का सारांश नहीं बन सका';
 }

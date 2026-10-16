@@ -13748,4 +13748,39 @@ class AppLocalizationsDa extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'Gør tale klar · $percent %';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Dit $plan-abonnement slutter $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Gentilmeld dig nu for at beholde dine fordele - ingen opkrævning indtil $date.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Dit $plan-abonnement fornys $date.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Gentilmelding først for at skifte abonnement.';
+
+  @override
+  String get noModelDownloadRequired =>
+      'Din enheds indbyggede talegenkendelse vil blive brugt. Ingen model-download påkrævet.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Din enheds indbyggede talemotor vil blive brugt. Ingen model-download påkrævet.';
+
+  @override
+  String get activityNeedsAttention => 'Kræver opmærksomhed';
+
+  @override
+  String get activityRetryAll => 'Prøv alle igen';
+
+  @override
+  String get attentionSummaryFailed => 'Samtalen kunne ikke opsummeres';
 }

@@ -131,9 +131,15 @@ class SyncTransferForegroundService : Service() {
         // Each accepted start has a foreground obligation, including a start
         // delivered to an existing instance or immediately followed by stop.
         promoteColdStart()
-        if (intent?.action == ACTION_STOP || cancellationRequested) {
-            // A newer queued start owns the service; an older cancellation
-            // must not tear down its notification or wake lock.
+        if (cancellationRequested) {
+            // Decide solely from our own flag, not from this intent's own
+            // action. A later start() resets the flag synchronously, before
+            // the system delivers this queued ACTION_STOP -- so a stale stop
+            // whose action is literally ACTION_STOP must still fall through
+            // and keep the newer transfer alive. stopSelfResult(startId)'s
+            // built-in staleness check can't catch this: it only compares
+            // against starts already *delivered* to onStartCommand, not
+            // ones merely sent to the system ahead of this queued stop.
             stopSelfResult(startId)
             return START_NOT_STICKY
         }

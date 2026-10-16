@@ -1137,6 +1137,9 @@ export type OmiBridgeApi = {
   onDeepgramSignUpdate: (cb: (result: TranslationResult) => void) => () => void
   signLanguageSetEnabled: (enabled: boolean) => void
   signLanguageGetEnabled: () => Promise<boolean>
+  /** Fires in every window when the sign-language toggle changes. Returns an
+   *  unsubscribe fn. */
+  onSignLanguageEnabledChanged: (cb: (enabled: boolean) => void) => () => void
   // --- Bar chat bridge (main-window side; the bar is a viewport, INV-CHAT-1) ---
   /** The bar sent a message — the main window's ChatBridgeHost drives the ONE
    *  chat.send() (with fromVoice). Main-window renderer only. */

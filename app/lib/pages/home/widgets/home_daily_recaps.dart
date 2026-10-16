@@ -42,6 +42,7 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> with WidgetsBindingObs
   final _forYouKey = GlobalKey<HomeForYouState>();
   List<DailySummary> _recaps = [];
   bool _loading = true;
+  bool _loadFailed = false;
 
   StreamSubscription<String>? _deletions;
   StreamSubscription<void>? _arrivals;
@@ -86,15 +87,21 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> with WidgetsBindingObs
     final generation = ++_generation;
     if (!mounted) return;
     setState(() => _loading = _recaps.isEmpty);
-    final result = await widget.load();
-    if (!mounted || generation != _generation) return;
-    final items = result.items.where((r) => !_deletedIds.contains(r.id)).toList();
-    // A new recap is the delight that lights Home's Activity bell.
-    if (result.ok) ActivitySeen.instance.observe(ActivitySeen.recapArrivals(items));
-    setState(() {
-      if (result.ok) _recaps = items;
-      _loading = false;
-    });
+    try {
+      final result = await widget.load().timeout(const Duration(seconds: 15));
+      if (!mounted || generation != _generation) return;
+      final items = result.items.where((r) => !_deletedIds.contains(r.id)).toList();
+      if (result.ok) ActivitySeen.instance.observe(ActivitySeen.recapArrivals(items));
+      setState(() {
+        if (result.ok) _recaps = items;
+        _loadFailed = !result.ok;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted && generation == _generation) setState(() => _loadFailed = true);
+    } finally {
+      if (mounted && generation == _generation) setState(() => _loading = false);
+    }
   }
 
   @override
@@ -109,7 +116,12 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> with WidgetsBindingObs
       );
 
   Widget _buildRecaps(BuildContext context) {
-    if (!_loading && _recaps.isEmpty) return const SizedBox.shrink();
+    if (!_loading && _recaps.isEmpty) {
+      return _loadFailed
+          ? OmiErrorState(
+              title: context.l10n.dailyRecaps, message: context.l10n.somethingWentWrong, onRetry: _refreshRecaps)
+          : const SizedBox.shrink();
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -143,6 +155,16 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> with WidgetsBindingObs
             ),
           ),
         ),
+        if (_loadFailed && !_loading)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+            child: Row(children: [
+              Expanded(
+                  child: Text(context.l10n.somethingWentWrong,
+                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary))),
+              OmiButton.tertiary(label: context.l10n.tryAgain, onPressed: _refreshRecaps),
+            ]),
+          ),
       ],
     );
   }
@@ -158,7 +180,10 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> with WidgetsBindingObs
     ActivitySeen.instance.observe(ActivitySeen.recapArrivals(_recaps));
   }
 
-  void _openAll() => routeToPage(context, const DailyRecapsPage());
+  Future<void> _openAll() async {
+    await routeToPage(context, const DailyRecapsPage());
+    if (mounted) await _refreshRecaps();
+  }
 
   Widget _card(BuildContext context, DailySummary summary) {
     return DailySummaryCard(

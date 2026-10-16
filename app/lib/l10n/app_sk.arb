@@ -4216,5 +4216,14 @@
     "onDeviceMeterLineShort": "{percent}% využité · {reset}",
     "onDeviceMeterLineHours": "{percent}% využité · zostáva asi {hours} hodín nahrávania · {reset}",
     "onDeviceGetMoreUsage": "Získajte viac využitia",
-    "onDeviceGettingSpeechReady": "Príprava reči · {percent}%"
+    "onDeviceGettingSpeechReady": "Príprava reči · {percent}%",
+    "yourPlanEndsOn": "Váš plán {plan} končí {date}.",
+    "resubscribeNowNoChargeUntil": "Znova sa prihláste teraz, aby ste si zachovali výhody - bez poplatku do {date}.",
+    "yourPlanWillRenewOn": "Váš plán {plan} sa obnoví {date}.",
+    "resubscribeFirstToChangePlans": "Ak chcete zmeniť plán, najprv sa znova prihláste.",
+    "nativeEngineNoDownload": "Bude použitý natívny hlasový engine vášho zariadenia. Nie je potrebné sťahovať model.",
+    "noModelDownloadRequired": "Použije sa natívny hlasový engine vášho zariadenia. Nie je potrebné sťahovať model.",
+    "activityNeedsAttention": "Vyžaduje pozornosť",
+    "activityRetryAll": "Skúsiť všetko znova",
+    "attentionSummaryFailed": "Tento rozhovor sa nepodarilo zhrnúť"
 }

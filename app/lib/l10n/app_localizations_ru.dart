@@ -13807,4 +13807,39 @@ class AppLocalizationsRu extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'Подготовка речи · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Ваш план $plan заканчивается $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Подпишитесь снова, чтобы сохранить преимущества - без оплаты до $date.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Ваш план $plan продлится $date.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Сначала оформите подписку снова, чтобы сменить план.';
+
+  @override
+  String get noModelDownloadRequired =>
+      'Будет использован встроенный механизм распознавания речи вашего устройства. Загрузка модели не требуется.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Будет использован встроенный речевой движок вашего устройства. Загрузка модели не требуется.';
+
+  @override
+  String get activityNeedsAttention => 'Требует внимания';
+
+  @override
+  String get activityRetryAll => 'Повторить все';
+
+  @override
+  String get attentionSummaryFailed => 'Не удалось подвести итоги этого разговора';
 }

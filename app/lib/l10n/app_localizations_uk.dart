@@ -13789,4 +13789,39 @@ class AppLocalizationsUk extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'Підготовка мовлення · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Ваш план $plan закінчується $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Підпишіться знову, щоб зберегти переваги - без оплати до $date.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Ваш план $plan поновиться $date.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Спочатку підпишіться знову, щоб змінити план.';
+
+  @override
+  String get noModelDownloadRequired =>
+      'Буде використано вбудований мовний движок вашого пристрою. Завантаження моделі не потрібне.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Буде використано вбудований мовленнєвий рушій вашого пристрою. Завантаження моделі не потрібне.';
+
+  @override
+  String get activityNeedsAttention => 'Потребує уваги';
+
+  @override
+  String get activityRetryAll => 'Повторити все';
+
+  @override
+  String get attentionSummaryFailed => 'Не вдалося підсумувати цю розмову';
 }

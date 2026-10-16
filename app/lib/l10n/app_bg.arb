@@ -4216,5 +4216,14 @@
     "onDeviceMeterLineShort": "{percent}% използвани · {reset}",
     "onDeviceMeterLineHours": "{percent}% използвани · остават около {hours} часа запис · {reset}",
     "onDeviceGetMoreUsage": "Вземете още потребление",
-    "onDeviceGettingSpeechReady": "Подготовка на речта · {percent}%"
+    "onDeviceGettingSpeechReady": "Подготовка на речта · {percent}%",
+    "yourPlanEndsOn": "Вашият план {plan} приключва на {date}.",
+    "resubscribeNowNoChargeUntil": "Абонирайте се отново сега, за да запазите предимствата си - без такса до {date}.",
+    "yourPlanWillRenewOn": "Вашият план {plan} ще се поднови на {date}.",
+    "resubscribeFirstToChangePlans": "Първо се абонирайте отново, за да смените плана.",
+    "noModelDownloadRequired": "Ще се използва вграденият речеви двигател на устройството. Не е необходимо изтегляне на модел.",
+    "nativeEngineNoDownload": "Ще се използва вграденият речеви механизъм на устройството. Не е необходимо изтегляне на модел.",
+    "activityNeedsAttention": "Изисква внимание",
+    "activityRetryAll": "Опитай всички отново",
+    "attentionSummaryFailed": "Този разговор не можа да бъде обобщен"
 }

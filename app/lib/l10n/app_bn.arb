@@ -11636,5 +11636,20 @@
     "onDeviceMeterLineShort": "{percent}% ব্যবহৃত · {reset}",
     "onDeviceMeterLineHours": "{percent}% ব্যবহৃত · প্রায় {hours} ঘণ্টা রেকর্ডিং বাকি · {reset}",
     "onDeviceGetMoreUsage": "আরও ব্যবহার নিন",
-    "onDeviceGettingSpeechReady": "কথা বলার প্রস্তুতি · {percent}%"
+    "onDeviceGettingSpeechReady": "কথা বলার প্রস্তুতি · {percent}%",
+    "yourPlanEndsOn": "আপনার {plan} প্ল্যান {date} এ শেষ হবে।",
+    "resubscribeNowNoChargeUntil": "আপনার সুবিধা রাখতে এখনই পুনরায় সাবস্ক্রাইব করুন - {date} পর্যন্ত কোনও চার্জ নেই।",
+    "yourPlanWillRenewOn": "আপনার {plan} প্ল্যান {date} এ নবায়ন হবে।",
+    "resubscribeFirstToChangePlans": "প্ল্যান বদলাতে আগে পুনরায় সাবস্ক্রাইব করুন।",
+    "noModelDownloadRequired": "আপনার ডিভাইসের নেটিভ স্পিচ ইঞ্জিন ব্যবহার করা হবে। কোন মডেল ডাউনলোড প্রয়োজন নেই।",
+    "@noModelDownloadRequired": {
+        "description": "Info about iOS native speech"
+    },
+    "nativeEngineNoDownload": "আপনার ডিভাইসের নেটিভ স্পিচ ইঞ্জিন ব্যবহার করা হবে। কোন মডেল ডাউনলোড প্রয়োজন নেই।",
+    "@nativeEngineNoDownload": {
+        "description": "Description of iOS native speech recognition"
+    },
+    "activityNeedsAttention": "মনোযোগ প্রয়োজন",
+    "activityRetryAll": "সবগুলো আবার চেষ্টা করুন",
+    "attentionSummaryFailed": "এই কথোপকথনের সারাংশ তৈরি করা যায়নি"
 }

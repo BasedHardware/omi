@@ -13814,4 +13814,39 @@ class AppLocalizationsHu extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'A beszéd előkészítése · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'A $plan csomagod $date-án lejár.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Iratkozzon fel újra most, hogy megtartsa előnyeit - nincs díj $date-ig.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'A $plan csomagod $date-án megújul.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Csomagváltáshoz először fizess elő újra.';
+
+  @override
+  String get noModelDownloadRequired =>
+      'Készüléke natív beszédfelismerő motorja lesz használva. Nincs szükség modell letöltésére.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Az eszközöd natív beszédmotorja lesz használva. Nem szükséges modell letöltése.';
+
+  @override
+  String get activityNeedsAttention => 'Figyelmet igényel';
+
+  @override
+  String get activityRetryAll => 'Összes újrapróbálása';
+
+  @override
+  String get attentionSummaryFailed => 'Ezt a beszélgetést nem sikerült összefoglalni';
 }

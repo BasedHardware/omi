@@ -65,6 +65,13 @@ import {
 } from '@/lib/api';
 import { SUPPORTED_LANGUAGES } from '@/types/user';
 import { decodePlan, planDisplayName, planGrantsPaidCapability } from '@/types/user';
+import {
+  RESUBSCRIBE_FIRST,
+  isPendingCancelConflict,
+  renewalDateSeconds,
+  yourPlanEndsOn,
+  yourPlanWillRenewOn,
+} from '@/lib/cancelPending';
 import type {
   DailySummarySettings,
   UserSubscription,
@@ -858,6 +865,7 @@ export function UsageSectionContent({
   const [selectedPriceId, setSelectedPriceId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [renewalConfirmation, setRenewalConfirmation] = useState<string | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
   const [showUpgradeOptions, setShowUpgradeOptions] = useState(false);
@@ -963,7 +971,7 @@ export function UsageSectionContent({
         selectedOption?.id === subscription?.current_price_id;
 
       if (isCancelingSubscription && selectedPriceId !== subscription?.current_price_id) {
-        setError('Plan changes are available after your current subscription ends.');
+        setError(RESUBSCRIBE_FIRST);
         return;
       }
 
@@ -988,6 +996,16 @@ export function UsageSectionContent({
           };
           window.addEventListener('focus', handleFocus);
         } else if (result?.status === 'reactivated') {
+          const seconds = renewalDateSeconds(
+            result.next_billing_date,
+            subscription?.current_period_end,
+          );
+          setRenewalConfirmation(
+            seconds == null
+              ? 'Your plan will renew.'
+              : yourPlanWillRenewOn(currentPlanName, formatDate(seconds)),
+          );
+          setError(null);
           trackUpgradeSucceeded(tier, interval);
           onSubscriptionUpdate();
         } else {
@@ -995,7 +1013,11 @@ export function UsageSectionContent({
         }
       }
     } catch (err) {
-      setError('An error occurred. Please try again.');
+      setError(
+        isPendingCancelConflict(err)
+          ? RESUBSCRIBE_FIRST
+          : 'An error occurred. Please try again.',
+      );
     } finally {
       setIsLoading(false);
     }
@@ -1304,13 +1326,18 @@ export function UsageSectionContent({
                   <h3 className="text-lg font-semibold text-text-primary">
                     {currentPlanName}
                   </h3>
-                  {subscription?.current_period_end && (
+                  {renewalConfirmation ? (
+                    <p className="text-xs text-green-400">{renewalConfirmation}</p>
+                  ) : subscription?.current_period_end ? (
                     <p className="text-xs text-text-quaternary">
                       {isCancelingSubscription
-                        ? `Cancels on ${formatDate(subscription.current_period_end)}`
+                        ? yourPlanEndsOn(
+                            currentPlanName,
+                            formatDate(subscription.current_period_end),
+                          )
                         : `Renews ${formatDate(subscription.current_period_end)}`}
                     </p>
-                  )}
+                  ) : null}
                 </div>
               </div>
 
@@ -1331,15 +1358,11 @@ export function UsageSectionContent({
                       <button
                         key={option.id}
                         onClick={() => setSelectedPriceId(option.id)}
-                        disabled={isCancelingSubscription && !isCurrent}
                         className={cn(
                           'relative rounded-xl border-2 p-4 text-left transition-all',
                           isSelected
                             ? 'border-white/25 bg-white/[0.08]'
                             : 'border-bg-tertiary bg-bg-tertiary/50 hover:border-bg-quaternary',
-                          isCancelingSubscription &&
-                            !isCurrent &&
-                            'cursor-not-allowed opacity-50',
                         )}
                       >
                         {isAnnual && (
@@ -1376,12 +1399,10 @@ export function UsageSectionContent({
                 </div>
               )}
 
-              {isCancelingSubscription && subscription?.current_period_end && (
-                <p className="text-sm text-text-tertiary">
-                  You can reactivate your current plan now. Plan changes are available
-                  after {formatDate(subscription.current_period_end)}.
-                </p>
-              )}
+              {isCancelingSubscription &&
+                selectedPriceId !== subscription?.current_price_id && (
+                  <p className="text-sm text-text-tertiary">{RESUBSCRIBE_FIRST}</p>
+                )}
 
               {/* Features List */}
               <div className="space-y-2">
@@ -1412,9 +1433,7 @@ export function UsageSectionContent({
                   !selectedPriceId ||
                   (!isCancelingSubscription &&
                     (selectedOption?.is_active ||
-                      selectedOption?.id === subscription?.current_price_id)) ||
-                  (isCancelingSubscription &&
-                    selectedPriceId !== subscription?.current_price_id)
+                      selectedOption?.id === subscription?.current_price_id))
                 }
                 className={cn(
                   'w-full rounded-xl py-3 font-medium transition-colors',
@@ -1429,7 +1448,7 @@ export function UsageSectionContent({
                     Processing...
                   </span>
                 ) : isCancelingSubscription ? (
-                  'Reactivate Subscription'
+                  'Resubscribe'
                 ) : selectedOption?.is_active ||
                   selectedOption?.id === subscription?.current_price_id ? (
                   'Current Plan'

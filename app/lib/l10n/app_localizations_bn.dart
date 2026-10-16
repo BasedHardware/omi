@@ -13755,4 +13755,39 @@ class AppLocalizationsBn extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'কথা বলার প্রস্তুতি · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'আপনার $plan প্ল্যান $date এ শেষ হবে।';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'আপনার সুবিধা রাখতে এখনই পুনরায় সাবস্ক্রাইব করুন - $date পর্যন্ত কোনও চার্জ নেই।';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'আপনার $plan প্ল্যান $date এ নবায়ন হবে।';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'প্ল্যান বদলাতে আগে পুনরায় সাবস্ক্রাইব করুন।';
+
+  @override
+  String get noModelDownloadRequired =>
+      'আপনার ডিভাইসের নেটিভ স্পিচ ইঞ্জিন ব্যবহার করা হবে। কোন মডেল ডাউনলোড প্রয়োজন নেই।';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'আপনার ডিভাইসের নেটিভ স্পিচ ইঞ্জিন ব্যবহার করা হবে। কোন মডেল ডাউনলোড প্রয়োজন নেই।';
+
+  @override
+  String get activityNeedsAttention => 'মনোযোগ প্রয়োজন';
+
+  @override
+  String get activityRetryAll => 'সবগুলো আবার চেষ্টা করুন';
+
+  @override
+  String get attentionSummaryFailed => 'এই কথোপকথনের সারাংশ তৈরি করা যায়নি';
 }

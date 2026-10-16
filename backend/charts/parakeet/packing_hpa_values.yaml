@@ -1,0 +1,19 @@
+# Opt-in config-train step, AFTER the bounded-work image and adapter qualify.
+# Apply over the environment values. Admission stays 2/35; max stays 12.
+# The GPU threshold remains recorded for immediate legacy-scaler rollback.
+autoscaling:
+  minReplicas: 3
+  maxReplicas: 12
+  requestsPerPod: 2
+  targetGPUUtilization: 35
+  demand:
+    enabled: true
+    liveQueueAgeSeconds: 0.75
+    backfillQueueAgeSeconds: 30
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120

@@ -220,6 +220,13 @@ def _redis_patches(stack: ExitStack) -> None:
         name = getattr(module, '__name__', '') or ''
         if not (name == 'database' or name.startswith('database.') or name.startswith('utils')):
             continue
+        if name == 'database.redis_db':
+            # Lazy best-effort caches now construct bounded clients at call time.
+            # Keep those clients on the same cache-miss seam as the global client;
+            # the socket blocker below must continue to reject every real attempt.
+            stack.enter_context(
+                unittest.mock.patch.object(module, 'create_bounded_redis_client', return_value=_MissRedis())
+            )
         for attr, value in list(vars(module).items()):
             module_name = type(value).__module__ or ''
             if module_name.startswith('redis'):

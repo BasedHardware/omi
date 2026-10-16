@@ -13870,4 +13870,39 @@ class AppLocalizationsFr extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'Préparation de la parole · $percent %';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Votre forfait $plan se termine le $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Réabonnez-vous maintenant pour conserver vos avantages - pas de frais jusqu\'au $date.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Votre forfait $plan sera renouvelé le $date.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Réabonnez-vous d\'abord pour changer de forfait.';
+
+  @override
+  String get noModelDownloadRequired =>
+      'Le moteur de reconnaissance vocale natif de votre appareil sera utilisé. Aucun téléchargement de modèle requis.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Le moteur vocal natif de votre appareil sera utilisé. Aucun téléchargement de modèle requis.';
+
+  @override
+  String get activityNeedsAttention => 'Nécessite votre attention';
+
+  @override
+  String get activityRetryAll => 'Tout réessayer';
+
+  @override
+  String get attentionSummaryFailed => 'Impossible de résumer cette conversation';
 }

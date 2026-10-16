@@ -3,11 +3,12 @@
 from dataclasses import asdict
 import hashlib
 import math
+import logging
 import uuid
 
 from database.batch_pipeline_store import Store, Transaction
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from config.batch_pipeline import shared_live_enabled, scheduler_control_key
+from config.batch_pipeline import shared_live_enabled, scheduler_control_key, max_worker_attempts
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.control import read_control, activate, field, migrate_legacy
@@ -17,6 +18,7 @@ LEASE_SECONDS = 120.0
 RETRY_BACKOFF_CAP_SECONDS = 600
 MAX_ACTIVE_OWNERS = 1024
 MAX_VISITS = 128
+logger = logging.getLogger(__name__)
 
 
 def owner_key(owner_id: str) -> str:
@@ -69,6 +71,7 @@ class Scheduler:
         self.store = store
         self.metrics = metrics
         self.pool = pool
+        self.max_attempts = max_worker_attempts()
 
     def enqueue(self, item: WorkItem, now: float) -> bool:
         return self.store.run(lambda tx: self.enqueue_in_transaction(tx, item, now))
@@ -304,14 +307,47 @@ class Scheduler:
         def commit(tx):
             job = tx.get('jobs', segment_id)
             if not owns_lease(job, token, now):
-                return False
-            _defer(job, now, 'worker_failed')
+                return None
+            if job['attempt'] >= self.max_attempts:
+                # Serialize removal from the ordered pending set against merge
+                # and admission. No success/silence result or cursor is invented.
+                owner = tx.get('owners', job['owner_key'])
+                owner['revision'] = owner.get('revision', 0) + 1
+                job.update(
+                    state='quarantined',
+                    merge_pending=False,
+                    token='',
+                    lease_until=0.0,
+                    failure='worker_failed',
+                    quarantine_reason='worker_failed',
+                    quarantined_at=now,
+                    recovery_state='held',
+                )
+                job.pop('retry_started_at', None)
+                tx.put('owners', job['owner_key'], owner)
+            else:
+                _defer(job, now, 'worker_failed')
             tx.put('jobs', segment_id, job)
-            return job['state']
+            return job['state'], job['attempt']
 
         outcome = self.store.run(commit)
-        if outcome and self.metrics:
-            self.metrics.record('retry')
+        if outcome:
+            state, attempt = outcome
+            # Best effort AFTER the transaction/exception scope: telemetry may
+            # neither fail a sibling nor reveal a worker exception via handleError.
+            if self.metrics:
+                try:
+                    self.metrics.record('quarantined' if state == 'quarantined' else 'retry')
+                    if state == 'quarantined':
+                        self.metrics.record('recovery_held')
+                except Exception:
+                    pass
+            if state == 'quarantined':
+                try:
+                    logger.error('event=batch_quarantined reason=worker_failed attempt=%d recovery=held', attempt)
+                    logger.warning('event=batch_recovery outcome=held reason=handoff_not_implemented')
+                except Exception:
+                    pass
         return bool(outcome)
 
     def defer(self, segment_id: str, token: str, now: float, retry_after: float = 30) -> bool:

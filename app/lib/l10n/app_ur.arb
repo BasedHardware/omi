@@ -11636,5 +11636,20 @@
     "onDeviceMeterLineShort": "{percent}% استعمال ہوا · {reset}",
     "onDeviceMeterLineHours": "{percent}% استعمال ہوا · تقریباً {hours} گھنٹے ریکارڈنگ باقی · {reset}",
     "onDeviceGetMoreUsage": "مزید استعمال حاصل کریں",
-    "onDeviceGettingSpeechReady": "تقریر تیار ہو رہی ہے · {percent}%"
+    "onDeviceGettingSpeechReady": "تقریر تیار ہو رہی ہے · {percent}%",
+    "yourPlanEndsOn": "آپ کا {plan} پلان {date} کو ختم ہوگا۔",
+    "resubscribeNowNoChargeUntil": "اپنے فوائل کو برقرار رکھنے کے لیے اب دوبارہ رکنیت حاصل کریں - {date} تک کوئی چارج نہیں۔",
+    "yourPlanWillRenewOn": "آپ کا {plan} پلان {date} کو تجدید ہوگا۔",
+    "resubscribeFirstToChangePlans": "پلان بدلنے کے لیے پہلے دوبارہ رکنیت حاصل کریں۔",
+    "noModelDownloadRequired": "آپ کے ڈیوائس کے native speech engine کا استعمال کیا جائے گا۔ کوئی ماڈل ڈاؤن لوڈ درکار نہیں۔",
+    "@noModelDownloadRequired": {
+        "description": "Info about iOS native speech"
+    },
+    "nativeEngineNoDownload": "آپ کے ڈیوائس کے native speech engine کا استعمال کیا جائے گا۔ کوئی ماڈل ڈاؤن لوڈ درکار نہیں۔",
+    "@nativeEngineNoDownload": {
+        "description": "Description of iOS native speech recognition"
+    },
+    "activityNeedsAttention": "توجہ درکار ہے",
+    "activityRetryAll": "سب دوبارہ کوشش کریں",
+    "attentionSummaryFailed": "اس گفتگو کا خلاصہ نہیں بن سکا"
 }

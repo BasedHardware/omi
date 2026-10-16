@@ -13754,4 +13754,37 @@ class AppLocalizationsFa extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'آماده‌سازی گفتار · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'طرح $plan شما در $date به پایان می‌رسد.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'همین الآن مجددا مشترک شوید تا از مزایای خود محروم نشوید - تا $date هیچ هزینه‌ای نخواهید داشت.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'طرح $plan شما در $date تمدید می‌شود.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'برای تغییر طرح، ابتدا دوباره مشترک شوید.';
+
+  @override
+  String get noModelDownloadRequired => 'موتور گفتار بومی دستگاه شما استفاده خواهد شد. بدون دانلود مدل مورد نیاز.';
+
+  @override
+  String get nativeEngineNoDownload => 'موتور گفتار بومی دستگاه شما استفاده خواهد شد. بدون دانلود مدل مورد نیاز.';
+
+  @override
+  String get activityNeedsAttention => 'نیاز به توجه';
+
+  @override
+  String get activityRetryAll => 'تلاش دوباره برای همه';
+
+  @override
+  String get attentionSummaryFailed => 'خلاصه‌سازی این گفتگو ممکن نشد';
 }

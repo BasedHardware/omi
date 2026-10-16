@@ -4251,5 +4251,14 @@
     "onDeviceMeterLineShort": "{percent}% kullanıldı · {reset}",
     "onDeviceMeterLineHours": "{percent}% kullanıldı · yaklaşık {hours} saat kayıt kaldı · {reset}",
     "onDeviceGetMoreUsage": "Daha fazla kullanım alın",
-    "onDeviceGettingSpeechReady": "Konuşma hazırlanıyor · %{percent}"
+    "onDeviceGettingSpeechReady": "Konuşma hazırlanıyor · %{percent}",
+    "yourPlanEndsOn": "{plan} planınız {date} tarihinde sona erer.",
+    "resubscribeNowNoChargeUntil": "Avantajlarınızı korumak için şimdi yeniden abone olun - {date} tarihine kadar ücret yok.",
+    "yourPlanWillRenewOn": "{plan} planınız {date} tarihinde yenilenecek.",
+    "resubscribeFirstToChangePlans": "Plan değiştirmek için önce yeniden abone olun.",
+    "nativeEngineNoDownload": "Cihazınızın yerel konuşma motoru kullanılacak. Model indirmesi gerekli değil.",
+    "noModelDownloadRequired": "Cihazınızın yerel konuşma motoru kullanılacak. Model indirmesi gerekmiyor.",
+    "activityNeedsAttention": "İlgi gerekiyor",
+    "activityRetryAll": "Tümünü yeniden dene",
+    "attentionSummaryFailed": "Bu konuşma özetlenemedi"
 }

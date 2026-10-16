@@ -13770,4 +13770,38 @@ class AppLocalizationsId extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'Menyiapkan ucapan · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Paket $plan Anda berakhir pada $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Berlangganan lagi sekarang untuk mempertahankan manfaat Anda - tidak ada biaya hingga $date.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Paket $plan Anda akan diperpanjang pada $date.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Berlangganan lagi dulu untuk mengubah paket.';
+
+  @override
+  String get noModelDownloadRequired =>
+      'Mesin ucapan bawaan perangkat Anda akan digunakan. Tidak perlu mengunduh model.';
+
+  @override
+  String get nativeEngineNoDownload => 'Mesin suara asli perangkat Anda akan digunakan. Tidak perlu mengunduh model.';
+
+  @override
+  String get activityNeedsAttention => 'Perlu perhatian';
+
+  @override
+  String get activityRetryAll => 'Coba lagi semua';
+
+  @override
+  String get attentionSummaryFailed => 'Percakapan ini tidak dapat diringkas';
 }

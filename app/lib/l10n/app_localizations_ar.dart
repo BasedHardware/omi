@@ -13686,4 +13686,37 @@ class AppLocalizationsAr extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'جارٍ تجهيز الكلام · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'تنتهي خطة $plan في $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'أعد الاشتراك الآن للحفاظ على مزاياك - لن يتم تحصيل رسوم حتى $date.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'ستتجدد خطة $plan في $date.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'أعد الاشتراك أولاً لتغيير الخطط.';
+
+  @override
+  String get noModelDownloadRequired => 'سيتم استخدام محرك الكلام الأصلي لجهازك. لا حاجة لتنزيل نموذج.';
+
+  @override
+  String get nativeEngineNoDownload => 'سيتم استخدام محرك الكلام الأصلي لجهازك. لا يلزم تنزيل نموذج.';
+
+  @override
+  String get activityNeedsAttention => 'يحتاج إلى انتباه';
+
+  @override
+  String get activityRetryAll => 'إعادة محاولة الكل';
+
+  @override
+  String get attentionSummaryFailed => 'تعذّر تلخيص هذه المحادثة';
 }

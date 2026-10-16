@@ -4258,5 +4258,14 @@
     "onDeviceMeterLineShort": "{percent}% brugt · {reset}",
     "onDeviceMeterLineHours": "{percent}% brugt · cirka {hours} timers optagelse tilbage · {reset}",
     "onDeviceGetMoreUsage": "Få mere forbrug",
-    "onDeviceGettingSpeechReady": "Gør tale klar · {percent} %"
+    "onDeviceGettingSpeechReady": "Gør tale klar · {percent} %",
+    "yourPlanEndsOn": "Dit {plan}-abonnement slutter {date}.",
+    "resubscribeNowNoChargeUntil": "Gentilmeld dig nu for at beholde dine fordele - ingen opkrævning indtil {date}.",
+    "yourPlanWillRenewOn": "Dit {plan}-abonnement fornys {date}.",
+    "resubscribeFirstToChangePlans": "Gentilmelding først for at skifte abonnement.",
+    "nativeEngineNoDownload": "Din enheds indbyggede talemotor vil blive brugt. Ingen model-download påkrævet.",
+    "noModelDownloadRequired": "Din enheds indbyggede talegenkendelse vil blive brugt. Ingen model-download påkrævet.",
+    "activityNeedsAttention": "Kræver opmærksomhed",
+    "activityRetryAll": "Prøv alle igen",
+    "attentionSummaryFailed": "Samtalen kunne ikke opsummeres"
 }

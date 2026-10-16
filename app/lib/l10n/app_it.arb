@@ -4216,5 +4216,14 @@
     "onDeviceMeterLineShort": "{percent}% usato · {reset}",
     "onDeviceMeterLineHours": "{percent}% usato · restano circa {hours} ore di registrazione · {reset}",
     "onDeviceGetMoreUsage": "Ottieni più utilizzo",
-    "onDeviceGettingSpeechReady": "Preparazione del parlato · {percent}%"
+    "onDeviceGettingSpeechReady": "Preparazione del parlato · {percent}%",
+    "yourPlanEndsOn": "Il tuo piano {plan} termina il {date}.",
+    "resubscribeNowNoChargeUntil": "Riabbonati ora per mantenere i tuoi benefici - nessun addebito fino al {date}.",
+    "yourPlanWillRenewOn": "Il tuo piano {plan} si rinnoverà il {date}.",
+    "resubscribeFirstToChangePlans": "Riabbonati prima per cambiare piano.",
+    "nativeEngineNoDownload": "Verrà utilizzato il motore vocale nativo del tuo dispositivo. Non è necessario scaricare un modello.",
+    "noModelDownloadRequired": "Verrà utilizzato il motore vocale nativo del dispositivo. Non è richiesto il download di alcun modello.",
+    "activityNeedsAttention": "Richiede attenzione",
+    "activityRetryAll": "Riprova tutto",
+    "attentionSummaryFailed": "Impossibile riassumere questa conversazione"
 }

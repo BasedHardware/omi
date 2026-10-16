@@ -16,6 +16,7 @@ from routers.listen.runtime import ListenSessionRuntime
 from utils.executors import storage_executor
 from utils.listen_session_bootstrap import ListenConnectBase
 from utils.stt.streaming import STTService
+from utils.stt import language_policy
 
 _PRINCIPAL = 'allowed-runtime-principal'
 _TRANSCRIPT = 'synthetic runtime transcript'
@@ -172,6 +173,9 @@ def _install_runtime_fakes(monkeypatch, runtime, stt_sockets, blocking_calls):
     monkeypatch.setattr(runtime_module, 'PUSHER_ENABLED', False)
     monkeypatch.setattr(runtime_module, 'should_load_speech_profile', lambda **_kwargs: False)
     monkeypatch.setattr(runtime_module, 'should_enable_speaker_identification', lambda **_kwargs: False)
+    # This seam verifies capture/persistence, with synthetic STT. Language
+    # inference has its own suite; do not cold-load its models in a worker.
+    monkeypatch.setattr(language_policy, 'classify_output', lambda *_args: ('in_profile', 'en'))
     monkeypatch.setattr(receiver_module, 'should_initialize_vad_gate', lambda **_kwargs: False)
     monkeypatch.setattr(ListenReceiver, '_create_stt_socket', create_stt_socket)
     monkeypatch.setattr(runtime, '_build_components', build_components)

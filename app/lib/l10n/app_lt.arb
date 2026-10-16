@@ -4216,5 +4216,14 @@
     "onDeviceMeterLineShort": "{percent}% panaudota · {reset}",
     "onDeviceMeterLineHours": "{percent}% panaudota · liko apie {hours} val. įrašo · {reset}",
     "onDeviceGetMoreUsage": "Gaukite daugiau naudojimo",
-    "onDeviceGettingSpeechReady": "Ruošiama kalba · {percent}%"
+    "onDeviceGettingSpeechReady": "Ruošiama kalba · {percent}%",
+    "nativeEngineNoDownload": "Bus naudojamas jūsų įrenginio vietinis kalbos variklis. Modelio atsisiuntimas nereikalingas.",
+    "yourPlanWillRenewOn": "Jūsų {plan} planas bus atnaujintas {date}.",
+    "yourPlanEndsOn": "Jūsų {plan} planas baigiasi {date}.",
+    "resubscribeNowNoChargeUntil": "Persiregistruokite dabar, kad išsaugotumėte privalumus - nėra mokesčio iki {date}.",
+    "resubscribeFirstToChangePlans": "Norėdami pakeisti planą, pirmiausia užsiprenumeruokite iš naujo.",
+    "noModelDownloadRequired": "Bus naudojamas jūsų įrenginio kalbos variklis. Modelio atsisiuntimas nereikalingas.",
+    "activityNeedsAttention": "Reikia dėmesio",
+    "activityRetryAll": "Bandyti visus iš naujo",
+    "attentionSummaryFailed": "Nepavyko apibendrinti šio pokalbio"
 }

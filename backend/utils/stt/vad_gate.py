@@ -12,6 +12,8 @@ Modes (VAD_GATE_MODE env var):
 """
 
 import audioop
+from utils.stt_cap_dispatch import suppress_socket_audio
+
 import logging
 import os
 import threading
@@ -794,6 +796,8 @@ class GatedSTTSocket(STTSocket):
 
     def send(self, data: bytes, wall_time: Optional[float] = None, start_sample: Optional[int] = None) -> bool:
         """Send audio through VAD gate and report whether it was accepted."""
+        if suppress_socket_audio(self._conn, data):
+            return True
         if self.is_connection_dead:
             return False
         if self._gate is None:
@@ -876,6 +880,8 @@ class GatedSTTSocket(STTSocket):
             commit()
 
     def send_admitted_audio(self, data: bytes, spans: Any) -> bool:
+        if suppress_socket_audio(self._conn, data):
+            return True
         from utils.stt.soniox_idle import unaccepted_onset
 
         data, spans = unaccepted_onset(data, spans, self._send_tracker)

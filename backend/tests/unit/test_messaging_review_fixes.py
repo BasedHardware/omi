@@ -23,6 +23,9 @@ def test_optional_load_failure_returns_plain_window(monkeypatch, failure):
     store = MagicMock()
     store.assert_access = MagicMock()
     store.load.side_effect = failure
+    # Preparation now starts digest IO concurrently; keep this regression hermetic
+    # while testing only the continuity-load failure.
+    monkeypatch.setattr(context, 'recent_activity', lambda *args: [])
     notices = []
     monkeypatch.setattr(context, 'record_fallback', lambda **kw: notices.append(kw))
     assert asyncio.run(context.prepare('u', 's', ['m'], store=store)) == {'summary': '', 'digest': ''}

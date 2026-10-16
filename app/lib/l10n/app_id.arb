@@ -4251,5 +4251,14 @@
     "onDeviceMeterLineShort": "{percent}% terpakai · {reset}",
     "onDeviceMeterLineHours": "{percent}% terpakai · sekitar {hours} jam rekaman tersisa · {reset}",
     "onDeviceGetMoreUsage": "Dapatkan lebih banyak penggunaan",
-    "onDeviceGettingSpeechReady": "Menyiapkan ucapan · {percent}%"
+    "onDeviceGettingSpeechReady": "Menyiapkan ucapan · {percent}%",
+    "yourPlanEndsOn": "Paket {plan} Anda berakhir pada {date}.",
+    "resubscribeNowNoChargeUntil": "Berlangganan lagi sekarang untuk mempertahankan manfaat Anda - tidak ada biaya hingga {date}.",
+    "yourPlanWillRenewOn": "Paket {plan} Anda akan diperpanjang pada {date}.",
+    "resubscribeFirstToChangePlans": "Berlangganan lagi dulu untuk mengubah paket.",
+    "nativeEngineNoDownload": "Mesin suara asli perangkat Anda akan digunakan. Tidak perlu mengunduh model.",
+    "noModelDownloadRequired": "Mesin ucapan bawaan perangkat Anda akan digunakan. Tidak perlu mengunduh model.",
+    "activityNeedsAttention": "Perlu perhatian",
+    "activityRetryAll": "Coba lagi semua",
+    "attentionSummaryFailed": "Percakapan ini tidak dapat diringkas"
 }

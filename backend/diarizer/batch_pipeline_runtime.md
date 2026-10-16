@@ -138,6 +138,43 @@ audio seconds, CUDA allocated/reserved baselines and peaks in bytes, process
 lifetime host peak, and cgroup lifetime peak when the kernel exports it. CUDA
 peaks reset after models load and before decode/VAD/ASR/diarization/persistence;
 the receipt is emitted after CUDA synchronization. Host peaks include startup.
+This receipt also runs when individual items fail; it is not an item-success
+receipt. Nonfatal item failures log `event=batch_worker_failed` with only
+`error_class`, a bounded `stage` and `segment_id`, once per item per flight,
+even without an `on_failure` callback. Repository validation raises
+`BatchValidationError` (a `ValueError`) with a closed `reason`: `word_shape`,
+`word_clock`, `word_sequence`, `vad_nonfinite`, `vad_order`, `vad_bounds`,
+`empty_asr`, or `no_owned_words`. Other exceptions use `unclassified`; never
+classify provider messages by printing them. Numeric `samples`, `vad_spans`,
+`windows`, `asr_words` and `owned_words` describe the failed shape; -1 means
+the operation did not return that count. ASR counts include validated records
+and context repeats; an invalid hypothesis fails before contributing its count.
+Buffer only those strings/integers and emit after
+the item exception handlers exit, so handler diagnostics cannot chain the worker
+exception. Logging failures are swallowed without another log attempt; healthy
+sibling results still return. Never add exception messages, traceback
+locals, transcript/audio, object URIs or lease/admission tokens to this event.
+Pyannote uses frame-centered VAD intervals: crop their end to the actual input
+duration, reject malformed or wholly outside intervals, and keep every in-buffer
+speech interval. Rebase ASR windows from the integer sample index used to slice
+them. Before failing empty ASR on VAD speech or an ownership-empty hypothesis,
+the Parakeet adapter makes one single-item ASR call over the full captured unit,
+with 2s synthetic silence on each edge and an 8s minimum padded length. The
+padded input must fit both 120s and the configured padded budget; otherwise it
+remains held whole for fenced legacy recovery. No real samples are discarded.
+Validated retry clocks are rebased by 2s and intersected with the real capture;
+words whose midpoint is in synthetic padding are excluded. Original VAD speech
+accounting, diarization input, privacy checks and persistence are unchanged.
+`event=batch_asr_recovery` contains only segment ID, original closed empty reason,
+sample count, original ASR count, recovered word count, original window count,
+minimum/maximum window sample lengths, speech sample count and recovered/empty
+outcome. It and the shared
+fallback metric emit outside exception handlers; observability failure never
+discards healthy results. A retry exception is labeled `stage=asr_recovery` and
+fatal CUDA still fences the entire chain. Remaining empties never become silence
+or bypass accepted content claims. The scheduler's attempt ceiling and the
+separate default-off, owner-allowlisted legacy path are documented in
+[serving settings](../docs/batch-pipeline-serving.md).
 For qualification run a synthetic one-hour unit with the intended model batch
 size and retain the GPU model/VRAM, exact image digest/config and receipt.
 Set the chart **host RAM** limit from the larger measured process/container peak
@@ -175,3 +212,13 @@ Staging uses resumable GCS uploads (including short captures), 8MiB chunks,
 The stream refuses new chunks after 15 minutes. The deletion outbox keeps the
 unique object name for 30 minutes, covering the last request/retry plus margin.
 Retries retain the registered create-only object name and encrypted stream.
+
+
+## Per-item quarantine
+
+Explicit failed items stop retrying at `BATCH_PIPELINE_MAX_ATTEMPTS` (default 5).
+The scheduler records a terminal failure and removes it from ordered pending
+work; it never reports successful silence. Successful siblings retain their
+assignment receipts, while later uploads may advance. Legacy recovery is held,
+not dispatched: see [terminal quarantine and the visible gap](../docs/batch-pipeline-worker.md#terminal-quarantine-and-the-visible-gap)
+for client status, retained audio/usage obligations and the fenced recovery design.

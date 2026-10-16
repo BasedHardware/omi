@@ -4216,5 +4216,14 @@
     "onDeviceMeterLineShort": "{percent}% مستخدم · {reset}",
     "onDeviceMeterLineHours": "{percent}% مستخدم · حوالي {hours} ساعات تسجيل متبقية · {reset}",
     "onDeviceGetMoreUsage": "احصل على المزيد من الاستخدام",
-    "onDeviceGettingSpeechReady": "جارٍ تجهيز الكلام · {percent}%"
+    "onDeviceGettingSpeechReady": "جارٍ تجهيز الكلام · {percent}%",
+    "yourPlanEndsOn": "تنتهي خطة {plan} في {date}.",
+    "resubscribeNowNoChargeUntil": "أعد الاشتراك الآن للحفاظ على مزاياك - لن يتم تحصيل رسوم حتى {date}.",
+    "yourPlanWillRenewOn": "ستتجدد خطة {plan} في {date}.",
+    "resubscribeFirstToChangePlans": "أعد الاشتراك أولاً لتغيير الخطط.",
+    "noModelDownloadRequired": "سيتم استخدام محرك الكلام الأصلي لجهازك. لا حاجة لتنزيل نموذج.",
+    "nativeEngineNoDownload": "سيتم استخدام محرك الكلام الأصلي لجهازك. لا يلزم تنزيل نموذج.",
+    "activityNeedsAttention": "يحتاج إلى انتباه",
+    "activityRetryAll": "إعادة محاولة الكل",
+    "attentionSummaryFailed": "تعذّر تلخيص هذه المحادثة"
 }

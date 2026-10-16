@@ -11636,5 +11636,20 @@
     "onDeviceMeterLineShort": "{percent}% ಬಳಕೆಯಾಗಿದೆ · {reset}",
     "onDeviceMeterLineHours": "{percent}% ಬಳಕೆಯಾಗಿದೆ · ಸುಮಾರು {hours} ಗಂಟೆ ರೆಕಾರ್ಡಿಂಗ್ ಉಳಿದಿದೆ · {reset}",
     "onDeviceGetMoreUsage": "ಹೆಚ್ಚಿನ ಬಳಕೆಯನ್ನು ಪಡೆಯಿರಿ",
-    "onDeviceGettingSpeechReady": "ಮಾತನ್ನು ಸಿದ್ಧಪಡಿಸಲಾಗುತ್ತಿದೆ · {percent}%"
+    "onDeviceGettingSpeechReady": "ಮಾತನ್ನು ಸಿದ್ಧಪಡಿಸಲಾಗುತ್ತಿದೆ · {percent}%",
+    "yourPlanEndsOn": "ನಿಮ್ಮ {plan} ಯೋಜನೆ {date} ರಂದು ಕೊನೆಗೊಳ್ಳುತ್ತದೆ.",
+    "resubscribeNowNoChargeUntil": "ನಿಮ್ಮ ಪ್ರಯೋಜನಗಳನ್ನು ಮುಂದುವರಿಸಲು ಈಗ ಮರುಸದಸ್ಯಗೊಳಿಸಿ - {date} ವರೆಗೆ ಯಾವುದೇ ಶುಲ್ಕ ಇಲ್ಲ.",
+    "yourPlanWillRenewOn": "ನಿಮ್ಮ {plan} ಯೋಜನೆ {date} ರಂದು ನವೀಕರಿಸಲಾಗುತ್ತದೆ.",
+    "resubscribeFirstToChangePlans": "ಯೋಜನೆ ಬದಲಾಯಿಸಲು ಮೊದಲು ಮರುಸದಸ್ಯರಾಗಿ.",
+    "noModelDownloadRequired": "ನಿಮ್ಮ ಸಾಧನದ ಸ್ಥಳೀಯ ಭಾಷಣ ಇಂಜಿನ್ ಬಳಸಲಾಗುವುದು. ಯಾವುದೇ ಮಾದರಿ ಡೌನ್‌ಲೋಡ್ ಅಗತ್ಯವಿಲ್ಲ.",
+    "@noModelDownloadRequired": {
+        "description": "Info about iOS native speech"
+    },
+    "nativeEngineNoDownload": "ನಿಮ್ಮ ಸಾಧನದ ಸ್ಥಳೀಯ ಭಾಷಣ ಇಂಜಿನ್ ಬಳಸಲಾಗುವುದು. ಯಾವುದೇ ಮಾದರಿ ಡೌನ್‌ಲೋಡ್ ಅಗತ್ಯವಿಲ್ಲ.",
+    "@nativeEngineNoDownload": {
+        "description": "Description of iOS native speech recognition"
+    },
+    "activityNeedsAttention": "ಗಮನ ಅಗತ್ಯವಿದೆ",
+    "activityRetryAll": "ಎಲ್ಲವನ್ನೂ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ",
+    "attentionSummaryFailed": "ಈ ಸಂಭಾಷಣೆಯ ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ"
 }

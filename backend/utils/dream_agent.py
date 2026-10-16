@@ -1,6 +1,7 @@
 """One owner session, two independent verifiers, one reversible effect boundary."""
 
 import asyncio
+from datetime import datetime, timezone
 from collections import Counter
 from dataclasses import replace
 from functools import partial
@@ -12,6 +13,7 @@ from config.dream_agent import (
     auto_apply_kinds,
     concurrency,
     enabled,
+    may_be_eligible,
     on_demand_enabled,
     PASS_TIMEOUT_SECONDS,
     DRAIN_TIMEOUT_SECONDS,
@@ -23,13 +25,30 @@ from models.agent_edit import HarnessEdit
 from utils.agent_capabilities import tools as dream_tools
 from utils.agent_capabilities import verifiers
 from utils import dream_review_policy, dream_capacity, dream_harness_transport, dream_seed, dream_verify
-from utils.dream_cost import conservative_attempt_micro, verification_reserve_tokens
+from utils.dream_cost import (
+    conservative_attempt_micro,
+    minute_burndown_tokens,
+    price_weighted_tokens,
+    verification_reserve_tokens,
+)
 from utils.agent_capabilities.search import OwnerSearch
 from utils.agent_capabilities.session import Session
 from utils.dream_instructions import INSTRUCTIONS
 from utils.dream_metrics import record_pass, error_code, record_reclaimed
 from database.dream_effect_fence import ACTIVE_RUN
 from utils.executors import db_executor, run_blocking
+
+TAIL_BUDGET_NOTICE_THRESHOLD = 0.20
+MINUTE_HEADROOM_RETRIES = 3
+PROVIDER_STOP_CODES = frozenset({'dream_gateway_rejected', 'dream_gateway_failure'})
+# A billed but unusable model reply late in a pass; staged work is still verified.
+MODEL_OUTPUT_STOP_CODES = frozenset({'dream_response_truncated', 'dream_invalid_tool_calls'})
+BUDGET_STOP_CODES = frozenset(
+    {
+        'dream_input_token_budget',
+        'dream_daily_budget',
+    }
+)
 
 
 def _cheap_turn(staged, invoke):
@@ -69,6 +88,7 @@ async def run_session(
         'status': 'failed',
         'tokens': 0,
         'accounted_tokens': 0,
+        'price_weighted_tokens': 0,
         'cached_tokens': 0,
         'cache_unreported_tokens': 0,
         'uncached_tokens': 0,
@@ -105,7 +125,30 @@ async def run_session(
     async def usage(result):
         report['tokens'] += result.tokens
         report['accounted_tokens'] += result.tokens if result.accounted_tokens is None else result.accounted_tokens
-        session.accounted_model_tokens = report['accounted_tokens']
+        weighted = getattr(result, 'price_weighted_tokens', None)
+        if weighted is None:
+            if result.prompt_tokens + result.completion_tokens == result.tokens:
+                weighted = price_weighted_tokens(
+                    dream_harness_transport.DREAM_PROVIDER,
+                    dream_harness_transport.DREAM_MODEL,
+                    prompt_tokens=result.prompt_tokens,
+                    cached_tokens=result.cached_tokens,
+                    completion_tokens=result.completion_tokens,
+                    cache_reported=(
+                        result.cached_tokens is not None and getattr(result, 'cache_unreported_tokens', 0) == 0
+                    ),
+                )
+            else:
+                weighted = result.tokens
+            weighted += max(
+                0,
+                (result.tokens if result.accounted_tokens is None else result.accounted_tokens) - result.tokens,
+            )
+        if type(weighted) is not int or weighted < 0:
+            raise ValueError('dream_invalid_usage')
+        result.price_weighted_tokens = weighted
+        report['price_weighted_tokens'] += weighted
+        session.accounted_model_tokens = report['price_weighted_tokens']
         if result.cached_tokens is None:
             report['cache_unreported_tokens'] += result.prompt_tokens
         else:
@@ -125,11 +168,34 @@ async def run_session(
         if lease is not None:
             await run_blocking(db_executor, dream_turns.settle, uid, lease['run_id'], result)
 
-    main_history = {'prompt_tokens': None, 'messages': 0}
+    main_history = {'prompt_tokens': None, 'messages': 0, 'cached_tokens': None}
+    budget_notice_sent = False
 
     async def invoke(lane, mount, messages):
+        nonlocal budget_notice_sent
         await active()
-        remaining = limits.tokens - report['accounted_tokens'] - session.counters['search_embedding_token_upper_bound']
+        remaining = (
+            limits.tokens - report['price_weighted_tokens'] - session.counters['search_embedding_token_upper_bound']
+        )
+        if (
+            lane == dream_harness_transport.MAIN_LANE
+            and not budget_notice_sent
+            and limits.tokens > 0
+            and remaining <= limits.tokens * TAIL_BUDGET_NOTICE_THRESHOLD
+        ):
+            remaining_percent = max(0, min(100, int(100 * remaining / limits.tokens)))
+            notice = (
+                f"BUDGET NOTICE: about {remaining_percent}% of this pass's budget remains. "
+                'Stage your strongest findings now with propose_* (or finish if there is nothing worth '
+                'proposing); avoid new broad searches.'
+            )
+            if messages and messages[-1].get('role') == 'tool' and isinstance(messages[-1].get('content'), str):
+                # Gemini rejects free text beside functionResponse parts in one user turn, so the
+                # notice rides inside the latest tool result instead of a separate message.
+                messages[-1] = {**messages[-1], 'content': messages[-1]['content'] + '\n\n' + notice}
+            else:
+                messages.append({'role': 'user', 'content': notice})
+            budget_notice_sent = True
         mount = replace(mount, budget=replace(mount.budget, tokens=min(mount.budget.tokens or 0, remaining)))
         if mount.budget.tokens is None or mount.budget.tokens < 1024:
             raise ValueError('dream_input_token_budget')
@@ -140,6 +206,7 @@ async def run_session(
         )
         prior = main_history['prompt_tokens'] if lane == dream_harness_transport.MAIN_LANE else None
         prior_count = main_history['messages'] if lane == dream_harness_transport.MAIN_LANE else 0
+        cached_estimate = main_history['cached_tokens'] if lane == dream_harness_transport.MAIN_LANE else None
         if type(prior_count) is not int:
             prior_count = 0
         estimate, completion_room = dream_harness_transport.attempt_room(
@@ -147,20 +214,51 @@ async def run_session(
             mount,
             prior_prompt_tokens=prior,
             prior_message_count=prior_count,
+            cached_tokens_estimate=cached_estimate,
             completion_limit=completion,
         )
-        reserve = estimate + completion_room
+        # The shared minute ceiling counts reserved-capacity burndown (cached input 0.1, output 5x), not raw
+        # tokens: counting every resent cached prefix in full stopped fast passes after a few minutes.
+        reserve = minute_burndown_tokens(
+            'gemini',
+            'gemini-3.8-flash',
+            weighted_tokens=price_weighted_tokens(
+                'gemini',
+                'gemini-3.8-flash',
+                prompt_tokens=estimate,
+                cached_tokens=(
+                    min(cached_estimate, estimate) if type(cached_estimate) is int and cached_estimate >= 0 else None
+                ),
+                completion_tokens=completion_room,
+            ),
+            completion_tokens=completion_room,
+            prompt_tokens=estimate,
+        )
         micro, price_status = conservative_attempt_micro('gemini', 'gemini-3.8-flash', estimate, completion_room)
         if lease is not None:
-            await run_blocking(
-                db_executor,
-                dream_turns.reserve,
-                uid,
-                lease['run_id'],
-                reserve,
-                caps,
-                cost_micro_usd=micro if price_status == 'priced' else None,
-            )
+            for attempt in range(MINUTE_HEADROOM_RETRIES + 1):
+                try:
+                    await run_blocking(
+                        db_executor,
+                        dream_turns.reserve,
+                        uid,
+                        lease['run_id'],
+                        reserve,
+                        caps,
+                        cost_micro_usd=micro if price_status == 'priced' else None,
+                    )
+                    break
+                except ValueError as exc:
+                    # A full minute pauses the pass until the next minute instead of discarding it.
+                    pause = 61 - datetime.now(timezone.utc).second
+                    if (
+                        str(exc) != 'dream_minute_headroom'
+                        or attempt == MINUTE_HEADROOM_RETRIES
+                        or asyncio.get_running_loop().time() + pause + 60 > deadline
+                    ):
+                        raise
+                    await asyncio.sleep(pause)
+                    await active()
         report['model_lanes'].append(lane)
         sink = {}
         try:
@@ -170,6 +268,11 @@ async def run_session(
                 if lane == dream_harness_transport.MAIN_LANE and result.prompt_tokens:
                     main_history['prompt_tokens'] = result.prompt_tokens
                     main_history['messages'] = len(messages)
+                    main_history['cached_tokens'] = (
+                        result.cached_tokens
+                        if result.cached_tokens is not None and getattr(result, 'cache_unreported_tokens', 0) == 0
+                        else None
+                    )
                 return result
             result = await dream_harness_transport.model_turn(
                 uid,
@@ -185,10 +288,16 @@ async def run_session(
                 usage_sink=sink,
                 prior_prompt_tokens=prior,
                 prior_message_count=prior_count,
+                cached_tokens_estimate=cached_estimate,
             )
             if lane == dream_harness_transport.MAIN_LANE and result.prompt_tokens:
                 main_history['prompt_tokens'] = result.prompt_tokens
                 main_history['messages'] = len(messages)
+                main_history['cached_tokens'] = (
+                    result.cached_tokens
+                    if result.cached_tokens is not None and result.cache_unreported_tokens == 0
+                    else None
+                )
             return result
         finally:
             if lane == dream_harness_transport.VERIFY_LANE and sink.get('transport_complete'):
@@ -204,6 +313,7 @@ async def run_session(
     try:
         async with asyncio.timeout(timeout_seconds):
             await active()
+            budget_stop_without_staged_work = False
             try:
                 if bootstrap_tools is not None:
                     await session.execute(bootstrap_tools)
@@ -215,11 +325,26 @@ async def run_session(
                     )
                     report['stop_reason'] = result.reason
             except Exception as exc:
-                # Already staged work survives model/budget exhaustion. The live
-                # kill/lease boundary is rechecked before verification and effects.
-                report['stop_reason'] = error_code(exc) or type(exc).__name__
-                if not session.staged:
+                stop_code = error_code(exc)
+                provider_stop = bool(session.staged) and (
+                    (
+                        type(exc) in (dream_harness_transport.PreTokenFailure, RuntimeError)
+                        and str(exc) in PROVIDER_STOP_CODES
+                    )
+                    or stop_code in MODEL_OUTPUT_STOP_CODES
+                )
+                if provider_stop:
+                    # A late provider failure must not discard work already staged this pass.
+                    stop_code = stop_code or str(exc)
+                elif stop_code not in BUDGET_STOP_CODES:
                     raise
+                # Budget exhaustion is a normal terminal outcome even when it
+                # leaves nothing to verify. Staged proposals still cross the
+                # usual independent-verification boundary below.
+                report['stop_reason'] = stop_code
+                budget_stop_without_staged_work = not session.staged
+                if budget_stop_without_staged_work:
+                    report.update(status='complete', notes='', summary='')
             await active()
             staged = list(session.staged.values())
             verification_telemetry = {}
@@ -231,17 +356,22 @@ async def run_session(
                 verification_reserve_tokens(staged, completion_tokens=limits.verifier_completion_tokens),
                 8 * 24000,
             )
-            verify_budget = min(verify_need, max(0, limits.tokens - report['accounted_tokens']))
-            support, calls = await dream_verify.verify(
-                staged,
-                partial(invoke, dream_harness_transport.VERIFY_LANE),
-                tokens=verify_budget,
-                deadline_seconds=max(0, deadline - asyncio.get_running_loop().time() - min(60, timeout_seconds / 10)),
-                verifier_seconds=limits.verifier_seconds,
-                completion_tokens=limits.verifier_completion_tokens,
-                telemetry=verification_telemetry,
-                cheap_turn=_cheap_turn(staged, invoke),
-            )
+            verify_budget = min(verify_need, max(0, limits.tokens - report['price_weighted_tokens']))
+            if budget_stop_without_staged_work:
+                support, calls = {}, 0
+            else:
+                support, calls = await dream_verify.verify(
+                    staged,
+                    partial(invoke, dream_harness_transport.VERIFY_LANE),
+                    tokens=verify_budget,
+                    deadline_seconds=max(
+                        0, deadline - asyncio.get_running_loop().time() - min(60, timeout_seconds / 10)
+                    ),
+                    verifier_seconds=limits.verifier_seconds,
+                    completion_tokens=limits.verifier_completion_tokens,
+                    telemetry=verification_telemetry,
+                    cheap_turn=_cheap_turn(staged, invoke),
+                )
             report['verifier_calls'] = calls
             report['verifier_transport_responses'] = max(
                 report.get('verifier_transport_responses', 0), verification_telemetry.get('transport_responses', 0)
@@ -348,6 +478,7 @@ async def run_session(
         if isinstance(exc, dream_harness_transport.CapacityWait) or str(exc) == 'dream_minute_headroom':
             report.update(status='waiting', reason='reserved_capacity')
     report['accounted_tokens'] += session.counters['search_embedding_token_upper_bound']
+    report['price_weighted_tokens'] += session.counters['search_embedding_token_upper_bound']
     report.update(
         tool_counts={key[5:]: count for key, count in session.counters.items() if key.startswith('tool:')},
         turns=len([lane for lane in report['model_lanes'] if lane == dream_harness_transport.MAIN_LANE]),
@@ -382,6 +513,14 @@ async def run_pass(
     caps = caps or Caps.from_env()
     if bootstrap_tools is not None and not canary:
         raise ValueError('dream_bootstrap_requires_synthetic_canary')
+    # Reject stale queue entries before capacity waits or owner-data loading.
+    # Synthetic canaries have separate, authoritative admission in acquire().
+    if not canary and not may_be_eligible(uid):
+        report = {'status': 'not_admitted', 'reason': 'ineligible'}
+        record_pass(report)
+        if not dry_run:
+            await run_blocking(db_executor, dream_scheduler.remove_due, uid)
+        return report
     mode, allowlisted = admission_for(uid)
     slot = (
         await dream_capacity.claim(
@@ -400,8 +539,8 @@ async def run_pass(
         seed, records, dirty, limits = await run_blocking(db_executor, dream_seed.load, uid, caps)
         limits = replace(
             limits,
-            completion_tokens=min(limits.completion_tokens, caps.completion_tokens),
-            verifier_completion_tokens=min(limits.verifier_completion_tokens, caps.completion_tokens),
+            completion_tokens=caps.completion_tokens,
+            verifier_completion_tokens=min(limits.verifier_completion_tokens, caps.verifier_completion_tokens),
         )
         caps = replace(caps, tokens=limits.tokens)
         if not dry_run:

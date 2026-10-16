@@ -4216,5 +4216,14 @@
     "onDeviceMeterLineShort": "{percent}% utilitzat · {reset}",
     "onDeviceMeterLineHours": "{percent}% utilitzat · queden unes {hours} hores de gravació · {reset}",
     "onDeviceGetMoreUsage": "Aconsegueix més ús",
-    "onDeviceGettingSpeechReady": "Preparant la parla · {percent}%"
+    "onDeviceGettingSpeechReady": "Preparant la parla · {percent}%",
+    "yourPlanEndsOn": "El vostre pla {plan} acaba el {date}.",
+    "resubscribeNowNoChargeUntil": "Torna a subscriure't ara per mantenir els teus beneficis - sense càrrec fins {date}.",
+    "yourPlanWillRenewOn": "El vostre pla {plan} es renovarà el {date}.",
+    "resubscribeFirstToChangePlans": "Torneu a subscriure-us primer per canviar de pla.",
+    "noModelDownloadRequired": "S'usarà el motor de veu natiu del dispositiu. No cal descarregar cap model.",
+    "nativeEngineNoDownload": "Sutilitzarà el motor de veu natiu del teu dispositiu. No cal descarregar cap model.",
+    "activityNeedsAttention": "Cal atenció",
+    "activityRetryAll": "Torna-ho a provar tot",
+    "attentionSummaryFailed": "No s'ha pogut resumir aquesta conversa"
 }

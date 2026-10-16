@@ -68,7 +68,16 @@ class QueueMetrics:
         self.refreshed_at.labels(*self.scope).set(now)
 
     def record(self, event: str, *, wait_seconds: float | None = None) -> None:
-        if event not in {'leased', 'completed', 'retry', 'lease_expired', 'dead', 'committed'}:
+        if event not in {
+            'leased',
+            'completed',
+            'retry',
+            'lease_expired',
+            'dead',
+            'committed',
+            'quarantined',
+            'recovery_held',
+        }:
             raise ValueError('metric event must be a static worker transition')
         self.events.labels(event).inc()
         if event == 'leased' and wait_seconds is not None:

@@ -11636,5 +11636,20 @@
     "onDeviceMeterLineShort": "{percent}% בשימוש · {reset}",
     "onDeviceMeterLineHours": "{percent}% בשימוש · נותרו כ-{hours} שעות הקלטה · {reset}",
     "onDeviceGetMoreUsage": "קבלו עוד שימוש",
-    "onDeviceGettingSpeechReady": "מכין את הדיבור · {percent}%"
+    "onDeviceGettingSpeechReady": "מכין את הדיבור · {percent}%",
+    "yourPlanEndsOn": "תוכנית {plan} שלך מסתיימת ב-{date}.",
+    "resubscribeNowNoChargeUntil": "הירשם מחדש כעת כדי לשמור על ההטבות שלך - לא תחויב עד {date}.",
+    "yourPlanWillRenewOn": "תוכנית {plan} שלך תתחדש ב-{date}.",
+    "resubscribeFirstToChangePlans": "הירשמו מחדש קודם כדי לשנות תוכנית.",
+    "noModelDownloadRequired": "מנוע הדיבור המקומי של המכשיר שלך יהיה בשימוש. הורדת דגם אינה נדרשת.",
+    "@noModelDownloadRequired": {
+        "description": "Info about iOS native speech"
+    },
+    "nativeEngineNoDownload": "מנוע הדיבור המקומי של המכשיר שלך יהיה בשימוש. הורדת דגם אינה נדרשת.",
+    "@nativeEngineNoDownload": {
+        "description": "Description of iOS native speech recognition"
+    },
+    "activityNeedsAttention": "דורש תשומת לב",
+    "activityRetryAll": "נסה הכול שוב",
+    "attentionSummaryFailed": "לא ניתן היה לסכם את השיחה הזו"
 }

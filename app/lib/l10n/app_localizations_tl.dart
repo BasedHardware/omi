@@ -13870,4 +13870,39 @@ class AppLocalizationsTl extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'Inihahanda ang pananalita · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Magtatapos ang iyong $plan plan sa $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Mag-subscribe muli upang mapanatili ang iyong mga benepisyo - walang bayad hanggang $date.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Mare-renew ang iyong $plan plan sa $date.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Mag-subscribe muna ulit para magpalit ng plan.';
+
+  @override
+  String get noModelDownloadRequired =>
+      'Ang native speech engine ng iyong device ay gagamitin. Walang model download na kailangan.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Ang native speech engine ng iyong device ay gagamitin. Walang model download na kailangan.';
+
+  @override
+  String get activityNeedsAttention => 'Kailangang tingnan';
+
+  @override
+  String get activityRetryAll => 'Subukan muli lahat';
+
+  @override
+  String get attentionSummaryFailed => 'Hindi ma-summarize ang usapang ito';
 }

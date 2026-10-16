@@ -13775,4 +13775,37 @@ class AppLocalizationsTr extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'Konuşma hazırlanıyor · %$percent';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return '$plan planınız $date tarihinde sona erer.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Avantajlarınızı korumak için şimdi yeniden abone olun - $date tarihine kadar ücret yok.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return '$plan planınız $date tarihinde yenilenecek.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Plan değiştirmek için önce yeniden abone olun.';
+
+  @override
+  String get noModelDownloadRequired => 'Cihazınızın yerel konuşma motoru kullanılacak. Model indirmesi gerekmiyor.';
+
+  @override
+  String get nativeEngineNoDownload => 'Cihazınızın yerel konuşma motoru kullanılacak. Model indirmesi gerekli değil.';
+
+  @override
+  String get activityNeedsAttention => 'İlgi gerekiyor';
+
+  @override
+  String get activityRetryAll => 'Tümünü yeniden dene';
+
+  @override
+  String get attentionSummaryFailed => 'Bu konuşma özetlenemedi';
 }

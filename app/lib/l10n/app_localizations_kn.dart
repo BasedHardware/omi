@@ -13804,4 +13804,38 @@ class AppLocalizationsKn extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'ಮಾತನ್ನು ಸಿದ್ಧಪಡಿಸಲಾಗುತ್ತಿದೆ · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'ನಿಮ್ಮ $plan ಯೋಜನೆ $date ರಂದು ಕೊನೆಗೊಳ್ಳುತ್ತದೆ.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'ನಿಮ್ಮ ಪ್ರಯೋಜನಗಳನ್ನು ಮುಂದುವರಿಸಲು ಈಗ ಮರುಸದಸ್ಯಗೊಳಿಸಿ - $date ವರೆಗೆ ಯಾವುದೇ ಶುಲ್ಕ ಇಲ್ಲ.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'ನಿಮ್ಮ $plan ಯೋಜನೆ $date ರಂದು ನವೀಕರಿಸಲಾಗುತ್ತದೆ.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'ಯೋಜನೆ ಬದಲಾಯಿಸಲು ಮೊದಲು ಮರುಸದಸ್ಯರಾಗಿ.';
+
+  @override
+  String get noModelDownloadRequired =>
+      'ನಿಮ್ಮ ಸಾಧನದ ಸ್ಥಳೀಯ ಭಾಷಣ ಇಂಜಿನ್ ಬಳಸಲಾಗುವುದು. ಯಾವುದೇ ಮಾದರಿ ಡೌನ್‌ಲೋಡ್ ಅಗತ್ಯವಿಲ್ಲ.';
+
+  @override
+  String get nativeEngineNoDownload => 'ನಿಮ್ಮ ಸಾಧನದ ಸ್ಥಳೀಯ ಭಾಷಣ ಇಂಜಿನ್ ಬಳಸಲಾಗುವುದು. ಯಾವುದೇ ಮಾದರಿ ಡೌನ್‌ಲೋಡ್ ಅಗತ್ಯವಿಲ್ಲ.';
+
+  @override
+  String get activityNeedsAttention => 'ಗಮನ ಅಗತ್ಯವಿದೆ';
+
+  @override
+  String get activityRetryAll => 'ಎಲ್ಲವನ್ನೂ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ';
+
+  @override
+  String get attentionSummaryFailed => 'ಈ ಸಂಭಾಷಣೆಯ ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ';
 }

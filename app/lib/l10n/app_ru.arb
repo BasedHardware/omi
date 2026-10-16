@@ -4251,5 +4251,14 @@
     "onDeviceMeterLineShort": "{percent}% использовано · {reset}",
     "onDeviceMeterLineHours": "{percent}% использовано · осталось около {hours} часов записи · {reset}",
     "onDeviceGetMoreUsage": "Получить больше использования",
-    "onDeviceGettingSpeechReady": "Подготовка речи · {percent}%"
+    "onDeviceGettingSpeechReady": "Подготовка речи · {percent}%",
+    "yourPlanEndsOn": "Ваш план {plan} заканчивается {date}.",
+    "resubscribeNowNoChargeUntil": "Подпишитесь снова, чтобы сохранить преимущества - без оплаты до {date}.",
+    "yourPlanWillRenewOn": "Ваш план {plan} продлится {date}.",
+    "resubscribeFirstToChangePlans": "Сначала оформите подписку снова, чтобы сменить план.",
+    "nativeEngineNoDownload": "Будет использован встроенный речевой движок вашего устройства. Загрузка модели не требуется.",
+    "noModelDownloadRequired": "Будет использован встроенный механизм распознавания речи вашего устройства. Загрузка модели не требуется.",
+    "activityNeedsAttention": "Требует внимания",
+    "activityRetryAll": "Повторить все",
+    "attentionSummaryFailed": "Не удалось подвести итоги этого разговора"
 }

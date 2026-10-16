@@ -13832,4 +13832,38 @@ class AppLocalizationsCa extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'Preparant la parla · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'El vostre pla $plan acaba el $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Torna a subscriure\'t ara per mantenir els teus beneficis - sense càrrec fins $date.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'El vostre pla $plan es renovarà el $date.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Torneu a subscriure-us primer per canviar de pla.';
+
+  @override
+  String get noModelDownloadRequired => 'S\'usarà el motor de veu natiu del dispositiu. No cal descarregar cap model.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Sutilitzarà el motor de veu natiu del teu dispositiu. No cal descarregar cap model.';
+
+  @override
+  String get activityNeedsAttention => 'Cal atenció';
+
+  @override
+  String get activityRetryAll => 'Torna-ho a provar tot';
+
+  @override
+  String get attentionSummaryFailed => 'No s\'ha pogut resumir aquesta conversa';
 }

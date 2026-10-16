@@ -11636,5 +11636,20 @@
     "onDeviceMeterLineShort": "{percent}% nagamit · {reset}",
     "onDeviceMeterLineHours": "{percent}% nagamit · mga {hours} oras ng recording ang natitira · {reset}",
     "onDeviceGetMoreUsage": "Kumuha ng higit pang paggamit",
-    "onDeviceGettingSpeechReady": "Inihahanda ang pananalita · {percent}%"
+    "onDeviceGettingSpeechReady": "Inihahanda ang pananalita · {percent}%",
+    "yourPlanEndsOn": "Magtatapos ang iyong {plan} plan sa {date}.",
+    "resubscribeNowNoChargeUntil": "Mag-subscribe muli upang mapanatili ang iyong mga benepisyo - walang bayad hanggang {date}.",
+    "yourPlanWillRenewOn": "Mare-renew ang iyong {plan} plan sa {date}.",
+    "resubscribeFirstToChangePlans": "Mag-subscribe muna ulit para magpalit ng plan.",
+    "noModelDownloadRequired": "Ang native speech engine ng iyong device ay gagamitin. Walang model download na kailangan.",
+    "@noModelDownloadRequired": {
+        "description": "Info about iOS native speech"
+    },
+    "nativeEngineNoDownload": "Ang native speech engine ng iyong device ay gagamitin. Walang model download na kailangan.",
+    "@nativeEngineNoDownload": {
+        "description": "Description of iOS native speech recognition"
+    },
+    "activityNeedsAttention": "Kailangang tingnan",
+    "activityRetryAll": "Subukan muli lahat",
+    "attentionSummaryFailed": "Hindi ma-summarize ang usapang ito"
 }

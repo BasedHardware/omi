@@ -4216,5 +4216,14 @@
     "onDeviceMeterLineShort": "{percent}% 사용 · {reset}",
     "onDeviceMeterLineHours": "{percent}% 사용 · 녹음이 약 {hours}시간 남음 · {reset}",
     "onDeviceGetMoreUsage": "사용량을 더 받기",
-    "onDeviceGettingSpeechReady": "음성을 준비하는 중 · {percent}%"
+    "onDeviceGettingSpeechReady": "음성을 준비하는 중 · {percent}%",
+    "yourPlanEndsOn": "{plan} 플랜은 {date}에 종료됩니다.",
+    "resubscribeNowNoChargeUntil": "혜택을 유지하려면 지금 재구독하세요 - {date}까지 요금이 청구되지 않습니다.",
+    "yourPlanWillRenewOn": "{plan} 플랜은 {date}에 갱신됩니다.",
+    "resubscribeFirstToChangePlans": "플랜을 변경하려면 먼저 다시 구독하세요.",
+    "nativeEngineNoDownload": "기기의 기본 음성 엔진이 사용됩니다. 모델 다운로드가 필요 없습니다.",
+    "noModelDownloadRequired": "기기의 기본 음성 엔진이 사용됩니다. 모델 다운로드가 필요하지 않습니다.",
+    "activityNeedsAttention": "확인 필요",
+    "activityRetryAll": "모두 다시 시도",
+    "attentionSummaryFailed": "이 대화를 요약하지 못했습니다"
 }

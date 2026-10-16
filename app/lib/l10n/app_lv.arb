@@ -4216,5 +4216,14 @@
     "onDeviceMeterLineShort": "{percent}% izmantots · {reset}",
     "onDeviceMeterLineHours": "{percent}% izmantots · atlikušas aptuveni {hours} ieraksta stundas · {reset}",
     "onDeviceGetMoreUsage": "Iegūstiet vairāk lietojuma",
-    "onDeviceGettingSpeechReady": "Runa tiek sagatavota · {percent}%"
+    "onDeviceGettingSpeechReady": "Runa tiek sagatavota · {percent}%",
+    "yourPlanEndsOn": "Jūsu {plan} plāns beidzas {date}.",
+    "resubscribeNowNoChargeUntil": "Abonejiet atkārtoti tagad, lai saglabātu savus ieguvumus - bez maksas līdz {date}.",
+    "yourPlanWillRenewOn": "Jūsu {plan} plāns atjaunosies {date}.",
+    "resubscribeFirstToChangePlans": "Lai mainītu plānu, vispirms abonējiet vēlreiz.",
+    "nativeEngineNoDownload": "Tiks izmantots jūsu ierīces vietējais runas dzinējs. Modeļa lejupielāde nav nepieciešama.",
+    "noModelDownloadRequired": "Tiks izmantots jūsu ierīces sākotnējais runas dzinējs. Modeļa lejupielāde nav nepieciešama.",
+    "activityNeedsAttention": "Nepieciešama uzmanība",
+    "activityRetryAll": "Mēģināt visu vēlreiz",
+    "attentionSummaryFailed": "Šo sarunu neizdevās apkopot"
 }

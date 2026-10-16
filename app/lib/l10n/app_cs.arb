@@ -4216,5 +4216,14 @@
     "onDeviceMeterLineShort": "{percent}% využito · {reset}",
     "onDeviceMeterLineHours": "{percent}% využito · zbývá asi {hours} hodin nahrávání · {reset}",
     "onDeviceGetMoreUsage": "Získejte více využití",
-    "onDeviceGettingSpeechReady": "Příprava řeči · {percent} %"
+    "onDeviceGettingSpeechReady": "Příprava řeči · {percent} %",
+    "yourPlanEndsOn": "Váš plán {plan} končí {date}.",
+    "resubscribeNowNoChargeUntil": "Znovu se přihlaste nyní, abyste si zachovali výhody - bez poplatku do {date}.",
+    "yourPlanWillRenewOn": "Váš plán {plan} se obnoví {date}.",
+    "resubscribeFirstToChangePlans": "Chcete-li změnit plán, nejprve se znovu přihlaste.",
+    "nativeEngineNoDownload": "Bude použit nativní hlasový engine vašeho zařízení. Není nutné stahovat model.",
+    "noModelDownloadRequired": "Bude použit nativní hlasový modul vašeho zařízení. Není nutné stahovat model.",
+    "activityNeedsAttention": "Vyžaduje pozornost",
+    "activityRetryAll": "Zkusit vše znovu",
+    "attentionSummaryFailed": "Tuto konverzaci se nepodařilo shrnout"
 }

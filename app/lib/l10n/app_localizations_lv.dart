@@ -13788,4 +13788,39 @@ class AppLocalizationsLv extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'Runa tiek sagatavota · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Jūsu $plan plāns beidzas $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Abonejiet atkārtoti tagad, lai saglabātu savus ieguvumus - bez maksas līdz $date.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Jūsu $plan plāns atjaunosies $date.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Lai mainītu plānu, vispirms abonējiet vēlreiz.';
+
+  @override
+  String get noModelDownloadRequired =>
+      'Tiks izmantots jūsu ierīces sākotnējais runas dzinējs. Modeļa lejupielāde nav nepieciešama.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Tiks izmantots jūsu ierīces vietējais runas dzinējs. Modeļa lejupielāde nav nepieciešama.';
+
+  @override
+  String get activityNeedsAttention => 'Nepieciešama uzmanība';
+
+  @override
+  String get activityRetryAll => 'Mēģināt visu vēlreiz';
+
+  @override
+  String get attentionSummaryFailed => 'Šo sarunu neizdevās apkopot';
 }

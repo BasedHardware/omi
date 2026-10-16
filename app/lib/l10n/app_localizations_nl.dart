@@ -13799,4 +13799,39 @@ class AppLocalizationsNl extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'Spraak voorbereiden · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Je $plan-abonnement eindigt op $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Abonneer nu opnieuw om uw voordelen te behouden - geen kosten tot $date.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Je $plan-abonnement wordt verlengd op $date.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Abonneer je eerst opnieuw om van abonnement te wisselen.';
+
+  @override
+  String get noModelDownloadRequired =>
+      'De native spraakengine van je apparaat wordt gebruikt. Geen modeldownload vereist.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'De native spraakengine van je apparaat wordt gebruikt. Geen model download nodig.';
+
+  @override
+  String get activityNeedsAttention => 'Vraagt aandacht';
+
+  @override
+  String get activityRetryAll => 'Alles opnieuw proberen';
+
+  @override
+  String get attentionSummaryFailed => 'Dit gesprek kon niet worden samengevat';
 }

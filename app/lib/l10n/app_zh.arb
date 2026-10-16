@@ -4216,5 +4216,14 @@
     "onDeviceMeterLineShort": "已用 {percent}% · {reset}",
     "onDeviceMeterLineHours": "已用 {percent}% · 大约还可录音 {hours} 小时 · {reset}",
     "onDeviceGetMoreUsage": "获取更多用量",
-    "onDeviceGettingSpeechReady": "正在准备语音 · {percent}%"
+    "onDeviceGettingSpeechReady": "正在准备语音 · {percent}%",
+    "yourPlanEndsOn": "您的 {plan} 套餐将于 {date} 结束。",
+    "resubscribeNowNoChargeUntil": "立即重新订阅以保留您的权益 - {date}之前不收费。",
+    "yourPlanWillRenewOn": "您的 {plan} 套餐将于 {date} 续订。",
+    "resubscribeFirstToChangePlans": "请先重新订阅再更改套餐。",
+    "nativeEngineNoDownload": "将使用您设备的原生语音引擎。无需下载模型。",
+    "noModelDownloadRequired": "将使用您设备的原生语音引擎。无需下载模型。",
+    "activityNeedsAttention": "需要处理",
+    "activityRetryAll": "全部重试",
+    "attentionSummaryFailed": "无法总结这段对话"
 }

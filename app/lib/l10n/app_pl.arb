@@ -4251,5 +4251,14 @@
     "onDeviceMeterLineShort": "{percent}% wykorzystane · {reset}",
     "onDeviceMeterLineHours": "{percent}% wykorzystane · zostało około {hours} godzin nagrywania · {reset}",
     "onDeviceGetMoreUsage": "Uzyskaj więcej użycia",
-    "onDeviceGettingSpeechReady": "Przygotowywanie mowy · {percent}%"
+    "onDeviceGettingSpeechReady": "Przygotowywanie mowy · {percent}%",
+    "yourPlanEndsOn": "Twój plan {plan} kończy się {date}.",
+    "resubscribeNowNoChargeUntil": "Subskrybuj ponownie teraz, aby zachować korzyści - bez opłat do {date}.",
+    "yourPlanWillRenewOn": "Twój plan {plan} odnowi się {date}.",
+    "resubscribeFirstToChangePlans": "Najpierw subskrybuj ponownie, aby zmienić plan.",
+    "nativeEngineNoDownload": "Zostanie użyty natywny silnik mowy Twojego urządzenia. Pobieranie modelu nie jest wymagane.",
+    "noModelDownloadRequired": "Zostanie użyty natywny silnik mowy urządzenia. Pobieranie modelu nie jest wymagane.",
+    "activityNeedsAttention": "Wymaga uwagi",
+    "activityRetryAll": "Ponów wszystkie",
+    "attentionSummaryFailed": "Nie udało się podsumować tej rozmowy"
 }

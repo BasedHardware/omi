@@ -4216,5 +4216,14 @@
     "onDeviceMeterLineShort": "{percent}% brukt · {reset}",
     "onDeviceMeterLineHours": "{percent}% brukt · omtrent {hours} timer opptak igjen · {reset}",
     "onDeviceGetMoreUsage": "Få mer bruk",
-    "onDeviceGettingSpeechReady": "Gjør tale klar · {percent}%"
+    "onDeviceGettingSpeechReady": "Gjør tale klar · {percent}%",
+    "yourPlanEndsOn": "{plan}-abonnementet ditt avsluttes {date}.",
+    "resubscribeNowNoChargeUntil": "Abonner på nytt nå for å beholde fordelene - ingen belastning til {date}.",
+    "yourPlanWillRenewOn": "{plan}-abonnementet ditt fornyes {date}.",
+    "resubscribeFirstToChangePlans": "Abonner på nytt først for å bytte abonnement.",
+    "nativeEngineNoDownload": "Enhetens innebygde talemotor vil bli brukt. Ingen modellnedlasting nødvendig.",
+    "noModelDownloadRequired": "Enhetens innebygde talemotor vil bli brukt. Ingen modellnedlasting nødvendig.",
+    "activityNeedsAttention": "Trenger oppmerksomhet",
+    "activityRetryAll": "Prøv alle på nytt",
+    "attentionSummaryFailed": "Kunne ikke oppsummere denne samtalen"
 }

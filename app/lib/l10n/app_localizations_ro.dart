@@ -13817,4 +13817,39 @@ class AppLocalizationsRo extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'Se pregătește vorbirea · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Planul tău $plan se încheie pe $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Reabonați-vă acum pentru a vă păstra beneficiile - fără taxă până la $date.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Planul tău $plan se va reînnoi pe $date.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Reabonează-te mai întâi ca să schimbi planul.';
+
+  @override
+  String get noModelDownloadRequired =>
+      'Se va utiliza motorul de vorbire nativ al dispozitivului. Nu este necesară descărcarea unui model.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Motorul vocal nativ al dispozitivului va fi folosit. Nu este necesară descărcarea modelului.';
+
+  @override
+  String get activityNeedsAttention => 'Necesită atenție';
+
+  @override
+  String get activityRetryAll => 'Reîncearcă tot';
+
+  @override
+  String get attentionSummaryFailed => 'Conversația nu a putut fi rezumată';
 }

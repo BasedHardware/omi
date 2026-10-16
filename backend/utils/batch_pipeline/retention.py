@@ -96,7 +96,15 @@ def register_batch_artifact(
         assert_batch_write_allowed(
             client, transaction, uid, conversation_ids=conversation_ids, expected_generation=expected_generation
         )
-        if kind != 'audio' and job.get('state') != 'leased':
+        recovery = job.get('recovery') or {}
+        recovery_write = (
+            job.get('state') == 'quarantined'
+            and job.get('recovery_state') == 'running'
+            and recovery.get('privacy_generation') == expected_generation
+            and bool(recovery.get('token'))
+            and uri.endswith(f"/{recovery['token']}.enc")
+        )
+        if kind != 'audio' and job.get('state') != 'leased' and not recovery_write:
             raise BatchPrivacyBlocked('result_lease_lost')
         if job and job.get('owner_id') != uid:
             raise ValueError('artifact owner mismatch')

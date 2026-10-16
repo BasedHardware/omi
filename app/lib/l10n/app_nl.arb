@@ -4216,5 +4216,14 @@
     "onDeviceMeterLineShort": "{percent}% gebruikt · {reset}",
     "onDeviceMeterLineHours": "{percent}% gebruikt · nog ongeveer {hours} uur opname · {reset}",
     "onDeviceGetMoreUsage": "Krijg meer gebruik",
-    "onDeviceGettingSpeechReady": "Spraak voorbereiden · {percent}%"
+    "onDeviceGettingSpeechReady": "Spraak voorbereiden · {percent}%",
+    "yourPlanEndsOn": "Je {plan}-abonnement eindigt op {date}.",
+    "resubscribeNowNoChargeUntil": "Abonneer nu opnieuw om uw voordelen te behouden - geen kosten tot {date}.",
+    "yourPlanWillRenewOn": "Je {plan}-abonnement wordt verlengd op {date}.",
+    "resubscribeFirstToChangePlans": "Abonneer je eerst opnieuw om van abonnement te wisselen.",
+    "nativeEngineNoDownload": "De native spraakengine van je apparaat wordt gebruikt. Geen model download nodig.",
+    "noModelDownloadRequired": "De native spraakengine van je apparaat wordt gebruikt. Geen modeldownload vereist.",
+    "activityNeedsAttention": "Vraagt aandacht",
+    "activityRetryAll": "Alles opnieuw proberen",
+    "attentionSummaryFailed": "Dit gesprek kon niet worden samengevat"
 }

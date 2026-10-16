@@ -4216,5 +4216,14 @@
     "onDeviceMeterLineShort": "{percent}% kasutatud · {reset}",
     "onDeviceMeterLineHours": "{percent}% kasutatud · salvestamist on jäänud umbes {hours} tundi · {reset}",
     "onDeviceGetMoreUsage": "Hangi rohkem kasutust",
-    "onDeviceGettingSpeechReady": "Kõne ettevalmistamine · {percent}%"
+    "onDeviceGettingSpeechReady": "Kõne ettevalmistamine · {percent}%",
+    "yourPlanEndsOn": "Teie {plan} pakett lõpeb {date}.",
+    "resubscribeNowNoChargeUntil": "Tellige uuesti kohe, et säilitada oma eelised - tasu ei võeta kuni {date}.",
+    "yourPlanWillRenewOn": "Teie {plan} pakett uueneb {date}.",
+    "resubscribeFirstToChangePlans": "Paketi muutmiseks tellige esmalt uuesti.",
+    "nativeEngineNoDownload": "Kasutatakse teie seadme natiivset kõnemootorit. Mudeli allalaadimine pole vajalik.",
+    "noModelDownloadRequired": "Kasutatakse teie seadme algset kõnemootorit. Mudeli allalaadimine pole vajalik.",
+    "activityNeedsAttention": "Vajab tähelepanu",
+    "activityRetryAll": "Proovi kõiki uuesti",
+    "attentionSummaryFailed": "Seda vestlust ei õnnestunud kokku võtta"
 }

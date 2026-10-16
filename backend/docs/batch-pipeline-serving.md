@@ -6,7 +6,7 @@ allowlist/percentage after qualification. Agent A does not deploy or apply index
 
 ## Host settings and rollback
 
-On the backend sync host, `BATCH_PIPELINE_SERVING_ENABLED=true` starts a supervised
+On the selected always-CPU backend host, `BATCH_PIPELINE_SERVING_ENABLED=true` starts a supervised
 20-second reconciliation loop. It recovers leases/retries, drains ordered log
 entries, projects C's durable outbox and refreshes queue-age metrics. Configure
 an explicit prod/dev runtime stage, customer data-plane project, shared encryption
@@ -135,14 +135,19 @@ VAD compaction and shared-live off until their independent quality gates pass.
 
 ## Recovery and late captures
 
-Compute failures and expired leases remain ordered, pending retries forever,
-with exponential backoff capped at 600s. Alert when
+Explicit compute failures retry with exponential backoff capped at 600s until
+`BATCH_PIPELINE_MAX_ATTEMPTS` (default 5, valid 1–20) is reached. The fenced
+terminal quarantine removes the failed span from ordered pending work without
+publishing success/silence. Expired leases alone remain recoverable. Successful
+siblings of that upload move to `quarantine_held` after persistence, preserving
+the projection cursor while allowing the bounded sweep to reach later uploads.
+See [the visible transcript gap and retained recovery obligations](batch-pipeline-worker.md#terminal-quarantine-and-the-visible-gap). Alert when
 `omi_batch_pipeline_retry_age_seconds{priority="fresh"}` exceeds 600s (same for
 recent/deep), scoped by worker_release/namespace; metric freshness must remain
-under 60s. Age persists through requeue/lease until successful completion.
+under 60s. Age persists through requeue/lease until success or terminal quarantine.
 Historical dead heads are redriven by authenticated `POST
 /v2/batch-pipeline/redrive-dead` with `{stage, segment_id}` or by authorized
-client job polling, including admission rollback. No route skips an ordered gap.
+client job polling, including admission rollback. Those routes never revive terminal quarantines; only the explicit bounded-failure transition skips a gap.
 A privacy-fenced lease is separately revoked to `privacy_blocked`; erasure still
 belongs to the durable deletion outbox.
 
@@ -171,3 +176,102 @@ Idle-shard activation reads the maximum retained per-class service frontier
 through its single-field descending index. No global document is written; an
 empty/rejoin cycle cannot reset credit, and an old shard cannot penalize newly
 active owners because another shard restarted its virtual clock from zero.
+
+## David-only production config train (2026-10-16)
+
+The production runtime overlay admits only `vi7SA9ckQCe4ccobWNxlbdcNdC23`:
+`BATCH_PIPELINE_ENABLED=true`, that single UID allowlist, and
+`BATCH_PIPELINE_PERCENT=0`. Code defaults remain off. Development admission,
+serving and worker RPC identity bindings are explicitly off/empty. The existing
+dev GPU qualification release is independent of this cohort configuration.
+Merging config is not a deployment or a successful production E2E receipt.
+
+| Consumer | Deployed host / setting |
+| --- | --- |
+| `routers/sync.py` → `intake.accept_upload` → `database.batch_pipeline_intake.admit` → `config.batch_pipeline.enabled_for` | Cloud Run `backend`, `backend-sync`, `backend-sync-backfill`, `backend-integration`, and the same backend image on GKE `backend-listen`; identical David-only gate on each |
+| `main.py` → `start_serving_from_env` → recovery/projection/cleanup | Only Cloud Run `backend-integration`; existing deployment has minimum three instances and CPU throttling disabled. Other CPU hosts keep the pump off |
+| `compute_client.from_env` | Dedicated GPU worker; HTTPS base `https://backend-sync-hhibjajaja-uc.a.run.app`, exact same OIDC audience |
+| `routers/batch_pipeline.verify_worker` → spend admission | Only Cloud Run `backend-sync` is configured to accept `batch-pipeline-worker@based-hardware.iam.gserviceaccount.com` with that audience |
+| `diarizer.batch_pipeline_runtime` | Separate prod worker chart: process on, one replica, autoscaling off, L4 `batch-pipeline-pool`; worker's own upload-admission gate stays false |
+| `pusher.main` | No batch upload admission, serving-loop or dedicated-worker consumer; no pusher flag change |
+
+Intake and worker ceilings both stay at 3600 seconds, ASR/segmentation/VAD model
+batch stays 8, and shared-live stays off. All CPU admission/projection hosts use
+`based-hardware-batch-pipeline-staging` and the existing shared encryption-secret
+binding. The worker chart uses the same bucket and explicit customer data plane.
+The prod values intentionally leave `image.digest` empty: `gcp_diarizer.yml`
+builds the prod image from merged source, resolves its immutable digest and
+passes it to Helm. Never paste the dev registry digest into prod values.
+
+Before admission deploy, the operator takes a private raw-document snapshot,
+checks source-bound Firestore indexes/TTLs, confirms worker Workload Identity,
+data-plane/bucket rights, and Cloud Run invoker access, then deploys the worker
+and waits for joint readiness. Deploy the Cloud Run/backend-listen config only
+after those gates. No account data, snapshot, IAM grant, index/TTL apply or
+workload deployment is performed by this config PR. The local qualification
+handoff contains the operator's snapshot, aggregate verification and restore
+procedure; snapshots must never enter Git or CI artifacts.
+
+Admission rollback sets the gate false on every sync host and clears the
+allowlist/percentage. Keep the worker and integration serving loop running until
+all accepted jobs and projection receipts drain. Only then stop the serving
+loop/worker before any snapshot restore; otherwise a late projection could
+rewrite restored data. Do not delete durable content claims to force a retry.
+The 14-day snapshot covers only its recorded conversation IDs: targets outside
+that set and post-snapshot live/user edits require their own before-image or
+manual reconciliation, never an assumed full-account restore.
+
+## Quarantined segment recovery
+
+`BATCH_PIPELINE_RECOVERY_MODE=off|on` defaults to **off**. Even `on` admits
+nobody without `BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST`. It is independent of new
+batch admission. The existing serving pump runs one legacy STT dispatch per
+allowlisted owner per sweep. Operators/schedulers can also call the existing
+`POST /v2/batch-pipeline/reconcile` with `{"stage":"prod"}` using its configured
+worker service-account OIDC identity and audience. The metrics endpoint performs
+ordinary reconciliation only; scraping metrics never initiates legacy STT.
+No laptop script, public client route, upload-wide legacy coordinator, or claim
+release is involved.
+
+The job embeds a durable recovery intent (random token, epoch, admitted privacy
+generation), created only for `worker_failed` quarantine with no result/log or
+assignment receipt and no active GPU lease. CAS moves `prepared` to `running`
+once, rechecking privacy and the retained batch content owner. Expired ordinary
+leases or historical status polls cannot authorize recovery. The unit's registered
+encrypted audio goes directly to `utils.stt.pre_recorded.prerecorded_from_bytes`
+with client retries disabled (`attempts=2`). Local strict Silero VAD measures
+speech usage; it does not estimate usage from transcript text or capture length.
+Empty VAD/STT or invalid clocks remain failures, never fabricated silence.
+
+The encrypted output uses the intent token as its create-only object name,
+registered with the erasure outbox before upload. Lost upload replies reconcile
+that exact authenticated generation. A recovery-specific token CAS returns a
+successful unit to `result_ready`; the ordinary owner log then appends it under
+its original segment identity and capture clocks, with the existing late-capture
+policy. Assignment replay uses the same batch receipt, part IDs and ledger.
+Once every sibling assignment/enrichment receipt is ready, the existing
+idempotent upload accounting completes, held results re-enter the sweep, and
+client publication/retention resume. Failed sibling obligations never arm a
+success TTL.
+
+There is no provider idempotency key in the synchronous legacy API. Therefore a
+process death after `running` commits and before a durable encrypted result is
+available is **ambiguous**, not permission for a second STT call. While running,
+other deliveries only look for that object; after 900 seconds with no object the
+intent becomes `failed_held`. A provider exception also becomes `failed_held`.
+Neither is automatically redispatched or scanned again. A successful artifact
+whose DB reply was lost remains reconcilable. A late reply after terminal hold
+cannot publish. Recovery logs have only a closed outcome; no owner IDs, URIs,
+tokens, transcript/audio, or exception bodies. Privacy deletion/protection
+changes cancel the intent and override audio retention at every boundary.
+
+Rollout (operator-owned, not performed by this PR): first apply/verify the declared
+owner/recovery-state indexes and deploy the reviewed source. Set recovery mode on
+with **David's owner only** in the recovery allowlist on the serving pump host.
+Run one bounded reconciliation, verify recovered assignment receipts and original
+clocks/late-capture append, then all sibling receipts, one upload usage commit,
+client completion and completion-only retention. Inspect content-free counts and
+any held failures. Leave recovery on for that owner for future quarantines after
+verification. Roll back to off to stop new dispatches; accepted normal
+projection still drains. Failed/ambiguous intents require a separately reviewed
+operator decision, never a blind reset to prepared.

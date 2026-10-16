@@ -11636,5 +11636,20 @@
     "onDeviceMeterLineShort": "{percent}% பயன்படுத்தப்பட்டது · {reset}",
     "onDeviceMeterLineHours": "{percent}% பயன்படுத்தப்பட்டது · சுமார் {hours} மணி நேர பதிவு மீதம் · {reset}",
     "onDeviceGetMoreUsage": "மேலும் பயன்பாட்டைப் பெறுங்கள்",
-    "onDeviceGettingSpeechReady": "பேச்சு தயாராகிறது · {percent}%"
+    "onDeviceGettingSpeechReady": "பேச்சு தயாராகிறது · {percent}%",
+    "yourPlanEndsOn": "உங்கள் {plan} திட்டம் {date} அன்று முடிவடைகிறது.",
+    "resubscribeNowNoChargeUntil": "உங்கள் சலுகைகளை தொடர்ந்து வைக்க இப்போது மீண்டும் சந்தா செய்யவும் - {date} வரை எந்த கட்டணமும் இல்லை.",
+    "yourPlanWillRenewOn": "உங்கள் {plan} திட்டம் {date} அன்று புதுப்பிக்கப்படும்.",
+    "resubscribeFirstToChangePlans": "திட்டத்தை மாற்ற முதலில் மீண்டும் சந்தா செய்யவும்.",
+    "noModelDownloadRequired": "உங்கள் சாதனத்தின் பூர்வீக பேச்சு ஞ்சனം பயன்படுத்தப்படும். மாதிரி பதிவிறக்கம் தேவையில்லை।",
+    "@noModelDownloadRequired": {
+        "description": "Info about iOS native speech"
+    },
+    "nativeEngineNoDownload": "உங்கள் சாதனத்தின் பூர்வீக பேச்சு ஞ்சனம் பயன்படுத்தப்படும்। மாதிரி பதிவிறக்கம் தேவையில்லை।",
+    "@nativeEngineNoDownload": {
+        "description": "Description of iOS native speech recognition"
+    },
+    "activityNeedsAttention": "கவனம் தேவை",
+    "activityRetryAll": "அனைத்தையும் மீண்டும் முயலவும்",
+    "attentionSummaryFailed": "இந்த உரையாடலைச் சுருக்க முடியவில்லை"
 }

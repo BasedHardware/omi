@@ -4216,5 +4216,14 @@
     "onDeviceMeterLineShort": "{percent}% använt · {reset}",
     "onDeviceMeterLineHours": "{percent}% använt · ungefär {hours} timmars inspelning kvar · {reset}",
     "onDeviceGetMoreUsage": "Få mer användning",
-    "onDeviceGettingSpeechReady": "Förbereder tal · {percent} %"
+    "onDeviceGettingSpeechReady": "Förbereder tal · {percent} %",
+    "yourPlanEndsOn": "Din {plan}-plan upphör {date}.",
+    "resubscribeNowNoChargeUntil": "Prenumerera igen nu för att behålla dina fördelar - ingen avgift till {date}.",
+    "yourPlanWillRenewOn": "Din {plan}-plan förnyas {date}.",
+    "resubscribeFirstToChangePlans": "Prenumerera igen först för att byta plan.",
+    "nativeEngineNoDownload": "Din enhets inbyggda talmotor kommer att användas. Ingen modellnedladdning krävs.",
+    "noModelDownloadRequired": "Din enhets inbyggda talmotor kommer att användas. Ingen modellnedladdning krävs.",
+    "activityNeedsAttention": "Behöver uppmärksamhet",
+    "activityRetryAll": "Försök igen med alla",
+    "attentionSummaryFailed": "Det gick inte att sammanfatta samtalet"
 }

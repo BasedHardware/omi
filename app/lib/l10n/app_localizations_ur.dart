@@ -13774,4 +13774,39 @@ class AppLocalizationsUr extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'تقریر تیار ہو رہی ہے · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'آپ کا $plan پلان $date کو ختم ہوگا۔';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'اپنے فوائل کو برقرار رکھنے کے لیے اب دوبارہ رکنیت حاصل کریں - $date تک کوئی چارج نہیں۔';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'آپ کا $plan پلان $date کو تجدید ہوگا۔';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'پلان بدلنے کے لیے پہلے دوبارہ رکنیت حاصل کریں۔';
+
+  @override
+  String get noModelDownloadRequired =>
+      'آپ کے ڈیوائس کے native speech engine کا استعمال کیا جائے گا۔ کوئی ماڈل ڈاؤن لوڈ درکار نہیں۔';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'آپ کے ڈیوائس کے native speech engine کا استعمال کیا جائے گا۔ کوئی ماڈل ڈاؤن لوڈ درکار نہیں۔';
+
+  @override
+  String get activityNeedsAttention => 'توجہ درکار ہے';
+
+  @override
+  String get activityRetryAll => 'سب دوبارہ کوشش کریں';
+
+  @override
+  String get attentionSummaryFailed => 'اس گفتگو کا خلاصہ نہیں بن سکا';
 }

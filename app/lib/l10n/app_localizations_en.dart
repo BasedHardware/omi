@@ -13746,4 +13746,37 @@ class AppLocalizationsEn extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'Getting speech ready · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Your $plan plan ends $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Resubscribe now to keep your plan. No charge until $date.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Your $plan plan will renew on $date.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Resubscribe first to change plans.';
+
+  @override
+  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+
+  @override
+  String get nativeEngineNoDownload => 'Your devices native speech engine will be used. No model download required.';
+
+  @override
+  String get activityNeedsAttention => 'Needs attention';
+
+  @override
+  String get activityRetryAll => 'Retry all';
+
+  @override
+  String get attentionSummaryFailed => 'Couldn\'t summarize this conversation';
 }

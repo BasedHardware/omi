@@ -13758,4 +13758,38 @@ class AppLocalizationsVi extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'Đang chuẩn bị giọng nói · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Gói $plan của bạn kết thúc vào $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Đăng ký lại ngay để giữ quyền lợi - không tính phí cho đến $date.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Gói $plan của bạn sẽ gia hạn vào $date.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Hãy đăng ký lại trước để đổi gói.';
+
+  @override
+  String get noModelDownloadRequired => 'Không cần tải mô hình';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Công cụ giọng nói gốc của thiết bị sẽ được sử dụng. Không cần tải xuống mô hình.';
+
+  @override
+  String get activityNeedsAttention => 'Cần chú ý';
+
+  @override
+  String get activityRetryAll => 'Thử lại tất cả';
+
+  @override
+  String get attentionSummaryFailed => 'Không thể tóm tắt cuộc trò chuyện này';
 }

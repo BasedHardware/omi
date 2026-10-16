@@ -13782,4 +13782,39 @@ class AppLocalizationsLt extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'Ruošiama kalba · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Jūsų $plan planas baigiasi $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Persiregistruokite dabar, kad išsaugotumėte privalumus - nėra mokesčio iki $date.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Jūsų $plan planas bus atnaujintas $date.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Norėdami pakeisti planą, pirmiausia užsiprenumeruokite iš naujo.';
+
+  @override
+  String get noModelDownloadRequired =>
+      'Bus naudojamas jūsų įrenginio kalbos variklis. Modelio atsisiuntimas nereikalingas.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Bus naudojamas jūsų įrenginio vietinis kalbos variklis. Modelio atsisiuntimas nereikalingas.';
+
+  @override
+  String get activityNeedsAttention => 'Reikia dėmesio';
+
+  @override
+  String get activityRetryAll => 'Bandyti visus iš naujo';
+
+  @override
+  String get attentionSummaryFailed => 'Nepavyko apibendrinti šio pokalbio';
 }

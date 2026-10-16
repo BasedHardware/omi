@@ -13665,4 +13665,37 @@ class AppLocalizationsHe extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'מכין את הדיבור · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'תוכנית $plan שלך מסתיימת ב-$date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'הירשם מחדש כעת כדי לשמור על ההטבות שלך - לא תחויב עד $date.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'תוכנית $plan שלך תתחדש ב-$date.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'הירשמו מחדש קודם כדי לשנות תוכנית.';
+
+  @override
+  String get noModelDownloadRequired => 'מנוע הדיבור המקומי של המכשיר שלך יהיה בשימוש. הורדת דגם אינה נדרשת.';
+
+  @override
+  String get nativeEngineNoDownload => 'מנוע הדיבור המקומי של המכשיר שלך יהיה בשימוש. הורדת דגם אינה נדרשת.';
+
+  @override
+  String get activityNeedsAttention => 'דורש תשומת לב';
+
+  @override
+  String get activityRetryAll => 'נסה הכול שוב';
+
+  @override
+  String get attentionSummaryFailed => 'לא ניתן היה לסכם את השיחה הזו';
 }

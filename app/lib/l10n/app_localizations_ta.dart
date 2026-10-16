@@ -13851,4 +13851,39 @@ class AppLocalizationsTa extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'பேச்சு தயாராகிறது · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'உங்கள் $plan திட்டம் $date அன்று முடிவடைகிறது.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'உங்கள் சலுகைகளை தொடர்ந்து வைக்க இப்போது மீண்டும் சந்தா செய்யவும் - $date வரை எந்த கட்டணமும் இல்லை.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'உங்கள் $plan திட்டம் $date அன்று புதுப்பிக்கப்படும்.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'திட்டத்தை மாற்ற முதலில் மீண்டும் சந்தா செய்யவும்.';
+
+  @override
+  String get noModelDownloadRequired =>
+      'உங்கள் சாதனத்தின் பூர்வீக பேச்சு ஞ்சனം பயன்படுத்தப்படும். மாதிரி பதிவிறக்கம் தேவையில்லை।';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'உங்கள் சாதனத்தின் பூர்வீக பேச்சு ஞ்சனம் பயன்படுத்தப்படும்। மாதிரி பதிவிறக்கம் தேவையில்லை।';
+
+  @override
+  String get activityNeedsAttention => 'கவனம் தேவை';
+
+  @override
+  String get activityRetryAll => 'அனைத்தையும் மீண்டும் முயலவும்';
+
+  @override
+  String get attentionSummaryFailed => 'இந்த உரையாடலைச் சுருக்க முடியவில்லை';
 }

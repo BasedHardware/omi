@@ -13793,4 +13793,39 @@ class AppLocalizationsMs extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'Menyediakan pertuturan · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Pelan $plan anda tamat pada $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Langgan semula sekarang untuk mengekalkan manfaat anda - tiada caj sehingga $date.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Pelan $plan anda akan diperbaharui pada $date.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Langgan semula dahulu untuk menukar pelan.';
+
+  @override
+  String get noModelDownloadRequired =>
+      'Enjin pertuturan asli peranti anda akan digunakan. Tiada muat turun model diperlukan.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Enjin pertuturan asli peranti anda akan digunakan. Tiada muat turun model diperlukan.';
+
+  @override
+  String get activityNeedsAttention => 'Perlu perhatian';
+
+  @override
+  String get activityRetryAll => 'Cuba semua semula';
+
+  @override
+  String get attentionSummaryFailed => 'Perbualan ini tidak dapat diringkaskan';
 }

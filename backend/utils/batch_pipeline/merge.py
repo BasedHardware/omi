@@ -15,6 +15,8 @@ class OrderedMerge:
 
         def commit(tx):
             owner = tx.get('owners', key)
+            # Terminal quarantine atomically removes merge_pending; it never
+            # enters this success log or the projection predecessor chain.
             candidate = tx.first_pending(key)
             if not candidate or candidate['state'] != 'result_ready':
                 return None
@@ -44,6 +46,8 @@ class OrderedMerge:
                 'committed_at': now,
                 'projection_state': 'pending',
             }
+            if job.get('recovery_state') == 'recovered':
+                entry['recovery_version'] = 1
             tx.put('results', job['segment_id'], entry)
             job.update(state='committed', merge_pending=False)
             tx.put('jobs', job['segment_id'], job)

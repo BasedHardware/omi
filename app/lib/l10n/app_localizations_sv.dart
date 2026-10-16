@@ -13766,4 +13766,39 @@ class AppLocalizationsSv extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'Förbereder tal · $percent %';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Din $plan-plan upphör $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Prenumerera igen nu för att behålla dina fördelar - ingen avgift till $date.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Din $plan-plan förnyas $date.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Prenumerera igen först för att byta plan.';
+
+  @override
+  String get noModelDownloadRequired =>
+      'Din enhets inbyggda talmotor kommer att användas. Ingen modellnedladdning krävs.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Din enhets inbyggda talmotor kommer att användas. Ingen modellnedladdning krävs.';
+
+  @override
+  String get activityNeedsAttention => 'Behöver uppmärksamhet';
+
+  @override
+  String get activityRetryAll => 'Försök igen med alla';
+
+  @override
+  String get attentionSummaryFailed => 'Det gick inte att sammanfatta samtalet';
 }

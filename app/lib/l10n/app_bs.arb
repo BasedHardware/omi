@@ -11636,5 +11636,20 @@
     "onDeviceMeterLineShort": "{percent}% iskorišteno · {reset}",
     "onDeviceMeterLineHours": "{percent}% iskorišteno · ostalo je oko {hours} sati snimanja · {reset}",
     "onDeviceGetMoreUsage": "Nabavite još korištenja",
-    "onDeviceGettingSpeechReady": "Priprema govora · {percent}%"
+    "onDeviceGettingSpeechReady": "Priprema govora · {percent}%",
+    "yourPlanEndsOn": "Vaš {plan} plan ističe {date}.",
+    "resubscribeNowNoChargeUntil": "Ponovno se pretplatite sada da zadržite svoje benefite - nema naknade do {date}.",
+    "yourPlanWillRenewOn": "Vaš {plan} plan će se obnoviti {date}.",
+    "resubscribeFirstToChangePlans": "Prvo se ponovo pretplatite da biste promijenili plan.",
+    "noModelDownloadRequired": "Koristiće se ugrađeni motor za govore vašeg uređaja. Preuzimanje modela nije potrebno.",
+    "@noModelDownloadRequired": {
+        "description": "Info about iOS native speech"
+    },
+    "nativeEngineNoDownload": "Koristiće se ugrađeni motor za govore vašeg uređaja. Preuzimanje modela nije potrebno.",
+    "@nativeEngineNoDownload": {
+        "description": "Description of iOS native speech recognition"
+    },
+    "activityNeedsAttention": "Potrebna pažnja",
+    "activityRetryAll": "Pokušaj sve ponovo",
+    "attentionSummaryFailed": "Ovaj razgovor nije bilo moguće sažeti"
 }

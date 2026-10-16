@@ -13822,4 +13822,39 @@ class AppLocalizationsMk extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'Се подготвува говорот · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Вашиот план $plan завршува на $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Претплатете се сега за да ги задржите вашите бенефиции - без наплата до $date.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Вашиот план $plan ќе се обнови на $date.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Прво претплатете се повторно за да го смените планот.';
+
+  @override
+  String get noModelDownloadRequired =>
+      'Ќе се користи нативната говор-машина на твојот уред. Нема потреба од преземање модел.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Ќе се користи нативната машина за говор на твојот уред. Нема потреба од преземање модел.';
+
+  @override
+  String get activityNeedsAttention => 'Потребно е внимание';
+
+  @override
+  String get activityRetryAll => 'Обиди ги сите повторно';
+
+  @override
+  String get attentionSummaryFailed => 'Овој разговор не можеше да се сумира';
 }

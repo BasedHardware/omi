@@ -4216,5 +4216,14 @@
     "onDeviceMeterLineShort": "ใช้ไป {percent}% · {reset}",
     "onDeviceMeterLineHours": "ใช้ไป {percent}% · เหลือการบันทึกอีกประมาณ {hours} ชั่วโมง · {reset}",
     "onDeviceGetMoreUsage": "รับการใช้งานเพิ่ม",
-    "onDeviceGettingSpeechReady": "กำลังเตรียมเสียงพูด · {percent}%"
+    "onDeviceGettingSpeechReady": "กำลังเตรียมเสียงพูด · {percent}%",
+    "yourPlanEndsOn": "แผน {plan} ของคุณสิ้นสุดวันที่ {date}",
+    "resubscribeNowNoChargeUntil": "สมัครใหม่ตอนนี้เพื่อรักษาสิทธิประโยชน์ - ไม่มีค่าใช้จ่ายจนถึง {date}",
+    "yourPlanWillRenewOn": "แผน {plan} ของคุณจะต่ออายุวันที่ {date}",
+    "resubscribeFirstToChangePlans": "สมัครใหม่ก่อนเพื่อเปลี่ยนแผน",
+    "nativeEngineNoDownload": "จะใช้เอนจินเสียงแบบเนทีฟของอุปกรณ์ ไม่ต้องดาวน์โหลดโมเดล",
+    "noModelDownloadRequired": "จะใช้เอนจินเสียงดั้งเดิมของอุปกรณ์ ไม่ต้องดาวน์โหลดโมเดล",
+    "activityNeedsAttention": "ต้องดำเนินการ",
+    "activityRetryAll": "ลองใหม่ทั้งหมด",
+    "attentionSummaryFailed": "ไม่สามารถสรุปบทสนทนานี้ได้"
 }

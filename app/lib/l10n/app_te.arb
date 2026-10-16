@@ -11636,5 +11636,20 @@
     "onDeviceMeterLineShort": "{percent}% ఉపయోగించబడింది · {reset}",
     "onDeviceMeterLineHours": "{percent}% ఉపయోగించబడింది · దాదాపు {hours} గంటల రికార్డింగ్ మిగిలి ఉంది · {reset}",
     "onDeviceGetMoreUsage": "మరింత వినియోగం పొందండి",
-    "onDeviceGettingSpeechReady": "మాట సిద్ధమవుతోంది · {percent}%"
+    "onDeviceGettingSpeechReady": "మాట సిద్ధమవుతోంది · {percent}%",
+    "yourPlanEndsOn": "మీ {plan} ప్లాన్ {date}న ముగుస్తుంది.",
+    "resubscribeNowNoChargeUntil": "మీ ప్రయోజనాలను ఉంచడానికి ఇప్పుడే సబ్‌స్క్రిప్ట్ చేయండి - {date} వరకు ఛార్జ్ లేదు.",
+    "yourPlanWillRenewOn": "మీ {plan} ప్లాన్ {date}న పునరుద్ధరించబడుతుంది.",
+    "resubscribeFirstToChangePlans": "ప్లాన్ మార్చడానికి ముందు మళ్లీ సబ్‌స్క్రైబ్ చేయండి.",
+    "noModelDownloadRequired": "మీ పరికరం యొక్క నేటివ్ స్పీచ్ ఇంజిన్ ఉపయోగించబడుతుంది. మోడల్ డౌన్‌లోడ్ అవసరం లేదు.",
+    "@noModelDownloadRequired": {
+        "description": "Info about iOS native speech"
+    },
+    "nativeEngineNoDownload": "మీ పరికరం యొక్క నేటివ్ స్పీచ్ ఇంజిన్ ఉపయోగించబడుతుంది. మోడల్ డౌన్‌లోడ్ అవసరం లేదు.",
+    "@nativeEngineNoDownload": {
+        "description": "Description of iOS native speech recognition"
+    },
+    "activityNeedsAttention": "శ్రద్ధ అవసరం",
+    "activityRetryAll": "అన్నింటినీ మళ్లీ ప్రయత్నించండి",
+    "attentionSummaryFailed": "ఈ సంభాషణను సంగ్రహించలేకపోయాం"
 }

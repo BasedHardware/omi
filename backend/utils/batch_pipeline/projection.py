@@ -4,6 +4,7 @@ Synchronous worker seam: offload the call from an async serving coordinator.
 No admission flag is consulted: already accepted work drains after rollback.
 """
 
+from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
 from datetime import datetime, timezone
 import time
 import math
@@ -37,7 +38,7 @@ def build_incoming(item: WorkItem, binding, payload: dict, *, geolocation=None) 
         raise ValueError('result audio duration differs from admitted capture')
     # The existing final-pass aligner abstains in diarization gaps; the existing
     # prerecorded grouper supplies the same sentence/segment shapes as sync.
-    aligned = assign_words(words, payload['diarization']['turns'])
+    aligned = words if payload.get('recovery_version') == 1 else assign_words(words, payload['diarization']['turns'])
     segments = postprocess_words([{**word, 'text': word['word']} for word in aligned], 0)
     if not segments:
         raise ValueError('successful batch result produced no transcript')
@@ -58,7 +59,7 @@ def build_incoming(item: WorkItem, binding, payload: dict, *, geolocation=None) 
         transcript_segments=segments,
         source=ConversationSource(binding.source),
         language=binding.language or payload.get('language'),
-        is_locked=binding.is_locked,
+        is_locked=False if cap_dispatch_enabled() else binding.is_locked,
         private_cloud_sync_enabled=binding.private_cloud_sync_enabled,
         client_device_id=binding.client_device_id,
         client_platform=binding.client_platform,
@@ -146,6 +147,7 @@ class Projector:
             self.finish_part(item, binding, receipt, int(index) if index is not None else None)
         accounting = self.store.prepare_accounting(binding, self.clock())
         if accounting is None:
+            self.store.hold_for_quarantine(segment_id, binding, self.clock())
             return None
         if accounting['seconds'] > 0 and not accounting['completed']:
             from utils.fair_use import record_speech_ms
@@ -177,6 +179,8 @@ class Projector:
         from utils.batch_pipeline.projection_parts import split_result
 
         payload = self.load_result(item, entry['result']['result_uri'])
+        if payload.get('recovery_version') == 1 and entry.get('recovery_version') != 1:
+            raise ProjectionBlocked('recovery result requires recovery handoff')
         speech = payload.get('speech_seconds')
         if (
             not isinstance(speech, (int, float))

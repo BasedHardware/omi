@@ -13546,4 +13546,37 @@ class AppLocalizationsZh extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return '正在准备语音 · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return '您的 $plan 套餐将于 $date 结束。';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return '立即重新订阅以保留您的权益 - $date之前不收费。';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return '您的 $plan 套餐将于 $date 续订。';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => '请先重新订阅再更改套餐。';
+
+  @override
+  String get noModelDownloadRequired => '将使用您设备的原生语音引擎。无需下载模型。';
+
+  @override
+  String get nativeEngineNoDownload => '将使用您设备的原生语音引擎。无需下载模型。';
+
+  @override
+  String get activityNeedsAttention => '需要处理';
+
+  @override
+  String get activityRetryAll => '全部重试';
+
+  @override
+  String get attentionSummaryFailed => '无法总结这段对话';
 }

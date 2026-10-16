@@ -4216,5 +4216,14 @@
     "onDeviceMeterLineShort": "{percent}% 使用済み · {reset}",
     "onDeviceMeterLineHours": "{percent}% 使用済み · 録音があと約 {hours} 時間 · {reset}",
     "onDeviceGetMoreUsage": "使用量を追加する",
-    "onDeviceGettingSpeechReady": "音声を準備しています · {percent}%"
+    "onDeviceGettingSpeechReady": "音声を準備しています · {percent}%",
+    "yourPlanEndsOn": "{plan}プランは{date}に終了します。",
+    "resubscribeNowNoChargeUntil": "特典を維持するために今すぐ再登録 - {date}まで請求はありません。",
+    "yourPlanWillRenewOn": "{plan}プランは{date}に更新されます。",
+    "resubscribeFirstToChangePlans": "プランを変更するには、先に再購読してください。",
+    "nativeEngineNoDownload": "デバイスのネイティブ音声エンジンが使用されます。モデルのダウンロードは不要です。",
+    "noModelDownloadRequired": "デバイスのネイティブ音声エンジンが使用されます。モデルのダウンロードは不要です。",
+    "activityNeedsAttention": "要対応",
+    "activityRetryAll": "すべて再試行",
+    "attentionSummaryFailed": "この会話を要約できませんでした"
 }

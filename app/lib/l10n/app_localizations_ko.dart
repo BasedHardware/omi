@@ -13571,4 +13571,37 @@ class AppLocalizationsKo extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return '음성을 준비하는 중 · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return '$plan 플랜은 $date에 종료됩니다.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return '혜택을 유지하려면 지금 재구독하세요 - $date까지 요금이 청구되지 않습니다.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return '$plan 플랜은 $date에 갱신됩니다.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => '플랜을 변경하려면 먼저 다시 구독하세요.';
+
+  @override
+  String get noModelDownloadRequired => '기기의 기본 음성 엔진이 사용됩니다. 모델 다운로드가 필요하지 않습니다.';
+
+  @override
+  String get nativeEngineNoDownload => '기기의 기본 음성 엔진이 사용됩니다. 모델 다운로드가 필요 없습니다.';
+
+  @override
+  String get activityNeedsAttention => '확인 필요';
+
+  @override
+  String get activityRetryAll => '모두 다시 시도';
+
+  @override
+  String get attentionSummaryFailed => '이 대화를 요약하지 못했습니다';
 }

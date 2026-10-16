@@ -11636,5 +11636,20 @@
     "onDeviceMeterLineShort": "{percent}% выкарыстана · {reset}",
     "onDeviceMeterLineHours": "{percent}% выкарыстана · засталося каля {hours} гадзін запісу · {reset}",
     "onDeviceGetMoreUsage": "Атрымайце больш выкарыстання",
-    "onDeviceGettingSpeechReady": "Падрыхтоўка маўлення · {percent}%"
+    "onDeviceGettingSpeechReady": "Падрыхтоўка маўлення · {percent}%",
+    "yourPlanEndsOn": "Ваш план {plan} заканчваецца {date}.",
+    "resubscribeNowNoChargeUntil": "Падпішыцеся яшчэ раз, каб сахаваць свае прывілеі - плата адсуцная да {date}.",
+    "yourPlanWillRenewOn": "Ваш план {plan} будзе падаўжацца {date}.",
+    "resubscribeFirstToChangePlans": "Спачатку падпішыцеся зноў, каб змяніць план.",
+    "noModelDownloadRequired": "Будзе выкарыстаны родзім рухавік маўлення вашага прыбора. Загрузка мадэлі не патрэбна.",
+    "@noModelDownloadRequired": {
+        "description": "Info about iOS native speech"
+    },
+    "nativeEngineNoDownload": "Будзе выкарыстаны родзім рухавік маўлення вашага прыбора. Загрузка мадэлі не патрэбна.",
+    "@nativeEngineNoDownload": {
+        "description": "Description of iOS native speech recognition"
+    },
+    "activityNeedsAttention": "Патрабуе ўвагі",
+    "activityRetryAll": "Паўтарыць усё",
+    "attentionSummaryFailed": "Не ўдалося падсумаваць гэту размову"
 }

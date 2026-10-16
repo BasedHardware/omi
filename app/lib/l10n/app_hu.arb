@@ -4309,5 +4309,17 @@
     "onDeviceMeterLineShort": "{percent}% felhasználva · {reset}",
     "onDeviceMeterLineHours": "{percent}% felhasználva · körülbelül {hours} óra felvétel maradt · {reset}",
     "onDeviceGetMoreUsage": "Szerezzen több használatot",
-    "onDeviceGettingSpeechReady": "A beszéd előkészítése · {percent}%"
+    "onDeviceGettingSpeechReady": "A beszéd előkészítése · {percent}%",
+    "yourPlanEndsOn": "A {plan} csomagod {date}-án lejár.",
+    "resubscribeNowNoChargeUntil": "Iratkozzon fel újra most, hogy megtartsa előnyeit - nincs díj {date}-ig.",
+    "yourPlanWillRenewOn": "A {plan} csomagod {date}-án megújul.",
+    "resubscribeFirstToChangePlans": "Csomagváltáshoz először fizess elő újra.",
+    "nativeEngineNoDownload": "Az eszközöd natív beszédmotorja lesz használva. Nem szükséges modell letöltése.",
+    "noModelDownloadRequired": "Készüléke natív beszédfelismerő motorja lesz használva. Nincs szükség modell letöltésére.",
+    "@noModelDownloadRequired": {
+        "description": "Message when native speech engine is used"
+    },
+    "activityNeedsAttention": "Figyelmet igényel",
+    "activityRetryAll": "Összes újrapróbálása",
+    "attentionSummaryFailed": "Ezt a beszélgetést nem sikerült összefoglalni"
 }

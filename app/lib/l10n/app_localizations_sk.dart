@@ -13755,4 +13755,39 @@ class AppLocalizationsSk extends AppLocalizations {
   String onDeviceGettingSpeechReady(int percent) {
     return 'Príprava reči · $percent%';
   }
+
+  @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Váš plán $plan končí $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Znova sa prihláste teraz, aby ste si zachovali výhody - bez poplatku do $date.';
+  }
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Váš plán $plan sa obnoví $date.';
+  }
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Ak chcete zmeniť plán, najprv sa znova prihláste.';
+
+  @override
+  String get noModelDownloadRequired =>
+      'Použije sa natívny hlasový engine vášho zariadenia. Nie je potrebné sťahovať model.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Bude použitý natívny hlasový engine vášho zariadenia. Nie je potrebné sťahovať model.';
+
+  @override
+  String get activityNeedsAttention => 'Vyžaduje pozornosť';
+
+  @override
+  String get activityRetryAll => 'Skúsiť všetko znova';
+
+  @override
+  String get attentionSummaryFailed => 'Tento rozhovor sa nepodarilo zhrnúť';
 }

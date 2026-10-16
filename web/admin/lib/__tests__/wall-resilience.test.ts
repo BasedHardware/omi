@@ -5,7 +5,12 @@ import {
   computeWall,
   type WallPayload,
 } from "../wall-metrics";
-import { queryPosthog, periodQueries } from "../wall-posthog";
+import {
+  ASYNC_DEADLINE_MS,
+  ASYNC_POLL_MS,
+  periodQueries,
+  queryPosthog,
+} from "../wall-posthog";
 import { WallSourceError } from "../wall-source-error";
 import { wallPresentation } from "../wall-presentation";
 import { WallJobCache } from "../wall-job-cache";
@@ -139,7 +144,7 @@ it("retries rate limits but exposes only safe actual reasons, never upstream bod
   const work = queryPosthog("SELECT 1");
   await vi.advanceTimersByTimeAsync(1000);
   expect((await work)[0][2]).toBe(2);
-  expect(JSON.parse(fetch.mock.calls[0][1].body).refresh).toBe("blocking");
+  expect(JSON.parse(fetch.mock.calls[0][1].body).refresh).toBe("async");
   fetch.mockResolvedValue(
     new Response(JSON.stringify({ detail: "secret=do-not-show" }), {
       status: 400,
@@ -148,6 +153,66 @@ it("retries rate limits but exposes only safe actual reasons, never upstream bod
   await expect(queryPosthog("SELECT 1")).rejects.toThrow(
     "PostHog query rejected (HTTP 400)"
   );
+});
+it("polls an async PostHog query to completion and fails safely past the deadline", async () => {
+  vi.stubEnv("POSTHOG_PERSONAL_API_KEY", "test-key");
+  vi.stubEnv("POSTHOG_PROJECT_ID", "test");
+  const pending = { query_status: { id: "q1", complete: false } };
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify(pending)))
+    .mockResolvedValueOnce(new Response(JSON.stringify(pending)))
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          query_status: {
+            id: "q1",
+            complete: true,
+            results: {
+              results: [[0, "macos", 5]],
+              last_refresh: "2026-10-16T17:30:30Z",
+            },
+          },
+        })
+      )
+    );
+  vi.stubGlobal("fetch", fetch);
+  const work = queryPosthog("SELECT 1");
+  await vi.advanceTimersByTimeAsync(2 * ASYNC_POLL_MS);
+  const rows = await work;
+  expect(rows[0][2]).toBe(5);
+  expect(rows.sourceRefreshedAt).toBe("2026-10-16T17:30:30Z");
+  expect(fetch.mock.calls[1][0]).toMatch(/\/query\/q1\/$/);
+  expect(fetch.mock.calls[1][1].body).toBeUndefined();
+
+  fetch.mockReset();
+  fetch.mockImplementation(async () => new Response(JSON.stringify(pending)));
+  const stuck = queryPosthog("SELECT 1");
+  const outcome = expect(stuck).rejects.toThrow("PostHog request timed out");
+  await vi.advanceTimersByTimeAsync(3 * (ASYNC_DEADLINE_MS + 10_000));
+  await outcome;
+
+  fetch.mockReset();
+  fetch.mockImplementation(
+    async () =>
+      new Response(
+        JSON.stringify({
+          query_status: {
+            id: "q2",
+            complete: true,
+            error: true,
+            error_message:
+              "Query has hit the max execution time; secret=do-not-show",
+          },
+        })
+      )
+  );
+  const failed = queryPosthog("SELECT 1");
+  const failure = expect(failed).rejects.toThrow(
+    "PostHog execution time limit exceeded (async)"
+  );
+  await vi.advanceTimersByTimeAsync(10_000);
+  await failure;
 });
 it("names the PostHog failure on every dependent null tile and in its card", async () => {
   const error = new WallSourceError(

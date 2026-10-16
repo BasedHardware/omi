@@ -14,13 +14,15 @@ import os
 import random
 import time
 import uuid
-from typing import Any, Callable, TypeVar, TypeAlias
+from typing import Any, Callable, TypeVar, TypeAlias, TypeGuard
+from urllib.parse import urlsplit
 
 from google.cloud import firestore
 from google.api_core.exceptions import AlreadyExists, FailedPrecondition, NotFound
 from prometheus_client import Counter
 
 from config.sync_reprocess import settle_seconds
+from config.repeat_work import revision_reuse
 from database._client import get_firestore_client
 
 Row: TypeAlias = dict[str, Any]
@@ -32,6 +34,7 @@ COLLECTION = 'sync_reprocess_outbox'
 LEASE_SECONDS = 1800  # Greater than the Cloud Tasks dispatch deadline.
 REPAIR_SECONDS = 1800
 COALESCED = Counter('sync_reprocess_coalesced_total', 'Sync updates folded into an existing enrichment obligation')
+UNBOUND = Counter('sync_reprocess_unbound_total', 'Sync obligations awaiting a complete worker binding', ['action'])
 
 
 def key(uid: str, conversation_id: str) -> str:
@@ -76,14 +79,37 @@ def _mutate(document_id: str, operation: Callable[[Row | None], tuple[Row | None
     raise AssertionError('outbox CAS loop must return or raise within its retry budget')
 
 
-def _dispatch_binding() -> dict[str, str]:
+def valid_dispatch_binding(dispatch: object) -> TypeGuard[dict[str, str]]:
+    """A binding belongs to the receiving sync handler, including its audience."""
+    if not isinstance(dispatch, dict):
+        return False
+    for field in ('queue', 'handler', 'audience', 'invoker_sa'):
+        value = dispatch.get(field)
+        if not isinstance(value, str) or not value or value != value.strip():
+            return False
+    try:
+        url = urlsplit(dispatch['handler'])
+    except ValueError:
+        return False
+    return (
+        url.scheme == 'https'
+        and bool(url.netloc)
+        and url.path.endswith('/v2/sync-jobs/run')
+        and not url.query
+        and not url.fragment
+        and dispatch['audience'] == dispatch['handler']
+    )
+
+
+def _dispatch_binding() -> dict[str, str] | None:
     handler = os.getenv('SYNC_TASKS_HANDLER_URL', '')
-    return {
+    binding = {
         'queue': os.getenv('SYNC_TASKS_QUEUE', ''),
         'handler': handler,
         'audience': os.getenv('SYNC_TASKS_OIDC_AUDIENCE') or handler,
         'invoker_sa': os.getenv('SYNC_TASKS_INVOKER_SA', ''),
     }
+    return binding if valid_dispatch_binding(binding) else None
 
 
 def _enqueue(row: dict[str, Any]) -> None:
@@ -92,10 +118,10 @@ def _enqueue(row: dict[str, Any]) -> None:
     # A backfill obligation is repaired by the fresh service's sweep. Retain
     # the originating queue/worker/identity rather than borrowing that sweep's
     # fresh capacity or audience. These bindings contain no credentials.
-    dispatch = row['dispatch']
+    dispatch = row.get('dispatch')
+    if not valid_dispatch_binding(dispatch):
+        raise RuntimeError('sync reprocessing requires a complete sync worker binding')
     handler = dispatch['handler']
-    if not handler.endswith('/v2/sync-jobs/run'):
-        raise RuntimeError('sync reprocessing requires the sync worker handler binding')
     enqueue_named_task(
         dispatch['queue'],
         handler,
@@ -134,17 +160,26 @@ def mark(
             version=row.get('version', 0) + 1,
             due_at=max(row.get('due_at', 0), current + settle_seconds()),
         )
+        if revision_reuse():
+            # Extend the existing quiet window, but never postpone a dirty
+            # obligation indefinitely under a continuous trickle of revisions.
+            row['first_pending_at'] = row.get('first_pending_at', current)
+            row['due_at'] = min(row['due_at'], row['first_pending_at'] + 3600)
         if old is None:
             row.update(
                 task_token=uuid.uuid4().hex, task_due_at=row['due_at'], lease_until=0, dispatch=_dispatch_binding()
             )
+        elif not valid_dispatch_binding(row.get('dispatch')):
+            row['dispatch'] = None
         return row, (row, old is not None)
 
     row, coalesced = (mutate or _mutate)(key(uid, conversation_id), update)
     if coalesced:
         COALESCED.inc()
-    else:
+    elif valid_dispatch_binding(row.get('dispatch')):
         _enqueue(row)  # Failure leaves the obligation durable for the sweep.
+    else:
+        UNBOUND.labels(action='mark').inc()
 
 
 def run(document_id: str, task_token: str, process: Callable[[str, str, str], Any], *, now: float | None = None) -> str:
@@ -194,22 +229,31 @@ def sweep(*, now: float | None = None, limit: int = 100) -> dict[str, int]:
     counts = {'repaired': 0, 'error': 0}
     if not owns_runtime():
         return counts
+    binding = _dispatch_binding()
     limit = max(1, min(100, limit))
     client = get_firestore_client()
     # One range/order field uses the automatic single-field index.
     snapshots = client.collection(COLLECTION).where('due_at', '<=', current).order_by('due_at').limit(limit).stream()
     for snapshot in snapshots:
 
-        def repair(old: Row | None) -> tuple[Row | None, Row | None]:
+        def repair(old: Row | None) -> tuple[Row | None, tuple[str, Row | None]]:
             if old is None or old.get('lease_until', 0) > current:
-                return old, None
+                return old, ('skipped', None)
             row = dict(old)
+            if not valid_dispatch_binding(row.get('dispatch')):
+                if binding is None:
+                    return old, ('unbound', None)
+                # Claim and fence the repaired binding in the same CAS. Any old
+                # task delivery becomes stale; valid backfill bindings stay put.
+                row.update(dispatch=binding, task_token=uuid.uuid4().hex, task_due_at=current)
             if row['task_due_at'] + REPAIR_SECONDS <= current:
                 row.update(task_token=uuid.uuid4().hex, task_due_at=current)
-            return row, row
+            return row, ('ready', row)
 
         try:
-            row = _mutate(snapshot.id, repair)
+            status, row = _mutate(snapshot.id, repair)
+            if status == 'unbound':
+                UNBOUND.labels(action='repair').inc()
             if row is not None:
                 _enqueue(row)
                 counts['repaired'] += 1

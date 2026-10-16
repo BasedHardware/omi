@@ -4216,5 +4216,14 @@
     "onDeviceMeterLineShort": "Đã dùng {percent}% · {reset}",
     "onDeviceMeterLineHours": "Đã dùng {percent}% · còn khoảng {hours} giờ ghi âm · {reset}",
     "onDeviceGetMoreUsage": "Nhận thêm mức sử dụng",
-    "onDeviceGettingSpeechReady": "Đang chuẩn bị giọng nói · {percent}%"
+    "onDeviceGettingSpeechReady": "Đang chuẩn bị giọng nói · {percent}%",
+    "yourPlanEndsOn": "Gói {plan} của bạn kết thúc vào {date}.",
+    "resubscribeNowNoChargeUntil": "Đăng ký lại ngay để giữ quyền lợi - không tính phí cho đến {date}.",
+    "yourPlanWillRenewOn": "Gói {plan} của bạn sẽ gia hạn vào {date}.",
+    "resubscribeFirstToChangePlans": "Hãy đăng ký lại trước để đổi gói.",
+    "nativeEngineNoDownload": "Công cụ giọng nói gốc của thiết bị sẽ được sử dụng. Không cần tải xuống mô hình.",
+    "noModelDownloadRequired": "Không cần tải mô hình",
+    "activityNeedsAttention": "Cần chú ý",
+    "activityRetryAll": "Thử lại tất cả",
+    "attentionSummaryFailed": "Không thể tóm tắt cuộc trò chuyện này"
 }

@@ -4216,5 +4216,14 @@
     "onDeviceMeterLineShort": "{percent}% उपयोग हुआ · {reset}",
     "onDeviceMeterLineHours": "{percent}% उपयोग हुआ · लगभग {hours} घंटे की रिकॉर्डिंग बची है · {reset}",
     "onDeviceGetMoreUsage": "और उपयोग पाएँ",
-    "onDeviceGettingSpeechReady": "बोली तैयार हो रही है · {percent}%"
+    "onDeviceGettingSpeechReady": "बोली तैयार हो रही है · {percent}%",
+    "yourPlanEndsOn": "आपका {plan} प्लान {date} को समाप्त होगा।",
+    "resubscribeNowNoChargeUntil": "अपने लाभ बनाए रखने के लिए अभी पुनः सदस्यता लें - {date} तक कोई शुल्क नहीं।",
+    "yourPlanWillRenewOn": "आपका {plan} प्लान {date} को नवीनीकृत होगा।",
+    "resubscribeFirstToChangePlans": "प्लान बदलने के लिए पहले पुनः सदस्यता लें।",
+    "nativeEngineNoDownload": "आपके डिवाइस का मूल स्पीच इंजन उपयोग किया जाएगा। मॉडल डाउनलोड की आवश्यकता नहीं।",
+    "noModelDownloadRequired": "आपके डिवाइस का नेटिव स्पीच इंजन उपयोग किया जाएगा। कोई मॉडल डाउनलोड आवश्यक नहीं।",
+    "activityNeedsAttention": "ध्यान देने की ज़रूरत",
+    "activityRetryAll": "सभी को फिर से आज़माएँ",
+    "attentionSummaryFailed": "इस बातचीत का सारांश नहीं बन सका"
 }

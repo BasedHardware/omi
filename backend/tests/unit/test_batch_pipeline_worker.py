@@ -1,11 +1,27 @@
 from dataclasses import replace
+from contextlib import nullcontext
+import io
+import logging
+import sys
+import wave
 from types import SimpleNamespace
+from unittest.mock import Mock
 
+import numpy as np
 import pytest
 
 from config.batch_pipeline_providers import ProviderConfig, provider_config
-from diarizer.batch_pipeline import PipelineWorker, LiveWords, Window, pack_windows, speech_windows
-from diarizer.batch_pipeline_models import ParakeetWords
+from diarizer import batch_pipeline, batch_pipeline_models
+from diarizer.batch_pipeline import (
+    BatchValidationError,
+    PipelineWorker,
+    LiveWords,
+    Window,
+    crop_model_vad_spans,
+    pack_windows,
+    speech_windows,
+)
+from diarizer.batch_pipeline_models import ParakeetWords, PyannoteVAD, decode_pcm16_wav
 from utils.batch_pipeline.contracts import WorkItem, Priority
 
 
@@ -84,6 +100,342 @@ def test_failure_is_not_silence_and_siblings_survive():
     worker, _, _, _, _, failures = setup_worker(decode=lambda i: Samples(99) if i.segment_id == 'bad' else Samples(2))
     assert [r.segment_id for r in worker.process_batch([item('bad'), item('ok')])] == ['ok']
     assert failures == [('bad', 'ValueError')]
+
+
+@pytest.mark.parametrize(
+    'stage', ['fetch_decode', 'vad_windows', 'asr', 'word_clocks', 'assemble_words', 'diarize', 'persist']
+)
+def test_item_failures_log_class_and_stage_without_callback_or_private_content(stage, caplog):
+    private_marker = 'synthetic-private-content-must-not-be-logged'
+
+    def broken(*args):
+        raise ValueError(private_marker)
+
+    class BrokenWords:
+        def transcribe_batch(self, samples):
+            if stage == 'asr':
+                return broken()
+            if stage == 'word_clocks':
+                # Multiple windows of one item must still emit one failure.
+                return [[{'word': private_marker, 'timestamp': [-1, 0]}] for _ in samples]
+            return [[] for _ in samples]
+
+    settings = {'on_failure': None}
+    if stage == 'fetch_decode':
+        settings['decode'] = broken
+    elif stage == 'vad_windows':
+        settings['vad'] = broken
+    elif stage in {'asr', 'word_clocks', 'assemble_words'}:
+        settings['words_providers'] = {'parakeet': BrokenWords()}
+    elif stage == 'diarize':
+        settings['diarizers'] = {'pyannote': broken}
+    else:
+        settings['persist'] = broken
+    worker, *_ = setup_worker(**settings)
+    assert worker.process_batch([item(duration=60)]) == []
+    records = [record for record in caplog.records if 'event=batch_worker_failed' in record.getMessage()]
+    assert len(records) == worker.counts['failed'] == 1
+    reason = {'word_clocks': 'word_clock', 'assemble_words': 'empty_asr'}.get(stage, 'unclassified')
+    error_class = 'ValueError' if reason == 'unclassified' else 'BatchValidationError'
+    assert (
+        records[0]
+        .getMessage()
+        .startswith(f'event=batch_worker_failed error_class={error_class} stage={stage} segment_id=a reason={reason} ')
+    )
+    assert all(isinstance(value, (str, int)) for value in records[0].args)
+    assert records[0].exc_info is None
+    assert private_marker not in caplog.text
+
+
+def test_raising_failure_logger_cannot_drop_healthy_sibling(monkeypatch, capsys):
+    private_marker = 'synthetic-private-worker-error'
+    active_exceptions = []
+
+    def decode(work):
+        if work.segment_id == 'bad':
+            raise ValueError(private_marker)
+        return Samples(work.duration_seconds)
+
+    def broken_logger(*args):
+        active_exceptions.append(sys.exc_info()[0])
+        raise RuntimeError('synthetic-logger-error')
+
+    monkeypatch.setattr(batch_pipeline.logger, 'error', broken_logger)
+    worker, *_ = setup_worker(decode=decode, on_failure=None)
+    assert [result.segment_id for result in worker.process_batch([item('bad'), item('good')])] == ['good']
+    assert worker.counts['failed'] == 1
+    assert active_exceptions == [None]
+    captured = capsys.readouterr()
+    assert private_marker not in captured.out + captured.err
+
+
+def test_raising_handler_stream_cannot_leak_worker_error_or_drop_sibling(monkeypatch, capsys):
+    private_marker = 'synthetic-private-worker-error'
+
+    def decode(work):
+        if work.segment_id == 'bad':
+            raise ValueError(private_marker)
+        return Samples(work.duration_seconds)
+
+    class BrokenStream:
+        writes = 0
+
+        def write(self, message):
+            self.writes += 1
+            raise OSError('synthetic-handler-stream-error')
+
+        def flush(self):
+            pass
+
+    stream = BrokenStream()
+    isolated_logger = logging.Logger('batch_worker_broken_stream', logging.ERROR)
+    isolated_logger.addHandler(logging.StreamHandler(stream))
+    monkeypatch.setattr(batch_pipeline, 'logger', isolated_logger)
+    monkeypatch.setattr(logging, 'raiseExceptions', True)
+    worker, *_ = setup_worker(decode=decode, on_failure=None)
+    assert [result.segment_id for result in worker.process_batch([item('bad'), item('good')])] == ['good']
+    assert worker.counts['failed'] == stream.writes == 1
+    captured = capsys.readouterr()
+    assert 'OSError: synthetic-handler-stream-error' in captured.err
+    assert private_marker not in captured.out + captured.err
+
+
+def test_empty_asr_on_vad_speech_stays_failure_with_numeric_shape(caplog):
+    class EmptyWords:
+        def transcribe_batch(self, samples):
+            return [[] for _ in samples]
+
+    worker, _, saved, *_ = setup_worker(
+        decode=lambda _: np.zeros(126400, dtype=np.float32),
+        words_providers={'parakeet': EmptyWords()},
+        on_failure=None,
+    )
+    assert worker.process_batch([item(duration=7.9)]) == []
+    assert not saved
+    message = next(r.getMessage() for r in caplog.records if 'event=batch_worker_failed' in r.getMessage())
+    assert 'stage=assemble_words' in message and 'reason=empty_asr' in message
+    assert 'samples=126400 vad_spans=1 windows=1 asr_words=0 owned_words=0' in message
+
+
+@pytest.mark.parametrize('first_words', [[], [{'word': 'context', 'timestamp': [4.5, 4.8]}]])
+def test_empty_unit_retries_full_capture_once_and_preserves_speech_accounting(first_words, caplog):
+    class Model:
+        def __init__(self):
+            self.calls = []
+
+        def transcribe(self, arrays, **kwargs):
+            self.calls.append(arrays)
+            if len(self.calls) == 1:
+                entries = [dict(word=w['word'], start=w['timestamp'][0], end=w['timestamp'][1]) for w in first_words]
+            else:
+                assert kwargs['batch_size'] == 1
+                assert len(arrays[0]) == 14 * 16000
+                np.testing.assert_array_equal(arrays[0][32000:-32000], samples)
+                assert not arrays[0][:32000].any() and not arrays[0][-32000:].any()
+                entries = [{'word': 'recovered', 'start': 8, 'end': 9}]
+            return [SimpleNamespace(text='synthetic' if entries else '', timestamp={'word': entries})]
+
+    samples = np.ones(10 * 16000, dtype=np.float32)
+    model = Model()
+    provider = ParakeetWords(model)
+    worker, _, saved, decoded, diarized, failures = setup_worker(
+        decode=lambda work: samples,
+        vad=lambda s: [(1, 2)],
+        words_providers={'parakeet': provider},
+        recover_words=provider.recover_empty,
+    )
+    with caplog.at_level(logging.INFO):
+        assert worker.process_batch([item(duration=10)])[0].outcome == 'success'
+    assert len(model.calls) == 2 and not failures
+    assert saved['a']['words'] == [{'word': 'recovered', 'timestamp': [6, 7]}]
+    assert saved['a']['speech_spans'] == [{'start': 1, 'end': 2}]
+    assert saved['a']['speech_seconds'] == 1 and saved['a']['audio_seconds'] == 10
+    assert diarized == [160000]
+    assert 'event=batch_asr_recovery' in caplog.text and 'outcome=recovered' in caplog.text
+    event = next(r for r in caplog.records if 'event=batch_asr_recovery' in r.getMessage())
+    assert all(isinstance(value, (str, int)) for value in event.args) and event.exc_info is None
+    assert 'windows=1 window_min_samples=96000 window_max_samples=96000 speech_samples=16000' in event.getMessage()
+
+
+def test_recovery_padding_clocks_and_minimum_input():
+    class Model:
+        def transcribe(self, arrays, **kwargs):
+            assert len(arrays) == 1 and arrays[0].dtype == np.float32
+            assert len(arrays[0]) == 8 * 16000
+            entries = [
+                {'word': 'padding', 'start': 0, 'end': 1},
+                {'word': 'edge', 'start': 1.8, 'end': 2.4},
+                {'word': 'tail', 'start': 3.8, 'end': 4.1},
+                {'word': 'padding', 'start': 5, 'end': 6},
+            ]
+            return [SimpleNamespace(text='synthetic', timestamp={'word': entries})]
+
+    words = ParakeetWords(Model()).recover_empty(np.ones(32000, dtype=np.float32), 272)
+    assert [w['word'] for w in words] == ['edge', 'tail']
+    assert words[0]['timestamp'] == pytest.approx([0, 0.4])
+    assert words[1]['timestamp'] == pytest.approx([1.8, 2])
+
+
+def test_recovery_never_truncates_audio_to_fit_budget():
+    class Model:
+        def transcribe(self, *args, **kwargs):
+            pytest.fail('oversized recovery must stay held, never transcribe a prefix')
+
+    provider = ParakeetWords(Model())
+    assert provider.recover_empty(np.ones(117 * 16000, dtype=np.float32), 272) == []
+    assert provider.recover_empty(np.ones(31 * 16000, dtype=np.float32), 34) == []
+
+
+def test_empty_recovery_remains_failure_and_healthy_sibling_survives(caplog):
+    calls = []
+
+    class EmptyWords:
+        def transcribe_batch(self, arrays):
+            return [[] for _ in arrays]
+
+    def recover(samples, budget):
+        calls.append(len(samples))
+        return [] if len(samples) == 32000 else [{'word': 'synthetic', 'timestamp': [0, 1]}]
+
+    worker, _, saved, _, diarized, failures = setup_worker(
+        words_providers={'parakeet': EmptyWords()}, recover_words=recover
+    )
+    assert [r.segment_id for r in worker.process_batch([item(), item('b', 3)])] == ['b']
+    assert calls == [32000, 48000] and set(saved) == {'b'}
+    assert failures == [('a', 'BatchValidationError')] and diarized == [48000]
+    assert 'reason=empty_asr' in caplog.text
+
+
+@pytest.mark.parametrize('mode', ['silence', 'nonempty', 'invalid'])
+def test_recovery_only_runs_for_valid_empty_speech(mode):
+    class Provider:
+        def transcribe_batch(self, arrays):
+            return [[{'word': 'synthetic', 'timestamp': [-1 if mode == 'invalid' else 0, 1]}] for _ in arrays]
+
+    worker, *_ = setup_worker(
+        vad=lambda s: [] if mode == 'silence' else [(0, 2)],
+        words_providers={'parakeet': Provider()},
+        recover_words=lambda *args: pytest.fail('must not retry silence, successful words or malformed clocks'),
+    )
+    assert bool(worker.process_batch([item()])) == (mode != 'invalid')
+
+
+def test_recovery_fatal_cuda_quarantines_chain():
+    class EmptyWords:
+        def transcribe_batch(self, arrays):
+            return [[] for _ in arrays]
+
+    def recover(*args):
+        raise RuntimeError('CUDA error: illegal memory access')
+
+    worker, *_ = setup_worker(words_providers={'parakeet': EmptyWords()}, recover_words=recover)
+    with pytest.raises(RuntimeError, match='fatal CUDA'):
+        worker.process_batch([item()])
+    with pytest.raises(RuntimeError, match='restart required'):
+        worker.process_batch([item('b')])
+
+
+def test_validation_reason_rejects_free_form_content():
+    with pytest.raises(ValueError, match='^invalid batch validation reason$'):
+        BatchValidationError('synthetic-private-provider-message')
+
+
+def test_numeric_diagnostics_preserve_iterable_hypothesis_support():
+    class IterableWords:
+        def transcribe_batch(self, samples):
+            return [(word for word in [{'word': 'synthetic', 'timestamp': [0.1, 0.2]}]) for _ in samples]
+
+    worker, _, saved, *_ = setup_worker(words_providers={'parakeet': IterableWords()})
+    assert worker.process_batch([item()])
+    assert len(saved['a']['words']) == 1
+
+
+def test_context_only_hypothesis_is_observable_failure_not_silence(caplog):
+    class ContextWords:
+        def transcribe_batch(self, samples):
+            return [[{'word': 'synthetic', 'timestamp': [4.5, 4.8]}]]
+
+    worker, _, saved, *_ = setup_worker(
+        decode=lambda _: np.zeros(160320, dtype=np.float32),
+        vad=lambda _: [(1, 2)],
+        words_providers={'parakeet': ContextWords()},
+        on_failure=None,
+    )
+    assert worker.process_batch([item(duration=10.02)]) == []
+    assert not saved
+    message = next(r.getMessage() for r in caplog.records if 'event=batch_worker_failed' in r.getMessage())
+    assert 'reason=no_owned_words' in message and 'asr_words=1 owned_words=0' in message
+
+
+def test_fractional_window_rebase_uses_actual_sample_origin():
+    class EndWords:
+        def transcribe_batch(self, samples):
+            duration = len(samples[0]) / 16000
+            return [[{'word': 'synthetic', 'timestamp': [duration - 0.1, duration + 0.01]}]]
+
+    samples = np.zeros(126400, dtype=np.float32)
+    spans = [(5.123456, 7.88)]
+    capture = item(duration=7.9)
+    window = next(speech_windows(capture, samples, spans, ProviderConfig()))
+    assert window.start == int(1.123456 * 16000) / 16000
+    # Rebasing to the unrounded 1.123456 origin exceeds the same validator's
+    # permitted end by 0.0000185s. Keep the word using the actual slice origin.
+    worker, _, saved, *_ = setup_worker(
+        decode=lambda _: samples, vad=lambda _: spans, words_providers={'parakeet': EndWords()}
+    )
+    assert len(worker.process_batch([capture])) == 1
+    assert len(saved['a']['words']) == 1
+    assert saved['a']['words'][0]['timestamp'][1] <= 7.91
+
+
+def test_pyannote_frame_center_beyond_eof_is_cropped_without_losing_in_buffer_speech(monkeypatch):
+    monkeypatch.setattr(
+        batch_pipeline_models,
+        'torch',
+        SimpleNamespace(inference_mode=nullcontext, from_numpy=lambda s: SimpleNamespace(unsqueeze=lambda _: s)),
+    )
+    samples = np.zeros(126400, dtype=np.float32)
+    output = SimpleNamespace(get_timeline=lambda: SimpleNamespace(support=lambda: [SimpleNamespace(start=0, end=7.93)]))
+    vad = PyannoteVAD(lambda _: output)
+    assert vad(samples) == [(0, 7.9)]
+    worker, _, saved, *_ = setup_worker(decode=lambda _: samples, vad=vad)
+    assert len(worker.process_batch([item(duration=7.9)])) == 1
+    assert saved['a']['speech_spans'] == [{'start': 0, 'end': 7.9}]
+    assert saved['a']['words']
+
+
+@pytest.mark.parametrize(
+    'span,reason',
+    [((0, float('nan')), 'vad_nonfinite'), ((0, 0), 'vad_order'), ((-1, 1), 'vad_order'), ((2, 3), 'vad_bounds')],
+)
+def test_model_vad_malformed_or_wholly_outside_span_never_becomes_silence(span, reason):
+    with pytest.raises(BatchValidationError) as caught:
+        crop_model_vad_spans([span], 2)
+    assert caught.value.reason == reason
+
+
+def test_unsorted_overlapping_vad_spans_are_merged_not_failed():
+    worker, _, saved, *_ = setup_worker(vad=lambda _: [(1, 2), (0, 1.5)])
+    assert worker.process_batch([item()])
+    assert saved['a']['speech_spans'] == [{'start': 0, 'end': 2}]
+
+
+@pytest.mark.parametrize('channels,rate', [(2, 16000), (1, 8000)])
+def test_noncanonical_headers_fail_before_vad_or_assembly(channels, rate, caplog):
+    body = io.BytesIO()
+    with wave.open(body, 'wb') as wav:
+        wav.setnchannels(channels)
+        wav.setsampwidth(2)
+        wav.setframerate(rate)
+        wav.writeframes(b'\0\0' * rate * channels)
+    worker, *_ = setup_worker(
+        decode=lambda _: decode_pcm16_wav(body.getvalue()),
+        vad=lambda _: pytest.fail('header failure must precede VAD'),
+        on_failure=None,
+    )
+    assert worker.process_batch([item(duration=1)]) == []
+    assert 'stage=fetch_decode' in caplog.text
+    assert 'stage=vad_windows' not in caplog.text and 'stage=assemble_words' not in caplog.text
 
 
 def test_batch_failure_retries_all_affected_conversations():
@@ -168,7 +520,7 @@ def test_reuse_default_off_never_reads_lineage():
 def test_invalid_vad_is_failure_not_silence(spans):
     worker, _, _, _, _, failures = setup_worker(vad=lambda s: spans)
     assert worker.process_batch([item()]) == []
-    assert failures == [('a', 'ValueError')]
+    assert failures == [('a', 'BatchValidationError')]
 
 
 def test_duplicate_and_oversized_pull_rejected():
@@ -364,3 +716,127 @@ def test_capture_vad_groups_keep_words_and_diarization_on_original_span_clocks()
         assert part_payload['words'] == [{'word': ['first', 'second'][index], 'timestamp': [0.25, 0.75]}]
         assert part_payload['diarization']['turns'] == [{'start': 0.0, 'end': 2.0, 'speaker': ['left', 'right'][index]}]
         assert part_payload['speech_seconds'] == 2.0
+
+
+@pytest.mark.parametrize('enforce', [False, True])
+def test_cap_provenance_is_additive_and_uses_actual_padded_provider_audio(monkeypatch, enforce):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
+    worker, words, saved, _, _, _ = setup_worker()
+    worker.process_batch([item('a', 2)], authorize_dispatch=lambda ids: ids)
+    if enforce:
+        assert saved['a']['cap_dispatch'] == {
+            'omi_funded_accepted_provider_audio_seconds': 2,
+            'admission': 'authorized_compute',
+        }
+    else:
+        assert 'cap_dispatch' not in saved['a']
+    assert saved['a']['speech_seconds'] == 2
+    assert words.calls == [[2]]
+
+
+def test_worker_rechecks_immediately_before_asr_and_holds_without_failure(monkeypatch):
+    from utils.batch_pipeline.contracts import HeldWork
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    worker, words, saved, _, diarized, failures = setup_worker()
+    checks = []
+
+    def authorize(ids):
+        checks.append(ids)
+        return set()
+
+    result = worker.process_batch([item('a', 2)], authorize_dispatch=authorize)
+    assert result == [HeldWork('a')]
+    assert checks == [{'a'}]
+    assert not words.calls and not saved and not diarized and not failures
+
+
+def test_worker_missing_authority_does_not_spend_at_cap(monkeypatch):
+    from utils.batch_pipeline.contracts import HeldWork
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    worker, words, saved, _, _, _ = setup_worker()
+    assert worker.process_batch([item('a', 2)]) == [HeldWork('a')]
+    assert not words.calls and not saved
+
+
+@pytest.mark.parametrize('enforce', [False, True])
+@pytest.mark.parametrize('recovery_allowed', [False, True])
+def test_full_capture_retry_rechecks_cap_and_counts_actual_padding(monkeypatch, enforce, recovery_allowed):
+    from utils.batch_pipeline.contracts import HeldWork
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
+    calls, checks = [], []
+
+    class Model:
+        def transcribe(self, arrays, **kwargs):
+            calls.append([len(samples) / 16000 for samples in arrays])
+            entries = [] if len(calls) == 1 else [{'word': 'recovered', 'start': 2.25, 'end': 2.75}]
+            return [SimpleNamespace(text='recovered' if entries else '', timestamp={'word': entries})]
+
+    provider = ParakeetWords(Model())
+    worker, _, saved, _, diarized, failures = setup_worker(
+        decode=lambda work: np.ones(int(work.duration_seconds * 16000), dtype=np.float32),
+        words_providers={'parakeet': provider},
+        recover_words=provider.recover_empty,
+    )
+
+    def authorize(ids):
+        checks.append(ids)
+        return ids if len(checks) == 1 or recovery_allowed else set()
+
+    result = worker.process_batch([item('a', 2)], authorize_dispatch=authorize)
+    if enforce and not recovery_allowed:
+        assert result == [HeldWork('a')]
+        assert calls == [[2]]
+        assert not saved and not diarized and not failures
+    else:
+        assert result[0].outcome == 'success'
+        assert calls == [[2], [8]]
+        assert saved['a']['words'] == [{'word': 'recovered', 'timestamp': [0.25, 0.75]}]
+        assert not failures
+        if enforce:
+            assert saved['a']['cap_dispatch']['omi_funded_accepted_provider_audio_seconds'] == 10
+        else:
+            assert 'cap_dispatch' not in saved['a']
+    assert checks == ([{'a'}, {'a'}] if enforce else [])
+
+
+@pytest.mark.parametrize('enforce', [False, True])
+def test_oversized_recovery_neither_rechecks_nor_counts_unsubmitted_audio(enforce):
+    provider = ParakeetWords(SimpleNamespace(transcribe=lambda *a, **kw: pytest.fail('oversized provider request')))
+    before, after = Mock(), Mock()
+    result = provider.recover_empty(
+        np.ones(117 * 16000, dtype=np.float32),
+        272,
+        **({'before_dispatch': before, 'after_dispatch': after} if enforce else {}),
+    )
+    assert result is None if enforce else result == []
+    before.assert_not_called()
+    after.assert_not_called()
+
+
+@pytest.mark.parametrize('enforce', [False, True])
+def test_oversized_empty_retry_holds_only_when_enforced(monkeypatch, enforce):
+    from utils.batch_pipeline.contracts import HeldWork
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
+    model = Mock()
+    model.transcribe.side_effect = lambda arrays, **_: [
+        SimpleNamespace(text='', timestamp={'word': []}) for _ in arrays
+    ]
+    provider = ParakeetWords(model)
+    worker, _, saved, _, diarized, failures = setup_worker(
+        decode=lambda work: np.ones(int(work.duration_seconds * 16000), dtype=np.float32),
+        words_providers={'parakeet': provider},
+        recover_words=provider.recover_empty,
+    )
+    result = worker.process_batch([item('a', 117)], authorize_dispatch=lambda ids: ids)
+    assert model.transcribe.call_count == 1  # Initial ASR only; 121s padded retry cannot fit.
+    assert not saved and not diarized
+    if enforce:
+        assert result == [HeldWork('a')]
+        assert not failures
+    else:
+        # Exact main behavior: an empty retry enters ordinary provider failure.
+        assert not result and failures == [('a', 'BatchValidationError')]

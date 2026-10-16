@@ -4216,5 +4216,14 @@
     "onDeviceMeterLineShort": "{percent}% folosit · {reset}",
     "onDeviceMeterLineHours": "{percent}% folosit · au rămas aproximativ {hours} ore de înregistrare · {reset}",
     "onDeviceGetMoreUsage": "Obțineți mai multă utilizare",
-    "onDeviceGettingSpeechReady": "Se pregătește vorbirea · {percent}%"
+    "onDeviceGettingSpeechReady": "Se pregătește vorbirea · {percent}%",
+    "yourPlanEndsOn": "Planul tău {plan} se încheie pe {date}.",
+    "resubscribeNowNoChargeUntil": "Reabonați-vă acum pentru a vă păstra beneficiile - fără taxă până la {date}.",
+    "yourPlanWillRenewOn": "Planul tău {plan} se va reînnoi pe {date}.",
+    "resubscribeFirstToChangePlans": "Reabonează-te mai întâi ca să schimbi planul.",
+    "nativeEngineNoDownload": "Motorul vocal nativ al dispozitivului va fi folosit. Nu este necesară descărcarea modelului.",
+    "noModelDownloadRequired": "Se va utiliza motorul de vorbire nativ al dispozitivului. Nu este necesară descărcarea unui model.",
+    "activityNeedsAttention": "Necesită atenție",
+    "activityRetryAll": "Reîncearcă tot",
+    "attentionSummaryFailed": "Conversația nu a putut fi rezumată"
 }

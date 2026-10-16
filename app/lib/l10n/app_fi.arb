@@ -4216,5 +4216,14 @@
     "onDeviceMeterLineShort": "{percent}% käytetty · {reset}",
     "onDeviceMeterLineHours": "{percent}% käytetty · noin {hours} tuntia tallennusta jäljellä · {reset}",
     "onDeviceGetMoreUsage": "Hanki lisää käyttöä",
-    "onDeviceGettingSpeechReady": "Puhe valmistellaan · {percent} %"
+    "onDeviceGettingSpeechReady": "Puhe valmistellaan · {percent} %",
+    "yourPlanEndsOn": "{plan}-pakettisi päättyy {date}.",
+    "resubscribeNowNoChargeUntil": "Tilaa uudelleen nyt säilyttääksesi edut - ei veloitusta ennen {date}.",
+    "yourPlanWillRenewOn": "{plan}-pakettisi uusiutuu {date}.",
+    "resubscribeFirstToChangePlans": "Tilaa ensin uudelleen, jotta voit vaihtaa pakettia.",
+    "nativeEngineNoDownload": "Käytetään laitteesi natiivia puhe-moottoria. Mallin latausta ei tarvita.",
+    "noModelDownloadRequired": "Laitteesi natiivi puheentunnistusmoottori on käytössä. Mallin lataus ei ole tarpeen.",
+    "activityNeedsAttention": "Vaatii huomiota",
+    "activityRetryAll": "Yritä kaikkia uudelleen",
+    "attentionSummaryFailed": "Tätä keskustelua ei voitu tiivistää"
 }

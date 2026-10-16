@@ -168,3 +168,19 @@ def test_folder_batch_get_rejects_foreign_store_and_unsupported_projection():
         database.get_all(
             [database.document('records/one')], field_paths=['private'], transaction=database.transaction()
         )
+
+
+def test_parent_navigation_preserves_owner_store_and_read_ordering():
+    database = StrictFirestore()
+    source = _record(database)
+    owner = source.parent.parent
+    assert owner is not None
+    assert owner.path == ('users', 'user-1')
+    assert owner.parent.parent is None
+    sibling = owner.collection('processing_attention_items').document('item')
+    transaction = database.transaction()
+    assert not sibling.get(transaction=transaction).exists
+    transaction.set(sibling, {'active': True})
+    assert database.rows[('users', 'user-1', 'processing_attention_items', 'item')] == {'active': True}
+    with pytest.raises(ReadAfterWriteError):
+        sibling.get(transaction=transaction)
