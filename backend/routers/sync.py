@@ -827,7 +827,9 @@ async def sync_local_files(
         # Record DG usage after successful processing (not before, to avoid charging on retries)
         if fair_use_restrict_dg:
             try:
-                dg_ms = int(max(0, total_speech_seconds - cap_held_seconds) * 1000)
+                dg_ms = int(total_speech_seconds * 1000)
+                if cap_holds:
+                    dg_ms = int(max(0, total_speech_seconds - cap_held_seconds) * 1000)
                 if dg_ms > 0:
                     await run_blocking(db_executor, record_dg_usage_ms, uid, dg_ms)
             except Exception as e:

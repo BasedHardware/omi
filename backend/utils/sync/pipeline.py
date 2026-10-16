@@ -3039,7 +3039,9 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 uid=uid,
                 job_id=job_id,
                 content_id=content_id,
-                total_speech_seconds=max(0, total_speech_seconds - cap_held_seconds),
+                total_speech_seconds=(
+                    max(0, total_speech_seconds - cap_held_seconds) if cap_holds else total_speech_seconds
+                ),
             )
 
             # Build result
