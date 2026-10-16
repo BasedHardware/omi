@@ -49,9 +49,9 @@ it("removes a failed renewal frame and schedules capped exponential retries unde
   await advance(6000);
   expect(fetchMock).toHaveBeenCalledTimes(2);
   expect(screen.queryByTitle("Omi TV")).toBeNull();
-  for (const [index, delay] of [
-    15000, 30000, 60000, 120000, 240000, 480000, 480000,
-  ].entries()) {
+  const delays = [15000, 30000, 60000, 120000, 240000, 480000, 480000];
+  for (let index = 0; index < delays.length; index++) {
+    const delay = delays[index];
     const retry = index + 1;
     await advance(delay - 1);
     expect(fetchMock).toHaveBeenCalledTimes(retry + 1);
