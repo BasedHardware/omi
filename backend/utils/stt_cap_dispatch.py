@@ -125,6 +125,12 @@ class CapSocket(STTSocket):
         if self.raw is not None:
             callback(self.raw)
 
+    def set_wire_ledger(self, ledger):
+        self.on_open(lambda transport: transport.set_wire_ledger(ledger))
+
+    def set_capture_axis_ledger(self, ledger):
+        self.on_open(lambda transport: transport.set_capture_axis_ledger(ledger))
+
     @property
     def __class__(self) -> type:
         return self.raw.__class__ if self.raw is not None else type(self)

@@ -191,3 +191,17 @@ async def test_terminal_provider_error_cannot_close_capture_during_cap_pause():
     assert session.active and not session.stt_terminal_failure
     websocket.send_json.assert_not_called()
     websocket.close.assert_not_called()
+
+
+async def test_paused_soniox_binds_wire_ledger_before_resumed_audio():
+    state = cap.LiveAdmission('synthetic')
+    raw = Mock()
+    socket = cap.CapSocket(state, 'soniox', 16000, AsyncMock(return_value=raw))
+    ledger = object()
+    socket.set_wire_ledger(ledger)
+    socket.set_capture_axis_ledger(ledger)
+    raw.set_wire_ledger.assert_not_called()
+    state.managed, state.remaining = True, 10
+    await socket.resume()
+    raw.set_wire_ledger.assert_called_once_with(ledger)
+    raw.set_capture_axis_ledger.assert_called_once_with(ledger)
