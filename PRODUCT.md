@@ -71,6 +71,12 @@ describes the capture, memory consent, and quality boundaries.
 
 ## Before you build
 
+Missing Daily Recaps must have a user-initiated recovery path for older dates,
+including accounts without push notifications. Reuse the shared date-based
+creation authority, preserve existing recaps and conversations, and distinguish
+empty days, ongoing generation, cooldowns, and failures. The cross-client flow
+and verification checklist live in `app/docs/recap-recovery.md`.
+
 - Large or ambiguous features start as a GitHub issue
   ([Contribution guide](docs/doc/developer/Contribution.mdx)).
 - Check the [invariant registry](product/invariants/) for locked rules that

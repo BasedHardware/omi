@@ -50,7 +50,12 @@ async def request_read_scope():
         with holder.lock:
             holder.closed = True
             holder.values.clear()
-        _request.reset(token)
+        try:
+            _request.reset(token)
+        except ValueError:
+            # FastAPI may tear down yield dependencies in another Context (streaming responses);
+            # the closed holder already stops reuse there.
+            pass
 
 
 @contextmanager
@@ -291,34 +296,35 @@ def cached_read(family, uid, variant, fetch, *, seconds=60, cacheable=lambda val
 
 @contextmanager
 def writing(family, uid):
-    """Invalidate both sides of a durable write, including same-request reads."""
+    """Invalidate both sides of a durable write, including same-request reads.
+
+    The generation fence runs regardless of this writer's lever: readers on other revisions or cohorts may
+    already be caching this UID, so only cache reads are cohort-gated.
+    """
     _forget(uid)
-    enabled = lever_enabled(family, uid)
     root = _root(family, uid)
     token = uuid.uuid4().hex
     begun = False
-    if enabled:
-        try:
-            _redis().eval(_BEGIN, 2, root + ':generation', root + ':writers', token, _generation_ttl(family))
-            begun = True
-        except Exception:
-            _failure(family, 'invalidate')
+    try:
+        _redis().eval(_BEGIN, 2, root + ':generation', root + ':writers', token, _generation_ttl(family))
+        begun = True
+    except Exception:
+        _failure(family, 'invalidate')
     try:
         yield
     finally:
         _forget(uid)
-        if enabled:
-            try:
-                # Even when begin failed, advance the generation after the write.
-                _redis().eval(
-                    _END, 2, root + ':generation', root + ':writers', token, uuid.uuid4().hex, _generation_ttl(family)
-                )
-                _event(family, 'invalidate')
-            except Exception:
-                _failure(family, 'invalidate')
-                # A successful begin leaves a persistent writer fence on failure.
-                if begun:
-                    logger.warning('Firestore read cache writer fence retained family=%s', family)
+        try:
+            # Even when begin failed, advance the generation after the write.
+            _redis().eval(
+                _END, 2, root + ':generation', root + ':writers', token, uuid.uuid4().hex, _generation_ttl(family)
+            )
+            _event(family, 'invalidate')
+        except Exception:
+            _failure(family, 'invalidate')
+            # A successful begin leaves a persistent writer fence on failure.
+            if begun:
+                logger.warning('Firestore read cache writer fence retained family=%s', family)
 
 
 def cache_writer(family):

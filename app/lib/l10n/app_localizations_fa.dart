@@ -4374,12 +4374,27 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'طرح $plan شما در $date به پایان می‌رسد.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'همین الآن مجددا مشترک شوید تا از مزایای خود محروم نشوید - تا $date هیچ هزینه‌ای نخواهید داشت.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'طرح شما برای لغو در تاریخ $date برنامه‌ریزی شده است.\nهمین الآن مجددا مشترک شوید تا از مزایای خود محروم نشوید - تا $date هیچ هزینه‌ای نخواهید داشت.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'طرح سالانه شما به‌طور خودکار هنگام پایان طرح ماهانه شما شروع خواهد شد.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'طرح $plan شما در $date تمدید می‌شود.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4412,6 +4427,9 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get continueText => 'ادامه';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'برای تغییر طرح، ابتدا دوباره مشترک شوید.';
 
   @override
   String get resubscribe => 'مجددا مشترک شوید';
