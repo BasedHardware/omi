@@ -299,12 +299,16 @@ class _AIQuery:
         per_doc_seconds: float = 0.0,
         clock=None,
         stream_error: Optional[BaseException] = None,
+        order_field: Optional[str] = None,
+        desc: bool = False,
     ):
         self._docs = docs
         self._filters = list(filters or [])
         self._per_doc_seconds = per_doc_seconds
         self._clock = clock
         self._stream_error = stream_error
+        self._order_field = order_field
+        self._desc = desc
 
     def where(self, *args, **kwargs):
         filt = kwargs.get('filter') or (args[0] if args else None)
@@ -314,10 +318,21 @@ class _AIQuery:
             self._per_doc_seconds,
             self._clock,
             self._stream_error,
+            order_field=self._order_field,
+            desc=self._desc,
         )
 
-    def order_by(self, *args, **kwargs):
-        return self
+    def order_by(self, field, direction=None):
+        desc = str(direction).endswith('DESCENDING')
+        return _AIQuery(
+            self._docs,
+            self._filters,
+            self._per_doc_seconds,
+            self._clock,
+            self._stream_error,
+            order_field=field,
+            desc=desc,
+        )
 
     def select(self, fields):
         return self
@@ -341,6 +356,14 @@ class _AIQuery:
                 docs = [d for d in docs if bool(d._data.get('completed', False)) is bool(value)]
             elif field == 'conversation_id' and op == '==':
                 docs = [d for d in docs if d._data.get('conversation_id') == value]
+        if self._order_field == 'due_at':
+            docs = [d for d in docs if d._data.get('due_at') is not None]
+            docs.sort(key=lambda d: d._data['due_at'], reverse=self._desc)
+        elif self._order_field == 'created_at':
+            docs = [d for d in docs if d._data.get('created_at') is not None]
+            docs.sort(
+                key=lambda d: d._data.get('created_at', datetime.min.replace(tzinfo=timezone.utc)), reverse=self._desc
+            )
         return docs
 
     def stream(self, **kwargs):

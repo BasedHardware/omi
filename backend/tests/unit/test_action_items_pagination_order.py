@@ -36,11 +36,13 @@ class _Doc:
 
 
 class _Query:
-    """Firestore query stand-in with completed equality filtering (production semantics)."""
+    """Firestore query stand-in with completed equality filtering and ordering semantics."""
 
-    def __init__(self, docs, completed=None):
+    def __init__(self, docs, completed=None, order_field=None, desc=False):
         self._docs = docs
         self._completed = completed
+        self._order_field = order_field
+        self._desc = desc
         self._offset = 0
         self._limit = None
 
@@ -52,10 +54,11 @@ class _Query:
             value = getattr(filt, 'value', None)
             if field == 'completed':
                 completed = value
-        return _Query(self._docs, completed=completed)
+        return _Query(self._docs, completed=completed, order_field=self._order_field, desc=self._desc)
 
-    def order_by(self, *a, **k):
-        return self
+    def order_by(self, field, direction=None):
+        desc = str(direction).endswith('DESCENDING')
+        return _Query(self._docs, completed=self._completed, order_field=field, desc=desc)
 
     def select(self, _fields):
         return self
@@ -73,6 +76,12 @@ class _Query:
         if self._completed is not None:
             # Firestore equality excludes missing/null completed fields.
             d = [doc for doc in d if doc._data.get('completed') is self._completed]
+        if self._order_field == 'due_at':
+            d = [doc for doc in d if doc._data.get('due_at') is not None]
+            d.sort(key=lambda doc: doc._data['due_at'], reverse=self._desc)
+        elif self._order_field == 'created_at':
+            d = [doc for doc in d if doc._data.get('created_at') is not None]
+            d.sort(key=lambda doc: doc._data['created_at'], reverse=self._desc)
         d = d[self._offset :]
         if self._limit is not None:
             d = d[: self._limit]
@@ -182,3 +191,30 @@ def test_completed_normalized_to_bool(raw, expected_completed, expected_status):
     out = action_items.prepare_action_item_for_read(dict(raw))
     assert out['completed'] is expected_completed
     assert out['status'] == expected_status
+
+
+def test_pagination_beyond_scan_window_has_no_duplicates_or_omissions(fake_db):
+    """200 active tasks must paginate without duplicates or omissions across pages (#21225).
+
+    Ids t000..t199 ascending, due dates reversed so t199 is due soonest. In the previous
+    unordered scan, page 1 pulled an arbitrary document-order prefix, omitting soon-due tasks
+    and repeating ~67 tasks across consecutive 100-item pages.
+    """
+    tasks_200 = [
+        _Doc(f't{i:03d}', BASE + timedelta(minutes=i), BASE + timedelta(days=200 - i), completed=False)
+        for i in range(200)
+    ]
+    query = _Query(tasks_200)
+    fake_db.collection.return_value.document.return_value.collection.return_value = query
+
+    page1 = [item['id'] for item in action_items.get_action_items('uid1', limit=100, offset=0)]
+    page2 = [item['id'] for item in action_items.get_action_items('uid1', limit=100, offset=100)]
+
+    assert len(page1) == 100
+    assert len(page2) == 100
+    # Page 1 must hold the 100 soonest-due tasks (t199 down to t100)
+    assert page1[:3] == ['t199', 't198', 't197']
+    assert page2[:3] == ['t099', 't098', 't097']
+    # Completely disjoint and covering all 200 tasks
+    assert set(page1).isdisjoint(set(page2))
+    assert set(page1 + page2) == {f't{i:03d}' for i in range(200)}
