@@ -907,6 +907,11 @@ class TestVerifyCloudTasksOidc:
             'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
             'job-1-s7',
         )
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
+            cloud_tasks.enqueue_sync_job(payload, dispatch_attempt=2)
+            cloud_tasks.enqueue_sync_job(payload, dispatch_attempt=2)
+        assert [call.args[2] for call in enqueue.call_args_list] == ['job-1-s7-d2', 'job-1-s7-d2']
+        assert all(call.args[3] == payload for call in enqueue.call_args_list)
 
     @pytest.mark.parametrize('sequencer', ['on', 'off'])
     def test_direct_backfill_newest_gets_earlier_eligibility(self, sequencer):

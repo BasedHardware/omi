@@ -4512,6 +4512,17 @@
             "title": "Provider",
             "type": "string"
           },
+          "source_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Fingerprint"
+          },
           "started_at": {
             "anyOf": [
               {
@@ -32330,6 +32341,17 @@
             "default": 0,
             "title": "Failed Segments",
             "type": "integer"
+          },
+          "held_audio": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Held Audio"
           },
           "new_memories": {
             "items": {
@@ -81668,6 +81690,16 @@
             "schema": {
               "title": "Job Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "surface_open",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Surface Open",
+              "type": "boolean"
             }
           },
           {

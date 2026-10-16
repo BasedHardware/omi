@@ -1,3 +1,5 @@
+from config.stt_cap_dispatch import enabled as stt_cap_dispatch_enabled
+from utils.observability.stt_cap_dispatch import CONFIG_ERRORS
 import os
 from database.fsr_read_cache import fresh_reader
 from dataclasses import dataclass
@@ -1584,9 +1586,15 @@ def get_monthly_usage_for_subscription(uid: str) -> Dict[str, Any]:
     """
     Gets the current monthly usage for subscription purposes, considering the launch date from env variables.
     The launch date format is expected to be YYYY-MM-DD.
-    If the launch date is not set, not valid, or in the future, usage is considered zero.
+    Legacy mode treats unset, invalid and future dates as zero usage. Dispatch
+    enforcement rejects missing/invalid configuration; an explicit future date
+    is the intentionally unlaunched policy in both modes.
     """
     subscription_launch_date_str = os.getenv('SUBSCRIPTION_LAUNCH_DATE')
+    if stt_cap_dispatch_enabled() and not subscription_launch_date_str:
+        CONFIG_ERRORS.labels(reason='missing').inc()
+        logger.error('event=stt_cap_launch_config outcome=invalid reason=missing')
+        raise ValueError('missing subscription launch date')
     if not subscription_launch_date_str:
         # Subscription not launched, so no usage is counted against limits.
         return {}
@@ -1595,6 +1603,10 @@ def get_monthly_usage_for_subscription(uid: str) -> Dict[str, Any]:
         # Use strptime to enforce YYYY-MM-DD format
         launch_date = datetime.strptime(subscription_launch_date_str, '%Y-%m-%d').replace(tzinfo=timezone.utc)
     except ValueError:
+        if stt_cap_dispatch_enabled():
+            CONFIG_ERRORS.labels(reason='invalid').inc()
+            logger.error('event=stt_cap_launch_config outcome=invalid reason=invalid')
+            raise
         # Invalid date format, treat as not launched.
         return {}
 
@@ -1668,6 +1680,7 @@ def resolve_transcription_allowance(
     subscription: Any = _UNRESOLVED,
     usage: Any = _UNRESOLVED,
     byok_active: Any = _UNRESOLVED,
+    omi_funded: bool = False,
 ) -> TranscriptionAllowance:
     """Resolve the managed-transcription allowance for one uid, once. Never raises.
 
@@ -1701,10 +1714,13 @@ def resolve_transcription_allowance(
         # lookup failure must not open a billed socket for a paywalled account,
         # and only a validated key on this request (not a stored fingerprint)
         # exempts.
-        if is_trial_paywalled(uid, source, required_byok_provider='deepgram', strict=True):
+        paywall_kwargs = {'byok_exempt': False} if omi_funded else {}
+        if is_trial_paywalled(uid, source, required_byok_provider='deepgram', strict=True, **paywall_kwargs):
             return TranscriptionAllowance(TRANSCRIPTION_MODE_BLOCKED, 0, 'trial_paywalled')
         # Require the Deepgram header on this request so a user cannot activate
         # BYOK with fake fingerprints and then omit x-byok-deepgram to ride Omi's key.
+        if omi_funded:
+            byok_active = False
         if byok_active is _UNRESOLVED:
             byok_active = users_db.is_byok_active(uid)
         if byok_active and get_byok_key('deepgram'):

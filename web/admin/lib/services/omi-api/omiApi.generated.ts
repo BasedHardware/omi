@@ -673,6 +673,7 @@ export interface AudioFile {
   duration: number;
   id: string;
   provider?: string;
+  source_fingerprint?: string | null;
   started_at?: string | null;
   uid: string;
 }
@@ -5313,6 +5314,7 @@ export interface SyncJobStatusResponse {
 export interface SyncLocalFilesResultResponse {
   errors?: Array<string>;
   failed_segments?: number;
+  held_audio?: boolean | null;
   new_memories?: Array<string>;
   total_segments?: number;
   updated_memories?: Array<string>;
@@ -21965,10 +21967,13 @@ export async function sync_local_files_v2_v2_sync_local_files_post(query: { conv
   return;
 }
 
-export async function get_sync_job_status_v2_sync_local_files__job_id__get(path: { job_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<SyncJobStatusResponse> {
+export async function get_sync_job_status_v2_sync_local_files__job_id__get(path: { job_id: string }, query: { surface_open?: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<SyncJobStatusResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/sync-local-files/${path.job_id}`;
-  const _search = "";
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "GET",
     headers: {

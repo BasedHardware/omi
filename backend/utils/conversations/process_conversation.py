@@ -14,6 +14,8 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, cast
 
 from fastapi import HTTPException
 
+from utils.sync.repeat_work_metrics import conversation_scope, record_final, record_feature, bind_generation
+
 import database._client as db_client_module
 from database import redis_db
 from database.firestore_read_metrics import FirestoreReadSite
@@ -1012,6 +1014,7 @@ def _sweep_owned_writer_mode(uid: str) -> Optional[str]:
 
 
 @spelling_context_run
+@conversation_scope
 def extract_memories(uid: str, conversation: Conversation) -> None:
     """Extract one conversation's memories through the selected memory system.
 
@@ -1977,7 +1980,9 @@ def _extract_memories_canonical(
         conversation.id,
         replacement_payloads,
     )
-    llm_input_dedupe.l1_succeeded(uid, conversation, l1_digest, db_client=db_client)
+    if llm_input_dedupe.l1_succeeded(uid, conversation, l1_digest, db_client=db_client):
+        record_feature(uid, conversation, 'l1', 'durable')
+        conversation.l1_llm_input_hash = l1_digest
     capture_regime = getattr(conversation.source, "value", conversation.source) or ConversationSource.unknown.value
     owner_evidence = OwnerAttributionEvidence.from_segments(conversation.transcript_segments)
     for memory_db_obj, _, _, _ in parsed_memories:
@@ -2752,6 +2757,7 @@ def _enrich_meeting_context(uid: str, conversation: Any) -> None:
 
 
 @spelling_context_run
+@conversation_scope
 def process_conversation(
     uid: str,
     language_code: str,
@@ -3057,6 +3063,7 @@ def process_conversation(
         people = Person.deserialize_many_safe(people_data)
 
     generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
+    bind_generation(uid, generated_conversation_id)
     decisions: list[RelevanceDecision] = []
     llm_hashes: dict[str, str] = {}
     structured, discarded = _get_structured(
@@ -3158,6 +3165,12 @@ def process_conversation(
             conversation.id,
         )
         return conversation
+
+    record_final(uid, conversation)
+    if llm_hashes:
+        record_feature(uid, conversation, 'notes', 'durable')
+        for field, value in llm_hashes.items():
+            setattr(conversation, field, value)
 
     from utils.conversations.demand_processing import lazy_enrichment_enabled
 

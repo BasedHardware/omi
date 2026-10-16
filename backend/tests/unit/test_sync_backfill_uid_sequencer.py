@@ -339,10 +339,63 @@ def test_sweeper_replaces_lost_dispatch_then_releases_terminal_job(db, monkeypat
     owner = registry.get_owner('a', firestore_client=db)
     assert uid_sequencer.reconcile_uid('a', owner, now=expired) == 'lease_expired'
     assert dispatched[0]['job_id'] == 'lost'
-    assert dispatched[0]['epoch'] == first['epoch'] + 1
+    assert dispatched[0]['epoch'] == first['epoch']
+    assert dispatched[0]['dispatch_attempt'] == 1
     assert registry.finish_job('a', 'lost', dispatched[0]['epoch'], 'failed', firestore_client=db, now=expired)
     assert uid_sequencer.kick('a')
     assert dispatched[-1]['job_id'] == 'next'
+
+
+@pytest.mark.parametrize('flag', ['on', 'off'])
+@pytest.mark.parametrize('delivery', ['original', 'replacement'])
+def test_delivery_after_running_lease_survives_repeated_dispatch_redrives(db, monkeypatch, flag, delivery):
+    monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', flag)
+    monkeypatch.setenv('SYNC_BACKFILL_ROUTING_ENABLED', 'false')
+    monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs')
+    monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://sync.example.com/v2/sync-jobs/run')
+    monkeypatch.setattr(registry, '_now', lambda: NOW)
+    monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
+    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: {'status': 'queued'})
+    monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
+    monkeypatch.setattr(backfill_cutover, 'direct_remaining_for_uid', lambda _uid: (0, ''))
+    tasks = {}
+
+    def enqueue(_queue, _url, task_id, payload, **_kwargs):
+        # Model named-task dedup, including names retained after task deletion.
+        tasks.setdefault(task_id, copy.deepcopy(payload))
+
+    monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
+    payload = {key: None for key in cloud_tasks.SYNC_JOB_TASK_PAYLOAD_KEYS}
+    payload.update(uid='a', job_id='delayed', lane='backfill')
+    registry.register_job('a', 'delayed', payload, NOW.timestamp(), now=NOW)
+    _register('a', 'next', 1, db=db)
+    first = registry.claim_next('a', now=NOW)
+    uid_sequencer._dispatch(first)
+    original_name = f"delayed-s{first['epoch']}"
+    # No delivery for two hours. Each sweep previously invalidated every task
+    # already in the queue, even well before the 30-minute running lease.
+    for minute in range(6, 121, 6):
+        current = NOW + timedelta(minutes=minute)
+        assert uid_sequencer.reconcile_uid('a', registry.get_owner('a'), now=current) == 'lease_expired'
+        assert registry.get_owner('a')['active_epoch'] == first['epoch']
+        assert registry.claim_next('a', now=current) is None
+    assert len(tasks) == 21
+    replacement_name = f"{original_name}-d20"
+    assert tasks[replacement_name] == tasks[original_name]
+    # Retrying an uncertain acknowledgement is idempotent for that attempt.
+    owner = registry.get_owner('a')
+    uid_sequencer._dispatch({**first, 'dispatch_attempt': owner['dispatch_attempt']})
+    assert len(tasks) == 21
+    delivered = tasks[original_name if delivery == 'original' else replacement_name]
+    current = NOW + timedelta(seconds=registry.LEASE_SECONDS * 4 + 1)
+    assert registry.begin_job('a', 'delayed', delivered['sequencer_epoch'], now=current)
+    assert registry.get_owner('a')['lease_expires_at'] == current + timedelta(seconds=registry.LEASE_SECONDS)
+    # A stale sweeper snapshot cannot redrive a worker that just began.
+    assert registry.redrive_job('a', 'delayed', first['epoch'], now=current) is None
+    assert registry.finish_job('a', 'delayed', first['epoch'], 'completed', now=current)
+    for task in tasks.values():
+        assert not registry.begin_job('a', 'delayed', task['sequencer_epoch'], now=current)
+    assert registry.claim_next('a', now=current)['job_id'] == 'next'
 
 
 def test_flag_switch_does_not_change_persisted_owner_or_legacy_task(db, monkeypatch):
@@ -1013,7 +1066,7 @@ def test_301_empty_owners_cannot_crowd_out_stuck_lease_from_one_page(db, monkeyp
     outcomes = uid_sequencer.sweep(limit=100)
     assert outcomes['lease_expired'] == 1
     assert len(dispatched) == 1 and dispatched[0]['job_id'] == 'stuck-job'
-    assert dispatched[0]['epoch'] > claim['epoch']
+    assert dispatched[0]['epoch'] == claim['epoch'] + int(state == 'running')
 
 
 @pytest.mark.parametrize('release', ['finish', 'active_retire', 'pending_retire'])

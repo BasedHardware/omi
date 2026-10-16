@@ -14,6 +14,8 @@ import pytest
 # --- Stubs to isolate from heavy deps ---
 # Use MagicMock for modules where specific names are imported (auto-creates attributes).
 # Use ModuleType only for modules imported as a whole without specific attribute access at import time.
+# Keep the real utils.other namespace so pure transitive helpers remain importable;
+# only its heavyweight storage/endpoints leaves need stubs.
 _stub_modules = [
     'database._client',
     'database.redis_db',
@@ -31,7 +33,6 @@ _stub_modules = [
     'models.transcript_segment',
     'utils.conversations.factory',
     'utils.conversations.process_conversation',
-    'utils.other',
     'utils.other.endpoints',
     'utils.other.storage',
     'utils.encryption',

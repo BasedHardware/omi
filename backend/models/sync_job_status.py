@@ -12,6 +12,7 @@ class SyncLocalFilesResultResponse(BaseModel):
     failed_segments: int = 0
     total_segments: int = 0
     errors: list[str] = Field(default_factory=list)
+    held_audio: bool | None = None
 
 
 class SyncJobStartResponse(BaseModel):

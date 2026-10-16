@@ -22,6 +22,7 @@ from google.api_core.exceptions import AlreadyExists, FailedPrecondition, NotFou
 from prometheus_client import Counter
 
 from config.sync_reprocess import settle_seconds
+from config.repeat_work import revision_reuse
 from database._client import get_firestore_client
 
 Row: TypeAlias = dict[str, Any]
@@ -217,12 +218,14 @@ def mark(
         )
         from config.demand_processing import enabled
 
-        if enabled(uid):
+        demand_enabled = enabled(uid)
+        if demand_enabled or revision_reuse():
+            # Keep demand's processing headroom when both policies are enabled;
+            # revision reuse alone retains its upstream one-hour ceiling.
             row['first_pending_at'] = row.get('first_pending_at', current)
-            row['due_at'] = min(row['due_at'], row['first_pending_at'] + 3540)
-        row.update(
-            effects_only=effects_only,
-        )
+            ceiling = 3540 if demand_enabled else 3600
+            row['due_at'] = min(row['due_at'], row['first_pending_at'] + ceiling)
+        row.update(effects_only=effects_only)
         if old is None:
             row.update(
                 task_token=uuid.uuid4().hex, task_due_at=row['due_at'], lease_until=0, dispatch=_dispatch_binding()

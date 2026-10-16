@@ -12,6 +12,7 @@ from google.cloud import firestore
 
 from database import dream_store
 from config.dream_agent import enabled
+from utils.dream_cost import minute_burndown_tokens
 
 HEADROOM_SHARDS = 64
 
@@ -135,7 +136,16 @@ def settle(uid, run_id, turn, *, firestore_client=None):
         hold = lease.get('minute_hold') or {}
         capacities = []
         held_shards = list((hold.get('shards') or {}).items())
-        remaining = charge
+        # Minute headroom is reserved-capacity burndown, matching reserve(): the price-weighted tokens
+        # (cached input at its fraction, unknown tail at full) plus output topped up to the output ratio.
+        weighted = getattr(turn, 'price_weighted_tokens', None)
+        completion = (
+            turn.completion_tokens if type(turn.completion_tokens) is int and turn.completion_tokens >= 0 else 0
+        )
+        base = weighted if type(weighted) is int and 0 <= weighted <= charge else charge
+        remaining = minute_burndown_tokens(
+            'gemini', 'gemini-3.8-flash', weighted_tokens=base, completion_tokens=min(completion, base)
+        )
         for index, (shard, held) in enumerate(held_shards):
             ref = headroom_ref(database, int(shard))
             capacity = ref.get(transaction=tx).to_dict() or {}

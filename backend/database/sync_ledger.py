@@ -73,6 +73,7 @@ class SyncContentRunBindingOutcome(str, Enum):
 
     BOUND = 'bound'
     COMPLETED = 'completed'
+    HELD = 'held'
     LOST = 'lost'
 
 
@@ -90,6 +91,10 @@ class SyncContentRunBinding:
     @property
     def completed(self) -> bool:
         return self.outcome is SyncContentRunBindingOutcome.COMPLETED
+
+    @property
+    def held(self) -> bool:
+        return self.outcome is SyncContentRunBindingOutcome.HELD
 
 
 def _ledger_ref(client: Any, uid: str, content_id: str) -> Any:
@@ -122,9 +127,23 @@ def _ledger_owner_matches(
     return bound_token == run_token and bound_epoch == run_epoch
 
 
+def sync_content_reference(client: Any, uid: str, content_id: str) -> Any:
+    """Share the canonical owner-scoped reference with a custody transfer."""
+    return _ledger_ref(client, uid, content_id)
+
+
+def sync_content_owner_matches(
+    existing: Dict[str, Any], job_id: str, run_token: str | None, run_epoch: int | None = None
+) -> bool:
+    """Custody transfer uses the same token/epoch fence as normal completion."""
+    return _ledger_owner_matches(existing, job_id, run_token, run_epoch)
+
+
 def is_valid_completed_sync_content_result(result: Any) -> bool:
     """A ledger completion may converge Redis only for an all-success result."""
     if not isinstance(result, dict):
+        return False
+    if result.get('held_audio') is True:
         return False
     failed_segments = result.get('failed_segments')
     total_segments = result.get('total_segments')
@@ -150,6 +169,12 @@ def is_valid_completed_sync_content_result(result: Any) -> bool:
         # zero-segment records predate the silence-vs-decode-failure contract.
         return total_segments > 0
     return outcome in {'success', 'expected_silence'}
+
+
+def is_valid_held_sync_content_result(result: Any) -> bool:
+    if not isinstance(result, dict) or result.get('held_audio') is not True:
+        return False
+    return is_valid_completed_sync_content_result({**result, 'held_audio': False})
 
 
 def _processing_claim_updates(
@@ -193,6 +218,10 @@ def _claim_transaction(
 ) -> Dict[str, Any]:
     snapshot = ref.get(transaction=transaction)
     existing = cast(Dict[str, Any], snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
+    if existing.get('dispatch_protocol') == 'stt_cap_hold_v1' and existing.get('status') == 'held':
+        if is_valid_held_sync_content_result(existing.get('result')):
+            return {'outcome': 'held', 'result': existing['result'], 'job_id': existing.get('job_id')}
+        return {'outcome': 'busy', 'job_id': existing.get('job_id')}
     if existing.get('dispatch_protocol') == 'batch_v1':
         result = existing.get('result')
         if existing.get('status') == 'completed' and is_valid_completed_sync_content_result(result):
@@ -293,6 +322,10 @@ def _bind_run_token_transaction(
     """
     snapshot = ref.get(transaction=transaction)
     existing = cast(Dict[str, Any], snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
+    if existing.get('dispatch_protocol') == 'stt_cap_hold_v1' and existing.get('status') == 'held':
+        if is_valid_held_sync_content_result(existing.get('result')):
+            return SyncContentRunBinding(SyncContentRunBindingOutcome.HELD, existing['result'])
+        return SyncContentRunBinding(SyncContentRunBindingOutcome.LOST)
     if existing.get('dispatch_protocol') == 'batch_v1':
         result = existing.get('result')
         if existing.get('status') == 'completed' and is_valid_completed_sync_content_result(result):
