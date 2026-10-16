@@ -112,6 +112,16 @@ def _excludes(row: Mapping[str, Any], other_ids: set[str]) -> bool:
     return bool(set(row.get(EXCLUSIONS_FIELD) or ()) & other_ids)
 
 
+def _snapshots_match(rows: Mapping, windows: Mapping, fingerprints: Mapping) -> bool:
+    for cid, window in windows.items():
+        row = rows.get(cid) or {}
+        if (_aware(row.get('started_at')), _aware(row.get('finished_at'))) != tuple(_aware(v) for v in window):
+            return False
+    return all(
+        value is not None and transcript_fingerprint(rows.get(cid)) == value for cid, value in fingerprints.items()
+    )
+
+
 def join_capture_group(
     uid: str,
     first_id: str,
@@ -138,6 +148,10 @@ def join_capture_group(
     transcript changes after the evidence was gathered. ``call_primary_id``
     enables the strict two-member call policy; ``continuation_from`` requires
     the caller's transaction-time policy guard before growing a call group.
+    ``expected_group_revision=0`` requires an ungrouped pair; a positive value
+    fences the existing membership used for group-wide speech confirmation.
+    Ordinary callers may supply ``join_guard`` to recheck eligibility for all
+    members on transaction snapshots before any membership write.
     """
     client = firestore_client or get_firestore_client()
     collection = client.collection('users').document(uid).collection(_CONVERSATIONS)
@@ -147,22 +161,34 @@ def join_capture_group(
         rows = {cid: collection.document(cid).get(transaction=transaction).to_dict() for cid in (first_id, second_id)}
         if not all(_joinable(row) for row in rows.values()):
             return None
-        for cid, window in (expected_windows or {}).items():
-            row = rows.get(cid) or {}
-            if (_aware(row.get('started_at')), _aware(row.get('finished_at'))) != tuple(_aware(v) for v in window):
-                return None
-        for cid, fingerprint in (expected_fingerprints or {}).items():
-            if fingerprint is None or transcript_fingerprint(rows.get(cid)) != fingerprint:
-                return None
+        # Keep the incumbent early conflict exit (and its read budget) intact.
+        if not _snapshots_match(
+            rows,
+            {k: v for k, v in (expected_windows or {}).items() if k in rows or expected_group_revision is None},
+            {k: v for k, v in (expected_fingerprints or {}).items() if k in rows or expected_group_revision is None},
+        ):
+            return None
         groups = {cid: (row.get(CAPTURE_GROUP_FIELD) or {}) for cid, row in rows.items()}
         group_ids = {g.get('id') for g in groups.values() if g.get('id')}
         if len(group_ids) > 1:
             return None
 
         existing = next((g for g in groups.values() if g.get('id')), None)
+        if expected_group_revision is not None:
+            if expected_group_revision == 0:
+                if existing:
+                    return None
+            elif not existing or existing.get('revision') != expected_group_revision:
+                return None
         member_ids = [m['id'] for m in (existing or {}).get('members', []) if m.get('id') not in rows]
         for cid in member_ids:
             rows[cid] = collection.document(cid).get(transaction=transaction).to_dict()
+        # A caller may confirm the entrant against every existing group member.
+        # Fence all of those transcripts/windows after reading the full group.
+        if expected_group_revision is not None and not _snapshots_match(
+            rows, expected_windows or {}, expected_fingerprints or {}
+        ):
+            return None
         # Deleted, closed, or departed members (e.g. absorbed by sync, or regrouped
         # by a race with deletion) are pruned rather than advertised.
         existing_id = (existing or {}).get('id')
@@ -199,6 +225,8 @@ def join_capture_group(
                 return None
         elif existing and existing.get('kind') == CALL_GROUP_KIND:
             # The ordinary shared-speech path cannot grow a call group.
+            return None
+        if not call_primary_id and join_guard and not join_guard(rows, transaction, client):
             return None
         live: dict[str, Mapping[str, Any]] = {
             cid: row

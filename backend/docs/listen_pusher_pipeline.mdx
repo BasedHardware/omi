@@ -962,6 +962,19 @@ processing hosts — Cloud Run `backend`, `backend-sync`, `backend-sync-backfill
 same-scene shadow also logs a companion `phase=jev` line carrying the existing
 score for per-flow comparison; it changes nothing in the Jev record.
 
+### Default-off deterministic shared speech
+
+`CAPTURE_SHARED_SPEECH_MODE=off|shadow|on`, the UID allowlist and stable percentage
+cohort gate a bounded overlap-only sentence matcher at the existing duplicate
+capture seam. Off preserves incumbent behavior. Shadow emits identifier-only
+verdicts; on requires ordered, time-aligned shared sentences and sufficient
+matched duration, including same-source duplicates. Group writes remain
+metadata-only and preserve Separate exclusions and transactional fences.
+The current authorized rollout deploys Cloud Run dark then shadow only; Pusher
+and listen keep mode off and receive code through their regular train. No on
+activation is qualified. Design, calibration, bounds and rollback details are in
+[the shared speech runbook](operational/capture-shared-speech.md).
+
 The default-off `CAPTURE_JEV_SHADOW_ENABLED` experiment also submits up to six
 overlapping pairs, including same-source and below-threshold pairs, to a bounded
 background Jev worker after finalization. It records the shipped group outcome
