@@ -15,6 +15,10 @@ Add one fragment per user-visible change under `unreleased/`, named
 a 360×168 acrylic toast (`src/renderer/src/components/insight/InsightToast.tsx`),
 with the full list one click away via "View release notes".
 
+Import the fragment explicitly in `src/main/whatsNew.ts` and add it to `CHANGES`
+with `changesFromFragment`. A fragment on disk is not loaded automatically. Add
+coverage in `src/main/whatsNew.test.ts` that the update payload contains the note.
+
 ## Runtime
 
 On launch, `src/main/whatsNew.ts` compares the running build to the last version
@@ -27,7 +31,7 @@ packaged notifications attribute to Omi.
 
 The macOS `desktop-changelog.py` consolidation (fragments → `releases/<version>.json`
 on release) and its CI check (`check-desktop-changelog.py`) are **not yet ported**.
-Today `whatsNew.ts` imports the single unreleased fragment directly. When a Windows
+Today `whatsNew.ts` imports selected unreleased fragments directly. When a Windows
 release pipeline lands, port the consolidation script + a CI gate that fails a PR
 whose user-visible change ships no fragment, and switch `whatsNew.ts` to read the
 compiled per-version file.

@@ -32,6 +32,7 @@ import { ModalShell } from '../components/conversations/ModalShell'
 import { MoveToFolderMenu } from '../components/conversations/MoveToFolderMenu'
 import { NameSpeakerModal } from '../components/conversations/NameSpeakerModal'
 import { TranscriptDrawer } from '../components/conversations/TranscriptDrawer'
+import { ConversationAnalyticsPanel } from '../components/conversations/ConversationAnalyticsPanel'
 import { fetchPeople } from '../lib/conversations/people'
 import { fetchFolders } from '../lib/conversations/folders'
 import { friendlyConversationError } from '../lib/conversations/detailErrors'
@@ -705,6 +706,10 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
               {duration != null && <Chip>{formatDuration(duration)}</Chip>}
               {category && <Chip>{category}</Chip>}
             </div>
+
+            {!conv.is_locked && (!status || status === 'completed') && (
+              <ConversationAnalyticsPanel conversationId={id} transcriptSegments={segments} />
+            )}
 
             {insights.length > 0 && (
               <section className="space-y-2">
