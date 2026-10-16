@@ -100,6 +100,7 @@ class _FakeRingDevice implements DeviceConnection {
   final readCalls = <int>[];
   final stopCalls = <int>[];
   Completer<RingStatus?>? statusGate;
+  bool statusRequested = false;
   int custodyEpochValue = 1;
   int effectiveCapsValue = 0;
   bool readResult = true;
@@ -112,6 +113,7 @@ class _FakeRingDevice implements DeviceConnection {
 
   @override
   Future<RingStatus?> getRingStatus() async {
+    statusRequested = true;
     final gate = statusGate;
     if (gate != null) return gate.future;
     return RingStatus(usedBytes: 0, unreadPackets: ringInfo.unreadPackets, freeBytes: 0, rtcValid: 1);
@@ -459,7 +461,7 @@ void main() {
     final sync = syncWith(local, card, wal);
 
     final future = sync.syncWal(wal: wal);
-    await _until(() => card.readCalls.isNotEmpty);
+    await _until(() => card.statusRequested);
     card.custodyEpochValue = 11;
     card.statusGate!.complete(RingStatus(usedBytes: 0, unreadPackets: 1, freeBytes: 0, rtcValid: 1));
     await future;
