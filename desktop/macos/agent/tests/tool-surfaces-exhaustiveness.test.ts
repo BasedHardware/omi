@@ -18,6 +18,7 @@ const generatedOutputPaths = [
   realtimeToolsPath,
   join(__dirname, "../../Desktop/Sources/Generated/GeneratedToolExecutors.swift"),
   join(__dirname, "../../Desktop/Sources/Generated/OmiToolManifest.generated.swift"),
+  join(__dirname, "../../Desktop/Sources/Generated/GeneratedUIAutomationSafetyFloor.swift"),
   fixturePath,
 ];
 const providerTopLevelCompositeSchemaKeys = ["anyOf", "oneOf", "allOf"];

@@ -85,6 +85,7 @@ const desktopCoordinatorBundleSchema = z.enum([
   "desktop.automation.read",
   "desktop.automation.act_dev_only",
   "desktop.automation.act",
+  "desktop.automation.observe",
   "desktop.contacts.read",
   "desktop.mail.read",
   "desktop.messaging.read",

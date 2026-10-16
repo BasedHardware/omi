@@ -34,6 +34,10 @@ extension AgentRuntimeProcess.RuntimeMessage {
     case externalSurfaceRunCompleteResult
     case chatFirstHarnessExecutorResult
     case ownerRuntimeRevoked
+    /// A device tool call is parked behind an approval card (`approval_requested`).
+    case approvalRequested
+    /// The kernel closed that card, whoever ended it (`approval_resolved`).
+    case approvalResolved
     case unknown(String)
   }
 }

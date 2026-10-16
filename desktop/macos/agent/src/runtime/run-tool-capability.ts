@@ -9,13 +9,18 @@ import {
   toolsForSurface,
 } from "./omi-tool-manifest.js";
 import { executionRoleAllowsTool, type AgentExecutionRole } from "./execution-policy.js";
+import { validateRuntimeContractSchema, type RuntimeContractSchema } from "./contract-schema.js";
+import { normalizedUIAutomationBundleId } from "./ui-automation-safety-floor.js";
 import {
+  buildDesktopToolApprovalRequest,
   desktopToolPolicyInternals,
   evaluateDesktopToolPolicy,
   type DesktopCoordinatorBundle,
+  type DesktopToolApprovalRequest,
   type DesktopToolGrant,
+  type DesktopToolPolicyResult,
 } from "./desktop-tool-policy.js";
-import type { AgentEvent, AgentStore, AttemptStatus, RunStatus } from "./types.js";
+import type { AgentEvent, AgentStore, AttemptStatus, DesktopCoordinatorDispatch, RunStatus } from "./types.js";
 import type { RunMode } from "./types.js";
 import {
   canonicalInputHash,
@@ -27,6 +32,7 @@ import {
   terminalizeRevokedToolInvocation,
   type ToolInvocationEffectClass,
   type ToolInvocationIdentity,
+  type ToolInvocationLedgerRecord,
   type ToolInvocationRetryPolicy,
 } from "./tool-invocation-ledger.js";
 
@@ -111,6 +117,8 @@ export type RunToolCapabilityRejectCode =
   | "tool_not_manifested"
   | "tool_not_allowed"
   | "approval_required"
+  | "invalid_tool_input"
+  | "input_too_large_to_approve"
   | "invocation_replayed";
 
 export class RunToolCapabilityRejectedError extends Error {
@@ -156,11 +164,70 @@ export interface RunToolExecutionLease {
   release(): void;
 }
 
+/**
+ * Relay authorization either admits the invocation or parks it behind one
+ * durable approval dispatch. A parked invocation already holds its `prepared`
+ * ledger row, so a restart fails it exactly like any other undispatched claim;
+ * the broker refuses to dispatch it until the user resolves the dispatch.
+ */
+export type RunToolAuthorizationOutcome =
+  | { kind: "authorized"; invocation: AuthorizedRunToolInvocation }
+  | {
+      kind: "approval_required";
+      invocation: AuthorizedRunToolInvocation;
+      dispatch: DesktopCoordinatorDispatch;
+      request: DesktopToolApprovalRequest;
+    };
+
+/** Durable binding stored in the approval dispatch payload under `invocation`. */
+export interface ToolApprovalInvocationBinding {
+  invocationId: string;
+  toolName: string;
+  inputHash: string;
+  daemonBootEpoch: string;
+  executionGeneration: number;
+  adapterId: string;
+  surfaceKind: string;
+}
+
+export interface CancelledToolApproval {
+  dispatchId: string;
+  invocationId: string;
+  sessionId: string;
+  runId: string;
+  attemptId: string;
+  reason: RunToolCapabilityRevocationReason;
+}
+
+export type ToolApprovalDenialCode = "approval_denied" | "approval_expired" | "approval_cancelled";
+
+/**
+ * What `approveInvocation` / `denyInvocation` took out of the broker's memory.
+ * The kernel hands it back through `restorePendingApproval` when the SQLite
+ * transaction around the decision rolls back, so memory never says "decided"
+ * while the dispatch row still says "pending".
+ */
+export interface ReleasedToolApproval {
+  capabilityRef: string;
+  invocationId: string;
+  dispatchId: string;
+  ledgerWasActive: boolean;
+}
+
 export interface RunToolCapabilityBrokerOptions {
   store: AgentStore;
   nowMs?: () => number;
   daemonBootEpoch?: string;
   onRejected?: (code: RunToolCapabilityRejectCode) => void;
+  /**
+   * Parked approvals the broker closed because their authority ended
+   * (terminal run, owner change, runtime stop). The dispatch rows are already
+   * cancelled when this fires; the kernel records the matching
+   * `approval.resolved` so every card ends with exactly one resolution.
+   */
+  onApprovalsCancelled?: (cancelled: CancelledToolApproval[]) => void;
+  /** Policy seam for tests; production always uses `evaluateDesktopToolPolicy`. */
+  desktopToolPolicy?: typeof evaluateDesktopToolPolicy;
   /**
    * Profiles are authoritative once the profile migration is installed. This
    * seam keeps the broker independently testable and makes legacy session
@@ -180,6 +247,23 @@ interface CapabilityState {
   activeInvocationIds: Set<string>;
   completedInvocationIds: Set<string>;
   executionLeases: Map<string, AbortController>;
+  /** invocationId → approval dispatchId for prepared invocations the user has not resolved. */
+  pendingApprovals: Map<string, string>;
+}
+
+interface PendingApproval {
+  capabilityRef: string;
+  invocationId: string;
+  dispatchId: string;
+}
+
+interface EvaluatedInvocation {
+  state: CapabilityState;
+  tool: OmiToolManifestEntry;
+  inputHash: string;
+  effectClass: ToolInvocationEffectClass;
+  retryPolicy: ToolInvocationRetryPolicy;
+  approval: { policy: DesktopToolPolicyResult; resourceRef: string | undefined } | null;
 }
 
 function rejectCodeForRevocation(reason: RunToolCapabilityRevocationReason): RunToolCapabilityRejectCode {
@@ -216,17 +300,39 @@ function number(value: unknown, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-const DESKTOP_APPROVAL_TOOLS = new Set([
+/**
+ * Tools the broker parks behind a per-invocation approval card. A test holds
+ * this set to every relay-callable tool the policy classifies into a sensitive
+ * bundle, so a new sensitive tool cannot ship ungated by omission.
+ */
+export const DESKTOP_APPROVAL_TOOLS: ReadonlySet<string> = new Set([
   "list_message_chats",
   "read_message_history",
   "list_mail_messages",
   "send_message",
   "run_applescript",
+  "capture_screen",
+  "ui_snapshot",
 ]);
 
+/** Bundles whose `grants` rows the broker reads; any other capability is ignored. */
+const DESKTOP_GRANT_BUNDLES: readonly DesktopCoordinatorBundle[] = [
+  "desktop.messaging.read",
+  "desktop.mail.read",
+  "desktop.messaging.send",
+  "desktop.automation.act",
+  "desktop.automation.observe",
+];
+
+/**
+ * The resource a scoped grant is matched against, derived only from the
+ * fields the tool actually acts on. The model never names the resource
+ * itself: a caller-supplied ref would let one approval cover a different
+ * recipient or script. Tools without a natural target get a stable ref so an
+ * `allow_session` grant can name exactly that surface; the legacy `*` pattern
+ * keeps matching them too.
+ */
 function toolResourceRef(toolName: string, input: Record<string, unknown>): string | undefined {
-  const explicit = typeof input.resource_ref === "string" ? input.resource_ref.trim() : "";
-  if (explicit) return explicit;
   if (toolName === "send_message") {
     const recipient = typeof input.to === "string" ? input.to.trim() : "";
     return recipient || undefined;
@@ -242,7 +348,74 @@ function toolResourceRef(toolName: string, input: Record<string, unknown>): stri
     const handle = typeof input.handle === "string" ? input.handle.trim() : "";
     return chatId || handle || undefined;
   }
+  if (toolName === "list_message_chats") return "messages:chats";
+  if (toolName === "list_mail_messages") return "mail:inbox";
+  if (toolName === "capture_screen") return "screen";
+  // One grant per app, whatever case the model spelled the bundle id in.
+  if (toolName === "ui_snapshot") return normalizedUIAutomationBundleId(input.bundle_id);
   return undefined;
+}
+
+/**
+ * Approval-gated tools are held to their manifest schema at the kernel
+ * boundary. Neither relay validates inputs, so without this an unknown key
+ * would ride into the ledger hash and the approval preview unexamined.
+ */
+function gatedToolInputErrors(tool: OmiToolManifestEntry, toolInput: Record<string, unknown>): string[] {
+  return validateRuntimeContractSchema(toolInput, tool.inputSchema as RuntimeContractSchema);
+}
+
+export function toolApprovalInvocationBinding(dispatch: Pick<DesktopCoordinatorDispatch, "kind" | "payloadJson">): ToolApprovalInvocationBinding | null {
+  if (dispatch.kind !== "approval") return null;
+  let payload: unknown;
+  try {
+    payload = JSON.parse(dispatch.payloadJson);
+  } catch {
+    return null;
+  }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+  const binding = (payload as Record<string, unknown>).invocation;
+  if (!binding || typeof binding !== "object" || Array.isArray(binding)) return null;
+  const record = binding as Record<string, unknown>;
+  if (
+    typeof record.invocationId !== "string" || !record.invocationId
+    || typeof record.toolName !== "string" || !record.toolName
+    || typeof record.inputHash !== "string" || !record.inputHash
+    || typeof record.daemonBootEpoch !== "string" || !record.daemonBootEpoch
+    || !Number.isSafeInteger(record.executionGeneration)
+    || typeof record.adapterId !== "string"
+    || typeof record.surfaceKind !== "string"
+  ) {
+    return null;
+  }
+  return {
+    invocationId: record.invocationId,
+    toolName: record.toolName,
+    inputHash: record.inputHash,
+    daemonBootEpoch: record.daemonBootEpoch,
+    executionGeneration: record.executionGeneration as number,
+    adapterId: record.adapterId,
+    surfaceKind: record.surfaceKind,
+  };
+}
+
+/**
+ * Whether the card for a bound tool approval offered "Allow for This Chat".
+ * The broker writes the offered options into the dispatch payload when it
+ * parks the call; a grant the card never offered (a live screenshot, a thread
+ * read with no exact resource) is refused rather than minted.
+ */
+export function toolApprovalOffersSessionGrant(dispatch: Pick<DesktopCoordinatorDispatch, "payloadJson">): boolean {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(dispatch.payloadJson);
+  } catch {
+    return false;
+  }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  const options = (payload as Record<string, unknown>).options;
+  return Array.isArray(options) && options.some((option) =>
+    !!option && typeof option === "object" && (option as Record<string, unknown>).id === "allow_session");
 }
 
 /**
@@ -259,10 +432,14 @@ export class RunToolCapabilityBroker {
   private readonly nowMs: () => number;
   readonly daemonBootEpoch: string;
   private readonly onRejected: (code: RunToolCapabilityRejectCode) => void;
+  private readonly onApprovalsCancelled: (cancelled: CancelledToolApproval[]) => void;
+  private readonly desktopToolPolicy: typeof evaluateDesktopToolPolicy;
   private readonly profileForSession: RunToolCapabilityBrokerOptions["profileForSession"];
   private readonly states = new Map<string, CapabilityState>();
   private readonly activeByAttempt = new Map<string, string>();
   private readonly activeByRun = new Map<string, Set<string>>();
+  /** dispatchId → parked invocation; process-local like the capabilities themselves. */
+  private readonly pendingApprovalsByDispatch = new Map<string, PendingApproval>();
   private executionGeneration = 0;
 
   constructor(options: RunToolCapabilityBrokerOptions) {
@@ -270,6 +447,8 @@ export class RunToolCapabilityBroker {
     this.nowMs = options.nowMs ?? Date.now;
     this.daemonBootEpoch = options.daemonBootEpoch ?? `boot_${randomUUID().replaceAll("-", "")}`;
     this.onRejected = options.onRejected ?? (() => undefined);
+    this.onApprovalsCancelled = options.onApprovalsCancelled ?? (() => undefined);
+    this.desktopToolPolicy = options.desktopToolPolicy ?? evaluateDesktopToolPolicy;
     if (typeof options.profileForSession !== "function") {
       throw new Error("Run tool capability broker requires a canonical session profile reader");
     }
@@ -379,6 +558,7 @@ export class RunToolCapabilityBroker {
       activeInvocationIds: new Set(),
       completedInvocationIds: new Set(),
       executionLeases: new Map(),
+      pendingApprovals: new Map(),
     });
     this.activeByAttempt.set(capability.attemptId, capability.capabilityRef);
     const runRefs = this.activeByRun.get(capability.runId) ?? new Set<string>();
@@ -396,6 +576,102 @@ export class RunToolCapabilityBroker {
     toolInput: Record<string, unknown>;
     activeOwnerId: string;
   }): AuthorizedRunToolInvocation {
+    const evaluated = this.evaluate(input);
+    if (evaluated.approval) {
+      this.reject("approval_required", `Desktop tool approval was not granted: ${evaluated.approval.policy.reason}`);
+    }
+    return this.prepare(evaluated, input);
+  }
+
+  /**
+   * Relay authorization that parks a sensitive invocation instead of rejecting
+   * it. The ledger row and the approval dispatch are written together so a
+   * restart cannot observe one without the other; the caller commits the
+   * run/attempt transition and the lifecycle events in the same transaction.
+   */
+  authorizeRelayInvocationOrRequestApproval(input: {
+    capabilityRef: string;
+    invocationId: string;
+    toolName: string;
+    toolInput: Record<string, unknown>;
+    activeOwnerId: string;
+  }): RunToolAuthorizationOutcome {
+    const state = this.states.get(input.capabilityRef);
+    if (!state) this.reject("capability_missing", "Unknown run tool capability");
+    const scoped = { ...input, runId: state.capability.runId, attemptId: state.capability.attemptId };
+    const evaluated = this.evaluate(scoped);
+    if (!evaluated.approval) return { kind: "authorized", invocation: this.prepare(evaluated, scoped) };
+
+    const nowMs = this.nowMs();
+    const request = buildDesktopToolApprovalRequest({
+      toolName: evaluated.tool.name,
+      toolInput: input.toolInput,
+      policy: evaluated.approval.policy,
+      resourceRef: evaluated.approval.resourceRef,
+      nowMs,
+    });
+    // The user approves what the card shows. If the card cannot show all of
+    // it, nothing is prepared: the model is told to shorten the input.
+    if (request.previewTruncated) {
+      this.reject(
+        "input_too_large_to_approve",
+        "The tool input is too large to show in an approval card; shorten it and call again",
+      );
+    }
+    const invocation = this.prepare(evaluated, scoped);
+    const binding: ToolApprovalInvocationBinding = {
+      invocationId: invocation.invocationId,
+      toolName: invocation.canonicalToolName,
+      inputHash: invocation.inputHash,
+      daemonBootEpoch: invocation.daemonBootEpoch,
+      executionGeneration: invocation.executionGeneration,
+      adapterId: invocation.adapterId,
+      surfaceKind: invocation.surfaceKind,
+    };
+    const dispatch = this.store.insertDesktopDispatch({
+      ownerId: invocation.ownerId,
+      kind: "approval",
+      priority: 100,
+      title: request.title,
+      decisionPrompt: request.decisionPrompt,
+      recommendedDefault: request.defaultOptionId,
+      sourceSessionId: invocation.sessionId,
+      sourceRunId: invocation.runId,
+      sourceAttemptId: invocation.attemptId,
+      capability: request.capability,
+      operation: request.operation,
+      resourceRef: request.resourceRef,
+      payloadJson: JSON.stringify({
+        policy: request.policy,
+        invocation: binding,
+        preview: request.preview,
+        previewTruncated: request.previewTruncated,
+        options: request.options,
+        defaultOptionId: request.defaultOptionId,
+        reason: request.reason,
+        requestedAtMs: request.requestedAtMs,
+      }),
+      createdAtMs: nowMs,
+      expiresAtMs: request.expiresAtMs,
+    });
+    state.pendingApprovals.set(invocation.invocationId, dispatch.dispatchId);
+    this.pendingApprovalsByDispatch.set(dispatch.dispatchId, {
+      capabilityRef: state.capability.capabilityRef,
+      invocationId: invocation.invocationId,
+      dispatchId: dispatch.dispatchId,
+    });
+    return { kind: "approval_required", invocation, dispatch, request };
+  }
+
+  private evaluate(input: {
+    capabilityRef: string;
+    invocationId: string;
+    runId: string;
+    attemptId: string;
+    toolName: string;
+    toolInput: Record<string, unknown>;
+    activeOwnerId: string;
+  }): EvaluatedInvocation {
     const state = this.states.get(input.capabilityRef);
     if (!state) this.reject("capability_missing", "Unknown run tool capability");
     if (state.revoked) this.reject("capability_revoked", "Run tool capability has been revoked");
@@ -452,20 +728,30 @@ export class RunToolCapabilityBroker {
       this.reject("tool_not_allowed", "Execution role cannot invoke this tool");
     }
 
+    let approval: EvaluatedInvocation["approval"] = null;
     if (DESKTOP_APPROVAL_TOOLS.has(tool.name)) {
+      const inputErrors = gatedToolInputErrors(tool, input.toolInput);
+      if (inputErrors.length > 0) {
+        this.reject("invalid_tool_input", `Tool input does not match the ${tool.name} schema: ${inputErrors[0]!.slice(0, 200)}`);
+      }
       const descriptor = desktopToolPolicyInternals.descriptorFromToolName(tool.name);
       if (!descriptor) this.reject("tool_not_manifested", "Desktop approval metadata is missing");
       const grants = this.desktopToolGrants(capability.sessionId, capability.runId);
-      const policy = evaluateDesktopToolPolicy({
+      const resourceRef = toolResourceRef(tool.name, input.toolInput);
+      const policy = this.desktopToolPolicy({
         toolName: tool.name,
         selectedBundles: descriptor.bundles,
         operation: tool.name,
-        resourceRef: toolResourceRef(tool.name, input.toolInput),
+        resourceRef,
         grants,
+        nowMs: this.nowMs(),
       });
-      if (policy.decision !== "allow") {
+      // A hard policy deny is not something the user can approve away, so it
+      // keeps the pre-existing rejection instead of parking the invocation.
+      if (policy.decision === "deny") {
         this.reject("approval_required", `Desktop tool approval was not granted: ${policy.reason}`);
       }
+      if (policy.decision === "dispatch_required") approval = { policy, resourceRef };
     }
 
     const inputHash = canonicalInputHash(input.toolInput);
@@ -477,6 +763,15 @@ export class RunToolCapabilityBroker {
     const retryPolicy: ToolInvocationRetryPolicy = effectClass === "non_idempotent_write"
       ? "never_auto_retry"
       : "safe_retry";
+    return { state, tool, inputHash, effectClass, retryPolicy, approval };
+  }
+
+  private prepare(
+    evaluated: EvaluatedInvocation,
+    input: { invocationId: string },
+  ): AuthorizedRunToolInvocation {
+    const { state, tool, inputHash, effectClass, retryPolicy } = evaluated;
+    const capability = state.capability;
     try {
       prepareToolInvocation(this.store, {
         invocationId: input.invocationId,
@@ -541,12 +836,7 @@ export class RunToolCapabilityBroker {
     ).flatMap((row) => {
       const capability = typeof row.capability === "string" ? row.capability : "";
       const bundle = capability as DesktopCoordinatorBundle;
-      if (![
-        "desktop.messaging.read",
-        "desktop.mail.read",
-        "desktop.messaging.send",
-        "desktop.automation.act",
-      ].includes(bundle)) return [];
+      if (!DESKTOP_GRANT_BUNDLES.includes(bundle)) return [];
       return [{
         bundle,
         operation: typeof row.operation === "string" ? row.operation : undefined,
@@ -576,13 +866,136 @@ export class RunToolCapabilityBroker {
   }
 
   markInvocationDispatched(invocation: AuthorizedRunToolInvocation): void {
+    this.assertNotAwaitingApproval(invocation);
     markToolInvocationDispatched(this.store, this.ledgerIdentity(invocation), this.nowMs());
+  }
+
+  /**
+   * Admit a parked invocation after the user allowed its dispatch. The caller
+   * has already moved the dispatch row out of `pending`; this re-reads the
+   * ledger and live run authority so a stale or tampered dispatch cannot admit
+   * a different invocation, and the invocation stays single use.
+   */
+  approveInvocation(input: {
+    dispatchId: string;
+    binding: ToolApprovalInvocationBinding;
+    activeOwnerId: string;
+  }): { record: ToolInvocationLedgerRecord; released: ReleasedToolApproval } {
+    const { state, record, pending } = this.readPendingApproval(input.dispatchId, input.binding);
+    // Revalidate before forgetting the parking: a failure here may revoke the
+    // capability, and revocation must still find and close the dispatch row.
+    this.assertLiveCapabilityAuthority(state, input.activeOwnerId);
+    return { record, released: this.releasePendingApproval(state, pending, false) };
+  }
+
+  /**
+   * Everything `approveInvocation` checks, without taking anything. The kernel
+   * runs this before it opens the transaction that resolves the dispatch, so a
+   * revocation triggered by a stale owner, run, or attempt commits on its own
+   * instead of being rolled back together with the failed resolution.
+   */
+  assertApprovalAuthority(input: {
+    dispatchId: string;
+    binding: ToolApprovalInvocationBinding;
+    activeOwnerId: string;
+  }): void {
+    const { state } = this.readPendingApproval(input.dispatchId, input.binding);
+    this.assertLiveCapabilityAuthority(state, input.activeOwnerId);
+  }
+
+  /** Fail a parked invocation closed; it never crossed the dispatch boundary, so it is `failed`, never `outcome_unknown`. */
+  denyInvocation(input: {
+    dispatchId: string;
+    binding: ToolApprovalInvocationBinding;
+    code: ToolApprovalDenialCode;
+  }): { record: ToolInvocationLedgerRecord; released: ReleasedToolApproval } {
+    const { state, record, pending } = this.readPendingApproval(input.dispatchId, input.binding);
+    const terminal = terminalizeRevokedToolInvocation(this.store, record, input.code, this.nowMs());
+    const released = this.releasePendingApproval(state, pending, state.activeInvocationIds.has(record.invocationId));
+    state.activeInvocationIds.delete(record.invocationId);
+    state.completedInvocationIds.add(record.invocationId);
+    return { record: terminal, released };
+  }
+
+  /** Undo a release whose surrounding transaction rolled back; a revoked capability already closed its dispatch durably. */
+  restorePendingApproval(released: ReleasedToolApproval): void {
+    const state = this.states.get(released.capabilityRef);
+    if (!state || state.revoked) return;
+    state.pendingApprovals.set(released.invocationId, released.dispatchId);
+    this.pendingApprovalsByDispatch.set(released.dispatchId, {
+      capabilityRef: released.capabilityRef,
+      invocationId: released.invocationId,
+      dispatchId: released.dispatchId,
+    });
+    if (released.ledgerWasActive) {
+      state.completedInvocationIds.delete(released.invocationId);
+      state.activeInvocationIds.add(released.invocationId);
+    }
+  }
+
+  hasPendingApprovals(runId: string): boolean {
+    for (const ref of this.activeByRun.get(runId) ?? []) {
+      const state = this.states.get(ref);
+      if (state && !state.revoked && state.pendingApprovals.size > 0) return true;
+    }
+    return false;
+  }
+
+  private readPendingApproval(
+    dispatchId: string,
+    binding: ToolApprovalInvocationBinding,
+  ): { state: CapabilityState; record: ToolInvocationLedgerRecord; pending: PendingApproval } {
+    const pending = this.pendingApprovalsByDispatch.get(dispatchId);
+    const state = pending ? this.states.get(pending.capabilityRef) : undefined;
+    if (!pending || !state || state.pendingApprovals.get(pending.invocationId) !== dispatchId) {
+      this.reject("capability_revoked", "Approval dispatch is not bound to a live pending invocation");
+    }
+    if (pending.invocationId !== binding.invocationId) {
+      this.reject("invocation_replayed", "Approval dispatch binding names a different invocation");
+    }
+    const record = readToolInvocation(this.store, pending.invocationId);
+    if (
+      record.status !== "prepared"
+      || record.inputHash !== binding.inputHash
+      || record.toolName !== binding.toolName
+      || record.daemonBootEpoch !== binding.daemonBootEpoch
+      || record.daemonBootEpoch !== this.daemonBootEpoch
+      || record.executionGeneration !== binding.executionGeneration
+      || record.runId !== state.capability.runId
+      || record.attemptId !== state.capability.attemptId
+    ) {
+      this.reject("invocation_replayed", "Approval dispatch binding does not match the prepared invocation");
+    }
+    return { state, record, pending };
+  }
+
+  private releasePendingApproval(
+    state: CapabilityState,
+    pending: PendingApproval,
+    ledgerWasActive: boolean,
+  ): ReleasedToolApproval {
+    state.pendingApprovals.delete(pending.invocationId);
+    this.pendingApprovalsByDispatch.delete(pending.dispatchId);
+    return {
+      capabilityRef: state.capability.capabilityRef,
+      invocationId: pending.invocationId,
+      dispatchId: pending.dispatchId,
+      ledgerWasActive,
+    };
+  }
+
+  private assertNotAwaitingApproval(invocation: AuthorizedRunToolInvocation): void {
+    const state = this.states.get(invocation.capabilityRef);
+    if (state?.pendingApprovals.has(invocation.invocationId)) {
+      this.reject("approval_required", "Tool invocation is waiting for user approval");
+    }
   }
 
   acquireExecutionLease(
     invocation: AuthorizedRunToolInvocation,
     activeOwnerId: () => string,
   ): RunToolExecutionLease {
+    this.assertNotAwaitingApproval(invocation);
     this.assertCurrentExecutionAuthority(invocation, activeOwnerId());
     const state = this.states.get(invocation.capabilityRef)!;
     const existing = state.executionLeases.get(invocation.invocationId);
@@ -643,6 +1056,7 @@ export class RunToolCapabilityBroker {
   revoke(capabilityRef: string, reason: RunToolCapabilityRevocationReason = "explicit"): boolean {
     const state = this.states.get(capabilityRef);
     if (!state || state.revoked) return false;
+    const cancelledApprovals: CancelledToolApproval[] = [];
     state.revoked = true;
     state.revocationReason = reason;
     for (const controller of state.executionLeases.values()) {
@@ -652,6 +1066,28 @@ export class RunToolCapabilityBroker {
       ));
     }
     state.executionLeases.clear();
+    // A parked approval cannot outlive the authority it would admit. Close the
+    // dispatch row here, before the ledger row below becomes `failed`, so no
+    // later resolution can find a pending card for a dead invocation.
+    const nowMs = this.nowMs();
+    for (const [invocationId, dispatchId] of state.pendingApprovals) {
+      this.store.execute(
+        `UPDATE desktop_dispatches
+         SET status = 'cancelled', resolved_at_ms = ?, resolved_by = 'system', resolution_json = ?
+         WHERE dispatch_id = ? AND status = 'pending'`,
+        [nowMs, JSON.stringify({ decision: "cancelled", reason: `run_tool_${reason}` }), dispatchId],
+      );
+      this.pendingApprovalsByDispatch.delete(dispatchId);
+      cancelledApprovals.push({
+        dispatchId,
+        invocationId,
+        sessionId: state.capability.sessionId,
+        runId: state.capability.runId,
+        attemptId: state.capability.attemptId,
+        reason,
+      });
+    }
+    state.pendingApprovals.clear();
     for (const invocationId of state.activeInvocationIds) {
       const invocation = readToolInvocation(this.store, invocationId);
       if (invocation.status === "prepared" || invocation.status === "dispatched") {
@@ -671,6 +1107,7 @@ export class RunToolCapabilityBroker {
     const runRefs = this.activeByRun.get(state.capability.runId);
     runRefs?.delete(capabilityRef);
     if (runRefs?.size === 0) this.activeByRun.delete(state.capability.runId);
+    if (cancelledApprovals.length > 0) this.onApprovalsCancelled(cancelledApprovals);
     return true;
   }
 
