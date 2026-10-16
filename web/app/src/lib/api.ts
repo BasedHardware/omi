@@ -1994,7 +1994,7 @@ export async function createCheckoutSession(
     return response;
   } catch (error) {
     console.error('createCheckoutSession error:', error);
-    return null;
+    throw error;
   }
 }
 
@@ -2015,7 +2015,7 @@ export async function upgradeSubscription(
     return response;
   } catch (error) {
     console.error('upgradeSubscription error:', error);
-    return null;
+    throw error;
   }
 }
 

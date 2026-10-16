@@ -5065,6 +5065,8 @@
             }
         }
     },
+    "yourPlanEndsOn": "ನಿಮ್ಮ {plan} ಯೋಜನೆ {date} ರಂದು ಕೊನೆಗೊಳ್ಳುತ್ತದೆ.",
+    "resubscribeNowNoChargeUntil": "ನಿಮ್ಮ ಪ್ರಯೋಜನಗಳನ್ನು ಮುಂದುವರಿಸಲು ಈಗ ಮರುಸದಸ್ಯಗೊಳಿಸಿ - {date} ವರೆಗೆ ಯಾವುದೇ ಶುಲ್ಕ ಇಲ್ಲ.",
     "planSetToCancelOn": "ನಿಮ್ಮ ಯೋಜನೆ {date} ಮೇಲೆ ರದ್ದುಗೊಳಿಸುವ ನಿರ್ಧಾರವನ್ನು ಹೊಂದಿದೆ.\nನಿಮ್ಮ ಪ್ರಯೋಜನಗಳನ್ನು ಮುಂದುವರಿಸಲು ಈಗ ಮರುಸದಸ್ಯಗೊಳಿಸಿ - {date} ವರೆಗೆ ಯಾವುದೇ ಶುಲ್ಕ ಇಲ್ಲ.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5079,6 +5081,7 @@
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
     },
+    "yourPlanWillRenewOn": "ನಿಮ್ಮ {plan} ಯೋಜನೆ {date} ರಂದು ನವೀಕರಿಸಲಾಗುತ್ತದೆ.",
     "planRenewsOn": "ನಿಮ್ಮ ಯೋಜನೆ {date} ಮೇಲೆ ನವೀಕರಣವಾಗುತ್ತದೆ.",
     "@planRenewsOn": {
         "description": "Message showing plan renewal date",
@@ -5125,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "resubscribeFirstToChangePlans": "ಯೋಜನೆ ಬದಲಾಯಿಸಲು ಮೊದಲು ಮರುಸದಸ್ಯರಾಗಿ.",
     "resubscribe": "ಮರುಸದಸ್ಯಗೊಳಿಸಿ",
     "@resubscribe": {
         "description": "Button to resubscribe"
