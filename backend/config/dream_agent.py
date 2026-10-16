@@ -3,6 +3,7 @@
 import math
 import os
 from dataclasses import dataclass
+from datetime import timedelta
 from config.plan_catalog import PAID_PLAN_IDS
 
 from utils.agent_capabilities.registry import AUTO, KINDS
@@ -38,6 +39,24 @@ def allowlisted(uid):
 
 def _allowlisted(uid):
     return allowlisted(uid)
+
+
+def allowlist_uids():
+    """Sorted allowlist; discovery reads only these owners under ``allowlist`` eligibility."""
+    return sorted({item.strip() for item in os.getenv('DREAM_AGENT_UID_ALLOWLIST', '').split(',') if item.strip()})
+
+
+def hunt_interval(size_bucket):
+    """Idle time before a pass with no dirty work hunts again; 24h (6h heavy) unless overridden."""
+    default = 6.0 if size_bucket == 'heavy' else 24.0
+    raw = os.getenv('DREAM_AGENT_HUNT_INTERVAL_HOURS', '').strip()
+    try:
+        hours = float(raw) if raw else default
+    except ValueError:
+        hours = default
+    if not math.isfinite(hours) or hours <= 0:
+        hours = default
+    return timedelta(hours=min(hours, default))
 
 
 def on_demand_enabled():

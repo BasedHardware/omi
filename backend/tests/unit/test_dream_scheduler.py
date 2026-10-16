@@ -107,3 +107,54 @@ def test_dirty_priority_orders_backlog_and_staleness_not_user_document_id(runtim
     busy = {'last_pass_at': NOW - timedelta(days=1), 'score': 20}
     assert dream_scheduler.due_time(old, NOW) < dream_scheduler.due_time(new, NOW)
     assert dream_scheduler.due_time(busy, NOW) < dream_scheduler.due_time(new, NOW)
+
+
+@pytest.mark.parametrize(
+    'raw,bucket,hours',
+    [
+        ('', 'light', 24),
+        ('', 'heavy', 6),
+        ('2', 'light', 2),
+        ('2', 'heavy', 2),
+        ('48', 'light', 24),
+        ('0', 'light', 24),
+        ('x', 'heavy', 6),
+    ],
+)
+def test_hunt_interval_override_only_shortens(monkeypatch, raw, bucket, hours):
+    from config.dream_agent import hunt_interval
+
+    monkeypatch.setenv('DREAM_AGENT_HUNT_INTERVAL_HOURS', raw)
+    assert hunt_interval(bucket) == timedelta(hours=hours)
+    assert dream_scheduler.due_time({'last_pass_at': NOW, 'size_bucket': bucket}, NOW) == NOW + timedelta(hours=hours)
+
+
+def test_short_hunt_interval_and_high_pass_cap_admit_repeat_hunts(runtime, monkeypatch):
+    monkeypatch.setenv('DREAM_AGENT_HUNT_INTERVAL_HOURS', '1')
+    caps = Caps(tokens=96000, passes=48)
+    for hour in range(4):
+        lease = dream_store.acquire(UID, caps, now=NOW + timedelta(hours=hour))
+        assert lease and lease['hunt']
+        dream_store.finish(
+            UID, lease, {'tokens': 10, 'usage_unknown': False}, success=True, now=NOW + timedelta(hours=hour)
+        )
+    assert dream_store.acquire(UID, caps, now=NOW + timedelta(hours=3, minutes=30)) is None
+
+
+def test_allowlist_discovery_reads_only_listed_owners(monkeypatch):
+    store = DreamFirestore()
+    store.collection('users').document('listed-owner').set({'plan': 'free'})
+    store.collection('users').document('other-owner').set({'plan': 'free'})
+    monkeypatch.setenv('DREAM_AGENT_ELIGIBILITY', 'allowlist')
+    monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', 'listed-owner,missing-owner')
+    monkeypatch.setattr(dream_scheduler.firestore, 'transactional', lambda fn: fn)
+
+    def scan(**kwargs):
+        raise AssertionError('allowlist discovery must not scan users')
+
+    monkeypatch.setattr(dream_scheduler, 'candidate_page', scan)
+    dream_scheduler.discover(store, NOW)
+    assert store.collection('dream_due').document('listed-owner').get().exists
+    assert not store.collection('dream_due').document('other-owner').get().exists
+    assert not store.collection('dream_due').document('missing-owner').get().exists
+    assert not store.collection('dream_scheduler').document('discovery').get().exists
