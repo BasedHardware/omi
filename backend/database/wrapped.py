@@ -25,6 +25,25 @@ def _typed_doc(doc: Any) -> Dict[str, Any]:
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
 
 
+def _wrapped_doc_ref(uid: object, year: object):
+    """users/{uid}/wrapped/{year} — a valid doc path needs a safe uid and a
+    sane 4-digit year. An empty uid makes users//wrapped/2025 (a collection
+    path, not a doc); a '/'/'\\'/traversal/control-char uid splits into a
+    subcollection path or reads an unintended location; an arbitrary year
+    makes a malformed doc id. Reject all before they reach Firestore."""
+    if (
+        not isinstance(uid, str)
+        or not uid.strip()
+        or len(uid) > 128
+        or any(c in uid for c in ('/', '\\', '\x00', '\r', '\n'))
+        or '..' in uid
+    ):
+        raise ValueError('uid must be a safe document id')
+    if not isinstance(year, int) or isinstance(year, bool) or year < 2000 or year > 2100:
+        raise ValueError('year must be a valid 4-digit year')
+    return db.collection('users').document(uid).collection(WRAPPED_COLLECTION).document(str(year))
+
+
 def _coerce_timestamp(value: Any) -> Optional[datetime]:
     if hasattr(value, 'timestamp'):
         return datetime.fromtimestamp(value.timestamp(), tz=timezone.utc)
@@ -46,8 +65,7 @@ def get_wrapped(uid: str, year: int) -> Optional[Dict[str, Any]]:
     Returns:
         Wrapped document data or None if not found
     """
-    user_ref = db.collection('users').document(uid)
-    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(year))
+    wrapped_ref = _wrapped_doc_ref(uid, year)
     doc = wrapped_ref.get()
 
     if not getattr(doc, "exists", False):
@@ -88,8 +106,7 @@ def create_wrapped(uid: str, year: int) -> Dict[str, Any]:
         'schema_version': 1,
     }
 
-    user_ref = db.collection('users').document(uid)
-    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(year))
+    wrapped_ref = _wrapped_doc_ref(uid, year)
     wrapped_ref.set(wrapped_data)
 
     return wrapped_data
@@ -115,8 +132,7 @@ def update_wrapped_status(
     Returns:
         True if updated successfully
     """
-    user_ref = db.collection('users').document(uid)
-    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(year))
+    wrapped_ref = _wrapped_doc_ref(uid, year)
 
     if not getattr(wrapped_ref.get(), "exists", False):
         return False
@@ -154,8 +170,7 @@ def update_wrapped_progress(uid: str, year: int, progress: Dict[str, Any]) -> bo
     Returns:
         True if updated successfully
     """
-    user_ref = db.collection('users').document(uid)
-    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(year))
+    wrapped_ref = _wrapped_doc_ref(uid, year)
 
     if not getattr(wrapped_ref.get(), "exists", False):
         return False
@@ -196,8 +211,7 @@ def reset_wrapped_for_regeneration(uid: str, year: int) -> Dict[str, Any]:
         'schema_version': 1,
     }
 
-    user_ref = db.collection('users').document(uid)
-    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(year))
+    wrapped_ref = _wrapped_doc_ref(uid, year)
     wrapped_ref.set(wrapped_data)
 
     return wrapped_data
