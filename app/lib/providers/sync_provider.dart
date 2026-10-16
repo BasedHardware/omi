@@ -254,7 +254,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// fresh budget a per-recording Retry gives ([syncWal]) before draining.
   Future<void> retryNeedsAttentionWals() async {
     for (final wal in retryableAttentionWals) {
-      wal.retryCount = 0;
+      wal
+        ..retryCount = 0
+        ..lastRetryAt = 0;
     }
     await syncWals();
   }

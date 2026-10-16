@@ -142,7 +142,9 @@ void main() {
 
   test('the Needs Attention retry uploads a recording whose automatic budget is spent', () async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final spent = (await diskWal('audio_spent.bin', timerStart: now - 600))..retryCount = walMaxAutoRetries;
+    final spent = (await diskWal('audio_spent.bin', timerStart: now - 600))
+      ..retryCount = walMaxAutoRetries
+      ..lastRetryAt = now - 60;
     final syncProvider = await start([spent]);
 
     expect(syncProvider.needsAttentionWalsCount, 1);
@@ -155,6 +157,8 @@ void main() {
 
     await syncProvider.retryNeedsAttentionWals();
 
+    // Same re-arm as resetExhaustedAutoRetries: both retry fields cleared.
+    expect(spent.lastRetryAt, 0);
     expect(uploads, [
       ['audio_spent.bin'],
     ]);
