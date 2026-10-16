@@ -591,15 +591,25 @@ secret. Use the admitted backend image by digest, one task, 600 seconds, one ret
 nothing. Hourly scheduling exceeds the bounded 20-minute execution/retry window;
 operators must not start overlapping manual executions.
 
-The existing GMP collector exports `omi_*`. Live Cloud Monitoring queries returned
-messaging turns/provider/queue samples and chat token samples. The deployed GKE
-exporter includes `backend` and restores plain metric names, but the read-only
-identity cannot proxy into Prometheus; final Grafana query/notification delivery is
-unverified. Production alerts therefore use Cloud Monitoring directly: content-free
-log conditions for worker/maintenance failures by reason, webhook 5xx, decoder,
-delivery and recovery; GMP PromQL for per-surface shaped-context degradation and queue
-age; built-in job execution failures also catch process/import/OOM failures. No new
-exporter or log-based metric is necessary. `alerts.yaml` alone is not an install.
+The existing GMP collector exports `omi_*`. Read-only checks at 2026-10-16 06:10 UTC
+confirmed 39 current backend chat-token series in GMP, with newest sample age about
+4.6 seconds, and a current messaging-turn series. The GKE bridge did import data
+within 24h (531 token series and 11 turn series), but it is currently unhealthy:
+`up{job="cloud-run-application-metrics"}=0`, one down target, zero scrape samples,
+connection refused, and no instant messaging/token series in Prometheus. The actual
+Prometheus service is `prod-omi-kube-prometheus-s-prometheus`; its read-only API works.
+The exporter pod was Ready at the later metadata snapshot, with restart count 59
+and last termination reason `OOMKilled`; readiness alone is not scrape acceptance.
+Historical samples do not establish live ingestion or healthy alert evaluation.
+
+Production alerts therefore use Cloud Monitoring directly, bypassing the unhealthy
+bridge: content-free log conditions for worker/maintenance failures by reason,
+webhook 5xx, decoder, delivery and recovery; GMP PromQL for per-surface shaped-context
+degradation and queue age; built-in job failures also catch process/import/OOM errors.
+No new exporter or log-based metric is needed. Installing `alerts.yaml` while the
+bridge is down would leave those rules without current Cloud Run samples. Repair
+and notification acceptance for the broader Prometheus/Grafana bridge are separate
+operator work; this install establishes an independent alert path.
 
 The sequence below is **for the authorized operator**, from the repository root.
 The operations tool uses the explicitly selected gcloud identity; Scheduler
@@ -745,7 +755,7 @@ show the intended notification channels. Test notification delivery through an
 approved test destination; policy creation alone does not prove delivery. Do not
 inject synthetic prod errors or send a test page without the operator's approval.
 
-After rollout, query GMP directly (or Grafana once its path is verified):
+After rollout, query GMP directly (or Grafana after its bridge is repaired):
 
 ```promql
 sum by (surface, outcome) (increase(omi_chat_context_turns_total{cluster="__run__",namespace="backend"}[24h]))
