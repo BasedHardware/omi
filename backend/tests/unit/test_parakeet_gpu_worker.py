@@ -7,6 +7,7 @@ import time
 from unittest.mock import MagicMock, patch
 
 import pytest
+from omegaconf import OmegaConf
 
 os.environ.setdefault("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
 os.environ.setdefault("PARAKEET_DEVICE", "cpu")
@@ -560,6 +561,25 @@ class TestTorchCompile:
 
 
 class TestCUDAGraphConfig:
+    def test_explicit_graph_policy_survives_timestamp_decoder_reconstruction(self, monkeypatch):
+        model = _make_mock_model()
+        model.cfg.decoding = OmegaConf.create({'greedy': {'use_cuda_graph_decoder': True}, 'compute_timestamps': None})
+        nemo_asr = _get_nemo_asr()
+        nemo_asr.models.ASRModel.from_pretrained.return_value = model
+        nemo_asr.models.ASRModel.from_pretrained.side_effect = None
+        monkeypatch.setenv('PARAKEET_EXPLICIT_CUDA_GRAPHS', 'true')
+        monkeypatch.setenv('PARAKEET_CUDA_GRAPHS', 'false')
+        monkeypatch.setenv('PARAKEET_BF16', '0')
+        monkeypatch.setenv('PARAKEET_TORCH_COMPILE', 'false')
+        worker = GPUWorker()
+        worker._load_model()
+        cfg = model.change_decoding_strategy.call_args.args[0]
+        assert cfg.compute_timestamps is True
+        assert cfg.greedy.use_cuda_graph_decoder is False
+        # Rebuilding with this persisted config cannot restore the default true.
+        rebuilt = OmegaConf.create(OmegaConf.to_container(cfg))
+        assert rebuilt.greedy.use_cuda_graph_decoder is False
+
     def test_cuda_graphs_disabled_calls_disable(self):
         nemo_asr = _get_nemo_asr()
         mock_model = _make_mock_model()
