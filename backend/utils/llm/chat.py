@@ -1,4 +1,3 @@
-import json
 import re
 from datetime import datetime, timezone
 
@@ -13,7 +12,6 @@ import database.users as users_db
 import database.notifications as notification_db
 import database.goals as goals_db
 import database.apps as apps_db
-from database.redis_db import add_filter_category_item
 from database.auth import get_user_name
 from models.app import App
 from models.chat import Message, MessageSender, PageContext
@@ -1101,14 +1099,6 @@ class ExtractedInformation(BaseModel):
     )
 
 
-class FiltersToUse(BaseModel):
-    people: List[str] = Field(default=[], description='People, names that could be relevant')
-    topics: List[str] = Field(default=[], description='Topics and subtopics that can help finding more information')
-    entities: List[str] = Field(
-        default=[], description='products, technologies, places, or other entities that could be relevant.'
-    )
-
-
 class OutputQuestion(BaseModel):
     question: str = Field(description='The extracted user question from the conversation.')
 
@@ -1254,15 +1244,6 @@ def retrieve_metadata_fields_from_transcript(
         dates=normalize_extracted_dates(result.dates, today),
     ).to_vector_metadata()
 
-    for p in metadata['people']:
-        add_filter_category_item(uid, 'people', p)
-    for t in metadata['topics']:
-        add_filter_category_item(uid, 'topics', t)
-    for e in metadata['entities']:
-        add_filter_category_item(uid, 'entities', e)
-    for d in metadata['dates']:
-        add_filter_category_item(uid, 'dates', d)
-
     return metadata
 
 
@@ -1370,43 +1351,7 @@ def _process_extracted_metadata(uid: str, prompt: str, reference_date: str) -> d
         dates=normalize_extracted_dates(result.dates, reference_date),
     ).to_vector_metadata()
 
-    for p in metadata['people']:
-        add_filter_category_item(uid, 'people', p)
-    for t in metadata['topics']:
-        add_filter_category_item(uid, 'topics', t)
-    for e in metadata['entities']:
-        add_filter_category_item(uid, 'entities', e)
-    for d in metadata['dates']:
-        add_filter_category_item(uid, 'dates', d)
-
     return metadata
-
-
-def select_structured_filters(question: str, filters_available: dict[str, Any]) -> dict[str, Any]:
-    prompt = f'''
-    Based on a question asked by the user to an AI, the AI needs to search for the user information related to topics, entities, people, and dates that will help it answering.
-    Your task is to identify the correct fields that can be related to the question and can help answering.
-
-    The JSON below contains samples of available filters as suggestions, but you are not limited to only these options. 
-    However, you must choose from the ones that are actually available in the provided lists.
-    Find as many as possible that can relate to the question asked, prioritizing the most relevant ones.
-    ```
-    {json.dumps(filters_available, indent=2)}
-    ```
-
-    Question: {question}
-    '''.replace('    ', '').strip()
-    # print(prompt)
-    with_parser = get_llm('chat_extraction').with_structured_output(FiltersToUse)
-    try:
-        response = cast(FiltersToUse, with_parser.invoke(prompt))
-        # print('select_structured_filters:', response.dict())
-        response.topics = [t for t in response.topics if t in filters_available['topics']]
-        response.people = [p for p in response.people if p in filters_available['people']]
-        response.entities = [e for e in response.entities if e in filters_available['entities']]
-        return response.model_dump()
-    except ValidationError:
-        return {}
 
 
 # **************************************************
