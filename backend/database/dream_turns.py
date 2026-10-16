@@ -135,7 +135,9 @@ def settle(uid, run_id, turn, *, firestore_client=None):
         hold = lease.get('minute_hold') or {}
         capacities = []
         held_shards = list((hold.get('shards') or {}).items())
-        remaining = charge
+        # Minute headroom is price-weighted (cached input at its rate-card fraction), matching reserve().
+        weighted = getattr(turn, 'price_weighted_tokens', None)
+        remaining = weighted if type(weighted) is int and 0 <= weighted <= charge else charge
         for index, (shard, held) in enumerate(held_shards):
             ref = headroom_ref(database, int(shard))
             capacity = ref.get(transaction=tx).to_dict() or {}
