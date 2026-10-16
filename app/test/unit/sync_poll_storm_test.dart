@@ -30,14 +30,14 @@ class _Listener implements IWalSyncListener {
 }
 
 Wal pending(int i) => Wal(
-  timerStart: 1700000000 + i,
-  codec: BleAudioCodec.opus,
-  seconds: 31,
-  status: WalStatus.uploaded,
-  storage: WalStorage.disk,
-  device: 'omi',
-  filePath: 'audio_$i.bin',
-)..jobId = 'job-$i';
+    timerStart: 1700000000 + i,
+    codec: BleAudioCodec.opus,
+    seconds: 31,
+    status: WalStatus.uploaded,
+    storage: WalStorage.disk,
+    device: 'omi',
+    filePath: 'audio_$i.bin')
+  ..jobId = 'job-$i';
 
 void main() {
   late Directory dir;
@@ -53,20 +53,16 @@ void main() {
     limiter.clockForTesting = () => now;
     SyncJobPoller.instance.resetForTesting(clock: () => now);
     dir = await Directory.systemTemp.createTemp('sync_poll_storm_');
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      (call) async => dir.path,
-    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'), (call) async => dir.path);
     await WalFileManager.init();
   });
   tearDown(() async {
     limiter.clear();
     limiter.clockForTesting = null;
     SyncJobPoller.instance.resetForTesting();
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      null,
-    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'), null);
     await dir.delete(recursive: true);
   });
 
@@ -121,25 +117,22 @@ void main() {
 
   test('50 pending jobs and five serial wakes cannot produce 250 polls', () async {
     var requests = 0;
-    final sync = LocalWalSyncImpl(
-      _Listener(),
-      now: () => now,
-      jobStatusFetcher: (id) async {
-        requests++;
-        return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'processing'));
-      },
-      persistWals: (_) async {},
-    );
+    final sync = LocalWalSyncImpl(_Listener(),
+        now: () => now,
+        jobStatusFetcher: (id) async {
+          requests++;
+          return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'processing'));
+        },
+        persistWals: (_) async {});
     sync.testWals = List.generate(50, pending);
     final coordinator = RecordingTransferCoordinator(
-      reconcile: () async {
-        await sync.reconcileUploadedWals();
-      },
-      drain: () async => const RecordingTransferDrainResult.skipped(),
-      discover: () async {},
-      refreshPending: () async {},
-      autoUploadEnabled: () => false,
-    );
+        reconcile: () async {
+          await sync.reconcileUploadedWals();
+        },
+        drain: () async => const RecordingTransferDrainResult.skipped(),
+        discover: () async {},
+        refreshPending: () async {},
+        autoUploadEnabled: () => false);
     addTearDown(coordinator.dispose);
     for (var i = 0; i < 5; i++) {
       await coordinator.wake(WakeTrigger.socketReconnected);
@@ -179,42 +172,36 @@ void main() {
       uploadGate: SyncUploadGate(
         limiter: limiter,
         fairUseStatusLoader: () async => {'stage': 'none'},
-        uploader:
-            (
-              files, {
-              onUploadProgress,
-              conversationId,
-              captureEvidence,
-              recordingSessionId,
-              audioStartSeconds,
-              audioEndSeconds,
-              claimLiveCapture = false,
-              geolocation,
-            }) async {
-              uploads++;
-              expect(files.length, 2, reason: 'only the retained orphan files need re-upload');
-              for (final file in files) {
-                expect(await file.readAsBytes(), originals[file.path.split('/').last]);
-              }
-              return UploadFilesResult.queued('recovered-orphans');
-            },
+        uploader: (files,
+            {onUploadProgress,
+            conversationId,
+            captureEvidence,
+            recordingSessionId,
+            audioStartSeconds,
+            audioEndSeconds,
+            claimLiveCapture = false,
+            geolocation}) async {
+          uploads++;
+          expect(files.length, 2, reason: 'only the retained orphan files need re-upload');
+          for (final file in files) {
+            expect(await file.readAsBytes(), originals[file.path.split('/').last]);
+          }
+          return UploadFilesResult.queued('recovered-orphans');
+        },
       ),
       jobStatusFetcher: (id) async {
         requests.add(now);
         if (throttle) {
           throttle = false;
           return SyncJobFetch.throttled(
-            SyncRateLimitedException(kind: SyncRateLimitKind.edgeThrottle, retryAfterSeconds: 120),
-          );
+              SyncRateLimitedException(kind: SyncRateLimitKind.edgeThrottle, retryAfterSeconds: 120));
         }
         if (id == 'job-4' && transient) {
           transient = false;
           return const SyncJobFetch(SyncJobFetchOutcome.transient);
         }
         return SyncJobFetch(
-          SyncJobFetchOutcome.ok,
-          SyncJobStatusResponse(jobId: id, status: id == 'job-3' ? 'queued' : 'completed'),
-        );
+            SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: id == 'job-3' ? 'queued' : 'completed'));
       },
     );
     sync.testWals = wals;
@@ -241,11 +228,10 @@ void main() {
     expect(persisted.map(Wal.fromJson).where((wal) => wal.status == WalStatus.synced), hasLength(125));
     for (final request in requests) {
       expect(
-        requests
-            .where((other) => other.isAfter(request.subtract(const Duration(minutes: 1))) && !other.isAfter(request))
-            .length,
-        lessThanOrEqualTo(SyncJobPoller.maxRequestsPerMinute),
-      );
+          requests
+              .where((other) => other.isAfter(request.subtract(const Duration(minutes: 1))) && !other.isAfter(request))
+              .length,
+          lessThanOrEqualTo(SyncJobPoller.maxRequestsPerMinute));
     }
     for (final entry in originals.entries) {
       expect(await File('${dir.path}/${entry.key}').readAsBytes(), entry.value);
@@ -253,18 +239,18 @@ void main() {
   });
 
   LocalWalSyncImpl orphanSync(List<Map<String, dynamic>> persisted, {void Function()? onPoll}) => LocalWalSyncImpl(
-    _Listener(),
-    now: () => now,
-    persistWals: (items) async {
-      persisted
-        ..clear()
-        ..addAll(items.map((wal) => wal.toJson()));
-    },
-    jobStatusFetcher: (id) async {
-      onPoll?.call();
-      return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'processing'));
-    },
-  );
+        _Listener(),
+        now: () => now,
+        persistWals: (items) async {
+          persisted
+            ..clear()
+            ..addAll(items.map((wal) => wal.toJson()));
+        },
+        jobStatusFetcher: (id) async {
+          onPoll?.call();
+          return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'processing'));
+        },
+      );
 
   Future<List<Wal>> orphanRows(int count) async {
     final rows = List.generate(count, pending)..forEach((wal) => wal.jobId = null);
@@ -278,14 +264,13 @@ void main() {
     final persisted = <Map<String, dynamic>>[];
     final orphans = await orphanRows(3);
     final incoming = Wal(
-      timerStart: 1700000100,
-      codec: BleAudioCodec.opus,
-      seconds: 31,
-      status: WalStatus.miss,
-      storage: WalStorage.disk,
-      device: 'omi',
-      filePath: 'incoming.bin',
-    );
+        timerStart: 1700000100,
+        codec: BleAudioCodec.opus,
+        seconds: 31,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        device: 'omi',
+        filePath: 'incoming.bin');
     await File('${dir.path}/incoming.bin').writeAsBytes([9, 9, 9]);
     final sync = orphanSync(persisted);
     final wals = [...orphans];
@@ -298,22 +283,16 @@ void main() {
     await expectLater(pass, completes);
     await admitted;
 
-    expect(
-      orphans.every((wal) => wal.status == WalStatus.miss && wal.jobId == null),
-      isTrue,
-      reason: 'retained orphan audio re-enters the upload path',
-    );
+    expect(orphans.every((wal) => wal.status == WalStatus.miss && wal.jobId == null), isTrue,
+        reason: 'retained orphan audio re-enters the upload path');
     expect(orphans.every((wal) => wal.retryCount == 0), isTrue, reason: 'recovery spends no retry budget');
     expect(wals.where((wal) => identical(wal, incoming)), hasLength(1));
     expect(incoming.status, WalStatus.miss);
     final saved = persisted.map(Wal.fromJson).toList();
     expect(saved.where((wal) => wal.filePath == 'incoming.bin'), hasLength(1), reason: 'the new recording is durable');
     for (final orphan in orphans) {
-      expect(
-        saved.singleWhere((wal) => wal.filePath == orphan.filePath).status,
-        WalStatus.miss,
-        reason: 'recovery is persisted, not only in memory',
-      );
+      expect(saved.singleWhere((wal) => wal.filePath == orphan.filePath).status, WalStatus.miss,
+          reason: 'recovery is persisted, not only in memory');
     }
     for (final wal in [...orphans, incoming]) {
       expect(await File('${dir.path}/${wal.filePath}').exists(), isTrue, reason: 'no retained audio is deleted');
@@ -353,11 +332,8 @@ void main() {
     sync.clearUserData();
     await expectLater(pass, completes);
 
-    expect(
-      orphans.every((wal) => wal.status == WalStatus.uploaded && wal.jobId == null),
-      isTrue,
-      reason: 'the retired session moves nothing',
-    );
+    expect(orphans.every((wal) => wal.status == WalStatus.uploaded && wal.jobId == null), isTrue,
+        reason: 'the retired session moves nothing');
   });
 
   test('shared budget, per-job cadence, server hint, fairness and sliding window', () async {
@@ -365,10 +341,8 @@ void main() {
     final seen = <String>[];
     Future<SyncJobFetch> fetch(String id) async {
       seen.add(id);
-      return SyncJobFetch(
-        SyncJobFetchOutcome.ok,
-        SyncJobStatusResponse(jobId: id, status: 'processing', pollAfterMs: id == '0' ? 90000 : null),
-      );
+      return SyncJobFetch(SyncJobFetchOutcome.ok,
+          SyncJobStatusResponse(jobId: id, status: 'processing', pollAfterMs: id == '0' ? 90000 : null));
     }
 
     for (final id in poller.ordered(List.generate(50, (i) => '$i'))) {
@@ -392,15 +366,13 @@ void main() {
   test('overlapping passes join; each job has one request in flight', () async {
     var requests = 0;
     final gate = Completer<SyncJobFetch>();
-    final sync = LocalWalSyncImpl(
-      _Listener(),
-      now: () => now,
-      persistWals: (_) async {},
-      jobStatusFetcher: (_) {
-        requests++;
-        return gate.future;
-      },
-    );
+    final sync = LocalWalSyncImpl(_Listener(),
+        now: () => now,
+        persistWals: (_) async {},
+        jobStatusFetcher: (_) {
+          requests++;
+          return gate.future;
+        });
     sync.testWals = [pending(1)];
     final first = sync.reconcileUploadedWals();
     final second = sync.reconcileUploadedWals();
@@ -411,17 +383,14 @@ void main() {
 
   test('poll 429 stops the pass and all subsequent wakes during cooldown', () async {
     var requests = 0;
-    final sync = LocalWalSyncImpl(
-      _Listener(),
-      now: () => now,
-      persistWals: (_) async {},
-      jobStatusFetcher: (_) async {
-        requests++;
-        return SyncJobFetch.throttled(
-          SyncRateLimitedException(kind: SyncRateLimitKind.edgeThrottle, retryAfterSeconds: 120),
-        );
-      },
-    );
+    final sync = LocalWalSyncImpl(_Listener(),
+        now: () => now,
+        persistWals: (_) async {},
+        jobStatusFetcher: (_) async {
+          requests++;
+          return SyncJobFetch.throttled(
+              SyncRateLimitedException(kind: SyncRateLimitKind.edgeThrottle, retryAfterSeconds: 120));
+        });
     sync.testWals = List.generate(50, pending);
     await sync.reconcileUploadedWals();
     now = now.add(const Duration(minutes: 1));
@@ -442,15 +411,13 @@ void main() {
 
   test('404 requires a second missing read after five minutes; no retry spent', () async {
     var requests = 0;
-    final sync = LocalWalSyncImpl(
-      _Listener(),
-      now: () => now,
-      persistWals: (_) async {},
-      jobStatusFetcher: (_) async {
-        requests++;
-        return const SyncJobFetch(SyncJobFetchOutcome.notFound);
-      },
-    );
+    final sync = LocalWalSyncImpl(_Listener(),
+        now: () => now,
+        persistWals: (_) async {},
+        jobStatusFetcher: (_) async {
+          requests++;
+          return const SyncJobFetch(SyncJobFetchOutcome.notFound);
+        });
     final wal = pending(1);
     await File('${dir.path}/audio_1.bin').writeAsBytes([1, 2]);
     sync.testWals = [wal];
@@ -470,28 +437,21 @@ void main() {
   test('409 content in progress pauses batch and manual uploads without failures or retries', () async {
     var uploads = 0;
     final gate = SyncUploadGate(
-      limiter: limiter,
-      fairUseStatusLoader: () async => {'stage': 'none'},
-      uploader:
-          (
-            files, {
-            onUploadProgress,
+        limiter: limiter,
+        fairUseStatusLoader: () async => {'stage': 'none'},
+        uploader: (files,
+            {onUploadProgress,
             conversationId,
             captureEvidence,
             recordingSessionId,
             audioStartSeconds,
             audioEndSeconds,
             claimLiveCapture = false,
-            geolocation,
-          }) async {
-            uploads++;
-            throw SyncRateLimitedException(
-              kind: SyncRateLimitKind.edgeThrottle,
-              retryAfterSeconds: 60,
-              reasonCode: 'sync_content_in_progress',
-            );
-          },
-    );
+            geolocation}) async {
+          uploads++;
+          throw SyncRateLimitedException(
+              kind: SyncRateLimitKind.edgeThrottle, retryAfterSeconds: 60, reasonCode: 'sync_content_in_progress');
+        });
     final sync = LocalWalSyncImpl(_Listener(), uploadGate: gate, persistWals: (_) async {});
     final wal = pending(1)
       ..status = WalStatus.miss
@@ -512,30 +472,24 @@ void main() {
     final wal = pending(1);
     await File('${dir.path}/audio_1.bin').writeAsBytes([1, 2]);
     final gate = SyncUploadGate(
-      limiter: limiter,
-      fairUseStatusLoader: () async => {'stage': 'none'},
-      uploader:
-          (
-            files, {
-            onUploadProgress,
-            conversationId,
-            captureEvidence,
-            recordingSessionId,
-            audioStartSeconds,
-            audioEndSeconds,
-            claimLiveCapture = false,
-            geolocation,
-          }) async =>
-              syncContentInProgressResult(http.Response('{"code":"sync_content_in_progress","job_id":"job-1"}', 409))!,
-    );
-    final sync = LocalWalSyncImpl(
-      _Listener(),
-      jobPoller: poller,
-      uploadGate: gate,
-      now: () => now,
-      persistWals: (_) async {},
-      jobStatusFetcher: (_) async => const SyncJobFetch(SyncJobFetchOutcome.notFound),
-    );
+        limiter: limiter,
+        fairUseStatusLoader: () async => {'stage': 'none'},
+        uploader: (files,
+                {onUploadProgress,
+                conversationId,
+                captureEvidence,
+                recordingSessionId,
+                audioStartSeconds,
+                audioEndSeconds,
+                claimLiveCapture = false,
+                geolocation}) async =>
+            syncContentInProgressResult(http.Response('{"code":"sync_content_in_progress","job_id":"job-1"}', 409))!);
+    final sync = LocalWalSyncImpl(_Listener(),
+        jobPoller: poller,
+        uploadGate: gate,
+        now: () => now,
+        persistWals: (_) async {},
+        jobStatusFetcher: (_) async => const SyncJobFetch(SyncJobFetchOutcome.notFound));
     sync.testWals = [wal];
     await sync.reconcileUploadedWals();
     now = now.add(const Duration(minutes: 5));
@@ -556,25 +510,21 @@ void main() {
     await SharedPreferencesUtil().saveString('localRecordingJobs', jsonEncode({name: 'expired'}));
     var uploads = 0;
     final gate = SyncUploadGate(
-      limiter: limiter,
-      fairUseStatusLoader: () async => {'stage': 'none'},
-      uploader:
-          (
-            files, {
-            onUploadProgress,
+        limiter: limiter,
+        fairUseStatusLoader: () async => {'stage': 'none'},
+        uploader: (files,
+            {onUploadProgress,
             conversationId,
             captureEvidence,
             recordingSessionId,
             audioStartSeconds,
             audioEndSeconds,
             claimLiveCapture = false,
-            geolocation,
-          }) async {
-            uploads++;
-            expect(files.single.existsSync(), isTrue);
-            return UploadFilesResult.queued('replacement');
-          },
-    );
+            geolocation}) async {
+          uploads++;
+          expect(files.single.existsSync(), isTrue);
+          return UploadFilesResult.queued('replacement');
+        });
     final provider = LocalRecordingsProvider(uploadGate: gate);
     provider.jobStatusFetcherOverride = (_) async => const SyncJobFetch(SyncJobFetchOutcome.notFound);
     addTearDown(provider.dispose);
@@ -607,30 +557,26 @@ void main() {
       // Construct on the widget zone below so its production 15s timer is virtual.
     });
     final timerZone = Zone.current;
-    provider = LocalRecordingsProvider(
-      periodic: (duration, callback) {
-        expect(duration, const Duration(seconds: 15));
-        // Directory IO finishes outside the widget zone; keep the actual Timer
-        // in the virtual clock's zone without manually driving reconciliation.
-        return timerZone.run(() => Timer.periodic(duration, callback));
-      },
-    );
+    provider = LocalRecordingsProvider(periodic: (duration, callback) {
+      expect(duration, const Duration(seconds: 15));
+      // Directory IO finishes outside the widget zone; keep the actual Timer
+      // in the virtual clock's zone without manually driving reconciliation.
+      return timerZone.run(() => Timer.periodic(duration, callback));
+    });
     provider.jobStatusFetcherOverride = (id) async {
       phoneRequests++;
       requests.add(now);
       return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'processing'));
     };
-    sync = LocalWalSyncImpl(
-      _Listener(),
-      now: () => now,
-      jobPoller: SyncJobPoller.instance,
-      persistWals: (_) async {},
-      jobStatusFetcher: (id) async {
-        walRequests++;
-        requests.add(now);
-        return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'processing'));
-      },
-    );
+    sync = LocalWalSyncImpl(_Listener(),
+        now: () => now,
+        jobPoller: SyncJobPoller.instance,
+        persistWals: (_) async {},
+        jobStatusFetcher: (id) async {
+          walRequests++;
+          requests.add(now);
+          return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'processing'));
+        });
     sync.testWals = List.generate(50, pending);
     await tester.runAsync(() async {
       await provider.refresh();
@@ -650,10 +596,8 @@ void main() {
       }
       expect(provider.isReconcilingForTesting, isFalse);
       await tester.runAsync(() => sync.reconcileUploadedWals());
-      expect(
-        requests.where((time) => time.isAfter(now.subtract(const Duration(minutes: 1)))).length,
-        lessThanOrEqualTo(18),
-      );
+      expect(requests.where((time) => time.isAfter(now.subtract(const Duration(minutes: 1)))).length,
+          lessThanOrEqualTo(18));
     }
     expect(phoneRequests, greaterThan(7), reason: 'the production timer resumes polling after the window');
     provider.dispose();
@@ -665,9 +609,7 @@ void main() {
     Future<SyncJobFetch> fetch(String id) async {
       requests++;
       return SyncJobFetch(
-        SyncJobFetchOutcome.ok,
-        SyncJobStatusResponse(jobId: id, status: 'processing', pollAfterMs: 90000),
-      );
+          SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'processing', pollAfterMs: 90000));
     }
 
     await poller.fetch('one', fetch);
@@ -692,37 +634,30 @@ void main() {
     var polls = 0;
     var status = 'processing';
     final gate = SyncUploadGate(
-      limiter: limiter,
-      fairUseStatusLoader: () async => {'stage': 'none'},
-      uploader:
-          (
-            files, {
-            onUploadProgress,
+        limiter: limiter,
+        fairUseStatusLoader: () async => {'stage': 'none'},
+        uploader: (files,
+            {onUploadProgress,
             conversationId,
             captureEvidence,
             recordingSessionId,
             audioStartSeconds,
             audioEndSeconds,
             claimLiveCapture = false,
-            geolocation,
-          }) async {
-            uploads++;
-            return syncContentInProgressResult(
-              http.Response('{"code":"sync_content_in_progress","job_id":"active-owner","poll_after_ms":120000}', 409),
-            )!;
-          },
-    );
-    final sync = LocalWalSyncImpl(
-      _Listener(),
-      uploadGate: gate,
-      now: () => now,
-      persistWals: (_) async {},
-      jobStatusFetcher: (id) async {
-        polls++;
-        expect(id, 'active-owner');
-        return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: status));
-      },
-    );
+            geolocation}) async {
+          uploads++;
+          return syncContentInProgressResult(http.Response(
+              '{"code":"sync_content_in_progress","job_id":"active-owner","poll_after_ms":120000}', 409))!;
+        });
+    final sync = LocalWalSyncImpl(_Listener(),
+        uploadGate: gate,
+        now: () => now,
+        persistWals: (_) async {},
+        jobStatusFetcher: (id) async {
+          polls++;
+          expect(id, 'active-owner');
+          return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: status));
+        });
     final wal = pending(1)
       ..status = WalStatus.miss
       ..jobId = null;
@@ -767,9 +702,9 @@ void main() {
     expect(isSyncContentInProgressResponse(http.Response('{"code":"other"}', 409)), isFalse);
     expect(isSyncContentInProgressResponse(http.Response('<html/>', 409)), isFalse);
     expect(
-      syncContentInProgressResult(http.Response('{"code":"sync_content_in_progress","job_id":"owner-1"}', 409))?.jobId,
-      'owner-1',
-    );
+        syncContentInProgressResult(http.Response('{"code":"sync_content_in_progress","job_id":"owner-1"}', 409))
+            ?.jobId,
+        'owner-1');
     expect(syncContentInProgressResult(http.Response('{"code":"sync_content_in_progress"}', 409)), isNull);
   });
 }

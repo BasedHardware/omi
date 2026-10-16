@@ -25,7 +25,11 @@ class DailySummaryCreationApi {
     final base = baseUrl ?? Env.apiBaseUrl ?? '';
     final root = base.endsWith('/') ? base : '$base/';
     final result = await executeApi<DailySummary>(
-      request: ApiRequest(url: '${root}v1/users/daily-summaries', method: 'POST', body: jsonEncode({'date': date})),
+      request: ApiRequest(
+        url: '${root}v1/users/daily-summaries',
+        method: 'POST',
+        body: jsonEncode({'date': date}),
+      ),
       send: send,
       execution: execution,
       canSend: current,

@@ -74,18 +74,17 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
     if (price == null || _busy) return;
     setState(() => _busy = true);
     try {
-      final start =
-          widget.checkout ??
+      final start = widget.checkout ??
           (BuildContext context, PaywallPrice price, String tierId) => PaywallCheckout.start(
-            context,
-            priceId: price.priceId,
-            plan: tierId,
-            interval: price.interval,
-            source: widget.source,
-            surface: (message) {
-              if (mounted) setState(() => _notice = message);
-            },
-          );
+                context,
+                priceId: price.priceId,
+                plan: tierId,
+                interval: price.interval,
+                source: widget.source,
+                surface: (message) {
+                  if (mounted) setState(() => _notice = message);
+                },
+              );
       final outcome = await start(context, price, offer.tierId);
       if (!mounted) return;
       if (outcome == PaywallCheckoutOutcome.failed && _notice == null) {
@@ -147,8 +146,7 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
           builder: (context, usage, _) {
             final subscription = usage.subscription?.subscription;
             final cancelPending = subscription?.cancelAtPeriodEnd == true;
-            final offer =
-                widget.offer ??
+            final offer = widget.offer ??
                 PaywallOffer.fromCatalog(
                   usage.availablePlans,
                   cancelAtPeriodEnd: cancelPending,
@@ -329,8 +327,13 @@ abstract final class _Graphite {
   static const success = Color(0xFF30D158); // omi-ux-allow: color-literal -- fixed black design canvas
   static const double buttonRadius = 14;
 
-  static TextStyle headline(double size) =>
-      TextStyle(fontSize: size, height: 1.1, fontWeight: FontWeight.w600, letterSpacing: -0.02 * size, color: text);
+  static TextStyle headline(double size) => TextStyle(
+        fontSize: size,
+        height: 1.1,
+        fontWeight: FontWeight.w600,
+        letterSpacing: -0.02 * size,
+        color: text,
+      );
 
   static TextStyle body({double size = 16, Color? color, double height = 1.4}) =>
       TextStyle(fontSize: size, height: height, fontWeight: FontWeight.w400, color: color ?? textSecondary);
@@ -342,13 +345,8 @@ abstract final class _Graphite {
 enum _ButtonKind { primary, text }
 
 class _Button extends StatelessWidget {
-  const _Button({
-    super.key,
-    required this.label,
-    required this.onPressed,
-    this.kind = _ButtonKind.primary,
-    this.busy = false,
-  });
+  const _Button(
+      {super.key, required this.label, required this.onPressed, this.kind = _ButtonKind.primary, this.busy = false});
 
   final String label;
   final VoidCallback? onPressed;
@@ -487,7 +485,7 @@ class _Skeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    height: height,
-    decoration: const BoxDecoration(color: _Graphite.surface, borderRadius: OmiRadius.lgAll),
-  );
+        height: height,
+        decoration: const BoxDecoration(color: _Graphite.surface, borderRadius: OmiRadius.lgAll),
+      );
 }

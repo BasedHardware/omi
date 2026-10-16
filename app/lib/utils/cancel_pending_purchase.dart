@@ -27,8 +27,8 @@ String? billingDateLabel(BuildContext context, Object? raw) {
   final seconds = raw is int
       ? raw
       : raw is num
-      ? raw.toInt()
-      : null;
+          ? raw.toInt()
+          : null;
   if (seconds == null || seconds <= 0) return null;
   return OmiDateFormat.of(context).date(DateTime.fromMillisecondsSinceEpoch(seconds * 1000));
 }

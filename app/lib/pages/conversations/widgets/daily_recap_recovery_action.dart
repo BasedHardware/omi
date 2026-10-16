@@ -47,8 +47,7 @@ class _DailyRecapRecoveryActionState extends State<DailyRecapRecoveryAction> {
       _choosing = false;
     }
     if (!mounted || date == null) return;
-    final key =
-        '${date.year.toString().padLeft(4, '0')}-'
+    final key = '${date.year.toString().padLeft(4, '0')}-'
         '${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
     await _recover(key);
   }
@@ -65,11 +64,9 @@ class _DailyRecapRecoveryActionState extends State<DailyRecapRecoveryAction> {
           if (widget.onCreated != null) {
             await widget.onCreated!(data);
           } else {
-            await Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => DailySummaryDetailPage(summaryId: data.id, summary: data),
-              ),
-            );
+            await Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => DailySummaryDetailPage(summaryId: data.id, summary: data),
+            ));
           }
         case ApiFailure<DailySummary>(:final problem):
           final message = switch (problem.statusCode) {
@@ -79,10 +76,10 @@ class _DailyRecapRecoveryActionState extends State<DailyRecapRecoveryAction> {
             422 => context.l10n.trySelectingDifferentDate,
             402 => context.l10n.upgradePlan,
             _ => switch (problem.kind) {
-              ApiProblemKind.authTerminal => context.l10n.sessionExpiredSignInAgain,
-              ApiProblemKind.transport => context.l10n.checkConnectionTryAgain,
-              _ => context.l10n.somethingWentWrong,
-            },
+                ApiProblemKind.authTerminal => context.l10n.sessionExpiredSignInAgain,
+                ApiProblemKind.transport => context.l10n.checkConnectionTryAgain,
+                _ => context.l10n.somethingWentWrong,
+              },
           };
           OmiFeedback.error(
             context,

@@ -65,17 +65,13 @@ abstract final class PaywallCheckout {
         return PaywallCheckoutOutcome.failed;
       }
       if (session['status'] == 'reactivated') {
-        final date =
-            billingDateLabel(context, session['next_billing_date']) ??
+        final date = billingDateLabel(context, session['next_billing_date']) ??
             billingDateLabel(context, subscription?.currentPeriodEnd);
         final planName = currentPlanDisplayName(context, provider.subscription);
         final message = date == null ? l10n.subscriptionReactivatedDefault : l10n.yourPlanWillRenewOn(planName, date);
         report(message, error: false);
-        PlatformManager.instance.analytics.upgradeSucceeded(
-          previousPlan: previousPlan,
-          newPlan: plan,
-          billingInterval: interval,
-        );
+        PlatformManager.instance.analytics
+            .upgradeSucceeded(previousPlan: previousPlan, newPlan: plan, billingInterval: interval);
         await provider.fetchSubscription();
         return PaywallCheckoutOutcome.purchased;
       }
@@ -90,11 +86,8 @@ abstract final class PaywallCheckout {
         return PaywallCheckoutOutcome.cancelled;
       }
       if (context.mounted) report(l10n.subscriptionSuccessfulCharged, error: false);
-      PlatformManager.instance.analytics.upgradeSucceeded(
-        previousPlan: previousPlan,
-        newPlan: plan,
-        billingInterval: interval,
-      );
+      PlatformManager.instance.analytics
+          .upgradeSucceeded(previousPlan: previousPlan, newPlan: plan, billingInterval: interval);
       await provider.fetchSubscription();
       await provider.loadAvailablePlans();
       return PaywallCheckoutOutcome.purchased;
@@ -109,7 +102,12 @@ abstract final class PaywallCheckout {
 /// Null until the catalog has loaded; a catalog without an Unlimited tier yields no offer.
 @immutable
 class PaywallOffer {
-  const PaywallOffer({required this.tierId, required this.monthly, required this.yearly, this.resubscribe = false});
+  const PaywallOffer({
+    required this.tierId,
+    required this.monthly,
+    required this.yearly,
+    this.resubscribe = false,
+  });
 
   final String tierId;
   final PaywallPrice? monthly;
@@ -207,12 +205,8 @@ class PaywallOffer {
 
 @immutable
 class PaywallPrice {
-  const PaywallPrice({
-    required this.priceId,
-    required this.interval,
-    required this.amountMinor,
-    required this.currency,
-  });
+  const PaywallPrice(
+      {required this.priceId, required this.interval, required this.amountMinor, required this.currency});
 
   final String priceId;
   final String interval;
