@@ -548,3 +548,14 @@ def test_unprojected_usage_exhausts_budget_and_emits_coverage(monkeypatch):
         ladder.enforce_budget('u', firestore_client=store)
     assert error.value.status_code == 402
     assert store.writes == 0
+
+
+def test_coverage_metrics_survive_isolated_auth_reimports():
+    from testing.import_isolation import load_module_fresh
+    from utils.observability import ladder_v1 as metrics
+
+    path = str(Path(__file__).parents[2] / 'utils/observability/ladder_v1.py')
+    for _ in range(3):
+        reloaded = load_module_fresh('utils.observability.ladder_v1', path)
+        assert reloaded.UNPROJECTED_SECONDS is metrics.UNPROJECTED_SECONDS
+        assert reloaded.UNPROJECTED_ATTEMPTS is metrics.UNPROJECTED_ATTEMPTS
