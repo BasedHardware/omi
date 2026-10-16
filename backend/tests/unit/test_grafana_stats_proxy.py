@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.client import HTTPConnection
 from pathlib import Path
 from urllib.error import HTTPError
+from urllib.parse import urlsplit
 
 import pytest
 from charts.monitoring.grafana.stats_proxy import (
@@ -299,7 +300,7 @@ def test_refreshing_body_is_cached_briefly_then_refetched():
     original = transport.open
 
     def open_(request, timeout):
-        if request.full_url.startswith("https://admin.omi.me"):
+        if urlsplit(request.full_url).netloc == "admin.omi.me":
             transport.calls.append(request.full_url)
             return io.BytesIO(bodies.pop(0))
         return original(request, timeout)

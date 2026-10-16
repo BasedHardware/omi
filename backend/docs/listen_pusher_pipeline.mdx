@@ -4895,3 +4895,18 @@ behavior; legacy/single-speaker resolution stays on original clocks. The sync
 final-pass adapter receives existing words and does not add an STT request.
 No Nemotron cascade is routed. WAL pre-STT proof matching is unchanged; bounded
 coverage outcome/reason diagnostics now explain conservative abstention.
+
+### Default-off desktop call + pendant links
+
+`DESKTOP_PENDANT_CALL_LINK_MODE=off|shadow|on` adds a metadata-only path at the
+existing duplicate-capture finalizer seam, in either arrival order. A completed
+desktop `external_data.conversation_role=meeting` and same-owner `omi` capture
+need at least 30 seconds and 50% shorter-window overlap; complementary speech
+needs no text confirmation. One-to-one selection and transactional group fences
+preserve exclusions and prevent transitive bridging. Desktop is primary.
+`DESKTOP_PENDANT_CALL_LINK_PERCENT` selects a stable owner cohort under `on`;
+shadow observes everyone. Defaults ship `off`, with percentage 100 inert until
+mode changes. Grouped pendant continuations may join after normal smart-merge
+checks and Jev approval; genuine user edits stay protected. No transcripts or
+audio are combined. Rollout, rollback limits and the separate wall-clock shadow
+review are in [the runbook](runbooks/desktop-pendant-call-link.md).

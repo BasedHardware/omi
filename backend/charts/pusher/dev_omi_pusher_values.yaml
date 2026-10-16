@@ -155,6 +155,10 @@ env:
     value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
     value: "shadow"
+  - name: DESKTOP_PENDANT_CALL_LINK_MODE
+    value: "off"
+  - name: DESKTOP_PENDANT_CALL_LINK_PERCENT
+    value: "100"
   - name: TRANSCRIPTION_SHADOW_ENABLED
     value: "true"
   - name: TRANSCRIPTION_SHADOW_KILL_SWITCH
