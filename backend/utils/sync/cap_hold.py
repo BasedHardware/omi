@@ -32,6 +32,7 @@ from utils.other.storage import get_private_cloud_sync_bucket, owner_storage_wri
 logger = logging.getLogger(__name__)
 COLLECTION = 'stt_cap_holds'
 AUDIO_CHUNK_BYTES = 1024 * 1024
+RETAINED_NEXT_ATTEMPT_AT = 253402300799  # Terminal rows sort after actionable work, without a new query/index.
 
 
 def holds(uid: str) -> Any:
@@ -146,7 +147,7 @@ def claim(uid: str, ref: Any, now: float) -> dict[str, Any] | None:
     def commit(tx: Any):
         snapshot = ref.get(transaction=tx)
         row = snapshot.to_dict() if snapshot.exists else None
-        if not row or row.get('state') == 'completed' or row.get('lease_until', 0) > now:
+        if not row or row.get('state') in {'completed', 'retained'} or row.get('lease_until', 0) > now:
             return None
         token = uuid4().hex
         tx.update(ref, {'lease_until': now + 1800, 'lease_token': token})
@@ -202,7 +203,14 @@ def release(uid: str, ref: Any, token: str) -> None:
         snapshot = ref.get(transaction=tx)
         row = snapshot.to_dict() if snapshot.exists else {}
         if row.get('lease_token') == token:
-            tx.update(ref, {'lease_until': 0, 'lease_token': '', 'next_attempt_at': time.time()})
+            tx.update(
+                ref,
+                {
+                    'lease_until': 0,
+                    'lease_token': '',
+                    'next_attempt_at': RETAINED_NEXT_ATTEMPT_AT if row.get('state') == 'retained' else time.time(),
+                },
+            )
 
     return commit(client.transaction())
 

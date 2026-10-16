@@ -1251,11 +1251,14 @@ def process_segment(
     cap_recovery: bool = False,
     cap_content_id: str | None = None,
     cap_recovery_service: tuple[str, str | None, str] | None = None,
+    cap_recovery_checkpoint: dict | None = None,
 ):
     conversation_id = None
     provider = 'unknown'
     model = 'unknown'
     phase = 'provider_select'
+    if stt_cap_dispatch_enabled() and cap_recovery and deferred_outcome is not None:
+        deferred_outcome['provider_called'] = False
     try:
         if ambiguous_binding_pending(uid, lineage_binding):
             phase = 'persistence'
@@ -1375,6 +1378,10 @@ def process_segment(
                 if deferred_outcome is not None:
                     deferred_outcome['cap_held'] = True
                 return False
+            if stt_cap_dispatch_enabled() and cap_recovery and deferred_outcome is not None:
+                # Explicit request-boundary signal survives later cap denial,
+                # parse/ingest errors, and the bounded empty-result retry.
+                deferred_outcome['provider_called'] = True
             words, detected_language = prerecorded(
                 url,
                 speakers_count=3,
@@ -1400,6 +1407,12 @@ def process_segment(
                     _log_empty_retry('recovered', words=len(words or []), raw_empty=not words)
                     recovered_via_retry = True
                 break
+            if stt_cap_dispatch_enabled() and cap_recovery and cap_recovery_checkpoint is not None:
+                # A held piece gets at most two persisted application dispatch
+                # attempts. Reconciliation owns the second, not this local retry.
+                if deferred_outcome is not None:
+                    deferred_outcome['recovery_ambiguous'] = True
+                return False
             if empty_retried:
                 # Words survived the provider but nothing survived post-processing:
                 # again no transcribable speech, valid and empty rather than failed.
@@ -1530,6 +1543,11 @@ def process_segment(
             incoming,
             candidate_id=closest_memory['id'] if closest_memory else None,
             target_id=target_conversation_id,
+            **(
+                {'recovery_checkpoint': cap_recovery_checkpoint}
+                if stt_cap_dispatch_enabled() and cap_recovery and cap_recovery_checkpoint is not None
+                else {}
+            ),
         )
         if sync_safety_wal_enabled() and assigned.get('sync_live_target'):
             removed = len(transcript_segments) - len(survivors)

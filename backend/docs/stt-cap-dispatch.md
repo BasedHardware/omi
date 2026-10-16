@@ -83,20 +83,44 @@ every new recovered provider request. Already persisted receipts can settle at
 the cap without another provider call. Recovery
 replays WAL coverage and lineage planning, loads speaker embeddings, and reuses
 VAD, segment intake, enrichment and optional playback finalization. Token-fenced
-piece receipts persist a `dispatched` intent with funding, provider and model
-**before** STT or ingestion, using the current token/lease fence. That selection
-is pinned through the actual provider factory. Successful transcription and
-ingestion replace the intent with a `transcribed` result before usage settlement;
-a usage retry cannot repeat paid STT. A save error or lost lease after dispatch
-leaves an ambiguous `dispatched` intent. Every subsequent claim fails closed
-before VAD/lineage planning, retaining the original audio for reconciliation and
-never automatically repeating STT or ingestion. This deliberately also holds an
-intent if execution stops before dispatch can be confirmed; no automatic
-reconciliation is added here. The log event is `event=stt_cap_recovery
-outcome=reconciliation_required`. Finalization runs once after all pieces join,
-with the retained geolocation and source-position context. Piece
-receipts and idempotent usage keys preserve progress across retries. Completed
-objects are deleted only after content and usage settlement. WS-only and inactive
+piece receipts persist a `dispatched` intent with funding, provider, model,
+`dispatched_at` and `attempt=1` **before** STT or ingestion, under the lease fence.
+Provider selection is pinned. Before dispatch, recovery freezes encrypted VAD
+piece bytes and their lineage context under the existing owner prefix. A later
+coverage/VAD decision cannot redefine a piece or suppress a sibling checkpoint.
+The original full audio remains retained throughout.
+
+`process_segment` explicitly reports `provider_called`, set immediately before
+`prerecorded`, never inferred from an error class. A known non-call atomically
+removes its intent (or reverts an unspent second attempt). The next claim retries
+normally. If a call may have happened, the piece waits 30 minutes. Then:
+
+1. A proof written in the **same transaction as conversation ingestion** identifies
+   the hold, piece and deterministic conversation lineage. Recovery marks that
+   piece transcribed, settles its existing idempotent usage key and finalizes it
+   without another provider call.
+2. Without a proof, current allowance/abuse admission permits **one** additional
+   application dispatch, persisted as `attempt=2`. Recovery owns retries; the
+   ordinary segment's local empty-result retry is disabled for these checkpointed
+   recovery attempts. Provider-internal SDK retries remain outside this ledger.
+3. A second ambiguous attempt gets the same cooldown/proof check, then becomes
+   `failed_reconciliation`. Its audio and manifest remain retained. Successful
+   siblings still settle usage and finalize independently; their paths checkpoint
+   finalization progress. A failed piece never publishes an all-success content
+   ledger result.
+
+A reconciled ingest also retains raw audio, since playback storage may not have
+finished before the interrupted processor returned. Terminal retained manifests
+sort after actionable work and cannot dispatch. Successful ledger settlement is
+retryable before that terminal transition. Neither retained form has an
+application TTL or is silently erased. Ordinary fully successful recovery deletes
+source and frozen pieces only after content/usage settlement.
+
+`omi_stt_cap_recovery_reconciliation_total{outcome}` counts `cleared_noncall`,
+`reconciled_ingested`, `redispatched`, and `failed`. Structured
+`event=stt_cap_recovery_reconciliation` logs include hold id and piece name, never
+content. Metric labels contain no uid, hold id or piece name. New recovery and
+its signals are inert when the dispatch flag is off. WS-only and inactive
 accounts wait for their next authenticated HTTP request; there is no new cron.
 Rolling back the dispatch flag pauses this new recovery, preserving its audio.
 

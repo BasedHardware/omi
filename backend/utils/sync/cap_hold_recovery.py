@@ -16,14 +16,14 @@ from google.api_core.exceptions import NotFound
 
 from config.stt_cap_dispatch import enabled
 from database import users as users_db
-from database import sync_cap_holds
+from database import sync_cap_holds, sync_cap_recovery
 from utils.analytics import record_usage
 from utils.executors import run_blocking, db_executor, sync_executor, storage_executor, start_background_task
 from utils.stt_cap_dispatch import sync_allowed
 from utils.fair_use import get_hard_restriction_status, is_daily_audio_ceiling_exceeded
 from utils.stt.pre_recorded import get_prerecorded_service
-from utils.sync import cap_hold
-from utils.sync.files import get_wav_duration
+from utils.sync import cap_hold, cap_recovery_plan
+from utils.observability.stt_cap_dispatch import record_reconciliation
 from utils.sync.cap_recovery_audio import prepare as prepare_audio
 from models.geolocation import Geolocation
 from utils.sync.pipeline import (
@@ -34,11 +34,13 @@ from utils.sync.pipeline import (
 from models.conversation import ConversationSource
 
 logger = logging.getLogger(__name__)
+RECONCILIATION_COOLDOWN_SECONDS = 1800
 
 
 def _erase(uid: str, snapshot: Any, row: dict[str, Any]) -> None:
     # Account deletion already purges this existing owner-scoped chunk prefix.
-    for path in filter(None, (row['audio_path'], row.get('metadata_path'))):
+    objects = [row, *(row.get('piece_plan') or {}).values()]
+    for path in {item[key] for item in objects for key in ('audio_path', 'metadata_path') if item.get(key)}:
         if not path.startswith(f'chunks/{uid}/cap-held/'):
             raise ValueError('hold audio owner mismatch')
         try:
@@ -82,14 +84,11 @@ def _new_dispatch_allowed(uid: str) -> bool:
 
 
 async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
+    if not enabled():
+        return False
     if row.get('finalized'):
         return True
-    if any(receipt.get('state') == 'dispatched' for receipt in (row.get('piece_receipts') or {}).values()):
-        # Check before re-running VAD/lineage planning, whose piece names could
-        # change. An ambiguous attempt blocks all new work for this source.
-        logger.warning('event=stt_cap_recovery outcome=reconciliation_required')
-        return False
-    meta = await run_blocking(db_executor, cap_hold.metadata, uid, row)
+    meta = await run_blocking(storage_executor, cap_hold.metadata, uid, row)
     if meta.get('content_id'):
         status = await run_blocking(db_executor, sync_cap_holds.recovery_status, uid, meta['content_id'], snapshot.id)
         if status in {'completed', 'settled'}:
@@ -98,7 +97,7 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
             return False
     if not row.get('piece_receipts') and not await run_blocking(db_executor, _new_dispatch_allowed, uid):
         return False
-    prefs = await run_blocking(db_executor, users_db.get_user_transcription_preferences, uid)
+    prefs = await run_blocking(db_executor, users_db.get_user_transcription_preferences, uid) or {}
     private = await run_blocking(db_executor, users_db.get_user_private_cloud_sync_enabled, uid)
     protection = await run_blocking(db_executor, users_db.get_data_protection_level, uid) if private else None
     try:
@@ -110,86 +109,164 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
         embeddings = {}
     geolocation = Geolocation.model_validate(meta['geolocation']) if meta.get('geolocation') else None
     directory = await run_blocking(storage_executor, cap_hold.recovery_directory, uid)
+    receipts = dict(row.get('piece_receipts') or {})
+
+    async def save_receipt(name, receipt):
+        updated = dict(receipts)
+        if receipt is None:
+            updated.pop(name, None)
+        else:
+            updated[name] = receipt
+        if not await _save(uid, snapshot, row, {'piece_receipts': updated}):
+            return False
+        receipts.clear()
+        receipts.update(updated)
+        return True
+
     try:
-        name = Path(meta.get('file_name') or f"{meta['timestamp']}.wav").name
-        path = str(Path(directory.name) / name)
-        await run_blocking(storage_executor, cap_hold.read_audio, uid, row, path)
-        paths, source_maps, targets, bindings = await prepare_audio(uid, path, meta)
+        try:
+            plan, local_paths, contexts = await cap_recovery_plan.ensure_plan(
+                uid, snapshot, row, meta, directory, prepare_audio, _save
+            )
+        except cap_recovery_plan.PlanFenced:
+            return False
         processed = set(row.get('processed_paths') or [])
-        receipts: dict[str, dict[str, Any]] = dict(row.get('piece_receipts') or {})
-        for segment_path in sorted(paths):
+        pending = False
+        for name in sorted(set(plan) | set(receipts)):
             if not await run_blocking(
                 db_executor, cap_hold.renew, uid, snapshot.reference, row['lease_token'], time.time()
             ):
                 return False
-            name = Path(segment_path).name
             if name in processed:
                 continue
-            receipt: dict[str, Any] | None = receipts.get(name)
-            if receipt is None:
+            receipt = receipts.get(name)
+            if receipt and receipt.get('state') == 'failed_reconciliation':
+                continue
+            attempt = 1
+            if receipt and receipt.get('state') == 'dispatched':
+                if 'dispatched_at' not in receipt:
+                    receipt = {
+                        **receipt,
+                        'attempt': receipt.get('attempt', 1),
+                        'dispatched_at': row.get('created_at', time.time()),
+                    }
+                    if not await save_receipt(name, receipt):
+                        return False
+                if time.time() - receipt['dispatched_at'] < RECONCILIATION_COOLDOWN_SECONDS:
+                    pending = True
+                    continue
+                proof = await run_blocking(db_executor, sync_cap_recovery.ingested_piece, uid, snapshot.id, name)
+                if proof:
+                    receipt = {**proof, 'reconciled_ingested': True}
+                    if not await save_receipt(name, receipt):
+                        return False
+                    record_reconciliation('reconciled_ingested', snapshot.id, name)
+                elif receipt.get('attempt', 1) >= 2 or name not in plan:
+                    if not await save_receipt(
+                        name, {**receipt, 'state': 'failed_reconciliation', 'has_content': False}
+                    ):
+                        return False
+                    record_reconciliation('failed', snapshot.id, name)
+                    continue
+                else:
+                    attempt = 2
+            if receipt is None or receipt.get('state') == 'dispatched':
                 if not await run_blocking(db_executor, _new_dispatch_allowed, uid):
-                    return False
-                language = prefs.get('language') or ''
-                service = get_prerecorded_service(
-                    language if prefs.get('single_language_mode') and language else 'multi'
-                )
+                    pending = True
+                    continue
+                previous = receipt
+                try:
+                    segment_path, context = await cap_recovery_plan.stage_piece(
+                        uid, name, plan[name], directory, local_paths, contexts
+                    )
+                    language = prefs.get('language') or ''
+                    service = get_prerecorded_service(
+                        language if prefs.get('single_language_mode') and language else 'multi'
+                    )
+                except Exception as error:
+                    logger.warning(
+                        'event=stt_cap_recovery outcome=prepare_deferred hold_id=%s piece=%r exception_type=%s',
+                        snapshot.id,
+                        name,
+                        type(error).__name__,
+                    )
+                    pending = True
+                    continue
                 intent = {
                     'state': 'dispatched',
                     'provider': service[0],
                     'model': service[2],
                     'funding': 'omi',
+                    'attempt': attempt,
+                    'dispatched_at': time.time(),
+                    'seconds': plan[name]['seconds'],
+                    'usage_metadata': {'funding': 'omi', 'provider': service[0], 'source': 'sync_v2'},
                 }
-                receipts[name] = intent
-                # Persist BEFORE any paid STT or ingestion. The token and lease
-                # fence this write; a failed/uncertain save cannot dispatch.
-                if not await _save(uid, snapshot, row, {'piece_receipts': dict(receipts)}):
+                if not await save_receipt(name, intent):
                     return False
                 response = {'new_memories': set(), 'updated_memories': set()}
-                errors, outcome = [], {}
-                ok = await run_blocking(
-                    sync_executor,
-                    process_segment,
-                    segment_path,
-                    uid,
-                    response,
-                    threading.Lock(),
-                    errors,
-                    ConversationSource(meta['source']),
-                    False,
-                    prefs,
-                    embeddings,
-                    private_cloud_sync_enabled=bool(private),
-                    data_protection_level=protection,
-                    client_device_id=meta.get('client_device_id'),
-                    client_platform=meta.get('client_platform'),
-                    target_conversation_id=targets.get(segment_path, meta.get('target_conversation_id')),
-                    geolocation=geolocation,
-                    source_position_map=source_maps.get(segment_path),
-                    lineage_binding=bindings.get(segment_path, meta.get('lineage_binding')),
-                    sync_lane=meta.get('sync_lane', 'fresh'),
-                    cap_recovery=True,
-                    deferred_outcome=outcome,
-                    cap_recovery_service=service,
-                )
-                if errors or outcome.get('cap_held'):
-                    return False
-                seconds = await run_blocking(sync_executor, get_wav_duration, segment_path) if ok else 0
+                errors, outcome = [], {'provider_called': False}
+                try:
+                    ok = await run_blocking(
+                        sync_executor,
+                        process_segment,
+                        segment_path,
+                        uid,
+                        response,
+                        threading.Lock(),
+                        errors,
+                        ConversationSource(meta['source']),
+                        False,
+                        prefs,
+                        embeddings,
+                        private_cloud_sync_enabled=bool(private),
+                        data_protection_level=protection,
+                        client_device_id=meta.get('client_device_id'),
+                        client_platform=meta.get('client_platform'),
+                        target_conversation_id=context.get('target_conversation_id'),
+                        geolocation=geolocation,
+                        source_position_map=context.get('source_position_map'),
+                        lineage_binding=context.get('lineage_binding'),
+                        sync_lane=meta.get('sync_lane', 'fresh'),
+                        cap_recovery=True,
+                        deferred_outcome=outcome,
+                        cap_recovery_service=service,
+                        cap_recovery_checkpoint={
+                            'hold_id': snapshot.id,
+                            'piece': name,
+                            'lease_token': row['lease_token'],
+                            'attempt': attempt,
+                            'receipt': intent,
+                        },
+                    )
+                except Exception as error:
+                    ok = False
+                    errors.append(type(error).__name__)
+                    logger.warning(
+                        'event=stt_cap_recovery outcome=processing_deferred hold_id=%s piece=%r exception_type=%s',
+                        snapshot.id,
+                        name,
+                        type(error).__name__,
+                    )
+                if not outcome['provider_called']:
+                    if not await save_receipt(name, previous):
+                        return False
+                    record_reconciliation('cleared_noncall', snapshot.id, name)
+                    pending = True
+                    continue
+                if attempt == 2:
+                    record_reconciliation('redispatched', snapshot.id, name)
+                if errors or outcome.get('cap_held') or outcome.get('recovery_ambiguous'):
+                    pending = True
+                    continue
                 receipt = {
                     **intent,
                     'state': 'transcribed',
                     'response': _stored(response),
-                    'seconds': seconds,
+                    'seconds': intent['seconds'] if ok else 0,
                     'has_content': bool(ok),
-                    'usage_metadata': {
-                        'funding': 'omi',
-                        'provider': outcome.get('provider') or service[0],
-                        'source': 'sync_v2',
-                    },
                 }
-                receipts[name] = receipt
-                # Paid STT/content is now durable BEFORE usage or enrichment.
-                # A settlement retry reuses this receipt without dispatching STT.
-                if not await _save(uid, snapshot, row, {'piece_receipts': dict(receipts)}):
+                if not await save_receipt(name, receipt):
                     return False
             if receipt['has_content']:
                 seconds = int(receipt['seconds'])
@@ -207,16 +284,37 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
             processed.add(name)
             if not await _save(uid, snapshot, row, {'processed_paths': sorted(processed)}):
                 return False
-        response = _response(receipts)
-        if receipts:
-            # Ordinary sync finalizes the joined batch, not each VAD piece.
-            await run_blocking(sync_executor, finalize_recovered_sync_segment, uid, response, bool(private))
-        return await _save(uid, snapshot, row, {'finalized': True, 'recovery_response': _stored(response)})
+        # Finalize completed siblings even while another piece is cooling down.
+        finalized = set(row.get('finalized_paths') or [])
+        ready = {name: receipts[name] for name in processed - finalized if name in receipts}
+        if ready:
+            await run_blocking(sync_executor, finalize_recovered_sync_segment, uid, _response(ready), bool(private))
+            finalized.update(ready)
+            if not await _save(uid, snapshot, row, {'finalized_paths': sorted(finalized)}):
+                return False
+        if pending:
+            return False
+        failed = any(r.get('state') == 'failed_reconciliation' for r in receipts.values())
+        retained = failed or any(r.get('reconciled_ingested') for r in receipts.values())
+        return await _save(
+            uid,
+            snapshot,
+            row,
+            {
+                'finalized': True,
+                'recovery_response': _stored(_response(receipts)),
+                'failed_reconciliation': failed,
+                'retain_audio': retained,
+            },
+        )
     finally:
         await run_blocking(storage_executor, directory.cleanup)
 
 
 def _settle_and_erase(uid: str, snapshot: Any, row: dict) -> None:
+    if row.get('failed_reconciliation'):
+        snapshot.reference.update({'state': 'retained', 'next_attempt_at': cap_hold.RETAINED_NEXT_ATTEMPT_AT})
+        return  # Siblings finalized, but the held ledger must not claim failed audio was transcribed.
     if not row.get('settled'):
         meta = cap_hold.metadata(uid, row)
         if meta.get('content_id') and not row.get('ledger_already_settled'):
@@ -229,12 +327,17 @@ def _settle_and_erase(uid: str, snapshot: Any, row: dict) -> None:
             ):
                 raise RuntimeError('hold content ledger ownership changed')
         snapshot.reference.update({'settled': True})
-    _erase(uid, snapshot, row)
+    if row.get('retain_audio'):
+        snapshot.reference.update({'state': 'retained', 'next_attempt_at': cap_hold.RETAINED_NEXT_ATTEMPT_AT})
+    else:
+        _erase(uid, snapshot, row)
 
 
 async def recover(uid: str) -> None:
     # One cheap distributed cooldown before querying usage or manifests. Failed
     # Redis means deferred recovery, never duplicate provider dispatch.
+    if not enabled():
+        return
     acquired = await run_blocking(db_executor, cap_hold.recovery_cooldown, uid)
     if not acquired:
         return
@@ -250,6 +353,8 @@ async def recover(uid: str) -> None:
                 continue
             try:
                 if await _recover_row(uid, snapshot, row):
+                    # Completed remains retryable if ledger settlement fails.
+                    # Only successful settlement (or terminal failure) retains it.
                     if not await _save(uid, snapshot, row, {'state': 'completed'}):
                         continue
                     await run_blocking(storage_executor, _settle_and_erase, uid, snapshot, row)
