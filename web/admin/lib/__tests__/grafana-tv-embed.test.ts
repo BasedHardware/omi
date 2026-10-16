@@ -141,9 +141,7 @@ it("flag-off keeps the kiosk on legacy while it serves anonymous readers", async
   vi.stubEnv("GRAFANA_EMBED_ENABLED", "");
   const original = fetchMock.getMockImplementation()!;
   fetchMock.mockImplementation((url: string) =>
-    url.endsWith("/grafana/api/datasources")
-      ? new Response(null, { status: 200 })
-      : original(url)
+    url.endsWith("/grafana/api/datasources") ? Response.json([]) : original(url)
   );
   const open = await callRoute({ token: "c".repeat(43) });
   const openData = await open.json();
@@ -179,3 +177,23 @@ it("returns 503 when enrollment fails after validation", async () => {
   const response = await callRoute({ token: "e".repeat(43) });
   expect(response.status).toBe(503);
 });
+
+it.each([302, 404, 502])(
+  "flag-off rejects legacy availability status %s",
+  async (status) => {
+    vi.stubEnv("GRAFANA_EMBED_ENABLED", "false");
+    fetchMock.mockResolvedValue(new Response(null, { status }));
+    const response = await callRoute({ token: "f".repeat(43) });
+    expect(await response.json()).toEqual({ enabled: false, legacy: false });
+  }
+);
+
+it.each(["<html>login</html>", JSON.stringify({ message: "login" })])(
+  "flag-off rejects non-datasource legacy responses",
+  async (body) => {
+    vi.stubEnv("GRAFANA_EMBED_ENABLED", "false");
+    fetchMock.mockResolvedValue(new Response(body, { status: 200 }));
+    const response = await callRoute({ token: "g".repeat(43) });
+    expect(await response.json()).toEqual({ enabled: false, legacy: false });
+  }
+);

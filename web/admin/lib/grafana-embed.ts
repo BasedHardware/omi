@@ -131,9 +131,20 @@ let legacyBoardOpenState = false;
 export async function legacyBoardOpen(): Promise<boolean> {
   if (legacyBoardCheckedUntil > Date.now()) return legacyBoardOpenState;
   try {
-    legacyBoardOpenState = !(await legacyOriginDeniesAnonymous(
-      "https://admin.omi.me/grafana"
-    ));
+    const response = await fetch(
+      "https://admin.omi.me/grafana/api/datasources",
+      {
+        redirect: "manual",
+        cache: "no-store",
+        signal: AbortSignal.timeout(10_000),
+      }
+    );
+    if (response.status === 200) {
+      legacyBoardOpenState = Array.isArray(await response.json());
+    } else {
+      await response.body?.cancel();
+      legacyBoardOpenState = false;
+    }
   } catch {
     legacyBoardOpenState = false; // Fail closed: never frame a private board.
   }

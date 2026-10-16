@@ -13,15 +13,24 @@ type TvEmbed = {
   expiresAt?: number;
 };
 
+class TvEmbedError extends Error {
+  constructor(public status: number) {
+    super("TV embed unavailable");
+  }
+}
+
 /** POST the validated path token; the route re-validates server-side. */
-async function tvEmbedFetcher([url, token]: [string, string]): Promise<TvEmbed> {
+async function tvEmbedFetcher([url, token]: [
+  string,
+  string
+]): Promise<TvEmbed> {
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token }),
     cache: "no-store",
   });
-  if (!response.ok) throw new Error("TV embed unavailable");
+  if (!response.ok) throw new TvEmbedError(response.status);
   return response.json();
 }
 
@@ -62,11 +71,18 @@ function TvEmbedFrame({ token }: { token: string }) {
     refreshInterval: (data) =>
       data?.enabled ? grafanaRenewalDelay(data.expiresAt ?? 0) : 0,
     revalidateOnFocus: false,
-    shouldRetryOnError: false,
+    shouldRetryOnError: (failure) =>
+      !(
+        failure instanceof TvEmbedError &&
+        [400, 401, 403].includes(failure.status)
+      ),
+    errorRetryCount: 3,
+    errorRetryInterval: 5000,
   });
   useEffect(() => {
     const resume = () => {
       if (
+        !error &&
         document.visibilityState === "visible" &&
         embed?.enabled &&
         (embed.expiresAt ?? 0) <= Date.now() + 60_000
@@ -80,31 +96,30 @@ function TvEmbedFrame({ token }: { token: string }) {
       window.removeEventListener("focus", resume);
       document.removeEventListener("visibilitychange", resume);
     };
-  }, [embed, mutate]);
+  }, [embed, mutate, error]);
 
-  if (embed?.enabled && embed.url)
-    return <KioskFrame src={embed.url} />;
+  // Legacy closed or kiosk enrollment unavailable: honest native notice
+  // instead of framing Grafana's login/denial page.
+  if (error || (!isLoading && embed && !embed.enabled && !embed.legacy)) {
+    return (
+      <main className="flex h-screen w-screen items-center justify-center bg-neutral-950 px-6 text-center text-neutral-200">
+        <div>
+          <h1 className="text-xl font-semibold">TV dashboard unavailable</h1>
+          <p className="mt-2 text-sm text-neutral-400">
+            Ask an admin to enable the private TV dashboard or open /dashboard
+            on a signed-in admin device.
+          </p>
+        </div>
+      </main>
+    );
+  }
+  if (embed?.enabled && embed.url) return <KioskFrame src={embed.url} />;
   // Flag-off while legacy anonymous board still exists: keep it working.
   if (embed && !embed.enabled && embed.legacy) {
     return (
       <Suspense fallback={<div className="h-screen w-screen bg-black" />}>
         <LegacyKioskFrame />
       </Suspense>
-    );
-  }
-  // Legacy closed or kiosk enrollment unavailable: honest native notice
-  // instead of framing Grafana's login/denial page.
-  if (error || (!isLoading && embed && !embed.enabled)) {
-    return (
-      <main className="flex h-screen w-screen items-center justify-center bg-neutral-950 px-6 text-center text-neutral-200">
-        <div>
-          <h1 className="text-xl font-semibold">TV dashboard unavailable</h1>
-          <p className="mt-2 text-sm text-neutral-400">
-            Ask an admin to enable the private TV dashboard or open
-            /dashboard on a signed-in admin device.
-          </p>
-        </div>
-      </main>
     );
   }
   return <div className="h-screen w-screen bg-black" />;
