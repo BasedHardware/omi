@@ -160,7 +160,10 @@ class Handler(BaseHTTPRequestHandler):
 
 class Server(ThreadingHTTPServer):
     daemon_threads = True
-    request_queue_size = 8
+    # The board fires ~24 Infinity targets at once; every admitted request
+    # coalesces behind the proxy's cache_lock, so admission must queue the
+    # full burst rather than close connections beyond the upstream budget.
+    request_queue_size = 64
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -172,7 +175,9 @@ class Server(ThreadingHTTPServer):
         return request, address
 
     def process_request(self, request, client_address):
-        if not self.slots.acquire(blocking=False):
+        # Bound blocking time by the socket deadline; a queued burst waits
+        # here without consuming an upstream slot or being dropped.
+        if not self.slots.acquire(timeout=430):
             self.shutdown_request(request)
             return
         try:

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { grafanaRenewalDelay } from "@/lib/grafana-renewal";
@@ -15,14 +15,29 @@ type TvEmbed = {
 
 /** POST the validated path token; the route re-validates server-side. */
 async function tvEmbedFetcher([url, token]: [string, string]): Promise<TvEmbed> {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token }),
-    cache: "no-store",
-  });
-  if (!response.ok) throw new Error("TV embed unavailable");
-  return response.json();
+  const controller = new AbortController();
+  // A stalled route (e.g. Firestore lookup hanging) must surface as an
+  // error so renewal retry logic engages; a bare fetch would never settle.
+  const timer = setTimeout(() => controller.abort(), 30_000);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const error = new Error("TV embed unavailable") as Error & {
+        status?: number;
+      };
+      error.status = response.status;
+      throw error;
+    }
+    return response.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function KioskFrame({ src }: { src: string }) {
@@ -53,13 +68,12 @@ function KioskFrame({ src }: { src: string }) {
 }
 
 function TvEmbedFrame({ token }: { token: string }) {
-  const [retry, setRetry] = useState(0);
   const {
     data: embed,
     error,
     isLoading,
     mutate,
-  } = useSWR(["/api/grafana/tv-embed", token, retry], tvEmbedFetcher, {
+  } = useSWR(["/api/grafana/tv-embed", token], tvEmbedFetcher, {
     refreshInterval: (data) =>
       data?.enabled ? grafanaRenewalDelay(data.expiresAt ?? 0) : 0,
     revalidateOnFocus: false,
@@ -67,12 +81,27 @@ function TvEmbedFrame({ token }: { token: string }) {
   });
   // A failed renewal must not strand an unattended TV on a dead iframe:
   // shouldRetryOnError:false leaves SWR's polling stopped while an error is
-  // cached, so re-arm bounded automatic retries until a renewal succeeds.
+  // cached. Revalidate the SAME key with exponential backoff so no new
+  // cache entries accumulate, and stop once the failure is permanent (the
+  // link is revoked/expired; a new token requires a new URL anyway).
   useEffect(() => {
     if (!error) return;
-    const timer = setTimeout(() => setRetry((value) => value + 1), 15_000);
+    // 400/403 are permanent for this URL (invalid/revoked/expired link);
+    // only transient failures (503, network) keep retrying.
+    if (error.status && error.status !== 503 && error.status >= 400) return;
+    const attempt = Number(sessionStorage.getItem("tv-embed-retry") || 0);
+    const capped = Math.min(attempt, 5);
+    const delay = Math.min(15_000 * 2 ** capped, 8 * 60_000);
+    const timer = setTimeout(() => {
+      sessionStorage.setItem("tv-embed-retry", String(capped + 1));
+      void mutate();
+    }, delay);
     return () => clearTimeout(timer);
-  }, [error, retry]);
+  }, [error, mutate]);
+  useEffect(() => {
+    // A successful fetch clears the backoff counter for the next renewal.
+    if (embed) sessionStorage.removeItem("tv-embed-retry");
+  }, [embed]);
   useEffect(() => {
     const resume = () => {
       if (
