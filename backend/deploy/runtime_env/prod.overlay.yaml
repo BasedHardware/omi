@@ -43,7 +43,7 @@ overlay:
     backend-listen:
       env:
         BATCH_PIPELINE_ENABLED:
-          value: "true"
+          value: "false"
           category: rollout
         BATCH_PIPELINE_UID_ALLOWLIST:
           value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
@@ -592,7 +592,7 @@ overlay:
             version: latest
         env:
           BATCH_PIPELINE_ENABLED:
-            value: "true"
+            value: "false"
             category: rollout
           BATCH_PIPELINE_UID_ALLOWLIST:
             value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
@@ -852,7 +852,7 @@ overlay:
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
           BATCH_PIPELINE_ENABLED:
-            value: "true"
+            value: "false"
             category: rollout
           BATCH_PIPELINE_UID_ALLOWLIST:
             value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
@@ -1078,7 +1078,7 @@ overlay:
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
           BATCH_PIPELINE_ENABLED:
-            value: "true"
+            value: "false"
             category: rollout
           BATCH_PIPELINE_UID_ALLOWLIST:
             value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
@@ -1281,7 +1281,7 @@ overlay:
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
           BATCH_PIPELINE_ENABLED:
-            value: "true"
+            value: "false"
             category: rollout
           BATCH_PIPELINE_UID_ALLOWLIST:
             value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
