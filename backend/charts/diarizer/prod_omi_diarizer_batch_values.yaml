@@ -1,4 +1,4 @@
-# David-only floor 1; lift to 6 after cohort qualification (max 18).
+# Stage E (15%) qualified floor 6; lift further only before later stages (max 18).
 # Separate release only: -f prod_omi_diarizer_values.yaml -f this file.
 # Lead-owned opt-in deployment; never install over prod-omi-diarizer.
 fullnameOverride: prod-omi-diarizer-batch
@@ -40,7 +40,7 @@ podMonitoring:
   enabled: false
 autoscaling:
   enabled: true
-  minReplicas: 1
+  minReplicas: 6
   maxReplicas: 18
   requestLatencyP99: null
   queueDepthAverageValue: 1

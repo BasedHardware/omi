@@ -122,6 +122,9 @@ at 5%; linear projection at E is 15 replicas. The HPA scales up by three pods pe
 A 25% stage projects 25 replicas; raise both the diarizer-batch HPA max and T4
 pool max, with scale-up headroom, before considering that stage. These are steady
 capacity projections, not a burst-capacity or p95 latency bound.
+The batch HPA floor is lifted to 6 replicas with stage E qualification so a
+cold rollout starts near projected load instead of scaling from 1 at three
+pods per minute.
 
 The daily cap is already configurable through `TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS`
 and reserved atomically in shared Redis across shadow workers before provider work. It

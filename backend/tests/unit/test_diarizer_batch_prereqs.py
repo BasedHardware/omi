@@ -37,7 +37,7 @@ def test_batch_scheduling_and_resources_are_disjoint_from_embedding():
     assert {t['key']: t['value'] for t in pod['tolerations']}['omi.ai/diarizer-batch'] == 'true'
     assert live['Deployment']['spec']['template']['spec']['affinity']['nodeAffinity']
     assert all(batch[k]['metadata']['name'] != live[k]['metadata']['name'] for k in batch if k in live)
-    assert batch['HorizontalPodAutoscaler']['spec']['minReplicas'] == 1
+    assert batch['HorizontalPodAutoscaler']['spec']['minReplicas'] == 6
     assert batch['HorizontalPodAutoscaler']['spec']['maxReplicas'] == 18
     assert live['BackendConfig']['spec']['timeoutSec'] == 30
     assert batch['BackendConfig']['spec']['timeoutSec'] == 900
