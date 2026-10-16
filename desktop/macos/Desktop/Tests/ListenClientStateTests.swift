@@ -88,7 +88,7 @@ final class ListenClientStateTests: XCTestCase {
             preparing.fulfill()
           }
         }
-        sent.append(latest()["surface_open"] as! Bool)
+        sent.append(try XCTUnwrap(latest()["surface_open"] as? Bool))
         return true
       })
     state.reportSurface()
@@ -117,7 +117,7 @@ final class ListenClientStateTests: XCTestCase {
       foreground: true, observeApplication: false, surfaceReportingEnabled: true,
       surfaceOpen: { open },
       surfaceTransport: { latest in
-        sent.append(latest()["surface_open"] as! Bool)
+        sent.append(try XCTUnwrap(latest()["surface_open"] as? Bool))
         if sent.count == 1 {
           await withCheckedContinuation { continuation in
             release = continuation
@@ -143,7 +143,7 @@ final class ListenClientStateTests: XCTestCase {
       foreground: true, observeApplication: false, surfaceReportingEnabled: true,
       surfaceOpen: { open },
       surfaceTransport: { latest in
-        let value = latest()["surface_open"] as! Bool
+        let value = try XCTUnwrap(latest()["surface_open"] as? Bool)
         sent.append(value)
         if !value && failClose { throw URLError(.timedOut) }
         return true
