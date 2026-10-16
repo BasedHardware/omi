@@ -96,3 +96,41 @@ def test_flag_off_http_result_retains_main_shape_without_hold_dispatch(client, m
     assert response.status_code == 200, response.text
     assert response.content == b'{"new_memories":[],"updated_memories":[]}'
     router.hold_capture_if_exhausted.assert_not_called()
+
+
+@pytest.mark.parametrize('accepted', [False, True])
+def test_late_v1_hold_is_reported_and_only_processed_speech_is_metered(client, monkeypatch, accepted):
+    monkeypatch.setattr(router, 'FAIR_USE_ENABLED', False)
+    router.hold_capture_if_exhausted.return_value = False
+    paths = ['1792152000.wav', '1792152020.wav'] if accepted else ['1792152020.wav']
+    monkeypatch.setattr(router, 'retrieve_vad_segments', lambda path, segments, errors, **kw: segments.update(paths))
+    monkeypatch.setattr(router, 'get_wav_duration', lambda path: 20)
+    monkeypatch.setattr(router.users_db, 'get_user_transcription_preferences', Mock(return_value={}))
+    monkeypatch.setattr(router.users_db, 'get_user_private_cloud_sync_enabled', Mock(return_value=False))
+    monkeypatch.setattr(router, 'build_person_embeddings_cache', Mock(return_value={}))
+    monkeypatch.setattr(router, '_reprocess_merged_conversations', Mock())
+    monkeypatch.setattr(router, 'schedule_person_voice_learning_retries', Mock())
+    usage = Mock()
+    monkeypatch.setattr(router, 'record_usage', usage)
+
+    def process(path, uid, response, *args, **kwargs):
+        if path == '1792152000.wav':
+            response['new_memories'].add('accepted')
+            return True
+        response['_cap_holds'] = {'late': {'id': 'late', 'seconds': 20}}
+        return False
+
+    monkeypatch.setattr(router, 'process_segment', process)
+    response = client.post('/v1/sync-local-files', files={'files': ('omi_1792152000.bin', b'synthetic')})
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        'new_memories': ['accepted'] if accepted else [],
+        'updated_memories': [],
+        'held_audio': True,
+        'credits_exhausted': True,
+        'held_segments': 1,
+    }
+    if accepted:
+        assert usage.call_args.kwargs == {'transcription_seconds': 20, 'speech_seconds': 20}
+    else:
+        usage.assert_not_called()

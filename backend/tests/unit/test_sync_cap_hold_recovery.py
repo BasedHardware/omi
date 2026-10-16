@@ -1,7 +1,7 @@
 """Recovery reaches real sync intake only after a current funded allowance."""
 
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, AsyncMock
 
 import pytest
 
@@ -20,10 +20,19 @@ def state(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(recovery.cap_hold, 'read_audio', Mock())
     monkeypatch.setattr(recovery.cap_hold, 'renew', Mock(return_value=True))
+    monkeypatch.setattr(recovery.cap_hold, 'checkpoint', Mock(return_value=True))
     monkeypatch.setattr(recovery.users_db, 'get_user_transcription_preferences', Mock(return_value={'language': 'en'}))
     monkeypatch.setattr(recovery.users_db, 'get_user_private_cloud_sync_enabled', Mock(return_value=False))
     monkeypatch.setattr(recovery, 'sync_allowed', Mock(return_value=True))
+    monkeypatch.setattr(recovery, 'get_hard_restriction_status', Mock(return_value=(False, None)))
+    monkeypatch.setattr(recovery, 'is_daily_audio_ceiling_exceeded', Mock(return_value=False))
     monkeypatch.setattr(recovery, 'process_segment', Mock(return_value=True))
+    monkeypatch.setattr(recovery, 'build_person_embeddings_cache', Mock(return_value={'known': 'embedding'}))
+    monkeypatch.setattr(
+        recovery,
+        'prepare_audio',
+        AsyncMock(side_effect=lambda uid, path, meta: ({path}, {}, {}, {})),
+    )
     monkeypatch.setattr(recovery, 'finalize_recovered_sync_segment', Mock())
     monkeypatch.setattr(recovery, 'get_wav_duration', Mock(return_value=20))
     monkeypatch.setattr(recovery, 'record_usage', Mock())
@@ -41,7 +50,10 @@ async def test_reset_or_upgrade_reuses_sync_and_settles_stable_usage_key(state):
     usage = recovery.record_usage.call_args.kwargs
     assert usage['idempotency_key'] == 'cap-hold-hold-1792152000.wav'
     assert usage['transcription_seconds'] == 20
-    state.snapshot.reference.update.assert_called_once()
+    assert state.row['processed_paths'] == ['1792152000.wav']
+    assert state.row['finalized']
+    assert state.row['piece_receipts']['1792152000.wav']['has_content']
+    assert recovery.process_segment.call_args.args[8] == {'known': 'embedding'}
 
 
 async def test_execution_denial_keeps_checkpoint_and_audio_without_stt(state, monkeypatch):
@@ -83,3 +95,70 @@ async def test_persistence_failure_keeps_audio_and_releases_local_staging(state)
         await recovery._recover_row('synthetic', state.snapshot, state.row)
     state.snapshot.reference.update.assert_not_called()
     recovery.cap_hold.recovery_directory.return_value.cleanup.assert_called_once()
+
+
+async def test_usage_failure_reuses_persisted_transcription_receipt(state):
+    recovery.record_usage.side_effect = RuntimeError('synthetic usage unavailable')
+    with pytest.raises(RuntimeError):
+        await recovery._recover_row('synthetic', state.snapshot, state.row)
+    assert state.row['piece_receipts']['1792152000.wav']['has_content']
+    recovery.finalize_recovered_sync_segment.assert_not_called()
+    recovery.record_usage.side_effect = None
+    # Already accepted content can settle even if no new provider work is allowed.
+    recovery.sync_allowed.return_value = False
+    assert await recovery._recover_row('synthetic', state.snapshot, state.row)
+    recovery.process_segment.assert_called_once()
+    recovery.finalize_recovered_sync_segment.assert_called_once()
+    assert recovery.record_usage.call_count == 2
+    assert recovery.record_usage.call_args_list[0] == recovery.record_usage.call_args_list[1]
+
+
+async def test_geolocation_and_speaker_context_survive_hold(state):
+    meta = recovery.cap_hold.metadata.return_value
+    meta['geolocation'] = {'latitude': 10.7, 'longitude': 106.7}
+    assert await recovery._recover_row('synthetic', state.snapshot, state.row)
+    args = recovery.process_segment.call_args
+    assert args.args[8] == {'known': 'embedding'}
+    assert args.kwargs['geolocation'].latitude == 10.7
+    assert args.kwargs['geolocation'].longitude == 106.7
+
+
+async def test_all_pieces_join_before_one_finalization(state):
+    recovery.prepare_audio.side_effect = lambda uid, path, meta: (
+        {path, path.replace('1792152000', '1792152020')},
+        {},
+        {},
+        {},
+    )
+
+    def persist(path, uid, response, *args, **kwargs):
+        response['updated_memories'].add('joined-conversation')
+        response['_merged'] = {'joined-conversation': 'en'}
+        return True
+
+    recovery.process_segment.side_effect = persist
+    assert await recovery._recover_row('synthetic', state.snapshot, state.row)
+    assert recovery.process_segment.call_count == 2
+    recovery.finalize_recovered_sync_segment.assert_called_once()
+    response = recovery.finalize_recovered_sync_segment.call_args.args[1]
+    assert response['updated_memories'] == {'joined-conversation'}
+    assert response['_merged'] == {'joined-conversation': 'en'}
+    assert len(state.row['piece_receipts']) == 2
+
+
+async def test_lost_checkpoint_fence_cannot_settle_or_finalize(state):
+    recovery.cap_hold.checkpoint.return_value = False
+    assert not await recovery._recover_row('synthetic', state.snapshot, state.row)
+    recovery.record_usage.assert_not_called()
+    recovery.finalize_recovered_sync_segment.assert_not_called()
+
+
+@pytest.mark.parametrize('restriction', ['hard', 'daily'])
+async def test_recovery_cannot_bypass_current_abuse_restrictions(state, restriction):
+    if restriction == 'hard':
+        recovery.get_hard_restriction_status.return_value = (True, 60)
+    else:
+        recovery.is_daily_audio_ceiling_exceeded.return_value = True
+    assert not await recovery._recover_row('synthetic', state.snapshot, state.row)
+    recovery.process_segment.assert_not_called()
+    recovery.cap_hold.read_audio.assert_not_called()

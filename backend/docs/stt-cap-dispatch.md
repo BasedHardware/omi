@@ -25,7 +25,10 @@ including self-hosted Deepgram and an Omi-funded fallback from BYOK, uses the
 ordinary allowance with both BYOK quota and desktop-paywall exemptions disabled.
 No key or identity is a metric label.
 
-Sync v1 intake and v2 execution hold full decoded WAVs before VAD when denied.
+Sync v1 intake and v2 execution hold decoded WAVs before VAD when denied. V2
+applies ordinary source-frame and safety-WAL coverage first, so already committed
+audio is not enrolled as new recoverable work. Source maps, recording identity
+and geolocation travel with the encrypted hold.
 The shared segment processor rechecks immediately before each STT invocation,
 including its empty-result retry. Late exhaustion holds the remaining segment.
 No denied segment reaches cloud STT. A successfully persisted hold is acknowledged
@@ -49,14 +52,33 @@ account deletion recursively removes the manifest and purges this chunk prefix.
 A failed object upload cannot publish a successful manifest or acknowledgment.
 Concurrent identical uploads cannot overwrite a recovery checkpoint.
 
+WAV hashing, encryption, upload, download and decryption use bounded chunks;
+large decoded recordings are never materialized as whole-file byte buffers.
+Large source-map metadata uses an encrypted sidecar under the same owner prefix.
+Late per-segment denials are aggregated into the v1/v2 held result and excluded
+from post-STT subscription/DG quantities until recovered. Root meter writers and
+all flag-off call semantics remain unchanged.
+
+V2 transfers the fenced content ledger into `held`, without a TTL or a completed
+transcription proof. Duplicate intake can acknowledge custody without dispatching
+another provider. A preparing/failed source job still owns its retry; its holds
+cannot race it into STT. Only settlement of every referenced hold completes the
+content ledger. Holds that were never acknowledged await the source job's retry.
+
 The existing `locked_content_recovery` authenticated-request path kicks an async
 recovery pass independently of its once-per-month unlock receipt and legacy reset
 flag. The flagged API sync router registers the recovery callback; auth-only and
 pusher images do not load the sync pipeline. A distributed 60-second cooldown
-bounds requests; token-fenced renewable
-leases prevent concurrent processing of a hold. At reset or upgrade, current
-funded allowance must pass again before every recovered piece is sent. Recovery
-reuses VAD, segment intake, enrichment and optional playback finalization. Piece
+bounds requests; token-fenced renewable leases prevent concurrent processing of
+a hold. At reset or upgrade, current
+funded allowance and the existing hard abuse restrictions must pass again before
+every new recovered provider request. Already persisted receipts can settle at
+the cap without another provider call. Recovery
+replays WAL coverage and lineage planning, loads speaker embeddings, and reuses
+VAD, segment intake, enrichment and optional playback finalization. Token-fenced
+piece receipts checkpoint persisted transcription before usage settlement; a
+usage retry cannot repeat paid STT. Finalization runs once after all pieces join,
+with the retained geolocation and source-position context. Piece
 receipts and idempotent usage keys preserve progress across retries. Completed
 objects are deleted only after content and usage settlement. WS-only and inactive
 accounts wait for their next authenticated HTTP request; there is no new cron.

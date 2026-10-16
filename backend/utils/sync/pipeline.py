@@ -783,7 +783,14 @@ def bind_or_converge_sync_ledger_completion(
     )
     if binding.bound:
         return None
-    if not binding.completed or not is_valid_completed_sync_content_result(binding.result):
+    held = getattr(binding, 'held', False) is True
+    if not (
+        held
+        and isinstance(binding.result, dict)
+        and binding.result.get('held_audio') is True
+        or binding.completed
+        and is_valid_completed_sync_content_result(binding.result)
+    ):
         raise SyncJobRunLeaseLost(f'sync content ledger owner lost: job={job_id}')
 
     finalized = _require_run_owner(
@@ -1242,6 +1249,7 @@ def process_segment(
     source_position_map: tuple[dict, int] | None = None,
     lineage_binding: Optional[str] = None,
     cap_recovery: bool = False,
+    cap_content_id: str | None = None,
 ):
     conversation_id = None
     provider = 'unknown'
@@ -1253,12 +1261,10 @@ def process_segment(
             raise SyncAssignmentConflict('sync lineage generation ownership remains ambiguous')
         if stt_cap_dispatch_enabled():
             if not sync_allowed(uid):
-                if deferred_outcome is not None:
-                    deferred_outcome['cap_held'] = True
                 if not cap_recovery:
-                    from utils.sync.cap_hold import hold_segment
+                    from utils.sync.cap_hold import defer_segment
 
-                    hold_segment(
+                    defer_segment(
                         uid,
                         path,
                         {
@@ -1269,8 +1275,18 @@ def process_segment(
                             'data_protection_level': data_protection_level,
                             'client_device_id': client_device_id,
                             'client_platform': client_platform,
+                            'geolocation': geolocation,
+                            'source_position_map': source_position_map,
+                            'lineage_binding': lineage_binding,
+                            'sync_lane': sync_lane,
+                            'content_id': cap_content_id,
+                            'job_id': job_id,
                         },
+                        response,
+                        lock,
                     )
+                if deferred_outcome is not None:
+                    deferred_outcome['cap_held'] = True
                 return False
             # Queue-time locks do not survive execution-time authorization.
             is_locked = False
@@ -1324,12 +1340,10 @@ def process_segment(
         while True:
             phase = 'provider_call'
             if stt_cap_dispatch_enabled() and not sync_allowed(uid):
-                if deferred_outcome is not None:
-                    deferred_outcome['cap_held'] = True
                 if not cap_recovery:
-                    from utils.sync.cap_hold import hold_segment
+                    from utils.sync.cap_hold import defer_segment
 
-                    hold_segment(
+                    defer_segment(
                         uid,
                         path,
                         {
@@ -1340,8 +1354,18 @@ def process_segment(
                             'data_protection_level': data_protection_level,
                             'client_device_id': client_device_id,
                             'client_platform': client_platform,
+                            'geolocation': geolocation,
+                            'source_position_map': source_position_map,
+                            'lineage_binding': lineage_binding,
+                            'sync_lane': sync_lane,
+                            'content_id': cap_content_id,
+                            'job_id': job_id,
                         },
+                        response,
+                        lock,
                     )
+                if deferred_outcome is not None:
+                    deferred_outcome['cap_held'] = True
                 return False
             words, detected_language = prerecorded(
                 url,
@@ -2107,6 +2131,9 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     coordinator itself holds zero thread pool slots — only leaf operations use
     threads, and only for their actual duration.
     """
+    if stt_cap_dispatch_enabled():
+        # A hold is pending processing, not a locked transcript partition.
+        should_lock = False
     # LocalRecordingsProvider uploads one explicitly selected native recording
     # at a time. The writer's exact marker distinguishes Transcribe Later from
     # automatic offline fallback (omibatchphoneauto) in already-released clients.
@@ -2313,23 +2340,6 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     failure_key='invalid_audio',
                 )
                 return
-            cap_held = False
-            if stt_cap_dispatch_enabled():
-                from utils.sync.cap_hold import hold_capture_if_exhausted
-
-                cap_held = await run_blocking(
-                    sync_executor,
-                    hold_capture_if_exhausted,
-                    uid,
-                    wav_paths,
-                    source,
-                    target_conversation_id=target_conversation_id,
-                    client_device_id=client_device_id,
-                    client_platform=client_platform,
-                )
-            if cap_held:
-                await run_blocking(storage_executor, _cleanup_files, wav_paths)
-                wav_paths = []
             try:
                 wav_paths, source_frame_maps, coverage_suppressed_all = await apply_sync_wal_audio_coverage(
                     uid,
@@ -2393,6 +2403,31 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         reason='policy',
                         outcome='degraded',
                     )
+            cap_held = False
+            cap_hold_receipts: dict = {}
+            if stt_cap_dispatch_enabled():
+                from utils.sync.cap_hold import hold_capture_if_exhausted
+
+                cap_held = await run_blocking(
+                    sync_executor,
+                    hold_capture_if_exhausted,
+                    uid,
+                    wav_paths,
+                    source,
+                    receipts=cap_hold_receipts,
+                    source_frame_maps=source_frame_maps,
+                    target_conversation_id=target_conversation_id,
+                    client_device_id=client_device_id,
+                    client_platform=client_platform,
+                    geolocation=geolocation,
+                    recording_session_id=recording_session_id,
+                    sync_lane=sync_lane,
+                    content_id=content_id,
+                    job_id=job_id,
+                )
+            if cap_held:
+                await run_blocking(storage_executor, _cleanup_files, wav_paths)
+                wav_paths = []
             # --- Phase 2: VAD ---
             job_phase = 'vad'
             await run_blocking(
@@ -2510,15 +2545,23 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     **({'held_audio': True} if cap_held else {}),
                 }
                 if content_id:
+                    ledger_writer = mark_sync_content_completed
+                    ledger_extra = {}
+                    if cap_held:
+                        from database.sync_cap_holds import mark_content_held
+
+                        ledger_writer = mark_content_held
+                        ledger_extra = {'hold_ids': list(cap_hold_receipts)}
                     completed_ledger = await run_blocking(
                         db_executor,
-                        mark_sync_content_completed,
+                        ledger_writer,
                         uid,
                         content_id,
                         job_id,
                         empty_result,
                         run_token=active_run_lock_token,
                         run_epoch=active_run_lock_epoch,
+                        **ledger_extra,
                     )
                     if not completed_ledger:
                         raise SyncJobRunLeaseLost(f'sync content ledger owner lost: job={job_id}')
@@ -2790,7 +2833,10 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     attempt_ref=attempt_ref,
                     source_position_map=segment_source_maps.get(path),
                     **({'lineage_binding': segment_binding_reasons.get(path)} if use_lineage else {}),
+                    **({'cap_content_id': content_id} if stt_cap_dispatch_enabled() else {}),
                 )
+                if deferred_outcome.get('cap_held'):
+                    return  # Durable policy hold, not success/silence/provider failure.
                 if ok:
                     # Persist result contributions before the processed marker.
                     # Therefore any skipped segment on a retry has its visible
@@ -2988,17 +3034,21 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
 
             # Record DG usage after processing.
             job_phase = 'usage'
+            cap_holds = response.get('_cap_holds', {}) if stt_cap_dispatch_enabled() else {}
+            cap_held_seconds = sum(item['seconds'] for item in cap_holds.values())
             await _record_restricted_sync_dg_usage(
                 enabled=fair_use_restrict_dg,
                 uid=uid,
                 job_id=job_id,
                 content_id=content_id,
-                total_speech_seconds=total_speech_seconds,
+                total_speech_seconds=max(0, total_speech_seconds - cap_held_seconds),
             )
 
             # Build result
             failed_segments = len(segment_errors)
             successful_segments = total_segments - failed_segments
+            if cap_holds:
+                successful_segments -= len(cap_holds)
             job_outcome = _job_transcription_outcome(segment_errors)
             result = {
                 'new_memories': sorted(response['new_memories']),
@@ -3012,6 +3062,8 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             if content_segment_count[0] > 0:
                 try:
                     usage_seconds = int(total_speech_seconds)
+                    if cap_holds:
+                        usage_seconds = int(max(0, total_speech_seconds - cap_held_seconds))
                     should_record_usage = bool(content_id) or await run_blocking(
                         db_executor, try_mark_once, job_id, 'usage'
                     )
@@ -3050,6 +3102,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 'provider': bounded_provider(job_provider),
                 'model': _bounded_sync_model(job_model),
                 'lane': sync_lane,
+                **({'held_audio': True} if cap_holds else {}),
             }
             repeat_failure_fingerprint = _whole_job_persistence_fingerprint(
                 failed_segments, total_segments, persistence_failure_fingerprints
@@ -3065,15 +3118,23 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             if content_id and failed_segments == 0:
                 # The durable content ledger proves every successful segment
                 # before the WAL-visible completed status is published.
+                ledger_writer = mark_sync_content_completed
+                ledger_extra = {}
+                if cap_holds:
+                    from database.sync_cap_holds import mark_content_held
+
+                    ledger_writer = mark_content_held
+                    ledger_extra = {'hold_ids': list(cap_holds)}
                 completed_ledger = await run_blocking(
                     db_executor,
-                    mark_sync_content_completed,
+                    ledger_writer,
                     uid,
                     content_id,
                     job_id,
                     final_result,
                     run_token=active_run_lock_token,
                     run_epoch=active_run_lock_epoch,
+                    **ledger_extra,
                 )
                 if not completed_ledger:
                     raise SyncJobRunLeaseLost(f'sync content ledger owner lost: job={job_id}')
@@ -3290,3 +3351,8 @@ def finalize_recovered_sync_segment(uid: str, response: dict, private: bool) -> 
     _reprocess_merged_conversations(uid, response)
     if private:
         _finalize_sync_audio_files(uid, response)
+
+
+def cleanup_recovered_sync_files(paths: list[str]) -> None:
+    """Coverage replay borrows the ordinary sync cleanup boundary."""
+    _cleanup_files(paths)

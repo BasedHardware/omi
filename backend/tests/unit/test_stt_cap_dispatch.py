@@ -97,6 +97,25 @@ async def test_held_constructor_resumes_after_reset_without_reopening_capture(mo
     raw.finish.assert_called_once()
 
 
+async def test_resumed_registry_leg_unwraps_nested_provider_and_debits_once(monkeypatch):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    state = cap.LiveAdmission('synthetic')
+    raw = Mock(send=Mock(return_value=True))
+    inner = cap.live_provider('modulate', 0)(AsyncMock(return_value=raw))
+    socket = cap.CapSocket(state, 'modulate', 16000, lambda: inner(16000))
+    state.managed, state.remaining = True, 2
+    token = cap.current_live_admission.set(state)
+    try:
+        await socket.resume()
+        assert socket.send(b'\0' * 32000)
+    finally:
+        cap.current_live_admission.reset(token)
+    assert socket.raw is raw
+    raw.send.assert_called_once()
+    assert state.remaining == 1
+    assert cap.record_audio.call_count == 1
+
+
 @pytest.mark.parametrize('managed', [False, True])
 def test_queued_sync_always_resolves_omi_funding(managed, monkeypatch):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')

@@ -118,6 +118,19 @@ class CapSocket(STTSocket):
             raw = await self.factory()
             if raw is None:
                 raise RuntimeError('held provider constructor returned no socket')
+            # Registry constructors can invoke another decorated provider. A
+            # resumed leg must retain exactly one debit/metric boundary, just
+            # like the initial construction path below.
+            while isinstance(raw, CapSocket):
+                self.provider, self.rate, self.factory = raw.provider, raw.rate, raw.factory
+                if not customer_funded(self.provider):
+                    self.admission.omi_selected = True
+                if raw in self.admission.held:
+                    self.admission.held.remove(raw)
+                if raw.raw is None:
+                    self._open_callbacks.extend(raw._open_callbacks)
+                    return  # Actual fallback remains denied; keep this leg held.
+                raw = raw.raw
             self.raw = raw
             for callback in self._open_callbacks:
                 callback(raw)

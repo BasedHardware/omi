@@ -23,7 +23,8 @@ def test_exhaustion_holds_before_url_or_provider_dispatch(tmp_path, monkeypatch,
     monkeypatch.setattr(
         cap, 'funded_allowance', Mock(return_value=SimpleNamespace(managed=False, reason='plan_allowance_exhausted'))
     )
-    hold, url, stt = Mock(), Mock(return_value='synthetic-url'), Mock(return_value=([], 'en'))
+    hold = Mock(side_effect=lambda *a, **kw: kw['receipt'].update(id='held', seconds=1))
+    url, stt = Mock(return_value='synthetic-url'), Mock(return_value=([], 'en'))
     monkeypatch.setattr(cap_hold, 'hold_segment', hold)
     monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', url)
     monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', Mock())
@@ -82,7 +83,13 @@ def test_full_capture_hold_precedes_vad_and_has_default_off_parity(tmp_path, mon
     paths = [str(tmp_path / '1792152000.wav')]
     assert cap_hold.hold_capture_if_exhausted('synthetic', paths, ConversationSource.omi) is enforce
     if enforce:
-        assert hold.call_args.args[2] == {'timestamp': 1792152000, 'source': 'omi', 'full_capture': True}
+        assert hold.call_args.args[2] == {
+            'timestamp': 1792152000,
+            'source': 'omi',
+            'full_capture': True,
+            'file_name': '1792152000.wav',
+            'source_frame_map': None,
+        }
     else:
         hold.assert_not_called()
         cap_hold.sync_allowed.assert_not_called()
@@ -119,9 +126,15 @@ def test_hold_persists_encrypted_audio_before_manifest_and_never_expires(tmp_pat
         wav.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
         wav.writeframes(b'\0' * 32000)
     order = []
+    uploaded = []
     ref, blob, bucket = Mock(), Mock(), Mock()
     ref.get.return_value.exists = False
-    blob.upload_from_string.side_effect = lambda *args, **kwargs: order.append('upload')
+
+    def upload(stream, **kwargs):
+        uploaded.append(stream.read())
+        order.append('upload')
+
+    blob.upload_from_file.side_effect = upload
     ref.create.side_effect = lambda *args, **kwargs: order.append('manifest')
     monkeypatch.setattr(cap_hold, 'holds', lambda _: SimpleNamespace(document=lambda _: ref))
     monkeypatch.setattr(cap_hold, 'get_private_cloud_sync_bucket', lambda: bucket)
@@ -132,13 +145,57 @@ def test_hold_persists_encrypted_audio_before_manifest_and_never_expires(tmp_pat
     meta = {'timestamp': 1792152000, 'source': 'omi', 'full_capture': True}
     assert cap_hold.hold_segment('synthetic', str(path), meta) == 1
     assert order == ['upload', 'manifest']
-    assert decrypt_audio_file(blob.upload_from_string.call_args.args[0], 'synthetic') == path.read_bytes()
+    assert decrypt_audio_file(uploaded[0], 'synthetic') == path.read_bytes()
     manifest = ref.create.call_args.args[0]
     assert manifest['audio_path'].startswith('chunks/synthetic/cap-held/')
     assert json.loads(decrypt(manifest['metadata'], 'synthetic')) == meta
     assert 'expires_at' not in manifest
     ref.create.reset_mock()
-    blob.upload_from_string.side_effect = RuntimeError('synthetic unavailable')
+    blob.upload_from_file.side_effect = RuntimeError('synthetic unavailable')
     with pytest.raises(RuntimeError):
         cap_hold.hold_segment('synthetic', str(path), meta)
     ref.create.assert_not_called()
+
+
+@pytest.mark.parametrize('corrupt', [False, True])
+def test_large_hold_streams_bounded_authenticated_chunks(tmp_path, monkeypatch, corrupt):
+    from contextlib import nullcontext
+    from pathlib import Path
+    from cryptography.exceptions import InvalidTag
+
+    path = tmp_path / '1792152000.wav'
+    with wave.open(str(path), 'wb') as wav:
+        wav.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+        wav.writeframes(b'\x01\x02' * cap_hold.AUDIO_CHUNK_BYTES)
+    expected = path.read_bytes()
+    ref, blob, bucket = Mock(), Mock(), Mock()
+    ref.get.return_value.exists = False
+    uploaded = []
+    blob.upload_from_file.side_effect = lambda stream, **kw: uploaded.append(stream.read())
+    bucket.blob.return_value = blob
+    monkeypatch.setattr(cap_hold, 'holds', lambda _: SimpleNamespace(document=lambda _: ref))
+    monkeypatch.setattr(cap_hold, 'get_private_cloud_sync_bucket', lambda: bucket)
+    monkeypatch.setattr(cap_hold, 'external_write_fence', lambda _: nullcontext())
+    monkeypatch.setattr(cap_hold, 'owner_storage_write_gate', lambda *_: nullcontext())
+    monkeypatch.setattr(cap_hold, 'funded_allowance', lambda _: SimpleNamespace(reason='plan_allowance_exhausted'))
+    monkeypatch.setattr(Path, 'read_bytes', Mock(side_effect=AssertionError('whole-file buffer')))
+    encrypt_chunk = Mock(wraps=cap_hold.encrypt_audio_chunk)
+    monkeypatch.setattr(cap_hold, 'encrypt_audio_chunk', encrypt_chunk)
+    cap_hold.hold_segment('synthetic', str(path), {'timestamp': 1792152000, 'source': 'omi'})
+    assert encrypt_chunk.call_count == 3
+    assert max(len(call.args[0]) for call in encrypt_chunk.call_args_list) <= cap_hold.AUDIO_CHUNK_BYTES
+    encrypted = uploaded[0]
+    if corrupt:
+        encrypted = encrypted[:-1] + bytes([encrypted[-1] ^ 1])
+    blob.download_to_file.side_effect = lambda output: output.write(encrypted)
+    output = tmp_path / 'recovered.wav'
+    manifest = ref.create.call_args.args[0]
+    if corrupt:
+        with pytest.raises(InvalidTag):
+            cap_hold.read_audio('synthetic', manifest, str(output))
+        assert not output.exists()
+    else:
+        cap_hold.read_audio('synthetic', manifest, str(output))
+        with output.open('rb') as recovered:
+            assert recovered.read() == expected
+    blob.delete.assert_not_called()
