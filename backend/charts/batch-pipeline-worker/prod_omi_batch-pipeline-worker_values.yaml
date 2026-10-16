@@ -13,11 +13,11 @@ replicaCount: 1
 autoscaling:
   enabled: false
 nodeSelector:
-  cloud.google.com/gke-nodepool: diarizer-batch-pool
-  service: diarizer-batch
+  cloud.google.com/gke-nodepool: batch-pipeline-pool
+  service: batch-pipeline
   env: prod
 tolerations:
-  - key: omi.ai/diarizer-batch
+  - key: omi.ai/batch-pipeline
     operator: Equal
     value: "true"
     effect: NoSchedule

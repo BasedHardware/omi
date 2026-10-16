@@ -89,8 +89,23 @@ end-to-end projection/deletion, and AMI quality in the built digest.
 
 The chart `charts/batch-pipeline-worker` pins a qualified image digest, existing
 Workload Identity service account, explicit data-plane project, secrets and
-staging bucket. It fixes the `diarizer-batch-pool` node selector and taints,
-requests one GPU, and prevents surge GPUs. It cannot be installed over the live
+staging bucket. It selects the dedicated `batch-pipeline-pool` with
+`service=batch-pipeline` and `env=<env>` labels, requests one GPU, and prevents
+surge GPUs. **An NVIDIA L4 on `g2-standard-8` is required**: the joint chain was
+qualified on L4 and ASR requires native BF16; T4 (`sm75`) is unsupported. The
+live `diarizer-batch-pool` is separate and must not host this worker.
+
+An operator creates the pool out-of-band, not through IaC or this chart, with
+labels `env=<env>,service=batch-pipeline` (`env=dev` or `env=prod`), taints
+`nvidia.com/gpu=present:NoSchedule` and `omi.ai/batch-pipeline=true:NoSchedule`,
+node autoscaling `0..N`, and location policy `ANY`. The chart tolerates exactly
+those two taints. Node autoscaling to zero is separate from the minimum-one
+worker requirement below. The image puts GKE's `/usr/local/nvidia/bin` on
+`PATH` and `/usr/local/nvidia/lib:/usr/local/nvidia/lib64` on `LD_LIBRARY_PATH`,
+retaining `/usr/lib/x86_64-linux-gnu` for system libraries. The pinned torch
+wheels supply CUDA userspace; the host mount supplies `libcuda.so.1`.
+
+The worker cannot be installed over the live
 embedding or Parakeet release. Dedicated bucket lifecycle must preserve pending
 accepted work; D arms cleanup only after successful projection.
 
@@ -126,8 +141,29 @@ the receipt is emitted after CUDA synchronization. Host peaks include startup.
 For qualification run a synthetic one-hour unit with the intended model batch
 size and retain the GPU model/VRAM, exact image digest/config and receipt.
 Set the chart **host RAM** limit from the larger measured process/container peak
-with explicit headroom; CUDA peaks qualify device capacity separately. The
-current 24Gi host limit remains provisional until that dev receipt exists.
+with explicit headroom; CUDA peaks qualify device capacity separately.
+
+The October 16 dev L4 compute qualification used the deployed image
+`sha256:e2ae6e672c07d6532e58ad0f7aa55eda52d1959bad3d65f4c88dc714adc5b619`,
+BF16 ASR, FP32 segmentation/VAD, eager decoding and effective batch 8 for ASR,
+segmentation, embedding and VAD. A 20-minute public AMI montage followed by its
+threefold 3600-second repetition ran in one model process with in-memory audio
+and result adapters. The synchronized one-hour receipt recorded CUDA allocated /
+reserved peaks of 2,238,839,808 / 7,184,842,752 bytes, process peak 5,910,188,032
+bytes and cgroup lifetime peak **10,517,725,184 bytes (9.795GiB)**, including
+startup. The chart requests **12Gi** and limits **14Gi**: round the host peak plus
+`max(1GiB, 20%)` / `max(2GiB, 40%)` up to whole GiB, respectively. This provides
+2.205GiB / 4.205GiB headroom. The qualification Job had a 24Gi cap; the proposed
+14Gi cap and multi-unit decoded-group envelope were not separately exercised.
+These are compute-chain measurements; deployed intake, lease-loss recovery,
+projection, encrypted artifact IO and deletion remain separate qualification
+gates. Admission stays off.
+
+The worker Deployment and its workflow rollout wait both allow **1800 seconds**.
+The first dev cold rollout took at least 718.6 seconds from pod creation to ASR
+restore, exceeding the old 600-second deadline before joint readiness. The new
+budget adds about 1081 seconds beyond that observed lower bound for node/image
+startup and model loading. The existing diarizer workflow wait remains 600s.
 
 PodMonitoring defaults on when the release is enabled. Queue age and freshness
 export the Kubernetes namespace and `worker_release` from the deployment.

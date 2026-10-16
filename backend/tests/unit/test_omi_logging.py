@@ -361,3 +361,14 @@ def test_executor_adoption_copies_context_without_leaking(monkeypatch):
     worker, outside = map(json.loads, output.getvalue().splitlines())
     assert worker['logging.googleapis.com/trace'].endswith('/' + 'a' * 32)
     assert 'logging.googleapis.com/trace' not in outside
+
+
+def test_successful_liveness_is_filtered_but_failure_is_kept(monkeypatch):
+    monkeypatch.setenv('OMI_LOG_FORMAT', 'json')
+    output = io.StringIO()
+    logs.configure_logging('nllb', access_policy='keep', stdout=output)
+    logger = logging.getLogger('uvicorn.access')
+    logger.info('%s %s %s %s %s', 'client', 'GET', '/live', '1.1', 200)
+    assert not output.getvalue()
+    logger.info('%s %s %s %s %s', 'client', 'GET', '/live', '1.1', 503)
+    assert json.loads(output.getvalue())['logger'] == 'uvicorn.access'

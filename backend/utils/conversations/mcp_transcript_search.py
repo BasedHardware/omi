@@ -23,6 +23,7 @@ from models.transcript_segment import legacy_conversation_segment_id
 from utils.conversations.transcript_chunks import build_transcript_chunks
 from utils.executors import db_executor, run_blocking
 from utils.log_sanitizer import sanitize
+from utils.model_text import DisplayClock, truncation_note
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -112,6 +113,7 @@ def chat_transcript_excerpts(
     *,
     max_excerpts: int = 5,
     max_chars: int = 1200,
+    clock: DisplayClock = DisplayClock.utc(),
 ) -> Dict[str, str]:
     """Rebuild only authorized, non-discarded chunk hits from hydrated conversations."""
     allowed = {
@@ -143,11 +145,23 @@ def chat_transcript_excerpts(
             ]
             chunks_by_id[cid] = {
                 chunk['chunk_index']: chunk['text']
-                for chunk in build_transcript_chunks(segments, conv.get('started_at') or conv.get('created_at'))
+                for chunk in build_transcript_chunks(
+                    segments,
+                    conv.get('started_at') or conv.get('created_at'),
+                    clock=clock,
+                    finished_at=conv.get('finished_at'),
+                )
             }
         excerpt = chunks_by_id[cid].get(chunk_index)
         if excerpt:
-            excerpts[cid] = excerpt[:max_chars]
+            clipped = excerpt[:max_chars]
+            note = truncation_note(
+                shown=len(clipped),
+                total=len(excerpt),
+                unit='characters of this transcript excerpt',
+                how_to_get_more='Request the conversation transcript with a higher max_transcript_segments limit.',
+            )
+            excerpts[cid] = clipped + (f'\n{note}' if note else '')
             if len(excerpts) >= max_excerpts:
                 break
     return excerpts

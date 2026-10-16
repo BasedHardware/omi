@@ -131,10 +131,10 @@ def test_histogram_conservation_and_cumulative_deltas(client):
     h = payload['histograms'][0]
     for _ in range(2):
         collector.add(h['name'], 'ios', 'stable', h['buckets'])
-    samples = list(collector.collect())[0].samples
-    buckets = [sample for sample in samples if sample.name.endswith('_bucket')]
+    samples = [sample for family in collector.collect() for sample in family.samples]
+    buckets = [sample for sample in samples if sample.name.endswith('_bucket_total')]
     assert [s.value for s in buckets] == [2 * b['count'] for b in h['buckets']]
-    assert samples[-1].name.endswith('_count')
+    assert samples[-1].name.endswith('_count_total')
     assert samples[-1].value == h['buckets'][-1]['count'] * 2
     assert not any(s.name.endswith('_sum') for s in samples)
     assert client.post('/v1/telemetry/fleet', json=payload).status_code == 200

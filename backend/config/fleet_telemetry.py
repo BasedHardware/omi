@@ -50,7 +50,7 @@ def validator():
 
 
 def max_series() -> int:
-    """Includes counter _created series and histogram bucket/count; excludes target replication."""
+    """Includes event _created series and bucket/count counters; excludes target replication."""
     spec = registry()
     axes = len(spec['platforms']) * len(spec['build_channels'])
     events = 2 * sum(map(len, spec['events'].values())) * axes

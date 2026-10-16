@@ -1,6 +1,7 @@
 """Offline Helm contract: no deployment, dedicated pool and scoped queue age."""
 
 from pathlib import Path
+import os
 import shutil
 import subprocess
 
@@ -33,10 +34,8 @@ def enabled_arguments():
         'serviceAccountName=synthetic-worker',
         '--set',
         'gcpServiceAccount=synthetic-worker@example.invalid',
-        '--set-json',
-        'nodeSelector={"cloud.google.com/gke-nodepool":"diarizer-batch-pool","service":"diarizer-batch","env":"dev"}',
-        '--set-json',
-        'tolerations=[{"key":"omi.ai/diarizer-batch","operator":"Equal","value":"true","effect":"NoSchedule"},{"key":"nvidia.com/gpu","operator":"Equal","value":"present","effect":"NoSchedule"}]',
+        '--set',
+        'nodeSelector.env=dev',
         '--set',
         'bucket=synthetic-batch',
         '--set',
@@ -52,8 +51,8 @@ def test_default_chart_has_no_resources_or_admission():
     assert values['autoscaling']['enabled'] is False
     assert values['podMonitoring']['enabled'] is True
     assert values['worker']['batchSize'] == 8
-    assert values['resources']['requests']['memory'] == '11Gi'
-    assert values['resources']['limits']['memory'] == '13Gi'
+    assert values['resources']['requests']['memory'] == '12Gi'
+    assert values['resources']['limits']['memory'] == '14Gi'
     result = render()
     assert result.returncode == 0 and list(yaml.safe_load_all(result.stdout)) == []
 
@@ -63,8 +62,15 @@ def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
     assert result.returncode == 0, result.stderr
     manifests = {doc['kind']: doc for doc in yaml.safe_load_all(result.stdout) if doc}
     pod = manifests['Deployment']['spec']['template']['spec']
-    assert pod['nodeSelector']['cloud.google.com/gke-nodepool'] == 'diarizer-batch-pool'
-    assert pod['tolerations'][1]['key'] == 'nvidia.com/gpu'
+    assert pod['nodeSelector'] == {
+        'cloud.google.com/gke-nodepool': 'batch-pipeline-pool',
+        'service': 'batch-pipeline',
+        'env': 'dev',
+    }
+    assert {(item['key'], item['operator'], item['value'], item['effect']) for item in pod['tolerations']} == {
+        ('omi.ai/batch-pipeline', 'Equal', 'true', 'NoSchedule'),
+        ('nvidia.com/gpu', 'Equal', 'present', 'NoSchedule'),
+    }
     assert manifests['ServiceAccount']['metadata']['annotations'] == {
         'iam.gke.io/gcp-service-account': 'synthetic-worker@example.invalid'
     }
@@ -145,15 +151,19 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     assert account['annotations']['iam.gke.io/gcp-service-account'] == gsa
 
     deployment = manifests['Deployment']
+    assert deployment['spec']['progressDeadlineSeconds'] == 1800
     pod = deployment['spec']['template']['spec']
     assert deployment['spec']['replicas'] == 1
     assert pod['serviceAccountName'] == 'batch-pipeline-worker'
     assert pod['nodeSelector'] == {
-        'cloud.google.com/gke-nodepool': 'diarizer-batch-pool',
-        'service': 'diarizer-batch',
+        'cloud.google.com/gke-nodepool': 'batch-pipeline-pool',
+        'service': 'batch-pipeline',
         'env': stage,
     }
-    assert {item['key'] for item in pod['tolerations']} == {'omi.ai/diarizer-batch', 'nvidia.com/gpu'}
+    assert {(item['key'], item['operator'], item['value'], item['effect']) for item in pod['tolerations']} == {
+        ('omi.ai/batch-pipeline', 'Equal', 'true', 'NoSchedule'),
+        ('nvidia.com/gpu', 'Equal', 'present', 'NoSchedule'),
+    }
     container = pod['containers'][0]
     project_env = {item['name']: item for item in container['env']}
     assert project_env['OMI_FIRESTORE_DATA_PLANE_PROJECT']['value'] == project
@@ -165,8 +175,8 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     batch_size = environment_values.get('worker', {}).get('batchSize', defaults['worker']['batchSize'])
     assert batch_size == 8
     assert project_env['BATCH_PIPELINE_MODEL_BATCH_SIZE']['value'] == str(batch_size)
-    assert container['resources']['requests']['memory'] == '11Gi'
-    assert container['resources']['limits']['memory'] == '13Gi'
+    assert container['resources']['requests']['memory'] == '12Gi'
+    assert container['resources']['limits']['memory'] == '14Gi'
     assert container['resources']['requests']['cpu'] == '4'
     assert container['resources']['limits']['cpu'] == '8'
     assert container['resources']['requests']['nvidia.com/gpu'] == '1'
@@ -176,3 +186,41 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     project_id = 'based-hardware-dev' if environment == 'dev' else 'based-hardware'
     assert container['image'] == f"gcr.io/{project_id}/batch-pipeline-worker@sha256:{'b' * 64}"
     assert 'HorizontalPodAutoscaler' not in manifests
+
+
+@pytest.mark.parametrize('service,timeout', [('batch-pipeline-worker', '1800s'), ('diarizer', '600s')])
+@pytest.mark.parametrize('rollout_exit', [0, 1])
+def test_rollout_wait_covers_worker_startup_and_still_fails_on_timeout(tmp_path, service, timeout, rollout_exit):
+    workflow = yaml.safe_load((CHART.parents[2] / '.github/workflows/gcp_diarizer.yml').read_text())
+    step = next(step for step in workflow['jobs']['deploy']['steps'] if step.get('name') == 'Verify rollout')
+    receipt = tmp_path / 'kubectl-arguments'
+    kubectl = tmp_path / 'kubectl'
+    kubectl.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$RECEIPT"\nexit "$ROLLOUT_EXIT"\n')
+    kubectl.chmod(0o755)
+    reporter = tmp_path / 'python3'
+    reporter.write_text('#!/bin/sh\nexit 0\n')
+    reporter.chmod(0o755)
+    result = subprocess.run(
+        ['bash', '-e', '-c', step['run']],
+        env={
+            **os.environ,
+            'PATH': f'{tmp_path}:{os.environ["PATH"]}',
+            'SERVICE': service,
+            'DEPLOY_NAMESPACE': 'synthetic',
+            'DEPLOY_ENV': 'dev',
+            'TARGET_RELEASE': f'synthetic-{service}',
+            'RECEIPT': str(receipt),
+            'ROLLOUT_EXIT': str(rollout_exit),
+        },
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == rollout_exit, result.stderr
+    assert receipt.read_text().splitlines() == [
+        '-n',
+        'synthetic',
+        'rollout',
+        'status',
+        f'deploy/synthetic-{service}',
+        f'--timeout={timeout}',
+    ]

@@ -15,8 +15,10 @@ summarizer LLMs copy verbatim into titles and overviews.
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Iterable, List, Optional, Protocol
+from types import SimpleNamespace
+from typing import Any, Iterable, List, Optional, Protocol, Sequence
 
 from database.auth import get_user_name
 from models.other import Person
@@ -35,7 +37,10 @@ def _speaker_label(segment: Any, user_name: str, people_map: dict[str, str]) -> 
     if segment.is_user:
         return user_name
     speaker_name = people_map.get(segment.person_id) if segment.person_id else None
-    return speaker_name or f'Speaker {segment.speaker_id}'
+    if speaker_name:
+        return speaker_name
+    speaker_id = getattr(segment, 'speaker_id', None)
+    return f'Speaker {speaker_id}' if speaker_id is not None else 'Unknown speaker'
 
 
 @dataclass(frozen=True)
@@ -166,24 +171,73 @@ def memory_transcript_from_segments(
     Copies are local to this render; summaries and action items retain their
     existing presentation and the original transcript segments are untouched.
     """
-    evidence = OwnerAttributionEvidence.from_segments(segments)
-    rendered_segments = [
+    rendered_segments, owner_note = owner_safe_transcript_segments(segments)
+    transcript = TranscriptSegment.segments_as_string(rendered_segments, user_name=user_name, people=people)
+    return f"{owner_note}\n{transcript}" if owner_note and transcript else transcript
+
+
+def _owner_evidence_view(segment: Any) -> Any:
+    """Adapt JIT mapping rows to the attribute shape consumed by the shared owner gate."""
+    if not isinstance(segment, Mapping):
+        return segment
+    return SimpleNamespace(
+        speaker_id=segment.get('speaker_id'),
+        speaker_id_scope=segment.get('speaker_id_scope'),
+        is_user=bool(segment.get('is_user', False)),
+        _speaker_id_synthesized=bool(segment.get('_speaker_id_synthesized', False)),
+    )
+
+
+def _clear_owner_claim(segment: Any) -> Any:
+    """Copy a segment before removing an untrusted owner attribution."""
+    if isinstance(segment, Mapping):
+        copied = dict(segment)
+        copied['is_user'] = False
+        copied['person_id'] = None
+        return copied
+    if hasattr(segment, 'model_copy'):
+        return segment.model_copy(update={'is_user': False, 'person_id': None})
+    copied = SimpleNamespace(**vars(segment))
+    copied.is_user = False
+    copied.person_id = None
+    return copied
+
+
+def owner_safe_transcript_segments(
+    segments: Sequence[Any], *, evidence_segments: Optional[Sequence[Any]] = None
+) -> tuple[list[Any], str]:
+    """Strip weak owner labels using the same speaker-cluster rule as memory transcripts.
+
+    ``evidence_segments`` lets a transcript excerpt use the complete conversation as its owner
+    evidence. The returned header is empty when the owner has a unique supported cluster.
+    """
+    selected = list(segments)
+    evidence_rows = list(evidence_segments) if evidence_segments is not None else selected
+    evidence = OwnerAttributionEvidence.from_segments([_owner_evidence_view(row) for row in evidence_rows])
+    rendered = [
         (
-            segment.model_copy(update={"is_user": False, "person_id": None})
-            if segment.is_user and not may_attribute_to_owner(evidence, segment=segment)
+            _clear_owner_claim(segment)
+            if bool(_owner_evidence_view(segment).is_user)
+            and not may_attribute_to_owner(evidence, segment=_owner_evidence_view(segment))
             else segment
         )
-        for segment in segments
+        for segment in selected
     ]
-    transcript = TranscriptSegment.segments_as_string(rendered_segments, user_name=user_name, people=people)
-    if transcript and not may_attribute_to_owner(evidence):
-        header = (
+    has_text = any(
+        (
+            str(row.get('text') or '').strip()
+            if isinstance(row, Mapping)
+            else str(getattr(row, 'text', '') or '').strip()
+        )
+        for row in rendered
+    )
+    if has_text and not may_attribute_to_owner(evidence):
+        return rendered, (
             f"[Diarization marked {evidence.owner_speaker_ids} of {evidence.distinct_speaker_ids} speaker clusters "
             "as the account owner; owner identity is UNTRUSTED in this transcript — "
             "treat first-person statements as unattributed]"
         )
-        return f"{header}\n{transcript}"
-    return transcript
+    return rendered, ''
 
 
 def conversation_transcript_for_llm(
@@ -273,6 +327,7 @@ __all__ = [
     'SpeakerCluster',
     'SpeakerMap',
     'memory_transcript_from_segments',
+    'owner_safe_transcript_segments',
     'conversation_action_item_speaker_labels',
     'conversation_transcript_and_speaker_map',
     'conversation_transcript_for_action_items',

@@ -737,13 +737,20 @@ live Grafana provisioning (`--mode fleet`). That run prints committed-but-absent
 live-but-uncommitted, present-but-paused, and present-but-divergent UIDs. Default
 `--fail-on none` reports drift without failing; `--fail-on gated` fails only on
 UIDs listed in `live-alert-gate.json`. The monitoring workflow uses `--mode
-import` to upsert the committed live-STT allowlist and the two Redis cache connection rules
-(`omi-redis-cache-conn-warn`/`page` from `resilience.json`) by stable UID (POST
-when absent, PUT when present), then runs `--mode fleet --alert-set live-stt
---fail-on gated`. The import verifies each rule's `alert_identity` and Telegram
+import` to upsert, by stable UID (POST when absent, PUT when present), the
+committed live-STT allowlist, the two Redis cache connection rules
+(`omi-redis-cache-conn-warn`/`page` from `resilience.json`), and every UID in
+`live-alert-gate.json`, including the finalization rules in `alerts/resilience.json`.
+Production upserts the datasource canaries and reads them back before any
+KeepLast business rule is written. Development writes the same gated UIDs with
+`execErrState` Error and does not install canaries. Grafana-assigned query
+defaults (`queryType` `""`, `model.intervalMs` `1000`, `model.maxDataPoints`
+`43200`) do not count as drift when the committed node omits them; a different
+value still fails. The import verifies each rule's `alert_identity` and Telegram
 receiver and confirms that receiver exists with resolve notifications enabled;
-it never deletes or pauses other rules. The `live-stt` verification scope includes those Redis rules and fails closed
-when either is absent, paused, or divergent. They are Grafana-managed alerts,
+it never deletes or pauses other rules. It then runs `--mode fleet --alert-set live-stt
+--fail-on gated`, which covers the canaries and every gated UID. The `live-stt` verification scope includes those Redis rules and the gated finalization rules, and fails closed
+when any of them is absent, paused, or divergent. They are Grafana-managed alerts,
 not PrometheusRule CRDs. Their `component="other"` selector matches the shared
 fallback bucket for `redis_cache`; cache-write children are initialized at zero.
 Soniox runway UIDs remain pending until
