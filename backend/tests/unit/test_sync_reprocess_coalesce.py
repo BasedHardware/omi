@@ -488,3 +488,20 @@ def test_lazy_unbound_host_keeps_debt_without_failing_visible_completion(monkeyp
     ref.set.assert_called_once()
     ref.get.assert_not_called()
     wake.assert_not_called()
+
+
+def test_repaired_delivery_token_always_gets_a_new_cloud_task_name(state, monkeypatch):
+    from utils import cloud_tasks
+
+    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    row = dict(tasks[0], wake_token='obsolete-name')
+    enqueue = Mock()
+    monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
+    _ENQUEUE(row)
+    first = enqueue.call_args.args[2]
+    row['task_token'] = 'new-fenced-delivery'
+    _ENQUEUE(row)
+    assert enqueue.call_args.args[2] != first
+    assert enqueue.call_args.args[3]['task_token'] == 'new-fenced-delivery'

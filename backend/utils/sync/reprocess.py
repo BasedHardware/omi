@@ -160,7 +160,7 @@ def _enqueue(row: dict[str, Any]) -> None:
 
     document_id = row.get('document_id') or key(row['uid'], row['conversation_id'])
     payload = {'kind': 'sync_reprocess', 'key': document_id, 'task_token': row['task_token']}
-    name = f"sr-{document_id}-{row.get('wake_token') or row['task_token']}"
+    name = f"sr-{document_id}-{row['task_token']}"
     if schedule(
         row['uid'],
         document_id,
@@ -287,7 +287,6 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         pending.update(
             lease_until=0,
             task_token=uuid.uuid4().hex,
-            wake_token=uuid.uuid4().hex,
             task_due_at=pending['due_at'],
         )
         return pending, pending
@@ -362,7 +361,6 @@ def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bo
         due_at=current + quiet_seconds,
         task_due_at=current + quiet_seconds,
         dispatch=_effects_binding(),
-        wake_token=uuid.uuid4().hex,
     )
     get_firestore_client().collection(COLLECTION).document(document_id).set(
         {**row, 'version': firestore.Increment(1)}, merge=True
