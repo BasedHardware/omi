@@ -133,6 +133,12 @@ environment_shared:
         CAPTURE_GROUP_CONTAINMENT_MODE:
           value: shadow
           category: rollout
+        DESKTOP_PENDANT_CALL_LINK_MODE:
+          value: 'off'
+          category: rollout
+        DESKTOP_PENDANT_CALL_LINK_PERCENT:
+          value: '100'
+          category: rollout
         TRANSLATION_DEMAND_SHADOW_ENABLED:
           value: 'false'
           category: rollout
@@ -596,6 +602,12 @@ environment_shared:
         CAPTURE_GROUP_CONTAINMENT_MODE:
           value: shadow
           category: rollout
+        DESKTOP_PENDANT_CALL_LINK_MODE:
+          value: 'off'
+          category: rollout
+        DESKTOP_PENDANT_CALL_LINK_PERCENT:
+          value: '100'
+          category: rollout
         FREE_TIER_LOCAL_PROCESSING:
           category: rollout
         FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -956,6 +968,12 @@ environment_shared:
             category: rollout
           CAPTURE_GROUP_CONTAINMENT_MODE:
             value: shadow
+            category: rollout
+          DESKTOP_PENDANT_CALL_LINK_MODE:
+            value: 'off'
+            category: rollout
+          DESKTOP_PENDANT_CALL_LINK_PERCENT:
+            value: '100'
             category: rollout
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
@@ -1342,6 +1360,12 @@ environment_shared:
           CAPTURE_GROUP_CONTAINMENT_MODE:
             value: shadow
             category: rollout
+          DESKTOP_PENDANT_CALL_LINK_MODE:
+            value: 'off'
+            category: rollout
+          DESKTOP_PENDANT_CALL_LINK_PERCENT:
+            value: '100'
+            category: rollout
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
@@ -1703,6 +1727,12 @@ environment_shared:
           CAPTURE_GROUP_CONTAINMENT_MODE:
             value: shadow
             category: rollout
+          DESKTOP_PENDANT_CALL_LINK_MODE:
+            value: 'off'
+            category: rollout
+          DESKTOP_PENDANT_CALL_LINK_PERCENT:
+            value: '100'
+            category: rollout
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
@@ -2036,6 +2066,12 @@ environment_shared:
             category: rollout
           CAPTURE_GROUP_CONTAINMENT_MODE:
             value: shadow
+            category: rollout
+          DESKTOP_PENDANT_CALL_LINK_MODE:
+            value: 'off'
+            category: rollout
+          DESKTOP_PENDANT_CALL_LINK_PERCENT:
+            value: '100'
             category: rollout
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'

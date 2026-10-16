@@ -6,7 +6,9 @@ windows are primary; equal windows use the document ID for stable ordering.
 
 A window match is only a proposal. When both captures also share speech
 (``shared_speech``), they join one capture group (``database.capture_groups``),
-which clients present as one event. Grouping is metadata only.
+which records their shared event identity. Grouping is metadata only.
+The default-off desktop-call path accepts complementary speech under its
+meeting-role and window contract, and pins the desktop primary.
 """
 
 from __future__ import annotations
@@ -18,6 +20,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
+from config.desktop_pendant_call_link import call_link_mode, call_pair
+from utils.conversations.desktop_pendant_call_link import link_call_pair, reserved_for_call
 from database import capture_groups as capture_groups_db
 from database import conversations as conversations_db
 from utils.conversations.capture_containment import (
@@ -106,11 +110,22 @@ def link_duplicate_captures(uid: str, conversation: Any) -> None:
         )
         if len(rows) == CANDIDATE_PAGE_LIMIT:
             _record_degraded()
+        link_call_pair(uid, candidate.conversation_id, rows, saturated=len(rows) == CANDIDATE_PAGE_LIMIT)
+        link_mode = call_link_mode(uid)
+        by_id = {row['id']: row for row in rows if row.get('id')} if link_mode == 'on' else {}
+        own = by_id.get(candidate.conversation_id) or {}
+        if link_mode == 'on' and not own:
+            own = conversation if isinstance(conversation, Mapping) else vars(conversation)
         # Largest windows first, so a secondary with several matches gets the
         # most complete observed capture. Existing pointers are idempotent.
         others = sorted(filter(None, map(capture_record, rows)), key=lambda row: row.primary_rank)
         matches = []
         for other in others:
+            other_row = by_id.get(other.conversation_id) or {}
+            if link_mode == 'on' and (
+                call_pair(own, other_row) or reserved_for_call(own) or reserved_for_call(other_row)
+            ):
+                continue
             match = overlap_match(candidate, other, seconds=seconds, ratio=ratio)
             if match is None:
                 continue

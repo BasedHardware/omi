@@ -68,6 +68,8 @@ overlay:
           value: ''
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-dev-screen-frames
+        CONVERSATION_RELEVANCE_JEV_PERCENT:
+          value: '0'
         TRANSCRIPTION_SHADOW_ENABLED:
           value: 'false'
           category: rollout
@@ -93,8 +95,6 @@ overlay:
         MEMORY_OWNER_JEV_FLIP_PERCENT:
           value: '0'
           category: rollout
-        CONVERSATION_RELEVANCE_JEV_PERCENT:
-          value: '0'
         CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
           value: ''
           category: rollout
@@ -132,6 +132,8 @@ overlay:
           value: '0'
         TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
           value: '1'
+        CONVERSATION_RELEVANCE_JEV_PERCENT:
+          value: '0'
         OMI_LLM_GATEWAY_URL:
           value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
           category: service_discovery
@@ -160,8 +162,6 @@ overlay:
         MEMORY_OWNER_JEV_FLIP_PERCENT:
           value: '0'
           category: rollout
-        CONVERSATION_RELEVANCE_JEV_PERCENT:
-          value: '0'
         CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
           value: ''
           category: rollout
@@ -369,6 +369,8 @@ overlay:
             value: ''
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-dev-screen-frames
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '0'
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           FIREBASE_SIGNER_SERVICE_ACCOUNT:
@@ -399,20 +401,10 @@ overlay:
           MEMORY_OWNER_JEV_FLIP_PERCENT:
             value: '0'
             category: rollout
-          CONVERSATION_RELEVANCE_JEV_PERCENT:
-            value: '0'
           CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
             value: ''
             category: rollout
       backend-sync:
-        forbidden_env:
-        - DEEPGRAM_SELF_HOSTED_ENABLED
-        - DEEPGRAM_SELF_HOSTED_URL
-        - HOSTED_PUSHER_API_URL
-        - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-        - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
-        - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
-        - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         secrets:
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
@@ -463,6 +455,12 @@ overlay:
             value: '0'
           TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
             value: '0'
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '0'
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '0'
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '0'
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           GOOGLE_CLOUD_PROJECT:
@@ -488,16 +486,9 @@ overlay:
           MEMORY_OWNER_JEV_FLIP_PERCENT:
             value: '0'
             category: rollout
-          CONVERSATION_RELEVANCE_JEV_PERCENT:
-            value: '0'
-          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-            value: '0'
-          MEMORY_OWNER_JEV_SHADOW_PERCENT:
-            value: '0'
           CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
             value: ''
             category: rollout
-      backend-sync-backfill:
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
@@ -506,6 +497,7 @@ overlay:
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+      backend-sync-backfill:
         secrets:
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
@@ -542,6 +534,10 @@ overlay:
             value: 'true'
           DREAM_AGENT_UID_ALLOWLIST:
             value: ''
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '0'
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '0'
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           GOOGLE_CLOUD_PROJECT:
@@ -561,14 +557,9 @@ overlay:
           OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
             value: '3600'
             category: replay_capture
-          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-            value: '0'
-          MEMORY_OWNER_JEV_SHADOW_PERCENT:
-            value: '0'
           CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
             value: ''
             category: rollout
-      backend-integration:
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
@@ -577,6 +568,7 @@ overlay:
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+      backend-integration:
         secrets:
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
@@ -626,6 +618,14 @@ overlay:
           OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
             value: '3600'
             category: replay_capture
+        forbidden_env:
+        - DEEPGRAM_SELF_HOSTED_ENABLED
+        - DEEPGRAM_SELF_HOSTED_URL
+        - HOSTED_PUSHER_API_URL
+        - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+        - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+        - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+        - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
     jobs:
       notifications-job:
         flags:
