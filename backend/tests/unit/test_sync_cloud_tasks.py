@@ -2167,16 +2167,9 @@ async def test_sync_task_persistence_fence_terminalizes_backfill_and_releases_it
     )
     request.json.return_value['lane'] = 'backfill'
     setattr(module, 'finalize_sync_job_superseded', AsyncMock())
-    # A backfill task without a sequencer epoch first reads its own job to decide
-    # whether the UID sequencer should adopt it. This test covers the legacy direct
-    # path, so pin that decision off explicitly: sequencer disabled, no owner and
-    # nothing pending. The job is still `queued` at that point, so that read gets
-    # its own entry ahead of the three the processor makes.
+    # Sequencer off: the direct path goes straight to the processor without the
+    # adoption read, so only the processor's own job reads happen.
     module.uid_sequencer.enabled = MagicMock(return_value=False)
-    module.sync_backfill_sequencer.get_owner = MagicMock(return_value={})
-    module.sync_backfill_sequencer.has_pending = MagicMock(return_value=False)
-    processor_reads = list(module.get_sync_job.side_effect)
-    module.get_sync_job.side_effect = [processor_reads[0], *processor_reads]
 
     try:
         response = await module.run_sync_job(request, task_retry_count=0)
@@ -3201,22 +3194,23 @@ async def test_old_backfill_task_migrates_on_flag_on_and_runs_direct_when_off(id
         module.sync_backfill_sequencer.register_job.assert_called_once()
         assert module.sync_backfill_sequencer.register_job.call_args.args[-1] == 940.0
         module._run_sync_job_body.assert_not_awaited()
+
+        # Kill switch: a sequenced backlog must not pull direct work back into
+        # the one-per-UID queue, nor pause that queue's drain.
         module.uid_sequencer.enabled.return_value = False
-        direct = await module.run_sync_job(request, task_retry_count=0)
-        assert direct.status_code == 200
-        module._run_sync_job_body.assert_awaited_once()
-        module.backfill_cutover.refresh_direct_run.assert_called_once_with('test-uid', 'job-1')
-        module.sync_backfill_sequencer.get_owner.return_value = {'active_job_id': 'older-sequenced-job'}
-        migrated_during_rollback = await module.run_sync_job(request, task_retry_count=0)
-        assert migrated_during_rollback.status_code == 200
-        assert module.sync_backfill_sequencer.register_job.call_count == 2
-        module._run_sync_job_body.assert_awaited_once()
-        module.sync_backfill_sequencer.get_owner.return_value = idle_owner
-        module.sync_backfill_sequencer.has_pending.return_value = True
-        migrated_from_pending = await module.run_sync_job(request, task_retry_count=0)
-        assert migrated_from_pending.status_code == 200
-        assert module.sync_backfill_sequencer.register_job.call_count == 3
-        module._run_sync_job_body.assert_awaited_once()
+        module.backfill_cutover.refresh_direct_run.reset_mock()
+        for owner, has_pending in (
+            (idle_owner, False),
+            ({'active_job_id': 'older-sequenced-job'}, False),
+            (idle_owner, True),
+        ):
+            module.sync_backfill_sequencer.get_owner.return_value = owner
+            module.sync_backfill_sequencer.has_pending.return_value = has_pending
+            direct = await module.run_sync_job(request, task_retry_count=0)
+            assert direct.status_code == 200
+        assert module.sync_backfill_sequencer.register_job.call_count == 1
+        assert module._run_sync_job_body.await_count == 3
+        module.backfill_cutover.refresh_direct_run.assert_not_called()
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
