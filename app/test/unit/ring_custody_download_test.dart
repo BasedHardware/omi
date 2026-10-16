@@ -71,6 +71,7 @@ class _FakeRingDevice implements DeviceConnection {
   final controller = StreamController<List<int>>.broadcast();
   final advances = <_Advance>[];
   final _firstAdvance = Completer<void>();
+  final _readReady = Completer<void>();
   int ackStatus = RingProtocol.ackOk;
   RingInfo? postAckInfo;
   int custodyEpochValue = 7;
@@ -79,6 +80,9 @@ class _FakeRingDevice implements DeviceConnection {
 
   /// Completes when the first advance reaches the card.
   Future<void> get firstAdvance => _firstAdvance.future;
+
+  /// Wait for the listener and transfer state to be ready before delivering bytes.
+  Future<void> get readReady => _readReady.future;
 
   @override
   Future<RingInfo?> getRingInfo() async {
@@ -97,7 +101,10 @@ class _FakeRingDevice implements DeviceConnection {
       RingStatus(usedBytes: 0, unreadPackets: ringInfo.unreadPackets, freeBytes: 0, rtcValid: 1);
 
   @override
-  Future<bool> readRingFromSeq(int startSeq, {int? packetCount}) async => true;
+  Future<bool> readRingFromSeq(int startSeq, {int? packetCount}) async {
+    if (!_readReady.isCompleted) _readReady.complete();
+    return true;
+  }
 
   @override
   Future<RingCommandAck?> advanceRingCustody(
@@ -281,7 +288,7 @@ void main() {
     final sync = syncWith(local, card, wal);
 
     final future = sync.syncWal(wal: wal);
-    await Future.delayed(const Duration(milliseconds: 50));
+    await card.readReady.timeout(const Duration(seconds: 5));
     card.emit(_readBegin(5, 1));
     card.emit(_record());
     card.emit(_done(0, 6));
@@ -308,7 +315,7 @@ void main() {
       final sync = syncWith(local, card, wal);
 
       final future = sync.syncWal(wal: wal);
-      await Future.delayed(const Duration(milliseconds: 50));
+      await card.readReady.timeout(const Duration(seconds: 5));
       card.emit(_readBegin(5, 63));
       for (var i = 0; i < 61; i++) {
         card.emit(_record(frameSizes: List.filled(100, 1)));
@@ -346,7 +353,7 @@ void main() {
     final sync = syncWith(local, card, wal);
 
     final future = sync.syncWal(wal: wal);
-    await Future.delayed(const Duration(milliseconds: 50));
+    await card.readReady.timeout(const Duration(seconds: 5));
     card.emit(_readBegin(5, 1));
     card.emit(_record());
     card.emit(_done(0, 6));
@@ -367,7 +374,7 @@ void main() {
     final sync = syncWith(local, card, wal);
 
     final future = sync.syncWal(wal: wal);
-    await Future.delayed(const Duration(milliseconds: 50));
+    await card.readReady.timeout(const Duration(seconds: 5));
     card.emit(_readBegin(5, 1));
     card.emit(_record());
     card.emit(_done(0, 6));
@@ -390,7 +397,7 @@ void main() {
     final sync = syncWith(local, card, wal);
 
     final future = sync.syncWal(wal: wal);
-    await Future.delayed(const Duration(milliseconds: 50));
+    await card.readReady.timeout(const Duration(seconds: 5));
     card.emit(_readBegin(5, 1));
     card.emit(_record());
     card.emit(_done(0, 6));
@@ -410,7 +417,7 @@ void main() {
     final sync = syncWith(local, card, wal);
 
     final future = sync.syncWal(wal: wal);
-    await Future.delayed(const Duration(milliseconds: 50));
+    await card.readReady.timeout(const Duration(seconds: 5));
     card.emit(_readBegin(5, 1));
     card.emit(_record());
     card.custodyEpochValue = 8;
