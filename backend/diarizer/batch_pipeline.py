@@ -202,6 +202,7 @@ class PipelineWorker:
 
     def _process(self, items):
         states, windows, failed, results = {}, [], set(), []
+        failure_records = []
 
         def fail(item, exc, stage):
             # Quarantine poisoned CUDA state without importing a second GPU owner.
@@ -211,12 +212,7 @@ class PipelineWorker:
             if item.segment_id not in failed:
                 failed.add(item.segment_id)
                 self.counts['failed'] += 1
-                logger.error(
-                    'event=batch_worker_failed error_class=%s stage=%s segment_id=%s',
-                    type(exc).__name__,
-                    stage,
-                    item.segment_id,
-                )
+                failure_records.append((type(exc).__name__, stage, item.segment_id))
                 if self.on_failure:
                     try:
                         self.on_failure(item, type(exc).__name__)
@@ -333,4 +329,16 @@ class PipelineWorker:
                 results.append(WorkResult(item.segment_id, uri, 'silence' if state['silence'] else 'success'))
             except Exception as exc:
                 fail(item, exc, stage)
+        # Emit only strings after every item exception handler has exited.
+        # Handler error printers must not inherit the private worker exception.
+        for error_class, failure_stage, segment_id in failure_records:
+            try:
+                logger.error(
+                    'event=batch_worker_failed error_class=%s stage=%s segment_id=%s',
+                    error_class,
+                    failure_stage,
+                    segment_id,
+                )
+            except Exception:
+                pass  # Observability failure must never discard healthy results.
         return results

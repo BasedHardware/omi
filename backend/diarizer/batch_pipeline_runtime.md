@@ -141,7 +141,10 @@ the receipt is emitted after CUDA synchronization. Host peaks include startup.
 This receipt also runs when individual items fail; it is not an item-success
 receipt. Nonfatal item failures log `event=batch_worker_failed` with only
 `error_class`, a bounded `stage` and `segment_id`, once per item per flight,
-even without an `on_failure` callback. Never add exception messages, traceback
+even without an `on_failure` callback. Buffer only those strings and emit after
+the item exception handlers exit, so handler diagnostics cannot chain the worker
+exception. Logging failures are swallowed without another log attempt; healthy
+sibling results still return. Never add exception messages, traceback
 locals, transcript/audio, object URIs or lease/admission tokens to this event.
 For qualification run a synthetic one-hour unit with the intended model batch
 size and retain the GPU model/VRAM, exact image digest/config and receipt.

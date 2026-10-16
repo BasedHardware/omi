@@ -1,9 +1,12 @@
 from dataclasses import replace
+import logging
+import sys
 from types import SimpleNamespace
 
 import pytest
 
 from config.batch_pipeline_providers import ProviderConfig, provider_config
+from diarizer import batch_pipeline
 from diarizer.batch_pipeline import PipelineWorker, LiveWords, Window, pack_windows, speech_windows
 from diarizer.batch_pipeline_models import ParakeetWords
 from utils.batch_pipeline.contracts import WorkItem, Priority
@@ -122,6 +125,59 @@ def test_item_failures_log_class_and_stage_without_callback_or_private_content(s
     assert records[0].getMessage() == f'event=batch_worker_failed error_class=ValueError stage={stage} segment_id=a'
     assert records[0].exc_info is None
     assert private_marker not in caplog.text
+
+
+def test_raising_failure_logger_cannot_drop_healthy_sibling(monkeypatch, capsys):
+    private_marker = 'synthetic-private-worker-error'
+    active_exceptions = []
+
+    def decode(work):
+        if work.segment_id == 'bad':
+            raise ValueError(private_marker)
+        return Samples(work.duration_seconds)
+
+    def broken_logger(*args):
+        active_exceptions.append(sys.exc_info()[0])
+        raise RuntimeError('synthetic-logger-error')
+
+    monkeypatch.setattr(batch_pipeline.logger, 'error', broken_logger)
+    worker, *_ = setup_worker(decode=decode, on_failure=None)
+    assert [result.segment_id for result in worker.process_batch([item('bad'), item('good')])] == ['good']
+    assert worker.counts['failed'] == 1
+    assert active_exceptions == [None]
+    captured = capsys.readouterr()
+    assert private_marker not in captured.out + captured.err
+
+
+def test_raising_handler_stream_cannot_leak_worker_error_or_drop_sibling(monkeypatch, capsys):
+    private_marker = 'synthetic-private-worker-error'
+
+    def decode(work):
+        if work.segment_id == 'bad':
+            raise ValueError(private_marker)
+        return Samples(work.duration_seconds)
+
+    class BrokenStream:
+        writes = 0
+
+        def write(self, message):
+            self.writes += 1
+            raise OSError('synthetic-handler-stream-error')
+
+        def flush(self):
+            pass
+
+    stream = BrokenStream()
+    isolated_logger = logging.Logger('batch_worker_broken_stream', logging.ERROR)
+    isolated_logger.addHandler(logging.StreamHandler(stream))
+    monkeypatch.setattr(batch_pipeline, 'logger', isolated_logger)
+    monkeypatch.setattr(logging, 'raiseExceptions', True)
+    worker, *_ = setup_worker(decode=decode, on_failure=None)
+    assert [result.segment_id for result in worker.process_batch([item('bad'), item('good')])] == ['good']
+    assert worker.counts['failed'] == stream.writes == 1
+    captured = capsys.readouterr()
+    assert 'OSError: synthetic-handler-stream-error' in captured.err
+    assert private_marker not in captured.out + captured.err
 
 
 def test_batch_failure_retries_all_affected_conversations():
