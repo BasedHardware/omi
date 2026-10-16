@@ -32,11 +32,17 @@ def _normalize_pmid(raw: Any) -> Optional[str]:
 
     Accepts:
     - Bare numeric strings: '34567890'
+    - Integer PMIDs: 34567890
     - Formatted prefixes: 'PMID: 34567890', 'pmid:34567890', 'PMID 34567890'
     - PubMed URLs: 'https://pubmed.ncbi.nlm.nih.gov/34567890/', 'https://www.ncbi.nlm.nih.gov/pubmed/34567890'
     Returns bare numeric PMID string if valid, else None.
     """
-    if not raw or not isinstance(raw, str):
+    if raw is None or isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        candidate = str(raw)
+        return candidate if _is_valid_pmid(candidate) else None
+    if not isinstance(raw, str):
         return None
     val = raw.strip()
 
@@ -60,6 +66,8 @@ def _normalize_pmid(raw: Any) -> Optional[str]:
 
 
 def _clamp_max_results(value: Any, default: int = 5) -> int:
+    if isinstance(value, bool):
+        return default
     try:
         parsed = int(value)
     except (TypeError, ValueError):
@@ -249,7 +257,14 @@ async def manifest_alias():
 async def search_pubmed(request: Request):
     try:
         body = await request.json()
-        query = (body.get("query") or "").strip()
+    except Exception:
+        return ChatToolResponse(error="Request body must be a valid JSON object")
+    if not isinstance(body, dict):
+        return ChatToolResponse(error="Request body must be a JSON object")
+
+    try:
+        raw_query = body.get("query")
+        query = "" if isinstance(raw_query, bool) else (str(raw_query) if raw_query is not None else "").strip()
         max_results = _clamp_max_results(body.get("max_results", 5))
         if not query:
             return ChatToolResponse(error="query is required")
@@ -280,11 +295,17 @@ async def search_pubmed(request: Request):
 async def get_pubmed_article(request: Request):
     try:
         body = await request.json()
+    except Exception:
+        return ChatToolResponse(error="Request body must be a valid JSON object")
+    if not isinstance(body, dict):
+        return ChatToolResponse(error="Request body must be a JSON object")
+
+    try:
         raw_pmid = body.get("pmid")
-        if not raw_pmid or not str(raw_pmid).strip():
+        if raw_pmid is None or isinstance(raw_pmid, bool) or not str(raw_pmid).strip():
             return ChatToolResponse(error="pmid is required")
 
-        pmid = _normalize_pmid(str(raw_pmid))
+        pmid = _normalize_pmid(raw_pmid)
         if not pmid:
             return ChatToolResponse(error="pmid must be a numeric PubMed ID")
 
@@ -323,12 +344,18 @@ async def get_pubmed_article(request: Request):
 async def get_related_pubmed(request: Request):
     try:
         body = await request.json()
+    except Exception:
+        return ChatToolResponse(error="Request body must be a valid JSON object")
+    if not isinstance(body, dict):
+        return ChatToolResponse(error="Request body must be a JSON object")
+
+    try:
         raw_pmid = body.get("pmid")
         max_results = _clamp_max_results(body.get("max_results", 5))
-        if not raw_pmid or not str(raw_pmid).strip():
+        if raw_pmid is None or isinstance(raw_pmid, bool) or not str(raw_pmid).strip():
             return ChatToolResponse(error="pmid is required")
 
-        pmid = _normalize_pmid(str(raw_pmid))
+        pmid = _normalize_pmid(raw_pmid)
         if not pmid:
             return ChatToolResponse(error="pmid must be a numeric PubMed ID")
 
