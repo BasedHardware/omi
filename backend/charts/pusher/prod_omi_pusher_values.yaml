@@ -300,16 +300,16 @@ env:
   - name: TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: TRANSCRIPTION_FINAL_PASS_PERCENT
-    value: "25"
+    value: "15"
   - name: TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE
     value: "true"
   - name: TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS
-    value: "250"
+    value: "150"
   - name: TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS
-    value: "25000"
+    value: "15000"
   - name: TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED
     value: "true"
-  # Complete stage E: 25% cohort plus the owner UID, bounded by the daily cap.
+  # Complete stage E: 15% cohort plus the owner UID, bounded by the daily cap.
   - name: TRANSCRIPTION_SHADOW_ENABLED
     value: "true"
   - name: TRANSCRIPTION_SHADOW_KILL_SWITCH
@@ -317,9 +317,9 @@ env:
   - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: TRANSCRIPTION_SHADOW_PERCENT
-    value: "25"
+    value: "15"
   - name: TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS
-    value: "2000"
+    value: "1200"
   - name: CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT
     value: "100"
   - name: MEMORY_OWNER_JEV_SHADOW_PERCENT

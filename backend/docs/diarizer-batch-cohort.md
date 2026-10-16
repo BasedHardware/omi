@@ -1,6 +1,6 @@
 # Shared Gateway batch cohort ramp
 
-Lead owns merges, deployments and ramp decisions. The checked-in production binding selects complete stage E: 25% authoritative including sync/backfill, plus David. Stage D (5%) was held clean for 3 hours 2 minutes on 2026-10-16, 02:45→05:47Z: queue depth 0, five replicas with 0 restarts, five T4 nodes, and `upstream_error` about 1%. For an E regression, roll back to complete D with the previous budgets.
+Lead owns merges, deployments and ramp decisions. The checked-in production binding selects complete stage E: 15% authoritative including sync/backfill, plus David. Stage D (5%) was held clean for 3 hours 2 minutes on 2026-10-16, 02:45→05:47Z: queue depth 0, five replicas with 0 restarts, five T4 nodes, and `upstream_error` about 1%. For an E regression, roll back to complete D with the previous budgets.
 Deployment and further long-audio qualification remain lead-owned.
 The reserved prod Gateway is `172.16.160.20`; reservation is not serving readiness.
 Follow [Gateway installation and route probes](../charts/internal-gateway/README.md)
@@ -30,7 +30,7 @@ Combine those constants with the following exact values (all strings):
 | B David authoritative including sync | 0 | 0 | true | true | 1 | 10 | 1,000 | — |
 | C 1% authoritative + David | 1 | 1 | true | true | 80 | 10 | 1,000 | — |
 | D 5% authoritative + David | 5 | 5 | true | true | 400 | 50 | 5,000 | 2026-10-16 02:45→05:47Z (3h 2m): queue 0; 5 replicas, 0 restarts; 5 T4 nodes; `upstream_error` ~1% |
-| E 25% authoritative + David | 25 | 25 | true | true | 2,000 | 250 | 25,000 | Configured; observation pending deployment |
+| E 15% authoritative + David | 15 | 15 | true | true | 1,200 | 150 | 15,000 | Configured; observation pending deployment |
 
 Column names abbreviate the `TRANSCRIPTION_` prefix. Edit only the single
 `<<: &batch_cohort {...}` line in `deploy/runtime_env/prod.overlay.yaml`; the three
@@ -50,7 +50,7 @@ Complete B is the broader David-only rollback: both percentages 0, daily shadow
 budget 1 h, with sync caps 10/1,000 and authoritative=true/sync=true. Complete A
 additionally sets authoritative=false and sync=false.
 
-The checked-in production configuration is E (25%). The preceding D hold met the
+The checked-in production configuration is E (15%). The preceding D hold met the
 three-hour minimum with the readout above. An empty series is not a passing gate.
 Lead records sample counts, baseline, p95 values and the acceptance decision for
 each stage before advancing.
@@ -114,26 +114,30 @@ assignments, clocks, translations and source references on the actual sync outpu
 [Stage C aggregate measurements and provisional capacity model](diarizer-batch-stagec-load.md)
 qualify the combined sync/pusher planning assumptions. The measured long-audio
 T4 RTF is about 0.042, or roughly 24 audio-hours per GPU-hour. At E's sync cap
-of 250 audio-hours per wall-clock hour, steady inference needs about 10.4 T4
-GPU-hours per hour, or 15 nodes at 70% planning utilization. The production batch
-HPA and T4 pool each have a maximum of 18. This covers the steady capacity
-arithmetic, not burst capacity or a p95 latency bound.
+of 150 audio-hours per wall-clock hour, steady inference needs about 6.3 T4
+GPU-hours per hour, or 9 nodes at 70% planning utilization. The production batch
+HPA and T4 pool each have a maximum of 18. The observed D peak was five replicas
+at 5%; linear projection at E is 15 replicas. The HPA scales up by three pods per
+60 seconds, so E uses the current ceiling minus one scale-up step (18 − 3 = 15).
+A 25% stage projects 25 replicas; raise both the diarizer-batch HPA max and T4
+pool max, with scale-up headroom, before considering that stage. These are steady
+capacity projections, not a burst-capacity or p95 latency bound.
 
 The daily cap is already configurable through `TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS`
 and reserved atomically in shared Redis across shadow workers before provider work. It
 charges **all** selected stored audio, even single-speaker triage skips. At the
-planning load of 6,300 audio-h/day, C selects ~63 h, D ~315 h and E ~1,575 h;
-80/400/2,000 h provide headroom. At E, ~709 multi-speaker audio-h/day × measured
-T4 RTF 0.042 is about **29.8 GPU-h/day**. At the same ~45% multi-speaker share,
-spending the entire 2,000 h cap is about **37.8 GPU-h/day**. These are planning
+planning load of 6,300 audio-h/day, C selects ~63 h, D ~315 h and E ~945 h;
+80/400/1,200 h provide headroom. At E, ~426 multi-speaker audio-h/day × measured
+T4 RTF 0.042 is about **17.9 GPU-h/day**. At the same ~45% multi-speaker share,
+spending the entire 1,200 h cap is about **22.7 GPU-h/day**. These are planning
 assumptions, not a T4 load-test receipt.
 Bursts, extra ASR work and retries still require queue/latency gates.
 **Sync has an independent admission cap.** Each process admits one final pass without
-waiting. Shared Redis atomically reserves at most 250 WAV audio-hours and 25,000 attempts
+waiting. Shared Redis atomically reserves at most 150 WAV audio-hours and 15,000 attempts
 per UTC hour across backend, sync and backfill at E. Stage D used 50 audio-hours and
 5,000 attempts; the stage data binds E's
-`TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS=250` and
-`TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS=25000` on all four hosts.
+`TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS=150` and
+`TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS=15000` on all four hosts.
 The reservation uses the shared bounded Redis factory with 0.5s connect/read
 timeouts and closes the client even on timeout. Each retry is charged again; reservations are never refunded. Invalid config,
 Redis failure and exhaustion skip before embedding/GPU calls, emit
@@ -176,8 +180,10 @@ it does not depend on that process-local shadow task.
 2. Deploy complete B to backend, backend-sync, backend-sync-backfill and pusher;
    confirm David's actual backfill jobs log `event=sync_final_pass` and inspect output.
 3. Hold B for acceptance, then advance through C and D only after the gates and
-   combined-load qualification. Advance to E (25%) only after at least 3 clean
-   hours at D and review of the supplied readout. Redeploy all four for each data edit.
+   combined-load qualification. Advance to E (15%) only after at least 3 clean
+   hours at D and review of the supplied readout. A later 25% move requires a
+   higher diarizer-batch HPA and T4 pool maximum first. Redeploy all four for each
+   data edit.
 
 ### Rollback
 
