@@ -660,7 +660,9 @@ def search_action_items(
         return {"action_items": []}
 
     action_items = action_items_db.get_action_items_by_ids(uid, action_item_ids)
-    action_items = [item for item in action_items if not item.get('is_locked', False)]
+    action_items = [
+        item for item in action_items if not item.get('deleted', False) and not item.get('is_locked', False)
+    ]
     return {"action_items": _safe_action_item_responses(action_items, uid=uid)}
 
 
@@ -953,13 +955,25 @@ class ConversationActionItemsDeleteResponse(BaseModel):
 )
 def delete_conversation_action_items(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Delete all action items for a specific conversation."""
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
+
     existing = action_items_db.get_action_items_by_conversation(uid, conversation_id)
+    if any(item.get('is_locked', False) for item in existing):
+        raise HTTPException(status_code=402, detail="A paid plan is required to delete locked action items.")
     existing_ids = [item['id'] for item in existing]
 
     deleted_count = action_items_db.delete_action_items_for_conversation(uid, conversation_id)
 
     if existing_ids:
-        delete_action_item_vectors_batch(uid, existing_ids)
+        try:
+            delete_action_item_vectors_batch(uid, existing_ids)
+        except Exception as e:
+            logger.error("Error deleting task vectors for %s: %s", conversation_id, e)
+        send_action_items_batch_deletion_message(user_id=uid, action_item_ids=existing_ids)
 
     return {"status": "Ok", "deleted_count": deleted_count}
 
@@ -1040,10 +1054,10 @@ class AcceptSharedTasksRequest(BaseModel):
 @router.post("/v1/action-items/share", response_model=ShareActionItemsResponse, tags=['action-items'])
 def share_action_items(request: ShareTasksRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Create a shareable link for selected action items."""
-    # Validate all task_ids belong to user and are not locked
+    # Validate all task_ids belong to user and are not deleted or locked
     for task_id in request.task_ids:
         item = action_items_db.get_action_item(uid, task_id)
-        if not item:
+        if not item or item.get('deleted', False):
             raise HTTPException(status_code=404, detail=f"Action item {task_id} not found")
         if item.get('is_locked', False):
             raise HTTPException(status_code=402, detail="Cannot share locked action items.")
@@ -1070,11 +1084,11 @@ def get_shared_action_items(token: str):
     sender_uid = share_data['uid']
     task_ids = share_data['task_ids']
 
-    # Fetch tasks — only expose description + due_at, skip locked items
+    # Fetch tasks — only expose description + due_at, skip deleted and locked items
     tasks = []
     for task_id in task_ids:
         item = action_items_db.get_action_item(sender_uid, task_id)
-        if item and not item.get('is_locked', False):
+        if item and not item.get('deleted', False) and not item.get('is_locked', False):
             tasks.append(
                 {
                     "description": item.get('description', ''),
@@ -1103,12 +1117,12 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
     sender_uid = share_data['uid']
     task_ids = share_data['task_ids']
 
-    # Pre-validate: check which items exist and which are locked
+    # Pre-validate: check which items exist (and are not soft-deleted) and which are locked
     eligible_ids = []
     existing_items_count = 0
     for task_id in task_ids:
         item = action_items_db.get_action_item(sender_uid, task_id)
-        if item:
+        if item and not item.get('deleted', False):
             existing_items_count += 1
             if not item.get('is_locked', False):
                 eligible_ids.append(task_id)
@@ -1133,7 +1147,7 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
     try:
         for task_id in eligible_ids:
             original = action_items_db.get_action_item(sender_uid, task_id)
-            if not original or original.get('is_locked', False):
+            if not original or original.get('deleted', False) or original.get('is_locked', False):
                 continue
 
             new_item = {
