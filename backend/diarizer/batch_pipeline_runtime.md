@@ -157,11 +157,24 @@ locals, transcript/audio, object URIs or lease/admission tokens to this event.
 Pyannote uses frame-centered VAD intervals: crop their end to the actual input
 duration, reject malformed or wholly outside intervals, and keep every in-buffer
 speech interval. Rebase ASR windows from the integer sample index used to slice
-them. Empty ASR on VAD speech and an ownership-empty hypothesis remain failures;
-neither becomes silence or bypasses accepted content claims. These boundary
-fixes and diagnostic reasons are not proof of the production failure cause.
-There is no retry ceiling or automatic legacy fallback today. Terminal recovery
-needs a separate durable claim/ordered-gap/publication design, not a local skip.
+them. Before failing empty ASR on VAD speech or an ownership-empty hypothesis,
+the Parakeet adapter makes one single-item ASR call over the full captured unit,
+with 2s synthetic silence on each edge and an 8s minimum padded length. The
+padded input must fit both 120s and the configured padded budget; otherwise it
+remains held whole for fenced legacy recovery. No real samples are discarded.
+Validated retry clocks are rebased by 2s and intersected with the real capture;
+words whose midpoint is in synthetic padding are excluded. Original VAD speech
+accounting, diarization input, privacy checks and persistence are unchanged.
+`event=batch_asr_recovery` contains only segment ID, original closed empty reason,
+sample count, original ASR count, recovered word count, original window count,
+minimum/maximum window sample lengths, speech sample count and recovered/empty
+outcome. It and the shared
+fallback metric emit outside exception handlers; observability failure never
+discards healthy results. A retry exception is labeled `stage=asr_recovery` and
+fatal CUDA still fences the entire chain. Remaining empties never become silence
+or bypass accepted content claims. The scheduler's attempt ceiling and the
+separate default-off, owner-allowlisted legacy path are documented in
+[serving settings](../docs/batch-pipeline-serving.md).
 For qualification run a synthetic one-hour unit with the intended model batch
 size and retain the GPU model/VRAM, exact image digest/config and receipt.
 Set the chart **host RAM** limit from the larger measured process/container peak
