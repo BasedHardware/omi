@@ -66,7 +66,7 @@ import config.speaker_match_scores as match_scores
 import config.owner_recognition_diagnostics as owner_diagnostics
 import utils.firestore_document_size as document_size
 from config.repeat_work import playback_on_demand
-from utils.other.playback_identity import source_fingerprint
+from utils.other.playback_identity import source_fingerprint, retain_aliases
 from utils.other.storage import list_audio_chunks
 from utils.observability.fallback import record_fallback
 from .first_open_obligations import (
@@ -1737,6 +1737,11 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bo
         return False
 
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
+    if playback_on_demand() and isinstance(update_data.get('audio_files'), list):
+        update_data = {
+            **update_data,
+            'audio_files': retain_aliases(update_data['audio_files'], doc_snapshot.to_dict().get('audio_files') or []),
+        }
     prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
     guard_match_score_size(prepared_data, doc_snapshot.to_dict(), getattr(doc_ref, 'path', None))
     try:

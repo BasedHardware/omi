@@ -28,3 +28,24 @@ def validate_sources(audio_files: list[dict[str, Any]], chunks: list[dict[str, A
         selected = [chunk for chunk in chunks if chunk['timestamp'] in timestamps]
         if source_fingerprint(selected) != expected:
             raise RuntimeError('playback source manifest changed')
+
+
+def retain_aliases(audio_files: list[dict[str, Any]], previous: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep recent client handles while rebuilding groups, without trusting old artifacts.
+
+    Aliases resolve to the *current* group/identity, never the old cached bytes.
+    A bounded history avoids growing the conversation document on every append.
+    Splits only retain an alias when one new group covers its entire old source.
+    """
+    result = [dict(af) for af in audio_files]
+    for old in previous:
+        timestamps = set(old.get('chunk_timestamps') or [])
+        matches = [af for af in result if timestamps and timestamps <= set(af.get('chunk_timestamps') or [])]
+        if len(matches) != 1:
+            continue
+        target = matches[0]
+        aliases = [*(target.get('legacy_ids') or []), *(old.get('legacy_ids') or []), old.get('id')]
+        target['legacy_ids'] = list(dict.fromkeys(a for a in aliases if isinstance(a, str) and a != target.get('id')))[
+            -128:
+        ]
+    return result

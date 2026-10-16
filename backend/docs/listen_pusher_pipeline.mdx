@@ -4932,8 +4932,9 @@ GCS listing generations/checksums plus the complete ordered chunk geometry selec
 stable UUIDs. Entries without immutable source evidence retain fresh IDs. The worker
 verifies stamped sources before/after merge. Conversation MP3s use immutable
 fingerprint paths, including the conversation origin used for seek offsets. Raw
-capture bytes, metadata, retention and consent rules remain unchanged. Existing IDs
-and their stored objects stay readable; newly rebuilt groups receive stable IDs.
+capture bytes, metadata, retention and consent rules remain unchanged. Up to 128 recent prior IDs per group resolve to the current source identity (never
+to an old artifact); stored objects remain untouched. Clients refresh `/urls` after
+a longer revision history or a group split. Newly rebuilt groups receive stable IDs.
 Demand tasks carry their source-identity protocol through rollback and use separate hourly task names so eager-task tombstones cannot swallow
 first play; run locks coalesce cross-hour deliveries. The first request may return
 pending. Measure `omi_playback_demand_to_ready_seconds` (queue/retry included),

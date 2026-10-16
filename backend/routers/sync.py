@@ -441,14 +441,16 @@ def download_audio_file_endpoint(
     audio_files = conversation.get('audio_files', [])
     audio_file = None
     for af in audio_files:
-        if af.get('id') == audio_file_id:
+        if af.get('id') == audio_file_id or audio_file_id in (af.get('legacy_ids') or []):
             audio_file = af
             break
 
     if not audio_file:
         raise HTTPException(status_code=404, detail="Audio file not found in conversation")
 
-    return sync_playback.download_audio_file_response(uid, conversation_id, audio_file_id, audio_file, request, format)
+    return sync_playback.download_audio_file_response(
+        uid, conversation_id, audio_file['id'], audio_file, request, format
+    )
 
 
 # **********************************************
@@ -2612,14 +2614,14 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
         if not conversation.get('audio_files'):
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'no_audio_files'})
         audio_files = conversation['audio_files']
-        fingerprint = compute_audio_files_fingerprint(
-            audio_files,
-            **(
-                {'origin': conversation.get('started_at') or conversation.get('created_at'), 'source_identity': True}
-                if demand
-                else {}
-            ),
-        )
+        if demand:
+            fingerprint = compute_audio_files_fingerprint(
+                audio_files,
+                origin=conversation.get('started_at') or conversation.get('created_at'),
+                source_identity=True,
+            )
+        else:
+            fingerprint = compute_audio_files_fingerprint(audio_files)
         if payload_fingerprint and payload_fingerprint != fingerprint:
             return JSONResponse(status_code=200, content={'status': 'superseded'})
 

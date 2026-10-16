@@ -244,3 +244,48 @@ async def test_demand_worker_drains_after_flag_rollback_and_reuses_same_artifact
     again = await sync._run_conversation_merge_job(payload, 0)
     assert b'exists' in again.body
     build.assert_called_once()
+
+
+def test_client_aliases_resolve_to_current_source_without_reusing_old_artifact(sync_router_module, monkeypatch):
+    from utils.other.playback_identity import retain_aliases
+
+    previous = [{'id': 'old', 'chunk_timestamps': [1000], 'legacy_ids': ['older']}]
+    current = [{'id': 'current', 'chunk_timestamps': [1000, 1005], 'source_fingerprint': 'changed'}]
+    result = retain_aliases(current, previous)
+    assert result[0]['legacy_ids'] == ['older', 'old']
+    assert 'legacy_ids' not in current[0]  # No mutation of the caller's manifest.
+    sync = sync_router_module
+    monkeypatch.setattr(sync.conversations_db, 'get_conversation', lambda *_: {'audio_files': result})
+    download = Mock(return_value='response')
+    monkeypatch.setattr(sync.sync_playback, 'download_audio_file_response', download)
+    request = SimpleNamespace(headers={})
+    assert sync.download_audio_file_endpoint('c', 'older', request, 'wav', 'u') == 'response'
+    assert download.call_args.args[2] == 'current'
+
+
+def test_inline_requests_share_one_build_with_only_playback_flag(monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    from utils.other import audio_singleflight
+
+    monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'true')
+    monkeypatch.setattr(audio_singleflight, 'admitted', lambda *_: False)
+    entered, finish, joined = Event(), Event(), Event()
+    counter = Mock()
+    monkeypatch.setattr(audio_singleflight.REBUILDS_COALESCED, 'inc', joined.set)
+
+    @audio_singleflight.coalesce_rebuild
+    def build(uid, conversation_id, source):
+        counter()
+        entered.set()
+        assert finish.wait(2)
+        return source
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(build, 'u', 'c', 'same-source')
+        assert entered.wait(2)
+        second = pool.submit(build, 'u', 'c', 'same-source')
+        assert joined.wait(2)
+        finish.set()
+        assert first.result() == second.result() == 'same-source'
+    counter.assert_called_once()

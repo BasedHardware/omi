@@ -172,14 +172,12 @@ def _conversation_audio_urls_entry(
     lifecycle) falls through to pending + re-enqueue under a fingerprint-named
     task, making staleness self-healing.
     """
-    fingerprint = compute_audio_files_fingerprint(
-        audio_files,
-        **(
-            {'origin': (conversation or {}).get('started_at') or (conversation or {}).get('created_at')}
-            if playback_on_demand()
-            else {}
-        ),
-    )
+    if playback_on_demand():
+        fingerprint = compute_audio_files_fingerprint(
+            audio_files, origin=(conversation or {}).get('started_at') or (conversation or {}).get('created_at')
+        )
+    else:
+        fingerprint = compute_audio_files_fingerprint(audio_files)
     stamp = (conversation or {}).get('conversation_audio') or {}
     if stamp.get('audio_files_fingerprint') == fingerprint:
         signed_url = get_conversation_playback_signed_url(
