@@ -2090,9 +2090,15 @@ class ListenReceiver(ReplayFilterMixin):
         elif kind == 'speaker_assigned':
             await self._handle_speaker_assigned(payload)
         elif kind == 'client_state':
-            from utils.conversations.demand_processing import observe_surface
+            from config.demand_processing import enabled as demand_enabled, surface_reporting_enabled
 
-            if 'surface_open' in payload or self._telemetry_platform() in {'ios', 'android', 'mobile'}:
+            if (
+                demand_enabled(self.host.request.uid)
+                and surface_reporting_enabled()
+                and ('surface_open' in payload or self._telemetry_platform() in {'ios', 'android', 'mobile'})
+            ):
+                from utils.conversations.demand_processing import observe_surface
+
                 await run_blocking(
                     db_executor, observe_surface, self.host.request.uid, str(self.host.session_id), payload
                 )
