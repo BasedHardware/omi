@@ -13,7 +13,7 @@ environment_shared:
       - memory.canonical.mutate
       env:
         FIRESTORE_READ_LEVERS:
-          value: '{}'
+          value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}'
           category: rollout
         FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
         FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -400,7 +400,7 @@ environment_shared:
       values_file: backend/charts/pusher/{env}_omi_pusher_values.yaml
       env:
         FIRESTORE_READ_LEVERS:
-          value: '{}'
+          value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}'
           category: rollout
         FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
         FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -555,7 +555,7 @@ environment_shared:
       FIRESTORE_READ_LEDGER:
         value: '1'
       FIRESTORE_READ_LEVERS:
-        value: '{}'
+        value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}'
         category: rollout
       FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
       FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -669,7 +669,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{}'
+            value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -920,7 +920,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{}'
+            value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1160,7 +1160,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{}'
+            value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1394,7 +1394,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{}'
+            value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1529,7 +1529,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{}'
+            value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1579,7 +1579,7 @@ environment_shared:
             version: latest
         env:
           FIRESTORE_READ_LEVERS:
-            value: '{}'
+            value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1642,7 +1642,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{}'
+            value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1712,7 +1712,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{}'
+            value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1760,7 +1760,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{}'
+            value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1828,7 +1828,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{}'
+            value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1874,7 +1874,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{}'
+            value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
