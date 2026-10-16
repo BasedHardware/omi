@@ -17,6 +17,17 @@ BYOK funding, additive metrics and the per-client activation decision.
 
 ## Windowed live transcription deadlines
 
+Parakeet packing is independently gated by `PARAKEET_PACKING_ENABLED=false`
+on the GPU service. When enabled, `/v1` and `/v2` historical uploads enter the
+same scheduler as live windows, one at-most-120-second GPU quantum at a time.
+Queued live windows always win the next dispatch; a running kernel cannot be
+preempted. Whole-file `/v2` speaker clustering retains the original audio and
+absolute segment times. This changes neither window session admission nor the
+2 requests / 35% capacity decision. The independent `PARAKEET_EXPLICIT_CUDA_GRAPHS`
+flag persists the existing CUDA graph selection across NeMo timestamp setup.
+The [packing runbook](runbooks/parakeet-packing.md) owns the demand-scaler train,
+warm floor, mixed-load gates and rollback.
+
 `PARAKEET_WINDOW_DEADLINE_CUT_ENABLED` defaults to `false` in code and
 both listen manifests. Qualification must explicitly enable it in the target
 listen cohort. While enabled, a successful nonempty POST can release its held
