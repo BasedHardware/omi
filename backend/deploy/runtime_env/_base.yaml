@@ -22,6 +22,10 @@ environment_shared:
       - conversation.finalize.persisted
       - memory.canonical.mutate
       env:
+        PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+        REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+        REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
+        SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
         FIRESTORE_READ_LEVERS:
           value: '{"action_items_page":5,"backfill_task_reads":0,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":0,"subscription_cache":5,"usage_month_cache":5}'
           category: rollout
@@ -558,6 +562,10 @@ environment_shared:
       - memory.canonical.mutate
       values_file: backend/charts/pusher/{env}_omi_pusher_values.yaml
       env:
+        PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+        REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+        REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
+        SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
         FIRESTORE_READ_LEVERS:
           value: '{"action_items_page":5,"backfill_task_reads":0,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":0,"subscription_cache":5,"usage_month_cache":5}'
           category: rollout
@@ -924,6 +932,10 @@ environment_shared:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1335,6 +1347,10 @@ environment_shared:
             secret: GOOGLE_MAPS_API_KEY
             version: latest
         env:
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1717,6 +1733,10 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -2080,6 +2100,10 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout

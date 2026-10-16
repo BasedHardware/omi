@@ -629,6 +629,7 @@ class GeneratedAudioFile {
   final double duration;
   final String id;
   final String provider;
+  final String? sourceFingerprint;
   final DateTime? startedAt;
   final String uid;
 
@@ -639,6 +640,7 @@ class GeneratedAudioFile {
     required this.duration,
     required this.id,
     this.provider = "gcp",
+    this.sourceFingerprint,
     this.startedAt,
     required this.uid,
   });
@@ -651,6 +653,7 @@ class GeneratedAudioFile {
       duration: _required(_readFieldValue<double>(_readField(json, const ["duration"]), "duration", _readDouble, requiredField: true, nullable: false), "duration"),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
       provider: _required(_readFieldValue<String>(_readField(json, const ["provider"]), "provider", _readString, requiredField: false, nullable: false, defaultValue: "gcp"), "provider"),
+      sourceFingerprint: _readFieldValue<String>(_readField(json, const ["source_fingerprint"]), "source_fingerprint", _readString, requiredField: false, nullable: true),
       startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: false, nullable: true),
       uid: _required(_readFieldValue<String>(_readField(json, const ["uid"]), "uid", _readString, requiredField: true, nullable: false), "uid"),
     );
@@ -664,6 +667,7 @@ class GeneratedAudioFile {
       'duration': duration,
       'id': id,
       'provider': provider,
+      'source_fingerprint': sourceFingerprint,
       'started_at': startedAt?.toUtc().toIso8601String(),
       'uid': uid,
     };
