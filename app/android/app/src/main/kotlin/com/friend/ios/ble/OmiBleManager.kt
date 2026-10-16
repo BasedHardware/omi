@@ -259,9 +259,6 @@ class OmiBleManager private constructor(private val application: Application) {
                 val device = result.device
                 val address = device.address.uppercase()
                 discoveredDevices[address] = device
-                if (Build.VERSION.SDK_INT >= 34) {
-                    saveAddressType(address, device.addressType)
-                }
                 val record = result.scanRecord
                 val name = discoveredPeripheralName(
                     advertisedName = record?.deviceName,
@@ -324,7 +321,7 @@ class OmiBleManager private constructor(private val application: Application) {
         // for public peripherals like OMI Glass); next check persisted address type from prior successful
         // connections (to handle reconnects after process restart); fall back to ADDRESS_TYPE_RANDOM on API 34+.
         val device = discoveredDevices[addr] ?: if (Build.VERSION.SDK_INT >= 34) {
-            val addressType = getPersistedAddressType(addr) ?: BluetoothDevice.ADDRESS_TYPE_RANDOM
+            val addressType = resolveAddressTypeForConnect(null, getPersistedAddressType(addr))
             adapter.getRemoteLeDevice(addr, addressType)
         } else {
             adapter.getRemoteDevice(addr)
