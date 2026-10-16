@@ -68,7 +68,7 @@ export function rollupSql(r: RollupRequest) {
     else
       body =
         `WITH ${ranked},
-      anchors AS (SELECT actor,MIN(anchor) anchor FROM data WHERE kind='identity' GROUP BY actor),
+      anchors AS (SELECT actor,MIN(anchor) anchor FROM data WHERE kind='activity' GROUP BY actor),
       labelled AS (SELECT a.*,d.n,prior.actor IS NOT NULL retained,
         prior.actor IS NULL AND i.anchor >= TIMESTAMP_SUB(${t(
           r.end

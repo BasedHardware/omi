@@ -148,6 +148,15 @@ function timestamp(v: unknown): string {
     ? iso.replace(/\.\d{3}Z$/, `.${fraction}Z`)
     : iso;
 }
+/** Personless events have no person.created_at; their identity observations
+ * keep a real null anchor instead of aborting the whole day's extraction.
+ * HogQL renders a null anchor as null/"null"; epoch sentinels also store null. */
+function anchorOf(v: unknown): string | null {
+  if (v === null || v === undefined) return null;
+  const text = String(v);
+  if (!/\d/.test(text) || /^null$/i.test(text)) return null;
+  return Date.parse(timestamp(text)) === 0 ? null : timestamp(text);
+}
 export function anonymize(day: string, r: unknown[], key: string): DailyRow {
   if (
     r.length !== 14 ||
@@ -162,7 +171,7 @@ export function anonymize(day: string, r: unknown[], key: string): DailyRow {
     row_key: hashId(key, String(r[13]), "row"),
     kind: String(r[1]),
     p: String(r[2]),
-    anchor: Date.parse(timestamp(r[3])) === 0 ? null : timestamp(r[3]),
+    anchor: anchorOf(r[3]),
     first_at: timestamp(r[4]),
     latest: timestamp(r[5]),
     activity_day: String(r[6]),

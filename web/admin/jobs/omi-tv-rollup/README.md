@@ -128,16 +128,19 @@ idempotent desired bindings, not claims that every grant is currently missing.
 
    This creates dataset and tables through code; no separate `bq mk` is needed.
 
-2. Apply dataset-scoped IAM with BigQuery's dataset binding command (there is no
-   equivalent supported `gcloud ... datasets add-iam-policy-binding`):
+2. Apply dataset-scoped IAM with BigQuery schema-level DCL grants. `bq
+   add-iam-policy-binding` supports tables/views only — not datasets — and there
+   is no supported `gcloud ... datasets add-iam-policy-binding`:
 
    ```sh
-   bq add-iam-policy-binding --dataset \
-     --member='serviceAccount:finops-writer@based-hardware.iam.gserviceaccount.com' \
-     --role='roles/bigquery.dataEditor' based-hardware:omi_tv
-   bq add-iam-policy-binding --dataset \
-     --member='serviceAccount:omi-admin-dashboard-runtime@based-hardware.iam.gserviceaccount.com' \
-     --role='roles/bigquery.dataViewer' based-hardware:omi_tv
+   bq query --project_id=based-hardware --location=US --use_legacy_sql=false \
+     "GRANT \`roles/bigquery.dataEditor\`
+      ON SCHEMA \`based-hardware.omi_tv\`
+      TO 'serviceAccount:finops-writer@based-hardware.iam.gserviceaccount.com';"
+   bq query --project_id=based-hardware --location=US --use_legacy_sql=false \
+     "GRANT \`roles/bigquery.dataViewer\`
+      ON SCHEMA \`based-hardware.omi_tv\`
+      TO 'serviceAccount:omi-admin-dashboard-runtime@based-hardware.iam.gserviceaccount.com';"
    gcloud projects add-iam-policy-binding based-hardware \
      --member='serviceAccount:finops-writer@based-hardware.iam.gserviceaccount.com' \
      --role=roles/bigquery.jobUser --condition=None

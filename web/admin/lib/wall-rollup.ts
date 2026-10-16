@@ -76,31 +76,47 @@ export async function readRollup(
 }
 
 let statusCache: { at: number; value: RollupStatus } | undefined;
-export async function rollupStatus(): Promise<RollupStatus> {
+export async function rollupStatus(
+  db: RollupDb = client()
+): Promise<RollupStatus> {
   if (process.env.OMI_TV_ROLLUP_ENABLED !== "1")
     return { through: null, reason: "disabled" };
   if (statusCache && Date.now() - statusCache.at < 60_000)
     return statusCache.value;
-  let value: RollupStatus;
-  try {
-    const [rows] = await client().query({
-      ...opts,
-      query: `SELECT FORMAT_DATE('%F',MAX(day)) through FROM \`${DATASET}.coverage\`
+  // Supplemental display text only: never hold a headline response on a slow or
+  // degraded BigQuery. The lookup is capped at one second and keeps filling the
+  // cache in the background, so a timed-out read retries on a later request and
+  // serves the stale cached value in the meantime.
+  const lookup = (async (): Promise<RollupStatus> => {
+    let value: RollupStatus;
+    try {
+      const [rows] = await db.query({
+        ...opts,
+        query: `SELECT FORMAT_DATE('%F',MAX(day)) through FROM \`${DATASET}.coverage\`
       WHERE day >= DATE_SUB(CURRENT_DATE('UTC'),INTERVAL 400 DAY) AND day<CURRENT_DATE('UTC') AND definition=@definition AND key_id=@keyId`,
-      params: {
-        definition: ROLLUP_VERSION,
-        keyId: keyId(process.env.CRON_SECRET || ""),
-      },
-    });
-    value = {
-      through: rows[0]?.through || null,
-      reason: rows[0]?.through ? null : "no completed days",
-    };
-  } catch {
-    value = { through: null, reason: "unavailable" };
-  }
-  statusCache = { at: Date.now(), value };
-  return value;
+        params: {
+          definition: ROLLUP_VERSION,
+          keyId: keyId(process.env.CRON_SECRET || ""),
+        },
+      });
+      value = {
+        through: rows[0]?.through ? String(rows[0].through) : null,
+        reason: rows[0]?.through ? null : "no completed days",
+      };
+    } catch {
+      value = { through: null, reason: "unavailable" };
+    }
+    statusCache = { at: Date.now(), value };
+    return value;
+  })();
+  let timer: ReturnType<typeof setTimeout>;
+  const capped = new Promise<RollupStatus>((resolve) => {
+    timer = setTimeout(
+      () => resolve(statusCache?.value ?? { through: null, reason: "slow" }),
+      1_000
+    );
+  });
+  return Promise.race([lookup, capped]).finally(() => clearTimeout(timer));
 }
 export async function preferRollup(
   read: RollupRead | undefined,

@@ -59,6 +59,27 @@ it("preserves microseconds for exact recency and signup-window boundaries", () =
     "dateDiff('microsecond',anchor,qt)/86400000000"
   );
 });
+it("keeps profileless identity observations instead of aborting the day", () => {
+  const personless = feature("n", "identity");
+  personless[3] = null;
+  const row = anonymize(day, personless, key);
+  expect(row.anchor).toBeNull();
+  expect(row.kind).toBe("identity");
+  // HogQL's stringified null ("null") and epoch sentinels must also stay null.
+  const textNull = feature("t", "identity");
+  textNull[3] = "null";
+  expect(anonymize(day, textNull, key).anchor).toBeNull();
+  const epoch = feature("e", "identity");
+  epoch[3] = "1970-01-01 00:00:00";
+  expect(anonymize(day, epoch, key).anchor).toBeNull();
+});
+it("growth freshness derives only from app activity anchors, never identity rows", () => {
+  const growth = rollupSql({ kind: "growth", end, periods: 1 });
+  expect(growth.query).toContain(
+    "anchors AS (SELECT actor,MIN(anchor) anchor FROM data WHERE kind='activity' GROUP BY actor)"
+  );
+  expect(growth.query).not.toContain("kind='identity' GROUP BY actor),\n      labelled");
+});
 it("extracts closed days with a one-day MCP probe and keyset pages, never OFFSET", () => {
   const sql = dailyExtractQuery(day, "a'\\b");
   const starts = Array.from(
@@ -141,6 +162,31 @@ it("requires every receipt for the exact version and key epoch, otherwise uses e
   const noFallback = vi.fn();
   await preferRollup(async () => got, request, noFallback);
   expect(noFallback).not.toHaveBeenCalled();
+});
+it("caps the rollup status lookup at one second and keeps filling the cache", async () => {
+  vi.stubEnv("OMI_TV_ROLLUP_ENABLED", "1");
+  vi.stubEnv("CRON_SECRET", key);
+  const { rollupStatus } = await import("../wall-rollup");
+  let release: ((rows: unknown) => void) | undefined;
+  const slow = {
+    query: () =>
+      new Promise<[Record<string, unknown>[]]>((resolve) => {
+        release = (rows) => resolve([rows as Record<string, unknown>[]]);
+      }),
+  } as unknown as import("../wall-rollup").RollupDb;
+  const started = Date.now();
+  const first = await rollupStatus(slow);
+  expect(Date.now() - started).toBeLessThan(2_000);
+  expect(first.through).toBeNull();
+  expect(["slow", "unavailable", "no completed days"]).toContain(
+    first.reason
+  );
+  // The background lookup still populates the cache once it finishes.
+  release?.([{ through: "2026-10-11" }]);
+  await new Promise((r) => setTimeout(r, 20));
+  const second = await rollupStatus(slow);
+  expect(second.through).toBe("2026-10-11");
+  expect(second.reason).toBeNull();
 });
 it("guards cohort lookback, exact signup-relative bins, entry platform, and frozen retention platform", () => {
   const cohort = rollupSql({ kind: "cohort", end, maturity: 37, periods: 6 });
