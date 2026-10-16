@@ -1283,7 +1283,7 @@ describe("JsonlTransport promptBlocks screen marker", () => {
   it("local provider, image present but NOT flagged as a screen capture (a user attachment): text ends with the neutral image marker instead", () => {
     // Regression: this marker used to be unconditional on OMI_PROVIDER alone,
     // so a user-attached photo (not a screen capture) was also told to the
-    // model as "the current screen" — a false statement that could also
+    // model as "the current screen", a false statement that could also
     // suppress a legitimate screen capture for an unrelated question.
     process.env.OMI_PROVIDER = "omi-local";
     const { store, session, transport } = fixture();

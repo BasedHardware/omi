@@ -1224,8 +1224,6 @@ class ChatProvider: ObservableObject {
     if let agentClient { return agentClient }
     let harness = resolvedHarnessMode()
     activeBridgeHarness = harness
-    activeBridgeMode =
-      UserDefaults.standard.string(forKey: .chatBridgeMode) ?? BridgeMode.piMono.rawValue
     activeProviderMode = AIProvider.providerMode(forBridgeModeRawValue: bridgeMode)
     let session = AgentClient.makeSession(harnessMode: harness)
     agentClient = session
@@ -1269,8 +1267,6 @@ class ChatProvider: ObservableObject {
   /// @AppStorage("chatBridgeMode") can be updated by other views sharing the same key,
   /// so comparing against it in switchBridgeMode() would always match → no-op.
   private var activeBridgeHarness: String = "piMono"
-  /// Persisted bridge mode the runtime last configured (not only harness).
-  private var activeBridgeMode: String = BridgeMode.piMono.rawValue
   /// Same idea as `activeBridgeHarness`, one layer down: piMono and Local
   /// share that harness, differing only in which pi provider ("omi" /
   /// "omi-local") it is actually configured with. Tracks what
@@ -2285,7 +2281,7 @@ class ChatProvider: ObservableObject {
     // itself (rather than `activeProviderMode`) would not catch this: it is
     // @AppStorage-backed by the same "chatBridgeMode" key the Settings picker
     // writes, so by the time this async function reads it, it may already
-    // reflect `resolvedMode` — the exact dead-guard bug `activeBridgeHarness`
+    // reflect `resolvedMode`, the exact dead-guard bug `activeBridgeHarness`
     // exists to avoid one layer up.
     // `switchApplyInFlight`: a restart/reconfigure this function starts is
     // awaited across a suspension point, during which a second call (a rapid
@@ -2294,12 +2290,12 @@ class ChatProvider: ObservableObject {
     // destination happens to match those still-stale trackers (e.g. the user
     // flips back to the original provider before the first switch finished),
     // comparing only against them would wrongly treat it as no change needed
-    // and silently do nothing. While a switch is in flight, always proceed —
+    // and silently do nothing. While a switch is in flight, always proceed ,
     // worst case this piggybacks on the in-flight restart/reconfigure (see
     // AgentBridge.runLifecycleOperation's same-kind flight coalescing), or a
     // later restart tears the process down under an earlier reconfigure RPC,
     // whose `.stopped` failure the generation guard below swallows so only
-    // the newest switch reports — either way beats a switch nobody applied.
+    // the newest switch reports, either way beats a switch nobody applied.
     guard
       newHarness != previousHarness || newProviderMode != previousProviderMode
         || switchApplyInFlight
@@ -2312,7 +2308,7 @@ class ChatProvider: ObservableObject {
     // `activeBridgeHarness`/`activeProviderMode` claim to track what is
     // ACTUALLY running (billing and credential gating depend on that), so
     // they must not flip until the operation below actually applies the
-    // change — a failed restart (e.g. `requestAlreadyActive` because a chat
+    // change, a failed restart (e.g. `requestAlreadyActive` because a chat
     // request is in flight) must leave them exactly as they were, or a
     // retry of the same switch would wrongly no-op against the guard above,
     // and billing would treat a still-old-provider process as switched.

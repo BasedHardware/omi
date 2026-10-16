@@ -966,10 +966,10 @@ final class UpdaterViewModel: ObservableObject {
 
   private init() {
     // Preview builds must not use the shared update feed. Do not start Sparkle for those
-    // artifacts. xctest is excluded the same way, see `isRunningUnderXCTest` above — and
+    // artifacts. xctest is excluded the same way, see `isRunningUnderXCTest` above, and
     // `checkForUpdates()`/`checkForUpdatesInBackground()` repeat the same check
     // themselves (not just `AppBuild.allowsSparkleUpdates`, which alone is true
-    // under xctest — no `com.omi.` bundle id in a test host): relying on Sparkle's
+    // under xctest, no `com.omi.` bundle id in a test host): relying on Sparkle's
     // own updater no-op'ing when asked to check while never started here was the
     // bug this class shipped with (see the automated-review finding this fixed).
     updaterController = SPUStandardUpdaterController(

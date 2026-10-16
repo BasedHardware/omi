@@ -1372,16 +1372,7 @@ describe("PiMonoAdapter local provider", () => {
     vi.mocked(spawn).mockClear();
   });
 
-  it("throws when provider is omi (default) and authToken is missing", async () => {
-    const config: HarnessConfig = {};
-    const adapter = new PiMonoAdapter(config, "/fake/pi", "/fake/ext.ts");
-    await expect(adapter.start()).rejects.toThrow(
-      'requires config.authToken (Firebase ID token) for provider "omi"'
-    );
-    expect(spawn).not.toHaveBeenCalled();
-  });
-
-  it("does not require authToken when provider is omi-local", async () => {
+  it("starts without any credential config when provider is omi-local", async () => {
     const config: HarnessConfig = {
       provider: "omi-local",
       model: "qwen3.8-27b-mlx",

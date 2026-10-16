@@ -933,7 +933,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
 
     // Quick toggles for screen capture and audio recording.
     // When paywalled (trial expired / usage limit hit), *starting* either is
-    // blocked and tapping the toggle surfaces the upgrade popup — but the
+    // blocked and tapping the toggle surfaces the upgrade popup, but the
     // switch itself must display whether monitoring is actually running
     // (SystemCaptureControls.isScreenCaptureOn), not a paywall-gated guess:
     // the paywall never blocks stopping, so a display gated on it could show

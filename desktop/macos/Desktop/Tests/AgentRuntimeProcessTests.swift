@@ -1035,7 +1035,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
   // distinct classification (see `ChatQueryTelemetryTests`) or the actionable
   // error message `AgentBridge`'s `.localConfigMissing` case returns. Reaching
   // this catch block behaviorally needs a real owner-authorization snapshot and
-  // an attempted process spawn — this pins the ordering directly instead.
+  // an attempted process spawn, this pins the ordering directly instead.
   func testLocalConfigMissingSurvivesStartProcessCatchInsteadOfBecomingFailedToStart() throws {
     let source = try agentRuntimeSource()
     let catchStart = try XCTUnwrap(source.range(of: "receipt = try await startupSingleFlight.run"))

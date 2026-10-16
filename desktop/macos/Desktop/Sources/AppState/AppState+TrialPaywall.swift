@@ -29,7 +29,7 @@ extension AppState {
   ///   text to Omi regardless of the cloud-assist setting), so the
   ///   free-tier question quota does not apply: `isLocalProviderActive`
   ///   alone is enough.
-  /// - `"ptt"`: exempted for a different reason than `"chat"` — a PTT turn
+  /// - `"ptt"`: exempted for a different reason than `"chat"`, a PTT turn
   ///   does NOT run its completion against the user's own server. Online,
   ///   it runs end to end (audio in, transcript, and the reply) inside
   ///   Omi's cloud realtime hub, regardless of the active chat provider.

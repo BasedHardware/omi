@@ -173,7 +173,7 @@ final class LocalProviderSettingsRestartTests: XCTestCase {
   /// redundant one from `onComplete`. (That second restart used to be
   /// rejected by `AgentRuntimeProcess`'s single-flight guard as
   /// `BridgeError.restarting`, which `ChatProvider.restartLocalBridgeIfActive()`
-  /// surfaced as a false "Could not apply local model change" error — this
+  /// surfaced as a false "Could not apply local model change" error, this
   /// test only asserts the restart count now; see git history if you need the
   /// error-surfacing behavior covered separately.)
   ///

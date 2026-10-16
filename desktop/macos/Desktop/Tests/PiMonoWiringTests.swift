@@ -183,14 +183,14 @@ final class PiMonoWiringTests: XCTestCase {
 
   /// Regression: `switchBridgeMode` must actually apply a piMono <-> local
   /// switch even when the "chatBridgeMode" UserDefaults key already reflects
-  /// the destination value before the call starts — exactly what happens in
+  /// the destination value before the call starts, exactly what happens in
   /// production when the Settings picker's own `@AppStorage("chatBridgeMode")`
   /// binding (a separate property from `ChatProvider.bridgeMode`, sharing the
   /// same key) writes the new value synchronously, before its `.onChange`
   /// handler's Task gets around to calling `switchBridgeMode` (see
   /// SettingsContentView+FloatingBarAndChat.swift). A guard that re-reads
   /// `bridgeMode` to detect "did this actually change" always sees the new
-  /// value already in place in that ordering and silently no-ops — this is
+  /// value already in place in that ordering and silently no-ops, this is
   /// exactly why `activeProviderMode` exists instead.
   @MainActor
   func testSwitchBridgeModeAppliesPiMonoLocalSwitchEvenWhenThePreferenceKeyAlreadyReflectsIt() async {
@@ -228,8 +228,8 @@ final class PiMonoWiringTests: XCTestCase {
   // must assign `activeBridgeHarness`/`activeProviderMode` only after its
   // `restart()`/`configureDefaultExecutionProfile` call actually succeeds, not
   // before attempting it. Assigning first (as this code originally did) means a
-  // failed restart — e.g. `BridgeError.requestAlreadyActive` because a chat
-  // request is in flight, the exact scenario an automated review caught —
+  // failed restart, e.g. `BridgeError.requestAlreadyActive` because a chat
+  // request is in flight, the exact scenario an automated review caught ,
   // leaves billing (`ChatRunAccountingPolicy`) and the no-op guard on the next
   // call both trusting a switch that never actually took effect. Reaching the
   // restart-failure path behaviorally needs a registered, live shared runtime

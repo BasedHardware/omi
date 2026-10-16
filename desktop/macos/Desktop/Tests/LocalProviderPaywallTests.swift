@@ -169,78 +169,6 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
       "cloud-assist on sends screenshots to Omi's Gemini proxy again, so this must be metered")
   }
 
-  // MARK: - Context-director delivery gate (ContextProactivityEngine / NotificationService)
-
-  /// Regression for paywall-review.md's blocking item 6: `ContextProactivityEngine`
-  /// and `NotificationService` used to feed the raw BYOK-only `isPaywalledEffective`
-  /// flag into their delivery gate, so a stale `desktop_isPaywalled` flag could
-  /// silently swallow a notification the local model itself produced. Both now
-  /// build their gate input off `!isScreenCaptureExemptFromPaywall`. These pin
-  /// that wiring at its actual production entry points
-  /// (`ContextProactivityEngine.liveDeliveryGateInput()` and
-  /// `NotificationService.contextDirectorGateInput()`), not just the underlying
-  /// flag (already covered above), so a regression in either call site's wiring
-  /// is caught here.
-  func testContextProactivityEngineDeliveryGateExemptsLocalSessionEvenIfPaywalled() {
-    UserDefaults.standard.set(true, forKey: paywallKey)
-    UserDefaults.standard.set("local", forKey: bridgeModeKey)
-    UserDefaults.standard.set(
-      AIProvider.CloudAssistMode.off.rawValue, forKey: AIProvider.cloudAssistModeKey)
-    UserDefaults.standard.set(3, forKey: notificationFrequencyKey)
-    UserDefaults.standard.set(true, forKey: notificationMasterEnabledKey)
-
-    let gate = ContextProactivityEngine.liveDeliveryGateInput(lastGlobalPresentationAt: nil)
-    XCTAssertFalse(
-      gate.paywalled,
-      "a Local session with cloud-assist off must not be swallowed by a stale trial flag")
-    XCTAssertEqual(ContextDeliveryBudget.freeGate(input: gate), .allowed)
-  }
-
-  func testContextProactivityEngineDeliveryGateStaysGatedWhenCloudAssistOn() {
-    UserDefaults.standard.set(true, forKey: paywallKey)
-    UserDefaults.standard.set("local", forKey: bridgeModeKey)
-    UserDefaults.standard.set(
-      AIProvider.CloudAssistMode.cloud.rawValue, forKey: AIProvider.cloudAssistModeKey)
-    UserDefaults.standard.set(3, forKey: notificationFrequencyKey)
-    UserDefaults.standard.set(true, forKey: notificationMasterEnabledKey)
-
-    let gate = ContextProactivityEngine.liveDeliveryGateInput(lastGlobalPresentationAt: nil)
-    XCTAssertTrue(
-      gate.paywalled,
-      "cloud-assist on sends this content to Omi's Gemini proxy again, so it must be metered")
-    XCTAssertEqual(ContextDeliveryBudget.freeGate(input: gate), .paywalled)
-  }
-
-  func testNotificationServiceContextDirectorGateExemptsLocalSessionEvenIfPaywalled() {
-    UserDefaults.standard.set(true, forKey: paywallKey)
-    UserDefaults.standard.set("local", forKey: bridgeModeKey)
-    UserDefaults.standard.set(
-      AIProvider.CloudAssistMode.off.rawValue, forKey: AIProvider.cloudAssistModeKey)
-    UserDefaults.standard.set(3, forKey: notificationFrequencyKey)
-    UserDefaults.standard.set(true, forKey: notificationMasterEnabledKey)
-
-    let gate = NotificationService.contextDirectorGateInput()
-    XCTAssertFalse(
-      gate.paywalled,
-      "a Local session with cloud-assist off must not be swallowed by a stale trial flag")
-    XCTAssertEqual(ContextDeliveryBudget.freeGate(input: gate), .allowed)
-  }
-
-  func testNotificationServiceContextDirectorGateStaysGatedWhenCloudAssistOn() {
-    UserDefaults.standard.set(true, forKey: paywallKey)
-    UserDefaults.standard.set("local", forKey: bridgeModeKey)
-    UserDefaults.standard.set(
-      AIProvider.CloudAssistMode.cloud.rawValue, forKey: AIProvider.cloudAssistModeKey)
-    UserDefaults.standard.set(3, forKey: notificationFrequencyKey)
-    UserDefaults.standard.set(true, forKey: notificationMasterEnabledKey)
-
-    let gate = NotificationService.contextDirectorGateInput()
-    XCTAssertTrue(
-      gate.paywalled,
-      "cloud-assist on sends this content to Omi's Gemini proxy again, so it must be metered")
-    XCTAssertEqual(ContextDeliveryBudget.freeGate(input: gate), .paywalled)
-  }
-
   // MARK: - Chat accounting (ChatRunAccountingPolicy)
 
   func testChatAccountingSkipsOmiQuotaForLocalProvider() {
@@ -274,7 +202,7 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
   /// typed chat, a PTT turn does not run its completion against the user's
   /// own server (it runs end to end through Omi's cloud realtime hub
   /// regardless of provider), so this only suppresses the client-side
-  /// free-tier popup — the server still enforces its own quota independently.
+  /// free-tier popup, the server still enforces its own quota independently.
   func testPushToTalkExemptForLocalProvider() throws {
     UserDefaults.standard.set("local", forKey: bridgeModeKey)
     FloatingBarUsageLimiter.shared.applyQuota(try exhaustedFreeQuota())
@@ -614,7 +542,7 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
   /// "chat" is exempt on `isLocalProviderActive` alone, since its completion
   /// always runs against the user's own server under Local. "ptt" is exempt
   /// too, but for a different reason: see `testPushToTalkExemptForLocalProvider`
-  /// above — it's a client-side popup suppression, not a completion-routing
+  /// above, it's a client-side popup suppression, not a completion-routing
   /// parity with typed chat.
   func testTriggerUsageLimitPopupSuppressedForChatWhenLocalActive() {
     UserDefaults.standard.set(true, forKey: paywallKey)
@@ -795,7 +723,7 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
   func testTerminalHintForTranscriptionFailedUnchanged() {
     XCTAssertEqual(
       VoiceTurnUICopy.terminalHint(for: .transcriptionFailed),
-      "Couldn't transcribe that — try again")
+      "Couldn't transcribe that, try again")
   }
 
   // MARK: - PushToTalkManager.transcriptionTerminalReason

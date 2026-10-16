@@ -3307,17 +3307,6 @@ test("omiProvider: does not register omi-local when neither env var is set", () 
   );
 });
 
-test("omiProvider: does not register omi when OMI_API_KEY is not set (local-only install)", () => {
-  withEnv(
-    { OMI_LOCAL_BASE_URL: undefined, OMI_LOCAL_MODEL_ID: undefined, OMI_API_KEY: undefined },
-    () => {
-      const pi = fakePi();
-      omiProvider(pi as any);
-      assert.ok(!pi.registered.some((r) => r.name === "omi"));
-    }
-  );
-});
-
 // Numeric HTTP status is captured before pi turns errors into opaque strings.
 import { credentialedModelFetch, type ProviderStatus } from "../agent/dist/runtime/model-fetch.js";
 

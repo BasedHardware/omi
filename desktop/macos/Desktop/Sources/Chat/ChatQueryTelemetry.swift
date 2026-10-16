@@ -32,7 +32,7 @@ enum ChatQueryErrorClass: String, Equatable, Sendable {
     case .agentError, .agentRuntime, .timeout, .toolStall: return .agentRuntime
     case .bridgeUnavailable, .bridgeStartFailed: return .bridgeProcess
     // A missing Local base URL/model id is a user-configuration gap, not a
-    // bridge-process defect — grouped with the other local-device/client
+    // bridge-process defect, grouped with the other local-device/client
     // preconditions rather than under bridgeProcess, so it stops inflating
     // bridge_start_failed churn analytics.
     case .sessionSetup, .concurrentRequest, .localConfigMissing: return .localSession

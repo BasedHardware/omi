@@ -624,7 +624,7 @@ describe("RunToolCapabilityBroker", () => {
 
     // The assertions above pass even without the adapter-projection fix,
     // because ACP's "omi-tools-stdio" adapter never advertises screenshot at
-    // all — only "pi-mono" does. The real regression (pi-mono advertising
+    // all, only "pi-mono" does. The real regression (pi-mono advertising
     // screenshot unconditionally to every non-realtime run) needs a pi-mono
     // fixture on both surfaces to actually be exercised.
     const piChat = fixture("coordinator", "act", "main_chat", "pi-mono");

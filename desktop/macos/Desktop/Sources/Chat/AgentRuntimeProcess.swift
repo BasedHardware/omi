@@ -477,12 +477,12 @@ actor AgentRuntimeProcess {
   private var processGeneration: UInt64 = 0
   /// The pi provider ("omi"/"omi-local") the currently-running piMono
   /// process was actually spawned with, set once per launch in
-  /// `performStartProcess`. `nil` before the first launch — nothing has run
+  /// `performStartProcess`. `nil` before the first launch, nothing has run
   /// yet, so there is no "actual" state to report. A provider switch after
   /// launch needs an explicit restart to take effect (see
   /// `ChatProvider.switchBridgeMode`); until that restart completes, this is
-  /// what billing/credential gating must trust (see `AgentBridge.providerMode`)
-  /// — re-deriving from the live Settings preference would disagree with
+  /// what billing/credential gating must trust (see `AgentBridge.providerMode`);
+  /// re-deriving from the live Settings preference would disagree with
   /// what the already-running subprocess was actually configured with.
   private(set) var launchedProviderMode: String?
   private var runtimeOwnerAuthorityEpoch: UInt64 = 0
@@ -2584,8 +2584,9 @@ actor AgentRuntimeProcess {
     let isLocalProvider = preferredAdapterId == .piMono && providerMode == "omi-local"
     if isLocalProvider {
       // Local provider: talk directly to a user-configured OpenAI-compatible
-      // endpoint (e.g. LM Studio, Ollama). No Firebase auth, no Rust backend,
-      // no BYOK — this session never reaches api.omi.me at all.
+      // endpoint (e.g. LM Studio, Ollama). Model requests carry no Omi
+      // credentials and no BYOK key, and never reach api.omi.me: the omi-local
+      // provider is registered without the per-request credential fetch.
       let defaults = UserDefaults.standard
       let localBaseURL = defaults.string(forKey: AIProvider.localBaseURLKey) ?? AIProvider.defaultLocalBaseURL
       let localModelID = defaults.string(forKey: AIProvider.localModelIDKey) ?? AIProvider.defaultLocalModelID

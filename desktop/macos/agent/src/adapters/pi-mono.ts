@@ -578,7 +578,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     // The Swift host already guards this before start (AgentRuntimeProcess
     // refuses to launch omi-local without a configured model id), but the
     // adapter must not silently substitute a cloud model id ("omi-sonnet")
-    // for a misconfigured local launch — that would request a model the
+    // for a misconfigured local launch, that would request a model the
     // user's own server was never asked to serve.
     if (this.provider === "omi-local" && !this.config.model) {
       throw new Error('pi-mono adapter requires config.model for provider "omi-local"');

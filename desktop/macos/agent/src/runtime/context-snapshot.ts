@@ -804,7 +804,7 @@ function budgetedRecentTurns<T>(recentTurns: T[], percent: number): T[] {
  * the fields the plan already reports (omittedTurnCount, olderHistoryStrategy),
  * plus contextBudgetPercent so the model knows a budget is active. Used both
  * to trim a full render's recentTurns AND (via renderContextSnapshotForBinding)
- * to derive the budgeted contextPlan a delta reports — turn *selection* on
+ * to derive the budgeted contextPlan a delta reports, turn *selection* on
  * the delta path stays unaffected by budget (delta only ever sends turns
  * whose hash changed), but the *plan* must match what a full render would
  * have said, or a later delta can tell the model retained turns are
