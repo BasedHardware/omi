@@ -2439,21 +2439,20 @@ environments:
           CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
-          OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
-          TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
-          TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
-          TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
-          TRANSCRIPTION_SHADOW_PERCENT: {category: rollout, value: '15'}
-          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {category: rollout, value: '1200'}
           HOSTED_DIARIZATION_API_URL:
             value: http://172.16.160.20/diarizer-batch
             category: service_discovery
           TRANSCRIPTION_FINAL_PASS_DIARIZER: {value: pyannote_shadow, category: rollout}
           TRANSCRIPTION_FINAL_PASS_BACKEND: {value: pyannote, category: rollout}
           TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-          TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '15', category: rollout}
+          TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '5', category: rollout}
           TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'true', category: rollout}
           TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'true', category: rollout}
+          TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
+          TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
+          TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+          TRANSCRIPTION_SHADOW_PERCENT: {value: '5', category: rollout}
+          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '1200', category: rollout}
           TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS: {value: '150', category: rollout}
           TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS: {value: '15000', category: rollout}
           DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
@@ -2484,6 +2483,7 @@ environments:
           SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
           SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
+          OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           CONVERSATION_RELEVANCE_JEV_RESCUE: {value: shadow, category: rollout}
@@ -2854,20 +2854,19 @@ environments:
             CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
-            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             HOSTED_DIARIZATION_API_URL:
               value: http://172.16.160.20/diarizer-batch
               category: service_discovery
             TRANSCRIPTION_FINAL_PASS_DIARIZER: {value: pyannote_shadow, category: rollout}
             TRANSCRIPTION_FINAL_PASS_BACKEND: {value: pyannote, category: rollout}
             TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-            TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '15', category: rollout}
+            TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '5', category: rollout}
             TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'true', category: rollout}
             TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'true', category: rollout}
             TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
             TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
             TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-            TRANSCRIPTION_SHADOW_PERCENT: {value: '15', category: rollout}
+            TRANSCRIPTION_SHADOW_PERCENT: {value: '5', category: rollout}
             TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '1200', category: rollout}
             TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS: {value: '150', category: rollout}
             TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS: {value: '15000', category: rollout}
@@ -2897,6 +2896,7 @@ environments:
             SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
             SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             FIREBASE_SIGNER_SERVICE_ACCOUNT:
               value: backend-runtime@based-hardware.iam.gserviceaccount.com
             OMI_CUSTOMER_DATA_PROJECT:
@@ -3200,23 +3200,23 @@ environments:
             CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
-            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
-            TRANSCRIPTION_SHADOW_ENABLED: {category: rollout, value: 'true'}
-            TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
-            TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
-            TRANSCRIPTION_SHADOW_PERCENT: {category: rollout, value: '15'}
-            TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {category: rollout, value: '1200'}
             HOSTED_DIARIZATION_API_URL:
               value: http://172.16.160.20/diarizer-batch
               category: service_discovery
             TRANSCRIPTION_FINAL_PASS_DIARIZER: {value: pyannote_shadow, category: rollout}
             TRANSCRIPTION_FINAL_PASS_BACKEND: {value: pyannote, category: rollout}
             TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-            TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '15', category: rollout}
+            TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '5', category: rollout}
             TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'true', category: rollout}
             TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'true', category: rollout}
+            TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
+            TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
+            TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            TRANSCRIPTION_SHADOW_PERCENT: {value: '5', category: rollout}
+            TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '1200', category: rollout}
             TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS: {value: '150', category: rollout}
             TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS: {value: '15000', category: rollout}
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
             REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_PASSES_PER_DAY: {value: '2', category: rollout}
@@ -3492,23 +3492,23 @@ environments:
             CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
-            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             HOSTED_DIARIZATION_API_URL:
               value: http://172.16.160.20/diarizer-batch
               category: service_discovery
             TRANSCRIPTION_FINAL_PASS_DIARIZER: {value: pyannote_shadow, category: rollout}
             TRANSCRIPTION_FINAL_PASS_BACKEND: {value: pyannote, category: rollout}
             TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-            TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '15', category: rollout}
+            TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '5', category: rollout}
             TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'true', category: rollout}
             TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'true', category: rollout}
             TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
             TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
             TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-            TRANSCRIPTION_SHADOW_PERCENT: {value: '15', category: rollout}
+            TRANSCRIPTION_SHADOW_PERCENT: {value: '5', category: rollout}
             TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '1200', category: rollout}
             TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS: {value: '150', category: rollout}
             TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS: {value: '15000', category: rollout}
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}

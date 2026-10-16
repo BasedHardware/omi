@@ -45,9 +45,14 @@ datasource/global timeouts. Warm/measure the real wall before enabling the embed
 these deadlines do not prove a cold aggregate finishes within them.
 
 Parent must apply `grafana-stats-proxy` ConfigMap from `stats_proxy.py` and the
-bootstrap-generated `grafana-business-runtime` ConfigMap before Helm. Hash the
-script into a pod annotation on each apply so a changed ConfigMap rolls the
-process. Keep the single Grafana PVC and current resources/alerts intact.
+bootstrap-generated `grafana-business-runtime` ConfigMap before Helm. Every prod
+stack upgrade passes the script's SHA-256 as
+`--set-string grafana.podAnnotations.omi-stats-proxy-sha256=<hash>` so a changed
+ConfigMap rolls the process. `gcp_cloud_run_metrics_egress.yml` computes that hash
+from the checked-out `stats_proxy.py` but never applies the ConfigMap, so apply the
+ConfigMap from the same commit before that workflow upgrades prod; otherwise the
+annotation names a script the pod is not running. Keep the single Grafana PVC and
+current resources/alerts intact.
 
 ## Admin embedding
 

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { allInCost, oneTimeExcess, SAAS_MONTHLY_USD } from "../wall-cost";
+import {
+  allInCost,
+  oneTimeExcess,
+  SAAS_MONTHLY_USD,
+  STT_MONTHLY_USD,
+} from "../wall-cost";
 
 const day = (i: number) => `2026-09-${String(i).padStart(2, "0")}`;
 /** Flat GCP with a Coldline-migration-like Cloud Storage spike on Sep 20. */
@@ -23,19 +28,19 @@ const days = Array.from({ length: 21 }, (_, k) => {
   };
 });
 const saasDay = SAAS_MONTHLY_USD / (365.25 / 12);
+const sttDay = STT_MONTHLY_USD / (365.25 / 12);
 
 describe("all-in cost", () => {
   it("removes only the excess of a one-time spike", () => {
     const spikes = oneTimeExcess(days);
     expect(Array.from(spikes.keys())).toEqual([day(20)]);
     expect(spikes.get(day(20))).toMatchObject({ usd: 13_800, llmUsd: 0 });
-    const { daily } = allInCost(days, null);
+    const { daily } = allInCost(days);
     expect(daily.find((d) => d.date === day(20))!.gcp).toBe(1_700);
   });
 
-  it("counts every line: GCP, Vertex, invoices, modelled STT and fixed SaaS", () => {
-    const stt = { [day(19)]: 300 };
-    const { daily, missing } = allInCost(days, stt, {
+  it("counts every line: GCP, Vertex, invoices, Soniox-console STT and fixed SaaS", () => {
+    const { daily, missing } = allInCost(days, {
       openai: true,
       anthropic: true,
     });
@@ -45,21 +50,20 @@ describe("all-in cost", () => {
       vertexLlm: 100,
       openai: 250,
       anthropic: 20,
-      stt: 300,
     });
-    expect(d.total).toBeCloseTo(1_700 + 100 + 250 + 20 + 300 + saasDay);
+    expect(STT_MONTHLY_USD).toBe(5_300);
+    expect(d.stt).toBeCloseTo(sttDay);
+    expect(d.total).toBeCloseTo(1_700 + 100 + 250 + 20 + sttDay + saasDay);
     expect(missing).toEqual([]);
-    // FinOps lags: later days use the trailing mean of modelled STT.
-    expect(daily.find((x) => x.date === day(21))!.stt).toBe(300);
   });
 
   it("names lines it cannot source instead of dropping them", () => {
-    const { daily, missing } = allInCost(days, null, {
+    const { daily, missing } = allInCost(days, {
       openai: false,
       anthropic: true,
     });
-    expect(missing).toEqual(["OpenAI invoice", "STT model (FinOps)"]);
-    expect(daily[0]).toMatchObject({ openai: null, stt: null });
+    expect(missing).toEqual(["OpenAI invoice"]);
+    expect(daily[0]).toMatchObject({ openai: null });
   });
 
   it("needs a week of history before calling anything one-time", () => {

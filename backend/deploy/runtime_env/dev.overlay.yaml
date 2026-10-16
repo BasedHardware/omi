@@ -26,9 +26,6 @@ overlay:
           value: 'false'
         SONIOX_WIRE_LEDGER:
           value: 'false'
-        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-          value: shadow
-          category: rollout
         FREE_TIER_LOCAL_PROCESSING:
           value: 'true'
         FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -75,6 +72,9 @@ overlay:
           value: '0'
         STT_SERVICE_MODELS:
           value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
+        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+          value: shadow
+          category: rollout
         OMI_SHAPED_AGENT_MODE:
           value: 'on'
           category: rollout
@@ -120,9 +120,6 @@ overlay:
           value: 'false'
         SONIOX_WIRE_LEDGER:
           value: 'false'
-        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-          value: shadow
-          category: rollout
         FREE_TIER_LOCAL_PROCESSING:
           value: 'true'
         FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -139,6 +136,9 @@ overlay:
           value: based-hardware-dev-screen-frames
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '0'
+        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+          value: shadow
+          category: rollout
         OMI_SHAPED_AGENT_MODE:
           value: 'on'
           category: rollout
@@ -371,9 +371,6 @@ overlay:
             value: syncing-local-development
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-            value: shadow
-            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             value: 'true'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -397,6 +394,9 @@ overlay:
             value: based-hardware-dev-screen-frames
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '0'
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
+            category: rollout
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout
@@ -451,9 +451,6 @@ overlay:
             value: ''
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-            value: shadow
-            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             value: 'true'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -485,6 +482,9 @@ overlay:
             value: '0'
           MEMORY_OWNER_JEV_SHADOW_PERCENT:
             value: '0'
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
+            category: rollout
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout
@@ -553,9 +553,6 @@ overlay:
             value: ''
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-            value: shadow
-            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             value: 'true'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -583,6 +580,9 @@ overlay:
             value: '0'
           MEMORY_OWNER_JEV_SHADOW_PERCENT:
             value: '0'
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
+            category: rollout
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout
@@ -632,9 +632,6 @@ overlay:
             value: ''
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-            value: shadow
-            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             value: 'true'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -650,6 +647,9 @@ overlay:
             value: https://app.posthog.com
           DREAM_AGENT_UID_ALLOWLIST:
             value: ''
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
+            category: rollout
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout

@@ -12,8 +12,15 @@ import {
   SeriesName,
   seriesPayload,
   SeriesSources,
+  STORE_FAIL_LIMIT,
 } from "../wall-series";
 import { resetWallCache } from "../wall-cache";
+import {
+  LEASE_MS,
+  memorySeriesStore,
+  mergeLegDoc,
+  SeriesStore,
+} from "../wall-series-store";
 import { isoDay, shiftDay, utcDay } from "../qualified-activity";
 
 const now = new Date("2026-10-15T12:00Z");
@@ -107,7 +114,6 @@ function sources(): SeriesSources & WallSources {
     }),
     finops: vi.fn(async () => ({
       mrr: finopsMrr,
-      stt: { [isoDay(shiftDay(end, -3))]: 12 },
     })),
   };
 }
@@ -143,9 +149,9 @@ describe("v3 series agree with the v2 snapshot", () => {
     const rate = value(wall, "activation.rate");
     const rows = f.activation.sources;
     expect(rows.map((r) => r.source)).toEqual([
-      "Omi pendant · 8",
-      "Phone mic only · 12",
-      "No capture · 10",
+      "Pendant · 8",
+      "Phone mic · 12",
+      "None · 10",
     ]);
     expect(rows.reduce((n, r) => n + Number(r.people), 0)).toBe(
       rate.denominator
@@ -242,6 +248,31 @@ describe("v3 series agree with the v2 snapshot", () => {
     expect(headlineDelta("mrr", [{ date: "b", value: 1 }]).text).toBe(
       "no prior"
     );
+    expect(headlineDelta("arpmau", [{ date: "b", value: null }]).text).toBe(
+      "—"
+    );
+  });
+
+  it("keeps every stat slot when a value is missing, so strips stay aligned", async () => {
+    const s = sources();
+    const f = await all(null, s);
+    for (const key of [
+      "wau",
+      "dau",
+      "mau",
+      "activation",
+      "capture",
+      "retained",
+      "established",
+      "mrr",
+      "arpmau",
+      "hardware",
+      "netCost",
+      "costPerMau",
+    ])
+      expect(f.headline[key].length, key).toBeGreaterThan(0);
+    const strip = f.headline.strip_retention[0];
+    expect(Object.values(strip)).toHaveLength(2);
   });
 
   it("serves one delta strip per column from the headline pairs", async () => {
@@ -435,5 +466,308 @@ describe("v3 series cold-load and cache rules", () => {
       s
     );
     expect(s.query).toHaveBeenCalledTimes(6);
+  });
+});
+
+describe("v3 series converge across Cloud Run instances", () => {
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
+  it("lets one instance refresh a leg while others serve without reading", async () => {
+    const store = memorySeriesStore();
+    const a = { ...sources(), store, instance: "a" };
+    a.query = vi.fn(() => new Promise<never>(() => {}));
+    const first = seriesPayload("growth", Promise.resolve(null), now, a);
+    await settle();
+    resetSeriesCache(); // instance b: cold process, same shared store
+    const b = { ...sources(), store, instance: "b" };
+    const served = await seriesPayload("growth", Promise.resolve(null), now, b);
+    expect(b.query).not.toHaveBeenCalled();
+    expect(served).toMatchObject({ refreshing: true, partial: true });
+    expect(served.gaps.growth).toBe("Series refresh running");
+    void first;
+  });
+
+  it("serves the shared last-good on a cold instance with zero reads", async () => {
+    const store = memorySeriesStore();
+    const a = { ...sources(), store, instance: "a" };
+    const filled = await seriesPayload("growth", Promise.resolve(null), now, a);
+    expect(filled.partial).toBe(false);
+    resetSeriesCache();
+    const b = { ...sources(), store, instance: "b" };
+    const served = await seriesPayload("growth", Promise.resolve(null), now, b);
+    expect(b.query).not.toHaveBeenCalled();
+    expect(served.frames.weekly).toEqual(filled.frames.weekly);
+    expect(served).toMatchObject({ refreshing: false, partial: false });
+    // Reads live inside the leg doc: bounded docs, no per-read garbage.
+    expect(Array.from(store.docs.keys())).toEqual([
+      "wall-series:v1:leg:growth",
+    ]);
+  });
+
+  it("resumes an abandoned fill from its persisted reads after the lease lapses", async () => {
+    const store = memorySeriesStore();
+    const a = { ...sources(), store, instance: "a" };
+    let served = 0;
+    a.query = vi.fn((sql: string) =>
+      served++ < 3 ? query(sql) : new Promise<never>(() => {})
+    );
+    void seriesPayload("growth", Promise.resolve(null), now, a);
+    for (let i = 0; i < 10; i++) await settle();
+    expect(a.query).toHaveBeenCalledTimes(4);
+    resetSeriesCache(); // instance a died mid-fill
+    const later = new Date(now.getTime() + LEASE_MS + 1);
+    const b = { ...sources(), store, instance: "b" };
+    const resumed = await seriesPayload(
+      "growth",
+      Promise.resolve(null),
+      later,
+      b
+    );
+    expect(b.query).toHaveBeenCalledTimes(GROWTH_WEEKS - 3);
+    expect(resumed.frames.weekly).toHaveLength(VISIBLE_WEEKS);
+  });
+
+  it("keeps the headline whole when only older MAU windows time out", async () => {
+    const s = { ...sources(), store: memorySeriesStore() };
+    let mauReads = 0;
+    s.query = vi.fn(async (sql: string) => {
+      if (sql.includes("spans") && mauReads++ > 0)
+        throw new Error("PostHog execution time limit exceeded (HTTP 504)");
+      return query(sql);
+    });
+    const head = await seriesPayload("headline", Promise.resolve(null), now, s);
+    expect(head.gaps).not.toHaveProperty("mauRecent");
+    const revenue = await seriesPayload(
+      "revenue",
+      Promise.resolve(null),
+      now,
+      s
+    );
+    expect(revenue.gaps).toHaveProperty("mauHistory");
+    expect(revenue.gaps).not.toHaveProperty("mauRecent");
+  });
+
+  it("logs one aggregate line per leg attempt and a data-through status", async () => {
+    const lines: Record<string, unknown>[] = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((line: unknown) => {
+      try {
+        lines.push(JSON.parse(String(line)));
+      } catch {
+        // not ours
+      }
+    });
+    const s = { ...sources(), store: memorySeriesStore(), instance: "rev:abc" };
+    (s.query as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => {
+      throw new Error("boom");
+    });
+    await seriesPayload("growth", Promise.resolve(null), now, s);
+    const head = await seriesPayload("headline", Promise.resolve(null), now, s);
+    spy.mockRestore();
+    const legs = lines.filter((l) => l.event === "wall_series_leg");
+    expect(legs.find((l) => l.leg === "growth")).toMatchObject({
+      instance: "rev:abc",
+      outcome: "partial:error",
+      rows: expect.any(Number),
+      duration_ms: expect.any(Number),
+    });
+    expect(legs.find((l) => l.leg === "billing")).toMatchObject({
+      outcome: "ok",
+    });
+    const reads = lines.filter((l) => l.event === "wall_series_read");
+    expect(reads[0]).toMatchObject({
+      leg: "growth",
+      outcome: "error",
+      rows: 0,
+    });
+    for (const l of lines)
+      expect(JSON.stringify(l)).not.toMatch(/SELECT|actor|distinct_id/i);
+    expect(head.status?.through).toBe(isoDay(shiftDay(end, -1)));
+    expect(head.frames.gaps[0]).toMatchObject({ metric: "Data through" });
+    expect(String(head.frames.gaps[0].missing)).toMatch(/^Oct 14 \(UTC\)/);
+  });
+});
+
+describe("v3 series lease is fenced", () => {
+  const settle = async (n = 10) => {
+    for (let i = 0; i < n; i++) await new Promise((r) => setTimeout(r, 0));
+  };
+  const read = (at: number) => ({ rows: [[at]], refreshedAt: null, at });
+
+  it("grants exactly one of many concurrent acquires", async () => {
+    const store = memorySeriesStore();
+    const results = await Promise.all(
+      Array.from({ length: 10 }, (_, i) =>
+        store.acquire("growth", `i${i}`, now.getTime())
+      )
+    );
+    expect(results.filter((r) => r.status === "acquired")).toHaveLength(1);
+    expect(results.filter((r) => r.status === "contended")).toHaveLength(9);
+  });
+
+  it("does not fill when the lease call times out, and hands back a late grant", async () => {
+    vi.useFakeTimers();
+    const store = memorySeriesStore();
+    let grant: (() => void) | undefined;
+    const slow: SeriesStore = {
+      ...store,
+      acquire: (leg, holder, at) =>
+        new Promise((resolve) => {
+          grant = () => resolve(store.acquire(leg, holder, at));
+        }),
+    };
+    const s = { ...sources(), store: slow, instance: "a" };
+    const pending = seriesPayload("growth", Promise.resolve(null), now, s);
+    await vi.advanceTimersByTimeAsync(5_000);
+    const served = await pending;
+    expect(s.query).not.toHaveBeenCalled();
+    expect(served.gaps.growth).toBe("Shared series store unavailable");
+    grant!(); // the transaction lands after we gave up on it
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.docs.has("wall-series:v1:lease:growth")).toBe(false);
+  });
+
+  it("does not fill when the lease call errors", async () => {
+    const store = memorySeriesStore();
+    const s = {
+      ...sources(),
+      store: {
+        ...store,
+        acquire: async () => ({ status: "unavailable" as const }),
+      },
+    };
+    const served = await seriesPayload("growth", Promise.resolve(null), now, s);
+    expect(s.query).not.toHaveBeenCalled();
+    expect(served.frames.weekly).toEqual([]);
+  });
+
+  it("rejects a stale holder's writes and stops its fill at the next read", async () => {
+    const store = memorySeriesStore();
+    const lines: Record<string, unknown>[] = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((line: unknown) => {
+      try {
+        lines.push(JSON.parse(String(line)));
+      } catch {
+        // not ours
+      }
+    });
+    const a = { ...sources(), store, instance: "a" };
+    a.query = vi.fn(async (sql: string) => {
+      // Our lease lapsed and another instance took it before this read landed.
+      await store.acquire("growth", "b", now.getTime() + LEASE_MS + 1);
+      return query(sql);
+    });
+    await seriesPayload("growth", Promise.resolve(null), now, a);
+    await settle();
+    spy.mockRestore();
+    expect(
+      (a.query as ReturnType<typeof vi.fn>).mock.calls.length
+    ).toBeLessThan(4);
+    expect(await store.read("growth")).toBeNull(); // nothing from "a" landed
+    expect(lines.find((l) => l.event === "wall_series_leg")).toMatchObject({
+      leg: "growth",
+      outcome: "lease_lost",
+    });
+    // Store level: an expired token is fenced; the live one writes.
+    const late = await store.acquire("curve", "a", 0);
+    const live = await store.acquire("curve", "b", LEASE_MS + 1);
+    if (late.status !== "acquired" || live.status !== "acquired")
+      throw new Error();
+    const patch = { reads: { day: "2026-10-15", rows: { h: read(1) } } };
+    expect(await store.write("curve", late.token, patch, LEASE_MS + 2)).toBe(
+      "fenced"
+    );
+    expect(await store.write("curve", live.token, patch, LEASE_MS + 2)).toBe(
+      "written"
+    );
+  });
+
+  it("awaits the final write before releasing, so the next holder sees the completed doc", async () => {
+    const store = memorySeriesStore();
+    const order: string[] = [];
+    const tracked: SeriesStore = {
+      ...store,
+      async write(leg, token, patch, at) {
+        if (patch.entry !== undefined) {
+          await new Promise((r) => setTimeout(r, 50)); // slow final commit
+          order.push("final-write");
+        }
+        return store.write(leg, token, patch, at);
+      },
+      async release(leg, token) {
+        order.push("release");
+        return store.release(leg, token);
+      },
+    };
+    const a = { ...sources(), store: tracked, instance: "a" };
+    await seriesPayload("growth", Promise.resolve(null), now, a);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(order).toEqual(["final-write", "release"]);
+    resetSeriesCache();
+    const b = { ...sources(), store, instance: "b" };
+    const served = await seriesPayload("growth", Promise.resolve(null), now, b);
+    expect(b.query).not.toHaveBeenCalled();
+    expect(served.partial).toBe(false);
+  });
+
+  it("merges reads as a superset: a slow, older write never drops completed reads", async () => {
+    const day = "2026-10-15";
+    const full = {
+      entry: null,
+      reads: { day, rows: { h1: read(5), h2: read(6) } },
+    };
+    const merged = mergeLegDoc(full, { reads: { day, rows: { h1: read(1) } } });
+    expect(Object.keys(merged.reads.rows).sort()).toEqual(["h1", "h2"]);
+    expect(merged.reads.rows.h1.at).toBe(5); // newer kept
+    expect(
+      mergeLegDoc(full, { reads: { day: "2026-10-16", rows: {} } }).reads
+    ).toEqual({
+      day: "2026-10-16",
+      rows: {},
+    });
+    expect(
+      mergeLegDoc(full, { reads: { day: "2026-10-14", rows: { x: read(9) } } })
+        .reads
+    ).toBe(full.reads);
+    // Through the fenced write as well.
+    const store = memorySeriesStore();
+    const lease = await store.acquire("growth", "a", 0);
+    if (lease.status !== "acquired") throw new Error();
+    await store.write("growth", lease.token, { reads: full.reads }, 1);
+    await store.write(
+      "growth",
+      lease.token,
+      { reads: { day, rows: { h1: read(1) } } },
+      2
+    );
+    const stored = await store.read("growth");
+    expect(Object.keys(stored!.reads.rows).sort()).toEqual(["h1", "h2"]);
+  });
+
+  it("fills per process, single-flight, only after the store has failed repeatedly", async () => {
+    const down: SeriesStore = {
+      read: async () => {
+        throw new Error("unreachable");
+      },
+      acquire: async () => ({ status: "unavailable" }),
+      renew: async () => false,
+      write: async () => "unavailable",
+      release: async () => {},
+    };
+    const s = { ...sources(), store: down };
+    let t = now.getTime();
+    // Each request fails twice (read + lease), so the limit is crossed on the
+    // request after floor(limit / 2) failing ones.
+    for (let i = 0; i < Math.floor(STORE_FAIL_LIMIT / 2); i++) {
+      await seriesPayload("growth", Promise.resolve(null), new Date(t), s);
+      expect(s.query).not.toHaveBeenCalled();
+      t += 11_000;
+    }
+    await Promise.all([
+      seriesPayload("growth", Promise.resolve(null), new Date(t), s),
+      seriesPayload("growth", Promise.resolve(null), new Date(t), s),
+    ]);
+    await settle();
+    expect(s.query).toHaveBeenCalledTimes(GROWTH_WEEKS); // one fill, not two
   });
 });
