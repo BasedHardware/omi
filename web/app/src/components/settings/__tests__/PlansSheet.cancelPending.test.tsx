@@ -49,7 +49,9 @@ const plans = [
   },
 ];
 
-function renderSheet() {
+function renderSheet(overrides: { currentPeriodEnd?: number | null } = {}) {
+  const currentPeriodEnd =
+    'currentPeriodEnd' in overrides ? overrides.currentPeriodEnd : periodEnd;
   const onSubscriptionUpdate = vi.fn();
   const onOpenChange = vi.fn();
   render(
@@ -63,7 +65,7 @@ function renderSheet() {
         is_unlimited: true,
         cancel_at_period_end: true,
         current_price_id: 'price_plus_month',
-        current_period_end: periodEnd,
+        current_period_end: currentPeriodEnd ?? undefined,
         features: [],
       }}
       cachedPlans={plans}
@@ -99,6 +101,14 @@ describe('PlansSheet pending cancellation', () => {
     expect(screen.queryByText(`Your Plus plan ends ${dateLabel}.`)).toBeNull();
     expect(onSubscriptionUpdate).toHaveBeenCalled();
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it('does not invent an end date when the period end is missing', async () => {
+    renderSheet({ currentPeriodEnd: null });
+    expect(await screen.findByRole('button', { name: 'Resubscribe' })).toBeTruthy();
+    expect(screen.queryByText(/Your Plus plan ends/)).toBeNull();
+    expect(screen.queryByText(/No charge until/)).toBeNull();
+    expect(screen.queryByText('—')).toBeNull();
   });
 
   it('refuses another price before any request', async () => {

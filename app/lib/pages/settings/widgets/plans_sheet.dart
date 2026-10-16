@@ -763,11 +763,13 @@ class _PlansSheetState extends State<PlansSheet> {
 
         String renewalDate = '—';
         final periodEnd = sub?.currentPeriodEnd;
-        if (periodEnd != null) {
-          renewalDate = OmiDateFormat.of(context).date(DateTime.fromMillisecondsSinceEpoch(periodEnd * 1000));
+        final DateTime? periodEndAt =
+            periodEnd != null && periodEnd > 0 ? DateTime.fromMillisecondsSinceEpoch(periodEnd * 1000) : null;
+        if (periodEndAt != null) {
+          renewalDate = OmiDateFormat.of(context).date(periodEndAt);
         }
-        final periodEnded =
-            periodEnd != null && DateTime.fromMillisecondsSinceEpoch(periodEnd * 1000).isBefore(DateTime.now());
+        final periodEnded = periodEndAt != null && periodEndAt.isBefore(DateTime.now());
+        final knownFutureEnd = periodEndAt != null && periodEndAt.isAfter(DateTime.now());
         final secondary = OmiType.subhead.copyWith(color: OmiColors.textSecondary);
 
         return DecoratedBox(
@@ -815,15 +817,17 @@ class _PlansSheetState extends State<PlansSheet> {
                           _renewalConfirmation ??
                               (periodEnded
                                   ? l10n.planEndedOn(renewalDate)
-                                  : l10n.yourPlanEndsOn(
-                                      currentPlanDisplayName(context, provider.subscription), renewalDate)),
+                                  : knownFutureEnd
+                                      ? l10n.yourPlanEndsOn(
+                                          currentPlanDisplayName(context, provider.subscription), renewalDate)
+                                      : l10n.subscriptionSetToCancel),
                           key: const ValueKey('plans_sheet_cancel_status'),
                           textAlign: TextAlign.center,
                           style: OmiType.subhead.copyWith(
                             color: _renewalConfirmation == null ? OmiColors.warning : OmiColors.success,
                           ),
                         ),
-                        if (_renewalConfirmation == null && !periodEnded) ...[
+                        if (_renewalConfirmation == null && knownFutureEnd) ...[
                           const SizedBox(height: OmiSpacing.xxs),
                           Text(
                             l10n.resubscribeNowNoChargeUntil(renewalDate),

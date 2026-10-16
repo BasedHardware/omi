@@ -116,6 +116,7 @@ Future<_Usage> _pump(
   Map<String, dynamic>? sessionResult,
   Object? sessionError,
   bool clearCancelOnFetch = false,
+  bool omitPeriodEnd = false,
 }) async {
   tester.view.physicalSize = const Size(430, 2400);
   tester.view.devicePixelRatio = 1;
@@ -135,7 +136,7 @@ Future<_Usage> _pump(
         status: SubscriptionStatus.active,
         stripeSubscriptionId: 'sub_1',
         currentPriceId: 'price_plus_month',
-        currentPeriodEnd: periodEnd,
+        currentPeriodEnd: omitPeriodEnd ? null : periodEnd,
         cancelAtPeriodEnd: true,
       ),
       transcriptionSecondsUsed: 0,
@@ -210,6 +211,17 @@ void main() {
     expect(find.text(l10n.yourPlanWillRenewOn('Plus', date)), findsWidgets);
     expect(find.text(l10n.yourPlanEndsOn('Plus', date)), findsNothing);
     expect(find.text(l10n.resubscribeNowNoChargeUntil(date)), findsNothing);
+  });
+
+  testWidgets('a missing end date uses the generic cancel line and no reassurance', (tester) async {
+    await _pump(tester, omitPeriodEnd: true);
+    final l10n = AppLocalizations.of(tester.element(find.byType(PlansSheet)));
+
+    expect(find.text(l10n.subscriptionSetToCancel), findsOneWidget);
+    expect(find.text(l10n.yourPlanEndsOn('Plus', '—')), findsNothing);
+    expect(find.text(l10n.resubscribeNowNoChargeUntil('—')), findsNothing);
+    expect(find.byKey(const ValueKey('plans_sheet_cancel_reassurance')), findsNothing);
+    expect(find.text(l10n.resubscribe), findsOneWidget);
   });
 
   testWidgets('another price is refused before any request', (tester) async {

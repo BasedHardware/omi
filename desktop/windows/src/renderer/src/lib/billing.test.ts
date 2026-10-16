@@ -287,6 +287,23 @@ describe('currentPlanPeriodText', () => {
   it('is empty for a free plan', () => {
     expect(currentPlanPeriodText(sub({ plan: 'basic' }))).toBe('')
   })
+  it('is empty when a cancellation is pending and the end date is missing', () => {
+    expect(
+      currentPlanPeriodText(
+        sub({ plan: 'operator', status: 'active', cancel_at_period_end: true })
+      )
+    ).toBe('')
+    expect(
+      currentPlanPeriodText(
+        sub({
+          plan: 'operator',
+          status: 'active',
+          cancel_at_period_end: true,
+          current_period_end: 0
+        })
+      )
+    ).toBe('')
+  })
 })
 
 describe('chatQuotaView', () => {
