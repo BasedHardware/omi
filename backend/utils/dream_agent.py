@@ -24,7 +24,7 @@ from models.agent_edit import HarnessEdit
 from utils.agent_capabilities import tools as dream_tools
 from utils.agent_capabilities import verifiers
 from utils import dream_review_policy, dream_capacity, dream_harness_transport, dream_seed, dream_verify
-from utils.dream_cost import conservative_attempt_micro, verification_reserve_tokens
+from utils.dream_cost import conservative_attempt_micro, price_weighted_tokens, verification_reserve_tokens
 from utils.agent_capabilities.search import OwnerSearch
 from utils.agent_capabilities.session import Session
 from utils.dream_instructions import INSTRUCTIONS
@@ -70,6 +70,7 @@ async def run_session(
         'status': 'failed',
         'tokens': 0,
         'accounted_tokens': 0,
+        'price_weighted_tokens': 0,
         'cached_tokens': 0,
         'cache_unreported_tokens': 0,
         'uncached_tokens': 0,
@@ -106,7 +107,30 @@ async def run_session(
     async def usage(result):
         report['tokens'] += result.tokens
         report['accounted_tokens'] += result.tokens if result.accounted_tokens is None else result.accounted_tokens
-        session.accounted_model_tokens = report['accounted_tokens']
+        weighted = getattr(result, 'price_weighted_tokens', None)
+        if weighted is None:
+            if result.prompt_tokens + result.completion_tokens == result.tokens:
+                weighted = price_weighted_tokens(
+                    dream_harness_transport.DREAM_PROVIDER,
+                    dream_harness_transport.DREAM_MODEL,
+                    prompt_tokens=result.prompt_tokens,
+                    cached_tokens=result.cached_tokens,
+                    completion_tokens=result.completion_tokens,
+                    cache_reported=(
+                        result.cached_tokens is not None and getattr(result, 'cache_unreported_tokens', 0) == 0
+                    ),
+                )
+            else:
+                weighted = result.tokens
+            weighted += max(
+                0,
+                (result.tokens if result.accounted_tokens is None else result.accounted_tokens) - result.tokens,
+            )
+        if type(weighted) is not int or weighted < 0:
+            raise ValueError('dream_invalid_usage')
+        result.price_weighted_tokens = weighted
+        report['price_weighted_tokens'] += weighted
+        session.accounted_model_tokens = report['price_weighted_tokens']
         if result.cached_tokens is None:
             report['cache_unreported_tokens'] += result.prompt_tokens
         else:
@@ -126,11 +150,13 @@ async def run_session(
         if lease is not None:
             await run_blocking(db_executor, dream_turns.settle, uid, lease['run_id'], result)
 
-    main_history = {'prompt_tokens': None, 'messages': 0}
+    main_history = {'prompt_tokens': None, 'messages': 0, 'cached_tokens': None}
 
     async def invoke(lane, mount, messages):
         await active()
-        remaining = limits.tokens - report['accounted_tokens'] - session.counters['search_embedding_token_upper_bound']
+        remaining = (
+            limits.tokens - report['price_weighted_tokens'] - session.counters['search_embedding_token_upper_bound']
+        )
         mount = replace(mount, budget=replace(mount.budget, tokens=min(mount.budget.tokens or 0, remaining)))
         if mount.budget.tokens is None or mount.budget.tokens < 1024:
             raise ValueError('dream_input_token_budget')
@@ -141,6 +167,7 @@ async def run_session(
         )
         prior = main_history['prompt_tokens'] if lane == dream_harness_transport.MAIN_LANE else None
         prior_count = main_history['messages'] if lane == dream_harness_transport.MAIN_LANE else 0
+        cached_estimate = main_history['cached_tokens'] if lane == dream_harness_transport.MAIN_LANE else None
         if type(prior_count) is not int:
             prior_count = 0
         estimate, completion_room = dream_harness_transport.attempt_room(
@@ -148,6 +175,7 @@ async def run_session(
             mount,
             prior_prompt_tokens=prior,
             prior_message_count=prior_count,
+            cached_tokens_estimate=cached_estimate,
             completion_limit=completion,
         )
         reserve = estimate + completion_room
@@ -171,6 +199,11 @@ async def run_session(
                 if lane == dream_harness_transport.MAIN_LANE and result.prompt_tokens:
                     main_history['prompt_tokens'] = result.prompt_tokens
                     main_history['messages'] = len(messages)
+                    main_history['cached_tokens'] = (
+                        result.cached_tokens
+                        if result.cached_tokens is not None and getattr(result, 'cache_unreported_tokens', 0) == 0
+                        else None
+                    )
                 return result
             result = await dream_harness_transport.model_turn(
                 uid,
@@ -186,10 +219,16 @@ async def run_session(
                 usage_sink=sink,
                 prior_prompt_tokens=prior,
                 prior_message_count=prior_count,
+                cached_tokens_estimate=cached_estimate,
             )
             if lane == dream_harness_transport.MAIN_LANE and result.prompt_tokens:
                 main_history['prompt_tokens'] = result.prompt_tokens
                 main_history['messages'] = len(messages)
+                main_history['cached_tokens'] = (
+                    result.cached_tokens
+                    if result.cached_tokens is not None and result.cache_unreported_tokens == 0
+                    else None
+                )
             return result
         finally:
             if lane == dream_harness_transport.VERIFY_LANE and sink.get('transport_complete'):
@@ -232,7 +271,7 @@ async def run_session(
                 verification_reserve_tokens(staged, completion_tokens=limits.verifier_completion_tokens),
                 8 * 24000,
             )
-            verify_budget = min(verify_need, max(0, limits.tokens - report['accounted_tokens']))
+            verify_budget = min(verify_need, max(0, limits.tokens - report['price_weighted_tokens']))
             support, calls = await dream_verify.verify(
                 staged,
                 partial(invoke, dream_harness_transport.VERIFY_LANE),
@@ -349,6 +388,7 @@ async def run_session(
         if isinstance(exc, dream_harness_transport.CapacityWait) or str(exc) == 'dream_minute_headroom':
             report.update(status='waiting', reason='reserved_capacity')
     report['accounted_tokens'] += session.counters['search_embedding_token_upper_bound']
+    report['price_weighted_tokens'] += session.counters['search_embedding_token_upper_bound']
     report.update(
         tool_counts={key[5:]: count for key, count in session.counters.items() if key.startswith('tool:')},
         turns=len([lane for lane in report['model_lanes'] if lane == dream_harness_transport.MAIN_LANE]),
