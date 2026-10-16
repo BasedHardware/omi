@@ -320,6 +320,18 @@ def test_sync_backfill_lifecycle_alerts_on_scheduler_failure_and_missing_sweep()
     assert "DURATION='600s'" in action
 
 
+def test_sequencer_scheduler_alerts_page_only_on_sustained_failure():
+    # Live prod policies (set by the alert owner on 2026-10-15/16) wait 10 minutes for
+    # both kinds; the deploy verifier must expect the same, or every prod deploy fails.
+    action = (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
+    step = action.split('Provision backfill sequencer Scheduler execution alerts', 1)[1]
+    step = step.split('\n    - name:', 1)[0]
+    assert step.count("DURATION='600s'") == 2
+    assert "DURATION='0s'" not in step
+    assert step.count('DURATION_SECONDS=600') == 2
+    assert 'DURATION_SECONDS=0' not in step
+
+
 def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     root = REPOSITORY_ROOT
     action = (root / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
