@@ -53,4 +53,14 @@ void main() {
     await tester.pump();
     expect(result, isFalse);
   });
+  testWidgets('leaving an authorization owner prevents a late URL from launching', (tester) async {
+    var current = true;
+    final pending = Completer<String?>();
+    final result = launchIntegrationOAuth(() => pending.future, isCurrent: () => current);
+    current = false;
+    pending.complete('https://vendor.test/oauth');
+    await tester.pump();
+    expect(await result, isFalse);
+    expect(browser.launches, isEmpty);
+  });
 }

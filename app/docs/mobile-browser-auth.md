@@ -54,3 +54,33 @@ not. No account contents or recordings are changed by this fix.
 References:
 - https://pub.dev/packages/url_launcher#checking-supported-schemes
 - https://developers.googleblog.com/upcoming-security-changes-to-googles-oauth-20-authorization-endpoint-in-embedded-webviews/
+
+## Completion audit after #21381
+
+The first PR was merged while the audit continued. The follow-up closes the
+remaining mobile and web client gaps:
+
+- Native Calendar/Gmail and task authorization keep checking when the grant is
+  saved after foreground return; default selection follows the confirmed grant.
+- Marketplace setup uses a typed successful boolean verdict, serial probes,
+  bounded initial/detail reads and explicit retry. Failed responses and absent
+  endpoints cannot claim setup complete. Only explicit setup/enable intent may
+  auto-install after confirmation.
+- MCP waits for approval AND the server's enable receipt, bounds creation/status
+  calls, retries an existing registration, cancels on leaving and cannot pop a
+  different route from a late callback.
+- External settings/home pages join affiliate signup in the system browser;
+  embedded Google popup handling and spoofed user agents are retired. URL/uid
+  construction, server-stored grants and conversation data are preserved.
+- Vendor completion probes use the documented uid contract without forwarding
+  Omi's Firebase bearer token; vendor failures cannot expire the Omi session.
+- Web referral activation has one token/request/body deadline, a working manual
+  retry and account/route ownership fences. It does not automatically retry an
+  eligibility rejection or alter the desktop referral destination.
+
+Release requires the follow-up mobile AND web changes, plus #21355's web helper
+proxy/client together. Verify the Firebase/Google/Apple callback configuration in
+`web/app/docs/firebase-auth.md` from #21355 and perform a real Samsung sign-in.
+The unspecified general Try Again screen still requires the reporter's screen,
+version and integration names; this audit does not invent its cause or close the
+customer incident from code merge.

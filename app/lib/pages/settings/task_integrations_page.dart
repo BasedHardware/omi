@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/services/integrations/connection_wait.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -147,6 +149,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
   TaskIntegrationApp? _pendingAuthApp;
   bool _startingAuth = false;
   bool _selectingPending = false;
+  ConnectionWait? _connectionWait;
   @override
   void initState() {
     super.initState();
@@ -159,6 +162,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
 
   @override
   void dispose() {
+    _connectionWait?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -167,7 +171,11 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       // Refresh when app comes back from background (e.g., after OAuth)
-      _loadFromBackend(forceRefresh: true);
+      if (_connectionWait?.isActive == true) {
+        _connectionWait!.refresh();
+      } else {
+        _loadFromBackend(forceRefresh: true);
+      }
     }
   }
 
@@ -175,20 +183,41 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     if (!mounted) return;
     final provider = context.read<TaskIntegrationProvider>();
     await provider.loadFromBackend(forceRefresh: forceRefresh);
-    if (!mounted || provider.hasLoadError || provider.isLoading || _selectingPending) return;
-    final pending = _pendingAuthApp;
-    if (pending != null && provider.isAppConnected(pending)) {
-      _selectingPending = true;
-      final selected = await provider.setSelectedApp(pending);
-      _selectingPending = false;
-      if (!mounted) return;
-      if (selected) {
-        setState(() => _pendingAuthApp = null);
-        OmiFeedback.confirm(context, context.l10n.connectedToApp(pending.displayName));
-      } else {
+  }
+
+  void _waitForTaskConnection(TaskIntegrationApp pending) {
+    if (_selectingPending) return;
+    _connectionWait?.cancel();
+    final provider = context.read<TaskIntegrationProvider>();
+    final uid = SharedPreferencesUtil().uid;
+    late final ConnectionWait wait;
+    wait = ConnectionWait(
+      isCurrent: () => mounted && SharedPreferencesUtil().uid == uid && _pendingAuthApp == pending,
+      probe: () async {
+        await provider.loadFromBackend(forceRefresh: true, silent: true);
+        if (provider.hasLoadError) return ConnectionProbe.failed;
+        if (provider.isLoading) return ConnectionProbe.pending;
+        return provider.isAppConnected(pending) ? ConnectionProbe.connected : ConnectionProbe.pending;
+      },
+    );
+    _connectionWait = wait;
+    unawaited(wait.start().then((outcome) async {
+      if (!mounted || !identical(_connectionWait, wait) || SharedPreferencesUtil().uid != uid) return;
+      if (outcome == ConnectionWaitOutcome.connected) {
+        setState(() => _selectingPending = true);
+        final selected = await provider.setSelectedApp(pending);
+        if (mounted) setState(() => _selectingPending = false);
+        if (!mounted || SharedPreferencesUtil().uid != uid || !identical(_connectionWait, wait)) return;
+        if (selected) {
+          setState(() => _pendingAuthApp = null);
+          OmiFeedback.confirm(context, context.l10n.connectedToApp(pending.displayName));
+        } else {
+          OmiFeedback.error(context, context.l10n.connectionErrorDesc);
+        }
+      } else if (outcome != ConnectionWaitOutcome.cancelled) {
         OmiFeedback.error(context, context.l10n.connectionErrorDesc);
       }
-    }
+    }));
   }
 
   bool _shouldShowSettingsIcon() {
@@ -218,6 +247,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
   }
 
   Future<void> _selectApp(TaskIntegrationApp app) async {
+    if (_selectingPending) return;
     if (!app.isAvailable) {
       _showComingSoonDialog(app);
       return;
@@ -261,7 +291,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
       TaskIntegrationApp.asana => (AsanaService().isAuthenticated, AsanaService().authenticate),
       TaskIntegrationApp.googleTasks => (GoogleTasksService().isAuthenticated, GoogleTasksService().authenticate),
       TaskIntegrationApp.clickup => (ClickUpService().isAuthenticated, ClickUpService().authenticate),
-      _ => (false, () async => false),
+      _ => (false, ({bool Function()? isCurrent}) async => false),
     };
     if (!authenticated) {
       if (_startingAuth) return;
@@ -270,13 +300,15 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
         _startingAuth = false;
         return;
       }
-      final started = await (widget.authenticate?.call(app) ?? authenticate());
+      final uid = SharedPreferencesUtil().uid;
+      final started = await (widget.authenticate?.call(app) ??
+          authenticate(isCurrent: () => mounted && SharedPreferencesUtil().uid == uid));
       _startingAuth = false;
       if (!mounted) return;
       if (started) {
         setState(() => _pendingAuthApp = app);
         OmiFeedback.info(context, context.l10n.completeAuthBrowser);
-        await _loadFromBackend(forceRefresh: true);
+        _waitForTaskConnection(app);
       } else {
         PlatformManager.instance.analytics.taskIntegrationAuthFailed(appName: app.key);
         OmiFeedback.error(context, context.l10n.failedToStartAppAuth(app.displayName));
@@ -448,7 +480,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
   Widget build(BuildContext context) {
     // Watch provider to rebuild when it changes
     final provider = context.watch<TaskIntegrationProvider>();
-    final isLoading = provider.isLoading || !provider.hasLoaded;
+    final isLoading = provider.isLoading || !provider.hasLoaded || _selectingPending;
 
     return Scaffold(
       appBar: AppBar(
@@ -473,9 +505,15 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
               if (provider.hasLoadError)
                 Semantics(liveRegion: true, child: Text(context.l10n.connectionErrorDesc, style: OmiType.subhead)),
               if (_pendingAuthApp != null) ...[
-                Text(context.l10n.completeAuthBrowser, style: OmiType.subhead),
+                Text(
+                    _selectingPending
+                        ? context.l10n.saving
+                        : !provider.hasLoadError && provider.isAppConnected(_pendingAuthApp!)
+                            ? context.l10n.connectedToApp(_pendingAuthApp!.displayName)
+                            : context.l10n.completeAuthBrowser,
+                    style: OmiType.subhead),
                 TextButton(
-                    onPressed: isLoading ? null : () => _loadFromBackend(forceRefresh: true),
+                    onPressed: isLoading ? null : () => _waitForTaskConnection(_pendingAuthApp!),
                     child: Text(context.l10n.tryAgain)),
               ],
               // App List

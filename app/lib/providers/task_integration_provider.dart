@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:omi/services/integrations/connection_read.dart';
 
 import 'package:omi/backend/http/api/task_integrations.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
@@ -18,6 +19,7 @@ class TaskIntegrationProvider extends ChangeNotifier {
   final Duration statusTimeout;
   Future<void>? _inFlightLoad;
   int _readGeneration = 0;
+  final _activeReads = <ConnectionRead<Object?>>{};
   bool _hasLoadError = false;
   TaskIntegrationApp _selectedApp;
   Map<String, dynamic> _connectionDetails = {};
@@ -42,25 +44,34 @@ class TaskIntegrationProvider extends ChangeNotifier {
   bool get hasLoadError => _hasLoadError;
 
   /// Load default app and connection details from backend
-  Future<void> loadFromBackend({bool forceRefresh = false}) {
+  Future<void> loadFromBackend({bool forceRefresh = false, bool silent = false}) {
     final existing = _inFlightLoad;
     if (existing != null && !forceRefresh) return existing;
     late final Future<void> started;
-    started = _loadFromBackendBody(++_readGeneration).whenComplete(() {
+    started = _loadFromBackendBody(++_readGeneration, silent: silent).whenComplete(() {
       if (identical(_inFlightLoad, started)) _inFlightLoad = null;
     });
     _inFlightLoad = started;
     return started;
   }
 
-  Future<void> _loadFromBackendBody(int readGeneration) async {
+  Future<void> _loadFromBackendBody(int readGeneration, {required bool silent}) async {
     final generation = _sessionGeneration;
     bool isCurrent() => generation == _sessionGeneration && readGeneration == _readGeneration;
-    _isLoading = true;
-    notifyListeners();
+    if (!silent) {
+      _isLoading = true;
+      notifyListeners();
+    }
 
     try {
-      final response = await Future.sync(_fetchStatus).timeout(statusTimeout);
+      final read = ConnectionRead(_fetchStatus, statusTimeout);
+      _activeReads.add(read);
+      TaskIntegrationsResponse? response;
+      try {
+        response = await read.future;
+      } finally {
+        _activeReads.remove(read);
+      }
       if (!isCurrent()) return;
       if (response == null) {
         _hasLoadError = true;
@@ -105,9 +116,10 @@ class TaskIntegrationProvider extends ChangeNotifier {
       }
       _appleRemindersPermissionManuallySet = false;
 
-      if (response.defaultApp != null && response.defaultApp!.isNotEmpty) {
+      final defaultApp = response.defaultApp;
+      if (defaultApp != null && defaultApp.isNotEmpty) {
         _selectedApp = TaskIntegrationApp.values.firstWhere(
-          (app) => app.key == response.defaultApp,
+          (app) => app.key == defaultApp,
           orElse: () => PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks,
         );
       }
@@ -131,7 +143,14 @@ class TaskIntegrationProvider extends ChangeNotifier {
   Future<bool> setSelectedApp(TaskIntegrationApp app) async {
     final generation = _sessionGeneration;
     try {
-      final success = await Future.sync(() => _setDefaultTaskIntegration(app.key)).timeout(statusTimeout);
+      final read = ConnectionRead(() => _setDefaultTaskIntegration(app.key), statusTimeout);
+      _activeReads.add(read);
+      bool success;
+      try {
+        success = await read.future;
+      } finally {
+        _activeReads.remove(read);
+      }
       if (generation != _sessionGeneration || !success) return false;
 
       // A status read issued before this write cannot restore the prior default.
@@ -229,6 +248,10 @@ class TaskIntegrationProvider extends ChangeNotifier {
   void clearUserData() {
     _sessionGeneration++;
     _readGeneration++;
+    for (final read in _activeReads) {
+      read.cancel();
+    }
+    _activeReads.clear();
     _inFlightLoad = null;
     _hasLoadError = false;
     _selectedApp = PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
@@ -242,5 +265,16 @@ class TaskIntegrationProvider extends ChangeNotifier {
     GoogleTasksService().setAuthenticated(false);
     ClickUpService().setAuthenticated(false);
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _sessionGeneration++;
+    _readGeneration++;
+    for (final read in _activeReads) {
+      read.cancel();
+    }
+    _activeReads.clear();
+    super.dispose();
   }
 }

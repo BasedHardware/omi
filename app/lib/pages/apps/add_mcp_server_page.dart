@@ -1,25 +1,34 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/services/integrations/connection_wait.dart';
+import 'package:omi/services/integrations/integration_oauth.dart';
 
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/other/temp.dart';
 import 'widgets/app_form_fields.dart';
 
 class AddMcpServerPage extends StatefulWidget {
-  const AddMcpServerPage({super.key});
+  const AddMcpServerPage(
+      {super.key,
+      this.addServer = addMcpServer,
+      this.appDetailsLoader = getAppDetailsServer,
+      this.probeTimeout = const Duration(seconds: 20),
+      this.waitTimeout = const Duration(minutes: 5)});
+  final Future<Map<String, dynamic>?> Function(String, String, {String? description}) addServer;
+  final Future<Map<String, dynamic>?> Function(String) appDetailsLoader;
+  final Duration probeTimeout;
+  final Duration waitTimeout;
 
   @override
   State<AddMcpServerPage> createState() => _AddMcpServerPageState();
 }
 
-class _AddMcpServerPageState extends State<AddMcpServerPage> {
+class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBindingObserver {
   final _nameController = TextEditingController();
   final _urlController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -28,124 +37,151 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
   bool _isLoading = false;
   bool _isPolling = false;
   String? _appId;
-  Timer? _pollTimer;
+  ConnectionWait? _connectionWait;
+  App? _readyApp;
+  String? _submittedUrl;
+  String? _authUrl;
+  String? _submittedUid;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _connectionWait?.refresh();
+  }
 
   @override
   void dispose() {
     _nameController.dispose();
     _urlController.dispose();
     _descriptionController.dispose();
-    _pollTimer?.cancel();
+    _connectionWait?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   Future<void> _connect() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() => _isLoading = true);
-
-    final result = await addMcpServer(
-      _nameController.text.trim(),
-      _urlController.text.trim(),
-      description: _descriptionController.text.trim(),
-    );
-
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-
-    if (result == null) {
-      _showError(context.l10n.mcpConnectionFailed);
-      return;
+    if (_isLoading || _isPolling || !_formKey.currentState!.validate()) return;
+    final uid = SharedPreferencesUtil().uid;
+    if (_submittedUid != null && _submittedUid != SharedPreferencesUtil().uid) {
+      _connectionWait?.cancel();
+      _appId = null;
+      _authUrl = null;
+      _submittedUrl = null;
     }
-
-    if (result.containsKey('error')) {
-      _showError(result['error'] as String);
-      return;
-    }
-
-    _appId = result['app_id'] as String?;
-    final requiresOauth = result['requires_oauth'] as bool? ?? false;
-
-    if (requiresOauth) {
-      final authUrl = result['auth_url'] as String?;
-      if (authUrl != null) {
-        await _openAuthInAppBrowser(authUrl);
-      } else {
-        _showError(context.l10n.mcpConnectionFailed);
-      }
-    } else {
-      final toolsCount = result['tools_count'] as int? ?? 0;
-      if (mounted) {
-        OmiFeedback.confirm(context, context.l10n.mcpServerConnected(toolsCount));
-        _navigateToAppDetail(_appId!);
-      }
-    }
-  }
-
-  Future<void> _openAuthInAppBrowser(String authUrl) async {
-    final uri = Uri.parse(authUrl);
-    try {
-      await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
-    } on PlatformException {
-      try {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } on PlatformException {
-        if (mounted) _showError(context.l10n.mcpConnectionFailed);
+    if (_appId != null && _submittedUrl == _urlController.text.trim()) {
+      if (_authUrl != null &&
+          !await launchIntegrationOAuth(() async => _authUrl,
+              isCurrent: () => mounted && SharedPreferencesUtil().uid == uid)) {
+        if (mounted && SharedPreferencesUtil().uid == uid) _showError(context.l10n.mcpConnectionFailed);
         return;
       }
+      if (mounted && SharedPreferencesUtil().uid == uid) _startPollingForCompletion();
+      return;
     }
-
-    // Start polling for OAuth completion
-    _startPollingForCompletion();
+    setState(() => _isLoading = true);
+    try {
+      final result = await widget
+          .addServer(_nameController.text.trim(), _urlController.text.trim(),
+              description: _descriptionController.text.trim())
+          .timeout(const Duration(seconds: 45));
+      if (!mounted || SharedPreferencesUtil().uid != uid) return;
+      if (result == null || result['error'] != null) {
+        _showError(result?['error'] is String ? result!['error'] as String : context.l10n.mcpConnectionFailed);
+        return;
+      }
+      final id = result['app_id'];
+      if (id is! String || id.isEmpty || result['requires_oauth'] is! bool) {
+        _showError(context.l10n.mcpConnectionFailed);
+        return;
+      }
+      _appId = id;
+      _submittedUrl = _urlController.text.trim();
+      _submittedUid = uid;
+      if (result['requires_oauth'] == true) {
+        final url = result['auth_url'];
+        _authUrl = url is String ? url : null;
+        if (url is! String ||
+            !await launchIntegrationOAuth(() async => url,
+                isCurrent: () => mounted && SharedPreferencesUtil().uid == uid)) {
+          if (mounted) _showError(context.l10n.mcpConnectionFailed);
+          return;
+        }
+        if (mounted && SharedPreferencesUtil().uid == uid) _startPollingForCompletion();
+      } else {
+        await _navigateToAppDetail(id, uid);
+      }
+    } catch (_) {
+      if (mounted && SharedPreferencesUtil().uid == uid) _showError(context.l10n.mcpConnectionFailed);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   void _startPollingForCompletion() {
-    if (_appId == null) return;
+    final id = _appId;
+    if (id == null || !mounted) return;
+    _connectionWait?.cancel();
+    _readyApp = null;
+    final uid = SharedPreferencesUtil().uid;
     setState(() => _isPolling = true);
-
-    int attempts = 0;
-    const maxAttempts = 100; // ~5 minutes at 3s intervals
-
-    _pollTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
-      attempts++;
-      if (attempts > maxAttempts || !mounted) {
-        timer.cancel();
-        if (mounted) {
-          setState(() => _isPolling = false);
-          _showError(context.l10n.mcpConnectionFailed);
+    late final ConnectionWait wait;
+    wait = ConnectionWait(
+      isCurrent: () => mounted && _appId == id && SharedPreferencesUtil().uid == uid,
+      probeTimeout: widget.probeTimeout,
+      waitTimeout: widget.waitTimeout,
+      probe: () async {
+        final data = await widget.appDetailsLoader(id);
+        if (!mounted || !wait.isActive || _appId != id || SharedPreferencesUtil().uid != uid) {
+          return ConnectionProbe.pending;
         }
-        return;
-      }
-
-      final appData = await getAppDetailsServer(_appId!);
-      if (appData == null) return;
-
-      final status = appData['status'] as String?;
-      if (status == 'approved') {
-        timer.cancel();
-        final chatTools = appData['chat_tools'] as List?;
-        final toolsCount = chatTools?.length ?? 0;
-        if (mounted) {
-          setState(() => _isPolling = false);
-          OmiFeedback.confirm(context, context.l10n.mcpServerConnected(toolsCount));
-          final app = App.fromJson(appData);
-          Navigator.pop(context);
-          routeToPage(context, AppDetailPage(app: app));
+        if (data == null) return ConnectionProbe.failed;
+        if (data['status'] == 'approved') {
+          final app = App.fromJson(data);
+          if (app.id != id) return ConnectionProbe.failed;
+          if (!app.enabled) return ConnectionProbe.pending;
+          _readyApp = app;
+          return ConnectionProbe.connected;
         }
+        if (['failed', 'rejected', 'disabled'].contains(data['status'])) return ConnectionProbe.failed;
+        return ConnectionProbe.pending;
+      },
+    );
+    _connectionWait = wait;
+    unawaited(wait.start().then((outcome) {
+      if (!mounted || !identical(_connectionWait, wait)) return;
+      setState(() => _isPolling = false);
+      if (outcome == ConnectionWaitOutcome.connected && _readyApp != null) {
+        _showConnectedApp(_readyApp!);
+      } else if (outcome != ConnectionWaitOutcome.cancelled) {
+        _showError(context.l10n.mcpConnectionFailed);
       }
-    });
+    }));
   }
 
-  Future<void> _navigateToAppDetail(String appId) async {
-    final appData = await getAppDetailsServer(appId);
-    if (!mounted) return;
-    if (appData != null) {
-      final app = App.fromJson(appData);
-      Navigator.pop(context);
-      routeToPage(context, AppDetailPage(app: app));
-    } else {
-      Navigator.pop(context, true);
+  Future<void> _navigateToAppDetail(String id, String uid) async {
+    final data = await widget.appDetailsLoader(id).timeout(widget.probeTimeout);
+    if (!mounted || SharedPreferencesUtil().uid != uid) return;
+    if (data == null) {
+      _showError(context.l10n.mcpConnectionFailed);
+      return;
     }
+    final app = App.fromJson(data);
+    if (app.id != id || app.status != 'approved' || !app.enabled) {
+      _showError(context.l10n.mcpConnectionFailed);
+      return;
+    }
+    _showConnectedApp(app);
+  }
+
+  void _showConnectedApp(App app) {
+    if (!mounted || ModalRoute.of(context)?.isCurrent != true) return;
+    OmiFeedback.confirm(context, context.l10n.mcpServerConnected(app.chatTools?.length ?? 0));
+    Navigator.of(context).pushReplacement(MaterialPageRoute<void>(builder: (_) => AppDetailPage(app: app)));
   }
 
   void _showError(String message) {
