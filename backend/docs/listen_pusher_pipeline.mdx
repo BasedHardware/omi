@@ -4966,6 +4966,66 @@ checks and Jev approval; genuine user edits stay protected. No transcripts or
 audio are combined. Rollout, rollback limits and the separate wall-clock shadow
 review are in [the runbook](runbooks/desktop-pendant-call-link.md).
 
+### Repeat-work cuts (plan v3, default off)
+
+`PLAYBACK_ON_DEMAND_ENABLED=false` preserves eager playback warming. When enabled,
+chunk-list refreshes persist metadata without warming MP3s; `/v1/sync/audio/{id}/urls`,
+precache on open, and audio download enqueue the existing named audio-merge tasks.
+GCS listing generations/checksums plus the complete ordered chunk geometry select
+stable UUIDs. Entries without immutable source evidence retain fresh IDs. The worker
+verifies stamped sources before/after merge. Conversation MP3s use immutable
+fingerprint paths, including the conversation origin used for seek offsets. Raw
+capture bytes, metadata, retention and consent rules remain unchanged. Up to 128 recent prior IDs per group resolve to the current source identity (never
+to an old artifact); stored objects remain untouched. Clients refresh `/urls` after
+a longer revision history or a group split. Newly rebuilt groups receive stable IDs.
+Demand tasks carry their source-identity protocol through rollback and use separate hourly task names so eager-task tombstones cannot swallow
+first play; run locks coalesce cross-hour deliveries. The first request may return
+pending. Measure `omi_playback_demand_to_ready_seconds` (queue/retry included),
+`omi_playback_build_seconds`, and `omi_playback_artifacts_total` before widening.
+Before acknowledging a pre-enable eager task, write an opaque playback recovery
+epoch to the existing conversation, without reading or recreating it. A failed
+write returns 503. On rollback, open/play readers reuse their loaded conversation
+to select a fresh, deduped eager task name, escaping the old task's tombstone.
+This adds one metadata write per deferred delivery, without a recurring queue
+wake or a new Firestore read. Track `omi_playback_artifacts_total{outcome="deferred"}`.
+Flag-off readers also reuse a matching immutable demand artifact and its spans.
+
+`REPEAT_WORK_REVISION_ENABLED=false` preserves Train 1 controls. Enabled uses the
+same #21679 `sync_reprocess_outbox`, leases, repair sweep and explicit Process Now
+bypass. Quiet-window extension is capped at 60 minutes from the first pending mark;
+new revisions during execution remain owed with their original first-pending clock.
+The step-1 demand scheduler owns surface
+promotion and the 1/5/60-minute tiers; this flag introduces no second queue or surface
+inference. Notes (including task generation) and L1 reuse only exact effective inputs
+with successful durable checkpoints, using the already loaded conversation snapshot
+for cache checks. Fingerprints include source revision, rendered transcript/context,
+language, owner evidence, prompt/schema implementation, resolved route and
+`REPEAT_WORK_LLM_VERSION` (default `2026-10-16-v1`). Bump that version in the same
+config train as a remote gateway model/prompt change. A failed output never stamps.
+Task identity and export preservation remain owned by `action_item_refresh.py`.
+
+`omi_repeat_work_features_total` counts invoked/reused/durable feature outcomes;
+`omi_repeat_work_llm_calls_total` counts observed LangChain completions/errors within
+the conversation processing scope. Content-free `event=repeat_work` logs join these
+to durable finalizations by hashed owner/conversation key and source revision; IDs
+never become metric labels. Group by the final surviving key, not finalization-event
+count. This covers observed logical calls, not hidden provider transport retries or
+external Jev calls; reconcile the attempt ledger/invoices before booking dollars.
+
+`SYNC_POLL_BACKOFF_ENABLED=false` preserves existing responses. Enabled GET
+`/v2/sync-local-files/{job_id}` returns `poll_after_ms=60000` for queued work,
+`20000` for active/unknown work or `?surface_open=true`, and `0` for terminal work
+(stop polling). It uses already loaded job state, without an account-wide Firestore
+query; a terminal job is not proof all other jobs are idle. Both Redis and durable
+batch status responses use the same hint. The Flutter generated response parser and
+`SyncJobPoller.fetch` honor it with a 20s minimum; terminal policy stops polls. Existing
+clients do not send the optional surface hint, so queued foreground work retains the
+60s hint until it becomes active; request-to-active freshness is a rollout guard.
+
+Rollback each new flag independently. Existing durable enrichment obligations drain
+with their original queue/audience after rollback. Do not change Train 1 production
+switches as part of the rollback. This PR changes no production runtime configuration.
+
 ### Mobile ring-download idle recovery
 
 The phone's ring-storage reader retains its initial five-second response limit

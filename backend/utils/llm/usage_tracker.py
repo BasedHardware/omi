@@ -17,6 +17,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 
 from database.llm_usage import record_llm_usage
+from utils.sync.repeat_work_metrics import record_llm_call
 
 # Context variable for tracking current feature
 _usage_context: contextvars.ContextVar[Optional["UsageContext"]] = contextvars.ContextVar(
@@ -83,9 +84,14 @@ class LLMUsageCallback(BaseCallbackHandler):
         """
         self._flush_fn = flush_fn
 
+    def on_llm_error(self, error: BaseException, **kwargs: Any) -> None:
+        ctx = _usage_context.get()
+        record_llm_call('failed', ctx.feature if ctx else 'other')
+
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
         """Called when LLM call ends. Records token usage."""
         ctx = _usage_context.get()
+        record_llm_call('completed', ctx.feature if ctx else 'other')
         if not ctx:
             ctx = UsageContext(uid="unknown", feature=Features.OTHER)
 

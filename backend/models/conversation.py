@@ -444,6 +444,9 @@ class CaptureEvidenceMetadata(BaseModel):
 
 
 class Conversation(BaseModel):
+    notes_llm_input_hash: Optional[str] = Field(default=None, exclude=True)
+    notes_llm_output_hash: Optional[str] = Field(default=None, exclude=True)
+    l1_llm_input_hash: Optional[str] = Field(default=None, exclude=True)
     sync_content_revision: Optional[int] = None
     sync_relevance: Optional[Literal['keep', 'review']] = None
     id: str
