@@ -4,6 +4,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 from cryptography.exceptions import InvalidTag
+from google.api_core.exceptions import NotFound
 import pytest
 
 from utils.batch_pipeline.artifacts import (
@@ -51,8 +52,11 @@ class ObjectClient:
                 client.after_upload()
 
             def reload(self, **kw):
+                if name not in client.objects:
+                    raise NotFound('synthetic absent object')
                 stored_generation, body = client.objects[name]
-                if kw['if_generation_match'] != stored_generation:
+                self.generation = stored_generation
+                if kw.get('if_generation_match', stored_generation) != stored_generation:
                     raise ValueError('generation mismatch')
                 self.size = client.reported_size or len(body)
 
@@ -230,3 +234,27 @@ def test_slow_upload_stops_new_chunks_before_deletion_outbox_can_drop_the_name(m
         + sum(upload_policy.UPLOAD_TIMEOUT)
         + 30
     )
+
+
+def test_recovery_upload_lost_reply_reconciles_same_encrypted_generation():
+    store, client, state = setup()
+    original = item()
+    staged = replace(original, audio_uri=store.stage_audio(original, b'synthetic audio'))
+    token = 'a' * 32
+    assert store.find_recovery_result(staged, token) is None
+    payload = {'words': [{'word': 'synthetic-private-text'}]}
+
+    def lost_reply():
+        raise TimeoutError('synthetic')
+
+    client.after_upload = lost_reply
+    with pytest.raises(TimeoutError):
+        store.persist_recovery_result(staged, payload, token)
+    uri = store.find_recovery_result(staged, token)
+    assert uri.endswith(f'/{token}.enc#2')
+    assert store.load_result(staged, uri) == payload
+    assert client.uploads == 2  # one audio, one result; no reupload or new STT
+    assert all(b'synthetic-private-text' not in body for _, body in client.objects.values())
+    state.context = ProtectionContext('enhanced', 1)
+    with pytest.raises(PermissionError):
+        store.find_recovery_result(staged, token)

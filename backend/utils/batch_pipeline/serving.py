@@ -22,13 +22,24 @@ from utils.sync import reprocess
 
 
 class Serving:
-    def __init__(self, store, *, metrics=None, projector=None, cleanup=None, reap_staging=None, enrichment_sweep=None):
+    def __init__(
+        self,
+        store,
+        *,
+        metrics=None,
+        projector=None,
+        cleanup=None,
+        reap_staging=None,
+        enrichment_sweep=None,
+        recovery=None,
+    ):
         self.store = store
         self.metrics = metrics
         self.projector = projector
         self.cleanup = cleanup
         self.reap_staging = reap_staging
         self.enrichment_sweep = enrichment_sweep
+        self.recovery = recovery
         self.merge = OrderedMerge(store, metrics=metrics)
 
     def queue(self, pool='batch'):
@@ -50,7 +61,7 @@ class Serving:
             if self.merge.commit_next(owner_id, time.time()) is None:
                 break
 
-    def reconcile(self):
+    def reconcile(self, *, recover_quarantine=False):
         if self.cleanup:
             try:
                 if self.reap_staging:
@@ -62,6 +73,8 @@ class Serving:
                 )
         if self.enrichment_sweep:
             self.enrichment_sweep()
+        if recover_quarantine and self.recovery:
+            self.recovery.sweep()
         self.queue().recover(time.time())
         owners = set()
         for segment in self.store.due('result_ready', time.time(), 100):
@@ -82,8 +95,11 @@ def serving_for_stage(stage: str) -> Serving:
     store = FirestoreStore(f'batch_pipeline_{stage}')
     artifacts = artifacts_for(store)
     projector = Projector(store, artifacts.load_result, fetch_audio=artifacts.fetch_audio)
+    from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery
+
     return Serving(
         store,
+        recovery=QuarantineRecovery(store, artifacts),
         metrics=_metrics(),
         projector=projector,
         cleanup=cleanup_completed_artifacts,
@@ -107,7 +123,7 @@ def start_serving_from_env():
         while not stop.is_set():
             try:
                 service = await run_blocking(sync_executor, serving_for_stage, current_stage())
-                await run_blocking(sync_executor, service.reconcile)
+                await run_blocking(sync_executor, service.reconcile, recover_quarantine=True)
             except Exception as error:
                 logging.getLogger(__name__).error(
                     'event=batch_serving outcome=retry exception_type=%s', type(error).__name__
@@ -126,7 +142,8 @@ async def stop_serving(runtime):
     stop, task = runtime
     stop.set()
     # Allow any transactional projection to finish; retries are durable if the
-    # process shutdown budget ends first. No model inference runs on this host.
+    # process shutdown budget ends first. Recovery may await a bounded legacy STT request; its durable started intent
+    # prevents a replacement process from issuing it again.
     try:
         await asyncio.wait_for(asyncio.shield(task), timeout=5)
     except asyncio.TimeoutError:
