@@ -12524,6 +12524,59 @@ class AppLocalizationsDe extends AppLocalizations {
   String get reviewNoChangesBody => 'Wenn Omi deine Notizen aufräumt, erscheinen die Änderungen hier.';
 
   @override
+  String get reviewChangesSectionTerms => 'Namen und Begriffe';
+
+  @override
+  String get reviewChangesSectionTitles => 'Titel und Zusammenfassungen';
+
+  @override
+  String get reviewChangesSectionOther => 'Weitere Änderungen';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Gespräche',
+      one: '1 Gespräch',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Stellen',
+      one: '1 Stelle',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Alle $count anzeigen';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Alle rückgängig machen';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Belege ansehen';
+
+  @override
+  String get reviewChangeViewConversation => 'Gespräch ansehen';
+
+  @override
+  String get reviewChangeViewTask => 'Aufgabe ansehen';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return '$failed von $total konnten nicht rückgängig gemacht werden. Versuche es erneut.';
+  }
+
+  @override
   String get reviewShowMore => 'Mehr anzeigen';
 
   @override
@@ -13500,4 +13553,28 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Zum Beheben tippen';
+
+  @override
+  String get homePendingTitle => 'Gespräche unterwegs';
+
+  @override
+  String get homePendingCatchingUp => 'Frühere Aufnahmen werden aufgeholt';
+
+  @override
+  String get onTheWayTitle => 'Unterwegs';
+
+  @override
+  String get onTheWayAlmostReady => 'Fast fertig';
+
+  @override
+  String get activityEmpty => 'Noch keine Aktivität';
+
+  @override
+  String get activityNewSemantics => 'Aktivität, neue Einträge';
+
+  @override
+  String get activityLoadFailed => 'Nicht alle Aktivitäten konnten geladen werden';
+
+  @override
+  String get activityNewItem => 'Neu';
 }

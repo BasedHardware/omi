@@ -12464,6 +12464,59 @@ class AppLocalizationsNl extends AppLocalizations {
   String get reviewNoChangesBody => 'Als Omi je notities opruimt, verschijnen de wijzigingen hier.';
 
   @override
+  String get reviewChangesSectionTerms => 'Namen en termen';
+
+  @override
+  String get reviewChangesSectionTitles => 'Titels en samenvattingen';
+
+  @override
+  String get reviewChangesSectionOther => 'Overige wijzigingen';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gesprekken',
+      one: '1 gesprek',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count plekken',
+      one: '1 plek',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Alle $count tonen';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Alles ongedaan maken';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Bewijs bekijken';
+
+  @override
+  String get reviewChangeViewConversation => 'Gesprek bekijken';
+
+  @override
+  String get reviewChangeViewTask => 'Taak bekijken';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return '$failed van $total konden niet ongedaan worden gemaakt. Probeer het opnieuw.';
+  }
+
+  @override
   String get reviewShowMore => 'Meer tonen';
 
   @override
@@ -13437,4 +13490,28 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Tik om te herstellen';
+
+  @override
+  String get homePendingTitle => 'Gesprekken onderweg';
+
+  @override
+  String get homePendingCatchingUp => 'Eerdere audio wordt ingehaald';
+
+  @override
+  String get onTheWayTitle => 'Onderweg';
+
+  @override
+  String get onTheWayAlmostReady => 'Bijna klaar';
+
+  @override
+  String get activityEmpty => 'Nog geen activiteit';
+
+  @override
+  String get activityNewSemantics => 'Activiteit, nieuwe items';
+
+  @override
+  String get activityLoadFailed => 'Niet al je activiteit kon worden geladen';
+
+  @override
+  String get activityNewItem => 'Nieuw';
 }

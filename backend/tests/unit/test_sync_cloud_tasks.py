@@ -32,6 +32,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import fakeredis
 import pytest
 
+# Keep additive batch imports real before legacy fixtures replace package roots.
+from utils.batch_pipeline import intake as _batch_intake  # noqa: F401
+from routers import batch_pipeline as _batch_router  # noqa: F401
+from models import sync_job_status as _sync_job_status  # noqa: F401
+
 BACKEND_DIR = os.path.join(os.path.dirname(__file__), '..', '..')
 
 
@@ -3171,7 +3176,8 @@ async def test_known_unregistered_backfill_cleans_up_and_returns_retryable_503()
 
 
 @pytest.mark.asyncio
-async def test_old_backfill_task_migrates_on_flag_on_and_runs_direct_when_off():
+@pytest.mark.parametrize('idle_owner', [{}, {'epoch': 3, 'reconcile_at': 0}])
+async def test_old_backfill_task_migrates_on_flag_on_and_runs_direct_when_off(idle_owner):
     module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
     payload = {
         'uid': 'test-uid',
@@ -3184,7 +3190,7 @@ async def test_old_backfill_task_migrates_on_flag_on_and_runs_direct_when_off():
     request.json = AsyncMock(return_value=payload)
     module.get_sync_job = MagicMock(return_value={'status': 'queued'})
     module.uid_sequencer.enabled.return_value = True
-    module.sync_backfill_sequencer.get_owner = MagicMock(return_value={})
+    module.sync_backfill_sequencer.get_owner = MagicMock(return_value=idle_owner)
     module.sync_backfill_sequencer.has_pending = MagicMock(return_value=False)
     module.sync_backfill_sequencer.register_job = MagicMock(return_value=True)
     module.uid_sequencer.kick = MagicMock(return_value=True)
@@ -3205,7 +3211,7 @@ async def test_old_backfill_task_migrates_on_flag_on_and_runs_direct_when_off():
         assert migrated_during_rollback.status_code == 200
         assert module.sync_backfill_sequencer.register_job.call_count == 2
         module._run_sync_job_body.assert_awaited_once()
-        module.sync_backfill_sequencer.get_owner.return_value = {}
+        module.sync_backfill_sequencer.get_owner.return_value = idle_owner
         module.sync_backfill_sequencer.has_pending.return_value = True
         migrated_from_pending = await module.run_sync_job(request, task_retry_count=0)
         assert migrated_from_pending.status_code == 200
@@ -3628,3 +3634,85 @@ async def test_legacy_fresh_refusal_preserves_backfill_pause_instead_of_429(monk
                 sys.modules.pop(mod_name, None)
             else:
                 sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('batch_status', [202, 503])
+async def test_batch_cohort_upload_never_dispatches_or_claims_legacy(monkeypatch, batch_status):
+    """Even ambiguous batch admission owns the route; it must never fall through."""
+    from starlette.datastructures import UploadFile
+    from fastapi.responses import JSONResponse
+
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
+    module, saved_modules, mock_sync_jobs, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    accepted = AsyncMock(return_value=JSONResponse(status_code=batch_status, content={'job_id': 'bp_synthetic'}))
+    module.accept_batch_upload = accepted
+    module._run_full_pipeline_background_async = AsyncMock()
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'synthetic-audio'))
+        response = await module.sync_local_files_v2(files=[upload], uid='test-uid')
+        assert response.status_code == batch_status
+        accepted.assert_awaited_once()
+        module.create_sync_job.assert_not_called()
+        module.claim_sync_content.assert_not_called()
+        module.enqueue_sync_job.assert_not_called()
+        module.release_sync_content_claim.assert_not_called()
+        module._run_full_pipeline_background_async.assert_not_called()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_coalesced_enrichment_task_uses_adapter_before_legacy_job_parsing(monkeypatch):
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    handler = AsyncMock(return_value=module.JSONResponse(status_code=200, content={'status': 'processed'}))
+    module.enrichment_response = handler
+    request = MagicMock()
+    payload = {'kind': 'sync_reprocess', 'key': 'a' * 64, 'task_token': 'b' * 32}
+    request.json = AsyncMock(return_value=payload)
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+        assert response.status_code == 200
+        handler.assert_awaited_once_with(payload)
+        module.get_sync_job.assert_not_called()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_cohort_prior_legacy_receipt_retains_original_claim_and_dispatch(monkeypatch):
+    from starlette.datastructures import UploadFile
+
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.accept_batch_upload = AsyncMock(return_value=None)
+    try:
+        response = await module.sync_local_files_v2(
+            files=[UploadFile(filename='test.opus', file=BytesIO(b'synthetic-audio'))], uid='test-uid'
+        )
+        assert response.status_code == 202
+        module.accept_batch_upload.assert_awaited_once()
+        module.claim_sync_content.assert_called_once()
+        module.enqueue_sync_job.assert_called_once()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original

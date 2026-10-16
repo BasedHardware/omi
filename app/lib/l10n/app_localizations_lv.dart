@@ -12457,6 +12457,59 @@ class AppLocalizationsLv extends AppLocalizations {
   String get reviewNoChangesBody => 'Kad Omi sakārtos jūsu piezīmes, izmaiņas parādīsies šeit.';
 
   @override
+  String get reviewChangesSectionTerms => 'Vārdi un termini';
+
+  @override
+  String get reviewChangesSectionTitles => 'Nosaukumi un kopsavilkumi';
+
+  @override
+  String get reviewChangesSectionOther => 'Citas izmaiņas';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Sarunas: $count',
+      one: '1 saruna',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vietas: $count',
+      one: '1 vieta',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Rādīt visus ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Atsaukt visu';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Skatīt pierādījumus';
+
+  @override
+  String get reviewChangeViewConversation => 'Skatīt sarunu';
+
+  @override
+  String get reviewChangeViewTask => 'Skatīt uzdevumu';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Neizdevās atsaukt $failed no $total. Mēģiniet vēlreiz.';
+  }
+
+  @override
   String get reviewShowMore => 'Rādīt vairāk';
 
   @override
@@ -13430,4 +13483,28 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Pieskarieties, lai labotu';
+
+  @override
+  String get homePendingTitle => 'Sarunas ceļā';
+
+  @override
+  String get homePendingCatchingUp => 'Apstrādājam iepriekšējo audio';
+
+  @override
+  String get onTheWayTitle => 'Ceļā';
+
+  @override
+  String get onTheWayAlmostReady => 'Gandrīz gatavs';
+
+  @override
+  String get activityEmpty => 'Vēl nav aktivitātes';
+
+  @override
+  String get activityNewSemantics => 'Aktivitāte, jauni vienumi';
+
+  @override
+  String get activityLoadFailed => 'Neizdevās ielādēt visu jūsu aktivitāti';
+
+  @override
+  String get activityNewItem => 'Jauns';
 }

@@ -1,0 +1,13 @@
+# Separate Python 3.11 GPU image; do not install into the backend service venv.
+torch==2.8.0
+torchaudio==2.8.0
+nemo_toolkit[asr]==2.7.1
+pyannote-audio==4.0.3
+numpy==2.3.5
+prometheus-client==0.22.1
+google-cloud-firestore==2.21.0
+google-cloud-storage==3.4.1
+cryptography==46.0.3
+# Stage-qualified Firestore reference helper imports the backend HTTP/env types.
+fastapi==0.121.0
+python-dotenv==1.1.1

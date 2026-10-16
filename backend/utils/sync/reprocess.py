@@ -107,7 +107,22 @@ def _enqueue(row: dict[str, Any]) -> None:
     )
 
 
-def mark(uid: str, conversation_id: str, language: str, *, now: float | None = None) -> None:
+def mark(
+    uid: str,
+    conversation_id: str,
+    language: str,
+    *,
+    now: float | None = None,
+    mutate: Callable | None = None,
+) -> None:
+    """Record one enrichment obligation.
+
+    Projection may inject a transactional mutation to commit its replay receipt
+    and privacy fences with this obligation. The default retains the normal
+    CAS path; both paths enqueue only after durable persistence.
+    """
+    if mutate is not None and not owns_runtime():
+        raise RuntimeError('sync reprocess projection requires production or a Firestore emulator')
     current = time.time() if now is None else now
 
     def update(old: Row | None) -> tuple[Row, tuple[Row, bool]]:
@@ -125,7 +140,7 @@ def mark(uid: str, conversation_id: str, language: str, *, now: float | None = N
             )
         return row, (row, old is not None)
 
-    row, coalesced = _mutate(key(uid, conversation_id), update)
+    row, coalesced = (mutate or _mutate)(key(uid, conversation_id), update)
     if coalesced:
         COALESCED.inc()
     else:

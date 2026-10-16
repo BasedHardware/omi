@@ -1,96 +1,218 @@
-// Home's Offline Sync status card (ConversationProcessingCard): the pipeline
-// state Home shows after a conversation ends — audio the server is turning
-// into conversations, and audio waiting for a sync while auto-sync is off.
+// Recordings that are not conversations yet, and what Omi did on its own: Home's pending row in
+// Today, the On the Way page it opens, the Activity bell in the header and the Activity page.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart' show BleAudioCodec;
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/daily_summary.dart';
+import 'package:omi/backend/schema/review.dart';
+import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/models/sync_state.dart';
-import 'package:omi/pages/conversations/widgets/conversation_processing_card.dart';
+import 'package:omi/pages/activity/activity_page.dart';
+import 'package:omi/pages/activity/activity_seen.dart';
+import 'package:omi/pages/conversations/on_the_way_page.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals/wal.dart';
 
+import '../fakes.dart';
 import '../harness.dart';
+import 'capture.dart';
 
 /// A SyncProvider reporting one fixed offline-sync pipeline state.
 class _SyncAuditProvider extends ChangeNotifier implements SyncProvider {
-  _SyncAuditProvider({this.wals = const [], this.job = const (doneSeconds: 0, totalSeconds: 0, tracked: false)});
+  _SyncAuditProvider({this.wals = const [], this.phase = SyncPhase.idle});
 
   final List<Wal> wals;
-  final ({int doneSeconds, int totalSeconds, bool tracked}) job;
+  final SyncPhase phase;
 
   @override
-  SyncState get syncState => const SyncState();
+  SyncState get syncState =>
+      phase == SyncPhase.idle ? const SyncState() : SyncState(status: SyncStatus.syncing, phase: phase);
   @override
-  bool get isSyncing => false;
+  bool get isSyncing => phase != SyncPhase.idle;
   @override
   List<Wal> get allWals => wals;
   @override
-  List<Wal> get displaySortedWals => wals;
+  List<Wal> get displaySortedWals => [...wals]..sort((a, b) => b.timerStart.compareTo(a.timerStart));
   @override
   List<Wal> get uploadedWals => wals.where((w) => w.status == WalStatus.uploaded).toList();
   @override
   bool get isRateLimited => false;
   @override
-  ({int processed, int total}) get offlineServerProcessingCounts =>
-      (processed: job.doneSeconds, total: job.totalSeconds);
-  @override
-  ({int doneSeconds, int totalSeconds, bool tracked}) get offlineServerProcessingSeconds => job;
-  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-Wal _wal(String id, int minutes, WalStatus status) => Wal(
-      timerStart: 1000 + id.length,
+final _now = DateTime.now();
+final _today = DateTime(_now.year, _now.month, _now.day);
+DateTime _at(int daysAgo, int hour, int minute) => DateTime(_now.year, _now.month, _now.day - daysAgo, hour, minute);
+
+Wal _wal(DateTime start, int minutes, WalStatus status, {WalStorage storage = WalStorage.disk}) => Wal(
+      timerStart: start.millisecondsSinceEpoch ~/ 1000,
       codec: BleAudioCodec.opus,
       seconds: minutes * 60,
       status: status,
-      storage: WalStorage.disk,
+      storage: storage,
       device: 'pendant',
     );
+
+ServerConversation _convo(String id, String title, String emoji, DateTime at, int minutes) => ServerConversation(
+      id: id,
+      createdAt: at,
+      startedAt: at,
+      finishedAt: at.add(Duration(minutes: minutes)),
+      structured: Structured(title, 'Overview', emoji: emoji, category: 'work'),
+      status: ConversationStatus.completed,
+    );
+
+final _recaps = [
+  DailySummary(
+    id: 'r1',
+    date: _today.subtract(const Duration(days: 1)).toIso8601String().substring(0, 10),
+    createdAt: _at(0, 4, 10),
+    headline: 'Dashboard Clarity Amid Paperwork',
+    overview: 'A day of dashboards and forms.',
+    dayEmoji: '📊',
+    stats: DayStats(totalConversations: 6, actionItemsCount: 2),
+  ),
+  DailySummary(
+    id: 'r2',
+    date: _today.subtract(const Duration(days: 2)).toIso8601String().substring(0, 10),
+    createdAt: _at(1, 4, 5),
+    headline: 'Wind-Down Paperwork and Hardware Reality',
+    overview: '',
+    dayEmoji: '🔧',
+    stats: DayStats(totalConversations: 4, actionItemsCount: 1),
+  ),
+];
+
+/// Home with today's conversations, two recaps, and [sync]'s pending work.
+Future<void> _runHome(AuditRun a, SyncProvider sync) async {
+  final items = [
+    _convo('h1', 'Trying Something and Discussing Its QR Code', '🍽️', _at(0, 13, 37), 3),
+    _convo('h2', 'Dinner, AI Demo Day, and Model Feedback', '🍽️', _at(0, 13, 5), 28),
+    _convo('h3', 'Morning Run Notes', '🏃', _at(0, 7, 31), 6),
+  ];
+  final conversations = ConversationProvider(
+    conversationListFetcher: () async => (items: items, ok: true),
+    isSignedIn: () => true,
+  )
+    ..conversations = items
+    ..groupConversationsByDate();
+  await a.pump(HomeFrame(recaps: () async => (items: _recaps, ok: true)), scaffold: false, providers: [
+    ChangeNotifierProvider<DeviceProvider>.value(
+        value: AuditDeviceProvider(connected: true, battery: 79, device: auditPendant)),
+    ChangeNotifierProvider<CaptureProvider>.value(value: AuditCaptureProvider(AuditLive.pendant)),
+    ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
+    ChangeNotifierProvider<SyncProvider>.value(value: sync),
+  ]);
+}
+
+/// An in-memory bell state: last visit yesterday, so this morning's recap is new.
+ActivitySeen _seenYesterday() {
+  var stored = _at(1, 20, 0).millisecondsSinceEpoch;
+  return ActivitySeen(read: () => stored, write: (v) => stored = v);
+}
+
+final _changes = ReviewChangesPage(changes: [
+  ReviewChange(
+      changeId: 'c1',
+      kind: ReviewChangeKind.mergeMemories,
+      title: 'Merged two memories about your gym schedule',
+      createdAt: _at(0, 4, 2)),
+  ReviewChange(
+      changeId: 'c2',
+      kind: ReviewChangeKind.labelSpeaker,
+      title: 'Labeled Maya in 2 conversations',
+      createdAt: _at(0, 1, 40)),
+  ReviewChange(
+      changeId: 'c3',
+      kind: ReviewChangeKind.closeTask,
+      title: 'Closed “Send the deck to Priya”',
+      createdAt: _at(1, 16, 12)),
+]);
 
 final offlineProcessingScenarios = <AuditScenario>[
   AuditScenario(
     id: 'home-offline-processing',
-    title: 'Home: recordings turning into conversations',
-    page: 'lib/pages/conversations/widgets/conversation_processing_card.dart (ConversationProcessingCard)',
-    state: 'A 40m recording finished and uploaded, still processing on the server, next to a 15m one already '
-        'done; Home shows the pipeline, not a stale timestamp',
+    title: 'Home: conversations on the way',
+    page: 'lib/pages/conversations/widgets/home_pending_row.dart (HomePendingRow) on Home',
+    state: 'Two recordings uploaded and transcribing; three conversations today; two recaps',
     run: (a) async {
-      final p = _SyncAuditProvider(
-        wals: [_wal('processing', 40, WalStatus.uploaded), _wal('done', 15, WalStatus.synced)],
-        job: (doneSeconds: 15 * 60, totalSeconds: 55 * 60, tracked: true),
-      );
-      await a.pump(
-        const Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          ConversationProcessingCard(multiFileSync: true),
-        ]),
-        providers: [ChangeNotifierProvider<SyncProvider>.value(value: p)],
-      );
-      expect(find.text('Turning 55m into conversations'), findsOneWidget);
-      expect(find.text('15m of 55m done · you can leave this screen'), findsOneWidget);
-      await a.shot('The card Home shows while the server processes a recording');
+      final sync = _SyncAuditProvider(wals: [
+        _wal(_at(0, 18, 41), 14, WalStatus.uploaded),
+        _wal(_at(0, 17, 58), 3, WalStatus.uploaded),
+      ]);
+      await _runHome(a, sync);
+      expect(find.text('Conversations on the way'), findsOneWidget);
+      expect(find.text('Transcribing…'), findsOneWidget);
+      await a.shot('Home shows one pending row under Today');
     },
   ),
   AuditScenario(
     id: 'home-offline-processing-ready',
-    title: 'Home: recordings waiting for a sync',
-    page: 'lib/pages/conversations/widgets/conversation_processing_card.dart (ConversationProcessingCard)',
-    state: 'A 45m and a 15m recording saved on the phone, waiting for their sync; the card offers the tap '
-        'into Offline Sync',
+    title: 'Home: catching up on a long backlog',
+    page: 'lib/pages/conversations/widgets/home_pending_row.dart (HomePendingRow) on Home',
+    state: 'Three hours of pendant audio waiting for its sync, one block downloading; the bell has a new recap',
     run: (a) async {
-      final p = _SyncAuditProvider(
-        wals: [_wal('ready-a', 45, WalStatus.miss), _wal('ready-b', 15, WalStatus.miss)],
-      );
+      final sync = _SyncAuditProvider(phase: SyncPhase.downloadingFromDevice, wals: [
+        _wal(_at(0, 15, 0), 70, WalStatus.miss, storage: WalStorage.sdcard),
+        _wal(_at(0, 11, 0), 110, WalStatus.miss, storage: WalStorage.sdcard),
+      ]);
+      // Home's recaps report to the app's bell state, so seed that one and put it back after.
+      final previous = ActivitySeen.instance;
+      ActivitySeen.instance = _seenYesterday();
+      addTearDown(() => ActivitySeen.instance = previous);
+      await _runHome(a, sync);
+      expect(find.byKey(const ValueKey('home_activity_dot')), findsOneWidget);
+      expect(find.text('Catching up on earlier audio'), findsOneWidget);
+      await a.shot('A long backlog reads as catching up, with no hour count');
+    },
+  ),
+  AuditScenario(
+    id: 'on-the-way',
+    title: 'On the Way',
+    page: 'lib/pages/conversations/on_the_way_page.dart (OnTheWayPage)',
+    state: 'One recording transcribing, one uploading from the phone, one still on the pendant, '
+        'and one the server refused',
+    run: (a) async {
+      final sync = _SyncAuditProvider(phase: SyncPhase.uploadingToCloud, wals: [
+        _wal(_at(0, 18, 41), 14, WalStatus.uploaded),
+        _wal(_at(0, 17, 58), 3, WalStatus.miss)..isSyncing = true,
+        _wal(_at(0, 17, 40), 1, WalStatus.miss, storage: WalStorage.sdcard),
+        _wal(_at(2, 9, 0), 5, WalStatus.outsideRecoveryWindow),
+      ]);
+      await a.pump(OnTheWayPage(syncProvider: sync, multiFileSync: true), scaffold: false, providers: [
+        ChangeNotifierProvider<SyncProvider>.value(value: sync),
+      ]);
+      expect(find.text('On the Way'), findsOneWidget);
+      expect(find.text('Sync details'), findsOneWidget);
+      await a.shot('Open the pending row');
+    },
+  ),
+  AuditScenario(
+    id: 'activity',
+    title: 'Activity',
+    page: 'lib/pages/activity/activity_page.dart (ActivityPage)',
+    state: 'Two recaps (one new since yesterday’s visit) and three changes Omi made on its own',
+    run: (a) async {
       await a.pump(
-        const Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          ConversationProcessingCard(multiFileSync: true),
-        ]),
-        providers: [ChangeNotifierProvider<SyncProvider>.value(value: p)],
+        ActivityPage(
+          seen: _seenYesterday(),
+          loadRecaps: () async => (items: _recaps, ok: true),
+          loadChanges: ({cursor}) async => ApiSuccess(_changes),
+          probeDreamReport: () async => false,
+        ),
+        scaffold: false,
       );
-      expect(find.text('1h ready to sync'), findsOneWidget);
-      await a.shot('The card Home shows when a sync is waiting for the user');
+      expect(find.text('Activity'), findsOneWidget);
+      expect(find.byKey(const Key('activity_new_dot')), findsOneWidget);
+      await a.shot('Open the bell');
     },
   ),
 ];

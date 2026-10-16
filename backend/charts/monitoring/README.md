@@ -719,8 +719,13 @@ health and queries, and contact points. Do not reuse `GRAFANA_TOKEN` here; that
 secret belongs to the TV Cloud Run Grafana. The default invocation is the
 Pusher release gate: it fails closed unless the committed memory-admission
 and capture-outcome pager set is live and unpaused, Prometheus reports healthy,
-both Pusher and backend-listen scrape targets are currently healthy, and the
-exact Telegram receiver exists with resolve notifications enabled. After each
+both Pusher and backend-listen have a non-terminating scrape target and every such target is up, and the
+exact Telegram receiver exists with resolve notifications enabled. A target is terminating only when
+`kube_pod_deletion_timestamp` matches its namespace and pod; pusher and backend-listen share that join
+because both scrape jobs label `namespace`/`pod` and both Deployments drain for 120s plus a 15s preStop.
+A missing job, or a down pod whose deletion timestamp is absent or unconfirmed, still fails the gate.
+When every required target is already up, unconfirmed kube-state-metrics data does not fail the gate.
+The check does not use `max(up)` and does not treat phase Running as terminating. After each
 rollout it additionally requires all three finalization telemetry families from
 both jobs; zero-valued labeled failure children are initialized at process
 startup so absence is unambiguously a source failure. Production repeats this
@@ -1232,3 +1237,14 @@ Explicit `admission_holds` require a rule to stay paused until its reviewed hold
 is removed. Live replay exits nonzero on dead, noisy or unproven results.
 The CI gate catches structural regressions; live threshold calibration remains
 a required admission review before an operator sends a rule to Telegram.
+
+## Fleet telemetry
+
+`dashboards/omi-services/fleet-telemetry.json` uses plain job-agnostic PromQL
+for client summary deltas, rejection rates, startup p95, and server upload
+admission. The [fleet contract](../../telemetry/README.md) owns schema, label
+bounds, cardinality and deploy acceptance. The shared backend deploy attaches
+GMP to sync, backfill and integration final candidates before readiness and
+promotion; all retain `omi_.*` and rendered runtime-env verification. Empty
+client panels are expected until the client emitters ship; this is not a
+PostHog parity or reader-cutover receipt.

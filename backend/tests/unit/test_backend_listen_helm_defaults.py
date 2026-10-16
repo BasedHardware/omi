@@ -90,6 +90,10 @@ def test_backend_listen_helm_template_uses_runtime_project_for_google_cloud_proj
     assert 'name: OMI_FIRESTORE_DATA_PLANE_PROJECT\n              value: "based-hardware"' in rendered
     assert 'name: POSTHOG_PROJECT_API_KEY' in rendered
     assert f'image: "{expected["image_repository"]}:abc1234"' in rendered
+    assert _env_value(_load_values(expected["values_file"]), "TRANSLATION_CACHE_TTL") == "86400"
+    assert _env_value(_load_values(expected["values_file"]), "TRANSLATION_NEGATIVE_CACHE_TTL") == "21600"
+    assert 'name: TRANSLATION_CACHE_TTL\n              value: "86400"' in rendered
+    assert 'name: TRANSLATION_NEGATIVE_CACHE_TTL\n              value: "21600"' in rendered
 
 
 def test_backend_listen_helm_template_requires_image_tag():

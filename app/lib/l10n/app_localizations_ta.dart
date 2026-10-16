@@ -12515,6 +12515,59 @@ class AppLocalizationsTa extends AppLocalizations {
   String get reviewNoChangesBody => 'Omi உங்கள் குறிப்புகளை ஒழுங்குபடுத்தும்போது, மாற்றங்கள் இங்கே தோன்றும்.';
 
   @override
+  String get reviewChangesSectionTerms => 'பெயர்கள் மற்றும் சொற்கள்';
+
+  @override
+  String get reviewChangesSectionTitles => 'தலைப்புகள் மற்றும் சுருக்கங்கள்';
+
+  @override
+  String get reviewChangesSectionOther => 'பிற மாற்றங்கள்';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count உரையாடல்கள்',
+      one: '1 உரையாடல்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count இடங்கள்',
+      one: '1 இடம்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'அனைத்து $count-ஐயும் காட்டு';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'அனைத்தையும் செயல்தவிர்';
+
+  @override
+  String get reviewChangeSeeEvidence => 'ஆதாரத்தைப் பார்';
+
+  @override
+  String get reviewChangeViewConversation => 'உரையாடலைப் பார்';
+
+  @override
+  String get reviewChangeViewTask => 'பணியைப் பார்';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'செயல்தவிர்க்க முடியவில்லை: $failed/$total. மீண்டும் முயலவும்.';
+  }
+
+  @override
   String get reviewShowMore => 'மேலும் காட்டு';
 
   @override
@@ -13493,4 +13546,28 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'சரிசெய்ய தட்டவும்';
+
+  @override
+  String get homePendingTitle => 'உரையாடல்கள் வருகின்றன';
+
+  @override
+  String get homePendingCatchingUp => 'முந்தைய ஆடியோ செயலாக்கப்படுகிறது';
+
+  @override
+  String get onTheWayTitle => 'வழியில்';
+
+  @override
+  String get onTheWayAlmostReady => 'கிட்டத்தட்ட தயார்';
+
+  @override
+  String get activityEmpty => 'இதுவரை எந்தச் செயல்பாடும் இல்லை';
+
+  @override
+  String get activityNewSemantics => 'செயல்பாடு, புதிய உருப்படிகள்';
+
+  @override
+  String get activityLoadFailed => 'உங்கள் எல்லா செயல்பாடுகளையும் ஏற்ற முடியவில்லை';
+
+  @override
+  String get activityNewItem => 'புதியது';
 }

@@ -9,6 +9,8 @@ from utils.observability.fallback import record_fallback
 from utils.stt.diarization import get_diarizer_backend, LegacyAHC
 from utils.stt.diarization_eval import score_words
 from utils.stt.diarization_turns import exclusive_from_activity
+from utils.stt.vad import offline_pcm_speech_segments
+from utils.stt.vad_compaction import diarize_with_speech_compaction
 
 import httpx
 from prometheus_client import Counter, Histogram
@@ -28,9 +30,15 @@ def run_final_pass(
     try:
         skipped = skip_single_speaker(resolution)
         backend = LegacyAHC() if skipped else get_diarizer_backend()
-        output = backend.diarize(
-            pcm, deadline=deadline, segments=segments, vectors=vectors or {}, resolution=resolution
-        ).model_dump()
+        output = diarize_with_speech_compaction(
+            pcm,
+            backend,
+            offline_pcm_speech_segments,
+            deadline=deadline,
+            segments=segments,
+            vectors=vectors or {},
+            resolution=resolution,
+        )
         # Legacy labels are scoped per upload until AHC resolves them. Compare
         # the actual segment projection, never reused window-local SPEAKER_00.
         legacy_turns = [

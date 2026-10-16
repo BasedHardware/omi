@@ -10,14 +10,24 @@ decision models. This module owns no provider, tool catalog, or skill catalog.
 from __future__ import annotations
 
 import asyncio
+import copy
+import hashlib
+import json
 import logging
 import os
 from dataclasses import dataclass, replace
 from typing import Any, Awaitable, Callable
 
+from prometheus_client import Counter
+
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT
 
 logger = logging.getLogger(__name__)
+PREFIX_VIOLATIONS = Counter(
+    'omi_shaped_agent_cache_prefix_violations_total',
+    'Append-only request prefix changed between harness turns',
+    ['reason'],
+)
 FLAG = 'OMI_SHAPED_AGENT_MODE'
 COHORT_UID = 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
 SHARED_CONTRACT = (
@@ -49,17 +59,46 @@ class Mount:
     skills: tuple[str, ...] = ()
     schema: Any = None
     budget: Budget = Budget()
-    cache_breakpoint: bool = False
+    cache_breakpoint: bool = True
+    cache_initial_evidence: bool = True
+    stable_context: tuple[Any, ...] = ()
 
     def prefix(self) -> str:
         return '\n\n'.join(part for part in (SHARED_CONTRACT, self.instructions, *self.skills) if part)
 
-    def messages(self, evidence: list[Any], *, explicit_cache: bool = False) -> list[Any]:
-        block: dict[str, Any] = {'type': 'text', 'text': self.prefix()}
-        if explicit_cache and self.cache_breakpoint:
-            block['prompt_cache_breakpoint'] = dict(EXPLICIT_CACHE_BREAKPOINT)
-        # Even without provider caching, the message boundary separates evidence.
-        return [{'role': 'system', 'content': [block]}, *evidence]
+    def messages(self, evidence: list[Any], *, explicit_cache: bool = True) -> list[Any]:
+        # Tools are passed separately on Mount and remain byte-stable. Provider
+        # translation orders systemInstruction, tools, stable context, continuation.
+        messages: list[Any] = [
+            {'role': 'system', 'content': [{'type': 'text', 'text': self.prefix()}]},
+            *copy.deepcopy(self.stable_context),
+            *copy.deepcopy(evidence),
+        ]
+        if explicit_cache and self.cache_breakpoint and (self.tools or self.budget.turns > 1 or self.stable_context):
+            # Explicit stable_context wins. Existing agent mounts provide their
+            # initial seed as evidence[0]; later tool/model turns are append-only.
+            boundary = len(self.stable_context)
+            if not self.stable_context and self.cache_initial_evidence:
+                boundary = min(1, len(evidence))
+            message = messages[boundary]
+            if isinstance(message, dict):
+                content = message.get('content')
+                if isinstance(content, str):
+                    message['content'] = [
+                        {'type': 'text', 'text': content, 'prompt_cache_breakpoint': dict(EXPLICIT_CACHE_BREAKPOINT)}
+                    ]
+                elif isinstance(content, list) and content and isinstance(content[-1], dict):
+                    content[-1]['prompt_cache_breakpoint'] = dict(EXPLICIT_CACHE_BREAKPOINT)
+        return messages
+
+
+def _cache_fingerprint(value: Any) -> str:
+    def encode(item):
+        if hasattr(item, 'model_dump'):
+            return item.model_dump()
+        return str(item)
+
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'), default=encode).encode()).hexdigest()
 
 
 @dataclass
@@ -99,7 +138,7 @@ async def run_loop(
     model_turn: Callable[[Mount, list[Any]], Awaitable[Turn]],
     execute_tools: Callable[[tuple[Any, ...]], Awaitable[list[Any] | LoopStop]] | None = None,
     *,
-    explicit_cache: bool = False,
+    explicit_cache: bool = True,
     observe_turn: Callable[[Turn], Awaitable[None]] | None = None,
 ) -> LoopResult:
     """The only new model/tool loop. Adapters perform exactly one provider turn.
@@ -123,7 +162,15 @@ async def run_loop(
 
     async def execute():
         nonlocal turns, used, tokens, value, accounted
+        previous_request: list[str] = []
+        previous_tools = _cache_fingerprint(mount.tools)
         for index in range(budget.turns):
+            request_snapshot = [_cache_fingerprint(message) for message in messages]
+            if request_snapshot[: len(previous_request)] != previous_request:
+                PREFIX_VIOLATIONS.labels(reason='messages').inc()
+            if _cache_fingerprint(mount.tools) != previous_tools:
+                PREFIX_VIOLATIONS.labels(reason='tools').inc()
+            previous_request = request_snapshot
             active_mount = (
                 mount
                 if budget.tokens is None

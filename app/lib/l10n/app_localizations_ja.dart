@@ -12249,6 +12249,59 @@ class AppLocalizationsJa extends AppLocalizations {
   String get reviewNoChangesBody => 'Omiがメモを整理すると、変更がここに表示されます。';
 
   @override
+  String get reviewChangesSectionTerms => '名前と用語';
+
+  @override
+  String get reviewChangesSectionTitles => 'タイトルと要約';
+
+  @override
+  String get reviewChangesSectionOther => 'その他の変更';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の会話',
+      one: '1件の会話',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countか所',
+      one: '1か所',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'すべて表示（$count）';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'すべて元に戻す';
+
+  @override
+  String get reviewChangeSeeEvidence => '根拠を見る';
+
+  @override
+  String get reviewChangeViewConversation => '会話を見る';
+
+  @override
+  String get reviewChangeViewTask => 'タスクを見る';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return '元に戻せませんでした：$failed/$total件。もう一度お試しください。';
+  }
+
+  @override
   String get reviewShowMore => 'もっと見る';
 
   @override
@@ -13213,4 +13266,28 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'タップして修正';
+
+  @override
+  String get homePendingTitle => '会話を準備中';
+
+  @override
+  String get homePendingCatchingUp => '以前の音声を処理中';
+
+  @override
+  String get onTheWayTitle => '準備中';
+
+  @override
+  String get onTheWayAlmostReady => 'まもなく完了';
+
+  @override
+  String get activityEmpty => 'アクティビティはまだありません';
+
+  @override
+  String get activityNewSemantics => 'アクティビティ、新着あり';
+
+  @override
+  String get activityLoadFailed => 'アクティビティの一部を読み込めませんでした';
+
+  @override
+  String get activityNewItem => '新着';
 }

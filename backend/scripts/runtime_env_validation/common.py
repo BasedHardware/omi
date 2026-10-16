@@ -8,6 +8,7 @@ import yaml
 
 from scripts.runtime_env_durable_dispatch_contracts import ValidationError
 from scripts.runtime_env_memory_contract import validate_retired_memory_env
+from scripts.runtime_env_compat import normalize_runtime_manifest
 
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND_ROOT = ROOT / 'backend'
@@ -161,7 +162,7 @@ def _load_yaml(path: Path) -> ConfigDict:
         loaded = yaml.safe_load(handle)
     if not isinstance(loaded, dict):
         raise ValueError(f'{path} must contain a YAML mapping')
-    return cast(ConfigDict, loaded)
+    return normalize_runtime_manifest(cast(ConfigDict, loaded))
 
 
 def _manifest_env_value(expected_services: ConfigDict, name: str) -> str:

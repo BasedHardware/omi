@@ -12509,6 +12509,59 @@ class AppLocalizationsEl extends AppLocalizations {
   String get reviewNoChangesBody => 'Όταν το Omi τακτοποιεί τις σημειώσεις σας, οι αλλαγές εμφανίζονται εδώ.';
 
   @override
+  String get reviewChangesSectionTerms => 'Ονόματα και όροι';
+
+  @override
+  String get reviewChangesSectionTitles => 'Τίτλοι και περιλήψεις';
+
+  @override
+  String get reviewChangesSectionOther => 'Άλλες αλλαγές';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count συνομιλίες',
+      one: '1 συνομιλία',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count σημεία',
+      one: '1 σημείο',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Εμφάνιση όλων ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Αναίρεση όλων';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Δείτε τα στοιχεία';
+
+  @override
+  String get reviewChangeViewConversation => 'Προβολή συνομιλίας';
+
+  @override
+  String get reviewChangeViewTask => 'Προβολή εργασίας';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Δεν ήταν δυνατή η αναίρεση $failed από $total. Δοκιμάστε ξανά.';
+  }
+
+  @override
   String get reviewShowMore => 'Εμφάνιση περισσότερων';
 
   @override
@@ -13485,4 +13538,28 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Πατήστε για διόρθωση';
+
+  @override
+  String get homePendingTitle => 'Συνομιλίες καθ\' οδόν';
+
+  @override
+  String get homePendingCatchingUp => 'Επεξεργασία προηγούμενου ήχου';
+
+  @override
+  String get onTheWayTitle => 'Καθ\' οδόν';
+
+  @override
+  String get onTheWayAlmostReady => 'Σχεδόν έτοιμο';
+
+  @override
+  String get activityEmpty => 'Δεν υπάρχει δραστηριότητα ακόμα';
+
+  @override
+  String get activityNewSemantics => 'Δραστηριότητα, νέα στοιχεία';
+
+  @override
+  String get activityLoadFailed => 'Δεν ήταν δυνατή η φόρτωση όλης της δραστηριότητάς σας';
+
+  @override
+  String get activityNewItem => 'Νέο';
 }

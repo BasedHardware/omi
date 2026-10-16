@@ -1,0 +1,223 @@
+"""One replay-fenced assignment part; cursor advance belongs to the last part."""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING, Any
+
+from google.cloud import firestore
+
+from database.batch_pipeline_privacy import assert_batch_write_allowed
+from database.batch_pipeline_projection_protocol import ProjectionBlocked, ProjectionReplay, normalized_binding
+from database.sync_ledger import sync_content_ledger_ref, batch_projection_ledger_owner_matches, LEDGER_RETENTION_DAYS
+from utils.batch_pipeline.contracts import ProjectionBinding
+from utils.batch_pipeline.scheduler import owner_key
+from utils.sync.capture import chunk_identity
+
+if TYPE_CHECKING:
+    from database.batch_pipeline_projection import ProjectionStore
+
+
+class ProjectionSession:
+    def __init__(
+        self,
+        store: ProjectionStore,
+        segment_id: str,
+        binding: ProjectionBinding,
+        now: float,
+        *,
+        part_index: int | None = None,
+        part_count: int = 1,
+    ):
+        self.store, self.segment_id, self.binding, self.now = store, segment_id, binding, now
+        self.client = store.client
+        self.result_ref = store.ref('results', segment_id)
+        self.owner_ref = store.ref('owners', owner_key(binding.owner_id))
+        self.ledger_ref = sync_content_ledger_ref(self.client, binding.owner_id, binding.content_id)
+        self.entry: dict[str, Any] = {}
+        self.ledger: dict[str, Any] = {}
+        self.job: dict[str, Any] = {}
+        self.incoming_segment_count = 0
+        self.speech_seconds = 0.0
+        self.erased_predecessors: list[Any] = []
+        self.part_index, self.part_count = part_index, part_count
+        self.capture_at: float | None = None
+        self.audio_end: float | None = None
+        self.speaker_scope: str | None = None
+        self.total_speech_seconds = 0.0
+
+    def receipt(self) -> dict:
+        parts = self.entry.get('projection_parts') or {}
+        if self.part_index is not None and parts:
+            return parts.get(str(self.part_index)) or {}
+        return self.entry.get('projection') or {}
+
+    def write_receipt(self, transaction, receipt):
+        """Ready acknowledgment and summary share one result-keyed receipt."""
+        parts = dict(self.entry.get('projection_parts') or {})
+        if self.part_index is None or not parts:
+            transaction.update(self.result_ref, {'projection': receipt, 'projection_state': receipt['state']})
+            return
+        parts[str(self.part_index)] = receipt
+        changes: dict[str, Any] = {'projection_parts': parts}
+        summary = dict(self.entry.get('projection') or {})
+        if summary and all(part.get('state') == 'ready' for part in parts.values()):
+            summary['state'] = 'ready'
+            changes.update(projection=summary, projection_state='ready')
+        transaction.update(self.result_ref, changes)
+
+    def guard(self, transaction, conversation_ids=()):
+        return assert_batch_write_allowed(
+            self.client,
+            transaction,
+            self.binding.owner_id,
+            conversation_ids=conversation_ids,
+            expected_generation=self.binding.privacy_generation,
+        )
+
+    def prepare(self, transaction, *, replay=True):
+        self.job = self.store.ref('jobs', self.segment_id).get(transaction=transaction).to_dict() or {}
+        self.entry = self.result_ref.get(transaction=transaction).to_dict() or {}
+        owner = self.owner_ref.get(transaction=transaction).to_dict() or {}
+        self.ledger = self.ledger_ref.get(transaction=transaction).to_dict() or {}
+        if (
+            not self.job.get('projection_binding')
+            or normalized_binding(self.job['projection_binding']) != self.binding
+            or self.segment_id not in self.binding.segment_ids
+            or self.job.get('owner_id') != self.binding.owner_id
+            or self.entry.get('owner_key') != owner_key(self.binding.owner_id)
+            or self.entry.get('protocol_version') != 1
+            or self.entry.get('segment_id') != self.segment_id
+            or self.entry.get('capture_at') != self.job.get('capture_at')
+            or self.job.get('privacy_generation') != self.binding.privacy_generation
+            or self.job.get('result') != self.entry.get('result')
+            or 'previous_segment_id' not in self.entry
+        ):
+            raise ProjectionBlocked('immutable result binding mismatch')
+        ids = [
+            chunk_identity(
+                self.binding.owner_id,
+                self.binding.source,
+                self.binding.client_device_id,
+                self.binding.is_locked,
+                self.job['capture_at'],
+            )
+        ]
+        if self.binding.target_conversation_id:
+            ids.append(self.binding.target_conversation_id)
+        if self.job.get('conversation_id'):
+            ids.append(self.job['conversation_id'])
+        ids.extend(self.job.get('conversation_ids') or [])
+        self.guard(transaction, ids)
+        durable = self.ledger.get('batch_pipeline') or {}
+        if (
+            self.ledger.get('dispatch_protocol') != 'batch_v1'
+            or durable
+            != {
+                'protocol_version': 1,
+                'namespace': self.store.store.namespace,
+                'segment_ids': list(self.binding.segment_ids),
+            }
+            or self.ledger.get('job_id') != self.binding.job_id
+        ):
+            raise ProjectionBlocked('durable intake ledger binding required')
+        receipt = self.receipt()
+        if not (receipt and self.ledger.get('status') == 'completed') and not batch_projection_ledger_owner_matches(
+            self.ledger,
+            self.binding.job_id,
+            self.binding.run_token,
+            self.binding.run_epoch,
+        ):
+            raise ProjectionBlocked('content ledger owner lost')
+        if receipt:
+            if replay:
+                raise ProjectionReplay(receipt)
+            return
+        if self.part_index is not None:
+            if self.entry.get('projection_part_count', self.part_count) != self.part_count:
+                raise ProjectionBlocked('immutable projection part count mismatch')
+            if self.part_index and str(self.part_index - 1) not in (self.entry.get('projection_parts') or {}):
+                raise ProjectionBlocked('earlier projection part must persist first')
+        from database.batch_pipeline_privacy import erased_predecessors
+
+        erased = erased_predecessors(
+            self.client,
+            transaction,
+            self.store.store.namespace,
+            owner_key(self.binding.owner_id),
+            self.entry['previous_segment_id'],
+            owner.get('projection_watermark'),
+        )
+        if erased is None:
+            raise ProjectionBlocked('earlier committed projection must persist first')
+        self.erased_predecessors = erased
+
+    def validate_plan(self, transaction, planned):
+        # encode is still in assignment's read-only planning phase.
+        self.guard(transaction, [planned['id'], *(planned.get('sync_merged_from') or [])])
+
+    def persist(self, transaction, planned=None):
+        assigned, created, survivors = planned if planned is not None else ({}, False, [])
+        repeat_only = assigned.get('_sync_lineage_repeat_only', False)
+        receipt = {
+            'state': 'persisted',
+            'conversation_id': assigned.get('id'),
+            'created': created,
+            'language': assigned.get('language') or self.binding.language or 'en',
+            'persisted_at': self.now,
+            'audio_required': bool(survivors and self.binding.private_cloud_sync_enabled),
+            'incoming_segment_count': self.incoming_segment_count,
+            'speech_seconds': self.speech_seconds,
+            'enrichment_required': bool(
+                assigned.get('id') and (not repeat_only or assigned.get('_sync_lineage_completion_pending'))
+            ),
+        }
+        if self.part_index is not None:
+            receipt.update(
+                part_index=self.part_index,
+                capture_at=self.capture_at,
+                audio_end=self.audio_end,
+                speaker_scope=self.speaker_scope,
+            )
+            parts = {**(self.entry.get('projection_parts') or {}), str(self.part_index): receipt}
+            changes: dict[str, Any] = {'projection_parts': parts, 'projection_part_count': self.part_count}
+            if assigned.get('id'):
+                changes['conversation_ids'] = firestore.ArrayUnion([assigned['id']])
+                transaction.update(
+                    self.store.ref('jobs', self.segment_id),
+                    {'conversation_ids': firestore.ArrayUnion([assigned['id']])},
+                )
+            if self.part_index != self.part_count - 1:
+                transaction.update(self.result_ref, changes)
+                return receipt
+            summary = {**receipt, 'speech_seconds': self.total_speech_seconds, 'part_count': self.part_count}
+            changes.update(projection=summary, projection_state='persisted')
+            transaction.update(self.result_ref, changes)
+        else:
+            transaction.update(self.result_ref, {'projection': receipt, 'projection_state': 'persisted'})
+        transaction.update(self.owner_ref, {'projection_watermark': self.segment_id})
+        for reference in self.erased_predecessors:
+            transaction.update(
+                reference,
+                {
+                    'expires_at': datetime.fromtimestamp(self.now, timezone.utc)
+                    + timedelta(days=LEDGER_RETENTION_DAYS),
+                },
+            )
+        # A read-before-write ledger checkpoint shares the assignment commit.
+        transaction.update(
+            self.ledger_ref,
+            {
+                'processed_segment_ids': firestore.ArrayUnion([self.segment_id]),
+                'updated_at': datetime.fromtimestamp(self.now, timezone.utc),
+            },
+        )
+        return receipt
+
+    def persist_empty(self):
+        @firestore.transactional
+        def commit(transaction):
+            self.prepare(transaction)
+            return self.persist(transaction)
+
+        return self.store.run(commit)

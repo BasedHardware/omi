@@ -12466,6 +12466,59 @@ class AppLocalizationsKn extends AppLocalizations {
   String get reviewNoChangesBody => 'Omi ನಿಮ್ಮ ಟಿಪ್ಪಣಿಗಳನ್ನು ಜೋಡಿಸಿದಾಗ, ಬದಲಾವಣೆಗಳು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ.';
 
   @override
+  String get reviewChangesSectionTerms => 'ಹೆಸರುಗಳು ಮತ್ತು ಪದಗಳು';
+
+  @override
+  String get reviewChangesSectionTitles => 'ಶೀರ್ಷಿಕೆಗಳು ಮತ್ತು ಸಾರಾಂಶಗಳು';
+
+  @override
+  String get reviewChangesSectionOther => 'ಇತರ ಬದಲಾವಣೆಗಳು';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಸಂಭಾಷಣೆಗಳು',
+      one: '1 ಸಂಭಾಷಣೆ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಸ್ಥಳಗಳು',
+      one: '1 ಸ್ಥಳ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'ಎಲ್ಲಾ $count ತೋರಿಸಿ';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'ಎಲ್ಲವನ್ನೂ ರದ್ದುಮಾಡಿ';
+
+  @override
+  String get reviewChangeSeeEvidence => 'ಸಾಕ್ಷ್ಯ ನೋಡಿ';
+
+  @override
+  String get reviewChangeViewConversation => 'ಸಂಭಾಷಣೆ ನೋಡಿ';
+
+  @override
+  String get reviewChangeViewTask => 'ಕಾರ್ಯ ನೋಡಿ';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'ರದ್ದುಮಾಡಲಾಗಲಿಲ್ಲ: $failed/$total. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+  }
+
+  @override
   String get reviewShowMore => 'ಇನ್ನಷ್ಟು ತೋರಿಸಿ';
 
   @override
@@ -13440,4 +13493,28 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'ಸರಿಪಡಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ';
+
+  @override
+  String get homePendingTitle => 'ಸಂಭಾಷಣೆಗಳು ಬರುತ್ತಿವೆ';
+
+  @override
+  String get homePendingCatchingUp => 'ಹಿಂದಿನ ಆಡಿಯೊವನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲಾಗುತ್ತಿದೆ';
+
+  @override
+  String get onTheWayTitle => 'ದಾರಿಯಲ್ಲಿದೆ';
+
+  @override
+  String get onTheWayAlmostReady => 'ಬಹುತೇಕ ಸಿದ್ಧ';
+
+  @override
+  String get activityEmpty => 'ಇನ್ನೂ ಯಾವುದೇ ಚಟುವಟಿಕೆ ಇಲ್ಲ';
+
+  @override
+  String get activityNewSemantics => 'ಚಟುವಟಿಕೆ, ಹೊಸ ಐಟಂಗಳು';
+
+  @override
+  String get activityLoadFailed => 'ನಿಮ್ಮ ಎಲ್ಲಾ ಚಟುವಟಿಕೆಯನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ';
+
+  @override
+  String get activityNewItem => 'ಹೊಸದು';
 }

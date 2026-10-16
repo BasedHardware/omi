@@ -1286,7 +1286,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_diarizer.yml/deploy": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 20,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1295,7 +1295,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual diarizer or batch GPU worker release; conservatively allow a 20-minute p50 for the worker model image build until measured.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1523,13 +1523,13 @@
       "budget_p50_minutes": 5,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 2,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual logging rollout and one recorded-image recovery per day; no automatic triggers or new runners; retains the 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -4092,7 +4092,7 @@
     "gcp_diarizer.yml": {
       "name": "Deploy Diarizer to GKE",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Manual dispatch now selects either the diarizer release or the dedicated batch GPU worker release.",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4115,6 +4115,16 @@
               "default": "",
               "description": "Release version (optional)",
               "required": "false"
+            },
+            "service": {
+              "default": "diarizer",
+              "description": "Select the GPU service to deploy",
+              "options": [
+                "diarizer",
+                "batch-pipeline-worker"
+              ],
+              "required": "true",
+              "type": "choice"
             }
           }
         }
@@ -4411,7 +4421,7 @@
     "gcp_nllb_translation.yml": {
       "name": "Deploy NLLB Translation to GKE",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Manual NLLB rollout adds receipt-bound existing-image rollback for historical sources; no automatic trigger",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4429,6 +4439,11 @@
               ],
               "required": "true",
               "type": "choice"
+            },
+            "rollback_digest": {
+              "default": "",
+              "description": "Replay the recorded prior serving sha256 digest without rebuilding historical source",
+              "required": "false"
             },
             "release_version": {
               "default": "",

@@ -70,6 +70,10 @@ _TRANSLATION_LISTEN_ONLY = frozenset(
         'TRANSLATION_ONDEMAND_UID_DAILY_CHARS',
         'TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS',
         'TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES',
+        # Translation cache TTLs belong to backend-listen and Cloud Run API
+        # callers; pusher has no TranslationService/cache callsite.
+        'TRANSLATION_CACHE_TTL',
+        'TRANSLATION_NEGATIVE_CACHE_TTL',
     }
 )
 # The API domain and the Review routes run on backend-listen. Pusher's
