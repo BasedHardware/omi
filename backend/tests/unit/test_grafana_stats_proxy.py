@@ -32,10 +32,19 @@ from charts.monitoring.grafana.stats_proxy import (
         "//evil/api/omi/stats/wall",
         "/api/omi/stats/wall#foo",
         "/api/omi/stats/wall\nInjected: yes",
+        "/api/omi/stats/wall?nonce=1",
+        "/api/omi/stats/walls",
+        "/api/omi/stats/wall/",
+        "/API/OMI/STATS/WALL",
+        "/api/omi/stats/wall ",
     ],
 )
 def test_only_literal_stats_paths(path):
     assert not allowed_path(path)
+
+
+def test_the_exact_wall_route_is_the_single_admitted_path():
+    assert allowed_path("/api/omi/stats/wall")
 
 
 def token(exp):

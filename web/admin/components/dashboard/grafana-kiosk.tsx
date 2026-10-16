@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { grafanaRenewalDelay } from "@/lib/grafana-renewal";
@@ -53,17 +53,26 @@ function KioskFrame({ src }: { src: string }) {
 }
 
 function TvEmbedFrame({ token }: { token: string }) {
+  const [retry, setRetry] = useState(0);
   const {
     data: embed,
     error,
     isLoading,
     mutate,
-  } = useSWR(["/api/grafana/tv-embed", token], tvEmbedFetcher, {
+  } = useSWR(["/api/grafana/tv-embed", token, retry], tvEmbedFetcher, {
     refreshInterval: (data) =>
       data?.enabled ? grafanaRenewalDelay(data.expiresAt ?? 0) : 0,
     revalidateOnFocus: false,
     shouldRetryOnError: false,
   });
+  // A failed renewal must not strand an unattended TV on a dead iframe:
+  // shouldRetryOnError:false leaves SWR's polling stopped while an error is
+  // cached, so re-arm bounded automatic retries until a renewal succeeds.
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(() => setRetry((value) => value + 1), 15_000);
+    return () => clearTimeout(timer);
+  }, [error, retry]);
   useEffect(() => {
     const resume = () => {
       if (
@@ -82,8 +91,6 @@ function TvEmbedFrame({ token }: { token: string }) {
     };
   }, [embed, mutate]);
 
-  if (embed?.enabled && embed.url)
-    return <KioskFrame src={embed.url} />;
   // Flag-off while legacy anonymous board still exists: keep it working.
   if (embed && !embed.enabled && embed.legacy) {
     return (
@@ -92,21 +99,23 @@ function TvEmbedFrame({ token }: { token: string }) {
       </Suspense>
     );
   }
-  // Legacy closed or kiosk enrollment unavailable: honest native notice
-  // instead of framing Grafana's login/denial page.
+  // Renewal failure shows the honest notice immediately — a stale embed must
+  // not keep framing a dead JWT — and the bounded retry effect above
+  // re-arms renewal so an unattended TV self-heals.
   if (error || (!isLoading && embed && !embed.enabled)) {
     return (
       <main className="flex h-screen w-screen items-center justify-center bg-neutral-950 px-6 text-center text-neutral-200">
         <div>
           <h1 className="text-xl font-semibold">TV dashboard unavailable</h1>
           <p className="mt-2 text-sm text-neutral-400">
-            Ask an admin to enable the private TV dashboard or open
-            /dashboard on a signed-in admin device.
+            Retrying automatically. Ask an admin to check the private TV
+            dashboard or open /dashboard on a signed-in admin device.
           </p>
         </div>
       </main>
     );
   }
+  if (embed?.enabled && embed.url) return <KioskFrame src={embed.url} />;
   return <div className="h-screen w-screen bg-black" />;
 }
 

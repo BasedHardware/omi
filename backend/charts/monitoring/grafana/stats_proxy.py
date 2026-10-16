@@ -6,7 +6,6 @@ are never logged. Successful GETs coalesce/cache for 15m; failures never serve s
 
 import base64
 import json
-import re
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -27,14 +26,22 @@ class NoRedirect(HTTPRedirectHandler):
         return None
 
 
+# The private board requests exactly this route (see
+# web/admin/grafana/dashboards/omi-tv-v2.json). Anything else — other stats
+# routes, query strings, fragments — is rejected before parsing so unique
+# attacker URLs cannot each become a distinct 360-second cache/slot entry.
+WALL_PATH = "/api/omi/stats/wall"
+
+
 def allowed_path(path):
+    if path != WALL_PATH:
+        return False
     parsed = urlsplit(path)
     return (
-        len(path) <= 2048
-        and not parsed.scheme
+        not parsed.scheme
         and not parsed.netloc
+        and not parsed.query
         and not parsed.fragment
-        and re.fullmatch(r"/api/omi/stats/[a-z][a-z0-9-]*", parsed.path) is not None
         and not any(ord(c) < 32 or ord(c) == 127 for c in path)
     )
 
