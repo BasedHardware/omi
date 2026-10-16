@@ -206,6 +206,10 @@ def integration_harness() -> Iterator[SimpleNamespace]:
             ACTION_DISABLE=3,
             ACTION_REDIRECT_NOT_FOLLOWED=4,
         ),
+        'database.webhook_signing': _auto_module(
+            'database.webhook_signing',
+            get_app_webhook_signing_db=MagicMock(return_value=None),
+        ),
         'database.chat': _auto_module(
             'database.chat',
             add_app_message=add_app_message,

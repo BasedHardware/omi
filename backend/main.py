@@ -54,6 +54,7 @@ from routers import (
     people,
     agents,
     users,
+    webhook_signing,
     support,
     trends,
     sync,
@@ -273,6 +274,7 @@ app.include_router(notifications.router)
 app.include_router(integration.router)
 app.include_router(agents.router)
 app.include_router(users.router)
+app.include_router(webhook_signing.router)
 app.include_router(support.router)
 app.include_router(referrals.router)
 app.include_router(csat.router)
