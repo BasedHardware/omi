@@ -117,3 +117,18 @@ def test_cap_rechecked_after_queueing_before_gpu_authorization(monkeypatch, enfo
     else:
         assert receipt['allowed'] == ['segment']
         cap.funded_allowance.assert_not_called()
+
+
+@pytest.mark.parametrize('enforce', [False, True])
+@pytest.mark.parametrize('duration', [None, 'invalid'])
+def test_flag_off_never_parses_new_dispatch_duration(monkeypatch, enforce, duration):
+    store, _, lease, _ = setup(monkeypatch, fresh=True)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
+    store.rows['jobs', 'segment']['duration_seconds'] = duration
+    gate = Mock(side_effect=AssertionError('unparseable duration must not reach dispatch policy'))
+    monkeypatch.setattr(admission, 'sync_allowed', gate)
+    receipt = admission.authorize(store, tokens(lease), now=1)
+    assert receipt == (
+        {'allowed': [], 'retry_after': {'segment': 30}} if enforce else {'allowed': ['segment'], 'retry_after': {}}
+    )
+    gate.assert_not_called()
