@@ -69,6 +69,9 @@ def reconcile_job(session, image, mode):
         params['jobId'] = 'messaging-maintenance-job'
         request(session, 'POST', url.rsplit('/', 1)[0], params=params, json=body)
     else:
+        # v2 UpdateJobRequest contains Job + validate_only + allow_missing, no
+        # update_mask. Send the complete declared Job (this tool owns its config).
+        # https://docs.cloud.google.com/run/docs/reference/rest/v2/projects.locations.jobs/patch
         request(session, 'PATCH', url, params=params, json=body)
     # Cloud Run returns an asynchronous operation. No execution is started here.
     print('VALIDATED' if mode == 'validate' else 'SUBMITTED; rerun --check after operation completion')
@@ -88,9 +91,56 @@ def desired_alerts(channels):
     return bodies
 
 
+def reconcile_log_metrics(session, mode):
+    if mode == 'validate':
+        raise ValueError('Logging has no validateOnly API; use --check to review the diff')
+    bodies = json.loads((ROOT / 'log-metrics.json').read_text())
+    url = f'https://logging.googleapis.com/v2/projects/{PROJECT}/metrics/'
+    planned = []
+    for body in bodies:
+        current = request(session, 'GET', url + body['name'])
+        if current is not None:
+            current.setdefault('disabled', False)
+            descriptor = current.get('metricDescriptor', {})
+            expected = body['metricDescriptor']
+            expected_labels = {label['key']: label for label in expected.get('labels', [])}
+            # Logging cannot change kind/type or remove existing metric labels.
+            if any(descriptor.get(k) != expected[k] for k in ('metricKind', 'valueType')) or not {
+                label['key'] for label in descriptor.get('labels', [])
+            }.issubset(expected_labels):
+                raise RuntimeError('Existing log metric schema differs; refusing incompatible update')
+            if any(
+                label.get('valueType', 'STRING') != expected_labels[label['key']]['valueType']
+                for label in descriptor.get('labels', [])
+            ):
+                raise RuntimeError('Existing log metric schema differs; refusing incompatible update')
+        if current is not None and contains(current, body):
+            print('MATCH ' + body['name'])
+        else:
+            planned.append(body)
+            print('DIFF ' + body['name'])
+    if mode == 'check':
+        return bool(planned)
+    for body in planned:
+        target = url + body['name']
+        # Logging metrics.update is PUT/upsert, not PATCH, and has no field mask.
+        request(session, 'PUT', target, json=body)
+        verified = request(session, 'GET', target)
+        if verified is None:
+            raise RuntimeError('Log metric missing during verification')
+        verified.setdefault('disabled', False)
+        if not contains(verified, body):
+            raise RuntimeError('Log metric verification failed')
+        print('VERIFIED ' + body['name'])
+    return bool(planned)
+
+
 def reconcile_alerts(session, channels, mode):
     if mode == 'validate':
         raise ValueError('Monitoring has no validateOnly API; use --check to review the diff')
+    metrics_drift = reconcile_log_metrics(session, 'check')
+    if mode == 'apply' and metrics_drift:
+        raise RuntimeError('Log metrics must MATCH before alert policy writes; apply log-metrics first')
     url = f'https://monitoring.googleapis.com/v3/projects/{PROJECT}/alertPolicies'
     policies = []
     token = None
@@ -106,7 +156,7 @@ def reconcile_alerts(session, channels, mode):
     for body in bodies:
         if sum(p['displayName'] == body['displayName'] for p in policies) > 1:
             raise RuntimeError('Duplicate managed policy name; refusing writes')
-    drift = False
+    drift = metrics_drift
     for desired in bodies:
         matches = [p for p in policies if p['displayName'] == desired['displayName']]
         if len(matches) > 1:
@@ -153,7 +203,7 @@ def reconcile_alerts(session, channels, mode):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('resource', choices=('job', 'alerts'))
+    parser.add_argument('resource', choices=('job', 'log-metrics', 'alerts'))
     modes = parser.add_mutually_exclusive_group(required=True)
     modes.add_argument('--check', action='store_true')
     modes.add_argument('--validate', action='store_true')
@@ -165,7 +215,7 @@ def main():
     # Validate inputs before authenticating or contacting GCP.
     if args.resource == 'job':
         desired_job(args.image)
-    else:
+    elif args.resource == 'alerts':
         desired_alerts(args.notification_channels)
     # Honor gcp-agent-env's selected gcloud identity, including human IAM/operator
     # sessions, rather than silently falling through to a different ADC account.
@@ -175,11 +225,12 @@ def main():
     if token.returncode or not token.stdout.strip():
         raise RuntimeError('Selected gcloud identity has no usable access token')
     session = AuthorizedSession(Credentials(token=token.stdout.strip()))
-    drift = (
-        reconcile_job(session, args.image, mode)
-        if args.resource == 'job'
-        else reconcile_alerts(session, args.notification_channels, mode)
-    )
+    if args.resource == 'job':
+        drift = reconcile_job(session, args.image, mode)
+    elif args.resource == 'log-metrics':
+        drift = reconcile_log_metrics(session, mode)
+    else:
+        drift = reconcile_alerts(session, args.notification_channels, mode)
     return 1 if mode == 'check' and drift else 0
 
 

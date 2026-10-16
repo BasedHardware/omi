@@ -6,23 +6,33 @@
     "conditions": [
       {
         "displayName": "worker failures by reason",
-        "conditionMatchedLog": {
-          "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend\" AND textPayload:\"Messaging job failed\"",
-          "labelExtractors": {
-            "reason": "REGEXP_EXTRACT(textPayload, \"reason=([a-z_]+)\")"
+        "conditionThreshold": {
+          "filter": "resource.type=\"cloud_run_revision\" AND metric.type=\"logging.googleapis.com/user/omi_messaging_worker_failures\"",
+          "aggregations": [
+            {
+              "alignmentPeriod": "900s",
+              "perSeriesAligner": "ALIGN_SUM",
+              "crossSeriesReducer": "REDUCE_SUM",
+              "groupByFields": [
+                "metric.label.reason"
+              ]
+            }
+          ],
+          "comparison": "COMPARISON_GT",
+          "thresholdValue": 2,
+          "duration": "0s",
+          "trigger": {
+            "count": 1
           }
         }
       }
     ],
     "alertStrategy": {
-      "notificationRateLimit": {
-        "period": "3600s"
-      },
       "autoClose": "3600s"
     },
     "documentation": {
       "mimeType": "text/markdown",
-      "content": "Inspect content-free aggregate logs and backend/docs/runbooks/messaging-channels.md. Do not replay running inbox rows or print provider payloads."
+      "content": "Inspect content-free aggregate logs and backend/docs/runbooks/messaging-channels.md. Do not replay running inbox rows or print provider payloads. Requires at least 3 matching log entries in a 15-minute alignment window, summed across instances per bounded reason. Counts log entries, not distinct messages. See the runbook for ingestion delay and verification."
     }
   },
   {
@@ -32,20 +42,30 @@
     "conditions": [
       {
         "displayName": "webhook 5xx",
-        "conditionMatchedLog": {
-          "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend\" AND httpRequest.requestUrl:\"/v1/messaging/webhooks/\" AND httpRequest.status>=500"
+        "conditionThreshold": {
+          "filter": "resource.type=\"cloud_run_revision\" AND metric.type=\"logging.googleapis.com/user/omi_messaging_webhook_5xx\"",
+          "aggregations": [
+            {
+              "alignmentPeriod": "900s",
+              "perSeriesAligner": "ALIGN_SUM",
+              "crossSeriesReducer": "REDUCE_SUM"
+            }
+          ],
+          "comparison": "COMPARISON_GT",
+          "thresholdValue": 2,
+          "duration": "0s",
+          "trigger": {
+            "count": 1
+          }
         }
       }
     ],
     "alertStrategy": {
-      "notificationRateLimit": {
-        "period": "3600s"
-      },
       "autoClose": "3600s"
     },
     "documentation": {
       "mimeType": "text/markdown",
-      "content": "Inspect content-free aggregate logs and backend/docs/runbooks/messaging-channels.md. Do not replay running inbox rows or print provider payloads."
+      "content": "Inspect content-free aggregate logs and backend/docs/runbooks/messaging-channels.md. Do not replay running inbox rows or print provider payloads. Requires at least 3 matching log entries in a 15-minute alignment window, summed across instances. Counts log entries, not distinct messages. See the runbook for ingestion delay and verification."
     }
   },
   {
@@ -56,7 +76,7 @@
       {
         "displayName": "decoder unavailable",
         "conditionMatchedLog": {
-          "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend\" AND textPayload:\"Messaging audio decoder unavailable\""
+          "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend\" AND textPayload:\"Messaging audio decoder unavailable at startup; voice notes will be declined\""
         }
       }
     ],
@@ -68,7 +88,7 @@
     },
     "documentation": {
       "mimeType": "text/markdown",
-      "content": "Inspect content-free aggregate logs and backend/docs/runbooks/messaging-channels.md. Do not replay running inbox rows or print provider payloads."
+      "content": "Inspect content-free aggregate logs and backend/docs/runbooks/messaging-channels.md. Do not replay running inbox rows or print provider payloads. Single-event by design: the once-per-startup readiness probe proves voice decoding is unavailable on this instance, even if text still works. No request-volume floor; the one-hour notification cap limits repeated startup noise."
     }
   },
   {
@@ -78,20 +98,30 @@
     "conditions": [
       {
         "displayName": "outbound delivery failures",
-        "conditionMatchedLog": {
-          "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend\" AND (textPayload:\"Messaging failure reply failed\" OR textPayload:\"reason=delivery_uncertain\" OR (textPayload:\"Messaging job failed\" AND textPayload:\"error_type=ProviderError\"))"
+        "conditionThreshold": {
+          "filter": "resource.type=\"cloud_run_revision\" AND metric.type=\"logging.googleapis.com/user/omi_messaging_outbound_failures\"",
+          "aggregations": [
+            {
+              "alignmentPeriod": "900s",
+              "perSeriesAligner": "ALIGN_SUM",
+              "crossSeriesReducer": "REDUCE_SUM"
+            }
+          ],
+          "comparison": "COMPARISON_GT",
+          "thresholdValue": 2,
+          "duration": "0s",
+          "trigger": {
+            "count": 1
+          }
         }
       }
     ],
     "alertStrategy": {
-      "notificationRateLimit": {
-        "period": "3600s"
-      },
       "autoClose": "3600s"
     },
     "documentation": {
       "mimeType": "text/markdown",
-      "content": "Inspect content-free aggregate logs and backend/docs/runbooks/messaging-channels.md. Do not replay running inbox rows or print provider payloads."
+      "content": "Inspect content-free aggregate logs and backend/docs/runbooks/messaging-channels.md. Do not replay running inbox rows or print provider payloads. Requires at least 3 matching log entries in a 15-minute alignment window, summed across instances. Counts log entries, not distinct messages. See the runbook for ingestion delay and verification."
     }
   },
   {
@@ -101,23 +131,33 @@
     "conditions": [
       {
         "displayName": "maintenance failure by reason",
-        "conditionMatchedLog": {
-          "filter": "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"messaging-maintenance-job\" AND textPayload:\"Messaging maintenance outcome=failed\"",
-          "labelExtractors": {
-            "reason": "REGEXP_EXTRACT(textPayload, \"reason=([a-z_]+)\")"
+        "conditionThreshold": {
+          "filter": "resource.type=\"cloud_run_job\" AND metric.type=\"logging.googleapis.com/user/omi_messaging_maintenance_failures\"",
+          "aggregations": [
+            {
+              "alignmentPeriod": "3600s",
+              "perSeriesAligner": "ALIGN_SUM",
+              "crossSeriesReducer": "REDUCE_SUM",
+              "groupByFields": [
+                "metric.label.reason"
+              ]
+            }
+          ],
+          "comparison": "COMPARISON_GT",
+          "thresholdValue": 1,
+          "duration": "0s",
+          "trigger": {
+            "count": 1
           }
         }
       }
     ],
     "alertStrategy": {
-      "notificationRateLimit": {
-        "period": "3600s"
-      },
       "autoClose": "3600s"
     },
     "documentation": {
       "mimeType": "text/markdown",
-      "content": "Inspect content-free aggregate logs and backend/docs/runbooks/messaging-channels.md. Do not replay running inbox rows or print provider payloads."
+      "content": "Inspect content-free aggregate logs and backend/docs/runbooks/messaging-channels.md. Do not replay running inbox rows or print provider payloads. Requires at least 2 matching log entries in a 60-minute alignment window, summed across instances per bounded reason. Counts log entries, not distinct messages. See the runbook for ingestion delay and verification."
     }
   },
   {
@@ -177,20 +217,30 @@
     "conditions": [
       {
         "displayName": "stale queue head",
-        "conditionMatchedLog": {
-          "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend\" AND textPayload:\"Messaging queue\" AND (textPayload:\"reason=stale_pending\" OR textPayload:\"reason=stale_running\")"
+        "conditionThreshold": {
+          "filter": "resource.type=\"cloud_run_revision\" AND metric.type=\"logging.googleapis.com/user/omi_messaging_stale_heads\"",
+          "aggregations": [
+            {
+              "alignmentPeriod": "900s",
+              "perSeriesAligner": "ALIGN_SUM",
+              "crossSeriesReducer": "REDUCE_SUM"
+            }
+          ],
+          "comparison": "COMPARISON_GT",
+          "thresholdValue": 2,
+          "duration": "0s",
+          "trigger": {
+            "count": 1
+          }
         }
       }
     ],
     "alertStrategy": {
-      "notificationRateLimit": {
-        "period": "3600s"
-      },
       "autoClose": "3600s"
     },
     "documentation": {
       "mimeType": "text/markdown",
-      "content": "Inspect content-free aggregate logs and backend/docs/runbooks/messaging-channels.md. Do not replay running inbox rows or print provider payloads."
+      "content": "Inspect content-free aggregate logs and backend/docs/runbooks/messaging-channels.md. Do not replay running inbox rows or print provider payloads. Requires at least 3 matching log entries in a 15-minute alignment window, summed across instances. Counts log entries, not distinct messages. See the runbook for ingestion delay and verification."
     }
   },
   {
@@ -223,7 +273,7 @@
     },
     "documentation": {
       "mimeType": "text/markdown",
-      "content": "Inspect content-free maintenance failure logs. Verify indexes, runtime identity and image imports. No provider sends occur in cleanup."
+      "content": "Inspect content-free maintenance failure logs. Verify indexes, runtime identity and image imports. No provider sends occur in cleanup. Single completed failure is intentional: this hourly job has already exhausted its configured retry. Waiting for three executions would hide a cleanup outage for hours."
     }
   },
   {
@@ -233,20 +283,30 @@
     "conditions": [
       {
         "displayName": "Pending recovery failing",
-        "conditionMatchedLog": {
-          "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend\" AND textPayload:\"Messaging recovery paused\""
+        "conditionThreshold": {
+          "filter": "resource.type=\"cloud_run_revision\" AND metric.type=\"logging.googleapis.com/user/omi_messaging_recovery_unavailable\"",
+          "aggregations": [
+            {
+              "alignmentPeriod": "900s",
+              "perSeriesAligner": "ALIGN_SUM",
+              "crossSeriesReducer": "REDUCE_SUM"
+            }
+          ],
+          "comparison": "COMPARISON_GT",
+          "thresholdValue": 2,
+          "duration": "0s",
+          "trigger": {
+            "count": 1
+          }
         }
       }
     ],
     "alertStrategy": {
-      "notificationRateLimit": {
-        "period": "3600s"
-      },
       "autoClose": "3600s"
     },
     "documentation": {
       "mimeType": "text/markdown",
-      "content": "Recovery may be stalled; check readiness and indexes. Never reset running rows or leases blindly."
+      "content": "Recovery may be stalled; check readiness and indexes. Never reset running rows or leases blindly. Requires at least 3 matching log entries in a 15-minute alignment window, summed across instances. Counts log entries, not distinct messages. See the runbook for ingestion delay and verification."
     }
   }
 ]

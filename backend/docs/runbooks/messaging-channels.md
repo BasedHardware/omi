@@ -607,13 +607,51 @@ and last termination reason `OOMKilled`; readiness alone is not scrape acceptanc
 Historical samples do not establish live ingestion or healthy alert evaluation.
 
 Production alerts therefore use Cloud Monitoring directly, bypassing the unhealthy
-bridge: content-free log conditions for worker/maintenance failures by reason,
-webhook 5xx, decoder, delivery and recovery; GMP PromQL for per-surface shaped-context
-degradation and queue age; built-in job failures also catch process/import/OOM errors.
-No new exporter or log-based metric is needed. Installing `alerts.yaml` while the
+bridge: six content-free log-based counters for worker/maintenance failures by reason,
+webhook 5xx, delivery, stale heads and recovery; a decoder startup log condition;
+GMP PromQL for per-surface shaped-context degradation and queue age; built-in job
+failures also catch process/import/OOM errors. No new exporter is needed. Installing `alerts.yaml` while the
 bridge is down would leave those rules without current Cloud Run samples. Repair
 and notification acceptance for the broader Prometheus/Grafana bridge are separate
 operator work; this install establishes an independent alert path.
+
+Cloud Monitoring's `LogMatch` checks one matching entry and cannot express a count
+floor; a notification rate cap does not delay the first incident. Google explicitly
+requires [log-based metrics to count logs](https://docs.cloud.google.com/logging/docs/alerting/log-based-alerts).
+`backend/deploy/messaging/log-metrics.json` declares six DELTA/INT64 counters, with
+only bounded `reason` labels where needed. [ALIGN_SUM and REDUCE_SUM](https://docs.cloud.google.com/monitoring/api/ref_v3/rest/v3/projects.alertPolicies#Aggregation)
+sum matching entries across instances in each alignment window; `COMPARISON_GT 2`
+means at least three entries, not three time series. These are observations, not
+necessarily distinct failed turns. No raw payload or customer label is extracted.
+
+| Policy | Count floor | Rationale |
+| --- | --- | --- |
+| Worker failures, webhook 5xx, outbound failures, stale queue head, recovery unavailable | >=3 entries / 15-minute alignment window (worker failures per reason) | Suppress a lone transient at the observed low traffic volume. |
+| Maintenance failure by reason | >=2 entries / 60-minute alignment window, per reason | One failed attempt can recover on the configured retry; repeated same-reason failures merit investigation. |
+| Decoder unavailable | One exact startup-readiness failure, hourly notification cap | The once-per-startup decoder probe proves that instance cannot decode voice; text health does not offset this outage. |
+| Cleanup execution failed | >=1 failed completed execution / 5 minutes | The hourly job has already exhausted its retry. Requiring multiple executions would conceal an outage for hours; import/OOM may emit no application failure log. |
+
+The shaped-context 20-turn minimum and 10-minute dwell, and queue p95's 10-minute
+dwell, are unchanged. Counter alerts have no additional dwell after their count floor.
+Counter data starts at installation, with [no historical backfill](https://docs.cloud.google.com/logging/docs/logs-based-metrics).
+Allow ingestion/evaluation delay; an absent series before a match is not a zero or
+proof of notification delivery. Install and verify the counters before enabling the
+policies. The tool refuses policy writes until all six metric definitions MATCH.
+Logging has no validate-only metric write API: `log-metrics --check` is the no-write
+plan; `--apply` uses [metrics.update PUT/upsert](https://docs.cloud.google.com/logging/docs/reference/v2/rest/v2/projects.metrics/update)
+and verifies each resource. It refuses incompatible existing metric schemas before
+writing. The existing operator needs `logging.logMetrics.get` and
+`logging.logMetrics.update`; no backend runtime permission is added.
+
+Cloud Run v2 [jobs.patch](https://docs.cloud.google.com/run/docs/reference/rest/v2/projects.locations.jobs/patch)
+accepts the complete `Job` body with `validateOnly`/`allowMissing`, and has no
+`updateMask` parameter. The official [UpdateJobRequest schema](https://github.com/googleapis/googleapis/blob/master/google/cloud/run/v2/job.proto)
+also has no field mask. This tool owns the declared job configuration and sends its
+complete desired body, including the image and task template; do not use it to
+preserve ad hoc sidecars or other untracked job configuration. For an existing job,
+`--validate` sends PATCH with `validateOnly=true`; `--apply` sends the same body with
+`validateOnly=false`. Neither starts an execution. Regression tests exercise both
+existing-job paths and the CLI validation path, not only first creation.
 
 The sequence below is **for the authorized operator**, from the repository root.
 The operations tool uses the explicitly selected gcloud identity; Scheduler
@@ -643,6 +681,7 @@ backend/.venv/bin/python backend/scripts/reconcile_firestore_indexes.py \
   --project based-hardware --database '(default)' --check-only
 backend/.venv/bin/python backend/scripts/messaging_operations.py job \
   --image "$ADMITTED_BACKEND_IMAGE" --check
+backend/.venv/bin/python backend/scripts/messaging_operations.py log-metrics --check
 backend/.venv/bin/python backend/scripts/messaging_operations.py alerts --check \
   --notification-channels \
   projects/based-hardware/notificationChannels/7795172925536204487 \
@@ -718,15 +757,18 @@ backend/.venv/bin/python backend/scripts/scheduler_reconcile.py \
   --gcloud-auth --environment prod --project based-hardware --check --jobs messaging-maintenance-hourly
 ```
 
-4. After backend rollout, require a real eligible shaped-turn sample in
+4. Install the six log counters first, then require a real eligible shaped-turn sample in
    `omi_chat_context_turns_total` before applying the rate policy. An absent series
-   cannot validate the alert. Review and apply only the ten named Monitoring policies. The tool refuses
+   cannot validate the alert. Review and apply only the six declared counters and ten named Monitoring policies. The tool refuses
    duplicate managed display names, preserves condition identities on update,
    verifies writes, and leaves every other policy alone. It never prints API error
    bodies. Use the existing authorized Monitoring operator identity; this example
    continues the human operator session from the IAM step.
 
 ```sh
+backend/.venv/bin/python backend/scripts/messaging_operations.py log-metrics --check
+backend/.venv/bin/python backend/scripts/messaging_operations.py log-metrics --apply
+backend/.venv/bin/python backend/scripts/messaging_operations.py log-metrics --check
 backend/.venv/bin/python backend/scripts/messaging_operations.py alerts --check \
   --notification-channels \
   projects/based-hardware/notificationChannels/7795172925536204487 \
