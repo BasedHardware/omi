@@ -166,9 +166,7 @@ def test_clean_proposal_requires_both_binding_ids():
     assert listen_continuations._clean_proposal('nope') is None
     assert listen_continuations._clean_proposal({'conversation_id': CANDIDATE_CONVERSATION_ID}) is None
     assert (
-        listen_continuations._clean_proposal(
-            {'conversation_id': 'a/b', 'recording_session_id': CANDIDATE_SESSION_ID}
-        )
+        listen_continuations._clean_proposal({'conversation_id': 'a/b', 'recording_session_id': CANDIDATE_SESSION_ID})
         is None
     )
     assert listen_continuations._clean_proposal(PROPOSAL) == PROPOSAL
@@ -178,30 +176,24 @@ def test_invalid_identifiers_are_rejected_before_any_firestore_call():
     broken = _BrokenClient()
     assert _resolve(broken, source='') == (None, None)
     assert _resolve(broken, source='phone/../other') == (None, None)
-    assert (
-        listen_continuations.resolve_live_continuation(
-            '',
-            ORIGIN_ID,
-            source='phone',
-            device_id=None,
-            now=datetime.now(timezone.utc),
-            timeout=300,
-            firestore_client=broken,
-        )
-        == (None, None)
-    )
-    assert (
-        listen_continuations.resolve_live_continuation(
-            UID,
-            'a/b',
-            source='phone',
-            device_id=None,
-            now=datetime.now(timezone.utc),
-            timeout=300,
-            firestore_client=broken,
-        )
-        == (None, None)
-    )
+    assert listen_continuations.resolve_live_continuation(
+        '',
+        ORIGIN_ID,
+        source='phone',
+        device_id=None,
+        now=datetime.now(timezone.utc),
+        timeout=300,
+        firestore_client=broken,
+    ) == (None, None)
+    assert listen_continuations.resolve_live_continuation(
+        UID,
+        'a/b',
+        source='phone',
+        device_id=None,
+        now=datetime.now(timezone.utc),
+        timeout=300,
+        firestore_client=broken,
+    ) == (None, None)
 
 
 def test_transport_failure_degrades_to_no_continuation():
