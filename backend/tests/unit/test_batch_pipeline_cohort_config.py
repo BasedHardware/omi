@@ -17,6 +17,27 @@ def manifest():
     return yaml.load((ROOT / 'deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)['environments']
 
 
+@pytest.fixture(scope='module')
+def recovery_base_hosts():
+    base = yaml.load((ROOT / 'deploy/runtime_env/_base.yaml').read_text(), Loader=yaml.CSafeLoader)[
+        'environment_shared'
+    ]
+    return {
+        **base['cloud_run']['services'],
+        'backend-listen': base['gke']['backend-listen'],
+    }
+
+
+@pytest.fixture(scope='module')
+def listen_chart_envs():
+    chart = ROOT / 'charts/backend-listen'
+    result = []
+    for stage in ('dev', 'prod'):
+        values = yaml.load((chart / f'{stage}_omi_backend_listen_values.yaml').read_text(), Loader=yaml.CSafeLoader)
+        result.append({entry['name']: entry.get('value') for entry in values['env']})
+    return result
+
+
 def hosts(config):
     return {
         **{name: config['cloud_run']['services'][name]['env'] for name in SERVICES},
@@ -42,7 +63,12 @@ def test_only_david_is_admitted_on_every_sync_host(manifest, monkeypatch):
                 assert env['BATCH_PIPELINE_API_URL']['value'] == ''
 
 
-def test_quarantine_recovery_is_david_only_on_prod_integration(manifest, monkeypatch):
+def test_quarantine_recovery_is_david_only_on_prod_integration(
+    manifest,
+    recovery_base_hosts,
+    listen_chart_envs,
+    monkeypatch,
+):
     for stage, config in manifest.items():
         for name, env in hosts(config).items():
             recovery_mode = env['BATCH_PIPELINE_RECOVERY_MODE']
@@ -63,19 +89,11 @@ def test_quarantine_recovery_is_david_only_on_prod_integration(manifest, monkeyp
             monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', recovery_allowlist['value'])
             assert recovery_owners() == expected
 
-    base = yaml.safe_load((ROOT / 'deploy/runtime_env/_base.yaml').read_text())['environment_shared']
-    base_hosts = {
-        **base['cloud_run']['services'],
-        'backend-listen': base['gke']['backend-listen'],
-    }
-    for host in base_hosts.values():
+    for host in recovery_base_hosts.values():
         assert host['env']['BATCH_PIPELINE_RECOVERY_MODE'] == {'value': 'off', 'category': 'rollout'}
         assert host['env']['BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST'] == {'value': '', 'category': 'rollout'}
 
-    chart = ROOT / 'charts/backend-listen'
-    for stage in ('dev', 'prod'):
-        values = yaml.safe_load((chart / f'{stage}_omi_backend_listen_values.yaml').read_text())
-        chart_env = {entry['name']: entry.get('value') for entry in values['env']}
+    for chart_env in listen_chart_envs:
         assert chart_env['BATCH_PIPELINE_RECOVERY_MODE'] == 'off'
         assert chart_env['BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST'] == ''
 
