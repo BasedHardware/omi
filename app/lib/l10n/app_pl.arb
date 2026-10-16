@@ -1542,7 +1542,6 @@
     "photos": "Zdjęcia",
     "rawData": "Surowe dane",
     "content": "Zawartość",
-    "noContentToDisplay": "Brak treści do wyświetlenia",
     "noSummary": "Brak podsumowania",
     "updateOmiFirmware": "Zaktualizuj oprogramowanie Omi",
     "anErrorOccurredTryAgain": "Wystąpił błąd. Spróbuj ponownie.",
@@ -3202,7 +3201,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Dotknij przycisku nagrywania, aby rozpocząć nagrywanie",
-    "processingTakingLonger": "Nadal działa — trwa to dłużej niż zwykle.",
     "speechProfileEnrollmentPrompt": "Aby Omi wiedziało, który głos jest Twój — mów o czymkolwiek przez około 5 sekund.",
     "home": "Główna",
     "failedToUpdateBaselineStatus": "Nie udało się zaktualizować tego wspomnienia. Spróbuj ponownie.",
@@ -4169,5 +4167,8 @@
     "activityEmpty": "Brak aktywności",
     "activityNewSemantics": "Aktywność, nowe elementy",
     "activityLoadFailed": "Nie udało się wczytać całej aktywności",
-    "activityNewItem": "Nowe"
+    "activityNewItem": "Nowe",
+    "activityNeedsAttention": "Wymaga uwagi",
+    "activityRetryAll": "Ponów wszystkie",
+    "attentionSummaryFailed": "Nie udało się podsumować tej rozmowy"
 }

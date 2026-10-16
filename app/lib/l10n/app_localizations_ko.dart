@@ -4944,9 +4944,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get content => '콘텐츠';
 
   @override
-  String get noContentToDisplay => '표시할 콘텐츠가 없습니다';
-
-  @override
   String get noSummary => '요약 없음';
 
   @override
@@ -9658,9 +9655,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get speechToTextUnavailableDesc => '지금은 음성을 텍스트로 변환할 수 없습니다. 인터넷 연결과 기기의 음성 인식 설정을 확인한 후 다시 시도해주세요.';
 
   @override
-  String get processingTakingLonger => '아직 처리 중입니다. 평소보다 더 오래 걸리고 있어요.';
-
-  @override
   String get speechProfileEnrollmentPrompt => 'Omi가 내 목소리를 구별할 수 있도록 아무 주제로나 약 5초 동안 말해 주세요.';
 
   @override
@@ -13296,4 +13290,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get activityNewItem => '새 항목';
+
+  @override
+  String get activityNeedsAttention => '확인 필요';
+
+  @override
+  String get activityRetryAll => '모두 다시 시도';
+
+  @override
+  String get attentionSummaryFailed => '이 대화를 요약하지 못했습니다';
 }

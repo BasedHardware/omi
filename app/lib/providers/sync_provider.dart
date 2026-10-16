@@ -242,6 +242,25 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
             s == WalSyncDisplayState.uploadRejected,
       );
 
+  /// The part of [needsAttentionWalsCount] a retry can still upload: the
+  /// automatic budget ([walMaxAutoRetries]) is spent, the recording is still
+  /// pending. The rest are terminal and no sync can move them.
+  List<Wal> get retryableAttentionWals =>
+      _allWals.where((w) => w.syncDisplayState == WalSyncDisplayState.failed).toList();
+
+  /// Retry every recording in [retryableAttentionWals]. The automatic drain
+  /// skips a recording once its budget is spent, so a plain [syncWals] from
+  /// the Needs Attention card left every one of them where it was; grant the
+  /// fresh budget a per-recording Retry gives ([syncWal]) before draining.
+  Future<void> retryNeedsAttentionWals() async {
+    for (final wal in retryableAttentionWals) {
+      wal
+        ..retryCount = 0
+        ..lastRetryAt = 0;
+    }
+    await syncWals();
+  }
+
   /// Durable HTTP refusals that automatic connectivity wakes must never retry.
   /// The Auto Sync Needs Attention chip renders this count through
   /// [needsAttentionWalsCount]; this narrower accessor keeps the terminal-HTTP

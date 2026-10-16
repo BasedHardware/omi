@@ -19,6 +19,7 @@ from config.dream_agent import (
     canary_eligible,
     canary_uid,
     eligible,
+    hunt_interval,
     may_be_eligible,
     mode,
     DRAIN_TIMEOUT_SECONDS,
@@ -235,7 +236,7 @@ def acquire(
         if trigger == 'manual' and manual_runs >= caps.manual_runs:
             raise AdmissionDenied('dream_manual_limit')
         last_pass = data.get('last_attempt_at') or data.get('last_pass_at') or EPOCH
-        interval = timedelta(hours=6 if data.get('size_bucket') == 'heavy' else 24)
+        interval = hunt_interval(data.get('size_bucket'))
         hunt_due = not canary and (not isinstance(last_pass, datetime) or now - last_pass >= interval)
         has_dirty = dirty_count(uid, transaction=tx, firestore_client=database) > 0
         tomorrow = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)

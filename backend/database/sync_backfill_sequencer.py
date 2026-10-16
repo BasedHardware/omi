@@ -18,6 +18,7 @@ from google.api_core.exceptions import NotFound
 from prometheus_client import Counter
 
 from database._client import get_firestore_client
+from config.firestore_read_levers import lever_enabled
 from utils.sync import stage as sync_stage
 
 logger = logging.getLogger(__name__)
@@ -231,6 +232,26 @@ def has_pending(uid: str, *, firestore_client: Any = None) -> bool:
 def waiting_sample(uid: str, *, firestore_client: Any = None, now: Optional[datetime] = None) -> dict[str, Any]:
     _require_production()
     client = firestore_client or get_firestore_client()
+    if lever_enabled('backfill_task_reads', uid):
+        # Preserve capped depth, oldest identity, and missing-order-field
+        # semantics. The read-only transaction pins both RPCs to one snapshot;
+        # an independent head/count pair could disagree during dispatch.
+        @firestore.transactional
+        def read(transaction: Any) -> dict[str, Any]:
+            query = _pending_for_uid(client, uid).order_by('accepted_at')
+            docs = list(query.limit(2).stream(transaction=transaction))
+            if not docs:
+                return {'depth': 0, 'age_seconds': 0.0, 'job_id': ''}
+            depth = len(docs)
+            if depth == 2:
+                depth = int(query.limit(100).count().get(transaction=transaction)[0][0].value)
+            accepted_at = _data(docs[0]).get('accepted_at')
+            age = (
+                max(0.0, ((now or _now()) - accepted_at).total_seconds()) if isinstance(accepted_at, datetime) else 0.0
+            )
+            return {'depth': depth, 'age_seconds': age, 'job_id': docs[0].id}
+
+        return read(client.transaction(read_only=True))
     docs = list(_pending_for_uid(client, uid).order_by('accepted_at').limit(100).stream())
     if not docs:
         return {'depth': 0, 'age_seconds': 0.0, 'job_id': ''}
@@ -429,7 +450,10 @@ def begin_job(
         )
         return True
 
-    return commit(client.transaction())
+    try:
+        return commit(client.transaction())
+    except NotFound:
+        return False
 
 
 def renew_job(
@@ -455,7 +479,10 @@ def renew_job(
         )
         return True
 
-    return commit(client.transaction())
+    try:
+        return commit(client.transaction())
+    except NotFound:
+        return False
 
 
 def finish_job(
@@ -518,7 +545,10 @@ def defer_owner(uid: str, seconds: int, *, firestore_client: Any = None, now: Op
             reconcile_at = owner['repair_not_before']
         transaction.update(root, {'reconcile_at': reconcile_at, 'updated_at': current})
 
-    commit(client.transaction())
+    try:
+        commit(client.transaction())
+    except NotFound:
+        pass
 
 
 def redrive_job(
@@ -560,7 +590,10 @@ def redrive_job(
             'accepted_at': owner['active_accepted_at'],
         }
 
-    replacement = commit(client.transaction())
+    try:
+        replacement = commit(client.transaction())
+    except NotFound:
+        return None
     if replacement:
         logger.warning('event=sync_uid_sequencer action=redrive outcome=lease_expired')
     return replacement

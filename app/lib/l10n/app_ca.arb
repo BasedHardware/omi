@@ -1542,7 +1542,6 @@
     "photos": "Fotos",
     "rawData": "Dades en brut",
     "content": "Contingut",
-    "noContentToDisplay": "No hi ha contingut per mostrar",
     "noSummary": "Sense resum",
     "updateOmiFirmware": "Actualitza el firmware d'Omi",
     "anErrorOccurredTryAgain": "S'ha produït un error. Si us plau, torna-ho a provar.",
@@ -3167,7 +3166,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Toca el botó de gravació per començar a gravar",
-    "processingTakingLonger": "Encara en curs: això està trigant més del normal.",
     "speechProfileEnrollmentPrompt": "Perquè Omi sàpiga quina veu és la teva — parla de qualsevol cosa durant uns 5 segons.",
     "home": "Inici",
     "failedToUpdateBaselineStatus": "No s'ha pogut actualitzar aquest record. Torna-ho a provar.",
@@ -4134,5 +4132,8 @@
     "activityEmpty": "Encara no hi ha activitat",
     "activityNewSemantics": "Activitat, elements nous",
     "activityLoadFailed": "No s'ha pogut carregar tota la teva activitat",
-    "activityNewItem": "Nou"
+    "activityNewItem": "Nou",
+    "activityNeedsAttention": "Cal atenció",
+    "activityRetryAll": "Torna-ho a provar tot",
+    "attentionSummaryFailed": "No s'ha pogut resumir aquesta conversa"
 }

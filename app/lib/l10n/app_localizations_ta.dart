@@ -5066,9 +5066,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get content => 'உள்ளடக்கம்';
 
   @override
-  String get noContentToDisplay => 'காட்ட உள்ளடக்கம் இல்லை';
-
-  @override
   String get noSummary => 'சுருக்கம் இல்லை';
 
   @override
@@ -9883,9 +9880,6 @@ class AppLocalizationsTa extends AppLocalizations {
       'பேச்சை உரையாக மாற்றும் வசதி தற்போது கிடைக்கவில்லை. உங்கள் இணைய இணைப்பையும் சாதனத்தின் பேச்சு அறிதல் அமைப்புகளையும் சரிபார்த்து, மீண்டும் முயற்சிக்கவும்.';
 
   @override
-  String get processingTakingLonger => 'இன்னும் செயல்படுகிறது — இது வழக்கத்தை விட அதிக நேரம் எடுக்கிறது.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Omi உங்கள் குரலை அடையாளம் காண — எதைப் பற்றியாவது சுமார் 5 வினாடிகள் பேசுங்கள்.';
 
@@ -13570,4 +13564,13 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get activityNewItem => 'புதியது';
+
+  @override
+  String get activityNeedsAttention => 'கவனம் தேவை';
+
+  @override
+  String get activityRetryAll => 'அனைத்தையும் மீண்டும் முயலவும்';
+
+  @override
+  String get attentionSummaryFailed => 'இந்த உரையாடலைச் சுருக்க முடியவில்லை';
 }

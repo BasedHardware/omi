@@ -260,7 +260,7 @@
               "options": {
                 "pattern": ".*\u200b.*",
                 "result": {
-                  "color": "#3fb950"
+                  "color": "#0ca30c"
                 }
               }
             },
@@ -269,7 +269,7 @@
               "options": {
                 "pattern": ".*\u2060.*",
                 "result": {
-                  "color": "#e66767"
+                  "color": "#d03b3b"
                 }
               }
             }
@@ -1062,7 +1062,7 @@
               "options": {
                 "pattern": ".*\u200b.*",
                 "result": {
-                  "color": "#3fb950"
+                  "color": "#0ca30c"
                 }
               }
             },
@@ -1071,7 +1071,7 @@
               "options": {
                 "pattern": ".*\u2060.*",
                 "result": {
-                  "color": "#e66767"
+                  "color": "#d03b3b"
                 }
               }
             }
@@ -1847,7 +1847,7 @@
               "options": {
                 "pattern": ".*\u200b.*",
                 "result": {
-                  "color": "#3fb950"
+                  "color": "#0ca30c"
                 }
               }
             },
@@ -1856,7 +1856,7 @@
               "options": {
                 "pattern": ".*\u2060.*",
                 "result": {
-                  "color": "#e66767"
+                  "color": "#d03b3b"
                 }
               }
             }
@@ -1948,7 +1948,7 @@
               "mode": "off"
             }
           },
-          "noValue": "Loading\u2026",
+          "noValue": "Cohorts still filling",
           "decimals": 0
         },
         "overrides": [
@@ -2549,7 +2549,7 @@
               "options": {
                 "pattern": ".*\u200b.*",
                 "result": {
-                  "color": "#3fb950"
+                  "color": "#0ca30c"
                 }
               }
             },
@@ -2558,7 +2558,7 @@
               "options": {
                 "pattern": ".*\u2060.*",
                 "result": {
-                  "color": "#e66767"
+                  "color": "#d03b3b"
                 }
               }
             }
@@ -3125,7 +3125,7 @@
     {
       "type": "stat",
       "title": "Health",
-      "description": "All-in cost counts every line: GCP net of committed-use credits (one-time incidents excluded), Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT (Soniox/Deepgram; no invoice feed, so the FinOps modelled estimate) and SaaS at a fixed $4.8K/month estimate. Cost / day is the settled day D\u22122; cost per user is the 30-day all-in cost \u00f7 monthly users. MAU here is qualified MAU (~10K). The \"Omi Cost vs Revenue\" artifact divides by any-event PostHog MAU (~22K, $3.41 in October), so its per-user cost is about half of this one. Relative % change; up is bad.",
+      "description": "All-in cost counts every line: GCP net of committed-use credits (one-time incidents excluded), Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT and SaaS. STT has no invoice feed yet: it is a $5.3K/month estimate from the Soniox console (October 2026, read 2026-10-16; the FinOps stt_vendor_low model overstated it ~2\u00d7). SaaS is a fixed $4.8K/month estimate. Cost / day is the settled day D\u22122; cost per user is the 30-day all-in cost \u00f7 monthly users. MAU here is qualified MAU (~10K). The \"Omi Cost vs Revenue\" artifact divides by any-event PostHog MAU (~22K, $3.41 in October), so its per-user cost is about half of this one. Relative % change; up is bad.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -3149,7 +3149,7 @@
           "columns": [
             {
               "selector": "value",
-              "text": "All-in cost / day",
+              "text": "Cost / day",
               "type": "number"
             }
           ]
@@ -3172,7 +3172,7 @@
           "columns": [
             {
               "selector": "value",
-              "text": "Cost / user \u00b7 30d",
+              "text": "Cost / user",
               "type": "number"
             }
           ]
@@ -3190,12 +3190,12 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "All-in cost / day"
+              "options": "Cost / day"
             },
             "properties": [
               {
                 "id": "displayName",
-                "value": "All-in cost / day"
+                "value": "Cost / day"
               },
               {
                 "id": "unit",
@@ -3210,12 +3210,12 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Cost / user \u00b7 30d"
+              "options": "Cost / user"
             },
             "properties": [
               {
                 "id": "displayName",
-                "value": "Cost / user \u00b7 30d"
+                "value": "Cost / user"
               },
               {
                 "id": "unit",
@@ -3309,7 +3309,7 @@
               "options": {
                 "pattern": ".*\u200b.*",
                 "result": {
-                  "color": "#3fb950"
+                  "color": "#0ca30c"
                 }
               }
             },
@@ -3318,7 +3318,7 @@
               "options": {
                 "pattern": ".*\u2060.*",
                 "result": {
-                  "color": "#e66767"
+                  "color": "#d03b3b"
                 }
               }
             }
@@ -3356,7 +3356,7 @@
     {
       "type": "timeseries",
       "title": "All-in cost vs revenue",
-      "description": "All-in cost counts every line: GCP net of committed-use credits (one-time incidents excluded), Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT (Soniox/Deepgram; no invoice feed, so the FinOps modelled estimate) and SaaS at a fixed $4.8K/month estimate. Settled through D\u22122. Invoiced lines are solid; STT (modelled) and SaaS (fixed estimate) are the faint amber segments. The stack top is the cost stat. One-time GCP spikes (a service-day above 2\u00d7 and $500 over its 14-day median, e.g. the 2026-09-07 Coldline migration) are excluded and shown in the tooltip. Revenue = FinOps MRR \u00f7 30.4.",
+      "description": "All-in cost counts every line: GCP net of committed-use credits (one-time incidents excluded), Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT and SaaS. STT has no invoice feed yet: it is a $5.3K/month estimate from the Soniox console (October 2026, read 2026-10-16; the FinOps stt_vendor_low model overstated it ~2\u00d7). SaaS is a fixed $4.8K/month estimate. Settled through D\u22122. Invoiced lines are the solid blue-greys; STT est. (Soniox console) and SaaS est. (fixed) are the amber segments. The stack top is the cost stat. One-time GCP spikes (a service-day above 2\u00d7 and $500 over its 14-day median, e.g. the 2026-09-07 Coldline migration) are excluded and shown in the tooltip. Revenue = FinOps MRR \u00f7 30.4.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -3405,12 +3405,12 @@
             },
             {
               "selector": "stt",
-              "text": "STT (modelled)",
+              "text": "STT est.",
               "type": "number"
             },
             {
               "selector": "saas",
-              "text": "SaaS (fixed estimate)",
+              "text": "SaaS est.",
               "type": "number"
             },
             {
@@ -3544,12 +3544,12 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "STT (modelled)"
+              "options": "STT est."
             },
             "properties": [
               {
                 "id": "displayName",
-                "value": "STT (modelled)"
+                "value": "STT est."
               },
               {
                 "id": "color",
@@ -3560,7 +3560,7 @@
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 30
+                "value": 55
               },
               {
                 "id": "custom.lineWidth",
@@ -3571,23 +3571,23 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "SaaS (fixed estimate)"
+              "options": "SaaS est."
             },
             "properties": [
               {
                 "id": "displayName",
-                "value": "SaaS (fixed estimate)"
+                "value": "SaaS est."
               },
               {
                 "id": "color",
                 "value": {
                   "mode": "fixed",
-                  "fixedColor": "#8a7a5c"
+                  "fixedColor": "#e0b45c"
                 }
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 30
+                "value": 55
               },
               {
                 "id": "custom.lineWidth",
@@ -3693,7 +3693,7 @@
       },
       "options": {
         "legend": {
-          "showLegend": false,
+          "showLegend": true,
           "displayMode": "list",
           "placement": "bottom"
         },
@@ -3881,8 +3881,8 @@
     },
     {
       "type": "table",
-      "title": "Coverage gaps",
-      "description": "Wall metrics without a defensible source (2026-10-15 contract audit). They stay off the charts rather than showing empty panels or fake zeros. The route's full classified reason is in /api/omi/stats/wall/series/headline (gaps[].reason) and the v2 diagnostics.",
+      "title": "Data & coverage",
+      "description": "First row: the oldest series' data-through day (UTC) across every chart, and how many series are still filling; the board shows stale-but-real data rather than waiting. Below: wall metrics without a defensible source (2026-10-15 contract audit). They stay off the charts rather than showing empty panels or fake zeros. The route's full classified reason is in /api/omi/stats/wall/series/headline (gaps[].reason) and the v2 diagnostics.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -3963,5 +3963,5 @@
     }
   ],
   "links": [],
-  "description": "Growth \u2192 Activation \u2192 Retention \u2192 Revenue \u2192 Health. Stats above native charts; v2 metric definitions via /api/omi/stats/wall/series. Every chart's latest point is the stat above it. Missing sources are listed under Coverage gaps."
+  "description": "Growth \u2192 Activation \u2192 Retention \u2192 Revenue \u2192 Health. Stats above native charts; v2 metric definitions via /api/omi/stats/wall/series. Every chart's latest point is the stat above it. Data-through day and missing sources are listed under Data & coverage."
 }

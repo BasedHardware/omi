@@ -14,23 +14,14 @@ WITH revenue AS (
     ROW_NUMBER() OVER (PARTITION BY snapshot_date, plan ORDER BY computed_at DESC) AS rn
   FROM \`based-hardware.omi_finops.plan_revenue_daily\`
   WHERE snapshot_date >= DATE_SUB(@today, INTERVAL @days DAY) AND snapshot_date <= @today
-), stt AS (
-  SELECT FORMAT_DATE('%F', date) AS day, usd,
-    ROW_NUMBER() OVER (PARTITION BY date ORDER BY computed_at DESC) AS rn
-  FROM \`based-hardware.omi_finops.unit_cost_daily\`
-  WHERE date >= DATE_SUB(@today, INTERVAL @days DAY) AND date < @today
-    AND segment_type = 'total' AND component = 'stt_vendor_low'
 )
 SELECT TO_JSON_STRING(STRUCT(
-  ARRAY(SELECT AS STRUCT day, plan, mrr_usd FROM revenue WHERE rn = 1 ORDER BY day) AS mrr,
-  ARRAY(SELECT AS STRUCT day, usd FROM stt WHERE rn = 1 ORDER BY day) AS stt
+  ARRAY(SELECT AS STRUCT day, plan, mrr_usd FROM revenue WHERE rn = 1 ORDER BY day) AS mrr
 )) AS history`;
 
 export interface FinopsHistory {
   /** snapshot_date → plan → monthly USD. */
   mrr: Record<string, Record<string, number>>;
-  /** usage date → modelled STT vendor cost (low estimate), USD/day. */
-  stt: Record<string, number>;
 }
 
 export async function fetchFinopsHistory(
@@ -52,11 +43,9 @@ export async function fetchFinopsHistory(
   }
   const parsed = JSON.parse(rows[0]?.history || "{}") as {
     mrr?: { day: string; plan: string; mrr_usd: number }[];
-    stt?: { day: string; usd: number }[];
   };
-  const history: FinopsHistory = { mrr: {}, stt: {} };
+  const history: FinopsHistory = { mrr: {} };
   for (const r of parsed.mrr || [])
     (history.mrr[r.day] ||= {})[r.plan] = Number(r.mrr_usd);
-  for (const r of parsed.stt || []) history.stt[r.day] = Number(r.usd);
   return history;
 }

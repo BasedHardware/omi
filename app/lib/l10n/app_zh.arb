@@ -1545,7 +1545,6 @@
     "photos": "照片",
     "rawData": "原始数据",
     "content": "内容",
-    "noContentToDisplay": "没有可显示的内容",
     "noSummary": "无摘要",
     "updateOmiFirmware": "更新Omi固件",
     "anErrorOccurredTryAgain": "发生错误，请重试。",
@@ -3167,7 +3166,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "点击录音按钮开始录音",
-    "processingTakingLonger": "仍在处理中——比平时耗时更长。",
     "speechProfileEnrollmentPrompt": "让 Omi 知道哪个声音是你的——随便聊点什么，说大约 5 秒就好。",
     "home": "首页",
     "failedToUpdateBaselineStatus": "无法更新此回忆。请重试。",
@@ -4134,5 +4132,8 @@
     "activityEmpty": "暂无活动",
     "activityNewSemantics": "活动，有新内容",
     "activityLoadFailed": "无法加载全部活动",
-    "activityNewItem": "新"
+    "activityNewItem": "新",
+    "activityNeedsAttention": "需要处理",
+    "activityRetryAll": "全部重试",
+    "attentionSummaryFailed": "无法总结这段对话"
 }

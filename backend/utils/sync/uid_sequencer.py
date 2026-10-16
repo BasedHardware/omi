@@ -300,7 +300,14 @@ def sweep(*, limit: int = 100) -> dict[str, int]:
     now = datetime.now(timezone.utc)
     outcomes: dict[str, int] = {}
     pending_retired = 0
-    owners = registry.due_owners(limit=limit, now=now)
+    try:
+        owners = registry.due_owners(limit=limit, now=now)
+    except Exception as error:
+        logger.error(
+            'event=sync_uid_sequencer action=sweep outcome=due_owners_error exception_type=%s', type(error).__name__
+        )
+        owners = []
+        outcomes['due_owners_error'] = outcomes.get('due_owners_error', 0) + 1
     for owner in owners:
         progress = _ClaimProgress()
         try:
@@ -313,9 +320,20 @@ def sweep(*, limit: int = 100) -> dict[str, int]:
                 backfill_cutover.uid_hash(owner['uid']),
                 type(error).__name__,
             )
+            try:
+                registry.defer_owner(owner['uid'], registry.HEARTBEAT_SECONDS, now=now)
+            except Exception:
+                pass
         pending_retired += progress.retired
         outcomes[outcome] = outcomes.get(outcome, 0) + 1
-    pending = registry.due_pending(limit=limit, now=now)
+    try:
+        pending = registry.due_pending(limit=limit, now=now)
+    except Exception as error:
+        logger.error(
+            'event=sync_uid_sequencer action=sweep outcome=due_pending_error exception_type=%s', type(error).__name__
+        )
+        pending = []
+        outcomes['due_pending_error'] = outcomes.get('due_pending_error', 0) + 1
     # Each UID gets one reconcile attempt per tick even when it appears in
     # both scans; pending rows are still deferred to rotate the bounded page.
     seen_uids: set[str] = {owner['uid'] for owner in owners}

@@ -625,7 +625,7 @@ class WallV2Contract(unittest.TestCase):
             self.assertEqual(set(colors), {f".*{GOOD_MARK}.*", f".*{BAD_MARK}.*"})
 
     def test_cost_stack_counts_every_line_and_marks_estimates(self):
-        from build_wall_dashboard import ESTIMATE
+        from build_wall_dashboard import ESTIMATE, ESTIMATE_OPACITY
         board = load("omi-tv-v2")
         cost = next(p for p in board["panels"] if p["title"] == "All-in cost vs revenue")
         fields = [c["selector"] for c in cost["targets"][0]["columns"]]
@@ -634,10 +634,26 @@ class WallV2Contract(unittest.TestCase):
         styled = {o["matcher"]["options"]: {p["id"]: p["value"] for p in o["properties"]}
                   for o in cost["fieldConfig"]["overrides"]}
         for name in ESTIMATE:
-            self.assertEqual(styled[name]["custom.fillOpacity"], 30)
+            self.assertEqual(styled[name]["custom.fillOpacity"], ESTIMATE_OPACITY)
             self.assertNotIn("custom.stacking", styled[name])  # still in the stack
-        self.assertIn("modelled", " ".join(ESTIMATE))
-        self.assertIn("fixed estimate", " ".join(ESTIMATE))
+        self.assertEqual(set(ESTIMATE), {"STT est.", "SaaS est."})
+        self.assertTrue(cost["options"]["legend"]["showLegend"])  # identity is never color alone
+        self.assertIn("Soniox console", cost["description"])
+        self.assertNotIn("FinOps modelled", cost["description"])
+
+    def test_status_colors_curve_placeholder_and_data_through(self):
+        from build_wall_dashboard import STATUS_BAD, STATUS_GOOD
+        board = load("omi-tv-v2")
+        strips = [p for p in board["panels"] if is_strip(p)]
+        colors = {m["options"]["result"]["color"] for p in strips for m in p["fieldConfig"]["defaults"]["mappings"]}
+        self.assertEqual(colors, {STATUS_GOOD, STATUS_BAD})  # dataviz status steps
+        curve = next(p for p in board["panels"] if p["title"].startswith("Weekly cohort retention"))
+        self.assertEqual(curve["fieldConfig"]["defaults"]["noValue"], "Cohorts still filling")
+        table = next(p for p in board["panels"] if p["type"] == "table")
+        self.assertEqual(table["title"], "Data & coverage")
+        health = next(p for p in board["panels"] if p["title"] == "Health")
+        names = [o["properties"][0]["value"] for o in health["fieldConfig"]["overrides"]]
+        self.assertTrue(all(len(n) <= 12 for n in names), names)  # no wrap at 1440
 
     def test_legacy_apply_rejects_private_uid_without_changing_layout_policy(self):
         import apply_omi_tv_dashboard as apply_module

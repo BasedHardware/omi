@@ -1542,7 +1542,6 @@
     "photos": "Φωτογραφίες",
     "rawData": "Ανεπεξέργαστα δεδομένα",
     "content": "Περιεχόμενο",
-    "noContentToDisplay": "Δεν υπάρχει περιεχόμενο για εμφάνιση",
     "noSummary": "Χωρίς σύνοψη",
     "updateOmiFirmware": "Ενημέρωση firmware Omi",
     "anErrorOccurredTryAgain": "Παρουσιάστηκε σφάλμα. Παρακαλώ δοκιμάστε ξανά.",
@@ -3167,7 +3166,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Πατήστε το κουμπί εγγραφής για να ξεκινήσετε την εγγραφή",
-    "processingTakingLonger": "Ακόμα σε εξέλιξη — χρειάζεται περισσότερο χρόνο από το συνηθισμένο.",
     "speechProfileEnrollmentPrompt": "Για να ξέρει το Omi ποια φωνή είναι δική σας — μιλήστε για οτιδήποτε για περίπου 5 δευτερόλεπτα.",
     "home": "Αρχική",
     "failedToUpdateBaselineStatus": "Δεν ήταν δυνατή η ενημέρωση αυτής της ανάμνησης. Δοκιμάστε ξανά.",
@@ -4134,5 +4132,8 @@
     "activityEmpty": "Δεν υπάρχει δραστηριότητα ακόμα",
     "activityNewSemantics": "Δραστηριότητα, νέα στοιχεία",
     "activityLoadFailed": "Δεν ήταν δυνατή η φόρτωση όλης της δραστηριότητάς σας",
-    "activityNewItem": "Νέο"
+    "activityNewItem": "Νέο",
+    "activityNeedsAttention": "Χρειάζεται προσοχή",
+    "activityRetryAll": "Επανάληψη όλων",
+    "attentionSummaryFailed": "Δεν ήταν δυνατή η σύνοψη αυτής της συνομιλίας"
 }

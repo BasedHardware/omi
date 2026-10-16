@@ -25,7 +25,12 @@ import {
 import { WallSourceError, wallFailure } from "./wall-source-error";
 import { fetchShopifyWeek } from "./wall-shopify";
 import { WallJobCache } from "./wall-job-cache";
-import { allInCost, SAAS_MONTHLY_USD } from "./wall-cost";
+import {
+  allInCost,
+  SAAS_MONTHLY_USD,
+  STT_MONTHLY_USD,
+  STT_SOURCE,
+} from "./wall-cost";
 
 export const WALL_DEFINITIONS = [
   ["growth.wau", "WAU", "people", "Growth"],
@@ -143,8 +148,6 @@ export interface WallSources {
       coverage?: { openai?: boolean; anthropic?: boolean };
     };
   } | null>;
-  /** FinOps modelled STT by usage day (no STT vendor feed exists). */
-  stt?: () => Promise<Record<string, number>>;
 }
 export const defaultWallSources: WallSources = {
   query: queryPosthog,
@@ -181,10 +184,6 @@ export const defaultWallSources: WallSources = {
       "@/app/api/omi/stats/infra-costs/route"
     );
     return computeBillingInfraCosts(60, 0, true);
-  },
-  stt: async () => {
-    const { fetchFinopsHistory } = await import("./wall-finops");
-    return (await fetchFinopsHistory(isoDay(new Date()), 75)).stt;
   },
 };
 const NULL_REASONS: Partial<Record<MetricId, string>> = {
@@ -605,11 +604,9 @@ export async function computeWall(
       }
       const cutoff = isoDay(shiftDay(end, -2));
       // All-in: GCP net of CUD minus one-time incidents, plus OpenAI/Anthropic
-      // invoices, modelled STT and fixed SaaS (David 2026-10-16).
-      const stt = sources.stt ? await sources.stt().catch(() => null) : null;
+      // invoices, the Soniox-console STT estimate and fixed SaaS (David 2026-10-16).
       const cost = allInCost(
         bill.daily.filter((d) => d.date <= cutoff),
-        stt,
         bill.summary.coverage
       );
       const daily = cost.daily;
@@ -620,7 +617,7 @@ export async function computeWall(
         ].reason = `Billing data has not reached ${cutoff}`;
         return;
       }
-      const lines = `All-in: GCP net of committed-use credits, one-time incidents excluded, + OpenAI + Anthropic + STT (modelled, FinOps) + SaaS (fixed $${SAAS_MONTHLY_USD}/mo estimate)${
+      const lines = `All-in: GCP net of committed-use credits, one-time incidents excluded, + OpenAI + Anthropic + STT ($${STT_MONTHLY_USD}/mo estimate, ${STT_SOURCE}) + SaaS (fixed $${SAAS_MONTHLY_USD}/mo estimate)${
         cost.missing.length ? `; missing: ${cost.missing.join(", ")}` : ""
       }`;
       const m = metrics["cost.net_day"];

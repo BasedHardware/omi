@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "The sign-language panel no longer stays on screen when sign-language translation is turned off, so it stops covering the Connect button on Home. It now appears and disappears as soon as you flip the setting."
+  ]
+}

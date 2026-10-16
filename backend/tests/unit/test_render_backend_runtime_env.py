@@ -725,6 +725,9 @@ def test_desktop_manifest_env_matches_what_the_workflow_deploys(env_name):
     literal_project = {'dev': 'based-hardware-dev', 'prod': 'based-hardware'}[env_name]
     for entry in state['services']['desktop-backend']['env']:
         name, value = entry['name'], entry['value']
+        if name in _MODULE['FIRESTORE_READ_RUNTIME_ENV_NAMES']:
+            assert '${{ steps.desktop-expected-env.outputs.firestore_read_env_vars }}' in workflow
+            continue
         if value == literal_project:
             # Supplied to the workflow as ${{ vars.GCP_PROJECT_ID }}.
             assert f'{name}=${{{{ vars.GCP_PROJECT_ID }}}}' in workflow, name
@@ -765,9 +768,30 @@ def test_desktop_cohort_output_reuses_escaped_state_value(monkeypatch, tmp_path,
     state = tmp_path / 'state.json'
     monkeypatch.setattr('sys.argv', [str(_SCRIPT), '--env', 'dev', '--desktop-state-output', str(state)])
     assert _MODULE['main']() == 0
-    assert capsys.readouterr().out == 'free_tier_local_processing_cohort=uid:fixture-a\\,uid:fixture-b\n'
+    output = capsys.readouterr().out
+    assert output.startswith(
+        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={}\n'
+    )
+    assert output.endswith(
+        '__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n'
+        'free_tier_local_processing_cohort=uid:fixture-a\\,uid:fixture-b\n'
+    )
     entries = json.loads(state.read_text())['services']['desktop-backend']['env']
     assert {'name': 'FREE_TIER_LOCAL_PROCESSING_COHORT', 'value': cohort} in entries
+
+
+def test_desktop_lever_output_tracks_manifest_value_and_escapes_deploy_delimiters(monkeypatch, tmp_path, capsys):
+    env_config = deepcopy(_MANIFEST['environments']['dev'])
+    env_config['desktop_backend']['env']['FIRESTORE_READ_LEVERS']['value'] = '{"queue_age":true,"subscription":true}'
+    monkeypatch.setitem(_MODULE['main'].__globals__, '_load_yaml', lambda _path: {'environments': {'dev': env_config}})
+    state = tmp_path / 'state.json'
+    monkeypatch.setattr('sys.argv', [str(_SCRIPT), '--env', 'dev', '--desktop-state-output', str(state)])
+
+    assert _MODULE['main']() == 0
+
+    output = capsys.readouterr().out
+    assert 'FIRESTORE_READ_LEVERS={"queue_age":true\\,"subscription":true}\n' in output
+    assert output.endswith('__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n' 'free_tier_local_processing_cohort=\n')
 
 
 def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_path):
@@ -810,7 +834,12 @@ def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_
         capture_output=True,
         text=True,
     )
-    assert result.stdout == 'free_tier_local_processing_cohort=\n'
+    assert result.stdout.startswith(
+        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={}\n'
+    )
+    assert result.stdout.endswith(
+        '__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n' 'free_tier_local_processing_cohort=\n'
+    )
     entries = json.loads(state.read_text())['services']['desktop-backend']['env']
     assert {'name': 'FREE_TIER_LOCAL_PROCESSING', 'value': 'false'} in entries
     assert {'name': 'FREE_TIER_LOCAL_PROCESSING_COHORT', 'value': ''} in entries
@@ -914,3 +943,24 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
         ('METRICS_SECRET', 'METRICS_SECRET', 'latest'),
         ('POSTHOG_PROJECT_API_KEY', 'POSTHOG_PROJECT_API_KEY', 'latest'),
     }
+
+
+def test_integration_enrichment_renderer_targets_fresh_sync_handler(monkeypatch):
+    handler = 'https://fresh.invalid/v2/sync-jobs/run'
+    monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', handler)
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@example.invalid')
+    entries = _MANIFEST['environments']['prod']['cloud_run']['services']['backend-integration']['env']
+    selected = {
+        name: entries[name]
+        for name in (
+            'SYNC_TASKS_QUEUE',
+            'SYNC_TASKS_HANDLER_URL',
+            'SYNC_TASKS_OIDC_AUDIENCE',
+            'SYNC_TASKS_INVOKER_SA',
+        )
+    }
+    rendered = _MODULE['_render_env_vars'](selected)
+    assert 'SYNC_TASKS_QUEUE=sync-jobs' in rendered
+    assert f'SYNC_TASKS_HANDLER_URL={handler}' in rendered
+    assert f'SYNC_TASKS_OIDC_AUDIENCE={handler}' in rendered
+    assert 'SYNC_TASKS_INVOKER_SA=invoker@example.invalid' in rendered

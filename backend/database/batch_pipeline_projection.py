@@ -9,6 +9,7 @@ from typing import Any
 
 from google.cloud import firestore
 
+from database.fsr_read_cache import writing
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import assert_batch_write_allowed
 from database.sync_ledger import (
@@ -126,12 +127,15 @@ class ProjectionStore:
                         handler = os.getenv('SYNC_BACKFILL_TASKS_HANDLER_URL', '').strip()
                         if not queue or not handler:
                             raise ProjectionBlocked('backfill enrichment dispatch binding required')
-                        row['dispatch'] = {
+                        dispatch = {
                             'queue': queue,
                             'handler': handler,
                             'audience': os.getenv('SYNC_BACKFILL_TASKS_OIDC_AUDIENCE') or handler,
                             'invoker_sa': os.getenv('SYNC_TASKS_INVOKER_SA', ''),
                         }
+                        if not reprocess.valid_dispatch_binding(dispatch):
+                            raise ProjectionBlocked('complete backfill enrichment dispatch binding required')
+                        row['dispatch'] = dispatch
                         result = (row, result[1])
                 # The enrichment obligation and its exactly-once projection
                 # receipt commit together, fenced against account deletion.
@@ -338,4 +342,5 @@ class ProjectionStore:
                 transaction.update(self.ref('jobs', sibling), {'client_status': 'completed', 'client_result': result})
             return result
 
-        return self.run(commit)
+        with writing('usage_month_cache', binding.owner_id):
+            return self.run(commit)

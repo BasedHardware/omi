@@ -52,6 +52,7 @@ overlay:
         BATCH_PIPELINE_SHARED_LIVE_ENABLED:
           value: "false"
           category: rollout
+        FSR_QUEUE_AGE_PUBLISHER: {value: '1', category: rollout}
         OMI_SHAPED_AGENT_MODE:
           value: 'on'
           category: rollout

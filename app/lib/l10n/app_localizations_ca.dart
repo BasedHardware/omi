@@ -5055,9 +5055,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get content => 'Contingut';
 
   @override
-  String get noContentToDisplay => 'No hi ha contingut per mostrar';
-
-  @override
   String get noSummary => 'Sense resum';
 
   @override
@@ -9864,9 +9861,6 @@ class AppLocalizationsCa extends AppLocalizations {
       'La transcripció de veu no està disponible ara mateix. Comprova la connexió a Internet i la configuració del reconeixement de veu del dispositiu i torna-ho a provar.';
 
   @override
-  String get processingTakingLonger => 'Encara en curs: això està trigant més del normal.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Perquè Omi sàpiga quina veu és la teva — parla de qualsevol cosa durant uns 5 segons.';
 
@@ -13547,4 +13541,13 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nou';
+
+  @override
+  String get activityNeedsAttention => 'Cal atenció';
+
+  @override
+  String get activityRetryAll => 'Torna-ho a provar tot';
+
+  @override
+  String get attentionSummaryFailed => 'No s\'ha pogut resumir aquesta conversa';
 }
