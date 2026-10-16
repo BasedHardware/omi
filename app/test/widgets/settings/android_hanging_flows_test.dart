@@ -194,4 +194,35 @@ void main() {
     expect(defaults, ['todoist']);
     expect(provider.selectedApp, TaskIntegrationApp.todoist);
   });
+
+  testWidgets('choosing another task app retires the earlier pending authorization selection', (tester) async {
+    var connected = false;
+    final defaults = <String>[];
+    final provider = TaskIntegrationProvider(
+        fetchStatus: () async => TaskIntegrationsResponse(integrations: {
+              'asana': {'app_key': 'asana', 'connected': true},
+              if (connected) 'todoist': {'app_key': 'todoist', 'connected': true},
+            }),
+        setDefaultTaskIntegrationFn: (key) async {
+          defaults.add(key);
+          return true;
+        });
+    addTearDown(provider.dispose);
+    provider.clearUserData();
+    await pumpPage(tester,
+        ChangeNotifierProvider.value(value: provider, child: TaskIntegrationsPage(authenticate: (_) async => true)));
+    await tester.tap(find.text('Todoist'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Asana'));
+    await tester.pumpAndSettle();
+    expect(defaults, ['asana']);
+    connected = true;
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    expect(defaults, ['asana']);
+    expect(provider.selectedApp, TaskIntegrationApp.asana);
+    await tester.pumpWidget(const SizedBox());
+  });
 }

@@ -15,8 +15,9 @@ cannot leave timers or publish after their owner is cleared/disposed.
 Marketplace app-detail setup uses the page's `app_setup_owner.dart` part: one
 probe, one wait and a separate install receipt. MCP setup uses the same wait
 policy and requires an approved, identity-matching server record before reporting
-connection. Native task selection is saved only after a confirmed grant. External
-web settings and affiliate pages use the system browser, with an explicit Open
+connection. Native task selection is saved only after a confirmed grant. A later
+explicit task choice cancels pending auto-selection, so a delayed grant cannot
+overwrite that choice. External web settings and affiliate pages use the system browser, with an explicit Open
 and failed-launch retry; embedded Google OAuth/user-agent spoofing is retired.
 
 No timer, presentation widget or SDK launch callback may assert a saved grant.

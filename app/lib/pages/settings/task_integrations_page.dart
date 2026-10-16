@@ -252,6 +252,11 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
       _showComingSoonDialog(app);
       return;
     }
+    if (_pendingAuthApp != null && _pendingAuthApp != app) {
+      _connectionWait?.cancel();
+      _connectionWait = null;
+      setState(() => _pendingAuthApp = null);
+    }
 
     // Check if Apple Reminders requires permission
     if (app == TaskIntegrationApp.appleReminders) {
