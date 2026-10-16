@@ -78,7 +78,10 @@ final class CurrentPlanResubscribeTests: XCTestCase {
 
   /// `point` is in the hosting view, origin top-left, matching the other click harnesses.
   private func click(_ host: NSView, at point: CGPoint) {
-    let window = host.window!
+    guard let window = host.window else {
+      XCTFail("the hosting view must be in a window before it can be clicked")
+      return
+    }
     let appKit = NSPoint(x: point.x, y: host.bounds.height - point.y)
     let down = NSEvent.mouseEvent(
       with: .leftMouseDown, location: appKit, modifierFlags: [], timestamp: 0,
