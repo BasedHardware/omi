@@ -2850,12 +2850,27 @@ _add(
         patchers=(lambda client: unittest.mock.patch('config.messaging.channel_enabled', lambda channel: False),),
     )
 )
+
+
+def _messaging_retention_candidate(client, combo, trial):
+    path = 'channel_identities/unknown'
+    row = {'active': False, 'last_inbound_at': T0 - timedelta(days=40)}
+    client.documents[path] = row
+    client.queue_results([])  # expired proofs
+    client.queue_results([client.snapshot(path, row)])
+    client.queue_results(
+        [client.snapshot(path + '/inbox/ambiguous', {'status': 'running'})] if combo['limit'] == 1 else []
+    )
+
+
 _add(
     DriverEntry(
         'database.messaging.MessagingStore.cleanup',
         base={'self': _messaging_store},
         neutrals={'now': _NOW},
         domains={'limit': [1, 100], 'retention_days': [7, 30]},
+        setup=_messaging_retention_candidate,
+        patchers=(_messaging_cleanup,),
     )
 )
 

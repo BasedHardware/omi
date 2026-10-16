@@ -311,7 +311,9 @@ and does not require `--prepare-launch` or an initialized counter:
    still enforce provider pacing. `off` is safe only with one backend process/instance.
 6. Install the Cloud Run cleanup job and its explicitly selected Scheduler trigger
    using [the production operations sequence](#production-maintenance-and-alert-install).
-   Each execution deletes at most 100 records per category. Retention defaults to 30 days,
+   Each execution selects at most 100 records per category; unknown identity
+   subtrees can contain additional records. Running inbox evidence blocks an unknown
+   identity purge. Retention defaults to 30 days,
    minimum 7. Do not delete running reconciliation evidence.
 7. Install the declared Cloud Monitoring policies through that same sequence. The
    Kubernetes chart and PrometheusRule remain optional GKE-only resources; neither is
@@ -587,7 +589,9 @@ select it only after job validation. No new workflow is needed.
 `roles/datastore.user`. Cleanup needs only Firestore and the existing
 `ENCRYPTION_SECRET` import binding, not provider tokens, Redis or the broad Kubernetes
 secret. Use the admitted backend image by digest, one task, 600 seconds, one retry,
-30-day retention, maximum 100 records per category. Cleanup is idempotent and sends
+30-day retention, maximum 100 candidates per category (unknown identity subtrees can contain more
+records). A transaction refuses to purge an unknown identity while any running inbox
+row remains, including FIFO-settled reconciliation evidence. Cleanup is idempotent and sends
 nothing. Hourly scheduling exceeds the bounded 20-minute execution/retry window;
 operators must not start overlapping manual executions.
 

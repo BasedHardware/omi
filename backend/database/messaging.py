@@ -775,6 +775,11 @@ class MessagingStore:
                 row = identity.reference.get(transaction=tx).to_dict() or {}
                 if row.get('active') or row.get('uid') or row.get('last_inbound_at', now) > cutoff:
                     return False
+                # Unknown senders can also have ambiguous provider delivery. Never
+                # erase their running reconciliation evidence through a parent purge.
+                running = identity.reference.collection('inbox').where('status', '==', 'running').limit(1)
+                if next(running.stream(transaction=tx), None) is not None:
+                    return False
                 tx.update(identity.reference, {'cleanup_pending': True})
                 return True
 

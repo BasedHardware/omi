@@ -227,3 +227,20 @@ def test_album_claimed_by_old_worker_is_never_appendable(store):
     store.db.document(path).update({'status': 'running', 'started_at': datetime.now(timezone.utc)})
     late_path = store.enqueue(replace(message, provider_message_id='late'))
     assert late_path != path
+
+
+def test_cleanup_preserves_unknown_running_reconciliation(store):
+    adapter = LoopbackAdapter()
+    message = adapter.parse(adapter.signed()[0])[0]
+    path = store.enqueue(message)
+    assert store.claim(path) is not None
+    identity = store.identity(message.channel, message.provider, message.external_user_id)
+    old = datetime.now(timezone.utc) - timedelta(days=40)
+    identity.update({'last_inbound_at': old})
+    store.db.document(path).update({'started_at': old, 'fifo_settled_at': old})
+    # Even a settled ambiguous send retains running status until reconciliation.
+    assert store.cleanup()['identities'] == 0
+    assert identity.get().exists and store.db.document(path).get().to_dict()['payload']
+    store.complete(path)
+    assert store.cleanup()['identities'] == 1
+    assert not identity.get().exists
