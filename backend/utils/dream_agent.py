@@ -25,7 +25,12 @@ from models.agent_edit import HarnessEdit
 from utils.agent_capabilities import tools as dream_tools
 from utils.agent_capabilities import verifiers
 from utils import dream_review_policy, dream_capacity, dream_harness_transport, dream_seed, dream_verify
-from utils.dream_cost import conservative_attempt_micro, price_weighted_tokens, verification_reserve_tokens
+from utils.dream_cost import (
+    conservative_attempt_micro,
+    minute_burndown_tokens,
+    price_weighted_tokens,
+    verification_reserve_tokens,
+)
 from utils.agent_capabilities.search import OwnerSearch
 from utils.agent_capabilities.session import Session
 from utils.dream_instructions import INSTRUCTIONS
@@ -212,16 +217,22 @@ async def run_session(
             cached_tokens_estimate=cached_estimate,
             completion_limit=completion,
         )
-        # The shared minute ceiling counts price-weighted tokens like the pass meter: a resent cached
-        # prefix costs a tenth, so counting it raw stopped fast passes after a few minutes.
-        reserve = price_weighted_tokens(
+        # The shared minute ceiling counts reserved-capacity burndown (cached input 0.1, output 5x), not raw
+        # tokens: counting every resent cached prefix in full stopped fast passes after a few minutes.
+        reserve = minute_burndown_tokens(
             'gemini',
             'gemini-3.8-flash',
-            prompt_tokens=estimate,
-            cached_tokens=(
-                min(cached_estimate, estimate) if type(cached_estimate) is int and cached_estimate >= 0 else None
+            weighted_tokens=price_weighted_tokens(
+                'gemini',
+                'gemini-3.8-flash',
+                prompt_tokens=estimate,
+                cached_tokens=(
+                    min(cached_estimate, estimate) if type(cached_estimate) is int and cached_estimate >= 0 else None
+                ),
+                completion_tokens=completion_room,
             ),
             completion_tokens=completion_room,
+            prompt_tokens=estimate,
         )
         micro, price_status = conservative_attempt_micro('gemini', 'gemini-3.8-flash', estimate, completion_room)
         if lease is not None:
