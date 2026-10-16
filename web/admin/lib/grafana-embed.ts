@@ -94,6 +94,16 @@ async function grafana(
   return response.json();
 }
 
+async function legacyOriginDeniesAnonymous(base: string): Promise<boolean> {
+  const response = await fetch(`${base}/api/datasources`, {
+    redirect: "manual",
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
+  });
+  await response.body?.cancel();
+  return response.status === 401 || response.status === 403;
+}
+
 async function requirePrivateLegacy() {
   if (legacyCheckedUntil > Date.now()) return;
   // Existing anonymous Infinity access can recreate a deleted private board's
@@ -102,17 +112,33 @@ async function requirePrivateLegacy() {
     "https://admin.omi.me/grafana",
     "https://omi-grafana-208440318997.us-central1.run.app/grafana",
   ]) {
-    const response = await fetch(`${base}/api/datasources`, {
-      redirect: "manual",
-      cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
-    });
-    await response.body?.cancel();
-    if (response.status !== 401 && response.status !== 403) {
+    if (!(await legacyOriginDeniesAnonymous(base))) {
       throw new Error("Legacy Grafana still permits anonymous data access");
     }
   }
   legacyCheckedUntil = Date.now() + 60_000;
+}
+
+let legacyBoardCheckedUntil = 0;
+let legacyBoardOpenState = false;
+
+/**
+ * True only while the same-origin legacy board still serves anonymous
+ * readers. Kiosk fallback keeps the legacy iframe solely in this window;
+ * once legacy is private (prerequisite applied or rollback) the kiosk must
+ * render a native notice instead of Grafana's login page.
+ */
+export async function legacyBoardOpen(): Promise<boolean> {
+  if (legacyBoardCheckedUntil > Date.now()) return legacyBoardOpenState;
+  try {
+    legacyBoardOpenState = !(await legacyOriginDeniesAnonymous(
+      "https://admin.omi.me/grafana"
+    ));
+  } catch {
+    legacyBoardOpenState = false; // Fail closed: never frame a private board.
+  }
+  legacyBoardCheckedUntil = Date.now() + 60_000;
+  return legacyBoardOpenState;
 }
 
 export async function mintEmbed(uid: string) {

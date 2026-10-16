@@ -22,5 +22,5 @@ export default async function TvKioskPage(props: {
     );
   }
 
-  return <GrafanaKiosk />;
+  return <GrafanaKiosk token={token} />;
 }
