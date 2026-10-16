@@ -2518,6 +2518,7 @@ environments:
           env_var: OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD
           provisional: true
           category: rollout
+          value: '12435'
         OMI_VERTEX_LEGACY_TASK_MODE:
           env_var: OMI_VERTEX_LEGACY_TASK_MODE
           provisional: true

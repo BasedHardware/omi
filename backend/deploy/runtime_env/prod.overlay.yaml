@@ -530,6 +530,10 @@ overlay:
       MENTOR_PIPELINE:
         value: cohort
         category: rollout
+      # First released macOS build with the Jev+3.8 screen pipeline and #20374 (Beta 12435, Stable 12447)
+      OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD:
+        value: '12435'
+        category: rollout
       FREE_TIER_LOCAL_PROCESSING:
         value: 'false'
       FREE_TIER_LOCAL_PROCESSING_COHORT:
