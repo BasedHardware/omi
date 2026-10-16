@@ -79,6 +79,15 @@ def discover(database, now, *, pages=20):
         after = rows[-1].id
 
 
+def remove_due(uid, *, firestore_client=None):
+    """Drop an ineligible scheduler row, retaining owner state and dirty work.
+
+    Discovery recreates the row if the owner becomes eligible again.
+    """
+    database = firestore_client if firestore_client is not None else get_firestore_client()
+    database.collection('dream_due').document(uid).delete()
+
+
 def candidates(*, limit=5000, now=None, firestore_client=None):
     if limit <= 0 or not enabled():
         return []
