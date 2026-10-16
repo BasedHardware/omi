@@ -28,12 +28,16 @@ Firestore jobs and outbox reconciliation retain the obligation.
 Visible notes and speaker resolution use the existing pipeline. Invisible memory,
 summary vectors and task persistence use the existing sync reprocess outbox, in a
 separate effects slot for the same conversation. Visible completion blind-writes
-that slot without a new Firestore read. Settlement is capped at 59 minutes from
+that slot without a new Firestore read. Closed-surface settlement waits to the 59-minute deadline from
 the indexed obligation; open intent, Process Now and the tool wake it immediately.
 The worker reloads the current settled row and uses the existing canonical memory,
 task-suggestion and vector writers. An effective-input checkpoint suppresses a
 completed replay without regenerating notes. Provider failures remain retryable.
-Daytime merge decisions are unchanged; survivor vectors join lazy work.
+Daytime merge decisions are unchanged; survivor vectors join lazy work. Its
+existing maximum gap is 60 minutes, so the completion ceiling takes precedence
+at the boundary: a legitimate later merge creates a new effective revision.
+This boundary needs qualification; no claim of one invocation for unknown future
+audio is made.
 
 `process_recent_conversations` is shared by app chat, Telegram/Linq's shared chat
 core and hosted MCP. Its owner comes from authenticated/injected execution context,

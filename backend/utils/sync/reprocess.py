@@ -347,6 +347,9 @@ def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bo
     if not owns_runtime():
         raise RuntimeError('lazy enrichment requires production or a Firestore emulator')
     current = time.time()
+    # Preserve the daytime merge window as far as the hard completion ceiling
+    # permits; open/explicit demand still bypasses this closed-surface wait.
+    quiet_seconds = 3540
     document_id = key(uid, conversation_id + '\0effects')
     row = dict(
         document_id=document_id,
@@ -356,8 +359,8 @@ def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bo
         effects_only=True,
         immediate=immediate,
         task_token=uuid.uuid4().hex,
-        due_at=current + settle_seconds(),
-        task_due_at=current + settle_seconds(),
+        due_at=current + quiet_seconds,
+        task_due_at=current + quiet_seconds,
         dispatch=_effects_binding(),
         wake_token=uuid.uuid4().hex,
     )
