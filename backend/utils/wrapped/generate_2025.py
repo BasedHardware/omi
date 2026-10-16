@@ -97,7 +97,15 @@ def _compute_conversation_duration(conv: Conversation) -> float:
     """Compute conversation duration in seconds."""
     # Try to get duration from transcript segments
     if conv.transcript_segments:
-        max_end = max((seg.end for seg in conv.transcript_segments), default=0)
+        max_end = max(
+            (
+                float(seg.end)
+                for seg in conv.transcript_segments
+                if isinstance(getattr(seg, "end", None), (int, float))
+                and not isinstance(getattr(seg, "end", None), bool)
+            ),
+            default=0.0,
+        )
         if max_end > 0:
             return max_end
 
@@ -109,8 +117,11 @@ def _find_signature_phrases(conversations: List[Conversation], sample_size: int 
     """Find signature phrases in user's conversations (sample for performance)."""
     phrase_counts: Counter[str] = Counter()
 
+    unlocked_conversations = [c for c in conversations if not getattr(c, "is_locked", False)]
     # Sample conversations
-    sampled = conversations[:sample_size] if len(conversations) > sample_size else conversations
+    sampled = (
+        unlocked_conversations[:sample_size] if len(unlocked_conversations) > sample_size else unlocked_conversations
+    )
 
     for conv in sampled:
         # Only look at user segments
@@ -169,6 +180,8 @@ Make the description specific to THIS person based on what you see in their conv
         loaded: Any = json.loads(content)
         if isinstance(loaded, list) and loaded:
             loaded = cast(Any, loaded[0])
+        if not isinstance(loaded, dict):
+            raise ValueError("Decision style response is not a JSON object")
         result = cast(Dict[str, str], loaded)
 
         logger.info(f"[Wrapped]     - Decision style: {result.get('name')}")
@@ -227,7 +240,9 @@ Be specific with actual phrases from their conversations. Avoid generic filler w
 
         loaded: Any = json.loads(content)
         phrases_loaded: Any = cast(Dict[str, Any], loaded).get("phrases", []) if isinstance(loaded, dict) else loaded
-        phrases = cast(List[Dict[str, Any]], phrases_loaded)
+        if not isinstance(phrases_loaded, list):
+            raise ValueError("Top phrases response is not a JSON list")
+        phrases = [cast(Dict[str, Any], p) for p in phrases_loaded if isinstance(p, dict)]
 
         logger.info(f"[Wrapped]     - Found {len(phrases)} top phrases")
         return phrases[:5]
@@ -252,7 +267,7 @@ def _build_conversations_context(conversations: List[Conversation], max_chars: i
     total_chars = 0
 
     for conv in conversations:
-        if not conv.created_at:
+        if getattr(conv, "is_locked", False) or not conv.created_at:
             continue
 
         date_str = conv.created_at.strftime("%Y-%m-%d %H:%M")
@@ -330,6 +345,33 @@ Be specific and reference actual events from the conversations. Make titles catc
             content = content.split("```")[1].split("```")[0].strip()
 
         result = json.loads(content)
+        if isinstance(result, list) and result:
+            result = result[0]
+        if not isinstance(result, dict):
+            raise ValueError("Expected JSON object for memorable days")
+        defaults = {
+            "most_fun_day": {
+                "date": "Unknown",
+                "title": "A Great Day",
+                "description": "You had some memorable moments this year!",
+                "emoji": "🎉",
+            },
+            "most_productive_day": {
+                "date": "Unknown",
+                "title": "Getting Things Done",
+                "description": "You crushed it on productivity!",
+                "emoji": "💪",
+            },
+            "most_stressful_day": {
+                "date": "Unknown",
+                "title": "A Challenging Day",
+                "description": "You pushed through some tough moments.",
+                "emoji": "😤",
+            },
+        }
+        for key, fallback in defaults.items():
+            if not isinstance(result.get(key), dict):
+                result[key] = fallback
         logger.info(f"[Wrapped]     - Successfully parsed memorable days")
         return result
 
@@ -404,6 +446,10 @@ Pick something genuinely funny and retell it in an entertaining way. Make the us
             content = content.split("```")[1].split("```")[0].strip()
 
         result = json.loads(content)
+        if isinstance(result, list) and result:
+            result = result[0]
+        if not isinstance(result, dict):
+            raise ValueError("Expected JSON object for funniest event")
         logger.warning(f"[Wrapped]     - Successfully parsed funniest event: {result.get('title', 'Unknown')}")
         return result
 
@@ -464,6 +510,10 @@ Frame it in a lighthearted, relatable way - we've all been there! Make it funny 
             content = content.split("```")[1].split("```")[0].strip()
 
         result = json.loads(content)
+        if isinstance(result, list) and result:
+            result = result[0]
+        if not isinstance(result, dict):
+            raise ValueError("Expected JSON object for embarrassing event")
         logger.warning(f"[Wrapped]     - Successfully parsed embarrassing event: {result.get('title', 'Unknown')}")
         return result
 
@@ -530,8 +580,10 @@ IMPORTANT:
         if not isinstance(loaded, list):
             loaded = [loaded]
 
-        # Ensure we have exactly 5
-        result = cast(List[Dict[str, Any]], loaded)[:5]
+        # Ensure we have up to 5 dict entries
+        result = [cast(Dict[str, Any], item) for item in loaded if isinstance(item, dict)][:5]
+        if not result:
+            raise ValueError("Expected non-empty list of objects for top buddies")
 
         logger.info(f"[Wrapped]     - Successfully parsed {len(result)} buddies")
         return result
@@ -605,6 +657,8 @@ Be specific with actual names. If something isn't clearly mentioned, make your b
         loaded: Any = json.loads(content)
         if isinstance(loaded, list) and loaded:
             loaded = cast(Any, loaded[0])
+        if not isinstance(loaded, dict):
+            raise ValueError("Expected JSON object for obsessions")
         result = cast(Dict[str, Any], loaded)
 
         logger.info(f"[Wrapped]     - Obsessions found: {result}")
@@ -661,9 +715,14 @@ Include a mix of movies they mentioned AND movies that match their vibe/interest
 
         loaded: Any = json.loads(content)
         if isinstance(loaded, list):
-            return cast(List[str], loaded)[:5]
+            return [str(m) for m in loaded if m is not None][:5]
+        if not isinstance(loaded, dict):
+            raise ValueError("Expected JSON object or list for movie recommendations")
         result = cast(Dict[str, Any], loaded)
-        movies = cast(List[str], result.get("movies", []))
+        raw_movies = result.get("movies")
+        if not isinstance(raw_movies, list):
+            raise ValueError("Expected 'movies' list in movie recommendations")
+        movies = [str(m) for m in raw_movies if m is not None]
         logger.info(f"[Wrapped]     - Movie recommendations: {movies}")
         return movies[:5]
 
@@ -727,7 +786,19 @@ Be specific and empathetic. These should feel personal and meaningful."""
         loaded: Any = json.loads(content)
         if isinstance(loaded, list) and loaded:
             loaded = cast(Any, loaded[0])
+        if not isinstance(loaded, dict):
+            raise ValueError("Expected JSON object for struggles and wins")
         result = cast(Dict[str, Any], loaded)
+        if not isinstance(result.get("struggle"), dict):
+            result["struggle"] = {
+                "title": "Balancing Everything",
+                "description": "Finding time for everything that matters",
+            }
+        if not isinstance(result.get("personal_win"), dict):
+            result["personal_win"] = {
+                "title": "Growth Mindset",
+                "description": "You became more self-aware and intentional",
+            }
 
         logger.info(f"[Wrapped]     - Struggles and wins found")
         return result
@@ -772,8 +843,9 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
             start_date=YEAR_2025_START,
             end_date=YEAR_2025_END,
         )
+        conversations_data = [c for c in conversations_data if not c.get("is_locked", False)]
 
-        conversations = deserialize_conversations(conversations_data)
+        conversations = [c for c in deserialize_conversations(conversations_data) if not getattr(c, "is_locked", False)]
         logger.info(
             f"[Wrapped] Step 1 complete: Found {len(conversations)} conversations for 2025 (took {time.time() - step_start:.2f}s)"
         )
@@ -793,6 +865,7 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
             end_date=YEAR_2025_END,
             limit=10000,
         )
+        action_items = [item for item in action_items if not item.get("is_locked", False)]
         logger.info(
             f"[Wrapped] Step 2 complete: Found {len(action_items)} action items for 2025 (took {time.time() - step_start:.2f}s)"
         )
@@ -839,12 +912,12 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
         memorable_days = _analyze_memorable_days_with_llm(conversations)
         result["memorable_days"] = memorable_days
         logger.info(f"[Wrapped] Step 6 complete: Memorable days analyzed (took {time.time() - step_start:.2f}s)")
-        logger.info(f"[Wrapped]   - Most fun day: {memorable_days.get('most_fun_day', {}).get('title', 'N/A')}")
+        logger.info(f"[Wrapped]   - Most fun day: {(memorable_days.get('most_fun_day') or {}).get('title', 'N/A')}")
         logger.info(
-            f"[Wrapped]   - Most productive day: {memorable_days.get('most_productive_day', {}).get('title', 'N/A')}"
+            f"[Wrapped]   - Most productive day: {(memorable_days.get('most_productive_day') or {}).get('title', 'N/A')}"
         )
         logger.info(
-            f"[Wrapped]   - Most stressful day: {memorable_days.get('most_stressful_day', {}).get('title', 'N/A')}"
+            f"[Wrapped]   - Most stressful day: {(memorable_days.get('most_stressful_day') or {}).get('title', 'N/A')}"
         )
 
         # Step 7: Find funniest event with Gemini
@@ -903,8 +976,8 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
         logger.info(f"[Wrapped] Step 12: Finding struggles and wins with Gemini...")
 
         struggles_wins = _find_struggles_and_wins_with_llm(conversations)
-        result["struggle"] = struggles_wins.get("struggle", {})
-        result["personal_win"] = struggles_wins.get("personal_win", {})
+        result["struggle"] = struggles_wins.get("struggle") or {}
+        result["personal_win"] = struggles_wins.get("personal_win") or {}
         logger.info(f"[Wrapped] Step 12 complete: Struggles and wins found (took {time.time() - step_start:.2f}s)")
 
         # Step 13: Save result

@@ -75,7 +75,9 @@ def _parse_firmware_version(version_str: Optional[str]) -> Optional[Tuple[int, .
     if not version_str:
         return None
 
-    normalized_version_str = version_str.lower()
+    normalized_version_str = version_str.strip().strip('\x00').strip().lower()
+    if not normalized_version_str:
+        return None
     if normalized_version_str.startswith('v'):
         normalized_version_str = normalized_version_str[1:]
 
@@ -84,7 +86,10 @@ def _parse_firmware_version(version_str: Optional[str]) -> Optional[Tuple[int, .
     version_tuple = []
     for part in parts:
         try:
-            version_tuple.append(int(part))
+            val = int(part)
+            if val < 0:
+                return None
+            version_tuple.append(val)
         except ValueError:
             return None
 
@@ -119,14 +124,9 @@ def _find_candidate_releases(
     """
     candidates = []
     for release in releases:
-        tag_name = release.get("tag_name", "")
+        tag_name = release.get("tag_name") or ""
 
-        if (
-            release.get("draft")
-            or release.get("prerelease")
-            or not release.get("published_at")
-            or not release.get("tag_name")
-        ):
+        if release.get("draft") or release.get("prerelease") or not release.get("published_at") or not tag_name:
             continue
 
         regex_pattern = f"^{release_prefix}_v[0-9]+(?:\\.[0-9]+){{1,2}}$"
@@ -139,12 +139,12 @@ def _find_candidate_releases(
         if not release_firmware_version_str:
             continue
 
-        if current_firmware_tuple is not None:
-            release_firmware_tuple = _parse_firmware_version(release_firmware_version_str)
-            # Skip releases with unparseable release_firmware_version metadata.
-            if release_firmware_tuple is None:
-                continue
+        release_firmware_tuple = _parse_firmware_version(release_firmware_version_str)
+        # Skip releases with unparseable release_firmware_version metadata in all flows.
+        if release_firmware_tuple is None:
+            continue
 
+        if current_firmware_tuple is not None:
             # Condition A: Release must be strictly newer than current version
             if not (release_firmware_tuple > current_firmware_tuple):
                 continue
