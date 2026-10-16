@@ -1137,7 +1137,7 @@ final class OmiBleManager: NSObject {
         reconnectDiagnostics[uuid] = recovery
         history = recovery.retainedHistory(
             history, nowMs: now, retentionMs: Self.disconnectRetentionMs, limit: Self.maxDisconnectHistory,
-            timestampOf: { $0["timestamp"] as? Int64 ?? 0 }
+            timestampOf: OmiBleReconnectDiagnostics.retentionTimestamp
         )
 
         persistPropertyListRecords(history, forKey: key, in: defaults)
@@ -1165,7 +1165,7 @@ final class OmiBleManager: NSObject {
         let history = defaults.array(forKey: key) as? [[String: Any]] ?? []
         if let updated = pending.backfilledHistory(
             history, nowMs: CheckedIntegerConversion.epochMs(), hadConnection: everConnected.contains(uuid) || defaults.object(forKey: "ble_audio_outage_\(uuid)") != nil,
-            timestampOf: { $0["timestamp"] as? Int64 ?? 0 },
+            timestampOf: OmiBleReconnectDiagnostics.retentionTimestamp,
             withDuration: { event, duration in
                 var updated = event
                 updated["timeToReconnectMs"] = duration
