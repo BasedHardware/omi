@@ -22080,17 +22080,6 @@
             ],
             "title": "Metadata"
           },
-          "plugin_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Plugin Id"
-          },
           "prompt_commit": {
             "anyOf": [
               {
@@ -26332,17 +26321,6 @@
               }
             ],
             "title": "Metadata"
-          },
-          "plugin_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Plugin Id"
           },
           "prompt_commit": {
             "anyOf": [
