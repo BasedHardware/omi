@@ -9,6 +9,8 @@ from fastapi import HTTPException, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydub import AudioSegment
 
+from config.repeat_work import playback_on_demand
+from utils.other.playback_identity import validate_sources
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.executors import postprocess_executor, storage_executor, submit_with_context
 from utils.other.storage import (
@@ -25,6 +27,7 @@ from utils.other.storage import (
     get_or_create_merged_audio,
     get_playback_artifact_signed_url,
     is_playback_unavailable,
+    list_audio_chunks,
 )
 
 logger = logging.getLogger(__name__)
@@ -169,10 +172,19 @@ def _conversation_audio_urls_entry(
     lifecycle) falls through to pending + re-enqueue under a fingerprint-named
     task, making staleness self-healing.
     """
-    fingerprint = compute_audio_files_fingerprint(audio_files)
+    fingerprint = compute_audio_files_fingerprint(
+        audio_files,
+        **(
+            {'origin': (conversation or {}).get('started_at') or (conversation or {}).get('created_at')}
+            if playback_on_demand()
+            else {}
+        ),
+    )
     stamp = (conversation or {}).get('conversation_audio') or {}
     if stamp.get('audio_files_fingerprint') == fingerprint:
-        signed_url = get_conversation_playback_signed_url(uid, conversation_id)
+        signed_url = get_conversation_playback_signed_url(
+            uid, conversation_id, **({'fingerprint': fingerprint} if playback_on_demand() else {})
+        )
         if signed_url:
             return {
                 "status": "cached",
@@ -479,11 +491,18 @@ def download_audio_file_response(
     )
 
 
-def build_playback_artifact(uid: str, conversation_id: str, timestamps: list[float]) -> bytes:
+def build_playback_artifact(
+    uid: str, conversation_id: str, timestamps: list[float], *, source_fingerprint: str | None = None
+) -> bytes:
     """Merge chunks (download -> decrypt -> decode -> gap-fill) and encode MP3 ~48kbps mono."""
+    source = [{'chunk_timestamps': timestamps, 'source_fingerprint': source_fingerprint}]
+    if playback_on_demand() and source_fingerprint:
+        validate_sources(source, list_audio_chunks(uid, conversation_id))
     pcm_data = download_audio_chunks_and_merge(
         uid, conversation_id, timestamps, fill_gaps=True, sample_rate=AUDIO_SAMPLE_RATE
     )
+    if playback_on_demand() and source_fingerprint:
+        validate_sources(source, list_audio_chunks(uid, conversation_id))
     if not pcm_data:
         return b''
     segment = AudioSegment(data=pcm_data, sample_width=2, frame_rate=AUDIO_SAMPLE_RATE, channels=1)
@@ -519,6 +538,9 @@ def build_conversation_playback_artifact(
         [af for af in audio_files if af.get('id') and af.get('chunk_timestamps')],
         key=lambda af: min(af['chunk_timestamps']),
     )
+    verified = playback_on_demand() and any(af.get('source_fingerprint') for af in parts)
+    if verified:
+        validate_sources(parts, list_audio_chunks(uid, conversation_id))
     pcm_buf = bytearray()
     spans: list[dict] = []
     for af in parts:
@@ -528,6 +550,8 @@ def build_conversation_playback_artifact(
                 uid, conversation_id, timestamps, fill_gaps=True, sample_rate=AUDIO_SAMPLE_RATE
             )
         except FileNotFoundError:
+            if playback_on_demand():
+                raise
             logger.warning(f'conversation_artifact: part {af["id"]} has no chunks, skipping conv={conversation_id}')
             continue
         if not pcm:
@@ -542,6 +566,8 @@ def build_conversation_playback_artifact(
         )
         pcm_buf.extend(pcm)
         del pcm
+    if verified:
+        validate_sources(parts, list_audio_chunks(uid, conversation_id))
     if not pcm_buf:
         raise FileNotFoundError(f'No chunks found for conversation {conversation_id}')
     segment = AudioSegment(data=bytes(pcm_buf), sample_width=2, frame_rate=AUDIO_SAMPLE_RATE, channels=1)

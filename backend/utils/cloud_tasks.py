@@ -379,9 +379,13 @@ def enqueue_audio_merge_job(payload: Dict[str, Any]) -> None:
 
 
 def _audio_merge_task_id(payload: Dict[str, Any]) -> str:
+    # Demand tasks use a separate hourly name so a drained eager task or a
+    # deleted/expired artifact cannot tombstone a first play. Run locks still
+    # coalesce requests straddling the hour boundary.
+    suffix = f"-d{int(payload['requested_at'] // 3600)}" if payload.get('on_demand') else ''
     if payload.get('schema_version') == 2:
-        return f"amc-{payload['conversation_id']}-{payload['fingerprint']}"
-    return f"am-{payload['conversation_id']}-{payload['audio_file_id']}"
+        return f"amc-{payload['conversation_id']}-{payload['fingerprint']}{suffix}"
+    return f"am-{payload['conversation_id']}-{payload['audio_file_id']}{suffix}"
 
 
 def enqueue_audio_merge_job_deferred(payload: Dict[str, Any], delay_seconds: int) -> None:

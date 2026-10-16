@@ -52,6 +52,10 @@ environments:
             value: '3600'
             category: reliability
           BATCH_PIPELINE_SHARED_LIVE_ENABLED: {value: 'false', category: rollout}
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
@@ -350,6 +354,10 @@ environments:
           FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
           ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
@@ -723,6 +731,10 @@ environments:
             BUCKET_TEMPORAL_SYNC_LOCAL:
               value: syncing-local-development
               category: storage_retention
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
@@ -986,6 +998,10 @@ environments:
             PROMETHEUS_SIDECAR_PORT:
               value: '9090'
               category: telemetry
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
@@ -1257,6 +1273,10 @@ environments:
             PROMETHEUS_SIDECAR_PORT:
               value: '9090'
               category: telemetry
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
@@ -1510,6 +1530,10 @@ environments:
             PROMETHEUS_SIDECAR_PORT:
               value: '9090'
               category: telemetry
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
@@ -2166,6 +2190,10 @@ environments:
             value: '3600'
             category: reliability
           BATCH_PIPELINE_SHARED_LIVE_ENABLED: {value: 'false', category: rollout}
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
@@ -2539,6 +2567,10 @@ environments:
           FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
           ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
@@ -2870,6 +2902,10 @@ environments:
             BUCKET_TEMPORAL_SYNC_LOCAL:
               value: syncing-local
               category: storage_retention
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
@@ -3213,6 +3249,10 @@ environments:
             PROMETHEUS_SIDECAR_PORT:
               value: '9090'
               category: telemetry
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
@@ -3530,6 +3570,10 @@ environments:
             PROMETHEUS_SIDECAR_PORT:
               value: '9090'
               category: telemetry
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
@@ -3829,6 +3873,10 @@ environments:
             PROMETHEUS_SIDECAR_PORT:
               value: '9090'
               category: telemetry
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}

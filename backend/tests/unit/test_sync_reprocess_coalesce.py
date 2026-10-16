@@ -446,3 +446,16 @@ def test_rebind_cas_conflict_rereads_a_new_lease(state, sweep_query, monkeypatch
     assert ref.get.call_count == 2 and ref.update.call_count == 1
     assert ref.update.call_args.kwargs['option'] is not None
     assert len(tasks) == 1  # The failed CAS never dispatches its tentative token.
+
+
+def test_repeat_work_window_has_a_hard_ceiling_without_a_second_queue(state, monkeypatch):
+    rows, tasks = state
+    monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
+    for now in range(0, 3600, 100):
+        reprocess.mark('u', 'c', 'en', now=now)
+    key = reprocess.key('u', 'c')
+    assert rows[key]['due_at'] == 3600 and len(tasks) == 1
+    process = Mock()
+    assert reprocess.run(key, tasks[0]['task_token'], process, now=3600) == 'processed'
+    process.assert_called_once()
+    assert not rows

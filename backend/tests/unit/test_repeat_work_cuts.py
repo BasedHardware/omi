@@ -1,0 +1,209 @@
+"""Behavioral contracts for the three independent default-off repeat-work cuts."""
+
+from copy import deepcopy
+from datetime import datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import pytest
+
+from config import repeat_work, sync_reprocess
+from database import conversations
+from models.structured import Structured
+from utils.conversations import llm_input_dedupe as dedupe
+from utils.other import storage
+from utils.other.playback_identity import source_fingerprint
+from utils.sync import repeat_work_metrics as metrics
+from utils.sync.poll_limit import with_poll_hint
+
+
+def chunks():
+    return [
+        dict(
+            path=f'chunks/u/c/{1000+i*5}.pcm', timestamp=1000 + i * 5, generation='7', md5_hash=f'hash-{i}', size=160000
+        )
+        for i in range(2)
+    ]
+
+
+def test_stable_source_identity_and_changed_sources(monkeypatch):
+    monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'true')
+    source = chunks()
+    first = conversations._finalize_audio_file_group('u', 'c', source, [])
+    again = conversations._finalize_audio_file_group('u', 'c', source, [])
+    assert first.id == again.id
+    assert first.source_fingerprint == source_fingerprint(source)
+    assert first.chunk_timestamps == [1000, 1005] and first.duration == 10
+    assert conversations._finalize_audio_file_group('other', 'c', source, []).id != first.id
+    assert source_fingerprint(list(reversed(source))) != first.source_fingerprint
+    for key, value in [
+        ('path', 'different.pcm'),
+        ('generation', '8'),
+        ('md5_hash', 'different'),
+        ('timestamp', 1001),
+        ('size', 160001),
+        ('span', {'start': 1000, 'samples': 80000, 'sample_rate': 16000}),
+    ]:
+        changed = deepcopy(source)
+        changed[0][key] = value
+        assert source_fingerprint(changed) != first.source_fingerprint
+    missing = chunks()
+    missing[0].pop('generation')
+    a = conversations._finalize_audio_file_group('u', 'c', missing, [])
+    b = conversations._finalize_audio_file_group('u', 'c', missing, [])
+    assert a.id != b.id and a.source_fingerprint is None
+    monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'false')
+    assert conversations._finalize_audio_file_group('u', 'c', source, []).id != first.id
+
+
+def test_background_updates_do_not_build_but_open_and_play_enqueue(monkeypatch):
+    monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'true')
+    enqueue = Mock()
+    monkeypatch.setattr(storage, 'enqueue_audio_merge_job', enqueue)
+    files = [{'id': 'stable', 'chunk_timestamps': [1000], 'source_fingerprint': 'source'}]
+    storage.precache_conversation_audio('u', 'c', files)
+    storage.enqueue_conversation_audio_merge('u', 'c', files, 'process_conversation')
+    storage.enqueue_conversation_artifact_build('u', 'c', 'fp', 'sync_finalize')
+    storage.maybe_invalidate_conversation_playback(
+        'u', 'c', {'conversation_audio': {'audio_files_fingerprint': 'old'}}, files, 'pusher'
+    )
+    enqueue.assert_not_called()
+    storage.enqueue_conversation_audio_merge('u', 'c', files, 'sync_download')
+    storage.enqueue_conversation_artifact_build('u', 'c', 'fp', 'sync_urls')
+    assert enqueue.call_count == 2
+    assert all(call.args[0]['on_demand'] and call.args[0]['requested_at'] > 0 for call in enqueue.call_args_list)
+    first = storage.compute_audio_files_fingerprint(files)
+    assert first == storage.compute_audio_files_fingerprint(deepcopy(files))
+    files[0]['chunk_timestamps'] = [999, 1000]  # Interior changes also invalidate.
+    assert storage.compute_audio_files_fingerprint(files) != first
+
+
+def test_demand_task_names_coalesce_and_recover_tombstones():
+    from utils.cloud_tasks import _audio_merge_task_id
+
+    old = dict(schema_version=2, conversation_id='c', fingerprint='source')
+    demand = dict(old, on_demand=True, requested_at=3601)
+    assert _audio_merge_task_id(old) != _audio_merge_task_id(demand)
+    assert _audio_merge_task_id(demand) == _audio_merge_task_id(dict(demand, requested_at=3700))
+    assert _audio_merge_task_id(demand) != _audio_merge_task_id(dict(demand, requested_at=7201))
+
+
+def test_conversation_artifact_paths_are_immutable_per_fingerprint(monkeypatch):
+    client = Mock()
+    monkeypatch.setattr(storage, '_get_storage_client', lambda: client)
+    bucket = client.bucket.return_value
+    storage._conversation_playback_blob('u', 'c', 'fp-a')
+    storage._conversation_playback_blob('u', 'c', 'fp-b')
+    assert bucket.blob.call_args_list[0].args == ('playback/u/c/conversation-fp-a.mp3',)
+    assert bucket.blob.call_args_list[1].args == ('playback/u/c/conversation-fp-b.mp3',)
+
+
+def test_revision_mode_reuses_loaded_snapshot_without_firestore_reads(monkeypatch):
+    monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
+    monkeypatch.setattr(conversations, 'get_conversation', Mock(side_effect=AssertionError('extra read')))
+    monkeypatch.setattr(conversations, 'get_conversation_raw_snapshot', Mock(side_effect=AssertionError('extra read')))
+    conv = SimpleNamespace(id='c', sync_content_revision=4, structured=Structured(title='old'), discarded=False)
+    generate = Mock(return_value=Structured(title='Durable notes'))
+    hashes = {}
+    output = dedupe.notes('u', conv, {'transcript': 'Ship Friday'}, generate, hashes, language='en')
+    conv.structured = output
+    for name, value in hashes.items():
+        setattr(conv, name, value)  # Simulate the existing durable payload commit.
+    assert dedupe.notes('u', conv, {'transcript': 'Ship Friday'}, generate, {}, language='en') == output
+    generate.assert_called_once()
+    conv.sync_content_revision += 1
+    dedupe.notes('u', conv, {'transcript': 'Ship Friday'}, generate, {}, language='en')
+    assert generate.call_count == 2
+    digest, matched = dedupe.l1_input('u', conv, {'owner': 'u', 'language': 'en'})
+    assert not matched
+    conv.l1_llm_input_hash = digest
+    assert dedupe.l1_input('u', conv, {'owner': 'u', 'language': 'en'}) == (digest, True)
+    monkeypatch.setenv('REPEAT_WORK_LLM_VERSION', 'next-model')
+    assert not dedupe.l1_input('u', conv, {'owner': 'u', 'language': 'en'})[1]
+
+
+def test_default_off_flags_are_independent(monkeypatch):
+    for name in (
+        'PLAYBACK_ON_DEMAND_ENABLED',
+        'REPEAT_WORK_REVISION_ENABLED',
+        'SYNC_POLL_BACKOFF_ENABLED',
+        'SYNC_REPROCESS_COALESCE_ENABLED',
+        'CONVERSATION_LLM_INPUT_DEDUPE_ENABLED',
+    ):
+        monkeypatch.delenv(name, raising=False)
+    assert not repeat_work.playback_on_demand() and not repeat_work.revision_reuse() and not repeat_work.poll_backoff()
+    assert not sync_reprocess.coalesce_enabled() and not sync_reprocess.dedupe_enabled()
+    monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
+    assert sync_reprocess.coalesce_enabled() and sync_reprocess.dedupe_enabled()
+    assert not repeat_work.playback_on_demand() and not repeat_work.poll_backoff()
+
+
+def test_poll_hint_uses_only_response_state_and_surface_demand(monkeypatch):
+    row = {'status': 'queued', 'job_id': 'j'}
+    monkeypatch.delenv('SYNC_POLL_BACKOFF_ENABLED', raising=False)
+    assert with_poll_hint(row) is row
+    monkeypatch.setenv('SYNC_POLL_BACKOFF_ENABLED', 'true')
+    assert with_poll_hint(row)['poll_after_ms'] == 60000
+    assert with_poll_hint(row, surface_open=True)['poll_after_ms'] == 20000
+    assert with_poll_hint({'status': 'processing'})['poll_after_ms'] == 20000
+    for state in ['completed', 'failed', 'partial_failure']:
+        assert with_poll_hint({'status': state})['poll_after_ms'] == 0
+    assert row == {'status': 'queued', 'job_id': 'j'}
+
+
+def test_call_join_is_content_free_scoped_and_counts_actual_callbacks(monkeypatch, caplog):
+    from langchain_core.outputs import LLMResult
+    from utils.llm.usage_tracker import LLMUsageCallback
+
+    monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
+    caplog.set_level('INFO', logger=metrics.__name__)
+    handler = LLMUsageCallback()
+    conv = SimpleNamespace(id='secret-conversation-id', sync_content_revision=5, transcript='DO NOT LOG THIS')
+
+    @metrics.conversation_scope
+    def process(uid, conversation):
+        handler.on_llm_end(LLMResult(generations=[]))
+        handler.on_llm_error(RuntimeError('DO NOT LOG ERROR CONTENT'))
+        metrics.record_final(uid, conversation)
+
+    before = metrics.CALLS.labels('completed')._value.get()
+    process('secret-uid', conv)
+    handler.on_llm_end(LLMResult(generations=[]))  # Outside scope: no join.
+    assert metrics.CALLS.labels('completed')._value.get() - before == 1
+    assert len(caplog.records) == 3
+    assert 'conversation_key=' in caplog.text and 'revision=5' in caplog.text
+    assert 'secret-' not in caplog.text and 'DO NOT LOG' not in caplog.text
+    assert 'secret' not in str(metrics.CALLS.collect())
+
+
+def test_source_replacement_during_build_is_rejected():
+    from utils.other.playback_identity import validate_sources
+
+    original = chunks()
+    files = [{'chunk_timestamps': [1000, 1005], 'source_fingerprint': source_fingerprint(original)}]
+    validate_sources(files, original)
+    replaced = deepcopy(original)
+    replaced[0]['generation'] = '8'
+    with pytest.raises(RuntimeError, match='source manifest changed'):
+        validate_sources(files, replaced)
+    with pytest.raises(RuntimeError, match='source manifest changed'):
+        validate_sources(files, original[:1])
+
+
+def test_initial_generation_calls_join_the_chosen_durable_id(monkeypatch, caplog):
+    monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
+    caplog.set_level('INFO', logger=metrics.__name__)
+
+    @metrics.conversation_scope
+    def process(uid, conversation):
+        metrics.bind_generation(uid, 'generated-c')
+        metrics.record_llm_call('completed', 'conv_structure')
+        metrics.record_feature(uid, conversation, 'notes', 'invoked')
+        metrics.record_final(uid, SimpleNamespace(id='generated-c', sync_content_revision=None))
+
+    process('u', SimpleNamespace())
+    assert len(caplog.records) == 3
+    keys = {record.message.split('conversation_key=')[1].split()[0] for record in caplog.records}
+    assert len(keys) == 1
+    assert 'feature=notes' in caplog.text
+    assert metrics._scope.get() is None

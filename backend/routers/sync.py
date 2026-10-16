@@ -116,7 +116,10 @@ from utils.metrics import (
     OMI_SYNC_QUEUE_WAIT_SECONDS,
     OMI_SYNC_RECORDING_AGE_SECONDS,
 )
-from utils.sync.poll_limit import SYNC_POLL_WINDOW_SECONDS, admit_sync_job_poll
+from utils.sync.poll_limit import SYNC_POLL_WINDOW_SECONDS, admit_sync_job_poll, with_poll_hint
+from config.repeat_work import playback_on_demand
+from contextlib import nullcontext
+from utils.sync.repeat_work_metrics import PLAYBACK_BUILD_SECONDS, PLAYBACK_BUILDS, record_playback_ready
 from utils.product_metrics import record_product_event, sanitize_app_build
 from utils.journey_metrics_contract import resolve_client_kind
 from utils.client_device import resolve_client_device, resolve_client_device_from_request
@@ -1625,7 +1628,7 @@ def _terminal_repeat_failure_kwargs(job: dict) -> dict[str, str]:
 
 
 @router.get("/v2/sync-local-files/{job_id}", response_model=SyncJobStatusResponse, response_model_exclude_none=True)
-def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_uid), surface_open: bool = False):
     """Poll for the status of an async sync job."""
     OMI_SYNC_JOB_POLL_REQUESTS_TOTAL.inc()
     if not admit_sync_job_poll(uid):
@@ -1637,7 +1640,7 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
         )
     durable = get_durable_job_status(job_id, uid)
     if durable is not None:
-        return durable
+        return with_poll_hint(durable, surface_open=surface_open)
     job = get_sync_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Sync job not found or expired")
@@ -1789,7 +1792,7 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
         if job.get('error'):
             resp['error'] = job['error']
 
-    return resp
+    return with_poll_hint(resp, surface_open=surface_open)
 
 
 async def _maintain_uid_sequencer_lease(
@@ -2443,6 +2446,8 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
     # artifact: the named task's tombstone makes the /urls re-enqueue a no-op, so the
     # artifact is never rebuilt until audio_files change. _run_conversation_merge_job
     # validates its own payload and returns 200-dropped for genuinely malformed input.
+    if playback_on_demand() and not payload.get('on_demand'):
+        return JSONResponse(status_code=200, content={'status': 'deferred_until_playback'})
     if schema_version == 2:
         return await _run_conversation_merge_job(payload, task_retry_count)
 
@@ -2463,12 +2468,20 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
             storage_executor, get_playback_artifact_signed_url, uid, conversation_id, audio_file_id
         )
         if existing:
+            if playback_on_demand():
+                PLAYBACK_BUILDS.labels('file', 'reused').inc()
             return JSONResponse(status_code=200, content={'status': 'exists'})
 
         try:
-            mp3_data = await run_blocking(
-                sync_executor, sync_playback.build_playback_artifact, uid, conversation_id, timestamps
-            )
+            with PLAYBACK_BUILD_SECONDS.labels('file').time() if playback_on_demand() else nullcontext():
+                mp3_data = await run_blocking(
+                    sync_executor,
+                    sync_playback.build_playback_artifact,
+                    uid,
+                    conversation_id,
+                    timestamps,
+                    **({'source_fingerprint': payload.get('source_fingerprint')} if playback_on_demand() else {}),
+                )
         except FileNotFoundError:
             logger.warning(f'audio_merge: chunks missing conv={conversation_id} file={audio_file_id}, dropping')
             # Persist the verdict or /urls reports pending forever and clients
@@ -2555,6 +2568,9 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
                 f'file={audio_file_id}, will retry: {e}'
             )
             return JSONResponse(status_code=500, content={'status': 'retry'})
+        if playback_on_demand():
+            PLAYBACK_BUILDS.labels('file', 'built').inc()
+            record_playback_ready(payload, 'file')
         logger.info(f'audio_merge: built artifact conv={conversation_id} file={audio_file_id} size={len(mp3_data)}')
         return JSONResponse(status_code=200, content={'status': 'done'})
     finally:
@@ -2595,14 +2611,29 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
         if not conversation.get('audio_files'):
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'no_audio_files'})
         audio_files = conversation['audio_files']
-        fingerprint = compute_audio_files_fingerprint(audio_files)
+        fingerprint = compute_audio_files_fingerprint(
+            audio_files,
+            **(
+                {'origin': conversation.get('started_at') or conversation.get('created_at')}
+                if playback_on_demand()
+                else {}
+            ),
+        )
         if payload_fingerprint and payload_fingerprint != fingerprint:
             return JSONResponse(status_code=200, content={'status': 'superseded'})
 
         stamp = conversation.get('conversation_audio') or {}
         if stamp.get('audio_files_fingerprint') == fingerprint:
-            existing = await run_blocking(storage_executor, get_conversation_playback_signed_url, uid, conversation_id)
+            existing = await run_blocking(
+                storage_executor,
+                get_conversation_playback_signed_url,
+                uid,
+                conversation_id,
+                **({'fingerprint': fingerprint} if playback_on_demand() else {}),
+            )
             if existing:
+                if playback_on_demand():
+                    PLAYBACK_BUILDS.labels('conversation', 'reused').inc()
                 return JSONResponse(status_code=200, content={'status': 'exists'})
 
         started_at_ts = persisted_started_seconds(conversation.get('started_at') or conversation.get('created_at'))
@@ -2613,14 +2644,15 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
             started_at_ts = min(chunk_starts) if chunk_starts else 0.0
 
         try:
-            mp3_data, spans = await run_blocking(
-                sync_executor,
-                sync_playback.build_conversation_playback_artifact,
-                uid,
-                conversation_id,
-                audio_files,
-                started_at_ts,
-            )
+            with PLAYBACK_BUILD_SECONDS.labels('conversation').time() if playback_on_demand() else nullcontext():
+                mp3_data, spans = await run_blocking(
+                    sync_executor,
+                    sync_playback.build_conversation_playback_artifact,
+                    uid,
+                    conversation_id,
+                    audio_files,
+                    started_at_ts,
+                )
         except FileNotFoundError:
             logger.warning(f'audio_merge: conversation chunks missing conv={conversation_id}, dropping')
             try:
@@ -2665,7 +2697,14 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
             return JSONResponse(status_code=500, content={'status': 'retry'})
 
         try:
-            await run_blocking(storage_executor, upload_conversation_playback_artifact, uid, conversation_id, mp3_data)
+            await run_blocking(
+                storage_executor,
+                upload_conversation_playback_artifact,
+                uid,
+                conversation_id,
+                mp3_data,
+                **({'fingerprint': fingerprint} if playback_on_demand() else {}),
+            )
         except Exception as e:
             if isinstance(e, DestructiveOperationInProgress):
                 deferred = await _defer_merge_for_destructive_operation(payload)
@@ -2697,6 +2736,8 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
                 f'audio_merge: conversation attempt {task_retry_count + 1} failed conv={conversation_id}, will retry: {e}'
             )
             return JSONResponse(status_code=500, content={'status': 'retry'})
+        if playback_on_demand():
+            PLAYBACK_BUILDS.labels('conversation', 'built').inc()
         mp3_size = len(mp3_data)
         del mp3_data
 
@@ -2718,6 +2759,8 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
                 }
             },
         )
+        if playback_on_demand():
+            record_playback_ready(payload, 'conversation')
         logger.info(
             f'audio_merge: built conversation artifact conv={conversation_id} size={mp3_size} spans={len(spans)}'
         )
