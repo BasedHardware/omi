@@ -16,6 +16,8 @@ stages, not a proven single deadlock. These fixes have distinct boundaries:
   change BLE speed or speaker quality.
 - Merged #21755 repairs legacy backfill dispatcher ownership. Its production
   repair script requires a separate operator decision; this change runs none.
+- Merged #21823 quarantines exhausted batch-worker items; it does not replace
+  recovery of phone-local recordings or validate this customer's queue.
 - #21362 recovers retained uploads with missing job handles and preserves
   honest processing/attention states. It needs client releases after merge.
 
@@ -52,7 +54,9 @@ firmware risk or guarantee recovery of incomplete records.
 - [x] Keep healthy DONE and normal durable frontier advancement working.
 - [x] Wait for read admission in custody fixtures instead of guessing with a
   startup sleep; keep the incremental durable-advance assertion unchanged.
-- [ ] Run ring/custody regression suites, analyzer and repository preflight.
+- [x] Run ring/custody/capture regressions (129 passed), the selected capture
+  journey (3 checks passed), the full app analyzer ratchet and local preflight
+  (25 checks passed).
 - [ ] Release a mobile build containing the fix after merge.
 - [ ] Customer retest with firmware, timestamp and diagnostics: measure BLE
   throughput, verify capture continues/resumes, inspect actual queued job
