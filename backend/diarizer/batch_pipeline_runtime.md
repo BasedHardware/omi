@@ -141,8 +141,29 @@ the receipt is emitted after CUDA synchronization. Host peaks include startup.
 For qualification run a synthetic one-hour unit with the intended model batch
 size and retain the GPU model/VRAM, exact image digest/config and receipt.
 Set the chart **host RAM** limit from the larger measured process/container peak
-with explicit headroom; CUDA peaks qualify device capacity separately. The
-current 24Gi host limit remains provisional until that dev receipt exists.
+with explicit headroom; CUDA peaks qualify device capacity separately.
+
+The October 16 dev L4 compute qualification used the deployed image
+`sha256:e2ae6e672c07d6532e58ad0f7aa55eda52d1959bad3d65f4c88dc714adc5b619`,
+BF16 ASR, FP32 segmentation/VAD, eager decoding and effective batch 8 for ASR,
+segmentation, embedding and VAD. A 20-minute public AMI montage followed by its
+threefold 3600-second repetition ran in one model process with in-memory audio
+and result adapters. The synchronized one-hour receipt recorded CUDA allocated /
+reserved peaks of 2,238,839,808 / 7,184,842,752 bytes, process peak 5,910,188,032
+bytes and cgroup lifetime peak **10,517,725,184 bytes (9.795GiB)**, including
+startup. The chart requests **12Gi** and limits **14Gi**: round the host peak plus
+`max(1GiB, 20%)` / `max(2GiB, 40%)` up to whole GiB, respectively. This provides
+2.205GiB / 4.205GiB headroom. The qualification Job had a 24Gi cap; the proposed
+14Gi cap and multi-unit decoded-group envelope were not separately exercised.
+These are compute-chain measurements; deployed intake, lease-loss recovery,
+projection, encrypted artifact IO and deletion remain separate qualification
+gates. Admission stays off.
+
+The worker Deployment and its workflow rollout wait both allow **1800 seconds**.
+The first dev cold rollout took at least 718.6 seconds from pod creation to ASR
+restore, exceeding the old 600-second deadline before joint readiness. The new
+budget adds about 1081 seconds beyond that observed lower bound for node/image
+startup and model loading. The existing diarizer workflow wait remains 600s.
 
 PodMonitoring defaults on when the release is enabled. Queue age and freshness
 export the Kubernetes namespace and `worker_release` from the deployment.
