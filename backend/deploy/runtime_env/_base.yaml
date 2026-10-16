@@ -12,6 +12,13 @@ environment_shared:
       - conversation.finalize.persisted
       - memory.canonical.mutate
       env:
+        DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+        DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
         FIRESTORE_READ_LEVERS:
           value: '{}'
           category: rollout
@@ -399,6 +406,13 @@ environment_shared:
       - memory.canonical.mutate
       values_file: backend/charts/pusher/{env}_omi_pusher_values.yaml
       env:
+        DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+        DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
         FIRESTORE_READ_LEVERS:
           value: '{}'
           category: rollout
@@ -512,6 +526,13 @@ environment_shared:
   region: us-central1
   desktop_backend:
     env:
+      DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+      DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+      DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+      DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED: {value: 'false', category: rollout}
+      DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+      DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+      DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
       OMI_VERTEX_RESERVATION_STATES:
         env_var: OMI_VERTEX_RESERVATION_STATES
         provisional: true
@@ -618,6 +639,13 @@ environment_shared:
             secret: MEMORY_V3_CURSOR_SECRET
             version: latest
         env:
+          DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+          DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_ENABLED:
             value: "false"
             category: rollout
@@ -863,6 +891,13 @@ environment_shared:
             secret: GOOGLE_MAPS_API_KEY
             version: latest
         env:
+          DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+          DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_ENABLED:
             value: "false"
             category: rollout
@@ -1109,6 +1144,13 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+          DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_ENABLED:
             value: "false"
             category: rollout
@@ -1343,6 +1385,13 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+          DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_ENABLED:
             value: "false"
             category: rollout
@@ -1526,6 +1575,13 @@ environment_shared:
             secret: PINECONE_API_KEY
             version: latest
         env:
+          DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+          DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:

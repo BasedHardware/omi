@@ -106,6 +106,20 @@ envFrom:
       name: dev-omi-backend-config
 
 env:
+  - name: DEMAND_PROCESSING_ENABLED
+    value: "false"
+  - name: DEMAND_PROCESSING_LAZY_ENABLED
+    value: "false"
+  - name: DEMAND_PROCESSING_TOOL_ENABLED
+    value: "false"
+  - name: DEMAND_PROCESSING_DAY_MERGE_SHADOW_ENABLED
+    value: "false"
+  - name: DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+    value: "false"
+  - name: DEMAND_PROCESSING_UID_ALLOWLIST
+    value: ""
+  - name: DEMAND_PROCESSING_PERCENT
+    value: "0"
   - name: BATCH_PIPELINE_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_UID_ALLOWLIST

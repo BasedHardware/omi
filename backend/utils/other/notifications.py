@@ -183,6 +183,9 @@ def _generate_and_store_daily_summary(
             release_daily_summary_lock(uid, date_str)
             return None, False, _DECLINE_NO_CONVERSATIONS
 
+        from utils.conversations.day_merge_pass import shadow_day
+
+        shadow_day(conversations_data)
         conversations = deserialize_conversations(
             [convo_data for convo_data in conversations_data if not convo_data.get('is_locked')]
         )

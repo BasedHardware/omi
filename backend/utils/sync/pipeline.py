@@ -1606,7 +1606,9 @@ def _reprocess_merged_conversations(
     """
     from config.sync_reprocess import coalesce_enabled
 
-    coalescing = coalesce_enabled() and not user_selected
+    from config.demand_processing import enabled as demand_enabled
+
+    coalescing = (coalesce_enabled() or demand_enabled(uid)) and not user_selected
     merged = response.pop('_merged', {})
     if coalescing:
         # Partial-result IDs survive a crash after append/checkpoint but before

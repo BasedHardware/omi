@@ -1696,3 +1696,63 @@ def test_summary_vector_update_only_keeps_metadata_semantics(monkeypatch, discar
     embed.assert_not_called()
     upsert.assert_not_called()
     update.assert_called_once()
+
+
+def test_demand_visible_completion_leaves_invisible_work_in_existing_outbox(monkeypatch):
+    """Visible notes persist while memory, vector and task writers wait for settlement."""
+    from utils.sync import reprocess
+
+    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'true')
+    monkeypatch.setenv('DEMAND_PROCESSING_PERCENT', '100')
+    monkeypatch.setenv('DEMAND_PROCESSING_LAZY_ENABLED', 'true')
+    incoming = MagicMock()
+    incoming.source = 'omi'
+    incoming.get_person_ids.return_value = []
+    completed = _explicit_selection_flow_conversation()
+    completed.discarded = False
+    completed.structured = None
+    notes = MagicMock(return_value=(MagicMock(), False))
+    persisted = MagicMock(return_value=True)
+    debt = MagicMock()
+    memory = MagicMock()
+    submit = MagicMock()
+    monkeypatch.setattr(process_conversation, '_get_structured', notes)
+    monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **kw: completed)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', persisted)
+    monkeypatch.setattr(reprocess, 'mark_effects', debt)
+    monkeypatch.setattr(process_conversation, '_extract_memories', memory)
+    monkeypatch.setattr(process_conversation, 'submit_with_context', submit)
+    monkeypatch.setattr(process_conversation, 'trigger_conversation_apps', MagicMock())
+    result = process_conversation.process_conversation('uid', 'en', incoming)
+    assert result is completed
+    notes.assert_called_once()
+    persisted.assert_called_once()
+    debt.assert_called_once_with('uid', completed.id, 'en', immediate=False)
+    memory.assert_not_called()
+    deferred = {process_conversation.save_structured_vector, process_conversation._save_action_items}
+    assert all(call.args[1] not in deferred for call in submit.call_args_list)
+
+
+def test_lazy_worker_uses_settled_notes_without_regenerating_them(monkeypatch):
+    from utils.conversations import lazy_enrichment
+
+    completed = MagicMock()
+    completed.get_person_ids.return_value = []
+    completed.model_dump.return_value = {'structured': {'title': 'settled'}, 'transcript_segments': []}
+    row = {'id': 'c', 'status': 'completed'}
+    monkeypatch.setattr(lazy_enrichment, 'deserialize_conversation', lambda _: completed)
+    monkeypatch.setattr(lazy_enrichment.conversations_db, 'get_conversation', lambda *a: row)
+    memory, tasks, vectors, notes = MagicMock(), MagicMock(), MagicMock(return_value=True), MagicMock()
+    monkeypatch.setattr(process_conversation, 'extract_memories', memory)
+    monkeypatch.setattr(process_conversation, '_save_action_items', tasks)
+    monkeypatch.setattr(process_conversation, 'save_structured_vector', vectors)
+    monkeypatch.setattr(process_conversation, '_get_structured', notes)
+    monkeypatch.setattr(
+        lazy_enrichment.conversations_db, 'update_conversation', lambda uid, cid, changes: row.update(changes)
+    )
+    lazy_enrichment.enrich_settled('uid', 'c', 'en')
+    lazy_enrichment.enrich_settled('uid', 'c', 'en')
+    memory.assert_called_once_with('uid', completed)
+    tasks.assert_called_once()
+    vectors.assert_called_once()
+    notes.assert_not_called()
