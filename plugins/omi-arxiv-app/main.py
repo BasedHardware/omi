@@ -84,7 +84,7 @@ async def validation_exception_handler(_: Request, exc: RequestValidationError) 
 
 
 def _clean_text(value: Any) -> str:
-    if value is None:
+    if value is None or isinstance(value, bool):
         return ""
     text = unescape(str(value))
     text = re.sub(r"\s+", " ", text)
@@ -92,7 +92,7 @@ def _clean_text(value: Any) -> str:
 
 
 def _safe_limit(limit: Any, default: int = 5) -> int:
-    if limit is None or limit == "":
+    if limit is None or limit == "" or isinstance(limit, bool):
         return default
     try:
         val = int(limit)
