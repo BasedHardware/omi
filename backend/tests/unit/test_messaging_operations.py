@@ -4,6 +4,7 @@ import copy
 import json
 import sys
 from types import SimpleNamespace
+from urllib.parse import urlparse
 
 import pytest
 
@@ -23,7 +24,7 @@ class Session:
 
     def request(self, method, url, **kwargs):
         self.calls.append((method, url, kwargs))
-        if 'logging.googleapis.com/' in url:
+        if urlparse(url).hostname == 'logging.googleapis.com':
             name = url.rsplit('/', 1)[-1]
             if method == 'PUT':
                 self.metrics[name] = copy.deepcopy(kwargs['json'])
