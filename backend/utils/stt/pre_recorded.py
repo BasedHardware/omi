@@ -1068,7 +1068,9 @@ class ParakeetPrerecordedProvider(PrerecordedSTTProvider):
         )
 
 
-def get_prerecorded_provider(language: Optional[str] = 'en') -> PrerecordedSTTProvider:
+def get_prerecorded_provider(
+    language: Optional[str] = 'en', *, selected_service: Optional[Tuple[str, Optional[str], str]] = None
+) -> PrerecordedSTTProvider:
     """Construct exactly the language-aware provider selected for telemetry."""
     # Offline harness sessions swap the provider for a deterministic stub
     # (selection/telemetry still resolve normally above them). Imported lazily:
@@ -1077,7 +1079,7 @@ def get_prerecorded_provider(language: Optional[str] = 'en') -> PrerecordedSTTPr
 
     if prerecorded_stub_enabled():
         return PrerecordedStubProvider()
-    service, _provider_language, model = get_prerecorded_service(language)
+    service, _provider_language, model = selected_service or get_prerecorded_service(language)
     if service == PrerecordedSTTService.MODULATE:
         return ModulatePrerecordedProvider()
     if service == PrerecordedSTTService.PARAKEET:
@@ -1099,9 +1101,15 @@ def prerecorded(
     language: Optional[str] = None,
     model: str = "nova-3",
     keywords: Optional[Sequence[str]] = None,
+    *,
+    selected_service: Optional[Tuple[str, Optional[str], str]] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     """Route pre-recorded URL transcription through STT_PRERECORDED_MODEL."""
-    provider = get_prerecorded_provider(language)
+    provider = (
+        get_prerecorded_provider(language, selected_service=selected_service)
+        if selected_service is not None
+        else get_prerecorded_provider(language)
+    )
     return provider.transcribe_url(
         audio_url,
         speakers_count=speakers_count,

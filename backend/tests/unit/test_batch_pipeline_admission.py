@@ -96,3 +96,39 @@ def test_policy_backend_failure_and_missing_duration_fail_closed(monkeypatch):
     reserve.reset_mock()
     assert admission.authorize(store, tokens(lease), now=1)['allowed'] == []
     reserve.assert_not_called()
+
+
+@pytest.mark.parametrize('enforce', [False, True])
+def test_cap_rechecked_after_queueing_before_gpu_authorization(monkeypatch, enforce):
+    from utils import stt_cap_dispatch as cap
+
+    store, queue, lease, reserve = setup(monkeypatch, fresh=True)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
+    monkeypatch.setattr(
+        cap, 'funded_allowance', Mock(return_value=SimpleNamespace(managed=False, reason='plan_allowance_exhausted'))
+    )
+    receipt = admission.authorize(store, tokens(lease), now=1)
+    if enforce:
+        assert receipt == {'allowed': [], 'retry_after': {'segment': 60}}
+        assert queue.defer('segment', lease.token, 1, 60)
+        assert store.rows['jobs', 'segment']['attempt'] == 0
+        assert 'compute_admission_token' not in store.rows['jobs', 'segment']
+        reserve.assert_not_called()
+    else:
+        assert receipt['allowed'] == ['segment']
+        cap.funded_allowance.assert_not_called()
+
+
+@pytest.mark.parametrize('enforce', [False, True])
+@pytest.mark.parametrize('duration', [None, 'invalid'])
+def test_flag_off_never_parses_new_dispatch_duration(monkeypatch, enforce, duration):
+    store, _, lease, _ = setup(monkeypatch, fresh=True)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
+    store.rows['jobs', 'segment']['duration_seconds'] = duration
+    gate = Mock(side_effect=AssertionError('unparseable duration must not reach dispatch policy'))
+    monkeypatch.setattr(admission, 'sync_allowed', gate)
+    receipt = admission.authorize(store, tokens(lease), now=1)
+    assert receipt == (
+        {'allowed': [], 'retry_after': {'segment': 30}} if enforce else {'allowed': ['segment'], 'retry_after': {}}
+    )
+    gate.assert_not_called()

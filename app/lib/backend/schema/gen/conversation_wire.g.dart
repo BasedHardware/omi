@@ -1673,6 +1673,7 @@ class GeneratedSearchConversationsResponse {
 class GeneratedSyncLocalFilesResultResponse {
   final List<String>? errors;
   final int failedSegments;
+  final bool? heldAudio;
   final List<String>? newMemories;
   final int totalSegments;
   final List<String>? updatedMemories;
@@ -1680,6 +1681,7 @@ class GeneratedSyncLocalFilesResultResponse {
   const GeneratedSyncLocalFilesResultResponse({
     this.errors,
     this.failedSegments = 0,
+    this.heldAudio,
     this.newMemories,
     this.totalSegments = 0,
     this.updatedMemories,
@@ -1689,6 +1691,7 @@ class GeneratedSyncLocalFilesResultResponse {
     return GeneratedSyncLocalFilesResultResponse(
       errors: _readFieldValue<List<String>>(_readField(json, const ["errors"]), "errors", _readStringList, requiredField: false, nullable: true),
       failedSegments: _required(_readFieldValue<int>(_readField(json, const ["failed_segments"]), "failed_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "failed_segments"),
+      heldAudio: _readFieldValue<bool>(_readField(json, const ["held_audio"]), "held_audio", _readBool, requiredField: false, nullable: true),
       newMemories: _readFieldValue<List<String>>(_readField(json, const ["new_memories"]), "new_memories", _readStringList, requiredField: false, nullable: true),
       totalSegments: _required(_readFieldValue<int>(_readField(json, const ["total_segments"]), "total_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "total_segments"),
       updatedMemories: _readFieldValue<List<String>>(_readField(json, const ["updated_memories"]), "updated_memories", _readStringList, requiredField: false, nullable: true),
@@ -1699,6 +1702,7 @@ class GeneratedSyncLocalFilesResultResponse {
     return {
       'errors': errors,
       'failed_segments': failedSegments,
+      'held_audio': heldAudio,
       'new_memories': newMemories,
       'total_segments': totalSegments,
       'updated_memories': updatedMemories,

@@ -9,6 +9,9 @@ import logging
 import time
 import uuid
 
+from config.stt_cap_dispatch import enabled as stt_cap_dispatch_enabled
+from utils.stt_cap_dispatch import LiveAdmission, current_live_admission, suppress_socket_audio
+from utils.observability.stt_cap_dispatch import record_audio as record_cap_audio
 from utils.manual_speaker_assignments import acknowledged_teaching
 from utils.other.live_audio_archive import LiveAudioArchive
 from collections import OrderedDict, deque
@@ -202,6 +205,8 @@ class _RecordingSTTSocket:
         return getattr(self._conn, name)
 
     def send(self, data: bytes, start_sample: Optional[int] = None) -> bool:
+        if suppress_socket_audio(self._conn, data):
+            return True
         try:
             accepted = (
                 self._conn.send(data, start_sample=start_sample) if start_sample is not None else self._conn.send(data)
@@ -250,6 +255,14 @@ class ListenReceiver(ReplayFilterMixin):
     def __init__(self, host: Any, channel_configs: List[ChannelConfig], channel_id_to_index: Dict[int, int]):
         self.soniox_idle_budget = SonioxIdleBudget()
         self.host = host
+        self.cap_admission = (
+            LiveAdmission(host.request.uid, host.request.source)
+            if stt_cap_dispatch_enabled() and not host.use_custom_stt
+            else None
+        )
+        self.cap_paused = False
+        if self.cap_admission is not None:
+            host.state.stt_cap_admission = self.cap_admission
         self.raw_archive = LiveAudioArchive(host)
         try:
             self.lane_meter = LiveLaneMeter()
@@ -908,6 +921,10 @@ class ListenReceiver(ReplayFilterMixin):
     ) -> Any:
         if not isinstance(getattr(self, 'recovery_enabled', None), bool):
             self.recovery_enabled = session_recovery_enabled(self)
+        admission = getattr(self, 'cap_admission', None)
+        if admission is not None and admission.reason == 'allowance_unavailable':
+            await admission.refresh()
+        cap_token = current_live_admission.set(admission)
         enabled_token = current_recovery_enabled.set(self.recovery_enabled)
         token = current_recovery.set(getattr(self, 'recovery', None) if self.recovery_enabled else None)
         try:
@@ -923,6 +940,7 @@ class ListenReceiver(ReplayFilterMixin):
         finally:
             current_recovery.reset(token)
             current_recovery_enabled.reset(enabled_token)
+            current_live_admission.reset(cap_token)
 
     async def _connect_stt_socket(
         self,
@@ -1226,6 +1244,14 @@ class ListenReceiver(ReplayFilterMixin):
         ).inc()
 
     async def initialize_stt(self) -> bool:
+        admission = getattr(self, 'cap_admission', None)
+        if admission is not None:
+            await admission.refresh()
+            if not admission.allowed(self.host.stt_service):
+                admission.omi_selected = True
+                self.cap_paused = True
+                return True  # Receive/persist without consulting provider routing.
+            self.cap_paused = False
         self.live_demand = attach_live_demand(self)
         if self.live_demand is not None:
             await self.live_demand.publish()
@@ -1309,6 +1335,9 @@ class ListenReceiver(ReplayFilterMixin):
 
             return True
         except ProviderChainUnavailable as error:
+            if admission is not None and admission.funded_paused is True:
+                self.cap_paused = True
+                return True
             await self._drain_stt_sockets()
             await terminate_live_stt_backoff(
                 request.websocket,
@@ -1318,6 +1347,9 @@ class ListenReceiver(ReplayFilterMixin):
             )
             return False
         except Exception as error:
+            if admission is not None and admission.funded_paused is True:
+                self.cap_paused = True
+                return True
             await self._drain_stt_sockets()
             await terminate_live_stt_session(
                 request.websocket,
@@ -1744,12 +1776,19 @@ class ListenReceiver(ReplayFilterMixin):
         if getattr(self, 'recovery', None) is None:
             return await legacy_recovery.monitor_stt_death(self)
         while self.host.state.active and not self.host.state.stt_terminal_failure:
+            admission = getattr(self, 'cap_admission', None)
+            if admission is not None and admission.funded_paused is True:
+                if await self.host.wait(STT_DEATH_POLL_INTERVAL_SECONDS):
+                    return
+                continue
             socket = self.stt_socket
             outcome = getattr(socket, 'leg_outcome', None)
             if outcome is not None and outcome.owner_closing:
                 return
             if socket is not None and live_stt_socket_is_dead(socket):
                 if await self._failover_stt_socket():
+                    continue
+                if admission is not None and admission.funded_paused is True:
                     continue
                 recovery = getattr(self, 'recovery', None)
                 if recovery is not None:
@@ -1820,6 +1859,18 @@ class ListenReceiver(ReplayFilterMixin):
             self.host.spawn(self._process_photo(image, chunk.id), name='photo_process')
 
     async def _flush_stt_buffer(self, buffer: bytearray, *, force: bool = False) -> None:
+        admission = getattr(self, 'cap_admission', None)
+        if admission is not None and not admission.allowed(self.host.stt_service):
+            record_cap_audio(
+                'live',
+                'suppressed',
+                self.host.stt_service,
+                len(buffer) / (2 * self.host.request.sample_rate),
+                admission.reason == 'plan_allowance_exhausted',
+            )
+            buffer.clear()
+            self._stt_buffer_start_sample = None
+            return
         if getattr(self, 'recovery', None) is None:
             return await legacy_recovery.flush_stt_buffer(self, buffer, force=force)
         request = self.host.request
@@ -1957,6 +2008,9 @@ class ListenReceiver(ReplayFilterMixin):
                 return
 
     async def _recover_ingested_audio(self) -> None:
+        admission = getattr(self, 'cap_admission', None)
+        if admission is not None and admission.funded_paused is True:
+            return
         if (
             not await self._failover_stt_socket()
             and self.host.state.active
@@ -2034,7 +2088,7 @@ class ListenReceiver(ReplayFilterMixin):
                 pcm_len=len(pcm),
                 fair_use_track_dg_usage=self.host.state.fair_use_track_dg_usage,
             )
-            if should_send:
+            if should_send and not suppress_socket_audio(self.stt_sockets_multi[channel_index], pcm):
                 sent = await send_live_stt_audio(
                     request.websocket,
                     self.host.state,

@@ -5,6 +5,7 @@ line-count ratchet, and so this provider's token-delta protocol stays readable o
 its own. Imports flow one way: this module never imports from ``streaming.py``.
 """
 
+from utils.stt_cap_dispatch import live_provider
 import asyncio
 import json
 import logging
@@ -715,6 +716,7 @@ class SafeSonioxSocket(STTSocket):
             self._stream_transcript(ready)
 
 
+@live_provider('soniox', 1)
 async def process_audio_soniox(
     stream_transcript: Callable[[List[Dict[str, Any]]], None],
     sample_rate: int,

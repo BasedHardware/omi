@@ -4,6 +4,7 @@ Synchronous worker seam: offload the call from an async serving coordinator.
 No admission flag is consulted: already accepted work drains after rollback.
 """
 
+from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
 from datetime import datetime, timezone
 import time
 import math
@@ -58,7 +59,7 @@ def build_incoming(item: WorkItem, binding, payload: dict, *, geolocation=None) 
         transcript_segments=segments,
         source=ConversationSource(binding.source),
         language=binding.language or payload.get('language'),
-        is_locked=binding.is_locked,
+        is_locked=False if cap_dispatch_enabled() else binding.is_locked,
         private_cloud_sync_enabled=binding.private_cloud_sync_enabled,
         client_device_id=binding.client_device_id,
         client_platform=binding.client_platform,
