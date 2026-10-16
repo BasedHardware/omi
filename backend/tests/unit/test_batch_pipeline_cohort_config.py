@@ -29,7 +29,8 @@ def test_only_david_is_admitted_on_every_sync_host(manifest, monkeypatch):
         for env in hosts(config).values():
             for key in ('BATCH_PIPELINE_ENABLED', 'BATCH_PIPELINE_PERCENT', 'BATCH_PIPELINE_UID_ALLOWLIST'):
                 monkeypatch.setenv(key, env[key]['value'])
-            assert enabled_for(UID) is (stage == 'prod')
+            # Admission paused 2026-10-16 (silent worker failures); prod keeps the David allowlist for resume.
+            assert enabled_for(UID) is False
             for excluded in ('', 'another-owner', UID + '-suffix'):
                 assert not enabled_for(excluded)
             assert env['BATCH_PIPELINE_PERCENT']['value'] == '0'

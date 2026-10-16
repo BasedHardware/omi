@@ -92,7 +92,7 @@ envFrom:
 
 env:
   - name: BATCH_PIPELINE_ENABLED
-    value: "true"
+    value: "false"
   - name: BATCH_PIPELINE_UID_ALLOWLIST
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: BATCH_PIPELINE_PERCENT
