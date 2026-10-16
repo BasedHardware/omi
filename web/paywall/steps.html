@@ -39,7 +39,7 @@
   .chip i { width:30px; height:30px; border-radius:10px; background:var(--panel); display:flex; align-items:center; justify-content:center; font-style:normal; font-size:15px; font-weight:800; flex:none; }
   .chip b { display:block; font-size:13px; font-weight:700; }
   .chip span { color:var(--text2); font-size:12px; }
-  .chip.c1 { --r:-3deg; left:12px; top:17%; animation-delay:.2s, 0s; }
+  .chip.c1 { --r:-3deg; left:12px; top:calc(env(safe-area-inset-top) + 66px); animation-delay:.2s, 0s; }
   .chip.c2 { --r:2deg; right:12px; bottom:3%; animation-delay:.5s, -2.2s; }
   .chip .dot { width:8px; height:8px; border-radius:50%; background:#ff3b30; box-shadow:0 0 0 4px #ff3b3022; }
 
