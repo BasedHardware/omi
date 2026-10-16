@@ -3106,8 +3106,8 @@ environments:
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
-            CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
-            CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
+            CAPTURE_SHARED_SPEECH_MODE: {value: shadow, category: rollout}
+            CAPTURE_SHARED_SPEECH_PERCENT: {value: '100', category: rollout}
             HOSTED_DIARIZATION_API_URL:
               value: http://172.16.160.20/diarizer-batch
               category: service_discovery
@@ -3471,8 +3471,8 @@ environments:
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
-            CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
-            CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
+            CAPTURE_SHARED_SPEECH_MODE: {value: shadow, category: rollout}
+            CAPTURE_SHARED_SPEECH_PERCENT: {value: '100', category: rollout}
             HOSTED_DIARIZATION_API_URL:
               value: http://172.16.160.20/diarizer-batch
               category: service_discovery
@@ -3782,8 +3782,8 @@ environments:
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
-            CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
-            CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
+            CAPTURE_SHARED_SPEECH_MODE: {value: shadow, category: rollout}
+            CAPTURE_SHARED_SPEECH_PERCENT: {value: '100', category: rollout}
             HOSTED_DIARIZATION_API_URL:
               value: http://172.16.160.20/diarizer-batch
               category: service_discovery
@@ -4035,8 +4035,8 @@ environments:
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
             BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
-            CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
-            CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
+            CAPTURE_SHARED_SPEECH_MODE: {value: shadow, category: rollout}
+            CAPTURE_SHARED_SPEECH_PERCENT: {value: '100', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}
