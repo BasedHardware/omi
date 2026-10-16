@@ -13,7 +13,7 @@ def _asc(field_path: str) -> FirestoreIndexField:
 
 # Stage-isolated dormant batch queue. Test namespaces run on the emulator only.
 _BATCH_PIPELINE_INDEXES = tuple(
-    FirestoreIndexRequirement(f'{namespace}_{name}', f'{namespace}_jobs', 'COLLECTION', fields)
+    FirestoreIndexRequirement(f'{namespace}_{name}', f'{namespace}_jobs', 'COLLECTION', fields + (_asc('__name__'),))
     for namespace in ('batch_pipeline_prod', 'batch_pipeline_dev')
     for name, fields in (
         ('merge', (_asc('owner_key'), _asc('merge_pending'), _asc('capture_at'), _asc('segment_id'))),
@@ -32,7 +32,7 @@ _BATCH_PROJECTION_INDEXES = tuple(
         f'{namespace}_projection',
         f'{namespace}_results',
         'COLLECTION',
-        (_asc('projection_state'), _asc('committed_at')),
+        (_asc('projection_state'), _asc('committed_at'), _asc('__name__')),
     )
     for namespace in ('batch_pipeline_prod', 'batch_pipeline_dev')
 )
@@ -42,7 +42,12 @@ _BATCH_CONTROL_INDEXES = tuple(
         f'{namespace}_control_{priority}_{pool}',
         f'{namespace}_control',
         'COLLECTION',
-        (_asc(f'p{priority}_active'), _asc(f'p{priority}_service'), _asc(f'p{priority}_{pool}_available_at')),
+        (
+            _asc(f'p{priority}_active'),
+            _asc(f'p{priority}_service'),
+            _asc(f'p{priority}_{pool}_available_at'),
+            _asc('__name__'),
+        ),
     )
     for namespace in ('batch_pipeline_prod', 'batch_pipeline_dev')
     for priority in (0, 1, 2)
