@@ -1,14 +1,26 @@
 from dataclasses import replace
+from contextlib import nullcontext
+import io
 import logging
 import sys
+import wave
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 from config.batch_pipeline_providers import ProviderConfig, provider_config
-from diarizer import batch_pipeline
-from diarizer.batch_pipeline import PipelineWorker, LiveWords, Window, pack_windows, speech_windows
-from diarizer.batch_pipeline_models import ParakeetWords
+from diarizer import batch_pipeline, batch_pipeline_models
+from diarizer.batch_pipeline import (
+    BatchValidationError,
+    PipelineWorker,
+    LiveWords,
+    Window,
+    crop_model_vad_spans,
+    pack_windows,
+    speech_windows,
+)
+from diarizer.batch_pipeline_models import ParakeetWords, PyannoteVAD, decode_pcm16_wav
 from utils.batch_pipeline.contracts import WorkItem, Priority
 
 
@@ -122,7 +134,14 @@ def test_item_failures_log_class_and_stage_without_callback_or_private_content(s
     assert worker.process_batch([item(duration=60)]) == []
     records = [record for record in caplog.records if 'event=batch_worker_failed' in record.getMessage()]
     assert len(records) == worker.counts['failed'] == 1
-    assert records[0].getMessage() == f'event=batch_worker_failed error_class=ValueError stage={stage} segment_id=a'
+    reason = {'word_clocks': 'word_clock', 'assemble_words': 'empty_asr'}.get(stage, 'unclassified')
+    error_class = 'ValueError' if reason == 'unclassified' else 'BatchValidationError'
+    assert (
+        records[0]
+        .getMessage()
+        .startswith(f'event=batch_worker_failed error_class={error_class} stage={stage} segment_id=a reason={reason} ')
+    )
+    assert all(isinstance(value, (str, int)) for value in records[0].args)
     assert records[0].exc_info is None
     assert private_marker not in caplog.text
 
@@ -178,6 +197,126 @@ def test_raising_handler_stream_cannot_leak_worker_error_or_drop_sibling(monkeyp
     captured = capsys.readouterr()
     assert 'OSError: synthetic-handler-stream-error' in captured.err
     assert private_marker not in captured.out + captured.err
+
+
+def test_empty_asr_on_vad_speech_stays_failure_with_numeric_shape(caplog):
+    class EmptyWords:
+        def transcribe_batch(self, samples):
+            return [[] for _ in samples]
+
+    worker, _, saved, *_ = setup_worker(
+        decode=lambda _: np.zeros(126400, dtype=np.float32),
+        words_providers={'parakeet': EmptyWords()},
+        on_failure=None,
+    )
+    assert worker.process_batch([item(duration=7.9)]) == []
+    assert not saved
+    message = next(r.getMessage() for r in caplog.records if 'event=batch_worker_failed' in r.getMessage())
+    assert 'stage=assemble_words' in message and 'reason=empty_asr' in message
+    assert 'samples=126400 vad_spans=1 windows=1 asr_words=0 owned_words=0' in message
+
+
+def test_validation_reason_rejects_free_form_content():
+    with pytest.raises(ValueError, match='^invalid batch validation reason$'):
+        BatchValidationError('synthetic-private-provider-message')
+
+
+def test_numeric_diagnostics_preserve_iterable_hypothesis_support():
+    class IterableWords:
+        def transcribe_batch(self, samples):
+            return [(word for word in [{'word': 'synthetic', 'timestamp': [0.1, 0.2]}]) for _ in samples]
+
+    worker, _, saved, *_ = setup_worker(words_providers={'parakeet': IterableWords()})
+    assert worker.process_batch([item()])
+    assert len(saved['a']['words']) == 1
+
+
+def test_context_only_hypothesis_is_observable_failure_not_silence(caplog):
+    class ContextWords:
+        def transcribe_batch(self, samples):
+            return [[{'word': 'synthetic', 'timestamp': [4.5, 4.8]}]]
+
+    worker, _, saved, *_ = setup_worker(
+        decode=lambda _: np.zeros(160320, dtype=np.float32),
+        vad=lambda _: [(1, 2)],
+        words_providers={'parakeet': ContextWords()},
+        on_failure=None,
+    )
+    assert worker.process_batch([item(duration=10.02)]) == []
+    assert not saved
+    message = next(r.getMessage() for r in caplog.records if 'event=batch_worker_failed' in r.getMessage())
+    assert 'reason=no_owned_words' in message and 'asr_words=1 owned_words=0' in message
+
+
+def test_fractional_window_rebase_uses_actual_sample_origin():
+    class EndWords:
+        def transcribe_batch(self, samples):
+            duration = len(samples[0]) / 16000
+            return [[{'word': 'synthetic', 'timestamp': [duration - 0.1, duration + 0.01]}]]
+
+    samples = np.zeros(126400, dtype=np.float32)
+    spans = [(5.123456, 7.88)]
+    capture = item(duration=7.9)
+    window = next(speech_windows(capture, samples, spans, ProviderConfig()))
+    assert window.start == int(1.123456 * 16000) / 16000
+    # Rebasing to the unrounded 1.123456 origin exceeds the same validator's
+    # permitted end by 0.0000185s. Keep the word using the actual slice origin.
+    worker, _, saved, *_ = setup_worker(
+        decode=lambda _: samples, vad=lambda _: spans, words_providers={'parakeet': EndWords()}
+    )
+    assert len(worker.process_batch([capture])) == 1
+    assert len(saved['a']['words']) == 1
+    assert saved['a']['words'][0]['timestamp'][1] <= 7.91
+
+
+def test_pyannote_frame_center_beyond_eof_is_cropped_without_losing_in_buffer_speech(monkeypatch):
+    monkeypatch.setattr(
+        batch_pipeline_models,
+        'torch',
+        SimpleNamespace(inference_mode=nullcontext, from_numpy=lambda s: SimpleNamespace(unsqueeze=lambda _: s)),
+    )
+    samples = np.zeros(126400, dtype=np.float32)
+    output = SimpleNamespace(get_timeline=lambda: SimpleNamespace(support=lambda: [SimpleNamespace(start=0, end=7.93)]))
+    vad = PyannoteVAD(lambda _: output)
+    assert vad(samples) == [(0, 7.9)]
+    worker, _, saved, *_ = setup_worker(decode=lambda _: samples, vad=vad)
+    assert len(worker.process_batch([item(duration=7.9)])) == 1
+    assert saved['a']['speech_spans'] == [{'start': 0, 'end': 7.9}]
+    assert saved['a']['words']
+
+
+@pytest.mark.parametrize(
+    'span,reason',
+    [((0, float('nan')), 'vad_nonfinite'), ((0, 0), 'vad_order'), ((-1, 1), 'vad_order'), ((2, 3), 'vad_bounds')],
+)
+def test_model_vad_malformed_or_wholly_outside_span_never_becomes_silence(span, reason):
+    with pytest.raises(BatchValidationError) as caught:
+        crop_model_vad_spans([span], 2)
+    assert caught.value.reason == reason
+
+
+def test_unsorted_overlapping_vad_spans_are_merged_not_failed():
+    worker, _, saved, *_ = setup_worker(vad=lambda _: [(1, 2), (0, 1.5)])
+    assert worker.process_batch([item()])
+    assert saved['a']['speech_spans'] == [{'start': 0, 'end': 2}]
+
+
+@pytest.mark.parametrize('channels,rate', [(2, 16000), (1, 8000)])
+def test_noncanonical_headers_fail_before_vad_or_assembly(channels, rate, caplog):
+    body = io.BytesIO()
+    with wave.open(body, 'wb') as wav:
+        wav.setnchannels(channels)
+        wav.setsampwidth(2)
+        wav.setframerate(rate)
+        wav.writeframes(b'\0\0' * rate * channels)
+    worker, *_ = setup_worker(
+        decode=lambda _: decode_pcm16_wav(body.getvalue()),
+        vad=lambda _: pytest.fail('header failure must precede VAD'),
+        on_failure=None,
+    )
+    assert worker.process_batch([item(duration=1)]) == []
+    assert 'stage=fetch_decode' in caplog.text
+    assert 'stage=vad_windows' not in caplog.text and 'stage=assemble_words' not in caplog.text
 
 
 def test_batch_failure_retries_all_affected_conversations():
@@ -262,7 +401,7 @@ def test_reuse_default_off_never_reads_lineage():
 def test_invalid_vad_is_failure_not_silence(spans):
     worker, _, _, _, _, failures = setup_worker(vad=lambda s: spans)
     assert worker.process_batch([item()]) == []
-    assert failures == [('a', 'ValueError')]
+    assert failures == [('a', 'BatchValidationError')]
 
 
 def test_duplicate_and_oversized_pull_rejected():
