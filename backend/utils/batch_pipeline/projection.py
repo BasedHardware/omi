@@ -37,7 +37,7 @@ def build_incoming(item: WorkItem, binding, payload: dict, *, geolocation=None) 
         raise ValueError('result audio duration differs from admitted capture')
     # The existing final-pass aligner abstains in diarization gaps; the existing
     # prerecorded grouper supplies the same sentence/segment shapes as sync.
-    aligned = assign_words(words, payload['diarization']['turns'])
+    aligned = words if payload.get('recovery_version') == 1 else assign_words(words, payload['diarization']['turns'])
     segments = postprocess_words([{**word, 'text': word['word']} for word in aligned], 0)
     if not segments:
         raise ValueError('successful batch result produced no transcript')
@@ -178,6 +178,8 @@ class Projector:
         from utils.batch_pipeline.projection_parts import split_result
 
         payload = self.load_result(item, entry['result']['result_uri'])
+        if payload.get('recovery_version') == 1 and entry.get('recovery_version') != 1:
+            raise ProjectionBlocked('recovery result requires recovery handoff')
         speech = payload.get('speech_seconds')
         if (
             not isinstance(speech, (int, float))

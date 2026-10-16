@@ -68,3 +68,18 @@ def max_worker_attempts() -> int:
     except ValueError:
         return 5
     return value if 1 <= value <= 20 else 5
+
+
+def recovery_owners() -> tuple[str, ...]:
+    """Recovery is independent of admission; empty allowlist always denies."""
+    if os.getenv('BATCH_PIPELINE_RECOVERY_MODE', 'off').strip().lower() != 'on':
+        return ()
+    return tuple(
+        sorted(
+            {
+                value.strip()
+                for value in os.getenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', '').split(',')
+                if value.strip() and '/' not in value.strip() and len(value.strip().encode()) <= 256
+            }
+        )
+    )

@@ -331,6 +331,10 @@ class ProjectionStore:
                 run_epoch=binding.run_epoch,
             )
             for sibling in live_siblings:
+                # All assignment/enrichment receipts now exist. Wake held
+                # siblings in the same durable completion, including a crash
+                # before client publication or completion retention.
+                transaction.update(self.ref('results', sibling), {'projection_state': 'ready'})
                 transaction.update(self.ref('jobs', sibling), {'client_status': 'completed', 'client_result': result})
             return result
 
