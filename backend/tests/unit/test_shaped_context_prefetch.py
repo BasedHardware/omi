@@ -1,4 +1,4 @@
-"""Context reads overlap turn setup, never extend it, and keep continuity outcomes distinct."""
+"""Context reads overlap setup; fresh mount fences and continuity outcomes stay bounded."""
 
 import asyncio
 from datetime import datetime, timezone
@@ -26,20 +26,26 @@ def reads(monkeypatch):
     return outcomes, overlaps
 
 
-def install_reads(monkeypatch, summary_gate, digest_gate, *, failure=None):
-    store = SimpleNamespace(load=lambda *a: None)
+def install_reads(
+    monkeypatch, summary_gate, digest_gate, *, failure=None, summary_text='Saved continuity', validation_failure=None
+):
+    store = SimpleNamespace(load_for_turn=lambda *a: None, validate_for_turn=lambda *a: None)
     monkeypatch.setattr(context, 'ChatContextStore', lambda: store)
     started = set()
 
     async def blocking(executor, function, *args):
         if function is context.ChatContextStore:
             return store
-        if function == store.load:
+        if function == store.load_for_turn:
             started.add('summary')
             await summary_gate.wait()
             if failure:
                 raise failure
-            return {'summary': 'Saved continuity'}
+            return {'summary': summary_text}
+        if function == store.validate_for_turn:
+            if validation_failure is not None:
+                raise validation_failure
+            return None
         assert function is context.recent_activity
         started.add('digest')
         await digest_gate.wait()
@@ -74,14 +80,14 @@ def test_model_mount_samples_without_waiting_and_counts_once(monkeypatch, reads,
             if digest_ready:
                 digest.set()
             await settle()
-            result = context.take_prepared('u', 's')
+            result = await context.take_prepared('u', 's')
             assert result is not None
             assert result['summary'] == ('Saved continuity' if summary_ready else '')
             assert bool(result['digest']) == (summary_ready and digest_ready)
-            assert context.take_prepared('u', 's') is result
+            assert await context.take_prepared('u', 's') is result
             assert reads[0] == [outcome] and len(reads[1]) == 1
         assert all(task.done() for task in pending.tasks)
-        assert context.take_prepared('u', 's') is None
+        assert await context.take_prepared('u', 's') is None
 
     asyncio.run(run())
 
@@ -94,7 +100,7 @@ def test_failed_security_guard_discards_ready_digest_without_exception_payload(m
         digest.set()
         async with context.preparation_scope('u', 's', ['m']):
             await settle()
-            assert context.take_prepared('u', 's') == {'summary': '', 'digest': ''}
+            assert await context.take_prepared('u', 's') == {'summary': '', 'digest': ''}
         assert reads[0] == ['degraded']
 
     asyncio.run(run())
@@ -107,9 +113,9 @@ def test_unscoped_and_wrong_identity_never_read_or_consume(monkeypatch, reads):
 
     async def run():
         async with context.preparation_scope('u', 's', []):
-            assert context.take_prepared('other', 's') is None
-            assert context.take_prepared('u', 'other') is None
-            assert context.take_prepared('u', 's') == {'summary': '', 'digest': ''}
+            assert await context.take_prepared('other', 's') is None
+            assert await context.take_prepared('u', 'other') is None
+            assert await context.take_prepared('u', 's') == {'summary': '', 'digest': ''}
         assert reads == (['unscoped'], [])
 
     asyncio.run(run())
@@ -121,9 +127,9 @@ def test_nested_scopes_restore_identity_and_cancel_unfinished_reads(monkeypatch,
         async with context.preparation_scope('u', 's', ['m']) as outer:
             async with context.preparation_scope('u', 't', ['m']) as inner:
                 await settle()
-                assert context.take_prepared('u', 's') is None
+                assert await context.take_prepared('u', 's') is None
             assert all(task.cancelled() for task in inner.tasks)
-            assert context.take_prepared('u', 's') == {'summary': '', 'digest': ''}
+            assert await context.take_prepared('u', 's') == {'summary': '', 'digest': ''}
         assert all(task.cancelled() for task in outer.tasks)
 
     asyncio.run(run())
@@ -154,7 +160,7 @@ def test_real_router_overlaps_reads_slower_than_old_budgets(monkeypatch, reads, 
             return '', 'UTC'
 
         async def model(uid, messages, app, **kwargs):
-            result = context.take_prepared(uid, kwargs['chat_session'].id)
+            result = await context.take_prepared(uid, kwargs['chat_session'].id)
             assert result is not None
             assert result['summary'] == 'Saved continuity' and result['digest']
             yield 'first token'
@@ -185,7 +191,7 @@ def test_old_and_shadow_router_start_no_context_reads(monkeypatch, reads, graph,
         return '', 'UTC'
 
     async def model(*args, **kwargs):
-        assert context.take_prepared('u', 's') is None
+        assert await context.take_prepared('u', 's') is None
         yield 'unchanged'
 
     monkeypatch.setattr(graph, '_current_prompt_metadata', metadata)
@@ -255,7 +261,7 @@ def test_router_cleans_up_reads_on_every_early_exit(monkeypatch, reads, graph, e
             assert [chunk async for chunk in stream][-1] is None
         assert started == {'summary', 'digest'}
         assert all(task.done() for task in captured[0].tasks)
-        assert context.take_prepared('u', 's') is None
+        assert await context.take_prepared('u', 's') is None
 
     asyncio.run(run())
 
@@ -290,18 +296,56 @@ def test_real_shaped_runner_streams_with_ready_summary_while_digest_is_pending(m
         async with context.preparation_scope('u', 's', ['m']):
             await settle()
             output = []
-            await shaped_chat.run_shaped_chat_stream(
-                '',
-                [{'role': 'user', 'content': 'Request'}],
-                [],
-                {},
-                agentic.AsyncStreamingCallback(),
-                output,
-                agentic.AgentSafetyGuard(),
-                {'user_id': 'u', 'chat_session_id': 's', 'context_message_ids': ['m']},
+            await asyncio.create_task(
+                shaped_chat.run_shaped_chat_stream(
+                    '',
+                    [{'role': 'user', 'content': 'Request'}],
+                    [],
+                    {},
+                    agentic.AsyncStreamingCallback(),
+                    output,
+                    agentic.AgentSafetyGuard(),
+                    {'user_id': 'u', 'chat_session_id': 's', 'context_message_ids': ['m']},
+                )
             )
             assert output == ['Answer']
             assert 'Saved continuity' in captured[0] and 'Activity elsewhere' not in captured[0]
             assert reads[0] == ['digest_degraded']
+
+    asyncio.run(run())
+
+
+def test_ready_empty_state_and_pending_digest_have_distinct_outcome(monkeypatch, reads):
+    async def run():
+        summary, digest = asyncio.Event(), asyncio.Event()
+        install_reads(monkeypatch, summary, digest, summary_text='')
+        summary.set()
+        async with context.preparation_scope('u', 's', ['m']):
+            await settle()
+            assert await context.take_prepared('u', 's') == {'summary': '', 'digest': ''}
+            assert reads[0] == ['empty_digest_degraded']
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    'failure,outcome',
+    [
+        (TimeoutError(), 'summary_pending'),
+        (context.ExecutorSaturatedError('synthetic saturation'), 'summary_pending'),
+        (PermissionError('synthetic revoke'), 'degraded'),
+    ],
+)
+def test_unchecked_ready_summary_and_digest_are_never_injected(monkeypatch, reads, failure, outcome):
+    async def run():
+        summary, digest = asyncio.Event(), asyncio.Event()
+        install_reads(monkeypatch, summary, digest, validation_failure=failure)
+        summary.set()
+        digest.set()
+        async with context.preparation_scope('u', 's', ['m']):
+            await settle()
+            assert await context.take_prepared('u', 's') == {'summary': '', 'digest': ''}
+            assert await context.take_prepared('u', 's') == {'summary': '', 'digest': ''}
+            assert reads[0] == [outcome]
 
     asyncio.run(run())

@@ -21,6 +21,7 @@ def shaped():
 @pytest.mark.parametrize('failure', [FailedPrecondition('index'), RuntimeError('revision'), ValueError('ciphertext')])
 def test_optional_load_failure_returns_plain_window(monkeypatch, failure):
     store = MagicMock()
+    store.load_for_turn = store.load
     store.assert_access = MagicMock()
     store.load.side_effect = failure
     # Preparation now starts digest IO concurrently; keep this regression hermetic
@@ -34,15 +35,25 @@ def test_optional_load_failure_returns_plain_window(monkeypatch, failure):
 
 
 def test_slow_context_read_has_hard_budget(monkeypatch):
+    deadlines = []
+    measured = context.measured
+
+    async def observe(phase, operation, *, timeout=None):
+        deadlines.append(timeout)
+        return await measured(phase, operation, timeout=timeout)
+
     async def stalled(*args):
         await asyncio.Event().wait()
 
     monkeypatch.setattr(context, 'run_blocking', stalled)
     monkeypatch.setattr(context, 'PREPARE_SECONDS', 0.01)
+    monkeypatch.setattr(context, 'measured', observe)
 
     async def run():
-        result = await asyncio.wait_for(context.prepare('u', 's', ['m']), 0.05)
+        # Allow scheduler jitter while proving both reads receive the 10ms cap.
+        result = await asyncio.wait_for(context.prepare('u', 's', ['m']), 1)
         assert result == {'summary': '', 'digest': ''}
+        assert deadlines == [0.01, 0.01]
 
     asyncio.run(run())
 
@@ -51,6 +62,7 @@ def test_slow_context_read_has_hard_budget(monkeypatch):
 def test_real_turn_streams_before_background_summary_even_on_failures(monkeypatch, shaped, failure):
     agentic, runner = shaped
     store = MagicMock()
+    store.load_for_turn = store.load
     store.assert_access = MagicMock()
     store.load.return_value = {'generation': 0, 'revision': 0}
     store.source_page.return_value = ([{'role': 'user', 'content': 'Dropped fact'}], None, False)
@@ -58,6 +70,11 @@ def test_real_turn_streams_before_background_summary_even_on_failures(monkeypatc
         store.source_page.side_effect = FailedPrecondition('synthetic missing index')
     tasks, captures, fallback = [], [], []
     summary_called = []
+
+    async def fake_database(executor, function, *args):
+        # These are in-memory fakes. Do not make the 10ms refresh test depend
+        # on cold db_executor startup; real worker isolation is tested separately.
+        return function(*args)
 
     async def summary(*args):
         summary_called.append(True)
@@ -84,6 +101,7 @@ def test_real_turn_streams_before_background_summary_even_on_failures(monkeypatc
         return task
 
     monkeypatch.setattr(context, 'ChatContextStore', lambda: store)
+    monkeypatch.setattr(context, 'run_blocking', fake_database)
     monkeypatch.setattr(context, 'summarize', summary)
     monkeypatch.setattr(context, 'recent_activity', lambda *args: [])
     monkeypatch.setattr(context, 'REFRESH_SECONDS', 0.01)
@@ -121,6 +139,7 @@ def test_real_turn_streams_before_background_summary_even_on_failures(monkeypatc
 
 def test_overlong_summary_is_truncated_and_checkpointed(monkeypatch, caplog):
     store = MagicMock()
+    store.load_for_turn = store.load
     store.assert_access = MagicMock()
     store.load.return_value = {'generation': 0, 'revision': 0}
     store.source_page.return_value = ([{'role': 'user', 'content': 'fact'}], None, False)
@@ -150,7 +169,9 @@ def test_activity_reads_twenty_candidates_without_decrypting_active_session(monk
     monkeypatch.setattr(history.chat_db, 'iter_all_messages', lambda *a, **kw: pytest.fail('unbounded scan'))
     assert history.recent_activity('u', exclude_session='active') == []
     query.limit.assert_called_once_with(20)
-    query.limit.return_value.stream.assert_called_once_with(timeout=1.0, retry=None)
+    from database.chat_context_prefetch import no_retry
+
+    query.limit.return_value.stream.assert_called_once_with(timeout=1.0, retry=no_retry())
     decrypt.assert_not_called()
 
 

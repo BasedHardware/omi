@@ -46,7 +46,7 @@ async def run_shaped_chat_stream(
     context = {'summary': '', 'digest': ''}
     if not shadow:
         try:
-            prepared = take_prepared(configurable['user_id'], configurable.get('chat_session_id'))
+            prepared = await take_prepared(configurable['user_id'], configurable.get('chat_session_id'))
             if prepared is None:
                 prepared = await prepare_context(
                     configurable['user_id'],

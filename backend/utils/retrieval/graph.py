@@ -23,6 +23,7 @@ from models.chat import ChatSession, Message, PageContext
 from utils.journey_metrics_contract import ClientKind
 from utils.llm.shaped_agent import route_for_uid
 from utils.messaging.projection import surface_runtime
+from utils.messaging.context import preparation_scope
 from utils.llm.chat import get_current_datetime_block, get_user_timezone
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import Features, track_usage
@@ -250,8 +251,6 @@ async def execute_chat_stream(
     # only ready components. Old/shadow routing starts no context IO.
     scope = nullcontext()
     if surface_runtime.get() is not None or (shaped_invocation and route_for_uid(uid) == 'new'):
-        from utils.messaging.context import preparation_scope
-
         scope = preparation_scope(
             uid,
             chat_session.id if chat_session else None,

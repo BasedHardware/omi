@@ -11,7 +11,13 @@ from contextvars import ContextVar
 
 from database.chat_context import ChatContextStore
 from database.chat_history_window import cache_aligned_history_limit
-from utils.executors import db_executor, run_blocking, start_background_task
+from utils.executors import (
+    db_executor,
+    get_context_executor,
+    ExecutorSaturatedError,
+    run_blocking,
+    start_background_task,
+)
 from utils.observability.fallback import record_fallback
 from utils.messaging.history import summarize, recent_activity
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT, has_cacheable_prefix
@@ -25,6 +31,7 @@ PREPARE_SECONDS = 0.15
 # Guarded refresh_load is the uncensored equivalent of the foreground load:
 # observed p95 0.86s. This window overlaps setup; consumption never waits for it.
 PREFETCH_SECONDS = 1.0
+FENCE_SECONDS = 0.15
 REFRESH_SECONDS = 60
 _REFRESHING = set()
 logger = logging.getLogger(__name__)
@@ -158,7 +165,11 @@ def _prepared_result(state, digest, *, pending=False):
     outcome = (
         ('summary_pending' if pending else 'degraded')
         if not readable
-        else 'digest_degraded' if not isinstance(digest, str) else 'summary' if summary else 'empty'
+        else (
+            ('digest_degraded' if summary else 'empty_digest_degraded')
+            if not isinstance(digest, str)
+            else 'summary' if summary else 'empty'
+        )
     )
     CONTEXT_TURNS.labels(context_surface(), outcome).inc()
     return {
@@ -177,15 +188,16 @@ class ContextPreparation:
         self.started = time.monotonic()
         self.result = None
         self.tasks = []
+        self.store = store
         if not self.scoped:
             return
 
         async def continuity():
-            context_store = store or await run_blocking(db_executor, ChatContextStore)
-            return await run_blocking(db_executor, context_store.load, uid, session_id)
+            self.store = store or await run_blocking(get_context_executor(), ChatContextStore)
+            return await run_blocking(get_context_executor(), self.store.load_for_turn, uid, session_id)
 
         async def activity_digest():
-            activity = await run_blocking(db_executor, recent_activity, uid, '', session_id)
+            activity = await run_blocking(get_context_executor(), recent_activity, uid, '', session_id)
             return digest_text(activity)
 
         async def read(phase, operation):
@@ -199,9 +211,12 @@ class ContextPreparation:
         for phase, operation in (('summary_load', continuity()), ('digest', activity_digest())):
             self.tasks.append(start_background_task(read(phase, operation), name='shaped-context-' + phase))
 
-    def take(self):
-        """No await: context must not extend setup or the first-token deadline."""
+    def take(self, *, guard_error=None):
+        """Sample completed data; the fresh mount guard is checked separately."""
         if self.result is not None:
+            if guard_error is not None:
+                degraded(guard_error)
+                return {'summary': '', 'digest': ''}
             return self.result
         if not self.scoped:
             CONTEXT_TURNS.labels(context_surface(), 'unscoped').inc()
@@ -215,8 +230,39 @@ class ContextPreparation:
                 error = TimeoutError()
                 setattr(error, 'shaped_context_phase', phase + '_not_ready')
                 results.append(error)
-        self.result = _prepared_result(*results, pending=not self.tasks[0].done())
+        if guard_error is not None:
+            results[0] = guard_error
+        self.result = _prepared_result(
+            *results,
+            pending=not self.tasks[0].done()
+            or isinstance(results[0], ExecutorSaturatedError)
+            or isinstance(guard_error, TimeoutError),
+        )
         return self.result
+
+    async def checked_take(self):
+        # Re-read projected access and invalidation fences at injection, not at
+        # the beginning of potentially long setup. One BatchGet, no queue.
+        if self.scoped and self.tasks[0].done() and not self.tasks[0].cancelled():
+            state = self.tasks[0].result()
+            if isinstance(state, dict):
+                try:
+                    assert self.store is not None
+                    started = time.monotonic()
+                    await measured(
+                        'fence_check',
+                        run_blocking(
+                            get_context_executor(), self.store.validate_for_turn, *self.identity, state, FENCE_SECONDS
+                        ),
+                        timeout=FENCE_SECONDS,
+                    )
+                    if time.monotonic() - started > FENCE_SECONDS:
+                        error = TimeoutError()
+                        setattr(error, 'shaped_context_phase', 'fence_check')
+                        raise error
+                except Exception as error:
+                    return self.take(guard_error=error)
+        return self.take()
 
     async def close(self):
         for task in self.tasks:
@@ -236,13 +282,13 @@ async def preparation_scope(uid, session_id, message_ids):
         await pending.close()
 
 
-def take_prepared(uid, session_id):
+async def take_prepared(uid, session_id):
     pending = _preparation.get()
     if pending is None or pending.identity != (uid, session_id):
         return None
     if pending.scoped and pending.result is None:
         CONTEXT_SETUP_OVERLAP.labels(context_surface()).observe(time.monotonic() - pending.started)
-    return pending.take()
+    return await pending.checked_take()
 
 
 async def prepare(uid, session_id, message_ids, *, store=None):

@@ -388,9 +388,13 @@ stopped and external effects are reconciled.
 The backend can be deployed while the new indexes build: optional context fails
 open to the existing plain cache-aligned window. Eligible app/channel turns start
 stored continuity and digest IO before router metadata and prompt/tool setup. Each
-has a one-second overlapping window; the model samples ready results synchronously
-and never joins an unfinished read. A pending/failed digest preserves a ready
-summary. Direct runner callers without the router retain the 150 ms bounded prepare
+has a one-second overlapping window on a dedicated four-worker, zero-queue context
+executor. Cancellation does not free a worker until its blocking call finishes.
+Every context RPC has an explicit timeout and a Retry predicate that never retries.
+The model samples ready results, then checks fresh session/account/deletion/link and
+generation/revision/incarnation fences in one projected BatchGet (150 ms maximum).
+A failed, late or saturated check discards both components; cap exhaustion is
+`summary_pending`. A pending/failed digest preserves a freshly validated summary. Direct runner callers without the router retain the 150 ms bounded prepare
 seam. Summarization only runs
 after the turn in tracked background tasks, at most two per process and 60 seconds
 per job. Failed/missing indexes, model errors, CAS conflicts and timeouts are logged
@@ -418,7 +422,9 @@ No new config means legacy admission/cohort/seat behavior stays in force. Existi
 shaped app turns keep the same plain 10–17-message window; optional summaries/digest
 can degrade safely while indexes build. There is no index-dependent app send gate,
 summary model call before streaming or new admission requirement. Router prefetch
-adds no awaited IO at model mount. The amount of useful overlap depends on actual
+adds no wait for unfinished prefetched data, but the fresh fence check at model mount
+adds up to 150 ms (the pre-prefetch foreground cap). This supersedes the earlier
+zero-wait mount claim. The amount of useful overlap depends on actual
 setup time; measure it with `omi_chat_context_setup_overlap_seconds`. A ready summary
 and digest can change provider input and caching, so provider bytes need not match.
 
@@ -619,10 +625,15 @@ The first corrected-release sample (four eligible app turns) lost optional conte
 on every turn. At 14:25 UTC, GMP p50/p95 in seconds were: digest .088/.099,
 summary_load .10/.27, refresh_load .225/.86, source_page .6/3. Foreground samples
 are censored by the old 75/150 ms deadlines. The uncensored refresh_load uses the
-same guarded state loader and informs the new one-second overlapping window.
-A state load has three sequential document reads for app (session, user, deletion
-marker), four for channel (plus link), and transaction overhead; these guards remain
-authoritative. Digest is one bounded 20-candidate query plus local decryption.
+old guarded state loader and informed the one-second overlapping window. The old
+loader used three serial document reads for app, four for channel, plus transaction
+overhead. Request prefetch now uses two bounded RPCs: a projected session link lookup
+and a BatchGet of session/user/deletion/link. At use, one additional projected BatchGet
+checks those fences against the snapshot. Background refresh keeps its transaction.
+No request prefetch uses `db_executor`; context capacity cannot queue behind or ahead
+of setup work. Guard reads remain point-in-time: a mutation after the fresh snapshot
+and before/during the provider call can still race, as with any read-based authorization.
+There are no intervening setup awaits after this validation. Digest is one bounded 20-candidate query plus local decryption.
 Background source paging adds guarded access, a logical-ID boundary query, a source
 page and model work; its latency does not belong on the foreground path. No per-RPC
 production timing is available; these counts come from the guarded call graph.
@@ -815,7 +826,7 @@ backend/.venv/bin/python backend/scripts/scheduler_reconcile.py \
    MATCH and notification destinations are approved, the nine can be applied without
    waiting for shaped traffic. Confirm the admitted source is actually in both serving
    backend and cleanup images before claiming their new logging is covered. Apply the
-   rate policy only after the release containing the prefetch fix is verified, old
+   rate policy only after the release containing prefetch isolation and fresh mount fences is verified, old
    instances have drained, and a full 30-minute window contains only new outcome
    semantics. Verify fresh context/read/overlap samples by surface. Require at least
    20 eligible turns in that window and a summary-loss fraction at or below 5% before
@@ -903,9 +914,12 @@ histogram_quantile(0.50, sum by (surface, le) (rate(omi_chat_context_setup_overl
 
 `unscoped` is excluded from eligible-turn rates. `summary` means stored continuity
 was available and the digest read succeeded; `empty` means the state read succeeded
-without an existing summary. `digest_degraded` means the state read succeeded but
-the digest failed or was not ready: any stored summary is retained. `degraded` means
-the state read failed; `summary_pending` means it was unfinished at model mount.
+without an existing summary. `digest_degraded` means a stored summary survived but
+the digest failed or was not ready. `empty_digest_degraded` means there was no prior
+summary and the digest failed or was not ready; empty-rate dashboards should include
+both `empty` and `empty_digest_degraded`. Both require a successful fresh fence check. `degraded` means
+a state/fence read failed or the snapshot was invalidated; `summary_pending` means
+a read/check was unfinished or context capacity was exhausted at model mount.
 Only `degraded|summary_pending` enter the alert numerator; every non-unscoped outcome
 enters the denominator. The managed policy name stays unchanged. Never mix old
 `degraded` semantics (which included digest-only failures) into the acceptance window.
@@ -917,11 +931,20 @@ window cannot help a 100 ms setup consume a 270 ms load. Full ready outcomes sho
 dominate when setup overlap exceeds those reads; the four-turn sample cannot establish
 a post-fix percentage. If summary_pending remains high, begin prefetch earlier in the
 request or investigate batching guarded reads, preserving transaction/generation fences.
+The mount guard costs one fresh projected RPC, capped at 150 ms, and no fresh read
+waits for pool admission. Direct runner helpers without router prefetch keep the
+150 ms total prepare cap; their already-guarded snapshots can be at most that old
+when consumed. All production shaped turns enter through the router and use the
+fresh mount fence. A digest uses a false-predicate Retry rather than `retry=None`,
+which the installed Firestore Query error handler dereferences and masks with an
+AttributeError on GoogleAPICallError.
+
 Persisting a per-session activity digest is deferred: it requires cross-session freshness
 and invalidation rules, adds writes and does not remove the guarded session read.
 Simply extending an awaited foreground budget to one second would add up to one
-second; the router prefetch does not add that wait. Optional IO still competes for
-the existing executor, so verify first-token latency after release.
+second; router prefetch does not add that wait, while its fresh guard adds at most
+150 ms. Verify first-token latency and the `fence_check` histogram after release;
+optional context no longer competes for setup's database workers.
 
 Warning logs carry only bounded surface/phase, exception type and code site. Analyze
 refresh warnings separately. `summary capped` is informational: the model's soft length

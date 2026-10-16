@@ -186,8 +186,13 @@ budget and at most two concurrent sessions per process. The answer uses stored
 continuity (or none); missing indexes and model/Firestore/CAS errors only degrade
 optional context and never gate streaming. For shaped app/channel turns, summary
 and digest reads start before router metadata and agentic prompt/tool setup, with
-a one-second background window. The model samples ready components without awaiting
-them: pending reads add no IO wait to the first token. Over-long model summaries
+a one-second background window in the dedicated four-worker context pool. It accepts
+no queued work; saturation skips context and cannot occupy setup's `db_executor`.
+Running calls retain their slots after caller cancellation. Every request-context RPC
+has an explicit timeout and an always-false Retry predicate. The model samples ready
+components, then validates session/account/deletion/link and generation/revision fences
+with one projected BatchGet, capped at 150 ms. Failed, late or saturated validation
+omits both summary and digest; it never injects an unchecked snapshot. Over-long model summaries
 are clipped before persistence (an informational event); empty summaries leave
 the source checkpoint unchanged.
 Reported, cleared and revised messages erase affected session summary ciphertext
