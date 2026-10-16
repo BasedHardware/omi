@@ -40,7 +40,7 @@ class ListenClientState extends ValueNotifier<ListenClientStateSnapshot> {
   ListenClientState._()
       : super(ListenClientStateSnapshot(foreground: _initiallyForeground(), transcriptVisible: false)) {
     if (_reportingEnabled) {
-      _heartbeat = Timer.periodic(const Duration(seconds: 30), (_) => _reportSurface());
+      _heartbeat = Timer.periodic(const Duration(seconds: 30), (_) => _reportSurface(heartbeat: true));
       _reportSurface();
     }
   }
@@ -50,8 +50,8 @@ class ListenClientState extends ValueNotifier<ListenClientStateSnapshot> {
   Timer? _heartbeat;
   bool _reportInFlight = false;
 
-  Future<void> _reportSurface() async {
-    if (!_reportingEnabled || _reportInFlight) return;
+  Future<void> _reportSurface({bool heartbeat = false}) async {
+    if (!_reportingEnabled || _reportInFlight || (heartbeat && !value.foreground)) return;
     _reportInFlight = true;
     try {
       await makeApiCall(

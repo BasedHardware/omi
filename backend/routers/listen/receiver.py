@@ -30,6 +30,7 @@ from utils.capture_evidence import SourcePositionMap, parse_live_frame
 from utils.stt.committed_words import CAPTURE_WORD_RANGES_KEY
 from utils.translation_demand import TranslationDemand
 from utils.translation_core.metrics import get_translation_metrics
+from utils.executors import db_executor, run_blocking
 
 lc3: Any = None
 lc3_import_error: Optional[BaseException] = None
@@ -2093,8 +2094,9 @@ class ListenReceiver(ReplayFilterMixin):
             from config.demand_processing import enabled as demand_enabled, surface_reporting_enabled
 
             if (
-                demand_enabled(self.host.request.uid)
+                demand_enabled()
                 and surface_reporting_enabled()
+                and demand_enabled(self.host.request.uid)
                 and ('surface_open' in payload or self._telemetry_platform() in {'ios', 'android', 'mobile'})
             ):
                 from utils.conversations.demand_processing import observe_surface

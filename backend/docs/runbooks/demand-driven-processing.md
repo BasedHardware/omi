@@ -8,8 +8,8 @@ only. No configuration is applied by this change.
 
 Explicit `client_state` intent is held in Redis: a 90-second lease per surface,
 unioned across devices, and `last_surface_open_at` retained for seven days. Phone
-foreground and Mac main-window visibility are reported every 30 seconds and on
-state changes, including when there is no recording socket. The client reporters
+foreground and Mac main-window visibility are reported on state changes, with 30-second renewals while
+open, including when there is no recording socket. The client reporters
 require `DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED=true` (Dart define on mobile,
 process environment on Mac); server flags alone do not activate client reporting.
 Mac activation and ordinary authenticated/background requests are not open intent.

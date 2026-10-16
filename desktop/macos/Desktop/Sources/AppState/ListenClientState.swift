@@ -38,7 +38,7 @@ final class ListenClientState: ObservableObject {
     URL(string: baseURL)?.appendingPathComponent("v1/users/client-state")
   }
 
-  private func reportSurface() {
+  private func reportSurface(heartbeat: Bool = false) {
     guard ProcessInfo.processInfo.environment["DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED"] == "true",
       !reportInFlight
     else { return }
@@ -48,6 +48,7 @@ final class ListenClientState: ObservableObject {
     let open =
       window?.isVisible == true && window?.isMiniaturized == false
       && window?.occlusionState.contains(.visible) == true && !NSApp.isHidden
+    if heartbeat && !open { return }
     reportInFlight = true
     Task { @MainActor [weak self] in
       guard let self else { return }
@@ -83,7 +84,7 @@ final class ListenClientState: ObservableObject {
     guard observeApplication else { return }
     if ProcessInfo.processInfo.environment["DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED"] == "true" {
       heartbeat = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-        Task { @MainActor in self?.reportSurface() }
+        Task { @MainActor in self?.reportSurface(heartbeat: true) }
       }
       reportSurface()
     }

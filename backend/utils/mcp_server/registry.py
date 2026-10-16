@@ -1245,10 +1245,6 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         rate_bucket=None,
         handler=other.get_daily_summaries,
     ),
-)
-
-TOOL_SPECS = (
-    *TOOL_SPECS,
     ToolSpec(
         name="process_recent_conversations",
         title="Process recent conversations",

@@ -90,3 +90,41 @@ def test_surface_auth_retains_security_fences_without_registration_or_recovery(e
     registration.assert_not_called()
     device.assert_not_called()
     recovery.assert_not_called()
+
+
+@pytest.fixture
+def listen_receiver_module():
+    from routers.listen import receiver
+
+    return receiver
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.asyncio
+async def test_websocket_surface_signal_uses_the_executor_only_when_enabled(
+    endpoint, listen_receiver_module, monkeypatch, enabled
+):
+    import json
+    from types import SimpleNamespace
+
+    module = listen_receiver_module
+    _, _, report = endpoint
+    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'true' if enabled else 'false')
+    monkeypatch.setenv('DEMAND_PROCESSING_PERCENT', '100')
+    monkeypatch.setenv('DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED', 'true')
+    monkeypatch.setattr(
+        module, 'resolve_ondemand_config', lambda: SimpleNamespace(shadow_enabled=False, gate_enabled=False)
+    )
+    receiver = module.ListenReceiver.__new__(module.ListenReceiver)
+    receiver.host = SimpleNamespace(
+        state=SimpleNamespace(realtime_demand=Mock(observe=Mock(return_value=True))), session_id='synthetic-socket'
+    )
+    if enabled:
+        receiver.host.request = SimpleNamespace(uid='synthetic-owner')
+    payload = {'type': 'client_state', 'surface_open': True, 'foreground': True, 'transcript_visible': False}
+    await receiver._handle_text(json.dumps(payload))
+    if enabled:
+        report.assert_called_once_with('synthetic-owner', 'synthetic-socket', payload)
+    else:
+        report.assert_not_called()
+    receiver.host.state.realtime_demand.observe.assert_called_once_with(payload)
