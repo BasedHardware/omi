@@ -173,6 +173,10 @@ env:
     value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
     value: "shadow"
+  - name: DESKTOP_PENDANT_CALL_LINK_MODE
+    value: "off"
+  - name: DESKTOP_PENDANT_CALL_LINK_PERCENT
+    value: "100"
   # Keep these aligned with the production GitHub environment variables used
   # by the Cloud Run backend; api.omi.me is served by backend-listen.
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE

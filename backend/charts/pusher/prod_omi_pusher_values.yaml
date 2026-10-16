@@ -188,6 +188,10 @@ env:
     value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
     value: "shadow"
+  - name: DESKTOP_PENDANT_CALL_LINK_MODE
+    value: "off"
+  - name: DESKTOP_PENDANT_CALL_LINK_PERCENT
+    value: "100"
   - name: FREE_TIER_LOCAL_PROCESSING
     value: "false"
   - name: FREE_TIER_EMERGENCY_STOP
