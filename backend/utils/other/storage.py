@@ -1753,7 +1753,9 @@ def enqueue_conversation_audio_merge(
 CONVERSATION_ARTIFACT_NAME = 'conversation'
 
 
-def compute_audio_files_fingerprint(audio_files: List[Dict[str, Any]], *, origin: Any = None) -> str:
+def compute_audio_files_fingerprint(
+    audio_files: List[Dict[str, Any]], *, origin: Any = None, source_identity: bool = False
+) -> str:
     """Content fingerprint of a conversation's audio_files (id + chunk count +
     last chunk timestamp per part, order-insensitive). Stamped on the doc at
     build time; a mismatch with the current audio_files means the artifact is
@@ -1761,7 +1763,7 @@ def compute_audio_files_fingerprint(audio_files: List[Dict[str, Any]], *, origin
     chunks aren't swallowed by named-task dedup. For v2 files the validated
     chunk_spans layout is part of the fingerprint, so a span change (not just
     last-timestamp/count) invalidates a stamped artifact."""
-    if playback_on_demand():
+    if source_identity or playback_on_demand():
         # Keep the logical IDs in the manifest for old client aliases. New IDs
         # already derive from every ordered source object generation/checksum.
         manifest = [

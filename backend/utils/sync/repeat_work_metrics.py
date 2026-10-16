@@ -7,10 +7,14 @@ import time
 from contextvars import ContextVar
 from functools import wraps
 from types import SimpleNamespace
+from typing import Any, Callable, ParamSpec, TypeVar
 
 from prometheus_client import Counter, Histogram
 
 from config.repeat_work import revision_reuse
+
+P = ParamSpec('P')
+R = TypeVar('R')
 
 logger = logging.getLogger(__name__)
 _scope: ContextVar[tuple[str, object] | None] = ContextVar('repeat_work_conversation', default=None)
@@ -30,7 +34,7 @@ PLAYBACK_BUILD_SECONDS = Histogram(
 )
 
 
-def _join(uid, conversation, event, feature='none', outcome='success'):
+def _join(uid: str, conversation: object, event: str, feature: str = 'none', outcome: str = 'success') -> None:
     identity = getattr(conversation, 'id', None)
     current = _scope.get()
     if not identity and current is not None and current[0] == uid:
@@ -47,19 +51,19 @@ def _join(uid, conversation, event, feature='none', outcome='success'):
     )
 
 
-def record_feature(uid, conversation, feature, outcome):
+def record_feature(uid: str, conversation: object, feature: str, outcome: str) -> None:
     if revision_reuse():
         FEATURES.labels(feature, outcome).inc()
         _join(uid, conversation, 'feature', feature, outcome)
 
 
-def record_final(uid, conversation):
+def record_final(uid: str, conversation: object) -> None:
     if revision_reuse():
         FINALS.inc()
         _join(uid, conversation, 'durable_final')
 
 
-def record_llm_call(outcome, feature='other'):
+def record_llm_call(outcome: str, feature: str = 'other') -> None:
     current = _scope.get()
     if revision_reuse() and current is not None:
         CALLS.labels(outcome).inc()
@@ -67,11 +71,11 @@ def record_llm_call(outcome, feature='other'):
         _join(*current, 'llm_call', feature=bounded_feature, outcome=outcome)
 
 
-def conversation_scope(function):
+def conversation_scope(function: Callable[P, R]) -> Callable[P, R]:
     signature = inspect.signature(function)
 
     @wraps(function)
-    def wrapped(*args, **kwargs):
+    def wrapped(*args: P.args, **kwargs: P.kwargs) -> R:
         if not revision_reuse():
             return function(*args, **kwargs)
         bound = signature.bind(*args, **kwargs)
@@ -92,13 +96,13 @@ PLAYBACK_READY_SECONDS = Histogram(
 )
 
 
-def record_playback_ready(payload, representation):
+def record_playback_ready(payload: dict[str, Any], representation: str) -> None:
     requested = payload.get('requested_at')
     if payload.get('on_demand') and isinstance(requested, (int, float)):
         PLAYBACK_READY_SECONDS.labels(representation).observe(max(0, time.time() - requested))
 
 
-def bind_generation(uid, conversation_id, revision=None):
+def bind_generation(uid: str, conversation_id: str | None, revision: int | None = None) -> None:
     """Bind ingress calls to the ID chosen before notes run, without storing content."""
     if revision_reuse() and conversation_id:
         _scope.set((uid, SimpleNamespace(id=conversation_id, sync_content_revision=revision)))

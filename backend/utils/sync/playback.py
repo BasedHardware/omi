@@ -496,12 +496,12 @@ def build_playback_artifact(
 ) -> bytes:
     """Merge chunks (download -> decrypt -> decode -> gap-fill) and encode MP3 ~48kbps mono."""
     source = [{'chunk_timestamps': timestamps, 'source_fingerprint': source_fingerprint}]
-    if playback_on_demand() and source_fingerprint:
+    if source_fingerprint:
         validate_sources(source, list_audio_chunks(uid, conversation_id))
     pcm_data = download_audio_chunks_and_merge(
         uid, conversation_id, timestamps, fill_gaps=True, sample_rate=AUDIO_SAMPLE_RATE
     )
-    if playback_on_demand() and source_fingerprint:
+    if source_fingerprint:
         validate_sources(source, list_audio_chunks(uid, conversation_id))
     if not pcm_data:
         return b''
@@ -517,7 +517,7 @@ _PCM_BYTES_PER_SECOND = AUDIO_SAMPLE_RATE * 2
 
 
 def build_conversation_playback_artifact(
-    uid: str, conversation_id: str, audio_files: list[dict], started_at_ts: float
+    uid: str, conversation_id: str, audio_files: list[dict], started_at_ts: float, *, strict_sources: bool = False
 ) -> tuple[bytes, list[dict]]:
     """One dense CBR MP3 for the whole conversation + spans manifest.
 
@@ -538,7 +538,7 @@ def build_conversation_playback_artifact(
         [af for af in audio_files if af.get('id') and af.get('chunk_timestamps')],
         key=lambda af: min(af['chunk_timestamps']),
     )
-    verified = playback_on_demand() and any(af.get('source_fingerprint') for af in parts)
+    verified = (strict_sources or playback_on_demand()) and any(af.get('source_fingerprint') for af in parts)
     if verified:
         validate_sources(parts, list_audio_chunks(uid, conversation_id))
     pcm_buf = bytearray()
@@ -550,7 +550,7 @@ def build_conversation_playback_artifact(
                 uid, conversation_id, timestamps, fill_gaps=True, sample_rate=AUDIO_SAMPLE_RATE
             )
         except FileNotFoundError:
-            if playback_on_demand():
+            if strict_sources or playback_on_demand():
                 raise
             logger.warning(f'conversation_artifact: part {af["id"]} has no chunks, skipping conv={conversation_id}')
             continue

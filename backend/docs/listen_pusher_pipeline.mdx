@@ -4934,7 +4934,7 @@ verifies stamped sources before/after merge. Conversation MP3s use immutable
 fingerprint paths, including the conversation origin used for seek offsets. Raw
 capture bytes, metadata, retention and consent rules remain unchanged. Existing IDs
 and their stored objects stay readable; newly rebuilt groups receive stable IDs.
-Demand tasks use separate hourly task names so eager-task tombstones cannot swallow
+Demand tasks carry their source-identity protocol through rollback and use separate hourly task names so eager-task tombstones cannot swallow
 first play; run locks coalesce cross-hour deliveries. The first request may return
 pending. Measure `omi_playback_demand_to_ready_seconds` (queue/retry included),
 `omi_playback_build_seconds`, and `omi_playback_artifacts_total` before widening.

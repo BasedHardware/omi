@@ -207,3 +207,33 @@ def test_initial_generation_calls_join_the_chosen_durable_id(monkeypatch, caplog
     assert len(keys) == 1
     assert 'feature=notes' in caplog.text
     assert metrics._scope.get() is None
+
+
+@pytest.mark.asyncio
+async def test_demand_worker_drains_after_flag_rollback_and_reuses_same_artifact(monkeypatch):
+    from routers import sync
+
+    monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'false')
+    row = {
+        'started_at': 1000.0,
+        'audio_files': [{'id': 'stable', 'chunk_timestamps': [1000.0], 'source_fingerprint': 'source'}],
+    }
+    digest = storage.compute_audio_files_fingerprint(row['audio_files'], origin=1000.0, source_identity=True)
+    payload = dict(uid='u', conversation_id='c', fingerprint=digest, on_demand=True, requested_at=1)
+    monkeypatch.setattr(sync, 'try_acquire_job_run_lock', lambda *_: 'lock')
+    monkeypatch.setattr(sync, 'release_job_run_lock', lambda *_: None)
+    monkeypatch.setattr(sync, 'should_skip_background_account_mutation', lambda *_: False)
+    monkeypatch.setattr(sync.conversations_db, 'get_conversation', lambda *_: row)
+    monkeypatch.setattr(sync.conversations_db, 'update_conversation', lambda u, c, data: row.update(data) or True)
+    build = Mock(return_value=(b'MP3', [{'file_id': 'stable', 'len': 2.0, 'wall_offset': 0.0}]))
+    upload = Mock()
+    monkeypatch.setattr(sync.sync_playback, 'build_conversation_playback_artifact', build)
+    monkeypatch.setattr(sync, 'upload_conversation_playback_artifact', upload)
+    monkeypatch.setattr(sync, 'get_conversation_playback_signed_url', lambda *a, **kw: 'cached')
+    assert (await sync._run_conversation_merge_job(payload, 0)).status_code == 200
+    build.assert_called_once_with('u', 'c', row['audio_files'], 1000.0, strict_sources=True)
+    assert upload.call_args.kwargs == {'fingerprint': digest}
+    assert row['conversation_audio']['audio_files_fingerprint'] == digest
+    again = await sync._run_conversation_merge_job(payload, 0)
+    assert b'exists' in again.body
+    build.assert_called_once()

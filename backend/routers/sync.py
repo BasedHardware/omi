@@ -2480,7 +2480,7 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
                     uid,
                     conversation_id,
                     timestamps,
-                    **({'source_fingerprint': payload.get('source_fingerprint')} if playback_on_demand() else {}),
+                    **({'source_fingerprint': payload.get('source_fingerprint')} if payload.get('on_demand') else {}),
                 )
         except FileNotFoundError:
             logger.warning(f'audio_merge: chunks missing conv={conversation_id} file={audio_file_id}, dropping')
@@ -2592,6 +2592,7 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
         uid = payload['uid']
         conversation_id = payload['conversation_id']
         payload_fingerprint = payload.get('fingerprint')
+        demand = payload.get('on_demand') is True
     except Exception as e:
         logger.error(f'audio_merge handler: invalid v2 payload, dropping task: {e}')
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
@@ -2614,8 +2615,8 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
         fingerprint = compute_audio_files_fingerprint(
             audio_files,
             **(
-                {'origin': conversation.get('started_at') or conversation.get('created_at')}
-                if playback_on_demand()
+                {'origin': conversation.get('started_at') or conversation.get('created_at'), 'source_identity': True}
+                if demand
                 else {}
             ),
         )
@@ -2629,10 +2630,10 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
                 get_conversation_playback_signed_url,
                 uid,
                 conversation_id,
-                **({'fingerprint': fingerprint} if playback_on_demand() else {}),
+                **({'fingerprint': fingerprint} if demand else {}),
             )
             if existing:
-                if playback_on_demand():
+                if demand:
                     PLAYBACK_BUILDS.labels('conversation', 'reused').inc()
                 return JSONResponse(status_code=200, content={'status': 'exists'})
 
@@ -2644,7 +2645,7 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
             started_at_ts = min(chunk_starts) if chunk_starts else 0.0
 
         try:
-            with PLAYBACK_BUILD_SECONDS.labels('conversation').time() if playback_on_demand() else nullcontext():
+            with PLAYBACK_BUILD_SECONDS.labels('conversation').time() if demand else nullcontext():
                 mp3_data, spans = await run_blocking(
                     sync_executor,
                     sync_playback.build_conversation_playback_artifact,
@@ -2652,6 +2653,7 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
                     conversation_id,
                     audio_files,
                     started_at_ts,
+                    **({'strict_sources': True} if demand else {}),
                 )
         except FileNotFoundError:
             logger.warning(f'audio_merge: conversation chunks missing conv={conversation_id}, dropping')
@@ -2703,7 +2705,7 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
                 uid,
                 conversation_id,
                 mp3_data,
-                **({'fingerprint': fingerprint} if playback_on_demand() else {}),
+                **({'fingerprint': fingerprint} if demand else {}),
             )
         except Exception as e:
             if isinstance(e, DestructiveOperationInProgress):
@@ -2736,7 +2738,7 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
                 f'audio_merge: conversation attempt {task_retry_count + 1} failed conv={conversation_id}, will retry: {e}'
             )
             return JSONResponse(status_code=500, content={'status': 'retry'})
-        if playback_on_demand():
+        if demand:
             PLAYBACK_BUILDS.labels('conversation', 'built').inc()
         mp3_size = len(mp3_data)
         del mp3_data
@@ -2759,7 +2761,7 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
                 }
             },
         )
-        if playback_on_demand():
+        if demand:
             record_playback_ready(payload, 'conversation')
         logger.info(
             f'audio_merge: built conversation artifact conv={conversation_id} size={mp3_size} spans={len(spans)}'
