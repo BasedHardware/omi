@@ -40,8 +40,10 @@ exhausted acknowledgment; v2 adds `held_audio` to its durable result.
 
 Batch compute authorization checks current funded allowance. The worker calls
 that authority again after decode/VAD, before each ASR microbatch and immediately
-before the full-capture empty-ASR recovery dispatch. Oversized recovery does not
-reauthorize or record audio it never submits; accepted recovery counts actual
+before the full-capture empty-ASR recovery dispatch. With enforcement on,
+oversized recovery returns held work without spending a provider-failure attempt;
+the unflagged path retains main's empty-result/failure behavior. Oversized recovery
+does not reauthorize or record audio it never submits; accepted recovery counts actual
 synthetic padding. Missing
 worker policy authority holds work. Held work uses the scheduler's existing
 `defer`, preserving raw artifacts and refunding the provider-failure attempt.
@@ -81,8 +83,17 @@ every new recovered provider request. Already persisted receipts can settle at
 the cap without another provider call. Recovery
 replays WAL coverage and lineage planning, loads speaker embeddings, and reuses
 VAD, segment intake, enrichment and optional playback finalization. Token-fenced
-piece receipts checkpoint persisted transcription and serving-provider provenance before usage settlement; a
-usage retry cannot repeat paid STT. Finalization runs once after all pieces join,
+piece receipts persist a `dispatched` intent with funding, provider and model
+**before** STT or ingestion, using the current token/lease fence. That selection
+is pinned through the actual provider factory. Successful transcription and
+ingestion replace the intent with a `transcribed` result before usage settlement;
+a usage retry cannot repeat paid STT. A save error or lost lease after dispatch
+leaves an ambiguous `dispatched` intent. Every subsequent claim fails closed
+before VAD/lineage planning, retaining the original audio for reconciliation and
+never automatically repeating STT or ingestion. This deliberately also holds an
+intent if execution stops before dispatch can be confirmed; no automatic
+reconciliation is added here. The log event is `event=stt_cap_recovery
+outcome=reconciliation_required`. Finalization runs once after all pieces join,
 with the retained geolocation and source-position context. Piece
 receipts and idempotent usage keys preserve progress across retries. Completed
 objects are deleted only after content and usage settlement. WS-only and inactive

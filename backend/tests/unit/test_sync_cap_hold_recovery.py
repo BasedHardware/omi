@@ -1,15 +1,20 @@
 """Recovery reaches real sync intake only after a current funded allowance."""
 
+from contextlib import nullcontext
 from types import SimpleNamespace
 from unittest.mock import Mock, AsyncMock
 
 import pytest
 
 from utils.sync import cap_hold_recovery as recovery
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
 
 @pytest.fixture
 def state(monkeypatch, tmp_path):
+    checkpoint, renew = recovery.cap_hold.checkpoint, recovery.cap_hold.renew
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+
     async def immediate(pool, fn, *args, **kwargs):
         return fn(*args, **kwargs)
 
@@ -41,9 +46,12 @@ def state(monkeypatch, tmp_path):
     monkeypatch.setattr(recovery, 'finalize_recovered_sync_segment', Mock())
     monkeypatch.setattr(recovery, 'get_wav_duration', Mock(return_value=20))
     monkeypatch.setattr(recovery, 'record_usage', Mock())
+    monkeypatch.setattr(recovery, 'get_prerecorded_service', Mock(return_value=('modulate', 'en', 'velma-2')))
     return SimpleNamespace(
         snapshot=SimpleNamespace(id='hold', reference=Mock()),
         row={'lease_token': 'owner-token', 'state': 'held'},
+        checkpoint=checkpoint,
+        renew=renew,
     )
 
 
@@ -51,6 +59,7 @@ async def test_reset_or_upgrade_reuses_sync_and_settles_stable_usage_key(state):
     assert await recovery._recover_row('synthetic', state.snapshot, state.row)
     recovery.process_segment.assert_called_once()
     assert recovery.process_segment.call_args.kwargs['cap_recovery'] is True
+    assert recovery.process_segment.call_args.kwargs['cap_recovery_service'] == ('modulate', 'en', 'velma-2')
     recovery.finalize_recovered_sync_segment.assert_called_once()
     usage = recovery.record_usage.call_args.kwargs
     assert usage['idempotency_key'] == 'cap-hold-hold-1792152000.wav'
@@ -156,6 +165,62 @@ async def test_all_pieces_join_before_one_finalization(state):
 async def test_lost_checkpoint_fence_cannot_settle_or_finalize(state):
     recovery.cap_hold.checkpoint.return_value = False
     assert not await recovery._recover_row('synthetic', state.snapshot, state.row)
+    recovery.process_segment.assert_not_called()
+    recovery.record_usage.assert_not_called()
+    recovery.finalize_recovered_sync_segment.assert_not_called()
+
+
+@pytest.mark.parametrize('fault', ['save-error', 'lost-lease'])
+async def test_ambiguous_dispatch_never_repeats_stt_or_ingestion_on_new_claim(state, monkeypatch, fault):
+    clock = [100.0]
+    key = ('users', 'synthetic', 'stt_cap_holds', 'hold')
+    client = StrictFirestore({key: {'state': 'held', 'lease_until': 0, 'audio_path': 'retained'}})
+    ref = client.document('/'.join(key))
+    state.snapshot.reference = ref
+    monkeypatch.setattr(recovery.cap_hold, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(recovery.cap_hold, 'external_write_fence', lambda _: nullcontext())
+    monkeypatch.setattr(recovery.cap_hold.time, 'time', lambda: clock[0])
+    monkeypatch.setattr(recovery.cap_hold, 'renew', state.renew)
+    fail_save = [False]
+
+    def checkpoint(*args):
+        if fail_save[0]:
+            raise RuntimeError('transcript checkpoint unavailable after ingestion')
+        return state.checkpoint(*args)
+
+    monkeypatch.setattr(recovery.cap_hold, 'checkpoint', checkpoint)
+    ingested = Mock()
+
+    def dispatch_and_ingest(*args, **kwargs):
+        intent = client.rows[key]['piece_receipts']['1792152000.wav']
+        assert intent == {'state': 'dispatched', 'provider': 'modulate', 'model': 'velma-2', 'funding': 'omi'}
+        assert kwargs['cap_recovery_service'] == ('modulate', 'en', 'velma-2')
+        ingested()
+        if fault == 'save-error':
+            fail_save[0] = True
+        else:
+            clock[0] = 2001
+            assert recovery.cap_hold.claim('synthetic', ref, clock[0])
+        return True
+
+    recovery.process_segment.side_effect = dispatch_and_ingest
+    row = recovery.cap_hold.claim('synthetic', ref, clock[0])
+    if fault == 'save-error':
+        with pytest.raises(RuntimeError, match='checkpoint unavailable'):
+            await recovery._recover_row('synthetic', state.snapshot, row)
+    else:
+        assert not await recovery._recover_row('synthetic', state.snapshot, row)
+    assert client.rows[key]['piece_receipts']['1792152000.wav']['state'] == 'dispatched'
+    assert client.rows[key]['audio_path'] == 'retained'
+    fail_save[0] = False
+    # A real new fenced claim loads only durable state, not the prior local row.
+    clock[0] = 4002
+    retry = recovery.cap_hold.claim('synthetic', ref, clock[0])
+    assert retry['lease_token'] != row['lease_token']
+    assert not await recovery._recover_row('synthetic', state.snapshot, retry)
+    recovery.process_segment.assert_called_once()
+    ingested.assert_called_once()
+    recovery.prepare_audio.assert_awaited_once()
     recovery.record_usage.assert_not_called()
     recovery.finalize_recovered_sync_segment.assert_not_called()
 

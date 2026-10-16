@@ -802,14 +802,41 @@ def test_full_capture_retry_rechecks_cap_and_counts_actual_padding(monkeypatch, 
     assert checks == ([{'a'}, {'a'}] if enforce else [])
 
 
-def test_oversized_recovery_neither_rechecks_nor_counts_unsubmitted_audio():
+@pytest.mark.parametrize('enforce', [False, True])
+def test_oversized_recovery_neither_rechecks_nor_counts_unsubmitted_audio(enforce):
     provider = ParakeetWords(SimpleNamespace(transcribe=lambda *a, **kw: pytest.fail('oversized provider request')))
     before, after = Mock(), Mock()
-    assert (
-        provider.recover_empty(
-            np.ones(117 * 16000, dtype=np.float32), 272, before_dispatch=before, after_dispatch=after
-        )
-        == []
+    result = provider.recover_empty(
+        np.ones(117 * 16000, dtype=np.float32),
+        272,
+        **({'before_dispatch': before, 'after_dispatch': after} if enforce else {}),
     )
+    assert result is None if enforce else result == []
     before.assert_not_called()
     after.assert_not_called()
+
+
+@pytest.mark.parametrize('enforce', [False, True])
+def test_oversized_empty_retry_holds_only_when_enforced(monkeypatch, enforce):
+    from utils.batch_pipeline.contracts import HeldWork
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
+    model = Mock()
+    model.transcribe.side_effect = lambda arrays, **_: [
+        SimpleNamespace(text='', timestamp={'word': []}) for _ in arrays
+    ]
+    provider = ParakeetWords(model)
+    worker, _, saved, _, diarized, failures = setup_worker(
+        decode=lambda work: np.ones(int(work.duration_seconds * 16000), dtype=np.float32),
+        words_providers={'parakeet': provider},
+        recover_words=provider.recover_empty,
+    )
+    result = worker.process_batch([item('a', 117)], authorize_dispatch=lambda ids: ids)
+    assert model.transcribe.call_count == 1  # Initial ASR only; 121s padded retry cannot fit.
+    assert not saved and not diarized
+    if enforce:
+        assert result == [HeldWork('a')]
+        assert not failures
+    else:
+        # Exact main behavior: an empty retry enters ordinary provider failure.
+        assert not result and failures == [('a', 'BatchValidationError')]

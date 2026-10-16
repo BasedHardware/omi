@@ -21,6 +21,7 @@ from utils.analytics import record_usage
 from utils.executors import run_blocking, db_executor, sync_executor, storage_executor, start_background_task
 from utils.stt_cap_dispatch import sync_allowed
 from utils.fair_use import get_hard_restriction_status, is_daily_audio_ceiling_exceeded
+from utils.stt.pre_recorded import get_prerecorded_service
 from utils.sync import cap_hold
 from utils.sync.files import get_wav_duration
 from utils.sync.cap_recovery_audio import prepare as prepare_audio
@@ -83,6 +84,11 @@ def _new_dispatch_allowed(uid: str) -> bool:
 async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
     if row.get('finalized'):
         return True
+    if any(receipt.get('state') == 'dispatched' for receipt in (row.get('piece_receipts') or {}).values()):
+        # Check before re-running VAD/lineage planning, whose piece names could
+        # change. An ambiguous attempt blocks all new work for this source.
+        logger.warning('event=stt_cap_recovery outcome=reconciliation_required')
+        return False
     meta = await run_blocking(db_executor, cap_hold.metadata, uid, row)
     if meta.get('content_id'):
         status = await run_blocking(db_executor, sync_cap_holds.recovery_status, uid, meta['content_id'], snapshot.id)
@@ -123,6 +129,21 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
             if receipt is None:
                 if not await run_blocking(db_executor, _new_dispatch_allowed, uid):
                     return False
+                language = prefs.get('language') or ''
+                service = get_prerecorded_service(
+                    language if prefs.get('single_language_mode') and language else 'multi'
+                )
+                intent = {
+                    'state': 'dispatched',
+                    'provider': service[0],
+                    'model': service[2],
+                    'funding': 'omi',
+                }
+                receipts[name] = intent
+                # Persist BEFORE any paid STT or ingestion. The token and lease
+                # fence this write; a failed/uncertain save cannot dispatch.
+                if not await _save(uid, snapshot, row, {'piece_receipts': dict(receipts)}):
+                    return False
                 response = {'new_memories': set(), 'updated_memories': set()}
                 errors, outcome = [], {}
                 ok = await run_blocking(
@@ -148,17 +169,20 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                     sync_lane=meta.get('sync_lane', 'fresh'),
                     cap_recovery=True,
                     deferred_outcome=outcome,
+                    cap_recovery_service=service,
                 )
                 if errors or outcome.get('cap_held'):
                     return False
                 seconds = await run_blocking(sync_executor, get_wav_duration, segment_path) if ok else 0
                 receipt = {
+                    **intent,
+                    'state': 'transcribed',
                     'response': _stored(response),
                     'seconds': seconds,
                     'has_content': bool(ok),
                     'usage_metadata': {
                         'funding': 'omi',
-                        'provider': outcome.get('provider') or 'unknown',
+                        'provider': outcome.get('provider') or service[0],
                         'source': 'sync_v2',
                     },
                 }

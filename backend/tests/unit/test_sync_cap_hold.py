@@ -72,6 +72,39 @@ def test_hold_failure_cannot_acknowledge_audio_or_dispatch_provider(tmp_path, mo
 
 
 @pytest.mark.parametrize('enforce', [False, True])
+def test_recovery_pins_checkpointed_provider_only_with_enforcement(tmp_path, monkeypatch, enforce):
+    path = tmp_path / '1792152000.wav'
+    with wave.open(str(path), 'wb') as output:
+        output.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+        output.writeframes(b'\0' * 32000)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
+    monkeypatch.setattr(pipeline, 'ambiguous_binding_pending', lambda *_: False)
+    monkeypatch.setattr(pipeline, 'sync_allowed', lambda *_: True)
+    monkeypatch.setattr(pipeline, 'funded_allowance', lambda *_: SimpleNamespace(reason='available'))
+    monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', Mock(return_value='synthetic-url'))
+    monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', Mock())
+    monkeypatch.setattr(pipeline, 'keyterms', AsyncMock(return_value=[]))
+    selection = Mock(return_value=('modulate', None, 'velma-2'))
+    monkeypatch.setattr(pipeline, 'get_prerecorded_service', selection)
+    stt = Mock(return_value=([], 'en'))
+    monkeypatch.setattr(pipeline, 'prerecorded', stt)
+    monkeypatch.setattr(pipeline, '_record_empty_segment_as_silence', Mock())
+    errors = []
+    service = ('parakeet', 'multi', 'parakeet')
+    assert not pipeline.process_segment(
+        str(path), 'synthetic', {}, threading.Lock(), errors, cap_recovery=True, cap_recovery_service=service
+    )
+    assert not errors
+    assert stt.call_count == 2
+    for call in stt.call_args_list:
+        if enforce:
+            assert call.kwargs['selected_service'] == service
+        else:
+            assert 'selected_service' not in call.kwargs
+    assert selection.call_count == (0 if enforce else 1)
+
+
+@pytest.mark.parametrize('enforce', [False, True])
 async def test_full_capture_hold_precedes_vad_and_has_default_off_parity(tmp_path, monkeypatch, enforce):
     from utils.sync import cap_hold
     from models.conversation_enums import ConversationSource

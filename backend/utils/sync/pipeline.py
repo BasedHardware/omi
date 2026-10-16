@@ -1250,6 +1250,7 @@ def process_segment(
     lineage_binding: Optional[str] = None,
     cap_recovery: bool = False,
     cap_content_id: str | None = None,
+    cap_recovery_service: tuple[str, str | None, str] | None = None,
 ):
     conversation_id = None
     provider = 'unknown'
@@ -1301,7 +1302,14 @@ def process_segment(
         single_language_mode = prefs.get('single_language_mode', False)
 
         req_language = user_language if (single_language_mode and user_language) else 'multi'
-        provider, _, model = get_prerecorded_service(req_language)
+        recovery_dispatch = {}
+        if stt_cap_dispatch_enabled() and cap_recovery and cap_recovery_service is not None:
+            # The durable pre-dispatch intent owns this provider/model. Pin
+            # actual serving too, rather than reselecting after the checkpoint.
+            provider, _, model = cap_recovery_service
+            recovery_dispatch['selected_service'] = cap_recovery_service
+        else:
+            provider, _, model = get_prerecorded_service(req_language)
 
         # When single-language mode is active, trust the user's language choice
         # rather than Deepgram's detection (avoids overriding explicit selection).
@@ -1374,6 +1382,7 @@ def process_segment(
                 return_language=True,
                 language=req_language,
                 keywords=vocabulary if vocabulary else None,
+                **recovery_dispatch,
             )
             if stt_cap_dispatch_enabled():
                 allowance = funded_allowance(uid)

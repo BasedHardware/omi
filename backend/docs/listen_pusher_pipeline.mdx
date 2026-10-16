@@ -14,6 +14,11 @@ Denial preserves receiving and existing audio storage paths; accepted provider
 work drains. Custom/on-device STT and flag-off metering retain their behavior.
 The [dispatch contract](stt-cap-dispatch.md) also documents sync holds, recovery,
 BYOK funding, additive metrics and the per-client activation decision.
+Sync recovery fences a provider-bound `dispatched` receipt before paid STT or
+ingestion. If the transcript checkpoint cannot be saved, later claims retain
+the audio for reconciliation without repeating either side effect. Flagged
+oversized GPU empty-result retries become held work without a failure attempt;
+the unflagged retry follows main's behavior.
 
 ## Windowed live transcription deadlines
 

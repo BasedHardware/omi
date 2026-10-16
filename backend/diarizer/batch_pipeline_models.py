@@ -97,7 +97,10 @@ class ParakeetWords:
         right = max(2 * SAMPLE_RATE, 8 * SAMPLE_RATE - len(samples) - left)
         padded_seconds = (len(samples) + left + right) / SAMPLE_RATE
         if padded_seconds > min(120, max_padded_seconds):
-            return []
+            # The callback identifies enforced dispatch. Main's unflagged
+            # adapter still returns an empty hypothesis; policy holds must not
+            # spend a provider-failure attempt for audio never submitted.
+            return None if before_dispatch is not None else []
         padded = np.pad(samples, (left, right))
         if before_dispatch is not None and not before_dispatch():
             return None  # Retain raw work without spending a provider-failure attempt.
