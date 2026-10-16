@@ -88,14 +88,17 @@ CTEs may inline into several scans of that single day; pagination
 repeats those day scans. Expected small-day work is five feature queries plus any additional pages, not a
 measurement or guaranteed 504 avoidance. Hard budget: 300 requests/extraction;
 normally three extractions/day, up to five during gap catch-up. A day that still
-times out remains a visible coverage hole. No dollar cost or execution latency
-has been measured against production for this new writer.
+times out remains a visible coverage hole. No dollar cost or Cloud Run job execution latency has been measured. A read-only
+2026-10-15 source smoke extracted 15,653 features in seven logical page queries
+and 100.4s, including nonempty MCP data; it performed no BigQuery load. Retries
+are bounded but were not separately instrumented in that measurement.
 
 Default backfill is 180 days, **one day per Cloud Run execution**, one task,
 serial `--wait`, 30s pause, at most five days per invocation of `backfill.py
 --execute` (maximum configurable batch ten). Commands print by default. At
 30–120s/day plus 30s pause, estimated total 3–7.5h plus cold starts/retries and
-operator gaps. Rerun a failed date; it overwrites, never appends duplicates.
+operator gaps. Extrapolating that source smoke plus the 30s driver pause gives
+about 6.5h for 180 similar days, before loading, job pauses and cold starts. Rerun a failed date; it overwrites, never appends duplicates.
 
 **180 initial days do not cover every existing leg.** The 26-week growth leg
 needs 189 days including its prior week. Capture-source needs 194 days; the oldest

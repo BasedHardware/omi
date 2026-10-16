@@ -66,60 +66,62 @@ const features = [
   row("a", "2026-10-12", "integrations", "mcp"),
 ];
 
+let fixtureClient: BigQuery | undefined;
+async function run(request: RollupRequest, population = features) {
+  const bq = (fixtureClient ||= new BigQuery({ projectId: "based-hardware" }));
+  const spec = rollupSql(request);
+  const typed = ["day", "activity_day"]
+    .map((k) => `DATE(JSON_VALUE(j,'$.${k}')) ${k}`)
+    .concat(
+      ["anchor", "first_at", "latest"].map(
+        (k) => `TIMESTAMP(JSON_VALUE(j,'$.${k}')) ${k}`
+      )
+    )
+    .concat(
+      ["actor", "p", "kind", "family"].map((k) => `JSON_VALUE(j,'$.${k}') ${k}`)
+    )
+    .concat(
+      ["age_day", "n"].map((k) => `CAST(JSON_VALUE(j,'$.${k}') AS INT64) ${k}`)
+    )
+    .concat(
+      ["saved", "phone", "mac"].map(
+        (k) => `CAST(JSON_VALUE(j,'$.${k}') AS BOOL) ${k}`
+      )
+    )
+    .join(",");
+  let sql = spec.query.replace(
+    /SELECT \* FROM `based-hardware\.omi_tv\.person_day` WHERE [^)]*?key_id=@keyId/,
+    `SELECT ${typed} FROM UNNEST(JSON_QUERY_ARRAY(@features)) j WHERE DATE(JSON_VALUE(j,'$.day'))>=@start AND DATE(JSON_VALUE(j,'$.day'))<@stop`
+  );
+  sql = sql.replace(
+    /SELECT \* FROM `based-hardware\.omi_tv\.coverage` WHERE [^)]*?key_id=@keyId/,
+    "SELECT day,TIMESTAMP('2026-10-13') refreshed_at FROM UNNEST(GENERATE_DATE_ARRAY(@start,DATE_SUB(@stop,INTERVAL 1 DAY))) day"
+  );
+  expect(sql).not.toContain(DATASET);
+  console.info("synthetic SQL:", request.kind);
+  const [out] = await bq.query({
+    query: sql,
+    params: {
+      start: new BigQueryDate(isoDay(spec.start)),
+      stop: new BigQueryDate(isoDay(spec.stop)),
+      activityStart: new BigQueryTimestamp(spec.activityStart),
+      features: JSON.stringify(population),
+    },
+    location: "US",
+    maximumBytesBilled: "10485760",
+    jobTimeoutMs: 30_000,
+  });
+  expect(new Date(out[0].refreshed).toISOString()).toBe(
+    "2026-10-13T00:00:00.000Z"
+  );
+  return (out[0].rows as string[]).map(
+    (x) => JSON.parse(x) as (string | number)[]
+  );
+}
+
 it.skipIf(process.env.OMI_TV_ROLLUP_SQL_CHECK !== "1")(
   "executes every aggregate SQL against a population with known counts and clock boundaries",
   async () => {
-    const bq = new BigQuery({ projectId: "based-hardware" });
-    async function run(request: RollupRequest, population = features) {
-      const spec = rollupSql(request);
-      const typed = ["day", "activity_day"]
-        .map((k) => `DATE(JSON_VALUE(j,'$.${k}')) ${k}`)
-        .concat(
-          ["anchor", "first_at", "latest"].map(
-            (k) => `TIMESTAMP(JSON_VALUE(j,'$.${k}')) ${k}`
-          )
-        )
-        .concat(
-          ["actor", "p", "kind", "family"].map(
-            (k) => `JSON_VALUE(j,'$.${k}') ${k}`
-          )
-        )
-        .concat(
-          ["age_day", "n"].map(
-            (k) => `CAST(JSON_VALUE(j,'$.${k}') AS INT64) ${k}`
-          )
-        )
-        .concat(
-          ["saved", "phone", "mac"].map(
-            (k) => `CAST(JSON_VALUE(j,'$.${k}') AS BOOL) ${k}`
-          )
-        )
-        .join(",");
-      let sql = spec.query.replace(
-        /SELECT \* FROM `based-hardware\.omi_tv\.person_day` WHERE [^)]*?key_id=@keyId/,
-        `SELECT ${typed} FROM UNNEST(JSON_QUERY_ARRAY(@features)) j WHERE DATE(JSON_VALUE(j,'$.day'))>=@start AND DATE(JSON_VALUE(j,'$.day'))<@stop`
-      );
-      sql = sql.replace(
-        /SELECT \* FROM `based-hardware\.omi_tv\.coverage` WHERE [^)]*?key_id=@keyId/,
-        "SELECT day,TIMESTAMP('2026-10-13') refreshed_at FROM UNNEST(GENERATE_DATE_ARRAY(@start,DATE_SUB(@stop,INTERVAL 1 DAY))) day"
-      );
-      expect(sql).not.toContain(DATASET);
-      console.info("synthetic SQL:", request.kind);
-      const [out] = await bq.query({
-        query: sql,
-        params: {
-          start: new BigQueryDate(isoDay(spec.start)),
-          stop: new BigQueryDate(isoDay(spec.stop)),
-          activityStart: new BigQueryTimestamp(spec.activityStart),
-          features: JSON.stringify(population),
-        },
-        location: "US",
-        maximumBytesBilled: "10485760",
-      });
-      return (out[0].rows as string[]).map(
-        (x) => JSON.parse(x) as (string | number)[]
-      );
-    }
     const growth = await run({ kind: "growth", end, periods: 1 });
     expect(growth).toContainEqual([0, "ios", 1, 3, 1, 0]);
     expect(growth).toContainEqual([0, "macos", 2, 2, 1, 1]);
@@ -151,6 +153,29 @@ it.skipIf(process.env.OMI_TV_ROLLUP_SQL_CHECK !== "1")(
     expect(curve).toContainEqual([0, 0, 2, 1]);
     expect(await run({ kind: "mau", end, offsets: [0, 1] }, [])).toEqual([]); // no telemetry stays absent
     expect(curve.some((r) => r[1] === 1)).toBe(false); // not all cohort members have a completed W1
+  },
+  300_000
+);
+
+it.skipIf(process.env.OMI_TV_ROLLUP_SQL_CHECK !== "1")(
+  "UTC boundary is exact to the microsecond",
+  async () => {
+    const atBoundary = await run(
+      { kind: "activity", end, days: 7, periods: 2 },
+      [
+        row("a", "2026-10-05", "ios", "activity", {
+          first_at: "2026-10-05T23:59:59.999999Z",
+          latest: "2026-10-05T23:59:59.999999Z",
+        }),
+        row("d", "2026-10-06", "macos", "activity", {
+          first_at: "2026-10-06T00:00:00.000000Z",
+          latest: "2026-10-06T00:00:00.000000Z",
+          age_day: 34,
+        }),
+      ]
+    );
+    expect(atBoundary).toContainEqual([1, "ios", 1]);
+    expect(atBoundary).toContainEqual([0, "macos", 1]);
   },
   300_000
 );

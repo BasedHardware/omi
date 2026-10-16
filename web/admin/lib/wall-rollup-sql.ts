@@ -20,7 +20,9 @@ const rank = `CASE p WHEN 'macos' THEN 1 WHEN 'ios' THEN 2 WHEN 'android' THEN 3
 const rows = (fields: string, from: string) =>
   `SELECT TO_JSON_STRING(JSON_ARRAY(${fields})) row ${from}`;
 const period = (at: string, end: Date, days = 7) =>
-  `DIV(TIMESTAMP_DIFF(${t(end)},${at},SECOND)-1,${days * 86400})`;
+  `DIV(TIMESTAMP_DIFF(${t(end)},${at},MICROSECOND)-1,${
+    days * 86400 * 1_000_000
+  })`;
 
 export function rollupSql(r: RollupRequest) {
   let start: Date,
