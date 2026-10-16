@@ -4305,12 +4305,27 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return '$plan 플랜은 $date에 종료됩니다.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return '혜택을 유지하려면 지금 재구독하세요 - $date까지 요금이 청구되지 않습니다.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return '플랜이 $date에 취소될 예정입니다.\n혜택을 유지하려면 지금 재구독하세요 - $date까지 요금이 청구되지 않습니다.';
   }
 
   @override
   String get annualPlanStartsAutomatically => '월간 플랜이 종료되면 연간 플랜이 자동으로 시작됩니다.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return '$plan 플랜은 $date에 갱신됩니다.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4343,6 +4358,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get continueText => '계속';
+
+  @override
+  String get resubscribeFirstToChangePlans => '플랜을 변경하려면 먼저 다시 구독하세요.';
 
   @override
   String get resubscribe => '재구독';

@@ -4380,6 +4380,16 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'آپ کا $plan پلان $date کو ختم ہوگا۔';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'اپنے فوائل کو برقرار رکھنے کے لیے اب دوبارہ رکنیت حاصل کریں - $date تک کوئی چارج نہیں۔';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'آپ کا منصوبہ $date کو منسوخ ہونے کے لیے طے شدہ ہے۔\nاپنے فوائل کو برقرار رکھنے کے لیے اب دوبارہ رکنیت حاصل کریں - $date تک کوئی چارج نہیں۔';
   }
@@ -4387,6 +4397,11 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'آپ کی سالانہ رکنیت خود کار طریقے سے شروع ہوگی جب آپ کا ماہانہ منصوبہ ختم ہوگا۔';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'آپ کا $plan پلان $date کو تجدید ہوگا۔';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4419,6 +4434,9 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get continueText => 'جاری رکھیں';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'پلان بدلنے کے لیے پہلے دوبارہ رکنیت حاصل کریں۔';
 
   @override
   String get resubscribe => 'دوبارہ رکنیت حاصل کریں';
