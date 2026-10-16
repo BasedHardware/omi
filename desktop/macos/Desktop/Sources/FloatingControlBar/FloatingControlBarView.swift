@@ -1616,7 +1616,9 @@ struct FloatingControlBarView: View {
         AnalyticsManager.shared.questionOriginating(.followUp)
         FloatingControlBarManager.shared.openAIInputWithQuery(question)
       },
-      followUpVoiceHint: Self.followUpVoiceHint()
+      followUpVoiceHint: Self.followUpVoiceHint(),
+      approvalSurface: state.activeAgentChatPillID.map { AgentSurfaceReference.floatingPill(pillId: $0) }
+        ?? provider?.mainChatSurfaceReference()
     )
     .transition(
       .asymmetric(

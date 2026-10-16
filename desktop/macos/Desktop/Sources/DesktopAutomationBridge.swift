@@ -794,6 +794,7 @@ final class DesktopAutomationActionRegistry {
     registerItemLinkActions()
     registerConversationRecordingActions()
     registerCaptureRecoveryActions()
+    registerToolApprovalActions()
     register(
       name: "refresh_all_data",
       effects: [.localState, .networkOrModel, .remoteWrite],
