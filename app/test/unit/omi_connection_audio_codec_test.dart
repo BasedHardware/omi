@@ -7,10 +7,7 @@ import 'package:omi/services/devices/transports/device_transport.dart';
 
 /// Test transport simulating BLE GATT characteristic reads with configurable failure count.
 class _CodecTestTransport extends DeviceTransport {
-  _CodecTestTransport({
-    this.failCount = 0,
-    this.returnValue,
-  });
+  _CodecTestTransport({this.failCount = 0, this.returnValue});
 
   int failCount;
   final List<int>? returnValue;
@@ -32,8 +29,7 @@ class _CodecTestTransport extends DeviceTransport {
   Future<bool> ping() async => true;
 
   @override
-  Stream<List<int>> getCharacteristicStream(String serviceUuid, String characteristicUuid) =>
-      const Stream.empty();
+  Stream<List<int>> getCharacteristicStream(String serviceUuid, String characteristicUuid) => const Stream.empty();
 
   @override
   Future<List<int>> readCharacteristic(String serviceUuid, String characteristicUuid) async {
@@ -92,20 +88,14 @@ void main() {
       final transport = _CodecTestTransport(failCount: 99);
       final connection = OmiDeviceConnection(_testDevice(), transport);
 
-      expect(
-        () => connection.performGetAudioCodec(),
-        throwsA(isA<StateError>()),
-      );
+      expect(() => connection.performGetAudioCodec(), throwsA(isA<StateError>()));
     });
 
     test('exhausts retries and throws StateError on persistent empty reads without defaulting to pcm8', () async {
       final transport = _CodecTestTransport(returnValue: []);
       final connection = OmiDeviceConnection(_testDevice(), transport);
 
-      expect(
-        () => connection.performGetAudioCodec(),
-        throwsA(isA<StateError>()),
-      );
+      expect(() => connection.performGetAudioCodec(), throwsA(isA<StateError>()));
     });
   });
 }
