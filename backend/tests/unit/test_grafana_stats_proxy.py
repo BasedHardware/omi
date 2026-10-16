@@ -217,3 +217,59 @@ def test_viewer_acceptance_requires_same_org_viewer_and_both_denials():
     viewer = Viewer()
     verify_viewer(viewer, 2, Admin())
     assert viewer.denied == ["/api/folders/business", "/api/dashboards/uid/omi-tv-v2"]
+
+
+def test_http_cold_wall_burst_queues_every_panel_and_coalesces_upstream(monkeypatch):
+    now = [10000]
+    proxy = StatsProxy(clock=lambda: now[0])
+    entered, release, queued = threading.Event(), threading.Event(), threading.Event()
+    upstream_calls = []
+
+    def upstream(*args, **kwargs):
+        upstream_calls.append(1)
+        entered.set()
+        assert release.wait(10)
+        return b'{"ok":true}'
+
+    class BurstServer(Server):
+        admitted = 0
+
+        def process_request(self, request, address):
+            self.admitted += 1
+            if self.admitted == 9:
+                queued.set()
+            super().process_request(request, address)
+
+    proxy.identity_token = lambda: "synthetic"
+    proxy.request = upstream
+    monkeypatch.setattr(Handler, "proxy", proxy)
+    server = BurstServer(("127.0.0.1", 0), Handler)
+    serving = threading.Thread(target=server.serve_forever, daemon=True)
+    serving.start()
+    start = threading.Barrier(24)
+
+    def panel():
+        start.wait(timeout=10)
+        connection = HTTPConnection(*server.server_address, timeout=10)
+        try:
+            connection.request("GET", "/api/omi/stats/wall")
+            response = connection.getresponse()
+            return response.status, response.read()
+        finally:
+            connection.close()
+
+    try:
+        with ThreadPoolExecutor(max_workers=24) as pool:
+            panels = [pool.submit(panel) for _ in range(24)]
+            try:
+                assert entered.wait(10)
+                assert queued.wait(10)
+            finally:
+                release.set()
+            assert all(result.result(timeout=10) == (200, b'{"ok":true}') for result in panels)
+        assert len(upstream_calls) == 1
+    finally:
+        release.set()
+        server.shutdown()
+        server.server_close()
+        serving.join(timeout=10)
