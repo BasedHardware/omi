@@ -377,8 +377,11 @@ async def trigger_external_integrations(
                 )
 
             try:
-                if message := response.json().get('message', ''):
-                    results[app.id] = message
+                response_data = response.json()
+                if isinstance(response_data, Mapping):
+                    message = response_data.get('message')
+                    if isinstance(message, str) and message:
+                        results[app.id] = message
             except Exception:
                 pass
         except Exception as e:
@@ -433,21 +436,31 @@ async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearr
     return await _async_trigger_realtime_audio_bytes(uid, sample_rate, data)
 
 
+def _string_filter_list(value) -> List[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
 # proactive notification
 def _retrieve_contextual_memories(uid: str, user_context):
-    vector = generate_embedding(user_context.get('question', '')) if user_context.get('question') else [0] * 3072
+    user_context = user_context if isinstance(user_context, Mapping) else {}
+    question = user_context.get('question')
+    question_text = question if isinstance(question, str) else ''
+    vector = generate_embedding(question_text) if question_text else [0] * 3072
     logger.info(f"query_vectors vector: {vector[:5]}")
 
     date_filters = {}  # not support yet
-    filters = user_context.get('filters', {})
+    raw_filters = user_context.get('filters')
+    filters = raw_filters if isinstance(raw_filters, Mapping) else {}
     memories_id = query_vectors_by_metadata(
         uid,
         vector,
         dates_filter=[date_filters.get("start"), date_filters.get("end")],
-        people=filters.get("people", []),
-        topics=filters.get("topics", []),
-        entities=filters.get("entities", []),
-        dates=filters.get("dates", []),
+        people=_string_filter_list(filters.get("people")),
+        topics=_string_filter_list(filters.get("topics")),
+        entities=_string_filter_list(filters.get("entities")),
+        dates=_string_filter_list(filters.get("dates")),
     )
     convos = conversations_db.get_conversations_by_id(uid, memories_id)
     return [c for c in convos if not c.get('is_locked')]
@@ -800,9 +813,9 @@ def _process_proactive_notification(uid: str, app: App, data):
     min_message_char_limit = 5
 
     # `data.get(k, default)` returns the stored value even when it's an
-    # explicit JSON null — a default only fires on a MISSING key. `or` coerces
-    # {"prompt": null} to the default so len()/iteration/.get can't TypeError.
-    prompt = data.get('prompt') or ''
+    # explicit JSON null or wrong type — a default only fires on a MISSING key.
+    raw_prompt = data.get('prompt')
+    prompt = raw_prompt if isinstance(raw_prompt, str) else ''
     if len(prompt) > max_prompt_char_limit:
         send_app_notification(
             uid,
@@ -813,15 +826,18 @@ def _process_proactive_notification(uid: str, app: App, data):
         logger.info(f"App {app.id}, prompt too long, length: {len(prompt)}/{max_prompt_char_limit} {uid}")
         return None
 
-    # params/context can also be explicit JSON nulls — coerce to the default so
-    # iteration/lookup can't TypeError/AttributeError on None.
-    filter_scopes = app.filter_proactive_notification_scopes(data.get('params') or [])
+    # params/context can also be explicit JSON nulls or wrong-typed JSON values —
+    # coerce to well-typed defaults so iteration/lookup can't TypeError/AttributeError.
+    raw_params = data.get('params')
+    params = [param for param in raw_params if isinstance(param, str)] if isinstance(raw_params, list) else []
+    filter_scopes = app.filter_proactive_notification_scopes(params)
 
     user_name, user_facts = get_prompt_memories(uid)
 
     context = None
     if 'user_context' in filter_scopes:
-        memories = _retrieve_contextual_memories(uid, data.get('context') or {})
+        raw_context = data.get('context')
+        memories = _retrieve_contextual_memories(uid, raw_context if isinstance(raw_context, Mapping) else {})
         if len(memories) > 0:
             context = conversations_to_string(deserialize_conversations(memories))
 
@@ -1051,12 +1067,12 @@ async def _async_trigger_realtime_integrations(
 
             try:
                 response_data = response.json()
-                if not response_data:
+                if not isinstance(response_data, Mapping) or not response_data:
                     return
 
                 # message
-                message = response_data.get('message', '')
-                if message and len(message) > 5:
+                message = response_data.get('message')
+                if isinstance(message, str) and len(message) > 5:
                     await send_app_notification_async(uid, app.name, app.id, message)
                     results[app.id] = message
 
