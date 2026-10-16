@@ -12459,6 +12459,59 @@ class AppLocalizationsEs extends AppLocalizations {
   String get reviewNoChangesBody => 'Cuando Omi ordene tus notas, los cambios aparecerán aquí.';
 
   @override
+  String get reviewChangesSectionTerms => 'Nombres y términos';
+
+  @override
+  String get reviewChangesSectionTitles => 'Títulos y resúmenes';
+
+  @override
+  String get reviewChangesSectionOther => 'Otros cambios';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversaciones',
+      one: '1 conversación',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lugares',
+      one: '1 lugar',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Ver los $count';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Deshacer todo';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Ver evidencia';
+
+  @override
+  String get reviewChangeViewConversation => 'Ver conversación';
+
+  @override
+  String get reviewChangeViewTask => 'Ver tarea';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'No se pudieron deshacer $failed de $total. Inténtalo de nuevo.';
+  }
+
+  @override
   String get reviewShowMore => 'Mostrar más';
 
   @override

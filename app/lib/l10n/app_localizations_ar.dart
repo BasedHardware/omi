@@ -12353,6 +12353,59 @@ class AppLocalizationsAr extends AppLocalizations {
   String get reviewNoChangesBody => 'عندما يرتّب Omi ملاحظاتك، ستظهر التغييرات هنا.';
 
   @override
+  String get reviewChangesSectionTerms => 'الأسماء والمصطلحات';
+
+  @override
+  String get reviewChangesSectionTitles => 'العناوين والملخصات';
+
+  @override
+  String get reviewChangesSectionOther => 'تغييرات أخرى';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'المحادثات: $count',
+      one: 'محادثة واحدة',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'المواضع: $count',
+      one: 'موضع واحد',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'عرض الكل ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'تراجع عن الكل';
+
+  @override
+  String get reviewChangeSeeEvidence => 'عرض الدليل';
+
+  @override
+  String get reviewChangeViewConversation => 'عرض المحادثة';
+
+  @override
+  String get reviewChangeViewTask => 'عرض المهمة';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'تعذّر التراجع عن $failed من $total. حاول مرة أخرى.';
+  }
+
+  @override
   String get reviewShowMore => 'عرض المزيد';
 
   @override

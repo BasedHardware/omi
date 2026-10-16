@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 from database.review_queries import REVIEW_QUERY_SPECS
+from database.sync_pipeline_indexes import SYNC_PIPELINE_INDEX_REQUIREMENTS
 from database.messaging_queries import MESSAGING_INDEX_REQUIREMENTS, MESSAGING_FIELD_REQUIREMENTS
 from .firestore_query_types import (
     FieldIndexRequirement,
@@ -32,6 +33,7 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # These explicit requirements preserve the current deployed index set while
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
+    *SYNC_PIPELINE_INDEX_REQUIREMENTS,
     *MESSAGING_INDEX_REQUIREMENTS,
     FirestoreIndexRequirement(
         'proactivity_followup_source_outcomes',
@@ -124,18 +126,6 @@ INDEX_ONLY_REQUIREMENTS = (
         'frame_requests',
         'COLLECTION',
         (_asc('account_generation'), _asc('dedupe_key'), _asc('device_id'), _desc('attempt_number'), _desc('__name__')),
-    ),
-    FirestoreIndexRequirement(
-        'sync_backfill_pending_uid_sort',
-        'sync_backfill_pending',
-        'COLLECTION',
-        (_asc('uid'), _asc('sort_at'), _asc('__name__')),
-    ),
-    FirestoreIndexRequirement(
-        'sync_backfill_pending_uid_accepted',
-        'sync_backfill_pending',
-        'COLLECTION',
-        (_asc('uid'), _asc('accepted_at'), _asc('__name__')),
     ),
     FirestoreIndexRequirement(
         'memory_items_collection_group_uid_generation_updated',

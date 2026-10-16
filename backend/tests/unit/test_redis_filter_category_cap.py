@@ -39,6 +39,12 @@ def test_missing_key_adds_first_member(fake_r) -> None:
     assert fake_r.smembers('users:u1:filters:topics') == {b'alpha'}
 
 
+def test_add_sets_filter_category_ttl(fake_r) -> None:
+    key = 'users:u1:filters:topics'
+    redis_db.add_filter_category_item('u1', 'topics', 'alpha')
+    assert fake_r.ttl(key) == redis_db.FILTER_CATEGORY_TTL_SECONDS
+
+
 def test_grows_to_cap(fake_r) -> None:
     for i in range(499):
         redis_db.add_filter_category_item('u1', 'topics', f't{i}')
@@ -48,13 +54,24 @@ def test_grows_to_cap(fake_r) -> None:
 
 
 def test_refuse_at_cap_without_removal(fake_r) -> None:
+    key = 'users:u1:filters:topics'
     for i in range(500):
-        fake_r.sadd('users:u1:filters:topics', f't{i}')
-    before = fake_r.smembers('users:u1:filters:topics')
+        fake_r.sadd(key, f't{i}')
+    before = fake_r.smembers(key)
     redis_db.add_filter_category_item('u1', 'topics', 'new-member')
-    after = fake_r.smembers('users:u1:filters:topics')
+    after = fake_r.smembers(key)
     assert after == before
     assert b'new-member' not in after
+    assert fake_r.ttl(key) == redis_db.FILTER_CATEGORY_TTL_SECONDS
+
+
+def test_refused_add_at_cap_refreshes_shortened_ttl(fake_r) -> None:
+    key = 'users:u1:filters:topics'
+    for i in range(500):
+        fake_r.sadd(key, f't{i}')
+    fake_r.expire(key, 30)
+    redis_db.add_filter_category_item('u1', 'topics', 'new-member')
+    assert fake_r.ttl(key) == redis_db.FILTER_CATEGORY_TTL_SECONDS
 
 
 def test_duplicate_at_capacity_does_not_remove(fake_r) -> None:
@@ -65,13 +82,23 @@ def test_duplicate_at_capacity_does_not_remove(fake_r) -> None:
     assert fake_r.sismember('users:u1:filters:topics', 't0')
 
 
+def test_duplicate_under_cap_refreshes_shortened_ttl(fake_r) -> None:
+    key = 'users:u1:filters:topics'
+    fake_r.sadd(key, 'existing')
+    fake_r.expire(key, 30)
+    redis_db.add_filter_category_item('u1', 'topics', 'existing')
+    assert fake_r.ttl(key) == redis_db.FILTER_CATEGORY_TTL_SECONDS
+
+
 @pytest.mark.parametrize('start,expect_removed', [(501, 1), (628, 128), (629, 128)])
 def test_legacy_trim_batch(fake_r, start, expect_removed) -> None:
+    key = 'users:u1:filters:topics'
     for i in range(start):
-        fake_r.sadd('users:u1:filters:topics', f't{i}')
+        fake_r.sadd(key, f't{i}')
     redis_db.add_filter_category_item('u1', 'topics', 'new')
-    assert fake_r.scard('users:u1:filters:topics') == start - expect_removed
-    assert not fake_r.sismember('users:u1:filters:topics', 'new')
+    assert fake_r.scard(key) == start - expect_removed
+    assert not fake_r.sismember(key, 'new')
+    assert fake_r.ttl(key) == redis_db.FILTER_CATEGORY_TTL_SECONDS
 
 
 def test_repeated_trim_stops_at_cap(fake_r) -> None:

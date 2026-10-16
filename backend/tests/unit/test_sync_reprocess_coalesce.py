@@ -176,6 +176,32 @@ def test_dev_sweep_does_not_read_the_shared_production_store(monkeypatch):
     read.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    'stage,namespace,emulator,expected',
+    [
+        ('prod', 'batch_pipeline_prod', None, True),
+        ('dev', 'batch_pipeline_dev', None, False),
+        ('dev', 'batch_pipeline_prod', None, False),
+        ('dev', 'arbitrary_namespace', None, False),
+        ('dev', None, None, False),
+        ('local', 'batch_pipeline_dev', None, False),
+        ('dev', 'batch_pipeline_dev', '127.0.0.1:8080', True),
+    ],
+)
+def test_owns_runtime_only_allows_production_or_emulator(monkeypatch, stage, namespace, emulator, expected):
+    monkeypatch.setenv('OMI_ENV_STAGE', stage)
+    if namespace is None:
+        monkeypatch.delenv('BATCH_PIPELINE_NAMESPACE', raising=False)
+    else:
+        monkeypatch.setenv('BATCH_PIPELINE_NAMESPACE', namespace)
+    if emulator is None:
+        monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
+    else:
+        monkeypatch.setenv('FIRESTORE_EMULATOR_HOST', emulator)
+
+    assert reprocess.owns_runtime() is expected
+
+
 def test_partial_result_replay_recovers_intent_without_transient_merged_map(pipeline, monkeypatch):
     monkeypatch.setenv('SYNC_REPROCESS_COALESCE_ENABLED', 'true')
     mark = Mock()

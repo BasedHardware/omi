@@ -12225,6 +12225,59 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reviewNoChangesBody => 'Omi 整理你的笔记后，更改会显示在这里。';
 
   @override
+  String get reviewChangesSectionTerms => '名称和术语';
+
+  @override
+  String get reviewChangesSectionTitles => '标题和摘要';
+
+  @override
+  String get reviewChangesSectionOther => '其他更改';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 段对话',
+      one: '1 段对话',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 处',
+      one: '1 处',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return '显示全部 $count 处';
+  }
+
+  @override
+  String get reviewChangeUndoAll => '全部撤销';
+
+  @override
+  String get reviewChangeSeeEvidence => '查看依据';
+
+  @override
+  String get reviewChangeViewConversation => '查看对话';
+
+  @override
+  String get reviewChangeViewTask => '查看任务';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return '无法撤销 $failed/$total 项，请重试。';
+  }
+
+  @override
   String get reviewShowMore => '显示更多';
 
   @override

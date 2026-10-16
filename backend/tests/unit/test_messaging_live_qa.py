@@ -817,13 +817,12 @@ def test_channel_memory_search_empty_does_not_claim_no_facts(monkeypatch):
 
     monkeypatch.setattr(memory_tools, 'MemoryService', Service)
     monkeypatch.setattr(memory_tools, 'belief_model_enabled', lambda: False)
-    monkeypatch.setattr(memory_tools.notification_db, 'get_user_time_zone', lambda uid: 'UTC')
     token = surface_runtime.set(
         SurfaceRuntime('channel:fixture', '', Principal('test'), withhold_private_memories=True)
     )
     try:
         result = memory_tools.search_memories_tool.func(
-            query='synthetic query', config={'configurable': {'user_id': 'test'}}
+            query='synthetic query', config={'configurable': {'user_id': 'test', 'user_timezone': 'UTC'}}
         )
     finally:
         surface_runtime.reset(token)

@@ -12420,6 +12420,59 @@ class AppLocalizationsVi extends AppLocalizations {
   String get reviewNoChangesBody => 'Khi Omi sắp xếp ghi chú của bạn, các thay đổi sẽ hiện ở đây.';
 
   @override
+  String get reviewChangesSectionTerms => 'Tên và thuật ngữ';
+
+  @override
+  String get reviewChangesSectionTitles => 'Tiêu đề và tóm tắt';
+
+  @override
+  String get reviewChangesSectionOther => 'Thay đổi khác';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count cuộc trò chuyện',
+      one: '1 cuộc trò chuyện',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count chỗ',
+      one: '1 chỗ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Hiện tất cả $count';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Hoàn tác tất cả';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Xem bằng chứng';
+
+  @override
+  String get reviewChangeViewConversation => 'Xem cuộc trò chuyện';
+
+  @override
+  String get reviewChangeViewTask => 'Xem công việc';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Không thể hoàn tác $failed/$total. Hãy thử lại.';
+  }
+
+  @override
   String get reviewShowMore => 'Xem thêm';
 
   @override

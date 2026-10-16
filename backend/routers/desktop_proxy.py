@@ -30,6 +30,8 @@ from utils.llm.vertex_reservation_response import ReservationResponseEvidence
 from utils.llm.desktop_reservation_policy import should_refuse, refusal_response
 from utils.llm import vertex_direct_attempt as direct_attempt
 from utils.llm import desktop_gemini_gateway
+from utils.llm import desktop_proxy_lifetime as lifetime
+from utils.llm.desktop_proxy_lifetime import ClientDisconnected
 from utils.llm.desktop_gemini_telemetry import (
     ALLOWED_ACTIONS as _ALLOWED_ACTIONS,
     ALLOWED_MODELS as _ALLOWED_MODELS,
@@ -134,10 +136,6 @@ class _GeminiRateLimitExceeded(HTTPException):
                 'X-Omi-Retryable': 'true' if retryable else 'false',
             },
         )
-
-
-class ClientDisconnected(Exception):
-    pass
 
 
 # Gemini body sanitization moved to utils/llm/desktop_gemini_gateway.py; these
@@ -514,6 +512,10 @@ def _recovery_plan(
     """
     if get_byok_key('gemini'):
         return []
+    # Paid reservation failures recover through the gateway's Luna route. This
+    # direct adapter must neither spill 2.5 to PayGo nor retry Dream's 3.8 order.
+    if served_model in {ptr.PT_MODEL_CURRENT, ptr.PT_MODEL_TARGET}:
+        return []
     capacity = capacity or ptr.reservation_capacity(
         served_model, _reservation_states(), override=os.getenv(_PT_MODEL_OVERRIDE_ENV, '')
     )
@@ -585,47 +587,12 @@ def _vertex_embedding_response(body: bytes) -> bytes:
     return json.dumps({'embedding': {'values': values}}, separators=(',', ':')).encode()
 
 
-async def _wait_for_disconnect(request: Request) -> None:
-    while not await request.is_disconnected():
-        await asyncio.sleep(_DISCONNECT_POLL_SECONDS)
-
-
-async def _await_value(awaitable: Awaitable[T]) -> T:
-    return await awaitable
-
-
 async def _cancel_on_disconnect(request: Request, awaitable: Awaitable[T]) -> T:
-    upstream_task = asyncio.create_task(_await_value(awaitable), name='desktop-gemini-upstream')
-    disconnect_task = asyncio.create_task(_wait_for_disconnect(request), name='desktop-gemini-disconnect')
-    try:
-        done, _ = await asyncio.wait((upstream_task, disconnect_task), return_when=asyncio.FIRST_COMPLETED)
-        if upstream_task in done:
-            return await upstream_task
-        raise ClientDisconnected
-    finally:
-        upstream_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await upstream_task
-        disconnect_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await disconnect_task
+    return await lifetime.cancel_on_disconnect(request, awaitable)
 
 
 async def _read_request_body(request: Request) -> bytes:
-    content_length = request.headers.get('content-length')
-    if content_length is not None:
-        if not content_length.isascii() or not content_length.isdigit():
-            raise HTTPException(status_code=400, detail='Content-Length must be a non-negative integer')
-        declared_length = int(content_length)
-        if declared_length > _MAX_BODY_BYTES:
-            raise HTTPException(status_code=413, detail='Request body is too large')
-
-    body = bytearray()
-    async for chunk in request.stream():
-        if len(body) + len(chunk) > _MAX_BODY_BYTES:
-            raise HTTPException(status_code=413, detail='Request body is too large')
-        body.extend(chunk)
-    return bytes(body)
+    return await lifetime.read_body(request, max_bytes=_MAX_BODY_BYTES)
 
 
 def _response_headers(
@@ -1187,6 +1154,7 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
             # The gateway ignores provider-specific query parameters. Reject
             # credential overrides here instead of silently accepting them.
             _safe_provider_query(dict(request.query_params))
+        telemetry.phase = 'reservation'
         if model != LUNA_MODEL and await should_refuse(
             model, action, body, request.headers, byok=bool(get_byok_key('gemini')), refresh=_refresh_reservations
         ):

@@ -496,7 +496,7 @@ actor GeminiClient {
   static func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.timeoutIntervalForRequest = 60
-    configuration.timeoutIntervalForResource = 300
+    configuration.timeoutIntervalForResource = 100
     let session = URLSession(configuration: configuration)
     defer { session.finishTasksAndInvalidate() }
     return try await session.data(for: request)
@@ -518,7 +518,9 @@ actor GeminiClient {
   /// Replaying a dispatched request is only unsafe when the request may have had an
   /// effect. Every call this client makes is a `generateContent` inference: it reads a
   /// prompt and an image and returns text, with no server-side state change, so a duplicate
-  /// costs one extra inference and nothing else.
+  /// costs one extra inference and nothing else. A local timeout is terminal: the
+  /// provider may still be working, and restarting the timeout would extend the
+  /// logical request to three full request budgets.
   ///
   /// `NSURLErrorNetworkConnectionLost` (-1005) is the dominant failure here and is a stale
   /// pooled-connection race, not a real network outage: URLSession reuses a keep-alive
@@ -529,7 +531,7 @@ actor GeminiClient {
   static func isReplayableTransportError(_ error: Error) -> Bool {
     let code = (error as? URLError)?.code ?? URLError.Code(rawValue: (error as NSError).code)
     switch code {
-    case .networkConnectionLost, .timedOut, .cannotConnectToHost, .notConnectedToInternet,
+    case .networkConnectionLost, .cannotConnectToHost, .notConnectedToInternet,
       .dnsLookupFailed, .cannotFindHost:
       return true
     default:
@@ -673,7 +675,7 @@ actor GeminiClient {
           workload: workload,
           authorization: try await authHeader()
         )
-        urlRequest.timeoutInterval = 300
+        urlRequest.timeoutInterval = 100
         urlRequest.httpBody = requestBody
 
         let (data, urlResponse) = try await Self.send(urlRequest)
@@ -719,7 +721,7 @@ actor GeminiClient {
     prompt: String,
     systemPrompt: String,
     maxRetries: Int = 2,
-    timeout: TimeInterval = 300,
+    timeout: TimeInterval = 100,
     thinkingBudget: Int = 0
   ) async throws -> String {
     try await Self.enforceManagedProactivity()
@@ -830,7 +832,7 @@ actor GeminiClient {
           workload: workload,
           authorization: try await authHeader()
         )
-        urlRequest.timeoutInterval = 300
+        urlRequest.timeoutInterval = 100
         urlRequest.httpBody = try JSONEncoder().encode(request)
 
         let (data, urlResponse) = try await Self.send(urlRequest)
@@ -1152,7 +1154,7 @@ extension GeminiClient {
             header = try await authHeader(authorization: authorization)
           }
           urlRequest.applyGeminiProxyHeaders(lane: lane, workload: workload, authorization: header)
-          urlRequest.timeoutInterval = 300
+          urlRequest.timeoutInterval = 100
           urlRequest.httpBody = requestBody
 
           if let authorization, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) {

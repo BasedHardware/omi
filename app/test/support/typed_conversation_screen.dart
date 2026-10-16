@@ -9,6 +9,7 @@ import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
+import 'package:omi/pages/home/widgets/home_daily_recaps.dart' show RecentRecapsLoader;
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -92,7 +93,12 @@ class _InertSyncProvider extends ChangeNotifier implements SyncProvider {
 /// Home's recaps row with nothing to show, and no I/O.
 Future<({List<DailySummary> items, bool ok})> _noRecaps() async => (items: const <DailySummary>[], ok: true);
 
-Future<Widget> buildTypedConversationScreen(ConversationProvider provider) async {
+/// [sync] defaults to nothing in flight; [loadRecaps] to no recaps.
+Future<Widget> buildTypedConversationScreen(
+  ConversationProvider provider, {
+  SyncProvider? sync,
+  RecentRecapsLoader loadRecaps = _noRecaps,
+}) async {
   SharedPreferences.setMockInitialValues({});
   await SharedPreferencesUtil.init();
 
@@ -124,11 +130,9 @@ Future<Widget> buildTypedConversationScreen(ConversationProvider provider) async
         ChangeNotifierProvider<PhoneCallProvider>.value(value: phone),
         ChangeNotifierProvider<CaptureProvider>.value(value: capture),
         ChangeNotifierProvider<SpeakerTagPromptsProvider>.value(value: speakerTagPrompts),
-        ChangeNotifierProvider<SyncProvider>.value(value: _InertSyncProvider()),
+        ChangeNotifierProvider<SyncProvider>.value(value: sync ?? _InertSyncProvider()),
       ],
-      child: const Scaffold(
-        body: ConversationsPage(requestInitialLoad: false, loadRecaps: _noRecaps),
-      ),
+      child: Scaffold(body: ConversationsPage(requestInitialLoad: false, loadRecaps: loadRecaps)),
     ),
   );
 }

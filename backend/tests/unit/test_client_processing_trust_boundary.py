@@ -994,11 +994,11 @@ def test_red_proof_render_client_processing_read_fails_static_scan() -> None:
     """
     render_path = _BACKEND / 'utils' / 'conversations' / 'render.py'
     source = render_path.read_text(encoding='utf-8')
-    needle = 'conversation_str += f"{str(conversation.structured.title).capitalize()}\\n"'
+    needle = "title = title[:1].upper() + title[1:] if title else ''"
     assert needle in source, 'render.py title-format site moved; update this red-proof needle'
     poisoned = source.replace(
         needle,
-        'conversation_str += f"{str(conversation.client_processing.structure.title)}\\n"',
+        "title = str(conversation.client_processing.structure.title) if title else ''",
         1,
     )
     assert 'client_processing' in poisoned

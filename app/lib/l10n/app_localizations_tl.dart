@@ -12522,6 +12522,59 @@ class AppLocalizationsTl extends AppLocalizations {
   String get reviewNoChangesBody => 'Kapag inayos ng Omi ang mga tala mo, lalabas dito ang mga pagbabago.';
 
   @override
+  String get reviewChangesSectionTerms => 'Mga pangalan at termino';
+
+  @override
+  String get reviewChangesSectionTitles => 'Mga pamagat at buod';
+
+  @override
+  String get reviewChangesSectionOther => 'Iba pang pagbabago';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pag-uusap',
+      one: '1 pag-uusap',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lugar',
+      one: '1 lugar',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Ipakita lahat ng $count';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'I-undo lahat';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Tingnan ang ebidensya';
+
+  @override
+  String get reviewChangeViewConversation => 'Tingnan ang pag-uusap';
+
+  @override
+  String get reviewChangeViewTask => 'Tingnan ang gawain';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Hindi ma-undo ang $failed sa $total. Subukang muli.';
+  }
+
+  @override
   String get reviewShowMore => 'Magpakita Pa';
 
   @override

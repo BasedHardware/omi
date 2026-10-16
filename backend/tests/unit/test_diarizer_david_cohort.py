@@ -19,7 +19,7 @@ def test_prepared_cohort_matches_reviewed_stage(monkeypatch, host):
     stages = json.loads((ROOT / 'config/diarization-cohort-stages.json').read_text())
     keys = tuple(stages['A'])
     selected = {key: binding[key]['value'] for key in keys}
-    assert selected == stages['C']
+    assert selected == stages['D']
     assert selected == {key: manifest['gke']['pusher']['env'][key]['value'] for key in keys}
     for key, value in selected.items():
         monkeypatch.setenv(key, value)
@@ -72,6 +72,10 @@ def test_ramp_data_preserves_scope_and_capacity(monkeypatch, stage, percent, aut
     assert values['TRANSCRIPTION_FINAL_PASS_PERCENT'] == values['TRANSCRIPTION_SHADOW_PERCENT'] == percent
     assert values['TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE'] == authoritative
     assert values['TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS'] == cap
+    sync_audio_cap = '50' if stage == 'D' else '10'
+    sync_request_cap = '5000' if stage == 'D' else '1000'
+    assert values['TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS'] == sync_audio_cap
+    assert values['TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS'] == sync_request_cap
     assert values['TRANSCRIPTION_SHADOW_ENABLED'] == 'true'
     assert values['TRANSCRIPTION_SHADOW_KILL_SWITCH'] == 'false'
     assert values['TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED'] == ('false' if stage == 'A' else 'true')

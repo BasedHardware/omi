@@ -634,7 +634,7 @@ class TestConversationToolFiltering:
 
         from utils.retrieval.tools.conversation_tools import get_conversations_tool
 
-        config = {'configurable': {'user_id': 'test-uid', 'conversations_collected': []}}
+        config = {'configurable': {'user_id': 'test-uid', 'user_timezone': 'UTC', 'conversations_collected': []}}
         result = get_conversations_tool.invoke({'limit': 10, 'offset': 0}, config=config)
         # Result is a string with "Conversation #N" format; should have exactly 1 conversation
         assert 'Conversation #1' in result
@@ -656,7 +656,7 @@ class TestConversationToolFiltering:
 
         from utils.retrieval.tools.conversation_tools import search_conversations_tool
 
-        config = {'configurable': {'user_id': 'test-uid', 'conversations_collected': []}}
+        config = {'configurable': {'user_id': 'test-uid', 'user_timezone': 'UTC', 'conversations_collected': []}}
         result = search_conversations_tool.invoke({'query': 'test'}, config=config)
         # Only 1 unlocked conv should appear
         assert 'Conversation #1' in result

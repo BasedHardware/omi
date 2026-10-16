@@ -719,8 +719,13 @@ health and queries, and contact points. Do not reuse `GRAFANA_TOKEN` here; that
 secret belongs to the TV Cloud Run Grafana. The default invocation is the
 Pusher release gate: it fails closed unless the committed memory-admission
 and capture-outcome pager set is live and unpaused, Prometheus reports healthy,
-both Pusher and backend-listen scrape targets are currently healthy, and the
-exact Telegram receiver exists with resolve notifications enabled. After each
+both Pusher and backend-listen have a non-terminating scrape target and every such target is up, and the
+exact Telegram receiver exists with resolve notifications enabled. A target is terminating only when
+`kube_pod_deletion_timestamp` matches its namespace and pod; pusher and backend-listen share that join
+because both scrape jobs label `namespace`/`pod` and both Deployments drain for 120s plus a 15s preStop.
+A missing job, or a down pod whose deletion timestamp is absent or unconfirmed, still fails the gate.
+When every required target is already up, unconfirmed kube-state-metrics data does not fail the gate.
+The check does not use `max(up)` and does not treat phase Running as terminating. After each
 rollout it additionally requires all three finalization telemetry families from
 both jobs; zero-valued labeled failure children are initialized at process
 startup so absence is unambiguously a source failure. Production repeats this
@@ -732,13 +737,20 @@ live Grafana provisioning (`--mode fleet`). That run prints committed-but-absent
 live-but-uncommitted, present-but-paused, and present-but-divergent UIDs. Default
 `--fail-on none` reports drift without failing; `--fail-on gated` fails only on
 UIDs listed in `live-alert-gate.json`. The monitoring workflow uses `--mode
-import` to upsert the committed live-STT allowlist and the two Redis cache connection rules
-(`omi-redis-cache-conn-warn`/`page` from `resilience.json`) by stable UID (POST
-when absent, PUT when present), then runs `--mode fleet --alert-set live-stt
---fail-on gated`. The import verifies each rule's `alert_identity` and Telegram
+import` to upsert, by stable UID (POST when absent, PUT when present), the
+committed live-STT allowlist, the two Redis cache connection rules
+(`omi-redis-cache-conn-warn`/`page` from `resilience.json`), and every UID in
+`live-alert-gate.json`, including the finalization rules in `alerts/resilience.json`.
+Production upserts the datasource canaries and reads them back before any
+KeepLast business rule is written. Development writes the same gated UIDs with
+`execErrState` Error and does not install canaries. Grafana-assigned query
+defaults (`queryType` `""`, `model.intervalMs` `1000`, `model.maxDataPoints`
+`43200`) do not count as drift when the committed node omits them; a different
+value still fails. The import verifies each rule's `alert_identity` and Telegram
 receiver and confirms that receiver exists with resolve notifications enabled;
-it never deletes or pauses other rules. The `live-stt` verification scope includes those Redis rules and fails closed
-when either is absent, paused, or divergent. They are Grafana-managed alerts,
+it never deletes or pauses other rules. It then runs `--mode fleet --alert-set live-stt
+--fail-on gated`, which covers the canaries and every gated UID. The `live-stt` verification scope includes those Redis rules and the gated finalization rules, and fails closed
+when any of them is absent, paused, or divergent. They are Grafana-managed alerts,
 not PrometheusRule CRDs. Their `component="other"` selector matches the shared
 fallback bucket for `redis_cache`; cache-write children are initialized at zero.
 Soniox runway UIDs remain pending until
@@ -1232,3 +1244,14 @@ Explicit `admission_holds` require a rule to stay paused until its reviewed hold
 is removed. Live replay exits nonzero on dead, noisy or unproven results.
 The CI gate catches structural regressions; live threshold calibration remains
 a required admission review before an operator sends a rule to Telegram.
+
+## Fleet telemetry
+
+`dashboards/omi-services/fleet-telemetry.json` uses plain job-agnostic PromQL
+for client summary deltas, rejection rates, startup p95, and server upload
+admission. The [fleet contract](../../telemetry/README.md) owns schema, label
+bounds, cardinality and deploy acceptance. The shared backend deploy attaches
+GMP to sync, backfill and integration final candidates before readiness and
+promotion; all retain `omi_.*` and rendered runtime-env verification. Empty
+client panels are expected until the client emitters ship; this is not a
+PostHog parity or reader-cutover receipt.

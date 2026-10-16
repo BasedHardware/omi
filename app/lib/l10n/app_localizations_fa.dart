@@ -12419,6 +12419,59 @@ class AppLocalizationsFa extends AppLocalizations {
   String get reviewNoChangesBody => 'وقتی Omi یادداشت‌های شما را مرتب کند، تغییرات اینجا نمایش داده می‌شود.';
 
   @override
+  String get reviewChangesSectionTerms => 'نام‌ها و اصطلاحات';
+
+  @override
+  String get reviewChangesSectionTitles => 'عنوان‌ها و خلاصه‌ها';
+
+  @override
+  String get reviewChangesSectionOther => 'تغییرات دیگر';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count گفتگو',
+      one: '۱ گفتگو',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count مورد',
+      one: '۱ مورد',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'نمایش همه ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'لغو همه';
+
+  @override
+  String get reviewChangeSeeEvidence => 'مشاهده شواهد';
+
+  @override
+  String get reviewChangeViewConversation => 'مشاهده گفتگو';
+
+  @override
+  String get reviewChangeViewTask => 'مشاهده کار';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'لغو $failed از $total ممکن نشد. دوباره امتحان کنید.';
+  }
+
+  @override
   String get reviewShowMore => 'نمایش بیشتر';
 
   @override

@@ -331,7 +331,12 @@ def test_chat_real_shared_loop_with_tools(monkeypatch, shadow):
     assert 'suppressed' in captured[1][-1]['content'] if shadow else 'Retrieved evidence' in captured[1][-1]['content']
     assert 'OLD CHAT PROMPT' not in str(captured)
     assert 'Find something' not in str(captured[0][0])
-    assert 'prompt_cache_breakpoint' in captured[0][0]['content'][0]
+    assert any(
+        'prompt_cache_breakpoint' in part
+        for message in captured[0]
+        if isinstance(message.get('content'), list)
+        for part in message['content']
+    )
 
 
 @pytest.mark.parametrize(

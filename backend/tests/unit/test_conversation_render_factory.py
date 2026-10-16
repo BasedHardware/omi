@@ -147,9 +147,49 @@ class TestRender:
     def test_basic_render(self):
         conv = _make_conversation()
         result = conversations_to_string([conv])
-        assert "Test title" in result  # .capitalize() lowercases after first char
+        assert "Test Title" in result
         assert "Test overview" in result
         assert "15 Jan 2026" in result
+        assert result.count('Text inside <untrusted> blocks') == 1
+
+    def test_title_preserves_proper_nouns_and_generated_fields_are_fenced(self):
+        conv = _make_conversation(
+            structured=Structured(
+                title='sync with john at ibm',
+                overview='John reviewed the IBM rollout.',
+                category=CategoryEnum.personal,
+                action_items=[
+                    ActionItem(description='Ship to AWS', completed=True),
+                    ActionItem(description='Call Dr. Kim'),
+                ],
+            )
+        )
+
+        result = conversations_to_string([conv])
+
+        assert 'Title (AI-generated summary, not a quote): Sync with john at ibm' in result
+        assert 'Sync with John at IBM' not in result
+        assert 'Overview (AI-generated summary, not a quote): John reviewed the IBM rollout.' in result
+        assert 'Action Items (AI-generated summary, not a quote):' in result
+        assert '- [done] Ship to AWS' in result
+        assert '- [open] Call Dr. Kim' in result
+        assert result.count('<untrusted source="conversation">') == 1
+        assert result.count('Text inside <untrusted> blocks') == 1
+
+    def test_weak_owner_evidence_is_rendered_as_unattributed(self):
+        conv = _make_conversation(
+            transcript_segments=[
+                TranscriptSegment(text='I will send the draft.', speaker_id=0, is_user=True, start=0.0, end=1.0),
+                TranscriptSegment(text='I will approve it.', speaker_id=1, is_user=True, start=1.0, end=2.0),
+            ]
+        )
+
+        result = conversations_to_string([conv], use_transcript=True)
+
+        assert 'owner identity is UNTRUSTED' in result
+        assert 'Speaker 0: I will send the draft.' in result
+        assert 'Speaker 1: I will approve it.' in result
+        assert 'User: I will' not in result
 
     def test_apps_results_override_overview(self):
         conv = _make_conversation(apps_results=[AppResult(app_id="a", content="App output")])
@@ -176,6 +216,7 @@ class TestRender:
         assert "Conversation #1" in result
         assert "Conversation #2" in result
         assert "---------------------" in result
+        assert result.count('Text inside <untrusted> blocks') == 1
 
     def test_empty_list(self):
         result = conversations_to_string([])
@@ -192,7 +233,7 @@ class TestRender:
         )
         result = conversations_to_string([conv])
         assert "Standup" in result
-        assert "30 minutes" in result
+        assert "30m" in result
 
     def test_attendees_rendered(self):
         conv = _make_conversation(
@@ -215,8 +256,8 @@ class TestRender:
     def test_started_finished_rendered(self):
         conv = _make_conversation()
         result = conversations_to_string([conv])
-        assert "Started:" in result
-        assert "Finished:" in result
+        assert "When:" in result
+        assert "10:00–10:30 UTC" in result
 
     def test_no_started_finished_when_none(self):
         conv = _make_conversation(started_at=None, finished_at=None)

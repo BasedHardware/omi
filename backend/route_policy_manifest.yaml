@@ -4612,6 +4612,30 @@ routes:
       deprecation: {state: active}
   - route_type: http
     method: POST
+    path: /v1/telemetry/fleet
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+          - admin_key_uid_prefix
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+          policy_name: telemetry:fleet
+          key_subject: uid
+          enforcement: fail_closed
+          placement: handler
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: metrics
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
     path: /v1/telemetry/client/batches
     policy:
       review_status: reviewed
@@ -4727,3 +4751,12 @@ routes:
         state: active
 
       owner: backend
+  - {route_type: http, method: POST, path: /v2/batch-pipeline/pull, policy: {review_status: reviewed, auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: sync_job, surface: internal_task, visibility: internal, data_domain: sync_audio, deprecation: {state: active}, owner: backend}}
+  - {route_type: http, method: POST, path: /v2/batch-pipeline/heartbeat, policy: {review_status: reviewed, auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: sync_job, surface: internal_task, visibility: internal, data_domain: sync_audio, deprecation: {state: active}, owner: backend}}
+  - {route_type: http, method: POST, path: /v2/batch-pipeline/complete, policy: {review_status: reviewed, auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: sync_job, surface: internal_task, visibility: internal, data_domain: sync_audio, deprecation: {state: active}, owner: backend}}
+  - {route_type: http, method: POST, path: /v2/batch-pipeline/fail, policy: {review_status: reviewed, auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: sync_job, surface: internal_task, visibility: internal, data_domain: sync_audio, deprecation: {state: active}, owner: backend}}
+  - {route_type: http, method: POST, path: /v2/batch-pipeline/redrive-dead, policy: {review_status: reviewed, auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: sync_job, surface: internal_task, visibility: internal, data_domain: sync_audio, deprecation: {state: active}, owner: backend}}
+  - {route_type: http, method: POST, path: /v2/batch-pipeline/gpu-idle, policy: {review_status: reviewed, auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: sync_job, surface: internal_task, visibility: internal, data_domain: sync_audio, deprecation: {state: active}, owner: backend}}
+  - {route_type: http, method: POST, path: /v2/batch-pipeline/reconcile, policy: {review_status: reviewed, auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: sync_job, surface: internal_task, visibility: internal, data_domain: sync_audio, deprecation: {state: active}, owner: backend}}
+  - {route_type: http, method: GET, path: /v2/batch-pipeline/metrics, policy: {review_status: reviewed, auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: sync_job, surface: internal_task, visibility: internal, data_domain: sync_audio, deprecation: {state: active}, owner: backend}}
+  - {route_type: http, method: POST, path: /v2/batch-pipeline/authorize-compute, policy: {review_status: reviewed, auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: sync_job, surface: internal_task, visibility: internal, data_domain: sync_audio, deprecation: {state: active}, owner: backend}}

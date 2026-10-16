@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -262,6 +263,40 @@ class RunIOSTests(unittest.TestCase):
             train, "_asc_rest_token", return_value="faketoken"
         ):
             self.assertFalse(train.ios_phased_release_paused("live-version-id"))
+
+    def test_phased_release_null_data_is_not_a_pause(self):
+        # Apple's live answer for a version released without a phased rollout.
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def read(self):
+                return json.dumps({"data": None, "links": {"self": "https://example"}}).encode()
+
+        with patch.object(train.urllib.request, "urlopen", return_value=Response()), patch.object(
+            train, "_asc_rest_token", return_value="faketoken"
+        ):
+            self.assertFalse(train.ios_phased_release_paused("live-version-id"))
+
+    def test_phased_release_without_data_still_fails_closed(self):
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def read(self):
+                return json.dumps({"errors": []}).encode()
+
+        with patch.object(train.urllib.request, "urlopen", return_value=Response()), patch.object(
+            train, "_asc_rest_token", return_value="faketoken"
+        ):
+            with self.assertRaisesRegex(train.TrainError, "invalid resource"):
+                train.ios_phased_release_paused("live-version-id")
 
     def test_phased_release_lookup_failure_fails_closed(self):
         import email.message
@@ -1213,6 +1248,29 @@ class AscKeyNormalizationTest(unittest.TestCase):
         for name, text in shapes.items():
             with self.subTest(shape=name):
                 self.assertTrue(self._signs_with_openssl(train._normalize_pem(text)), name)
+
+    def test_codemagic_key_references_resolve_to_a_signing_key(self):
+        # Live 2026-10-15: the codemagic_v4 integration's variable was a 72-character
+        # single-line reference, not key text.
+        with tempfile.NamedTemporaryFile("w", suffix=".p8", delete=False) as key_file:
+            key_file.write(self.pem)
+        try:
+            ref = "@file:" + key_file.name
+            self.assertIn("ref=@file", train._pem_shape(ref))
+            self.assertTrue(self._signs_with_openssl(train._normalize_pem(train._resolve_key_ref(ref))))
+            with unittest.mock.patch.dict(train.os.environ, {"CM_ASC_KEY": ref}):
+                resolved = train._resolve_key_ref("@env:CM_ASC_KEY")
+            self.assertTrue(self._signs_with_openssl(train._normalize_pem(resolved)))
+        finally:
+            Path(key_file.name).unlink()
+        self.assertEqual(train._resolve_key_ref(self.pem), self.pem)
+
+    def test_unreadable_key_reference_fails_closed(self):
+        with self.assertRaises(train.TrainError):
+            train._resolve_key_ref("@file:/nonexistent/AuthKey.p8")
+        with unittest.mock.patch.dict(train.os.environ, {}, clear=False):
+            with self.assertRaises(train.TrainError):
+                train._resolve_key_ref("@env:OMI_DEFINITELY_UNSET_KEY")
 
     def test_garbage_fails_closed_without_echoing_the_key(self):
         with self.assertRaises(train.TrainError) as ctx:
