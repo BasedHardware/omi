@@ -34,10 +34,16 @@ final class ListenClientState: ObservableObject {
   private let surfaceSession = UUID().uuidString
   private var reportInFlight = false
 
+  static func surfaceReportURL(baseURL: String) -> URL? {
+    URL(string: baseURL)?.appendingPathComponent("v1/users/client-state")
+  }
+
   private func reportSurface() {
     guard ProcessInfo.processInfo.environment["DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED"] == "true",
       !reportInFlight
     else { return }
+    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
+    let clientState = snapshot
     let window = ShellSummon.shellWindow()
     let open = window?.isVisible == true && window?.isMiniaturized == false && !NSApp.isHidden
     reportInFlight = true
@@ -46,14 +52,18 @@ final class ListenClientState: ObservableObject {
       defer { self.reportInFlight = false }
       do {
         let baseURL = await APIClient.shared.baseURL
-        guard let url = URL(string: baseURL + "/v1/users/client-state") else { return }
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization),
+          let url = Self.surfaceReportURL(baseURL: baseURL)
+        else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 5
-        request.allHTTPHeaderFields = try await APIClient.shared.buildHeaders(requireAuth: true, includeBYOK: false)
+        request.allHTTPHeaderFields = try await APIClient.shared.buildHeaders(
+          requireAuth: true, includeBYOK: false, expectedAuthOwnerId: authorization.ownerID)
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
         request.httpBody = try JSONSerialization.data(withJSONObject: [
           "session_id": self.surfaceSession, "surface_open": open,
-          "foreground": self.snapshot.foreground, "transcript_visible": self.snapshot.transcriptVisible,
+          "foreground": clientState.foreground, "transcript_visible": clientState.transcriptVisible,
         ])
         _ = try await URLSession.shared.data(for: request)
       } catch { /* Best effort; the server lease expires without renewal. */  }
