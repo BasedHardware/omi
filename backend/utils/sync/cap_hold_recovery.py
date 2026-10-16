@@ -13,7 +13,7 @@ from anyio import from_thread
 from typing import Any
 from google.api_core.exceptions import NotFound
 
-from config.stt_cap_dispatch import enabled
+from config.stt_cap_dispatch import execution_admission_enabled as enabled
 from database import users as users_db
 from database import sync_cap_holds, sync_cap_recovery
 from utils.analytics import record_usage

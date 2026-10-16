@@ -4,7 +4,7 @@ Synchronous worker seam: offload the call from an async serving coordinator.
 No admission flag is consulted: already accepted work drains after rollback.
 """
 
-from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
+from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from datetime import datetime, timezone
 import time
 import math

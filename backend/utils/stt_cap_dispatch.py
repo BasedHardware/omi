@@ -8,7 +8,7 @@ from typing import Any
 from utils.stt.socket import STTSocket
 from utils.stt.live_router import connecting_target
 
-from config.stt_cap_dispatch import enabled
+from config.stt_cap_dispatch import enabled, execution_admission_enabled
 from utils.observability.stt_cap_dispatch import record_audio
 from utils.byok import get_byok_key
 from utils.executors import db_executor, run_blocking
@@ -27,13 +27,31 @@ def customer_funded(provider):
 def funded_allowance(uid, source=None):
     # Streaming imports this module even with enforcement off. Load billing
     # policy only at the admission boundary, not during provider-module import.
-    from utils.subscription import resolve_transcription_allowance
+    from utils.subscription import resolve_transcription_allowance, TranscriptionAllowance
+    from utils import ladder_v1
 
+    if not enabled() and execution_admission_enabled():
+        # Ladder-only activation must not activate legacy monthly-seconds
+        # dispatch enforcement. A missing/unreadable budget is never permission
+        # to spend; match the funded resolver's fail-closed behavior.
+        try:
+            snapshot = ladder_v1.budget_snapshot(uid)
+            if snapshot is None:
+                return TranscriptionAllowance('managed', None, 'legacy_dispatch_disabled', limit_seconds=None)
+            exhausted = snapshot['budget_percent'] >= 100
+            return TranscriptionAllowance(
+                'on_device' if exhausted else 'managed',
+                0 if exhausted else None,
+                'usage_budget_exhausted' if exhausted else 'usage_budget_available',
+                limit_seconds=None,
+            )
+        except Exception:
+            return TranscriptionAllowance('on_device', 0, 'allowance_unavailable')
     return resolve_transcription_allowance(uid, source=source, byok_active=False, omi_funded=True)
 
 
 def sync_allowed(uid: str, seconds: float = 0, provider: Any = 'unknown') -> bool:
-    if not enabled():
+    if not execution_admission_enabled():
         return True
     allowance = funded_allowance(uid)
     if not allowance.managed:

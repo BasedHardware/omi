@@ -7,7 +7,7 @@ import time
 import wave
 
 from utils.stt_cap_dispatch import sync_allowed, funded_allowance
-from config.stt_cap_dispatch import enabled as cap_enabled
+from config.stt_cap_dispatch import execution_admission_enabled as cap_enabled
 from utils.observability.stt_cap_dispatch import record_audio
 from config.batch_pipeline import recovery_owners
 from database.batch_pipeline_privacy import BatchPrivacyBlocked

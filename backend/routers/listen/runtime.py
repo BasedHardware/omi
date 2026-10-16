@@ -14,6 +14,7 @@ from fastapi.websockets import WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 from config.ladder_v1 import enabled as ladder_enabled
+from config import ladder_v1 as ladder_policy
 from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
 from database.live_language_profile import get_live_language_sessions
@@ -807,18 +808,34 @@ class ListenSessionRuntime:
             if getattr(self.receiver, 'cap_paused', False) and admission.managed:
                 await self.receiver.initialize_stt()
         now = time.time()
+        subscription = await self.persistence.call(user_db.get_user_valid_subscription, self.request.uid)
+        ladder_session = (
+            ladder_enabled('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED')
+            and ladder_policy.entitlements(subscription) is not None
+        )
         invalidated = await self.persistence.call(check_credits_invalidation, self.request.uid)
         needs_refresh = (
             not self.state.remaining_seconds_cache_initialized
             or invalidated
-            or now - self.state.remaining_seconds_cache_ts >= self.limits.credits_refresh_seconds
+            or now - self.state.remaining_seconds_cache_ts
+            >= (60 if ladder_session else self.limits.credits_refresh_seconds)
             or (
                 self.state.remaining_seconds_cache is not None
                 and self.state.remaining_seconds_cache <= 0
                 and now - self.state.remaining_seconds_cache_ts >= 60
             )
         )
-        if needs_refresh:
+        if (
+            ladder_session
+            and admission is not None
+            and (admission.omi_selected or not customer_funded(self.stt_service))
+        ):
+            # The funded admission above already read this flush's shared budget.
+            # Reuse it rather than scanning the same monthly rollups twice.
+            self.state.remaining_seconds_cache = admission.remaining
+            self.state.remaining_seconds_cache_ts = now
+            self.state.remaining_seconds_cache_initialized = True
+        elif needs_refresh:
             self.state.remaining_seconds_cache = await self.persistence.call(
                 get_remaining_transcription_seconds, self.request.uid, source=self.request.source
             )
@@ -829,7 +846,6 @@ class ListenSessionRuntime:
         remaining = self.state.remaining_seconds_cache
         if admission is not None and (admission.omi_selected or not customer_funded(self.stt_service)):
             remaining = admission.remaining
-        subscription = await self.persistence.call(user_db.get_user_valid_subscription, self.request.uid)
         if remaining is not None and remaining <= FREEMIUM_THRESHOLD_SECONDS and not self.state.freemium_threshold_sent:
             if should_emit_plus_meter_warning(subscription):
                 await self.asend_event(

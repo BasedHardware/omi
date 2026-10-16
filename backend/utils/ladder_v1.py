@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from config import ladder_v1 as policy
 from config.plan_catalog import ENTITLEMENT_VERSIONS
 from utils.observability.fallback import record_fallback
+from utils.observability.ladder_v1 import record_coverage
 
 _UNRESOLVED = object()
 
@@ -28,6 +29,8 @@ def usage_snapshot(uid: str, subscription: Any = _UNRESOLVED, *, firestore_clien
 
     now = datetime.now(timezone.utc)
     snapshot = usage_units.get_usage_units(uid, now, firestore_client=firestore_client, entitlements=entitlement)
+    if policy.budget_enforcement_enabled():
+        record_coverage(snapshot.get('completeness', {}))
     reset = datetime(now.year + (now.month == 12), now.month % 12 + 1, 1, tzinfo=timezone.utc)
     budget = snapshot['budget_units']
     if not budget or budget <= 0:

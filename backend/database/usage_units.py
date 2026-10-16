@@ -12,13 +12,15 @@ from typing import Any, Mapping
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 from config.plan_catalog import resolve_subscription_entitlements
-from config.ladder_v1 import enabled
+from config.ladder_v1 import enabled, budget_enforcement_enabled
 from config.rate_card import (
     budget_units,
     normalize_transcription_provider,
     price_llm_attempt,
     price_request,
     price_transcription,
+    standard_chat_units,
+    EXCLUDED_FUNDING,
 )
 from database._client import get_customer_firestore_client
 from utils.observability.fallback import record_fallback
@@ -219,7 +221,9 @@ def get_usage_units(
 
     period selects the month. Uses one existing year/month query and at most
     31 direct day-rollup reads; never scans immutable attempts. Missing records
-    and known producer gaps make this a lower-bound shadow total.
+    and known producer gaps make this a lower-bound shadow total. Flagged ladder
+    enforcement adds conservative residual-second and attempt estimates in memory;
+    legacy and flag-off reads retain the shadow-only total.
     """
     if period.tzinfo is None:
         raise ValueError('timezone-aware period required')
@@ -232,6 +236,7 @@ def get_usage_units(
         snap = user.get(['subscription'])
         data = snap.to_dict() or {}
         entitlements = resolve_subscription_entitlements(data.get('subscription') or {})
+    enforcing = budget_enforcement_enabled() and entitlements['entitlement_version'] == 'ladder_v1'
     totals: dict[str, int] = {}
     statuses: dict[str, dict[str, int]] = {}
     funding_totals: dict[str, int] = {}
@@ -272,7 +277,11 @@ def get_usage_units(
                 lane_accepted[lane] = lane_accepted.get(lane, 0) + int(values.get('accepted_events', 0))
             covered = sum(
                 float(leaf.get('legacy_counter_seconds', 0))
-                for leaf in features.get('transcription', {}).get('funding', {}).values()
+                for funding, leaf in features.get('transcription', {}).get('funding', {}).items()
+                if not enforcing
+                or funding in EXCLUDED_FUNDING
+                or funding == 'omi'
+                and not leaf.get('status_counts', {}).get('missing', 0)
             )
             residual = max(float(data.get('transcription_seconds', 0)) - covered, 0)
             missing_seconds += residual
@@ -297,10 +306,18 @@ def get_usage_units(
                 features = hour.get('features', {})
                 consume(features)
                 projected += sum(
-                    int(leaf.get('events', 0))
+                    (
+                        int(leaf.get('events', 0))
+                        if not enforcing or funding in EXCLUDED_FUNDING
+                        else (
+                            max(0, int(leaf.get('events', 0)) - int(leaf.get('status_counts', {}).get('missing', 0)))
+                            if funding == 'omi'
+                            else 0
+                        )
+                    )
                     for feature, row in features.items()
                     if feature != 'web_search_tool'
-                    for leaf in row.get('funding', {}).values()
+                    for funding, leaf in row.get('funding', {}).items()
                 )
         residual = max(int(data.get('attempts', 0)) - projected, 0)
         if residual:
@@ -329,6 +346,15 @@ def get_usage_units(
                     }
                 )
         day += timedelta(days=1)
+    if enforcing:
+        # Treat every residual second as speech at the pinned unknown-provider
+        # provisional rate. Do not apply the historical elapsed/silence ratio.
+        # Unknown attempt sizes use the same provisional standard-chat quantity
+        # as the Free budget. These are estimates, never repaired ledger writes.
+        speech_proxy = price_transcription(missing_seconds, provider='unknown', funding='omi', accepted=True)
+        attempt_proxy = int(Decimal(missing_attempts) * standard_chat_units() * 1_000_000)
+        for feature, amount in [('transcription', speech_proxy['micro_units']), ('other_llm', attempt_proxy)]:
+            consume({feature: {'funding': {'omi': {'micro_units': amount, 'status_counts': {}}}}})
     return {
         'used_units': float(Decimal(sum(totals.values())) / 1_000_000),
         'budget_units': budget_units(entitlements),

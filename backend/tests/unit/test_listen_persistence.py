@@ -154,3 +154,72 @@ async def test_credit_refresh_emits_threshold_event_for_plus(monkeypatch):
 
 async def _completed():
     return None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('enforce,legacy,expected_reads', [(True, False, 1), (False, False, 0), (True, True, 0)])
+async def test_ladder_crossing_refreshes_within_one_usage_flush(monkeypatch, enforce, legacy, expected_reads):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(enforce).lower())
+    monkeypatch.setattr(listen_runtime.ladder_policy, 'entitlements', lambda _: None if legacy else {'plan_id': 'plus'})
+    runtime = object.__new__(listen_runtime.ListenSessionRuntime)
+    runtime.request = SimpleNamespace(uid='user-1', source='desktop')
+    runtime.limits = ListenLimits(credits_refresh_seconds=900)
+    runtime.state = ListenSessionState(
+        remaining_seconds_cache=None, remaining_seconds_cache_ts=100, remaining_seconds_cache_initialized=True
+    )
+    runtime.user_has_credits = True
+    # No dispatch admission: this also closes the gap when #21866 stays dark.
+    runtime.receiver = SimpleNamespace(cap_admission=None)
+    reads = Mock(return_value=0)
+
+    async def call(function, *args, **kwargs):
+        if function is listen_runtime.check_credits_invalidation:
+            return False
+        if function is listen_runtime.get_remaining_transcription_seconds:
+            assert kwargs == {'source': 'desktop'}
+            return reads()
+        if function is listen_runtime.user_db.get_user_valid_subscription:
+            return SimpleNamespace(plan=PlanType.operator)
+        raise AssertionError(function)
+
+    runtime.persistence = SimpleNamespace(call=call)
+    # Budget crosses immediately after the previous read; no chunk performs IO.
+    for now in (110, 159, 160):
+        monkeypatch.setattr(listen_runtime.time, 'time', lambda: now)
+        await runtime._refresh_credits(transcription_seconds=10)
+        if now < 160:
+            reads.assert_not_called()
+    assert reads.call_count == expected_reads
+    assert runtime.user_has_credits is (expected_reads == 0)
+
+
+@pytest.mark.anyio
+async def test_ladder_refresh_reuses_funded_admission_snapshot(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    monkeypatch.setattr(listen_runtime.ladder_policy, 'entitlements', lambda _: {'plan_id': 'plus'})
+    runtime = object.__new__(listen_runtime.ListenSessionRuntime)
+    runtime.request = SimpleNamespace(uid='user-1', source='desktop')
+    runtime.limits = ListenLimits()
+    runtime.state = ListenSessionState()
+    runtime.stt_service = 'modulate'
+    admission = SimpleNamespace(refresh=AsyncMock(), remaining=0, managed=False, omi_selected=True)
+    runtime.receiver = SimpleNamespace(cap_admission=admission, cap_paused=False)
+
+    async def call(function, *args, **kwargs):
+        if function is listen_runtime.check_credits_invalidation:
+            return False
+        if function is listen_runtime.user_db.get_user_valid_subscription:
+            return SimpleNamespace(plan=PlanType.operator)
+        raise AssertionError('redundant budget read')
+
+    runtime.persistence = SimpleNamespace(call=call)
+    await runtime._refresh_credits()
+    admission.refresh.assert_awaited_once()
+    assert runtime.state.remaining_seconds_cache == 0
+    assert not runtime.user_has_credits

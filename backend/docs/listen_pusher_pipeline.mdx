@@ -22,6 +22,43 @@ as failed reconciliation. Successful siblings finalize independently. Flagged
 oversized GPU empty-result retries become held work without a failure attempt;
 the unflagged retry follows main's behavior.
 
+## Ladder budget refresh and execution admission (default off)
+
+With `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED=true`, ladder/Free live sessions
+re-read the shared budget after every 60-second durable usage flush, including
+when `STT_CAP_DISPATCH_ENFORCEMENT` remains off. The existing subscription read
+selects the cadence; a funded admission snapshot is reused to avoid a second
+monthly-rollup scan on the same flush. Legacy accounts keep the 900-second cache and finite local
+debit. There is no per-audio-chunk I/O. With funded dispatch enabled, its shared
+live admission state obtains the ladder budget through the common allowance
+resolver rather than consulting legacy monthly seconds.
+
+A budget crossing just after a refresh is detected on the next flush: about
+60 seconds of speech per live session, plus persistence/read latency. This is
+not a distributed reservation or a bound on concurrent already-admitted batch
+work; accepted provider queues can drain. Sync execution and each GPU ASR
+microbatch reauthorize even with the legacy dispatch flag off. Denied work uses
+the durable encrypted hold/defer and reset/upgrade recovery described above.
+Ladder-only execution activation bypasses legacy monthly-seconds dispatch.
+
+Enforced ladder totals include unprojected transcription seconds priced as
+speech at rate-card v1's unknown-provider provisional rate, without a silence
+ratio. Missing-price/unknown-funding hourly leaves do not claim coverage;
+known BYOK/custom/on-device leaves remain excluded. Unprojected/unpriced gateway
+attempts use the provisional standard-chat quantity from the same rate card.
+These estimates are computed on read; no historical record is rewritten. Mixed
+hourly leaves with any missing price conservatively estimate the full leaf's
+seconds because historical rollups cannot split seconds by pricing status.
+Unknown attempt sizes and producers with no durable quantity remain measurement
+limitations, not proof of complete cost coverage.
+
+`omi_ladder_unprojected_transcription_seconds` and
+`omi_ladder_unprojected_gateway_attempts` are histograms of the gaps observed
+per enforced budget evaluation (no user labels); repeated evaluations are not
+unique consumed usage. The completeness payload retains both residual counts.
+With ladder flags off, shadow totals and all #21866 dispatch behavior remain
+unchanged. No switch or deployment binding is activated by this change.
+
 ## Windowed live transcription deadlines
 
 Parakeet packing is independently gated by `PARAKEET_PACKING_ENABLED=false`

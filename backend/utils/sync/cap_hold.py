@@ -21,7 +21,7 @@ from utils.stt_cap_dispatch import funded_allowance
 from google.cloud import firestore
 from google.api_core.exceptions import AlreadyExists
 from database import redis_db
-from config.stt_cap_dispatch import enabled
+from config.stt_cap_dispatch import execution_admission_enabled as enabled
 from utils.sync.files import get_timestamp_from_path
 from utils.executors import db_executor, storage_executor, run_blocking
 from database._client import get_firestore_client

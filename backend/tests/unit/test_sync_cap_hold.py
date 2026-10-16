@@ -12,13 +12,15 @@ from utils import stt_cap_dispatch as cap
 
 
 @pytest.mark.parametrize('enforce', [False, True])
+@pytest.mark.parametrize('ladder', [False, True])
 @pytest.mark.parametrize('queued', [False, True], ids=['sync-v1', 'sync-v2-worker'])
-def test_exhaustion_holds_before_url_or_provider_dispatch(tmp_path, monkeypatch, enforce, queued):
+def test_exhaustion_holds_before_url_or_provider_dispatch(tmp_path, monkeypatch, enforce, queued, ladder):
     path = tmp_path / '1792152000.wav'
     with wave.open(str(path), 'wb') as output:
         output.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
         output.writeframes(b'\0' * 32000)
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(ladder).lower())
     monkeypatch.setattr(pipeline, 'ambiguous_binding_pending', lambda *_: False)
     monkeypatch.setattr(
         cap, 'funded_allowance', Mock(return_value=SimpleNamespace(managed=False, reason='plan_allowance_exhausted'))
@@ -47,7 +49,7 @@ def test_exhaustion_holds_before_url_or_provider_dispatch(tmp_path, monkeypatch,
         is False
     )
     assert not errors
-    if enforce:
+    if enforce or ladder:
         hold.assert_called_once()
         assert hold.call_args.args[2]['timestamp'] == 1792152000
         url.assert_not_called()

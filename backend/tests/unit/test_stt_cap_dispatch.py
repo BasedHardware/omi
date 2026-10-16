@@ -224,3 +224,55 @@ async def test_paused_soniox_binds_wire_ledger_before_resumed_audio():
     await socket.resume()
     raw.set_wire_ledger.assert_called_once_with(ledger)
     raw.set_capture_axis_ledger.assert_called_once_with(ledger)
+
+
+@pytest.mark.parametrize('dispatch', [False, True])
+@pytest.mark.parametrize('percent', [99, 100])
+def test_funded_dispatch_uses_ladder_budget_instead_of_legacy_seconds(monkeypatch, dispatch, percent):
+    from utils import ladder_v1, subscription
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(dispatch).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    monkeypatch.setattr(ladder_v1, 'budget_snapshot', lambda *a, **k: {'budget_percent': percent})
+    monkeypatch.setattr(subscription, 'is_marketplace_reviewer', lambda _: False)
+    monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda *a, **k: False)
+    monkeypatch.setattr(subscription.users_db, 'get_user_valid_subscription', lambda _: SimpleNamespace(plan='plus'))
+    legacy = Mock(side_effect=AssertionError('ladder admission consulted the legacy seconds meter'))
+    monkeypatch.setattr(subscription, 'get_monthly_usage_for_subscription', legacy)
+    assert cap.sync_allowed('synthetic') is (percent < 100)
+    assert cap.funded_allowance('synthetic').reason == (
+        'usage_budget_available' if percent < 100 else 'usage_budget_exhausted'
+    )
+    legacy.assert_not_called()
+
+
+def test_ladder_only_execution_bypasses_legacy_dispatch_and_fails_closed_on_budget_error(monkeypatch):
+    from utils import ladder_v1
+
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    monkeypatch.setattr(ladder_v1, 'budget_snapshot', lambda *a, **k: None)
+    assert cap.sync_allowed('synthetic')
+    monkeypatch.setattr(ladder_v1, 'budget_snapshot', Mock(side_effect=RuntimeError('ledger unavailable')))
+    assert not cap.sync_allowed('synthetic')
+
+
+async def test_live_minute_refresh_stops_funded_audio_after_ladder_crossing(monkeypatch):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    allowance = SimpleNamespace(managed=True, remaining_seconds=None, reason='usage_budget_available')
+    monkeypatch.setattr(cap, 'funded_allowance', lambda *a: allowance)
+
+    async def run(_executor, fn, *args):
+        return fn(*args)
+
+    monkeypatch.setattr(cap, 'run_blocking', run)
+    state = cap.LiveAdmission('synthetic')
+    await state.refresh()
+    raw = Mock(send=Mock(return_value=True))
+    # Crossing just after a flush permits at most the next minute's audio.
+    for _ in range(60):
+        state.send(raw, b'\0' * 32000, 'modulate', 16000)
+    allowance = SimpleNamespace(managed=False, remaining_seconds=0, reason='usage_budget_exhausted')
+    await state.refresh()
+    for _ in range(60):
+        state.send(raw, b'\0' * 32000, 'modulate', 16000)
+    assert raw.send.call_count == 60

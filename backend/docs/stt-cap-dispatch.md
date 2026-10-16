@@ -4,7 +4,9 @@
 adds no deployment binding and does not enable it. Enabling changes the policy
 for existing capped paid plans: exhausted sync uploads wait as audio rather than
 being transcribed into locked conversations. Product approval is required before
-activation. No ladder-v1 code or prices change.
+activation. Ladder budget composition and its independent default-off execution
+admission are documented in [the listen pipeline](listen_pusher_pipeline.mdx#ladder-budget-refresh-and-execution-admission-default-off).
+No prices or deployment switches change.
 
 ## Boundaries
 

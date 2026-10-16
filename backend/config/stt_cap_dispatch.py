@@ -5,3 +5,8 @@ import os
 
 def enabled() -> bool:
     return os.getenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false').lower() == 'true'
+
+
+def execution_admission_enabled() -> bool:
+    """Queued work must recheck ladder budgets even when legacy dispatch is dark."""
+    return enabled() or os.getenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false') == 'true'

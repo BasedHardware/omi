@@ -509,3 +509,42 @@ def test_chat_pause_payload_is_only_flagged_exhausted_ladder(monkeypatch, cap_pr
 def test_chat_below_shared_budget_still_allowed(monkeypatch, percent):
     monkeypatch.setattr(ladder, 'budget_snapshot', lambda *a, **k: {'budget_percent': percent})
     assert ladder.enforce_chat_budget('u') is True
+
+
+def test_unprojected_usage_exhausts_budget_and_emits_coverage(monkeypatch):
+    from database import usage_units
+    from tests.unit.fixtures.shadow_usage_firestore import Store
+    from utils.observability import ladder_v1 as metrics
+    from unittest.mock import Mock
+
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    monkeypatch.setattr(
+        ladder,
+        'account',
+        lambda *a, **k: {
+            'plan_id': 'plus',
+            'entitlement_version': 'ladder_v1',
+            'budget': {'kind': 'units', 'value': 1},
+        },
+    )
+    now = datetime.now(timezone.utc)
+    store = Store(
+        {
+            'users/u/hourly_usage/current': {
+                'year': now.year,
+                'month': now.month,
+                'transcription_seconds': 3600,
+            }
+        }
+    )
+    seconds, attempts = Mock(), Mock()
+    monkeypatch.setattr(metrics.UNPROJECTED_SECONDS, 'observe', seconds)
+    monkeypatch.setattr(metrics.UNPROJECTED_ATTEMPTS, 'observe', attempts)
+    snapshot = ladder.budget_snapshot('u', firestore_client=store)
+    assert snapshot['used_units'] > snapshot['budget_units']
+    seconds.assert_called_once_with(3600)
+    attempts.assert_called_once_with(0)
+    with pytest.raises(HTTPException) as error:
+        ladder.enforce_budget('u', firestore_client=store)
+    assert error.value.status_code == 402
+    assert store.writes == 0
