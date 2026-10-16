@@ -185,3 +185,62 @@ def test_optional_failure_is_content_free_and_does_not_raise(store, monkeypatch,
         policy.link_duplicate_captures(UID, store.rows[path('a')])
     assert 'private sentence' not in caplog.text
     assert 'outcome=error' in caplog.text
+
+
+def seed_group(store, ids):
+    for cid in ids:
+        store.rows[path(cid)] = row(cid)
+    for cid in ids[1:]:
+        assert groups_db.join_capture_group(UID, ids[0], cid, {'method': 'synthetic-prior-group'})
+
+
+def test_existing_group_grows_only_when_entrant_matches_every_member(store, monkeypatch):
+    monkeypatch.setenv('CAPTURE_SHARED_SPEECH_MODE', 'on')
+    seed_group(store, ['a', 'b'])
+    store.rows[path('c')] = row('c')
+    policy.link_duplicate_captures(UID, store.rows[path('c')])
+    group = store.rows[path('c')]['capture_group']
+    assert {member['id'] for member in group['members']} == {'a', 'b', 'c'}
+
+
+def test_pairwise_match_does_not_bridge_different_speech_through_long_capture(store, monkeypatch):
+    monkeypatch.setenv('CAPTURE_SHARED_SPEECH_MODE', 'on')
+    seed_group(store, ['a', 'b'])
+    for segment in store.rows[path('b')]['transcript_segments']:
+        segment['text'] = 'a different private event with entirely unrelated vocabulary about zebra quartz tundra'
+    store.rows[path('c')] = row('c')
+    policy.link_duplicate_captures(UID, store.rows[path('c')])
+    assert not store.rows[path('c')].get('capture_group')
+    assert len(store.rows[path('a')]['capture_group']['members']) == 2
+
+
+@pytest.mark.parametrize('change', ['third_transcript', 'group_revision'])
+def test_group_wide_evidence_is_fenced_at_commit(store, monkeypatch, change):
+    monkeypatch.setenv('CAPTURE_SHARED_SPEECH_MODE', 'on')
+    seed_group(store, ['a', 'b'])
+    store.rows[path('c')] = row('c')
+    original = groups_db.join_capture_group
+
+    def race(*args, **kwargs):
+        if change == 'third_transcript':
+            # The queried pair is c/a; b was checked as the additional member.
+            store.rows[path('b')]['transcript_segments'][0]['text'] = 'an edited third transcript'
+        else:
+            for cid in ('a', 'b'):
+                store.rows[path(cid)]['capture_group']['revision'] += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(groups_db, 'join_capture_group', race)
+    policy.link_duplicate_captures(UID, store.rows[path('c')])
+    assert not store.rows[path('c')].get('capture_group')
+
+
+def test_large_group_abstains_without_exceeding_read_budget(store, monkeypatch):
+    monkeypatch.setenv('CAPTURE_SHARED_SPEECH_MODE', 'on')
+    seed_group(store, [str(i) for i in range(8)])
+    store.rows[path('entrant')] = row('entrant')
+    read = MagicMock(wraps=conversations_db.get_conversation_for_capture_check)
+    monkeypatch.setattr(conversations_db, 'get_conversation_for_capture_check', read)
+    policy.link_duplicate_captures(UID, store.rows[path('entrant')])
+    assert not store.rows[path('entrant')].get('capture_group')
+    assert read.call_count <= policy.MAX_CONTENT_CHECKS + 1

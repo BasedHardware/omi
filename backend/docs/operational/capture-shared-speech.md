@@ -28,7 +28,11 @@ checked first, with ID tie breaking.
 The writer remains `database.capture_groups.join_capture_group`, with the same
 transcript fingerprints, expected windows, sticky Separate exclusions,
 deletion/discard/closed fences, 12-member cap, and refusal to bridge two existing
-groups. It changes group metadata only. Transcript, summary, memories, tasks,
+groups. For the new rule, an entrant must also match every existing member;
+all those transcript/window snapshots and the group revision are fenced in the
+transaction. A long capture cannot transitively bridge two unrelated scenes.
+If that proof exceeds the same seven-read budget, the rule abstains. It changes
+group metadata only. Transcript, summary, memories, tasks,
 sharing and effects are retained independently. Separate reverses presentation
 grouping and prevents regrouping with former members. It does not undo manual,
 sync or smart merges. Switching off stops future decisions; it does not dissolve
@@ -66,10 +70,11 @@ Smart merge and EXP-003 Jev remain separate and unchanged.
    add duration. Line duration is transcript evidence, not acoustic ground truth.
 
 Unknown layouts and overflow abstain, rather than truncate and claim a match.
-Bounds per capture: 4,096 segments, 512 KiB text, 64,000 selected words, 4,096
-characters and 90 seconds per selected segment. Pair work is capped at 16,384
+Bounds per capture: 4,096 segments, 524,288 text characters, 64,000 selected words, 4,096
+characters and 90 seconds per selected segment. Each pair check is capped at 16,384
 line comparisons, 524,288 token-set operations and 262,144 LCS cells. The core is
 pure CPU, uses no provider and persists no lexical fingerprint or transcript.
+At most 12 matcher calls run per completion, including group-member confirmation.
 Changing cutoffs/version requires recalibration.
 
 This deliberately misses noisy, clock-shifted, heavily resegmented or weakly
@@ -84,35 +89,53 @@ issues, PRs, logs or the knowledge base. Report aggregates only. David's `unsure
 labels are excluded from precision/recall and audited separately for folds.
 
 Snapshot: 29 David labels (13 same, six different, ten unsure), 244 pair cards.
-The card schema contains shared-axis starts but **no segment ends**. Consequently
-the current card replay uses synthetic eight-second durations only as a lexical
-proxy. Its precision/recall is **not calibration of the deployed duration gate**.
-Do not activate on using that proxy. Original start/end exports have been requested.
+The cards omit segment ends, but the existing local pilot export retains them.
+Joining the original timed transcripts through the existing prospective event
+records, with September exports filling missing rows, reproduces the transcript
+text in all 29 labeled cards exactly. No account read or new export was needed.
+An earlier synthetic-duration lexical proxy was discarded; the table below uses
+original segment ends and the unchanged production matcher.
 
 | Data and class | Decisive n (same/different) | TP/FP | Precision (95% Wilson) | Recall (95% Wilson) |
 | --- | --- | --- | --- | --- |
-| David, start-only proxy, cross-source | 7 (5/2) | 3/0 | 100% (43.9–100%) | 60.0% (23.1–88.2%) |
-| David, start-only proxy, same-source same-device | 12 (8/4) | 3/0 | 100% (43.9–100%) | 37.5% (13.7–69.4%) |
-| David, start-only proxy, all | 19 (13/6) | 6/0 | 100% (61.0–100%) | 46.2% (23.2–70.9%) |
+| David, cross-source | 7 (5/2) | 1/0 | 100% (20.7–100%) | 20.0% (3.6–62.4%) |
+| David, same-source same-device | 12 (8/4) | 0/0 | undefined, no folds | 0% (0–32.4%) |
+| David, all | 19 (13/6) | 1/0 | 100% (20.7–100%) | 7.7% (1.4–33.3%) |
 | September agent benchmark, cross-source | 52 (32/20) | 1/0 | 100% (20.7–100%) | 3.1% (0.6–15.7%) |
 | September agent benchmark, same-source same-device | 43 (24/19) | 0/0 | undefined, no folds | 0% (0–13.8%) |
 | September agent benchmark, same-source different-device | 1 (0/1) | 0/0 | undefined, no folds | undefined, no positives |
 | September agent benchmark, all | 96 (56/40) | 1/0 | 100% (20.7–100%) | 1.8% (0.3–9.5%) |
 
+For comparison, replaying the incumbent ordinary rule with its code defaults on
+the original ends gives David cross-source TP4/FP2: precision 66.7% (Wilson
+30.0–90.3%), recall 80.0% (37.6–96.4%). On the September cross-source set it gives
+TP9/FP0: precision 100% (70.1–100%), recall 28.1% (15.6–45.4%). It accepts no
+same-source pairs. These are policy replays, not historical group observations;
+they do not include a nondefault containment/call policy or transaction conflicts.
+
 No David different-device or unknown-device labels exist at this snapshot. No
-proxy folds on ten unsure labels; eight excluded benchmark pairs also have no
+folds on ten unsure labels; eight excluded benchmark pairs also have no
 folds. The benchmark uses actual segment ends, but enriched old same-scene labels
 include adjacent events without overlap (38/104), truncated layouts and clock
 errors. It is a stress set, not a prospective shared-sentences truth set. The
 single benchmark accepted pair is insufficient evidence of useful recall or safe
-fleet precision. Cases share captures, so Wilson intervals assume independence
-that the actual sample does not establish; report them as descriptive only.
+fleet precision. Its component-held-out split accepts 0/20 same with 0/14 false
+folds; held-out recall is 0% (Wilson 0–16.1%). Cases share captures, so Wilson
+intervals assume independence that the actual sample does not establish; report
+them as descriptive only.
 
 Two David negatives defeat a bag-of-words rule. Their window Jaccards are 0.398
 and 0.653. The former has zero strong line pairs anywhere; the latter has 16
 strong line combinations, all at least 35.8 seconds apart (best exact line pair
 47.8 seconds apart). Neither has a strong line pair within 15 seconds. Both remain
 separate. These observations do not establish a TV/background-audio diagnosis.
+
+David's positive abstentions: four bounds, two timing, five sentence support,
+one window text, one confirmed. Across the six timing/bounds positive pairs,
+five capture instances contain lines longer than 90 seconds, two contain text
+with zero/negative duration, and one has a segment past its capture end
+(nonexclusive counts). These layouts cannot establish matched speech duration;
+upstream quality fixes should be evaluated before relaxing the rule.
 
 Thresholds favor false-fold avoidance: ordered, timed, distinct sentence evidence
 and actual line duration are mandatory. Low global lexical overlap is allowed to
@@ -141,8 +164,8 @@ pair IDs locally; never paste raw production records.
 
 After at least three clean shadow hours, compare counts by pair class and
 incumbent/new verdict, bounds/timing abstentions, latency and error signatures.
-Operations alone cannot prove accuracy. Before on, obtain real-end David
-calibration, prospective labels including background audio, noisy segmentation,
+Operations alone cannot prove accuracy. Before on, refresh real-end David
+calibration, obtain prospective labels including background audio, noisy segmentation,
 different devices and clock drift, and a sufficiently precise independent false
 fold bound. If safety is not established, stop at shadow and report the blocker.
 Only then progress David on → 5% for at least three hours → 100%, watching every

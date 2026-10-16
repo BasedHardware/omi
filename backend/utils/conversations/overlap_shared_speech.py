@@ -81,7 +81,10 @@ class _Rejected(Exception):
 def _epoch(value: Any) -> float:
     if not isinstance(value, datetime):
         raise _Rejected('timing')
-    return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).timestamp()
+    try:
+        return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).timestamp()
+    except (OverflowError, OSError, ValueError):
+        raise _Rejected('timing') from None
 
 
 def _number(value: Any) -> bool:
@@ -114,11 +117,11 @@ def _lines(row: Any, window: tuple[float, float], lo: float, hi: float) -> list:
         text = field(segment, 'text')
         if not isinstance(text, str):
             raise _Rejected('shape')
-        if not text.strip():
-            continue
         chars += len(text)
         if len(text) > MAX_SEGMENT_CHARS or chars > MAX_CHARS:
             raise _Rejected('bounds')
+        if not text.strip():
+            continue
         start, end = field(segment, 'start'), field(segment, 'end')
         if not _number(start) or not _number(end) or end <= start:
             raise _Rejected('timing')

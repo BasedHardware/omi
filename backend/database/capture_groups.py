@@ -138,6 +138,8 @@ def join_capture_group(
     transcript changes after the evidence was gathered. ``call_primary_id``
     enables the strict two-member call policy; ``continuation_from`` requires
     the caller's transaction-time policy guard before growing a call group.
+    ``expected_group_revision=0`` requires an ungrouped pair; a positive value
+    fences the existing membership used for group-wide speech confirmation.
     """
     client = firestore_client or get_firestore_client()
     collection = client.collection('users').document(uid).collection(_CONVERSATIONS)
@@ -147,6 +149,22 @@ def join_capture_group(
         rows = {cid: collection.document(cid).get(transaction=transaction).to_dict() for cid in (first_id, second_id)}
         if not all(_joinable(row) for row in rows.values()):
             return None
+        groups = {cid: (row.get(CAPTURE_GROUP_FIELD) or {}) for cid, row in rows.items()}
+        group_ids = {g.get('id') for g in groups.values() if g.get('id')}
+        if len(group_ids) > 1:
+            return None
+
+        existing = next((g for g in groups.values() if g.get('id')), None)
+        if (
+            expected_group_revision is not None
+            and int((existing or {}).get('revision') or 0) != expected_group_revision
+        ):
+            return None
+        member_ids = [m['id'] for m in (existing or {}).get('members', []) if m.get('id') not in rows]
+        for cid in member_ids:
+            rows[cid] = collection.document(cid).get(transaction=transaction).to_dict()
+        # A caller may confirm the entrant against every existing group member.
+        # Fence all of those transcripts/windows after reading the full group.
         for cid, window in (expected_windows or {}).items():
             row = rows.get(cid) or {}
             if (_aware(row.get('started_at')), _aware(row.get('finished_at'))) != tuple(_aware(v) for v in window):
@@ -154,15 +172,6 @@ def join_capture_group(
         for cid, fingerprint in (expected_fingerprints or {}).items():
             if fingerprint is None or transcript_fingerprint(rows.get(cid)) != fingerprint:
                 return None
-        groups = {cid: (row.get(CAPTURE_GROUP_FIELD) or {}) for cid, row in rows.items()}
-        group_ids = {g.get('id') for g in groups.values() if g.get('id')}
-        if len(group_ids) > 1:
-            return None
-
-        existing = next((g for g in groups.values() if g.get('id')), None)
-        member_ids = [m['id'] for m in (existing or {}).get('members', []) if m.get('id') not in rows]
-        for cid in member_ids:
-            rows[cid] = collection.document(cid).get(transaction=transaction).to_dict()
         # Deleted, closed, or departed members (e.g. absorbed by sync, or regrouped
         # by a race with deletion) are pruned rather than advertised.
         existing_id = (existing or {}).get('id')

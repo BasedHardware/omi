@@ -44,6 +44,7 @@ MIN_WINDOW_COVERAGE = 0.5
 CANDIDATE_PAGE_LIMIT = 100
 # Each confirmation re-reads one decrypted transcript; bound the work per finalization.
 MAX_CONTENT_CHECKS = 6
+MAX_SHARED_SPEECH_CHECKS = 12
 
 
 @dataclass(frozen=True)
@@ -200,16 +201,38 @@ def _group_with_overlap_speech(
     """
     if not matches:
         return
+    snapshots = {}
+
+    def load(cid):
+        if cid not in snapshots:
+            if len(snapshots) >= MAX_CONTENT_CHECKS + 1:
+                return None, None
+            snapshots[cid] = conversations_db.get_conversation_for_capture_check(uid, cid)
+        return snapshots[cid]
+
+    remaining_checks = MAX_SHARED_SPEECH_CHECKS
+
+    def confirms(first, second):
+        nonlocal remaining_checks
+        if remaining_checks <= 0:
+            return None
+        remaining_checks -= 1
+        return measure_overlap_shared_speech(first, second)
+
     try:
-        own, own_fingerprint = conversations_db.get_conversation_for_capture_check(uid, candidate.conversation_id)
+        own, own_fingerprint = load(candidate.conversation_id)
     except Exception:
         _record_degraded(to_mode='separate_captures')
         return
     for other in matches:
         try:
-            row, fingerprint = conversations_db.get_conversation_for_capture_check(uid, other.conversation_id)
+            row, fingerprint = load(other.conversation_id)
+            if not row:
+                break  # exhausted read budget or absent snapshot; never infer a fold
             started = time.perf_counter()
-            decision = measure_overlap_shared_speech(own, row)
+            decision = confirms(own, row)
+            if decision is None:
+                break
             elapsed_ms = (time.perf_counter() - started) * 1000
             incumbent = False
             if other.conversation_id in legacy_ids:
@@ -220,18 +243,41 @@ def _group_with_overlap_speech(
             own_group = (own or {}).get('capture_group') or {}
             other_group = (row or {}).get('capture_group') or {}
             already_grouped = bool(own_group.get('id') and own_group.get('id') == other_group.get('id'))
+            windows = {r.conversation_id: (r.started_at, r.finished_at) for r in (candidate, other)}
+            fingerprints = {candidate.conversation_id: own_fingerprint, other.conversation_id: fingerprint}
+            existing = own_group if own_group.get('id') else other_group
+            expected_revision = int(existing.get('revision') or 0)
+            would_join, reason = decision.would_join, decision.reason
+            if would_join and not already_grouped:
+                # Shared speech is not transitive: a long A containing scenes B
+                # and C must not fold B and C through A. Confirm the new entrant
+                # against every existing member, within the same read/CPU budget.
+                if own_group.get('id') and other_group.get('id'):
+                    would_join, reason = False, 'different_groups'
+                else:
+                    entrant = row if own_group.get('id') else own
+                    for member in existing.get('members') or []:
+                        cid = member['id']
+                        if cid in fingerprints:
+                            continue
+                        member_row, member_fingerprint = load(cid)
+                        record = capture_record(member_row)
+                        confirmation = confirms(entrant, member_row) if record else None
+                        if confirmation is None or not confirmation.would_join:
+                            would_join, reason = False, 'group_unconfirmed'
+                            break
+                        windows[cid] = (record.started_at, record.finished_at)
+                        fingerprints[cid] = member_fingerprint
             outcome = 'shadow' if mode == 'shadow' else 'none'
-            if mode == 'on' and decision.would_join:
+            if mode == 'on' and would_join:
                 group_id = capture_groups_db.join_capture_group(
                     uid,
                     candidate.conversation_id,
                     other.conversation_id,
                     decision.evidence(),
-                    expected_windows={r.conversation_id: (r.started_at, r.finished_at) for r in (candidate, other)},
-                    expected_fingerprints={
-                        candidate.conversation_id: own_fingerprint,
-                        other.conversation_id: fingerprint,
-                    },
+                    expected_windows=windows,
+                    expected_fingerprints=fingerprints,
+                    expected_group_revision=expected_revision,
                 )
                 outcome = 'applied' if group_id else 'conflict'
                 record_product_event('capture_group_joined', outcome=outcome)
@@ -248,8 +294,9 @@ def _group_with_overlap_speech(
                         'category': pair_category(own, row),
                         'current_would_join': bool(incumbent),
                         'already_grouped': already_grouped,
-                        'would_join': decision.would_join,
-                        'reason': decision.reason,
+                        'would_join': would_join,
+                        'reason': reason,
+                        'pair_would_join': decision.would_join,
                         'outcome': outcome,
                         'matcher_ms': round(elapsed_ms, 3),
                         **decision.evidence(),
