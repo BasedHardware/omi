@@ -30,6 +30,14 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   bool isLoading = false;
   bool _hasTriggeredReconnect = false;
 
+  @visibleForTesting
+  void markInstalledForTesting() {
+    setState(() {
+      isInstalled = true;
+      isLoading = false;
+    });
+  }
+
   // Store reference to provider for safe disposal
   DeviceProvider? _deviceProvider;
 

@@ -47,6 +47,15 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
   @visibleForTesting
   set isUpdating(bool value) => _isUpdating = value;
 
+  @visibleForTesting
+  void markSuccessForTesting() {
+    setState(() {
+      _isSuccess = true;
+      _isLoading = false;
+      _isUpdating = false;
+    });
+  }
+
   /// What the page says under the progress ring or in the failed state. Resolved to localized text
   /// at build time ([_statusText]); raw exceptions are never shown.
   _OtaMessage _status = _OtaMessage.checking;

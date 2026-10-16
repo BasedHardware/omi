@@ -121,10 +121,7 @@ void main() {
 
       // Transition to installed state
       final dynamic state = tester.state(find.byType(FirmwareUpdate));
-      state.isInstalled = true;
-      state.isLoading = false;
-      // Trigger rebuild into success section
-      (state as State).setState(() {});
+      state.markInstalledForTesting();
       await tester.pump();
 
       final doneFinder = find.byKey(const Key('firmware_update_done'));
@@ -163,9 +160,7 @@ void main() {
       await tester.pump();
 
       final dynamic state = tester.state(find.byType(FirmwareUpdate));
-      state.isInstalled = true;
-      state.isLoading = false;
-      (state as State).setState(() {});
+      state.markInstalledForTesting();
       await tester.pump();
 
       // Simulate popping the route without tapping Done
@@ -219,10 +214,7 @@ void main() {
       await tester.pump();
 
       final dynamic state = tester.state(find.byType(OmiGlassOtaUpdate));
-      state.isSuccess = true;
-      state.isLoading = false;
-      state.isUpdating = false;
-      (state as State).setState(() {});
+      state.markSuccessForTesting();
       await tester.pump();
 
       final doneFinder = find.widgetWithText(OmiButton, 'Done');
@@ -261,10 +253,7 @@ void main() {
       await tester.pump();
 
       final dynamic state = tester.state(find.byType(OmiGlassOtaUpdate));
-      state.isSuccess = true;
-      state.isLoading = false;
-      state.isUpdating = false;
-      (state as State).setState(() {});
+      state.markSuccessForTesting();
       await tester.pump();
 
       await tester.pumpWidget(const SizedBox.shrink());
