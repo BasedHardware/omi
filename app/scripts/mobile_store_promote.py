@@ -124,7 +124,8 @@ def ios_live_locales() -> list[str]:
     newest = None
     for resource in live:
         version = _resource_attrs(resource).get("versionString")
-        if isinstance(version, str) and resource.get("id"):
+        # Old live versions can be loose ("1.0"); like the train, only strict X.Y.Z can be newest.
+        if isinstance(version, str) and VERSION_RE.fullmatch(version) and resource.get("id"):
             if newest is None or version_parts(version) > version_parts(newest[0]):
                 newest = (version, str(resource["id"]))
     if newest is None:
