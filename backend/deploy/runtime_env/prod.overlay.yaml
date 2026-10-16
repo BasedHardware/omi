@@ -87,6 +87,10 @@ overlay:
         PROACTIVITY_V2_POSTHOG_HOST:
           value: https://us.posthog.com
           category: rollout
+        # Public product-capture token; shared POSTHOG_PROJECT_API_KEY stays disabled to keep flag rollouts dark.
+        POSTHOG_PRODUCT_CAPTURE_TOKEN:
+          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+          category: telemetry
         POSTHOG_PROJECT_API_KEY:
           secret:
             name: prod-omi-backend-secrets
@@ -358,6 +362,10 @@ overlay:
         PROACTIVITY_V2_POSTHOG_HOST:
           value: https://us.posthog.com
           category: rollout
+        # Public product-capture token; shared POSTHOG_PROJECT_API_KEY stays disabled to keep flag rollouts dark.
+        POSTHOG_PRODUCT_CAPTURE_TOKEN:
+          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+          category: telemetry
         POSTHOG_PROJECT_API_KEY:
           secret:
             name: prod-omi-backend-secrets
