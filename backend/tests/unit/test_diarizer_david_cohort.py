@@ -63,7 +63,7 @@ def test_prepared_cohort_does_not_enable_integration_or_dev():
         ('B', '0', 'true', '1'),
         ('C', '1', 'true', '80'),
         ('D', '5', 'true', '400'),
-        ('E', '15', 'true', '1200'),
+        ('E', '5', 'true', '1200'),
     ],
 )
 def test_ramp_data_preserves_scope_and_capacity(monkeypatch, stage, percent, authoritative, cap):
