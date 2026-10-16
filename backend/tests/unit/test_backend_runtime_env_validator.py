@@ -72,6 +72,8 @@ def with_memory_env(payload: str) -> str:
         {"name": "BATCH_PIPELINE_UID_ALLOWLIST", "value": ""},
         {"name": "BATCH_PIPELINE_PERCENT", "value": "0"},
         {"name": "BATCH_PIPELINE_SERVING_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_RECOVERY_MODE", "value": "off"},
+        {"name": "BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST", "value": ""},
         {"name": "BATCH_PIPELINE_WORKER_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_API_URL", "value": ""},
         {"name": "BATCH_PIPELINE_WORKER_AUDIENCE", "value": ""},

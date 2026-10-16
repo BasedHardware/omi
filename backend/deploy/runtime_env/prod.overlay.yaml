@@ -50,6 +50,8 @@ overlay:
           value: 'true'
         SONIOX_WIRE_LEDGER:
           value: 'true'
+        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+          value: shadow
         FREE_TIER_LOCAL_PROCESSING:
           value: 'false'
         FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -72,6 +74,9 @@ overlay:
           value: '16'
         PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
           value: '3'
+        STT_SERVICE_MODELS:
+          value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
+          category: stt_policy
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'false'
         HOSTED_PARAKEET_API_URL:
@@ -92,6 +97,9 @@ overlay:
           value: based-hardware-prod-screen-frames
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '100'
+        OMI_SHAPED_AGENT_MODE:
+          value: 'on'
+          category: rollout
         DREAM_AGENT_ENABLED:
           value: 'true'
           category: rollout
@@ -229,6 +237,8 @@ overlay:
           value: 'true'
         SONIOX_WIRE_LEDGER:
           value: 'true'
+        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+          value: shadow
         FREE_TIER_LOCAL_PROCESSING:
           value: 'false'
         FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -241,14 +251,26 @@ overlay:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-prod-screen-frames
-        TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-        TRANSCRIPTION_SHADOW_PERCENT:
-          value: '15'
-        TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
-          value: '1200'
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '100'
+        OMI_SHAPED_AGENT_MODE:
+          value: 'on'
+          category: rollout
+        TRANSCRIPTION_SHADOW_ENABLED:
+          value: 'true'
+          category: rollout
+        TRANSCRIPTION_SHADOW_KILL_SWITCH:
+          value: 'false'
+          category: rollout
+        TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+          category: rollout
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+        TRANSCRIPTION_SHADOW_PERCENT:
+          category: rollout
+          value: '15'
+        TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
+          category: rollout
+          value: '1200'
         HOSTED_DIARIZATION_API_URL:
           value: http://172.16.160.20/diarizer-batch
           category: service_discovery
@@ -450,6 +472,8 @@ overlay:
             value: syncing-local
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'true'
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
           FREE_TIER_LOCAL_PROCESSING:
             value: 'false'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -472,6 +496,9 @@ overlay:
             value: based-hardware-prod-screen-frames
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
+          OMI_SHAPED_AGENT_MODE:
+            value: 'on'
+            category: rollout
           HOSTED_DIARIZATION_API_URL:
             value: http://172.16.160.20/diarizer-batch
             category: service_discovery
@@ -676,6 +703,8 @@ overlay:
             value: based-hardware-batch-pipeline-staging
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'true'
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
           FREE_TIER_LOCAL_PROCESSING:
             value: 'false'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -700,20 +729,30 @@ overlay:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-prod-screen-frames
-          TRANSCRIPTION_SHADOW_ENABLED:
-            value: 'true'
-          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-          TRANSCRIPTION_SHADOW_PERCENT:
-            value: '15'
-          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
-            value: '1200'
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
           CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
             value: '100'
           MEMORY_OWNER_JEV_SHADOW_PERCENT:
             value: '100'
+          OMI_SHAPED_AGENT_MODE:
+            value: 'on'
+            category: rollout
+          TRANSCRIPTION_SHADOW_ENABLED:
+            category: rollout
+            value: 'true'
+          TRANSCRIPTION_SHADOW_KILL_SWITCH:
+            value: 'false'
+            category: rollout
+          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+            category: rollout
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          TRANSCRIPTION_SHADOW_PERCENT:
+            category: rollout
+            value: '15'
+          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
+            category: rollout
+            value: '1200'
           HOSTED_DIARIZATION_API_URL:
             value: http://172.16.160.20/diarizer-batch
             category: service_discovery
@@ -859,6 +898,8 @@ overlay:
             value: based-hardware-batch-pipeline-staging
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'true'
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
           FREE_TIER_LOCAL_PROCESSING:
             value: 'false'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -885,6 +926,9 @@ overlay:
             value: '100'
           MEMORY_OWNER_JEV_SHADOW_PERCENT:
             value: '100'
+          OMI_SHAPED_AGENT_MODE:
+            value: 'on'
+            category: rollout
           HOSTED_DIARIZATION_API_URL:
             value: http://172.16.160.20/diarizer-batch
             category: service_discovery
@@ -1033,6 +1077,8 @@ overlay:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'true'
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
           FREE_TIER_LOCAL_PROCESSING:
             value: 'false'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -1047,6 +1093,9 @@ overlay:
             value: https://us.posthog.com
           DREAM_AGENT_UID_ALLOWLIST:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          OMI_SHAPED_AGENT_MODE:
+            value: 'on'
+            category: rollout
           DREAM_AGENT_ENABLED:
             value: 'true'
             category: rollout

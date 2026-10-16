@@ -180,9 +180,6 @@ environments:
           STT_SHED_CONNECT_FAILURES: {value: '3', category: rollout}
           SONIOX_CIRCUIT_FAILURE_THRESHOLD: {value: '3', category: rollout}
           SONIOX_CIRCUIT_COOLDOWN_SECONDS: {value: '30', category: rollout}
-          STT_SERVICE_MODELS:
-            value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
-            category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
               name: dev-omi-backend-config
@@ -283,7 +280,6 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://api.omiapi.com
-          OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
           DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -304,6 +300,10 @@ environments:
           CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
           REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
+          STT_SERVICE_MODELS:
+            value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
+            category: stt_policy
+          OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           TRANSCRIPTION_SHADOW_ENABLED: {value: 'false', category: rollout}
           TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
           TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: '', category: rollout}
@@ -379,7 +379,6 @@ environments:
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://172.16.48.49/diarizer
-          OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
           DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -389,11 +388,6 @@ environments:
           BUCKET_SCREEN_FRAMES:
             category: storage_retention
             value: based-hardware-dev-screen-frames
-          TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
-          TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
-          TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {category: rollout, value: omi-release-probe}
-          TRANSCRIPTION_SHADOW_PERCENT: {category: rollout, value: '0'}
-          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {category: rollout, value: '1'}
           CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_RELEVANCE_JEV_PERCENT: {category: rollout, value: '0'}
           CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
@@ -404,6 +398,12 @@ environments:
           CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
           CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+          OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
+          TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
+          TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
+          TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {category: rollout, value: omi-release-probe}
+          TRANSCRIPTION_SHADOW_PERCENT: {category: rollout, value: '0'}
+          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {category: rollout, value: '1'}
           OMI_LLM_GATEWAY_URL:
             value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
             category: service_discovery
@@ -833,7 +833,6 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: dev-v1
               category: memory_rollout
-            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
             DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -855,6 +854,7 @@ environments:
             CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
             CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             FIREBASE_SIGNER_SERVICE_ACCOUNT:
@@ -1095,7 +1095,6 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
-            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
             DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -1111,11 +1110,6 @@ environments:
             BUCKET_SCREEN_FRAMES:
               category: storage_retention
               value: based-hardware-dev-screen-frames
-            TRANSCRIPTION_SHADOW_ENABLED: {category: rollout, value: 'false'}
-            TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
-            TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {category: rollout, value: ''}
-            TRANSCRIPTION_SHADOW_PERCENT: {category: rollout, value: '0'}
-            TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {category: rollout, value: '0'}
             CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_RELEVANCE_JEV_PERCENT: {category: rollout, value: '0'}
             CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {category: rollout, value: '0'}
@@ -1126,6 +1120,12 @@ environments:
             CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
             CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
+            TRANSCRIPTION_SHADOW_ENABLED: {category: rollout, value: 'false'}
+            TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
+            TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {category: rollout, value: ''}
+            TRANSCRIPTION_SHADOW_PERCENT: {category: rollout, value: '0'}
+            TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {category: rollout, value: '0'}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -1347,7 +1347,6 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
-            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
             DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -1368,6 +1367,7 @@ environments:
             CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
             CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -1550,13 +1550,13 @@ environments:
               category: storage_retention
             GCP_LOCATION:
               value: us-central1
-            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
             DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -2146,9 +2146,6 @@ environments:
           STT_SHED_CONNECT_FAILURES: {value: '3', category: rollout}
           SONIOX_CIRCUIT_FAILURE_THRESHOLD: {value: '3', category: rollout}
           SONIOX_CIRCUIT_COOLDOWN_SECONDS: {value: '30', category: rollout}
-          STT_SERVICE_MODELS:
-            value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
-            category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
               name: prod-omi-backend-config
@@ -2249,7 +2246,6 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://omi.me
-          OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
           DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -2270,6 +2266,10 @@ environments:
           CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
           REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
+          STT_SERVICE_MODELS:
+            value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
+            category: stt_policy
+          OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
           POSTHOG_PRODUCT_CAPTURE_TOKEN:
             value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
@@ -2420,7 +2420,6 @@ environments:
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://172.16.160.20/diarizer
-          OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
           DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -2430,11 +2429,6 @@ environments:
           BUCKET_SCREEN_FRAMES:
             category: storage_retention
             value: based-hardware-prod-screen-frames
-          TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
-          TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
-          TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
-          TRANSCRIPTION_SHADOW_PERCENT: {category: rollout, value: '15'}
-          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {category: rollout, value: '1200'}
           CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_RELEVANCE_JEV_PERCENT: {category: rollout, value: '100'}
           CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
@@ -2445,6 +2439,12 @@ environments:
           CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
           CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+          OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
+          TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
+          TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
+          TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
+          TRANSCRIPTION_SHADOW_PERCENT: {category: rollout, value: '15'}
+          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {category: rollout, value: '1200'}
           HOSTED_DIARIZATION_API_URL:
             value: http://172.16.160.20/diarizer-batch
             category: service_discovery
@@ -2833,7 +2833,6 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: prod-v1
               category: memory_rollout
-            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
             DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -2855,6 +2854,7 @@ environments:
             CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
             CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             HOSTED_DIARIZATION_API_URL:
               value: http://172.16.160.20/diarizer-batch
               category: service_discovery
@@ -3175,7 +3175,6 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
-            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
             DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -3191,11 +3190,6 @@ environments:
             BUCKET_SCREEN_FRAMES:
               category: storage_retention
               value: based-hardware-prod-screen-frames
-            TRANSCRIPTION_SHADOW_ENABLED: {category: rollout, value: 'true'}
-            TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
-            TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
-            TRANSCRIPTION_SHADOW_PERCENT: {category: rollout, value: '15'}
-            TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {category: rollout, value: '1200'}
             CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_RELEVANCE_JEV_PERCENT: {category: rollout, value: '100'}
             CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {category: rollout, value: '100'}
@@ -3206,6 +3200,12 @@ environments:
             CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
             CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
+            TRANSCRIPTION_SHADOW_ENABLED: {category: rollout, value: 'true'}
+            TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
+            TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
+            TRANSCRIPTION_SHADOW_PERCENT: {category: rollout, value: '15'}
+            TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {category: rollout, value: '1200'}
             HOSTED_DIARIZATION_API_URL:
               value: http://172.16.160.20/diarizer-batch
               category: service_discovery
@@ -3472,7 +3472,6 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
-            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
             DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -3493,6 +3492,7 @@ environments:
             CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
             CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             HOSTED_DIARIZATION_API_URL:
               value: http://172.16.160.20/diarizer-batch
               category: service_discovery
@@ -3721,13 +3721,13 @@ environments:
               category: storage_retention
             GCP_LOCATION:
               value: us-central1
-            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
             DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}

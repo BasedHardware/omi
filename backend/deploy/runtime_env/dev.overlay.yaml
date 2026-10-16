@@ -26,6 +26,8 @@ overlay:
           value: 'false'
         SONIOX_WIRE_LEDGER:
           value: 'false'
+        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+          value: shadow
         FREE_TIER_LOCAL_PROCESSING:
           value: 'true'
         FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -50,6 +52,9 @@ overlay:
           value: '1'
         PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
           value: '1'
+        STT_SERVICE_MODELS:
+          value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
+          category: stt_policy
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'true'
         HOSTED_PARAKEET_API_URL:
@@ -70,6 +75,9 @@ overlay:
           value: based-hardware-dev-screen-frames
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '0'
+        OMI_SHAPED_AGENT_MODE:
+          value: 'on'
+          category: rollout
         TRANSCRIPTION_SHADOW_ENABLED:
           value: 'false'
           category: rollout
@@ -112,6 +120,8 @@ overlay:
           value: 'false'
         SONIOX_WIRE_LEDGER:
           value: 'false'
+        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+          value: shadow
         FREE_TIER_LOCAL_PROCESSING:
           value: 'true'
         FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -126,14 +136,26 @@ overlay:
           value: ''
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-dev-screen-frames
-        TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-          value: omi-release-probe
-        TRANSCRIPTION_SHADOW_PERCENT:
-          value: '0'
-        TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
-          value: '1'
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '0'
+        OMI_SHAPED_AGENT_MODE:
+          value: 'on'
+          category: rollout
+        TRANSCRIPTION_SHADOW_ENABLED:
+          value: 'true'
+          category: rollout
+        TRANSCRIPTION_SHADOW_KILL_SWITCH:
+          value: 'false'
+          category: rollout
+        TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+          category: rollout
+          value: omi-release-probe
+        TRANSCRIPTION_SHADOW_PERCENT:
+          category: rollout
+          value: '0'
+        TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
+          category: rollout
+          value: '1'
         OMI_LLM_GATEWAY_URL:
           value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
           category: service_discovery
@@ -348,6 +370,8 @@ overlay:
             value: syncing-local-development
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
           FREE_TIER_LOCAL_PROCESSING:
             value: 'true'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -371,6 +395,9 @@ overlay:
             value: based-hardware-dev-screen-frames
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '0'
+          OMI_SHAPED_AGENT_MODE:
+            value: 'on'
+            category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           FIREBASE_SIGNER_SERVICE_ACCOUNT:
@@ -422,6 +449,8 @@ overlay:
             value: ''
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
           FREE_TIER_LOCAL_PROCESSING:
             value: 'true'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -447,19 +476,29 @@ overlay:
             value: ''
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-dev-screen-frames
-          TRANSCRIPTION_SHADOW_ENABLED:
-            value: 'false'
-          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-            value: ''
-          TRANSCRIPTION_SHADOW_PERCENT:
-            value: '0'
-          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
-            value: '0'
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '0'
           CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
             value: '0'
           MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '0'
+          OMI_SHAPED_AGENT_MODE:
+            value: 'on'
+            category: rollout
+          TRANSCRIPTION_SHADOW_ENABLED:
+            category: rollout
+            value: 'false'
+          TRANSCRIPTION_SHADOW_KILL_SWITCH:
+            value: 'false'
+            category: rollout
+          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+            category: rollout
+            value: ''
+          TRANSCRIPTION_SHADOW_PERCENT:
+            category: rollout
+            value: '0'
+          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
+            category: rollout
             value: '0'
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
@@ -511,6 +550,8 @@ overlay:
             value: ''
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
           FREE_TIER_LOCAL_PROCESSING:
             value: 'true'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -538,6 +579,9 @@ overlay:
             value: '0'
           MEMORY_OWNER_JEV_SHADOW_PERCENT:
             value: '0'
+          OMI_SHAPED_AGENT_MODE:
+            value: 'on'
+            category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           GOOGLE_CLOUD_PROJECT:
@@ -584,6 +628,8 @@ overlay:
             value: ''
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
           FREE_TIER_LOCAL_PROCESSING:
             value: 'true'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -599,6 +645,9 @@ overlay:
             value: https://app.posthog.com
           DREAM_AGENT_UID_ALLOWLIST:
             value: ''
+          OMI_SHAPED_AGENT_MODE:
+            value: 'on'
+            category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           GOOGLE_CLOUD_PROJECT:

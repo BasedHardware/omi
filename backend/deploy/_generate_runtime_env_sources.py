@@ -55,6 +55,24 @@ STT_LITERALS = {
     'STT_SERVICE_MODELS': 'modulate-velma-2,soniox,dg-nova-3,parakeet',
 }
 
+OVERLAY_ENV_KEYS = {
+    'OMI_SHAPED_AGENT_MODE',
+    'STT_SERVICE_MODELS',
+    'TRANSCRIPTION_SHADOW_ENABLED',
+    'TRANSCRIPTION_SHADOW_KILL_SWITCH',
+    'TRANSCRIPTION_SHADOW_UID_ALLOWLIST',
+    'TRANSCRIPTION_SHADOW_PERCENT',
+    'TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS',
+}
+WALLCLOCK_SHADOW_HOSTS = {
+    ('cloud_run', 'backend'),
+    ('cloud_run', 'backend-sync'),
+    ('cloud_run', 'backend-sync-backfill'),
+    ('cloud_run', 'backend-integration'),
+    ('gke', 'backend-listen'),
+    ('gke', 'pusher'),
+}
+
 
 def _load_yaml(path: Path) -> ConfigDict:
     with path.open('r', encoding='utf-8') as handle:
@@ -193,6 +211,50 @@ def _seed_recovery_defaults(shared: ConfigDict, dev: ConfigDict) -> None:
                 shared_host.setdefault('env', {})[key] = deepcopy(dev_host['env'][key])
 
 
+def _seed_wallclock_defaults(shared: ConfigDict) -> None:
+    """Keep wallclock smart-merge dark in base and let overlays opt into shadow."""
+    for section, name in WALLCLOCK_SHADOW_HOSTS:
+        if section == 'cloud_run':
+            host = shared.get('cloud_run', {}).get('services', {}).get(name)
+        else:
+            host = shared.get('gke', {}).get(name)
+        if host is not None:
+            host.setdefault('env', {})['CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE'] = {
+                'value': 'off',
+                'category': 'rollout',
+            }
+
+
+def _seed_stt_service_models_default(shared: ConfigDict) -> None:
+    """Keep the safe route in base while each environment overlays its canary order."""
+    listen_env = shared.get('gke', {}).get('backend-listen', {}).get('env', {})
+    if 'STT_SERVICE_MODELS' in listen_env:
+        listen_env['STT_SERVICE_MODELS'] = {
+            'value': STT_LITERALS['STT_SERVICE_MODELS'],
+            'category': 'stt_policy',
+        }
+
+
+def _remove_overlay_env_keys(shared: ConfigDict) -> None:
+    """Keep selected rollout declarations explicit in both environment overlays.
+
+    The shared extractor hoists identical declarations into base, and hoists a
+    shared subfield when only the value differs. These controls are intentionally
+    environment-scoped, so retaining their full declarations in each overlay
+    preserves the reviewed rollout boundary and keeps generated sources auditable.
+    """
+    cloud_run = shared.get('cloud_run', {}).get('services', {})
+    gke = shared.get('gke', {})
+    hosts = [*cloud_run.values(), *gke.values()]
+    for host in hosts:
+        if not isinstance(host, dict):
+            continue
+        env = host.get('env')
+        if isinstance(env, dict):
+            for key in OVERLAY_ENV_KEYS:
+                env.pop(key, None)
+
+
 def _project_fields(env: str, env_config: ConfigDict) -> ConfigDict:
     compute = str(env_config['gcp_project'])
     data_plane = str(env_config.get('runtime_gcp_project', compute))
@@ -218,6 +280,9 @@ def main() -> int:
     norm_prod = _normalize(prod, 'prod')
     shared = _extract_common(norm_dev, norm_prod) or {}
     _seed_recovery_defaults(shared, norm_dev)
+    _seed_wallclock_defaults(shared)
+    _seed_stt_service_models_default(shared)
+    _remove_overlay_env_keys(shared)
 
     dev_substituted = _substitute_placeholders(
         shared,
