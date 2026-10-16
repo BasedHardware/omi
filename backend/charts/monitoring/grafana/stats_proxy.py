@@ -26,15 +26,23 @@ class NoRedirect(HTTPRedirectHandler):
         return None
 
 
-# The private board requests exactly this route (see
-# web/admin/grafana/dashboards/omi-tv-v2.json). Anything else — other stats
-# routes, query strings, fragments — is rejected before parsing so unique
-# attacker URLs cannot each become a distinct 360-second cache/slot entry.
+# The private board requests exactly these routes (see
+# web/admin/grafana/dashboards/omi-tv-v2.json and SERIES_NAMES in
+# web/admin/lib/wall-series.ts). Anything else — other stats routes, query
+# strings, fragments — is rejected before parsing so unique attacker URLs cannot
+# each become a distinct 360-second cache/slot entry. The set is fixed and small.
 WALL_PATH = "/api/omi/stats/wall"
+SERIES_NAMES = ("headline", "growth", "activation", "retention", "revenue", "health")
+ALLOWED_PATHS = frozenset([WALL_PATH] + [f"{WALL_PATH}/series/{name}" for name in SERIES_NAMES])
+# A cold admin response returns within its 5 s bound while the fill continues
+# (`"refreshing": true`). Cache that body only briefly so the next panel refresh
+# picks up the filled result instead of pinning the empty one for 15 minutes.
+REFRESHING_TTL = 15
+SETTLED_TTL = 900
 
 
 def allowed_path(path):
-    if path != WALL_PATH:
+    if path not in ALLOWED_PATHS:
         return False
     parsed = urlsplit(path)
     return (
@@ -115,8 +123,9 @@ class StatsProxy:
                         {"Authorization": f"Bearer {token}", "Accept": "application/json"},
                         timeout=360,
                     )
-                    json.loads(body)  # Never forward HTML, redirects or a login page.
-                    return self.remember(path, 200, body, 900)
+                    parsed = json.loads(body)  # Never forward HTML, redirects or a login page.
+                    refreshing = isinstance(parsed, dict) and parsed.get("refreshing") is True
+                    return self.remember(path, 200, body, REFRESHING_TTL if refreshing else SETTLED_TTL)
                 except HTTPError as exc:
                     exc.close()
                     if exc.code == 401 and attempt == 0:

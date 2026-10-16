@@ -242,7 +242,11 @@ def start_background_task(coro: Coroutine[Any, Any, Any], *, name: str) -> async
     fire-and-forget work.  Bare ``create_task`` silently drops exceptions
     and can be garbage-collected if the caller doesn't keep a reference.
     """
-    task = asyncio.create_task(coro, name=name)
+    from database.firestore_read_origin import background_task_read_origin
+
+    # Task creation copies context; keep the original coroutine/task semantics.
+    with background_task_read_origin(name):
+        task = asyncio.create_task(coro, name=name)
     _background_tasks.add(task)
 
     def _done(t: asyncio.Task[Any]) -> None:

@@ -1,6 +1,8 @@
 # Shared Gateway batch cohort ramp
 
-Lead owns merges, deployments and ramp decisions. The checked-in production binding selects complete stage E: 15% authoritative including sync/backfill, plus David. Stage D (5%) was held clean for 3 hours 2 minutes on 2026-10-16, 02:45→05:47Z: queue depth 0, five replicas with 0 restarts, five T4 nodes, and `upstream_error` about 1%. For an E regression, roll back to complete D with the previous budgets.
+Lead owns merges, deployments and ramp decisions. The checked-in production binding holds stage E at 5% authoritative including sync/backfill, plus David, with stage E's existing budgets. Stage D (5%) was held clean for 3 hours 2 minutes on 2026-10-16, 02:45→05:47Z: queue depth 0, five replicas with 0 restarts, five T4 nodes, and `upstream_error` about 1%. For an E regression, roll back to complete D with the previous budgets.
+David's 2026-10-16 decision is to keep a 5% live quality sample: per-~8-second-clip pyannote runs at RTF 0.308 cost about $100/day at 15%, with $700–900/day estimated at 100%, and miss the cost goal.
+This per-clip path will be superseded by whole-unit diarization in the batch pipeline.
 Deployment and further long-audio qualification remain lead-owned.
 The reserved prod Gateway is `172.16.160.20`; reservation is not serving readiness.
 Follow [Gateway installation and route probes](../charts/internal-gateway/README.md)
@@ -30,7 +32,7 @@ Combine those constants with the following exact values (all strings):
 | B David authoritative including sync | 0 | 0 | true | true | 1 | 10 | 1,000 | — |
 | C 1% authoritative + David | 1 | 1 | true | true | 80 | 10 | 1,000 | — |
 | D 5% authoritative + David | 5 | 5 | true | true | 400 | 50 | 5,000 | 2026-10-16 02:45→05:47Z (3h 2m): queue 0; 5 replicas, 0 restarts; 5 T4 nodes; `upstream_error` ~1% |
-| E 15% authoritative + David | 15 | 15 | true | true | 1,200 | 150 | 15,000 | Configured; observation pending deployment |
+| E 5% quality sample + David | 5 | 5 | true | true | 1,200 | 150 | 15,000 | Current hold; stage E budgets retained |
 
 Column names abbreviate the `TRANSCRIPTION_` prefix. Edit only the single
 `<<: &batch_cohort {...}` line in `deploy/runtime_env/prod.overlay.yaml`; the three
@@ -50,7 +52,7 @@ Complete B is the broader David-only rollback: both percentages 0, daily shadow
 budget 1 h, with sync caps 10/1,000 and authoritative=true/sync=true. Complete A
 additionally sets authoritative=false and sync=false.
 
-The checked-in production configuration is E (15%). The preceding D hold met the
+The checked-in production configuration is E (5%). The preceding D hold met the
 three-hour minimum with the readout above. An empty series is not a passing gate.
 Lead records sample counts, baseline, p95 values and the acceptance decision for
 each stage before advancing.
@@ -114,11 +116,11 @@ assignments, clocks, translations and source references on the actual sync outpu
 [Stage C aggregate measurements and provisional capacity model](diarizer-batch-stagec-load.md)
 qualify the combined sync/pusher planning assumptions. The measured long-audio
 T4 RTF is about 0.042, or roughly 24 audio-hours per GPU-hour. At E's sync cap
-of 150 audio-hours per wall-clock hour, steady inference needs about 6.3 T4
+of 150 audio-hours per wall-clock hour, the 15% planning scenario needs about 6.3 T4
 GPU-hours per hour, or 9 nodes at 70% planning utilization. The production batch
 HPA and T4 pool each have a maximum of 18. The observed D peak was five replicas
-at 5%; linear projection at E is 15 replicas. The HPA scales up by three pods per
-60 seconds, so E uses the current ceiling minus one scale-up step (18 − 3 = 15).
+at 5%; the prior 15% scenario projected 15 replicas. The HPA scales up by three pods per
+60 seconds, leaving one scale-up step of headroom under the current ceiling (18 − 3 = 15).
 A 25% stage projects 25 replicas; raise both the diarizer-batch HPA max and T4
 pool max, with scale-up headroom, before considering that stage. These are steady
 capacity projections, not a burst-capacity or p95 latency bound.
@@ -126,9 +128,10 @@ capacity projections, not a burst-capacity or p95 latency bound.
 The daily cap is already configurable through `TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS`
 and reserved atomically in shared Redis across shadow workers before provider work. It
 charges **all** selected stored audio, even single-speaker triage skips. At the
-planning load of 6,300 audio-h/day, C selects ~63 h, D ~315 h and E ~945 h;
-80/400/1,200 h provide headroom. At E, ~426 multi-speaker audio-h/day × measured
-T4 RTF 0.042 is about **17.9 GPU-h/day**. At the same ~45% multi-speaker share,
+planning load of 6,300 audio-h/day, C selects ~63 h and both D and the current E hold select ~315 h;
+the prior 15% scenario selected ~945 h; 80/400/1,200 h provide headroom. At that prior
+scenario, ~426 multi-speaker audio-h/day × measured T4 RTF 0.042 is about **17.9 GPU-h/day**;
+the current 5% hold is about **6 GPU-h/day**. At the same ~45% multi-speaker share,
 spending the entire 1,200 h cap is about **22.7 GPU-h/day**. These are planning
 assumptions, not a T4 load-test receipt.
 Bursts, extra ASR work and retries still require queue/latency gates.
@@ -180,10 +183,9 @@ it does not depend on that process-local shadow task.
 2. Deploy complete B to backend, backend-sync, backend-sync-backfill and pusher;
    confirm David's actual backfill jobs log `event=sync_final_pass` and inspect output.
 3. Hold B for acceptance, then advance through C and D only after the gates and
-   combined-load qualification. Advance to E (15%) only after at least 3 clean
-   hours at D and review of the supplied readout. A later 25% move requires a
-   higher diarizer-batch HPA and T4 pool maximum first. Redeploy all four for each
-   data edit.
+   combined-load qualification. Keep E at 5% for the live quality sample; further
+   per-clip percentage increases require a new cost decision. Redeploy all four for
+   each data edit.
 
 ### Rollback
 

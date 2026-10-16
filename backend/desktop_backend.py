@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import Response
 
+from database.firestore_tier_context import FirestoreTierMiddleware
 from utils.byok import BYOKMiddleware
 from utils.llm.desktop_proxy_lifetime import DesktopProxyDeadlineMiddleware
 from utils.env_loader import firebase_admin_options, load_backend_env
@@ -121,6 +122,7 @@ def _cors_allowed_origins_from_env() -> list[str]:
 
 def _build_app() -> FastAPI:
     app = FastAPI(lifespan=lifespan)
+    app.add_middleware(FirestoreTierMiddleware)
     watchdog = DesktopLoopWatchdog(enabled=os.getenv("DESKTOP_LOOP_WATCHDOG_ENABLED", "true").lower() != "false")
     app.state.loop_watchdog = watchdog
     app.add_middleware(InFlightRequestsMiddleware, watchdog=watchdog)

@@ -220,7 +220,17 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     } else if (attentionWals.isNotEmpty) {
       title = l.syncCardNeedsAttention(groupRecordingBlocks(attentionWals).length);
       titleColor = Colors.orangeAccent;
-      action = statusActionPill(l.sync, OmiColors.accent, startSync);
+      // Only a recording whose retry budget is spent can still upload; the
+      // others are terminal, and a plain Sync skipped both kinds. Offer the
+      // button only when it can do something.
+      if (p.retryableAttentionWals.isNotEmpty) {
+        action = KeyedSubtree(
+          key: const Key('offline_sync_card_retry_attention'),
+          child: statusActionPill(l.retry, OmiColors.accent, () async {
+            if (await confirmSyncForCustomStt(context) && context.mounted) p.retryNeedsAttentionWals();
+          }),
+        );
+      }
     } else if (readyWals.isNotEmpty) {
       final seconds = walSeconds(readyWals);
       title = seconds > 0

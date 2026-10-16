@@ -110,7 +110,7 @@ def _stub_module(name: str) -> types.ModuleType:
 # --- database stubs ---
 database_mod = _stub_module("database")
 if not hasattr(database_mod, "__path__"):
-    database_mod.__path__ = []
+    database_mod.__path__ = [str(BACKEND_DIR / "database")]
 for submodule in [
     "redis_db",
     "memories",
@@ -146,8 +146,6 @@ sys.modules["database.auth"].get_user_name = MagicMock(return_value="Alice")
 sys.modules["database.goals"].get_user_goal = MagicMock(return_value=None)
 sys.modules["database.goals"].get_user_goals = MagicMock(return_value=[])
 sys.modules["database.redis_db"].get_enabled_apps = MagicMock(return_value=[])
-sys.modules["database.redis_db"].get_filter_category_items = MagicMock(return_value=[])
-sys.modules["database.redis_db"].add_filter_category_item = MagicMock()
 sys.modules["database.redis_db"].get_cached_user_geolocation = MagicMock(return_value=None)
 sys.modules["database.redis_db"].r = MagicMock()
 sys.modules["database.users"].get_user_location_context_consent = MagicMock(return_value=None)

@@ -1915,7 +1915,12 @@ def get_shared_conversation_by_id(conversation_id: str):
     if not uid:
         raise HTTPException(status_code=404, detail="Conversation is private")
 
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    try:
+        conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail='Shared conversation unavailable') from exc
     visibility = conversation.get('visibility', ConversationVisibility.private)
     if not visibility or visibility == ConversationVisibility.private:
         raise HTTPException(status_code=404, detail="Conversation is private")

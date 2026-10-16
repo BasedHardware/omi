@@ -136,6 +136,27 @@ def test_missing_evidence_is_returned_and_successful_resubmission_is_counted_wit
     assert store.rows == before and not store.transactions
 
 
+def test_same_turn_resubmission_resolves_rejected_call_before_finish(store, monkeypatch):
+    active = session(store, monkeypatch)
+    edit = {'kind': 'dismiss_person', 'target': 'people/junk', 'reason': 'Synthetic junk detection'}
+
+    async def model(mount, messages):
+        return turn(
+            [
+                call('propose_edit', {'edit': edit}),
+                call('propose_edit', {'edit': {**edit, 'evidence': ['conversations/one']}}, 2),
+                call('finish', {'summary': 'Staged one synthetic correction.'}, 3),
+            ]
+        )
+
+    result = asyncio.run(active.run(model, deadline_seconds=5))
+
+    assert result.reason == 'finished'
+    assert len(active.staged) == 1
+    assert active.counters['resubmits_succeeded'] == 1
+    assert active.rejections['schema'] == 1
+
+
 def test_empty_backlog_can_search_read_and_stage_hunt_work(store, monkeypatch):
     active = session(store, monkeypatch, seed_records=False)
     step = 0

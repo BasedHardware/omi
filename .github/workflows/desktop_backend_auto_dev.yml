@@ -273,6 +273,7 @@ jobs:
             OMI_FIRESTORE_DATA_PLANE_PROJECT=based-hardware
             FIRESTORE_READ_LEDGER=1
             FIRESTORE_READ_LEDGER_SERVICE=desktop-backend
+            ${{ steps.desktop-expected-env.outputs.firestore_read_env_vars }}
             FIREBASE_SIGNER_SERVICE_ACCOUNT=dev-auth-token-signer@based-hardware.iam.gserviceaccount.com
             BASE_API_URL=${{ steps.desktop-base-api-url.outputs.base_api_url }}
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.candidate-identity.outputs.source_sha }}

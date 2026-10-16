@@ -10,6 +10,7 @@ from config import sync_reprocess as flags
 from utils.sync import reprocess
 
 _ENQUEUE = reprocess._enqueue
+_MUTATE = reprocess._mutate
 
 
 @pytest.fixture
@@ -27,6 +28,10 @@ def state(monkeypatch):
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
     monkeypatch.setattr(reprocess, '_mutate', mutate)
     monkeypatch.setattr(reprocess, '_enqueue', lambda row: tasks.append(deepcopy(row)))
+    monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs')
+    monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://fresh.invalid/v2/sync-jobs/run')
+    monkeypatch.delenv('SYNC_TASKS_OIDC_AUDIENCE', raising=False)
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@example.invalid')
     monkeypatch.setenv('SYNC_REPROCESS_SETTLE_SECONDS', '600')
     return rows, tasks
 
@@ -219,17 +224,17 @@ def test_backfill_recovery_retains_its_queue_worker_and_identity(state, monkeypa
     monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
     monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-backfill')
     monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://backfill.invalid/v2/sync-jobs/run')
-    monkeypatch.setenv('SYNC_TASKS_OIDC_AUDIENCE', 'backfill-audience')
+    monkeypatch.setenv('SYNC_TASKS_OIDC_AUDIENCE', 'https://backfill.invalid/v2/sync-jobs/run')
     monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'backfill-invoker@example.invalid')
     reprocess.mark('u', 'c', 'en', now=0)
     row = rows[reprocess.key('u', 'c')]
     monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs')
     monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://fresh.invalid/v2/sync-jobs/run')
-    monkeypatch.setenv('SYNC_TASKS_OIDC_AUDIENCE', 'fresh-audience')
+    monkeypatch.setenv('SYNC_TASKS_OIDC_AUDIENCE', 'https://fresh.invalid/v2/sync-jobs/run')
     monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'fresh-invoker@example.invalid')
     _ENQUEUE(row)
     assert enqueue.call_args.args[0:2] == ('sync-backfill', 'https://backfill.invalid/v2/sync-jobs/run')
-    assert enqueue.call_args.kwargs['audience'] == 'backfill-audience'
+    assert enqueue.call_args.kwargs['audience'] == 'https://backfill.invalid/v2/sync-jobs/run'
     assert enqueue.call_args.kwargs['invoker_sa'] == 'backfill-invoker@example.invalid'
     assert enqueue.call_args.kwargs['schedule_at'] == 600
 
@@ -299,3 +304,145 @@ def test_sweep_reports_repair_errors_without_failing_successful_retirement(
         'reprocess_repaired': 0 if repair_raises else 3,
         'reprocess_repair_errors': 1 if repair_raises else repair_errors,
     }
+
+
+@pytest.fixture
+def sweep_query(state, monkeypatch):
+    rows, _ = state
+    query = Mock()
+    query.where.return_value = query
+    query.order_by.return_value = query
+    query.limit.return_value = query
+    query.stream.side_effect = lambda: [SimpleNamespace(id=key) for key in list(rows)]
+    monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: SimpleNamespace(collection=lambda _: query))
+    return query
+
+
+@pytest.mark.parametrize('poison', [None, {}, {'queue': ''}, 'invalid'])
+def test_sweep_rebinds_poison_in_cas_and_fences_old_delivery(state, sweep_query, poison):
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    key = reprocess.key('u', 'c')
+    original = deepcopy(rows[key])
+    rows[key]['dispatch'] = poison
+    assert reprocess.sweep(now=600) == {'repaired': 1, 'error': 0}
+    repaired = rows[key]
+    assert repaired['dispatch'] == reprocess._dispatch_binding()
+    assert repaired['task_token'] != original['task_token']
+    assert repaired['version'] == original['version'] and repaired['due_at'] == original['due_at']
+    assert tasks[-1] == repaired  # The binding/token are durable before enqueue.
+    process = Mock()
+    assert reprocess.run(key, original['task_token'], process, now=600) == 'stale'
+    process.assert_not_called()
+    assert reprocess.run(key, repaired['task_token'], process, now=600) == 'processed'
+    assert not rows
+
+
+@pytest.mark.parametrize('field', ['queue', 'handler', 'audience', 'invoker_sa'])
+def test_sweep_repairs_each_missing_binding_field(state, sweep_query, field):
+    rows, _ = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    rows[reprocess.key('u', 'c')]['dispatch'][field] = ''
+    assert reprocess.sweep(now=600) == {'repaired': 1, 'error': 0}
+    assert rows[reprocess.key('u', 'c')]['dispatch'] == reprocess._dispatch_binding()
+
+
+def test_unbound_host_leaves_claimable_obligation_without_error_storm(state, sweep_query, monkeypatch, caplog):
+    rows, tasks = state
+    monkeypatch.delenv('SYNC_TASKS_QUEUE')
+    reprocess.mark('u', 'c', 'en', now=0)
+    key = reprocess.key('u', 'c')
+    assert rows[key]['dispatch'] is None and not tasks
+    # Includes a legacy poison row: neither row is rewritten or enqueued here.
+    reprocess.mark('u', 'poison', 'en', now=0)
+    rows[reprocess.key('u', 'poison')]['dispatch'] = {'queue': ''}
+    original = deepcopy(rows)
+    before = reprocess.UNBOUND.labels(action='repair')._value.get()
+    for _ in range(3):
+        assert reprocess.sweep(now=600) == {'repaired': 0, 'error': 0}
+    assert rows == original and not tasks
+    assert reprocess.UNBOUND.labels(action='repair')._value.get() == before + 6
+    assert not caplog.records
+    monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs')
+    assert reprocess.sweep(now=600) == {'repaired': 2, 'error': 0}
+    assert len(tasks) == 2
+
+
+def test_rebinding_waits_for_lease_and_cannot_finish_another_owner(state, sweep_query):
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    key = reprocess.key('u', 'c')
+    rows[key].update(dispatch=None, lease_until=700, owner='other')
+    original = deepcopy(rows[key])
+    assert reprocess.sweep(now=600) == {'repaired': 0, 'error': 0}
+    assert rows[key] == original and len(tasks) == 1
+    assert reprocess.sweep(now=700) == {'repaired': 1, 'error': 0}
+
+    def supersede(*_):
+        rows[key]['owner'] = 'new-owner'
+
+    assert reprocess.run(key, tasks[-1]['task_token'], supersede, now=700) == 'processed'
+    assert rows[key]['owner'] == 'new-owner'
+
+
+def test_sweep_keeps_valid_backfill_binding_on_fresh_host(state, sweep_query):
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    binding = {
+        'queue': 'sync-backfill',
+        'handler': 'https://backfill.invalid/v2/sync-jobs/run',
+        'audience': 'https://backfill.invalid/v2/sync-jobs/run',
+        'invoker_sa': 'backfill@example.invalid',
+    }
+    rows[reprocess.key('u', 'c')]['dispatch'] = binding
+    assert reprocess.sweep(now=600) == {'repaired': 1, 'error': 0}
+    assert tasks[-1]['dispatch'] == binding
+
+
+@pytest.mark.parametrize(
+    'handler,audience',
+    [
+        ('https://fresh.invalid/v2/audio-merge-jobs/run', 'https://fresh.invalid/v2/audio-merge-jobs/run'),
+        ('https://fresh.invalid/v2/sync-jobs/run', 'https://sibling.invalid/v2/sync-jobs/run'),
+        ('https://fresh.invalid/v2/sync-jobs/run?extra=1', 'https://fresh.invalid/v2/sync-jobs/run?extra=1'),
+    ],
+)
+def test_mark_never_persists_invalid_worker_or_sibling_audience(state, monkeypatch, handler, audience):
+    rows, tasks = state
+    monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', handler)
+    monkeypatch.setenv('SYNC_TASKS_OIDC_AUDIENCE', audience)
+    reprocess.mark('u', 'c', 'en', now=0)
+    assert rows[reprocess.key('u', 'c')]['dispatch'] is None and not tasks
+
+
+def test_integration_manifest_has_fresh_worker_queue_and_receiving_audience(runtime_manifest):
+    env = runtime_manifest['environments']['prod']['cloud_run']['services']['backend-integration']['env']
+    assert env['SYNC_TASKS_QUEUE']['value'] == 'sync-jobs'
+    assert env['SYNC_TASKS_OIDC_AUDIENCE']['env_var'] == env['SYNC_TASKS_HANDLER_URL']['env_var']
+    assert env['SYNC_TASKS_INVOKER_SA']['env_var'] == 'SYNC_TASKS_INVOKER_SA'
+
+
+def test_rebind_cas_conflict_rereads_a_new_lease(state, sweep_query, monkeypatch):
+    from google.api_core.exceptions import FailedPrecondition
+
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    poisoned = deepcopy(rows[reprocess.key('u', 'c')])
+    poisoned['dispatch'] = None
+    leased = {**poisoned, 'lease_until': 900, 'owner': 'winning-worker'}
+    ref = Mock()
+    ref.get.side_effect = [
+        SimpleNamespace(exists=True, update_time=None, to_dict=lambda: deepcopy(poisoned)),
+        SimpleNamespace(exists=True, update_time=None, to_dict=lambda: deepcopy(leased)),
+    ]
+    ref.update.side_effect = FailedPrecondition('CAS conflict')
+    client = Mock()
+    client.collection.return_value = sweep_query
+    sweep_query.document.return_value = ref
+    monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(reprocess, '_mutate', _MUTATE)
+    monkeypatch.setattr(reprocess.time, 'sleep', lambda _: None)
+    assert reprocess.sweep(now=600) == {'repaired': 0, 'error': 0}
+    assert ref.get.call_count == 2 and ref.update.call_count == 1
+    assert ref.update.call_args.kwargs['option'] is not None
+    assert len(tasks) == 1  # The failed CAS never dispatches its tentative token.

@@ -205,7 +205,11 @@ async def run_cheap(item, *, lane: str, model_turn, tokens: int, deadline_second
         nonlocal calls, used
         calls += 1
         turn = await model_turn(active, messages)
-        used += turn.tokens if turn.accounted_tokens is None else turn.accounted_tokens
+        used += (
+            turn.price_weighted_tokens
+            if turn.price_weighted_tokens is not None
+            else turn.tokens if turn.accounted_tokens is None else turn.accounted_tokens
+        )
         return turn
 
     try:

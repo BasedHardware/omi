@@ -1,3 +1,4 @@
+from database.fsr_read_cache import fresh_reader, fresh_reads
 import os
 from datetime import datetime, timezone
 
@@ -300,29 +301,31 @@ def _build_subscription_from_stripe_object(
 
 
 def _update_subscription_from_session(uid: str, session: stripe.checkout.Session) -> bool:
-    customer_id = session.get('customer')
-    subscription_id = session.get('subscription')
+    with fresh_reads():
+        customer_id = session.get('customer')
+        subscription_id = session.get('subscription')
 
-    try:
-        if customer_id:
-            users_db.set_stripe_customer_id(uid, customer_id)
+        try:
+            if customer_id:
+                users_db.set_stripe_customer_id(uid, customer_id)
 
-        if subscription_id:
-            stripe_sub = stripe.Subscription.retrieve(subscription_id)
-            if stripe_sub:
-                new_subscription = _build_subscription_from_stripe_object(stripe_sub.to_dict())
-                if new_subscription is None:
-                    return False
-                users_db.update_user_subscription(uid, new_subscription.model_dump())
-                logger.info(f"Subscription for user {uid} updated from session {session.id}.")
-    except FirestoreNotFound:
-        logger.warning(
-            f"Stripe webhook: user {uid} not found in Firestore, " f"skipping checkout session subscription update"
-        )
+            if subscription_id:
+                stripe_sub = stripe.Subscription.retrieve(subscription_id)
+                if stripe_sub:
+                    new_subscription = _build_subscription_from_stripe_object(stripe_sub.to_dict())
+                    if new_subscription is None:
+                        return False
+                    users_db.update_user_subscription(uid, new_subscription.model_dump())
+                    logger.info(f"Subscription for user {uid} updated from session {session.id}.")
+        except FirestoreNotFound:
+            logger.warning(
+                f"Stripe webhook: user {uid} not found in Firestore, " f"skipping checkout session subscription update"
+            )
 
-    return True
+        return True
 
 
+@fresh_reader
 def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
     """
     Attempts to reactivate a canceled subscription if possible.
@@ -614,6 +617,7 @@ def _validate_price_id(price_id: str) -> None:
     response_model=PaymentCheckoutSessionResponse,
     response_model_exclude_none=True,
 )
+@fresh_reader
 def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = Depends(auth.get_current_user_uid)):
     _validate_price_id(request.price_id)
     # Check if user can make a new payment
@@ -694,6 +698,7 @@ def _unlock_paid_content(uid: str) -> None:
 
 
 @router.post('/v1/payments/upgrade-subscription', response_model=PaymentUpgradeSubscriptionResponse)
+@fresh_reader
 def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Upgrade or change a user's subscription plan.
 
@@ -856,6 +861,7 @@ class CancelSubscriptionRequest(BaseModel):
 
 
 @router.delete('/v1/payments/subscription', response_model=PaymentStatusMessageResponse)
+@fresh_reader
 def cancel_subscription_endpoint(
     request: CancelSubscriptionRequest = CancelSubscriptionRequest(),
     uid: str = Depends(auth.get_current_user_uid),
@@ -946,6 +952,7 @@ async def stripe_webhook(
     return await dispatch_with_ledger(event, lambda: _handle_stripe_event(event, background_tasks), run_db)
 
 
+@fresh_reader
 async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | None = None):
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']

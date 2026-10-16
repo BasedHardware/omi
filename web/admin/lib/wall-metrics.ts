@@ -25,10 +25,16 @@ import {
 import { WallSourceError, wallFailure } from "./wall-source-error";
 import { fetchShopifyWeek } from "./wall-shopify";
 import { WallJobCache } from "./wall-job-cache";
+import {
+  allInCost,
+  SAAS_MONTHLY_USD,
+  STT_MONTHLY_USD,
+  STT_SOURCE,
+} from "./wall-cost";
 
 export const WALL_DEFINITIONS = [
   ["growth.wau", "WAU", "people", "Growth"],
-  ["growth.true_new_7d", "Interim true-new", "people", "Growth"],
+  ["growth.true_new_7d", "New users", "people", "Growth"],
   ["activation.rate", "Activation · ≥2 days", "percent", "Activation"],
   ["retention.if_activated", "Retained if activated", "percent", "Retention"],
   ["retention.recovery", "Recovery", "percent", "Retention"],
@@ -49,8 +55,8 @@ export const WALL_DEFINITIONS = [
   ["revenue.payer_churn", "Payer churn", "percent", "Revenue"],
   ["revenue.hardware_units_week", "Hardware units", "devices", "Revenue"],
   ["revenue.hardware_usd_week", "Hardware sales", "USD", "Revenue"],
-  ["cost.net_day", "Settled net cost", "USD/day", "Health"],
-  ["cost.per_mau_month", "Cost / MAU", "USD/person/30d", "Health"],
+  ["cost.net_day", "All-in cost / day", "USD/day", "Health"],
+  ["cost.per_mau_month", "All-in cost / MAU", "USD/person/30d", "Health"],
   ["cost.gross_margin_pct", "Gross margin · goal 60%", "percent", "Revenue"],
   ["health.crash_free", "Crash-free · macOS", "percent", "Health"],
   ["health.thumbs_positive", "Positive answers", "percent", "Health"],
@@ -101,7 +107,16 @@ export interface Metric {
   partial: boolean;
   windowStart: string | null;
   windowEnd: string | null;
-  trend: { date: string; value: number | null }[];
+  /** Complete periods, oldest first. Splits/counts are present for observed periods. */
+  /** Revenue only: live MRR by FinOps plan key, summing to `value`. */
+  breakdown?: Record<string, number>;
+  trend: {
+    date: string;
+    value: number | null;
+    split?: Split;
+    numerator?: number;
+    denominator?: number | null;
+  }[];
 }
 const emptySplit = (): Split => ({ macos: null, mobile: null, other: null });
 const bucket = (p: unknown): "macos" | "mobile" | "other" =>
@@ -111,6 +126,7 @@ export interface WallSources {
   shopify: typeof fetchShopifyWeek;
   stripe: () => Promise<{
     usd: number;
+    byPlan?: Record<string, number>;
     partial: boolean;
     unmappedProducts: number;
     unsupportedItems: number;
@@ -119,9 +135,18 @@ export interface WallSources {
     sourceRefreshedAt?: string;
   }>;
   billing: () => Promise<{
-    daily: { date: string; total: number }[];
+    daily: {
+      date: string;
+      total: number;
+      components?: Record<string, unknown>;
+    }[];
     generatedAt: number;
-    summary: { costSource?: string; partial: boolean; windowEnd?: string };
+    summary: {
+      costSource?: string;
+      partial: boolean;
+      windowEnd?: string;
+      coverage?: { openai?: boolean; anthropic?: boolean };
+    };
   } | null>;
 }
 export const defaultWallSources: WallSources = {
@@ -209,6 +234,61 @@ export function emptyWallMetrics() {
     ])
   ) as Record<MetricId, Metric>;
 }
+/** One complete period of a snapshot aggregate: headline value, additive splits
+ * and split counts. Shared by the snapshot and the v3 series so a series point
+ * and the matching stat are the same computation over the same rows.
+ */
+export function aggregatePeriod(
+  rows: unknown[][],
+  period: number,
+  numeratorIndex = 2,
+  denominatorIndex?: number,
+  mcpActivity = false,
+  markerSeen = false
+) {
+  const subset = rows.filter(
+    (r) => Number(r[0]) === period && r[1] !== MCP_MARKER_STATUS_ROW
+  );
+  const num = subset.reduce((a, r) => a + Number(r[numeratorIndex]), 0);
+  const den =
+    denominatorIndex == null
+      ? null
+      : subset.reduce((a, r) => a + Number(r[denominatorIndex]), 0);
+  const value =
+    subset.length === 0
+      ? null
+      : den == null
+      ? num
+      : den > 0
+      ? (100 * num) / den
+      : null;
+  const counts = {
+    macos: { numerator: 0, denominator: 0 },
+    mobile: { numerator: 0, denominator: 0 },
+    other: { numerator: 0, denominator: 0 },
+    mcp: { numerator: 0, denominator: 0 },
+  };
+  for (const r of subset) {
+    const b =
+      counts[mcpActivity && r[1] === "integrations" ? "mcp" : bucket(r[1])];
+    b.numerator += Number(r[numeratorIndex]);
+    b.denominator += denominatorIndex == null ? 0 : Number(r[denominatorIndex]);
+  }
+  const split: Split = {
+    macos: null,
+    mobile: null,
+    other: null,
+    ...(mcpActivity ? { mcp: markerSeen ? counts.mcp.numerator : null } : {}),
+  };
+  for (const key of ["macos", "mobile", "other"] as const)
+    split[key] =
+      den == null
+        ? counts[key].numerator
+        : counts[key].denominator
+        ? (100 * counts[key].numerator) / counts[key].denominator
+        : null;
+  return { value, num, den, counts, split, observed: subset.length > 0 };
+}
 export async function computeWall(
   sources: WallSources = defaultWallSources,
   now = new Date(),
@@ -247,55 +327,31 @@ export async function computeWall(
     ].includes(id);
     const markerSeen = mcpActivity && rows.some((r) => Number(r[3]) > 0);
     for (let period = 5; period >= 0; period--) {
-      const subset = rows.filter(
-        (r) => Number(r[0]) === period && r[1] !== MCP_MARKER_STATUS_ROW
+      const { value, num, den, counts, split, observed } = aggregatePeriod(
+        rows,
+        period,
+        numeratorIndex,
+        denominatorIndex,
+        mcpActivity,
+        markerSeen
       );
-      const num = subset.reduce((a, r) => a + Number(r[numeratorIndex]), 0);
-      const den =
-        denominatorIndex == null
-          ? null
-          : subset.reduce((a, r) => a + Number(r[denominatorIndex]), 0);
-      const value =
-        subset.length === 0
-          ? null
-          : den == null
-          ? num
-          : den > 0
-          ? (100 * num) / den
-          : null;
-      m.trend.push({ date: isoDay(shiftDay(stop, -days * period - 1)), value });
+      m.trend.push({
+        date: isoDay(shiftDay(stop, -days * period - 1)),
+        value,
+        ...(observed ? { split, numerator: num, denominator: den } : {}),
+      });
       if (period === 1) m.prev = value;
       if (period !== 0) continue;
       m.value = value;
       m.numerator = num;
       m.denominator = den;
-      const counts = {
-        macos: { numerator: 0, denominator: 0 },
-        mobile: { numerator: 0, denominator: 0 },
-        other: { numerator: 0, denominator: 0 },
-        mcp: { numerator: 0, denominator: 0 },
-      };
-      for (const r of subset) {
-        const b =
-          counts[mcpActivity && r[1] === "integrations" ? "mcp" : bucket(r[1])];
-        b.numerator += Number(r[numeratorIndex]);
-        b.denominator +=
-          denominatorIndex == null ? 0 : Number(r[denominatorIndex]);
-      }
       m.splitCounts = {
         macos: counts.macos,
         mobile: counts.mobile,
         other: counts.other,
         ...(markerSeen ? { mcp: counts.mcp } : {}),
       };
-      if (mcpActivity) m.split.mcp = markerSeen ? counts.mcp.numerator : null;
-      for (const key of ["macos", "mobile", "other"] as const)
-        m.split[key] =
-          den == null
-            ? counts[key].numerator
-            : counts[key].denominator
-            ? (100 * counts[key].numerator) / counts[key].denominator
-            : null;
+      m.split = split;
     }
     stamp(
       m,
@@ -517,6 +573,7 @@ export async function computeWall(
           : book.usd;
       m.partial =
         book.partial || book.unmappedProducts > 0 || book.unsupportedItems > 0;
+      if (m.value != null && book.byPlan) m.breakdown = book.byPlan;
       // Live Stripe is today's book. Never pretend it is a historical complete-day close.
       m.status = m.value == null ? "null" : "proxy";
       m.sourceRefreshedAt = new Date().toISOString();
@@ -546,9 +603,13 @@ export async function computeWall(
         return;
       }
       const cutoff = isoDay(shiftDay(end, -2));
-      const daily = bill.daily
-        .filter((d) => d.date <= cutoff)
-        .sort((a, b) => a.date.localeCompare(b.date));
+      // All-in: GCP net of CUD minus one-time incidents, plus OpenAI/Anthropic
+      // invoices, the Soniox-console STT estimate and fixed SaaS (David 2026-10-16).
+      const cost = allInCost(
+        bill.daily.filter((d) => d.date <= cutoff),
+        bill.summary.coverage
+      );
+      const daily = cost.daily;
       const last = daily.find((d) => d.date === cutoff);
       if (!last) {
         metrics["cost.net_day"].reason = metrics[
@@ -556,6 +617,9 @@ export async function computeWall(
         ].reason = `Billing data has not reached ${cutoff}`;
         return;
       }
+      const lines = `All-in: GCP net of committed-use credits, one-time incidents excluded, + OpenAI + Anthropic + STT ($${STT_MONTHLY_USD}/mo estimate, ${STT_SOURCE}) + SaaS (fixed $${SAAS_MONTHLY_USD}/mo estimate)${
+        cost.missing.length ? `; missing: ${cost.missing.join(", ")}` : ""
+      }`;
       const m = metrics["cost.net_day"];
       m.value = last.total;
       m.prev =
@@ -565,7 +629,7 @@ export async function computeWall(
         m,
         shiftDay(end, -2),
         shiftDay(end, -1),
-        "Billing mode net credits; provider/STT coverage partial; allocation unavailable",
+        lines,
         new Date(bill.generatedAt).toISOString()
       );
       m.stale = freshness(
@@ -597,13 +661,16 @@ export async function computeWall(
       }
       c.definitionVersion = MCP_ACTIVITY_VERSION;
       c.value = costs.reduce((s, d) => s + d.total, 0) / mau;
+      c.numerator = costs.reduce((s, d) => s + d.total, 0);
       c.denominator = mau;
       c.partial = true;
       stamp(
         c,
         window.start,
         window.end,
-        "Same-window settled 30d billed cost / qualified MAU; provider/STT coverage partial; " +
+        "Same-window 30-day all-in cost / qualified MAU. " +
+          lines +
+          "; " +
           COVERAGE_REASON,
         new Date(bill.generatedAt).toISOString()
       );

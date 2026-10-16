@@ -75,6 +75,7 @@ overlay:
         BATCH_PIPELINE_SHARED_LIVE_ENABLED:
           value: "false"
           category: rollout
+        FSR_QUEUE_AGE_PUBLISHER: {value: '1', category: rollout}
         DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
         DREAM_AGENT_ELIGIBILITY: {value: 'allowlist', category: rollout}
         DREAM_AGENT_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
@@ -87,6 +88,10 @@ overlay:
         PROACTIVITY_V2_POSTHOG_HOST:
           value: https://us.posthog.com
           category: rollout
+        # Public product-capture token; shared POSTHOG_PROJECT_API_KEY stays disabled to keep flag rollouts dark.
+        POSTHOG_PRODUCT_CAPTURE_TOKEN:
+          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+          category: telemetry
         POSTHOG_PROJECT_API_KEY:
           secret:
             name: prod-omi-backend-secrets
@@ -345,7 +350,7 @@ overlay:
           category: rollout
     pusher:
       env:
-        <<: &batch_cohort {"HOSTED_DIARIZATION_API_URL": {"value": "http://172.16.160.20/diarizer-batch", "category": "service_discovery"}, "TRANSCRIPTION_FINAL_PASS_DIARIZER": {"value": "pyannote_shadow", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_BACKEND": {"value": "pyannote", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST": {"value": "vi7SA9ckQCe4ccobWNxlbdcNdC23", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_PERCENT": {"value": "15", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE": {"value": "true", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED": {"value": "true", "category": "rollout"}, "TRANSCRIPTION_SHADOW_ENABLED": {"value": "true", "category": "rollout"}, "TRANSCRIPTION_SHADOW_KILL_SWITCH": {"value": "false", "category": "rollout"}, "TRANSCRIPTION_SHADOW_UID_ALLOWLIST": {"value": "vi7SA9ckQCe4ccobWNxlbdcNdC23", "category": "rollout"}, "TRANSCRIPTION_SHADOW_PERCENT": {"value": "15", "category": "rollout"}, "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS": {"value": "1200", "category": "rollout"}, "TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS": {"value": "150", "category": "rollout"}, "TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS": {"value": "15000", "category": "rollout"}}
+        <<: &batch_cohort {"HOSTED_DIARIZATION_API_URL": {"value": "http://172.16.160.20/diarizer-batch", "category": "service_discovery"}, "TRANSCRIPTION_FINAL_PASS_DIARIZER": {"value": "pyannote_shadow", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_BACKEND": {"value": "pyannote", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST": {"value": "vi7SA9ckQCe4ccobWNxlbdcNdC23", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_PERCENT": {"value": "5", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE": {"value": "true", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED": {"value": "true", "category": "rollout"}, "TRANSCRIPTION_SHADOW_ENABLED": {"value": "true", "category": "rollout"}, "TRANSCRIPTION_SHADOW_KILL_SWITCH": {"value": "false", "category": "rollout"}, "TRANSCRIPTION_SHADOW_UID_ALLOWLIST": {"value": "vi7SA9ckQCe4ccobWNxlbdcNdC23", "category": "rollout"}, "TRANSCRIPTION_SHADOW_PERCENT": {"value": "5", "category": "rollout"}, "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS": {"value": "1200", "category": "rollout"}, "TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS": {"value": "150", "category": "rollout"}, "TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS": {"value": "15000", "category": "rollout"}}
         DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
         DREAM_AGENT_ELIGIBILITY: {value: 'allowlist', category: rollout}
         DREAM_AGENT_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
@@ -358,6 +363,10 @@ overlay:
         PROACTIVITY_V2_POSTHOG_HOST:
           value: https://us.posthog.com
           category: rollout
+        # Public product-capture token; shared POSTHOG_PROJECT_API_KEY stays disabled to keep flag rollouts dark.
+        POSTHOG_PRODUCT_CAPTURE_TOKEN:
+          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+          category: telemetry
         POSTHOG_PROJECT_API_KEY:
           secret:
             name: prod-omi-backend-secrets
@@ -530,6 +539,10 @@ overlay:
       MENTOR_PIPELINE:
         value: cohort
         category: rollout
+      # First released macOS build with the Jev+3.8 screen pipeline and #20374 (Beta 12435, Stable 12447)
+      OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD:
+        value: '12435'
+        category: rollout
       FREE_TIER_LOCAL_PROCESSING:
         value: 'false'
       FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -642,7 +655,9 @@ overlay:
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           # Spelling fixes go to Review until auto-apply requires supporting context (Run Now passes run here).
           # Dogfood self-report + Run Now (GET/POST /v1/dream/runs) for the dream cohort only.
-          DREAM_AGENT_PASSES_PER_DAY: {value: '2', category: rollout}
+          # 2026-10-16: no fixed pass count for the allowlisted owner; the daily USD ceiling bounds spend.
+          DREAM_AGENT_PASSES_PER_DAY: {value: '48', category: rollout}
+          DREAM_AGENT_HUNT_INTERVAL_HOURS: {value: '2', category: rollout}
           DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
           DREAM_AGENT_DAILY_USD: {value: '10', category: rollout}
           DREAM_AGENT_TOKENS_PER_MINUTE: {value: '2000000', category: rollout}
@@ -905,7 +920,9 @@ overlay:
           DREAM_AGENT_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
-          DREAM_AGENT_PASSES_PER_DAY: {value: '2', category: rollout}
+          # 2026-10-16: no fixed pass count for the allowlisted owner; the daily USD ceiling bounds spend.
+          DREAM_AGENT_PASSES_PER_DAY: {value: '48', category: rollout}
+          DREAM_AGENT_HUNT_INTERVAL_HOURS: {value: '2', category: rollout}
           DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
           DREAM_AGENT_DAILY_USD: {value: '10', category: rollout}
           DREAM_AGENT_TOKENS_PER_MINUTE: {value: '2000000', category: rollout}
@@ -1387,6 +1404,13 @@ overlay:
             category: reliability
           SYNC_TASKS_INVOKER_SA:
             env_var: SYNC_TASKS_INVOKER_SA
+            category: reliability
+          # Batch projection dispatches enrichment to the fresh sync worker.
+          SYNC_TASKS_QUEUE:
+            value: sync-jobs
+            category: reliability
+          SYNC_TASKS_OIDC_AUDIENCE:
+            env_var: SYNC_TASKS_HANDLER_URL
             category: reliability
           SYNC_TASKS_HANDLER_URL:
             env_var: SYNC_TASKS_HANDLER_URL

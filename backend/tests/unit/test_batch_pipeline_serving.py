@@ -218,3 +218,23 @@ def test_historical_dead_redrive_is_authenticated_stage_bound_and_idempotent(api
     monkeypatch.delenv('BATCH_PIPELINE_WORKER_AUDIENCE', raising=False)
     monkeypatch.delenv('BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT', raising=False)
     assert TestClient(app).post(path, json={'stage': 'dev', 'segment_id': 'synthetic'}).status_code == 403
+
+
+def test_recovery_is_scheduled_inside_service_but_metrics_reconcile_does_not_dispatch():
+    from unittest.mock import Mock
+
+    recovery = Mock()
+    service = Serving(MemoryStore(), recovery=recovery)
+    service.reconcile()
+    recovery.sweep.assert_not_called()
+    service.reconcile(recover_quarantine=True)
+    recovery.sweep.assert_called_once()
+
+
+def test_reconcile_entry_point_requires_existing_worker_oidc(monkeypatch):
+    monkeypatch.delenv('BATCH_PIPELINE_WORKER_AUDIENCE', raising=False)
+    monkeypatch.delenv('BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT', raising=False)
+    app = FastAPI()
+    app.include_router(module.router)
+    response = TestClient(app).post('/v2/batch-pipeline/reconcile', json={'stage': 'dev'})
+    assert response.status_code == 403
