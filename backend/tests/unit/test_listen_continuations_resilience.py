@@ -12,6 +12,7 @@ network and no credentials are involved.
 from datetime import datetime, timezone
 
 import database.listen_continuations as listen_continuations
+from utils import conversation_continuity
 
 UID = 'user-1'
 ORIGIN_ID = 'origin-1'
@@ -267,3 +268,49 @@ def test_malformed_proposal_is_ignored_instead_of_raising(monkeypatch):
 def test_calendar_continuity_row_ignores_an_invalid_uid():
     row = {'external_data': {'calendar_event_id': 'event-1'}}
     assert listen_continuations.calendar_continuity_row('a/b', row, firestore_client=_BrokenClient()) is row
+
+
+def test_real_resumable_continuation_aligns_a_naive_stored_finish():
+    """The gap check must survive Firestore's naive ``finished_at``.
+
+    ``_patch_flow`` stubs ``resumable_continuation`` out, so this exercises the real
+    helper in ``utils.conversation_continuity``: that subtraction raised ``TypeError``
+    for a naive stored timestamp paired with an aware ``now``.
+    """
+    row = {
+        'status': 'in_progress',
+        'source': 'phone',
+        'client_device_id': 'device-1',
+        'finished_at': datetime(2026, 10, 16, 11, 59, 30),  # naive, as Firestore returns it
+    }
+    aware_now = datetime(2026, 10, 16, 12, 0, tzinfo=timezone.utc)
+    naive_now = datetime(2026, 10, 16, 12, 0)
+
+    assert conversation_continuity.resumable_continuation(
+        row, source='phone', device_id='device-1', now=aware_now, timeout=300
+    )
+    assert conversation_continuity.resumable_continuation(
+        row, source='phone', device_id='device-1', now=naive_now, timeout=300
+    )
+
+
+def test_real_resumable_continuation_still_refuses_foreign_and_stale_rows():
+    base = {
+        'status': 'in_progress',
+        'source': 'phone',
+        'client_device_id': 'device-1',
+        'finished_at': datetime(2026, 10, 16, 11, 59, 30, tzinfo=timezone.utc),
+    }
+    now = datetime(2026, 10, 16, 12, 0, tzinfo=timezone.utc)
+
+    def resumable(row):
+        return conversation_continuity.resumable_continuation(
+            row, source='phone', device_id='device-1', now=now, timeout=300
+        )
+
+    assert resumable(base) is True
+    assert resumable({**base, 'finished_at': 'not-a-timestamp'}) is False
+    assert resumable({**base, 'finished_at': datetime(2026, 10, 16, 11, 50)}) is False  # stale, naive
+    assert resumable({**base, 'client_device_id': 'device-2'}) is False
+    assert resumable({**base, 'status': 'completed'}) is False
+    assert resumable({**base, 'is_locked': True}) is False
