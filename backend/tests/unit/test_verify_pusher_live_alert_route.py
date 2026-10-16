@@ -988,3 +988,56 @@ def test_development_fleet_rejects_unprotected_keep_last(verifier, monkeypatch):
         'https://monitor.omiapi.com', 'dummy-token', 1, 'gated', alert_set='live-stt'
     )
     assert any(uid in failure and 'execErrState' in failure for failure in failures)
+
+
+def test_development_finalization_gate_expects_the_imported_error_state(verifier):
+    rules, datasource, up_query, metric_query, contact_points = _inputs(verifier)
+    assert any(rule['execErrState'] == 'KeepLast' for rule in rules.values())
+    development_live = verifier._development_rules(rules)
+    assert verifier._committed_rules() == rules
+    assert (
+        verifier.validate_live_route(
+            development_live, datasource, up_query, metric_query, contact_points, phase='postrollout', production=False
+        )
+        == []
+    )
+    # Production still requires the committed KeepLast definitions exactly.
+    errors = verifier.validate_live_route(
+        development_live, datasource, up_query, metric_query, contact_points, phase='postrollout'
+    )
+    assert any('execErrState does not match' in error for error in errors)
+
+
+def test_development_finalization_gate_still_rejects_other_drift(verifier):
+    rules, datasource, up_query, metric_query, contact_points = _inputs(verifier)
+    development_live = verifier._development_rules(rules)
+    uid = next(iter(development_live))
+    development_live[uid]['execErrState'] = 'OK'
+    development_live[next(reversed(development_live))]['noDataState'] = 'OK'
+    errors = verifier.validate_live_route(
+        development_live, datasource, up_query, metric_query, contact_points, phase='postrollout', production=False
+    )
+    assert any(uid in error and 'execErrState' in error for error in errors)
+    assert any('noDataState' in error for error in errors)
+
+
+def test_pusher_gate_selects_development_expectations_by_grafana_host(verifier, monkeypatch):
+    rules, datasource, up_query, metric_query, contact_points = _inputs(verifier)
+    development_live = verifier._development_rules(rules)
+
+    def read(_base, path, _token, **kwargs):
+        if '/provisioning/alert-rules/' in path:
+            return development_live[path.rsplit('/', 1)[-1]]
+        if path.endswith('/health'):
+            return datasource
+        if 'min%28up' in path or 'min(up' in path:
+            return up_query
+        if '/api/v1/query' in path:
+            return metric_query
+        return contact_points
+
+    monkeypatch.setitem(verifier._run_pusher_gate.__globals__, '_request_json', read)
+    assert verifier._run_pusher_gate('https://monitor.omiapi.com', 'dummy-secret', 'postrollout', 1) == []
+    production_failures = verifier._run_pusher_gate('https://monitor.omi.me', 'dummy-secret', 'postrollout', 1)
+    assert production_failures
+    assert all('execErrState does not match' in failure for failure in production_failures)
