@@ -68,6 +68,17 @@ def render_cloud_run_state(env_config: dict, monkeypatch) -> dict:
 
 def with_memory_env(payload: str) -> str:
     memory_env = '''\
+        {"name": "BATCH_PIPELINE_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_UID_ALLOWLIST", "value": ""},
+        {"name": "BATCH_PIPELINE_PERCENT", "value": "0"},
+        {"name": "BATCH_PIPELINE_SERVING_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_WORKER_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_API_URL", "value": ""},
+        {"name": "BATCH_PIPELINE_WORKER_AUDIENCE", "value": ""},
+        {"name": "BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT", "value": ""},
+        {"name": "BUCKET_BATCH_PIPELINE", "value": ""},
+        {"name": "BATCH_PIPELINE_UNIT_SECONDS", "value": "3600"},
+        {"name": "BATCH_PIPELINE_SHARED_LIVE_ENABLED", "value": "false"},
         {"name": "AUDIO_ARCHIVE_LIVE_ENABLED", "value": "false"},
         {"name": "AUDIO_ARCHIVE_READ_ENABLED", "value": "false"},
         {"name": "AUDIO_ARCHIVE_STOP_PCM_ENABLED", "value": "false"},

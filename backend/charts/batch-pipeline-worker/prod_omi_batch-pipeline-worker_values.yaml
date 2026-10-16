@@ -1,6 +1,7 @@
 enabled: true
 image:
   repository: gcr.io/based-hardware/batch-pipeline-worker
+  # gcp_diarizer.yml builds the prod image and supplies its immutable digest.
   digest: ""
 serviceAccountName: batch-pipeline-worker
 gcpServiceAccount: batch-pipeline-worker@based-hardware.iam.gserviceaccount.com
@@ -25,3 +26,6 @@ tolerations:
     operator: Equal
     value: present
     effect: NoSchedule
+worker:
+  apiUrl: https://backend-sync-hhibjajaja-uc.a.run.app
+  audience: https://backend-sync-hhibjajaja-uc.a.run.app

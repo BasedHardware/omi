@@ -272,3 +272,20 @@ def test_partial_sync_authority_stage_is_rejected(gate, chart_fixture, stage, na
     expected = stages[stage][name]
     replace_once(path, f'  - name: {name}\n    value: "{expected}"\n', f'  - name: {name}\n    value: "{value}"\n')
     assert gate.validate_preflight(chart_fixture)
+
+
+@pytest.mark.parametrize('env', ('dev', 'prod'))
+def test_batch_intake_and_worker_settings_are_explained_listen_only(gate: SimpleNamespace, env: str) -> None:
+    assert gate._BATCH_PIPELINE_LISTEN_ONLY <= gate.LISTEN_ONLY_ALLOWED[env]
+    assert 'BATCH_PIPELINE_ENABLED' in gate._BATCH_PIPELINE_LISTEN_ONLY
+    assert 'BUCKET_BATCH_PIPELINE' in gate._BATCH_PIPELINE_LISTEN_ONLY
+    assert gate.validate_preflight(REPO_ROOT) == []
+
+
+def test_copying_batch_admission_to_pusher_is_not_silently_allowed(gate: SimpleNamespace, chart_fixture: Path) -> None:
+    path = chart_fixture / 'backend/charts/pusher/prod_omi_pusher_values.yaml'
+    text = path.read_text()
+    path.write_text(text.replace('env:\n', 'env:\n  - name: BATCH_PIPELINE_ENABLED\n    value: "true"\n', 1))
+    assert any(
+        'BATCH_PIPELINE_ENABLED is no longer listen-only' in error for error in gate.validate_preflight(chart_fixture)
+    )

@@ -19,6 +19,39 @@ overlay:
   gke:
     backend-listen:
       env:
+        BATCH_PIPELINE_ENABLED:
+          value: "false"
+          category: rollout
+        BATCH_PIPELINE_UID_ALLOWLIST:
+          value: ""
+          category: rollout
+        BATCH_PIPELINE_PERCENT:
+          value: "0"
+          category: rollout
+        BATCH_PIPELINE_SERVING_ENABLED:
+          value: "false"
+          category: rollout
+        BATCH_PIPELINE_WORKER_ENABLED:
+          value: "false"
+          category: ops_kill
+        BATCH_PIPELINE_API_URL:
+          value: ""
+          category: service_discovery
+        BATCH_PIPELINE_WORKER_AUDIENCE:
+          value: ""
+          category: service_auth
+        BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
+          value: ""
+          category: service_auth
+        BUCKET_BATCH_PIPELINE:
+          value: ""
+          category: service_discovery
+        BATCH_PIPELINE_UNIT_SECONDS:
+          value: "3600"
+          category: reliability
+        BATCH_PIPELINE_SHARED_LIVE_ENABLED:
+          value: "false"
+          category: rollout
         OMI_SHAPED_AGENT_MODE:
           value: 'on'
           category: rollout
@@ -472,6 +505,39 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          BATCH_PIPELINE_ENABLED:
+            value: "false"
+            category: rollout
+          BATCH_PIPELINE_UID_ALLOWLIST:
+            value: ""
+            category: rollout
+          BATCH_PIPELINE_PERCENT:
+            value: "0"
+            category: rollout
+          BATCH_PIPELINE_SERVING_ENABLED:
+            value: "false"
+            category: rollout
+          BATCH_PIPELINE_WORKER_ENABLED:
+            value: "false"
+            category: ops_kill
+          BATCH_PIPELINE_API_URL:
+            value: ""
+            category: service_discovery
+          BATCH_PIPELINE_WORKER_AUDIENCE:
+            value: ""
+            category: service_auth
+          BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
+            value: ""
+            category: service_auth
+          BUCKET_BATCH_PIPELINE:
+            value: ""
+            category: service_discovery
+          BATCH_PIPELINE_UNIT_SECONDS:
+            value: "3600"
+            category: reliability
+          BATCH_PIPELINE_SHARED_LIVE_ENABLED:
+            value: "false"
+            category: rollout
           BUCKET_TEMPORAL_SYNC_LOCAL: {value: syncing-local-development, category: storage_retention}
           REDIS_DB_PORT:
             value: '13151'
@@ -616,6 +682,39 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          BATCH_PIPELINE_ENABLED:
+            value: "false"
+            category: rollout
+          BATCH_PIPELINE_UID_ALLOWLIST:
+            value: ""
+            category: rollout
+          BATCH_PIPELINE_PERCENT:
+            value: "0"
+            category: rollout
+          BATCH_PIPELINE_SERVING_ENABLED:
+            value: "false"
+            category: rollout
+          BATCH_PIPELINE_WORKER_ENABLED:
+            value: "false"
+            category: ops_kill
+          BATCH_PIPELINE_API_URL:
+            value: ""
+            category: service_discovery
+          BATCH_PIPELINE_WORKER_AUDIENCE:
+            value: ""
+            category: service_auth
+          BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
+            value: ""
+            category: service_auth
+          BUCKET_BATCH_PIPELINE:
+            value: ""
+            category: service_discovery
+          BATCH_PIPELINE_UNIT_SECONDS:
+            value: "3600"
+            category: reliability
+          BATCH_PIPELINE_SHARED_LIVE_ENABLED:
+            value: "false"
+            category: rollout
           REDIS_DB_PORT:
             value: '13151'
             category: service_discovery
@@ -763,6 +862,39 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          BATCH_PIPELINE_ENABLED:
+            value: "false"
+            category: rollout
+          BATCH_PIPELINE_UID_ALLOWLIST:
+            value: ""
+            category: rollout
+          BATCH_PIPELINE_PERCENT:
+            value: "0"
+            category: rollout
+          BATCH_PIPELINE_SERVING_ENABLED:
+            value: "false"
+            category: rollout
+          BATCH_PIPELINE_WORKER_ENABLED:
+            value: "false"
+            category: ops_kill
+          BATCH_PIPELINE_API_URL:
+            value: ""
+            category: service_discovery
+          BATCH_PIPELINE_WORKER_AUDIENCE:
+            value: ""
+            category: service_auth
+          BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
+            value: ""
+            category: service_auth
+          BUCKET_BATCH_PIPELINE:
+            value: ""
+            category: service_discovery
+          BATCH_PIPELINE_UNIT_SECONDS:
+            value: "3600"
+            category: reliability
+          BATCH_PIPELINE_SHARED_LIVE_ENABLED:
+            value: "false"
+            category: rollout
           REDIS_DB_PORT:
             value: '13151'
             category: service_discovery
@@ -875,6 +1007,39 @@ overlay:
             secret: POSTHOG_EVENTS_API_KEY
             version: latest
         env:
+          BATCH_PIPELINE_ENABLED:
+            value: "false"
+            category: rollout
+          BATCH_PIPELINE_UID_ALLOWLIST:
+            value: ""
+            category: rollout
+          BATCH_PIPELINE_PERCENT:
+            value: "0"
+            category: rollout
+          BATCH_PIPELINE_SERVING_ENABLED:
+            value: "false"
+            category: rollout
+          BATCH_PIPELINE_WORKER_ENABLED:
+            value: "false"
+            category: ops_kill
+          BATCH_PIPELINE_API_URL:
+            value: ""
+            category: service_discovery
+          BATCH_PIPELINE_WORKER_AUDIENCE:
+            value: ""
+            category: service_auth
+          BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
+            value: ""
+            category: service_auth
+          BUCKET_BATCH_PIPELINE:
+            value: ""
+            category: service_discovery
+          BATCH_PIPELINE_UNIT_SECONDS:
+            value: "3600"
+            category: reliability
+          BATCH_PIPELINE_SHARED_LIVE_ENABLED:
+            value: "false"
+            category: rollout
           REDIS_DB_PORT:
             value: '13151'
             category: service_discovery
