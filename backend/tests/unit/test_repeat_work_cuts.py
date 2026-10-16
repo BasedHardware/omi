@@ -62,7 +62,7 @@ def test_chunk_listing_checksums_only_when_playback_enabled(monkeypatch, enabled
     monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
     monkeypatch.setattr(storage.audio_archive, 'admitted', lambda *_: False)
     blob = SimpleNamespace(
-        name='chunks/u/c/1000.000.pcm', size=160000, generation='7', md5_hash='md5', crc32c='crc', metadata=None
+        name='chunks/u/c/1000.000.bin', size=160000, generation='7', md5_hash='md5', crc32c='crc', metadata=None
     )
     client = Mock()
     client.bucket.return_value.list_blobs.return_value = [blob]
