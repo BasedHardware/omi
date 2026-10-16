@@ -73,7 +73,8 @@ future date continues to mean intentionally unlaunched.
 - `path`: `live` or `sync`;
 - `outcome`: `accepted`, `suppressed` (live), or `held` (sync);
 - `provider`: a bounded serving family or `unknown`;
-- `allowance`: `exhausted` or `available`, at the admission/acceptance observation.
+- `allowance`: `exhausted` or `other`, at the admission/acceptance observation; `other`
+  includes available allowance and untrusted lookups, without claiming availability.
 
 Accepted live quantities count PCM accepted by a provider adapter, including
 replay; failed sends do not count. Suppressed quantities count input PCM, before

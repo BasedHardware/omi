@@ -14,4 +14,4 @@ def record_audio(path, outcome, provider, seconds, exhausted=False):
     provider = getattr(provider, 'value', provider)
     provider = provider if provider in {'deepgram', 'modulate', 'soniox', 'parakeet'} else 'unknown'
     if seconds > 0:
-        AUDIO_SECONDS.labels(path, outcome, provider, 'exhausted' if exhausted else 'available').inc(seconds)
+        AUDIO_SECONDS.labels(path, outcome, provider, 'exhausted' if exhausted else 'other').inc(seconds)
