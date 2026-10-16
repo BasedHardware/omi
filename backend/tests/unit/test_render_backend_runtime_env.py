@@ -846,19 +846,17 @@ def test_phase_a_keeps_cloud_run_credentials_and_isolates_gke_v2_redis():
     for key in ('HOST', 'PORT', 'PASSWORD'):
         assert f'REDIS_DB_{key}' not in desktop['env']
         assert f'REDIS_DB_{key}' not in desktop['secrets']
-    # Gateway reservation bindings live in chart-only optional runtime references.
+    # Gateway reservation state shares the same Redis binding as backend-listen.
     chart = yaml.safe_load((_REPO_ROOT / 'backend/charts/llm-gateway/prod_omi_llm_gateway_values.yaml').read_text())
     env = {row['name']: row for row in chart['env']}
-    for key in ('HOST', 'PORT'):
-        assert env[f'REDIS_DB_{key}']['valueFrom']['configMapKeyRef'] == {
-            'name': 'prod-omi-reservation-runtime-config',
-            'key': f'REDIS_DB_{key}',
-            'optional': True,
-        }
+    assert env['REDIS_DB_HOST']['valueFrom']['configMapKeyRef'] == {
+        'name': 'prod-omi-backend-config',
+        'key': 'REDIS_DB_HOST',
+    }
+    assert env['REDIS_DB_PORT']['value'] == '13151'
     assert env['REDIS_DB_PASSWORD']['valueFrom']['secretKeyRef'] == {
         'name': 'prod-omi-backend-secrets',
-        'key': 'VERTEX_RESERVATION_REDIS_PASSWORD',
-        'optional': True,
+        'key': 'REDIS_DB_PASSWORD',
     }
 
 

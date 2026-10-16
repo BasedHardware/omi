@@ -158,6 +158,9 @@ env:
     value: cohort
   - name: POSTHOG_HOST
     value: https://us.posthog.com
+  # Public product-capture token; shared POSTHOG_PROJECT_API_KEY stays disabled to keep flag rollouts dark.
+  - name: POSTHOG_PRODUCT_CAPTURE_TOKEN
+    value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
   - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
     value: "true"
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED

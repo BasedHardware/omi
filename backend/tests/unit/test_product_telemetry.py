@@ -93,7 +93,8 @@ def test_invalid_metadata_is_bounded():
 def test_family_clients_are_lazy_and_constructed_once_under_concurrency(monkeypatch):
     factory = Mock(side_effect=lambda **kwargs: Mock(**kwargs))
     monkeypatch.setattr(telemetry.importlib, 'import_module', lambda _: SimpleNamespace(Posthog=factory))
-    monkeypatch.setenv('POSTHOG_PROJECT_API_KEY', ' phc_project ')
+    monkeypatch.setenv('POSTHOG_PRODUCT_CAPTURE_TOKEN', ' phc_product_capture ')
+    monkeypatch.setenv('POSTHOG_PROJECT_API_KEY', 'disabled')
     monkeypatch.setenv('POSTHOG_EVENTS_API_KEY', 'phc_events')
     monkeypatch.setenv('POSTHOG_BILLING_API_KEY', 'phc_billing')
     factory.assert_not_called()
@@ -103,7 +104,7 @@ def test_family_clients_are_lazy_and_constructed_once_under_concurrency(monkeypa
     assert len({id(client) for client in clients}) == 3
     assert factory.call_count == 3
     configuration = {call.kwargs['project_api_key']: call.kwargs for call in factory.call_args_list}
-    assert configuration['phc_project']['sync_mode'] is False
+    assert configuration['phc_product_capture']['sync_mode'] is False
     assert configuration['phc_events']['sync_mode'] is False
     assert configuration['phc_billing']['sync_mode'] is True
     assert all(config['max_queue_size'] == 1000 for config in configuration.values())
@@ -120,6 +121,31 @@ def test_invalid_keys_never_construct_sdk_or_leak(monkeypatch, caplog, key):
     assert not telemetry.emit_product_event(uid='u', event='Example', properties={})
     if key != 'disabled':
         assert key not in caplog.text
+
+
+def test_disabled_product_capture_token_does_not_fall_back_to_project_key(monkeypatch):
+    monkeypatch.setenv('POSTHOG_PRODUCT_CAPTURE_TOKEN', 'disabled')
+    monkeypatch.setenv('POSTHOG_PROJECT_API_KEY', 'phc_project')
+    monkeypatch.setattr(telemetry.importlib, 'import_module', lambda _: pytest.fail('invalid SDK construction'))
+    assert not telemetry.emit_product_event(uid='u', event='Example', properties={})
+
+
+def test_absent_product_capture_token_keeps_project_and_legacy_fallback_order(monkeypatch):
+    assert telemetry._capture_project_key('Example') is None
+    monkeypatch.setenv('POSTHOG_API_KEY', 'phc_legacy')
+    assert telemetry._capture_project_key('Example') == 'phc_legacy'
+    monkeypatch.setenv('POSTHOG_PROJECT_API_KEY', 'phc_project')
+    assert telemetry._capture_project_key('Example') == 'phc_project'
+
+
+def test_product_capture_token_wins_over_disabled_project_key(monkeypatch):
+    factory = Mock(return_value=Mock())
+    monkeypatch.setattr(telemetry.importlib, 'import_module', lambda _: SimpleNamespace(Posthog=factory))
+    monkeypatch.setenv('POSTHOG_PRODUCT_CAPTURE_TOKEN', 'phc_product_capture')
+    monkeypatch.setenv('POSTHOG_PROJECT_API_KEY', 'disabled')
+    assert telemetry.emit_product_event(uid='u', event='Example', properties={})
+    factory.assert_called_once()
+    assert factory.call_args.kwargs['project_api_key'] == 'phc_product_capture'
 
 
 def test_capture_failure_and_queue_rejection_are_not_success():

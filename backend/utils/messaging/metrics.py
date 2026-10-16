@@ -15,3 +15,13 @@ QUEUE_AGE = Histogram(
 CHAT_TOKENS = Counter(
     'omi_chat_agent_tokens_total', 'Provider-reported chat input and cache tokens', ['surface', 'kind']
 )
+
+# Outcomes, including successful/missing continuity, supply the denominator.
+# Fail-open events still use the shared omi_fallback_total authority.
+CONTEXT_TURNS = Counter('omi_chat_context_turns_total', 'Shaped context preparation', ['surface', 'outcome'])
+CONTEXT_READS = Histogram(
+    'omi_chat_context_read_seconds',
+    'Optional shaped context operation latency including executor admission',
+    ['surface', 'phase'],
+    buckets=(0.01, 0.025, 0.05, 0.075, 0.1, 0.15, 0.3, 1, 5, 60),
+)

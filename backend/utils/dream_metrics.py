@@ -121,6 +121,7 @@ BASE_VALUE_ERROR_CODES = (
             'dream_contradictory_spelling',
             'dream_conversation_user_protected',
             'dream_cursor_collection',
+            'dream_daily_budget',
             'dream_disabled',
             'dream_edit_cap',
             'dream_frame_evidence',
