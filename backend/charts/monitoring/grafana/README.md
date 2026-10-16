@@ -77,7 +77,8 @@ signing/JWKS to the new version, wait the one-minute Grafana JWKS cache, then en
 The public JWKS route is not a dashboard/data access path.
 
 Grafana allows embedding, requires secure SameSite=None cookies, and sends CSP
-`frame-ancestors https://admin.omi.me`. The iframe suppresses referrers. Token minting fails closed until both legacy Grafana
+`frame-ancestors https://admin.omi.me` in addition to the pinned Grafana default
+nonce/script/object/base/form protections. The iframe suppresses referrers. Token minting fails closed until both legacy Grafana
 origins deny anonymous datasource access (401/403). Apply the
 Grafana-only BackendConfig before enabling URL login and verify its Compute
 backend logging is disabled: query strings contain short-lived bearer tokens.
