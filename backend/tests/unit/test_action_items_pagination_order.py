@@ -257,9 +257,13 @@ def test_conversation_scoped_query_skips_ordered_prefix_ordering(fake_db):
     scan without order_by('created_at', DESCENDING) to avoid missing composite index
     FailedPrecondition in Firestore on (conversation_id, completed, created_at DESC)."""
     docs = [
-        _Doc('c1_task1', BASE + timedelta(minutes=1), BASE + timedelta(days=2), completed=False, conversation_id='conv-1'),
+        _Doc(
+            'c1_task1', BASE + timedelta(minutes=1), BASE + timedelta(days=2), completed=False, conversation_id='conv-1'
+        ),
         _Doc('c1_task2', BASE + timedelta(minutes=2), None, completed=False, conversation_id='conv-1'),
-        _Doc('c2_task', BASE + timedelta(minutes=3), BASE + timedelta(days=1), completed=False, conversation_id='conv-2'),
+        _Doc(
+            'c2_task', BASE + timedelta(minutes=3), BASE + timedelta(days=1), completed=False, conversation_id='conv-2'
+        ),
     ]
     query = _Query(docs)
     tracked_queries = []
