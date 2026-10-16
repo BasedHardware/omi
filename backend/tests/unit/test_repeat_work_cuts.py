@@ -372,6 +372,11 @@ def test_flag_off_reader_reuses_matching_demand_stamp(monkeypatch):
     assert playback._conversation_audio_urls_entry('u', 'c', files, row)['status'] == 'cached'
     signed.assert_called_once_with('u', 'c', fingerprint=fingerprint)
     enqueue.assert_not_called()
+    signed.return_value = None
+    assert playback._conversation_audio_urls_entry('u', 'c', files, row)['status'] == 'pending'
+    enqueue.assert_called_once_with(
+        'u', 'c', storage.compute_audio_files_fingerprint(files), caller='sync_urls', playback_epoch=fingerprint
+    )
 
 
 @pytest.mark.parametrize('outcome', ['written', 'missing', 'failed'])
