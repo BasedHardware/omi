@@ -324,11 +324,16 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
             logger.info(f"[Limitless Import] First 20 entries: {all_files[:20]}")
 
             # Find all lifelog markdown files
-            # Handle both "lifelogs/..." and "something/lifelogs/..." structures
+            # Handle both "lifelogs/..." and "something/lifelogs/..." structures.
+            # Skip macOS archive metadata (__MACOSX/ tree and AppleDouble "._name" files)
+            # that Finder's "Compress" adds alongside every real entry.
             lifelog_files = [
                 name
                 for name in all_files
-                if ('lifelogs/' in name or name.startswith('lifelogs')) and name.endswith('.md')
+                if ('lifelogs/' in name or name.startswith('lifelogs'))
+                and name.endswith('.md')
+                and '__MACOSX' not in name
+                and not Path(name).name.startswith('.')
             ]
 
             logger.info(f"[Limitless Import] Found {len(lifelog_files)} lifelog files")
