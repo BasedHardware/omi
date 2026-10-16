@@ -304,6 +304,41 @@ def with_firestore_read_ledger_env(payload: str) -> str:
     return payload
 
 
+FIRESTORE_READ_RUNTIME_ENV_NAMES = (
+    'FIRESTORE_READ_LEVERS',
+    'FSR_QUEUE_AGE_PUBLISHER',
+    'FSR_QUEUE_AGE_LEASE_SECONDS',
+    'FSR_LEADER_LEASE_TTL_SECONDS',
+    'DELETION_WIPE_RECONCILE_INTERVAL_SECONDS',
+    'FSR_DELETION_NEGATIVE_TTL_SECONDS',
+    'FSR_USAGE_MONTH_TTL_SECONDS',
+    'FSR_SUBSCRIPTION_TTL_SECONDS',
+    'FSR_SERVING_CONFIG_TTL_SECONDS',
+    'ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS',
+    'CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS',
+)
+
+
+def with_firestore_read_runtime_env(payload: str) -> str:
+    """Add the manifest's new Firestore read settings to hand-authored service snapshots."""
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    services = manifest['environments']['dev']['cloud_run']['services']
+    for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        env = services[service]['env']
+        entries = ',\n'.join(
+            '        ' + json.dumps({'name': name, 'value': env[name]['value']})
+            for name in FIRESTORE_READ_RUNTIME_ENV_NAMES
+        )
+        payload, _ = re.subn(
+            rf'("{service}":\s*\{{.*?"env":\s*\[)',
+            lambda match: match.group(1) + '\n' + entries + ',',
+            payload,
+            count=1,
+            flags=re.DOTALL,
+        )
+    return payload
+
+
 def with_sync_ledger_fence_mode(payload: str) -> str:
     """Keep offline Cloud Run state fixtures aligned with the protected rollout default."""
     return payload.replace(
@@ -564,7 +599,8 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
             count=1,
             flags=re.DOTALL,
         )
-    return with_backend_integration_events_secret(payload)
+    payload = with_backend_integration_events_secret(payload)
+    return with_firestore_read_runtime_env(payload)
 
 
 def validate_cloud_run_workflows_only(validator, *, env: str, manifest_path: Path, workflow_root: Path | None = None):

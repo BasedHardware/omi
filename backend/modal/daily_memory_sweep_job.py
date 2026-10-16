@@ -15,6 +15,7 @@ import os
 import firebase_admin
 
 from database._client import db as default_db_client
+from database.firestore_read_origin import read_origin
 from database.notifications import get_user_time_zone
 from utils.env_loader import firebase_admin_options
 from utils.jit_rollout import JITDecisionStage, TriState, resolve_jit_rollout_sync
@@ -145,6 +146,7 @@ def run_daily_memory_sweep_job() -> None:
         write_qa_sweep_run_receipt(default_db_client, run_id=qa_run_id, summary=summary)
 
 
+@read_origin('job:daily_memory_sweep')
 def main() -> None:
     _init_firebase()
     logger.info("Starting daily-memory-sweep-job...")

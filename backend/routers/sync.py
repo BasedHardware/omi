@@ -30,6 +30,7 @@ from database import sync_dead_letters
 from database import sync_backfill_sequencer
 from database import users as users_db
 from database.firestore_read_metrics import FirestoreReadSite
+from database.firestore_read_origin import read_origin
 from database.sync_jobs import (
     SyncLedgerFenceMode,
     TERMINAL_STATUSES,
@@ -1815,6 +1816,7 @@ async def _maintain_uid_sequencer_lease(
 
 
 @router.post('/v2/sync-backfill-sequencer/sweep', include_in_schema=False)
+@read_origin('job:sync_backfill_sequencer')
 async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     outcomes = await run_blocking(db_executor, uid_sequencer.sweep)
     from utils.sync import reprocess

@@ -46,7 +46,7 @@ def gmail_module(monkeypatch):
     monkeypatch.setitem(sys.modules, "utils.retrieval.agentic", agentic)
 
     database = types.ModuleType("database")
-    database.__path__ = []
+    database.__path__ = [str(BACKEND_DIR / "database")]
     users_db = types.ModuleType("database.users")
     users_db.get_integration = MagicMock()
     monkeypatch.setitem(sys.modules, "database", database)
