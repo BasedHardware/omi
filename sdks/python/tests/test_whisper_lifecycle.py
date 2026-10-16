@@ -130,3 +130,28 @@ def test_whisper_transcribe_wrapper_drains_on_cancellation():
         assert transcripts == ["wrapped_transcript"]
 
     asyncio.run(scenario())
+
+
+def test_whisper_drain_timeout_zero_skips_drain_on_cancellation():
+    async def scenario():
+        calls = []
+
+        def runner(pcm: bytes) -> str:
+            calls.append(len(pcm))
+            return "skipped"
+
+        queue = asyncio.Queue()
+        queue.put_nowait(b"\x00\x00" * 16000)
+
+        t = WhisperTranscriber(runner=runner, drain_timeout=0)
+        task = asyncio.create_task(t.run(queue))
+        await asyncio.sleep(0)  # queue item consumed into buffer
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        # drain_timeout=0 explicitly opts out of draining on cancel
+        assert calls == []
+
+    asyncio.run(scenario())
+

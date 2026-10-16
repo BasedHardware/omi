@@ -64,7 +64,12 @@ class WhisperTranscriber:
                 emit(text)
                 current_transcribe_task = None
         except asyncio.CancelledError:
-            timeout = self.drain_timeout or 5.0
+            timeout = self.drain_timeout if self.drain_timeout is not None else 5.0
+            if timeout <= 0:
+                if current_transcribe_task is not None and not current_transcribe_task.done():
+                    current_transcribe_task.cancel()
+                raise
+
             loop = asyncio.get_running_loop()
             deadline = loop.time() + timeout
 
@@ -72,7 +77,7 @@ class WhisperTranscriber:
                 return max(0.0, deadline - loop.time())
 
             # 1. Complete in-flight batch if one was actively transcribing
-            if current_transcribe_task is not None and not current_transcribe_task.done():
+            if current_transcribe_task is not None:
                 try:
                     text = await asyncio.wait_for(
                         asyncio.shield(current_transcribe_task),
