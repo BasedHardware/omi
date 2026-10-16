@@ -149,6 +149,7 @@ class DemandTelemetry:
         state = None
         if type(foreground) is bool and type(visible) is bool and (foreground or not visible):
             state = 'visible' if visible else 'hidden'
+        state = self.visibility if state is None else state
         if state == 'visible' and self.visibility == 'hidden':
             self.visible_at = monotonic()
             self.output_event('visible_return', 'started')

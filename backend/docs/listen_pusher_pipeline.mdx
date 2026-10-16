@@ -5002,7 +5002,9 @@ periodically. Use drained controls for a complete lane-time comparison.
 `omi_listen_demand_output_seconds{demand_cohort,trigger}` measures first decoded
 audio to delivered text (`first_output`) and a valid hidden-to-visible report
 to the next delivered text (`visible_return`). Repeated visible heartbeats do
-not reset the wait. It includes provider/replay delay and time without speech;
+not reset the wait. Invalid reports preserve the last valid telemetry visibility
+and its pending wait; routing still treats invalid state as unknown. It includes
+provider/replay delay and time without speech;
 compare matched exposure. `omi_listen_demand_output_events_total` counts
 `started|delivered|no_output` waits so censored latencies cannot look healthy.
 A wait ends without output at teardown or when the client leaves visibility.

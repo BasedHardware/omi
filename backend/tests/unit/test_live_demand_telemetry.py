@@ -1,17 +1,23 @@
 """Exercise pinned admission, socket writes, replay and delivered-output telemetry offline."""
 
 import asyncio
-from types import SimpleNamespace
-from unittest.mock import AsyncMock
+import json
+import threading
+from types import MethodType, SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
+from deepgram.clients.common.v1.abstract_sync_websocket import AbstractSyncWebSocketClient
 from prometheus_client import REGISTRY
 
+from models.transcript_segment import TranscriptSegment
 from routers.listen import demand_routing
+from routers.listen import receiver as receiver_module
 from routers.listen import runtime as runtime_module
 from routers.listen import lane_meter as lane_module
 from routers.listen.contracts import ListenRequest
 from routers.listen.runtime import ListenSessionRuntime
+from routers.listen.transcripts import TranscriptProcessor
 from utils.observability import transcription
 from tests.unit.test_listen_parity_runtime import (
     _AUDIO,
@@ -26,6 +32,7 @@ from utils.stt.live_metrics import RECOVERY_ATTEMPTS
 from tests.unit.test_live_session_transcript_outcome import _runtime
 from utils.metrics import OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL
 from utils.stt.soniox import SafeSonioxSocket
+from utils.stt.safe_socket import SafeDeepgramSocket
 from utils.stt.streaming import SafeModulateSocket, _build_wav_header
 
 
@@ -254,16 +261,20 @@ def test_recovery_dials_and_session_outcomes_keep_the_admission_cohort(monkeypat
 class _BrokenMetric:
     def __init__(self, failure):
         self.failure = failure
+        self.attempts = 0
 
     def labels(self, **_labels):
         if self.failure == 'labels':
+            self.attempts += 1
             raise RuntimeError('synthetic label binding failure')
         return self
 
     def inc(self, *_args):
+        self.attempts += 1
         raise RuntimeError('synthetic counter failure')
 
     def observe(self, *_args):
+        self.attempts += 1
         raise RuntimeError('synthetic histogram failure')
 
 
@@ -355,8 +366,10 @@ def test_wire_meter_failure_cannot_change_successful_transport_result(monkeypatc
 @pytest.mark.parametrize('provider', ['soniox', 'modulate'])
 @pytest.mark.parametrize('failure', ['labels', 'mutation'])
 async def test_async_wire_metric_failure_keeps_successful_socket_alive(monkeypatch, provider, failure):
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
     telemetry.current_demand.set(telemetry.DemandTelemetry('admitted'))
-    monkeypatch.setattr(telemetry, 'WIRE_AUDIO', _BrokenMetric(failure))
+    broken = _BrokenMetric(failure)
+    monkeypatch.setattr(telemetry, 'WIRE_AUDIO', broken)
     wire = SimpleNamespace(send=AsyncMock(), close=AsyncMock())
     cls = SafeSonioxSocket if provider == 'soniox' else SafeModulateSocket
     sock = cls(wire, lambda _: None, asyncio.get_running_loop())
@@ -365,13 +378,189 @@ async def test_async_wire_metric_failure_keeps_successful_socket_alive(monkeypat
     await asyncio.gather(sock._recv_task, sock._send_task, return_exceptions=True)
     pcm = b'\0\0' * 160
     try:
-        if provider == 'soniox':
-            await sock._write(pcm)
-        else:
-            assert sock.send(pcm)
-            sock._send_queue.put_nowait(b'__EOS__')
-            await sock._send_loop()
-        assert wire.send.call_args_list[0].args == (pcm,)
+        assert sock.send(pcm)
+        assert sock.send(pcm)  # an actual replay is still exactly one write
+        sock._send_queue.put_nowait(b'' if provider == 'soniox' else b'__EOS__')
+        await sock._send_loop()
+        assert [call.args[0] for call in wire.send.call_args_list] == [pcm, pcm, '']
+        assert broken.attempts == 2
+        assert sock._send_queue.written_audio == 2
+        assert sock._send_queue.inflight == 0
+        assert sock._send_queue.empty()
         assert not sock.is_connection_dead
     finally:
         sock._closed = True
+
+
+@pytest.mark.parametrize('failure', ['labels', 'mutation'])
+def test_deepgram_sdk_and_safe_socket_keep_accepting_audio_when_wire_metric_raises(monkeypatch, failure):
+    telemetry.current_demand.set(telemetry.DemandTelemetry('admitted'))
+    broken = _BrokenMetric(failure)
+    monkeypatch.setattr(telemetry, 'WIRE_AUDIO', broken)
+    raw = SimpleNamespace(send=Mock())
+    # Exercise the installed SDK's real exception-to-False boundary without dialing.
+    sdk = SimpleNamespace(
+        _socket=telemetry.MeteredSyncTransport(raw, telemetry.WireAudioMeter('deepgram', 16000)),
+        _exit_event=threading.Event(),
+        _lock_send=threading.Lock(),
+        _logger=Mock(),
+        _config=SimpleNamespace(options={}),
+        is_connected=lambda: True,
+        finish=lambda: None,
+    )
+    sdk.send = MethodType(AbstractSyncWebSocketClient.send, sdk)
+    sock = SafeDeepgramSocket(sdk)
+    try:
+        pcm = b'\0\0' * 160
+        assert sock.send(pcm)
+        assert sock.send(pcm)
+        assert raw.send.call_count == broken.attempts == 2
+        assert not sock.is_connection_dead
+        # Genuine transport failure must still cross the same boundary as False.
+        raw.send.side_effect = RuntimeError('synthetic vendor write failure')
+        assert not sock.send(pcm)
+        assert sock.is_connection_dead
+        assert not sock.send(pcm)
+        assert raw.send.call_count == 3
+    finally:
+        sock.finish()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure', ['labels', 'mutation'])
+async def test_receive_loop_preserves_audio_and_client_state_when_metrics_raise(monkeypatch, failure):
+    monkeypatch.setenv('STT_LIVE_DEMAND_ENABLED', 'false')
+    capture, events = _BrokenMetric(failure), _BrokenMetric(failure)
+    monkeypatch.setattr(telemetry, 'CAPTURE_AUDIO', capture)
+    monkeypatch.setattr(telemetry, 'OUTPUT_EVENTS', events)
+    websocket = _FakeWebSocket(_AUDIO)
+    websocket._messages[:0] = [
+        {'type': 'websocket.receive', 'text': json.dumps(dict(type='client_state', **payload))}
+        for payload in (
+            {'foreground': False, 'transcript_visible': False},
+            {'foreground': True, 'transcript_visible': True},
+        )
+    ]
+    runtime = ListenSessionRuntime(
+        ListenRequest(websocket=websocket, uid=f'synthetic-state-metric-{failure}', codec='pcm16')
+    )
+    runtime.persistence = _FakePersistence(fail_usage=False)
+    sockets = []
+    _install_runtime_fakes(monkeypatch, runtime, sockets, [])
+
+    build_components = runtime._build_components
+
+    def build_with_translation_demand():
+        build_components()
+        runtime.transcripts.on_translation_demand_changed = AsyncMock()
+
+    monkeypatch.setattr(runtime, '_build_components', build_with_translation_demand)
+
+    def attach(receiver):
+        routing = demand_routing.LiveDemandRouting(receiver, eligible=False)
+        monkeypatch.setattr(routing, 'publish', AsyncMock(return_value=False))
+        return routing
+
+    monkeypatch.setattr(receiver_module, 'attach_live_demand', attach)
+    await runtime.run()
+    assert runtime.state.close_code == 1000
+    assert sockets[0].sent == [_AUDIO]
+    assert len(runtime.transcripts.inbound) == 1
+    assert capture.attempts > 0 and events.attempts > 0
+    policy = runtime.receiver.live_demand.policy
+    assert policy.state == 'visible' and policy.reports == 2
+    assert policy.decide(enabled=True, visible=False, consumer=False) == 'vendor'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure', ['labels', 'mutation'])
+async def test_real_transcript_delivery_continues_and_records_transcribed_when_latency_metric_raises(
+    monkeypatch, failure
+):
+    runtime = ListenSessionRuntime(ListenRequest(websocket=_FakeWebSocket(b''), uid='synthetic-delivery'))
+    runtime.pusher_enabled = True
+    runtime.demand_telemetry = telemetry.DemandTelemetry('admitted')
+    runtime.demand_telemetry.capture(1)
+    runtime.demand_telemetry.observe_visibility({'foreground': False, 'transcript_visible': False})
+    runtime.demand_telemetry.observe_visibility({'foreground': True, 'transcript_visible': True})
+    broken = _BrokenMetric(failure)
+    monkeypatch.setattr(telemetry, 'OUTPUT_LATENCY', broken)
+    processor = TranscriptProcessor(runtime)
+    segment = TranscriptSegment(id='synthetic-segment', text='synthetic text', is_user=False, start=0, end=1)
+    before = value(OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL, outcome='transcribed', demand_cohort='admitted')
+    for _ in range(2):
+        await processor._deliver_live_updates(
+            SimpleNamespace(id='synthetic-conversation'), [segment], [], [segment], 'synthetic-conversation'
+        )
+    assert len(runtime.request.websocket.sent) == 2
+    assert runtime.state.active and runtime.state.live_transcript_delivered
+    assert broken.attempts == 2  # first output and visible return, despite two deliveries
+    runtime._record_session_transcript_outcome()
+    assert (
+        value(OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL, outcome='transcribed', demand_cohort='admitted') == before + 1
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure', ['labels', 'mutation'])
+async def test_demand_lifetime_loop_survives_lane_metrics_and_returns_to_vendor(monkeypatch, failure):
+    monkeypatch.setenv('STT_LIVE_DEMAND_ENABLED', 'true')
+    monkeypatch.setenv('STT_LIVE_DEMAND_PERCENT', '100')
+    broken = _BrokenMetric(failure)
+    monkeypatch.setattr(lane_module, 'DEMAND_LANE_SECONDS', broken)
+    monkeypatch.setattr(lane_module, 'DEMAND_SWITCHES', broken)
+    h = host()
+    h.state = SimpleNamespace(active=True, stt_terminal_failure=False)
+    h.stt_model = 'parakeet-window'
+    meter = lane_module.LiveLaneMeter()
+    meter.transition('parakeet')
+    receiver = SimpleNamespace(host=h, lane_meter=meter)
+    routing = demand_routing.LiveDemandRouting(receiver, eligible=True)
+    routing.policy.observe({'foreground': False, 'transcript_visible': False})
+    waits = []
+
+    async def wait(_seconds):
+        waits.append(True)
+        routing.policy.observe({'foreground': True, 'transcript_visible': True})
+        return len(waits) == 2
+
+    async def switch(desired):
+        assert desired == 'vendor'
+        meter.transition('soniox', reason=routing.policy.reason)
+        h.stt_model = 'soniox'
+        return True
+
+    h.wait = wait
+    receiver._switch_live_demand = AsyncMock(side_effect=switch)
+    monkeypatch.setattr(routing, 'publish', AsyncMock(return_value=False))
+    monkeypatch.setattr(demand_routing, 'realtime_consumer_active', AsyncMock(return_value=False))
+    await routing.run()
+    assert len(waits) == 2 and broken.attempts >= 5
+    receiver._switch_live_demand.assert_awaited_once_with('vendor')
+    assert h.state.active and not h.state.stt_terminal_failure
+    assert routing.closed
+
+
+@pytest.mark.parametrize(
+    'payload',
+    [
+        {'foreground': 'true', 'transcript_visible': True},
+        {'foreground': False, 'transcript_visible': True},
+    ],
+)
+def test_invalid_visibility_preserves_open_wait_and_last_valid_hidden_state(monkeypatch, payload):
+    now = [10.0]
+    monkeypatch.setattr(telemetry, 'monotonic', lambda: now[0])
+    cohort = telemetry.DemandTelemetry('admitted')
+    cohort.observe_visibility({'foreground': False, 'transcript_visible': False})
+    cohort.observe_visibility(payload)
+    assert cohort.visibility == 'hidden'
+    cohort.observe_visibility({'foreground': True, 'transcript_visible': True})
+    now[0] = 14
+    cohort.observe_visibility(payload)
+    cohort.observe_visibility({'foreground': True, 'transcript_visible': True})
+    assert cohort.visible_at == 10
+    labels = dict(demand_cohort='admitted', trigger='visible_return', outcome='no_output')
+    before = value(telemetry.OUTPUT_EVENTS, **labels)
+    cohort.finish()
+    assert value(telemetry.OUTPUT_EVENTS, **labels) == before + 1
