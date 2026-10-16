@@ -12,6 +12,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 if TestClient is not None:
     from main import app
+    from whoop_tools_auth import require_whoop_tools_auth
+    app.dependency_overrides[require_whoop_tools_auth] = lambda: None
 
 
 def _page(records, next_token=None):
