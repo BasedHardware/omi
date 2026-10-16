@@ -459,3 +459,24 @@ def test_repeat_work_window_has_a_hard_ceiling_without_a_second_queue(state, mon
     assert reprocess.run(key, tasks[0]['task_token'], process, now=3600) == 'processed'
     process.assert_called_once()
     assert not rows
+
+
+def test_repeat_work_deadline_survives_overlapping_revision_and_next_mark(state, monkeypatch):
+    rows, tasks = state
+    monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
+    for now in range(0, 3600, 100):
+        reprocess.mark('u', 'c', 'en', now=now)
+    key = reprocess.key('u', 'c')
+    assert rows[key]['first_pending_at'] == 0 and rows[key]['due_at'] == 3600
+    assert (
+        reprocess.run(key, tasks[0]['task_token'], lambda *_: reprocess.mark('u', 'c', 'en', now=3700), now=3600)
+        == 'processed'
+    )
+    assert rows[key]['task_due_at'] == 3600
+    reprocess.mark('u', 'c', 'en', now=3900)
+    assert rows[key]['first_pending_at'] == 0
+    assert rows[key]['due_at'] == rows[key]['task_due_at'] == 3600
+    process = Mock()
+    assert reprocess.run(key, tasks[-1]['task_token'], process, now=3900) == 'processed'
+    process.assert_called_once_with('u', 'c', 'en')
+    assert not rows

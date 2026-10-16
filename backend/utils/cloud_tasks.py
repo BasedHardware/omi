@@ -383,24 +383,36 @@ def _audio_merge_task_id(payload: Dict[str, Any]) -> str:
     # deleted/expired artifact cannot tombstone a first play. Run locks still
     # coalesce requests straddling the hour boundary.
     suffix = f"-d{int(payload['requested_at'] // 3600)}" if payload.get('on_demand') else ''
+    if payload.get('playback_deferrals'):
+        suffix += f"-pd{int(payload['playback_deferrals'])}"
     if payload.get('schema_version') == 2:
         return f"amc-{payload['conversation_id']}-{payload['fingerprint']}{suffix}"
     return f"am-{payload['conversation_id']}-{payload['audio_file_id']}{suffix}"
 
 
-def enqueue_audio_merge_job_deferred(payload: Dict[str, Any], delay_seconds: int) -> None:
+def enqueue_audio_merge_job_deferred(
+    payload: Dict[str, Any], delay_seconds: int, *, reason: str = 'destructive_operation'
+) -> None:
     """Re-enqueue a merge task that ran into a destructive-operation fence.
 
     The ``-dd{n}`` suffix (n = ``payload['destructive_deferrals']``) escapes the
     original name's tombstone, and ``schedule_at`` places the new task after the
     gate has cleared. Gate holds last seconds to a few minutes.
     """
-    deferral = int(payload['destructive_deferrals'])
+    # Playback deferral keeps pre-enable eager work owed in the same queue.
+    # Its successor name advances on each delivery, so acknowledging the old
+    # name cannot tombstone the wake needed after rollback. Preserve the
+    # destructive suffix too when the two deferral protocols overlap.
+    suffix = (
+        f"-dd{int(payload['destructive_deferrals'])}"
+        if reason == 'destructive_operation' or payload.get('destructive_deferrals')
+        else ''
+    )
     handler_url = _audio_merge_handler_url(str(payload.get('uid') or ''))
     enqueue_named_task(
         os.getenv('AUDIO_MERGE_TASKS_QUEUE', ''),
         handler_url,
-        f'{_audio_merge_task_id(payload)}-dd{deferral}',
+        f'{_audio_merge_task_id(payload)}{suffix}',
         payload,
         audience=handler_url,
         schedule_at=int(time.time()) + delay_seconds,

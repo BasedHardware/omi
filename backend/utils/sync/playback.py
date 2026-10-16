@@ -179,9 +179,20 @@ def _conversation_audio_urls_entry(
     else:
         fingerprint = compute_audio_files_fingerprint(audio_files)
     stamp = (conversation or {}).get('conversation_audio') or {}
-    if stamp.get('audio_files_fingerprint') == fingerprint:
+    cached_fingerprint = fingerprint
+    immutable = playback_on_demand()
+    stamped = stamp.get('audio_files_fingerprint')
+    if not immutable and isinstance(stamped, str) and len(stamped) == 64:
+        source_fingerprint = compute_audio_files_fingerprint(
+            audio_files,
+            origin=(conversation or {}).get('started_at') or (conversation or {}).get('created_at'),
+            source_identity=True,
+        )
+        if stamped == source_fingerprint:
+            cached_fingerprint, immutable = source_fingerprint, True
+    if stamped == cached_fingerprint:
         signed_url = get_conversation_playback_signed_url(
-            uid, conversation_id, **({'fingerprint': fingerprint} if playback_on_demand() else {})
+            uid, conversation_id, **({'fingerprint': cached_fingerprint} if immutable else {})
         )
         if signed_url:
             return {

@@ -3,7 +3,7 @@
 from copy import deepcopy
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -256,6 +256,105 @@ def sync_router_module():
     from routers import sync
 
     return sync
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('schema', [1, 2])
+async def test_deferred_eager_task_survives_tombstone_and_builds_after_rollback(
+    monkeypatch, sync_router_module, schema
+):
+    from copy import deepcopy
+    from utils import cloud_tasks
+
+    sync = sync_router_module
+    files = [dict(id='legacy-file', chunk_timestamps=[1000.0])]
+    monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'false')
+    fingerprint = storage.compute_audio_files_fingerprint(files)
+    row = dict(started_at=1000.0, audio_files=files)
+    payload = dict(uid='u', conversation_id='c', schema_version=schema)
+    payload.update(
+        dict(fingerprint=fingerprint) if schema == 2 else dict(audio_file_id='legacy-file', timestamps=[1000.0])
+    )
+    queued, reserved = {}, set()
+
+    def enqueue(_queue, _url, name, body, **kwargs):
+        if name not in reserved:  # Cloud Tasks AlreadyExists is success, even after acknowledgement.
+            reserved.add(name)
+            queued[name] = (deepcopy(body), kwargs)
+
+    monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
+    monkeypatch.setattr(sync, 'enqueue_audio_merge_job_deferred', cloud_tasks.enqueue_audio_merge_job_deferred)
+    monkeypatch.setattr(sync, 'try_acquire_job_run_lock', lambda *_: 'lock')
+    monkeypatch.setattr(sync, 'release_job_run_lock', lambda *_: None)
+    monkeypatch.setattr(sync, 'should_skip_background_account_mutation', lambda *_: False)
+    monkeypatch.setattr(sync.conversations_db, 'get_conversation', lambda *_: row)
+    monkeypatch.setattr(sync.conversations_db, 'update_conversation', lambda u, c, data: row.update(data) or True)
+    monkeypatch.setattr(sync, 'get_playback_artifact_signed_url', lambda *_: None)
+    monkeypatch.setattr(sync, 'get_conversation_playback_signed_url', lambda *a, **kw: None)
+    file_build = Mock(return_value=b'MP3')
+    conversation_build = Mock(return_value=(b'MP3', [dict(file_id='legacy-file', len=1.0, wall_offset=0.0)]))
+    monkeypatch.setattr(sync.sync_playback, 'build_playback_artifact', file_build)
+    monkeypatch.setattr(sync.sync_playback, 'build_conversation_playback_artifact', conversation_build)
+    upload = Mock()
+    monkeypatch.setattr(sync, 'upload_playback_artifact', upload)
+    monkeypatch.setattr(sync, 'upload_conversation_playback_artifact', upload)
+    cloud_tasks.enqueue_audio_merge_job(payload)
+    eager_name = next(iter(queued))
+    monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'true')
+    for _ in range(2):
+        name = next(iter(queued))
+        delivered, _ = queued.pop(name)
+        response = await sync.run_audio_merge_job(SimpleNamespace(json=AsyncMock(return_value=delivered)), 0)
+        assert response.status_code == 200 and b'deferred_until_playback' in response.body
+        assert len(queued) == 1  # A durable successor exists before the old name is acknowledged.
+        successor = next(iter(queued))
+        assert successor != name and successor != eager_name
+        assert queued[successor][1]['schedule_at'] > 0
+        # A duplicate delivery must coalesce onto the same reserved successor.
+        response = await sync.run_audio_merge_job(SimpleNamespace(json=AsyncMock(return_value=delivered)), 0)
+        assert response.status_code == 200 and len(queued) == 1
+    file_build.assert_not_called()
+    conversation_build.assert_not_called()
+    monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'false')
+    cloud_tasks.enqueue_audio_merge_job(payload)  # Reusing the original tombstone cannot erase the successor.
+    assert len(queued) == 1
+    delivered, _ = queued.pop(next(iter(queued)))
+    response = await sync.run_audio_merge_job(SimpleNamespace(json=AsyncMock(return_value=delivered)), 0)
+    assert response.status_code == 200 and b'done' in response.body
+    (conversation_build if schema == 2 else file_build).assert_called_once()
+    upload.assert_called_once()
+    if schema == 2:
+        assert row['conversation_audio']['audio_files_fingerprint'] == fingerprint
+
+
+@pytest.mark.asyncio
+async def test_eager_deferral_enqueue_failure_keeps_original_task_retryable(monkeypatch, sync_router_module):
+    monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'true')
+    enqueue = Mock(side_effect=RuntimeError('synthetic queue failure'))
+    monkeypatch.setattr(sync_router_module, 'enqueue_audio_merge_job_deferred', enqueue)
+    request = SimpleNamespace(json=AsyncMock(return_value=dict(schema_version=2, uid='u', conversation_id='c')))
+    response = await sync_router_module.run_audio_merge_job(request, 0)
+    assert response.status_code == 503
+    enqueue.assert_called_once()
+
+
+def test_flag_off_reader_reuses_matching_demand_stamp(monkeypatch):
+    from utils.sync import playback
+
+    files = [dict(id='unchanged-id', chunk_timestamps=[1000.0], source_fingerprint='source')]
+    row = dict(started_at=1000.0, audio_files=files)
+    monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'true')
+    fingerprint = storage.compute_audio_files_fingerprint(files, origin=1000.0)
+    row['conversation_audio'] = dict(audio_files_fingerprint=fingerprint, spans=[], duration=1, captured_duration=1)
+    monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'false')
+    signed = Mock(return_value='demand-artifact')
+    enqueue = Mock()
+    monkeypatch.setattr(playback, 'get_conversation_playback_signed_url', signed)
+    monkeypatch.setattr(playback, 'get_conversation_playback_unavailable_fingerprint', lambda *_: None)
+    monkeypatch.setattr(playback, 'enqueue_conversation_artifact_build', enqueue)
+    assert playback._conversation_audio_urls_entry('u', 'c', files, row)['status'] == 'cached'
+    signed.assert_called_once_with('u', 'c', fingerprint=fingerprint)
+    enqueue.assert_not_called()
 
 
 @pytest.mark.asyncio

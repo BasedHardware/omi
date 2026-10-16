@@ -96,7 +96,7 @@ def implementation_digest(feature: str) -> str:
 def fingerprint(feature: str, inputs: Any) -> str:
     value = {'feature': feature, 'implementation': implementation_digest(feature), 'input': canonical(inputs)}
     if revision_reuse():
-        value['route'] = canonical(get_route_ref('conv_structure' if feature == 'notes' else 'memories'))
+        value['route'] = canonical(get_route_ref('conv_structure' if feature == 'notes' else 'memory_l1'))
         value['deployment_version'] = os.getenv('REPEAT_WORK_LLM_VERSION', '2026-10-16-v1')
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False).encode()).hexdigest()
 

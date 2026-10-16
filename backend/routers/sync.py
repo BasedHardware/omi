@@ -2449,6 +2449,23 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
     # artifact is never rebuilt until audio_files change. _run_conversation_merge_job
     # validates its own payload and returns 200-dropped for genuinely malformed input.
     if playback_on_demand() and not payload.get('on_demand'):
+        # An empty ACK burns the eager task's name. Transfer its obligation
+        # to a distinct delayed task before acknowledging; on rollback that
+        # successor builds with the original eager protocol within one minute.
+        # New eager enqueues are suppressed while enabled, so only pre-enable
+        # queued work follows this transitional chain. No Firestore read/write.
+        try:
+            await run_blocking(
+                db_executor,
+                enqueue_audio_merge_job_deferred,
+                {**payload, 'playback_deferrals': int(payload.get('playback_deferrals', 0)) + 1},
+                60,
+                reason='playback',
+            )
+        except Exception as e:
+            logger.warning('audio_merge: playback deferral enqueue failed exception_type=%s', type(e).__name__)
+            return JSONResponse(status_code=503, content={'status': 'retry'})
+        PLAYBACK_BUILDS.labels('conversation' if schema_version == 2 else 'file', 'deferred').inc()
         return JSONResponse(status_code=200, content={'status': 'deferred_until_playback'})
     if schema_version == 2:
         return await _run_conversation_merge_job(payload, task_retry_count)

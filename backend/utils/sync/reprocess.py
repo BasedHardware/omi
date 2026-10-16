@@ -216,8 +216,6 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             return None, None
         pending = dict(old)
         pending.update(lease_until=0, task_token=uuid.uuid4().hex, task_due_at=pending['due_at'])
-        if revision_reuse():
-            pending['first_pending_at'] = current
         return pending, pending
 
     pending = _mutate(document_id, finish)

@@ -70,6 +70,21 @@ def test_l1_only_reuses_successful_exact_hash(enabled, monkeypatch):
         assert changed != digest and not matched
 
 
+def test_memory_l1_route_retarget_alone_invalidates_successful_hash(monkeypatch):
+    monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
+    routes = {'memory_l1': 'old-model', 'memories': 'unchanged-model', 'conv_structure': 'notes-model'}
+    monkeypatch.setattr(dedupe, 'get_route_ref', lambda feature: {'feature': feature, 'model': routes[feature]})
+    conversation = SimpleNamespace(id='c', sync_content_revision=1)
+    inputs = {'transcript': 'synthetic input', 'language': 'en'}
+    digest, matched = dedupe.l1_input('u', conversation, inputs)
+    assert digest and not matched
+    conversation.l1_llm_input_hash = digest
+    assert dedupe.l1_input('u', conversation, inputs) == (digest, True)
+    routes['memory_l1'] = 'new-model'
+    changed, matched = dedupe.l1_input('u', conversation, inputs)
+    assert changed != digest and not matched
+
+
 def test_disabled_dedupe_preserves_calls_and_invalidates_only_metadata(monkeypatch):
     monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'false')
     read = Mock(side_effect=AssertionError('must not read'))
