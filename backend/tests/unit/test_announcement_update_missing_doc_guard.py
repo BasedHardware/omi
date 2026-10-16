@@ -23,46 +23,17 @@ os.environ.setdefault(
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
 
+from tests.unit.memory_import_isolation import install_database_client_stub
 
-def _pkg(name):
-    mod = sys.modules.get(name)
-    if mod is None or not hasattr(mod, "__path__"):
-        mod = types.ModuleType(name)
-        mod.__path__ = []
-        sys.modules[name] = mod
-    return mod
+install_database_client_stub()
 
+try:
+    from google.api_core.exceptions import NotFound as _NotFound
+except (ImportError, ModuleNotFoundError):
+    class _NotFound(Exception):
+        """Stand-in for google.api_core.exceptions.NotFound."""
 
-def _mod(name, **attrs):
-    mod = types.ModuleType(name)
-    for key, value in attrs.items():
-        setattr(mod, key, value)
-    sys.modules[name] = mod
-    return mod
-
-
-class _NotFound(Exception):
-    """Stand-in for google.api_core.exceptions.NotFound."""
-
-
-for _p in ["google", "google.cloud", "google.api_core", "database"]:
-    _pkg(_p)
-_mod("google.api_core.exceptions", NotFound=_NotFound)
-_mod("google.cloud.firestore_v1", FieldFilter=MagicMock())
-_mod("database._client", db=MagicMock())
-
-
-def _load():
-    spec = importlib.util.spec_from_file_location(
-        "database.announcements", str(BACKEND_DIR / "database" / "announcements.py")
-    )
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules["database.announcements"] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-announcements = _load()
+from database import announcements
 
 
 def _snap(exists, data=None, doc_id="ann-1"):
