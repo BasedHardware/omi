@@ -705,9 +705,15 @@ def get_user_public_memories(
 
     memories: List[Dict[str, Any]] = [_typed_doc(doc) for doc in memories_ref.stream()]
 
-    # Consider visibility as 'public' if it's missing
+    # Consider visibility as 'public' if it's missing; exclude user-rejected,
+    # invalidated/superseded, payload-tombstoned, and paywall-locked rows.
     public_memories: List[Dict[str, Any]] = [
-        memory for memory in memories if memory.get('visibility', 'public') == 'public'
+        memory
+        for memory in memories
+        if memory.get('visibility', 'public') == 'public'
+        and _memory_passes_list_visibility(memory, include_invalidated=False)
+        and memory.get('redaction_status') != 'payload_tombstoned'
+        and not memory.get('is_locked', False)
     ]
 
     return public_memories
@@ -940,11 +946,9 @@ def get_memories_by_ids(
 
 
 def review_memory(uid: str, memory_id: str, value: bool, *, firestore_client: Any = None) -> None:
-    database = _get_db(firestore_client)
-    user_ref = database.collection(users_collection).document(uid)
-    memories_ref = user_ref.collection(memories_collection)
-    memory_ref = memories_ref.document(memory_id)
-    memory_ref.update({'reviewed': True, 'user_review': value})
+    _update_memory_if_exists(
+        uid, memory_id, {'reviewed': True, 'user_review': value}, 'review', firestore_client=firestore_client
+    )
 
 
 def set_memory_kg_extracted(uid: str, memory_id: str, *, firestore_client: Any = None) -> None:
@@ -952,11 +956,7 @@ def set_memory_kg_extracted(uid: str, memory_id: str, *, firestore_client: Any =
 
 
 def change_memory_visibility(uid: str, memory_id: str, value: str, *, firestore_client: Any = None) -> None:
-    database = _get_db(firestore_client)
-    user_ref = database.collection(users_collection).document(uid)
-    memories_ref = user_ref.collection(memories_collection)
-    memory_ref = memories_ref.document(memory_id)
-    memory_ref.update({'visibility': value})
+    _update_memory_if_exists(uid, memory_id, {'visibility': value}, 'visibility', firestore_client=firestore_client)
 
 
 @after_write('memories')
@@ -965,14 +965,9 @@ def update_memory_fields(uid: str, memory_id: str, data: Dict[str, Any], *, fire
     if not data:
         return
 
-    database = _get_db(firestore_client)
-    user_ref = database.collection(users_collection).document(uid)
-    memories_ref = user_ref.collection(memories_collection)
-    memory_ref = memories_ref.document(memory_id)
-
     update_payload = data.copy()
     update_payload['updated_at'] = datetime.now(timezone.utc)
-    memory_ref.update(update_payload)
+    _update_memory_if_exists(uid, memory_id, update_payload, 'fields', firestore_client=firestore_client)
 
 
 def add_evidence(uid: str, memory_id: str, evidence: Dict[str, Any], *, firestore_client: Any = None) -> None:
@@ -1052,19 +1047,37 @@ def refine_memory(
     user_ref = database.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
     memory_ref = memories_ref.document(memory_id)
+
+    doc_snapshot = memory_ref.get()
+    if not doc_snapshot.exists:
+        return
+
+    doc_level = _typed_doc(doc_snapshot).get('data_protection_level', 'standard')
+    prepared_changes = copy.deepcopy(arg_changes)
+    if doc_level == 'enhanced' and 'content' in prepared_changes:
+        raw_change = prepared_changes['content']
+        plain_val = raw_change.get('to') if isinstance(raw_change, dict) and 'to' in raw_change else raw_change
+        if isinstance(plain_val, str):
+            encrypted_val = encryption.encrypt(plain_val, uid)
+            content_hash = hashlib.sha256(plain_val.encode('utf-8')).hexdigest()
+            if isinstance(raw_change, dict) and 'to' in raw_change:
+                prepared_changes['content'] = {**raw_change, 'to': encrypted_val, 'to_sha256': content_hash}
+            else:
+                prepared_changes['content'] = {'to': encrypted_val, 'to_sha256': content_hash}
+
     update_time = datetime.now(timezone.utc)
 
     def write_projection(transaction: Any) -> None:
         snapshot = memory_ref.get(transaction=transaction)
         if not snapshot.exists:
             return
-        update_payload = projection_update_for_refine(_typed_doc(snapshot) or {}, arg_changes, update_time)
+        update_payload = projection_update_for_refine(_typed_doc(snapshot) or {}, prepared_changes, update_time)
         transaction.update(memory_ref, update_payload)
 
     return memory_ledger.append_commit(
         uid,
         None,
-        [memory_ledger.refine_fact(memory_id, arg_changes)],
+        [memory_ledger.refine_fact(memory_id, prepared_changes)],
         commit_time=update_time,
         projection_writer=write_projection,
         use_current_head=True,
@@ -1542,16 +1555,23 @@ def migrate_memories_level_batch(
             continue
 
         # Decrypt the data first (if needed) to get a clean slate.
-        plain_data = _prepare_memory_for_read(memory_data, uid)
+        plain_data = cast(Dict[str, Any], _prepare_memory_for_read(memory_data, uid) or {})
 
-        plain_content = cast(Dict[str, Any], plain_data).get('content')
+        plain_content = plain_data.get('content')
         migrated_content = plain_content
         if target_level == 'enhanced':
             if isinstance(plain_content, str):
                 migrated_content = encryption.encrypt(plain_content, uid)
 
         # Update the document with the migrated data and the new protection level.
-        update_data = {'data_protection_level': target_level, 'content': migrated_content}
+        update_data: Dict[str, Any] = {'data_protection_level': target_level, 'content': migrated_content}
+        if 'evidence' in plain_data:
+            plain_evidence = plain_data.get('evidence')
+            if target_level == 'enhanced':
+                if isinstance(plain_evidence, list):
+                    update_data['evidence'] = encryption.encrypt(json.dumps(plain_evidence, default=str), uid)
+            elif isinstance(plain_evidence, list):
+                update_data['evidence'] = plain_evidence
         batch.update(doc_snapshot.reference, update_data)
         batch_count += 1
         if batch_count >= BATCH_LIMIT:
@@ -1612,6 +1632,15 @@ def migrate_memories(prev_uid: str, new_uid: str, app_id: Optional[str] = None, 
                 logger.warning(f"migrate_memories: could not decrypt memory {memory.get('id')}; copying as-is")
             else:
                 memory = {**memory, 'content': encryption.encrypt(plaintext, new_uid)}
+        evidence = memory.get('evidence')
+        if memory.get('data_protection_level') == 'enhanced' and isinstance(evidence, str) and evidence:
+            plain_evidence = encryption.decrypt(evidence, prev_uid)
+            if plain_evidence == evidence:
+                logger.warning(f"migrate_memories: could not decrypt memory evidence {memory.get('id')}; copying as-is")
+            else:
+                memory = {**memory, 'evidence': encryption.encrypt(plain_evidence, new_uid)}
+        if 'uid' in memory:
+            memory = {**memory, 'uid': new_uid}
         memory_ref = new_memories_ref.document(memory['id'])
         batch.set(memory_ref, memory)
         batch_count += 1
