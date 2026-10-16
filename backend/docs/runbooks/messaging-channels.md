@@ -784,6 +784,12 @@ gcloud run jobs add-iam-policy-binding messaging-maintenance-job \
   --project=based-hardware --region=us-central1 \
   --member='serviceAccount:msg-maintenance-scheduler@based-hardware.iam.gserviceaccount.com' \
   --role=roles/run.invoker
+# CI's scheduler reconciler (omi-ci-deployer-prod) patches oauthToken on drift and
+# must be able to act as this account, like the other Scheduler invokers:
+gcloud iam service-accounts add-iam-policy-binding \
+  msg-maintenance-scheduler@based-hardware.iam.gserviceaccount.com --project=based-hardware \
+  --member='serviceAccount:omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com' \
+  --role=roles/iam.serviceAccountUser
 backend/.venv/bin/python backend/scripts/scheduler_reconcile.py \
   --gcloud-auth --environment prod --project based-hardware --check --jobs messaging-maintenance-hourly
 backend/.venv/bin/python backend/scripts/scheduler_reconcile.py \
