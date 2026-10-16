@@ -138,6 +138,7 @@ def schedule(
         for t in range(3):
             p.zrem(prefix() + f'queue:{t}', obligation)
         p.zadd(prefix() + f'queue:{priority}', {obligation: started})
+        p.expire(prefix() + f'queue:{priority}', TTL)
         p.execute()
         _wake(row)
         EVENTS.labels('scheduled').inc()
@@ -181,6 +182,7 @@ def _promote_member(uid: str, obligation: str, r: Any, now: float) -> bool:
     for priority in range(3):
         p.zrem(prefix() + f'queue:{priority}', obligation)
     p.zadd(prefix() + 'queue:0', {obligation: row['started_at']})
+    p.expire(prefix() + 'queue:0', TTL)
     p.execute()
     _wake(row, immediate=True, now=now)
     return True

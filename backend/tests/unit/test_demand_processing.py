@@ -112,6 +112,7 @@ def test_ceiling_not_reset_by_revision_or_redis_repair(runtime):
     schedule('owner', 'pending', now=4400)
     row = json.loads(redis.get(demand.prefix() + 'pending'))
     assert row['started_at'] == 1000 and row['due_at'] == 4540
+    assert redis.ttl(demand.prefix() + 'queue:2') > config.CEILING_SECONDS
     assert demand.admit('pending', now=4540)
 
 
