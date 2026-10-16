@@ -64,4 +64,13 @@ final class ListenClientStateTests: XCTestCase {
         .init(foreground: false, transcriptVisible: false),
       ])
   }
+
+  func testSurfaceReportingURLAcceptsBothBackendBaseShapes() {
+    for base in ["https://backend.example.invalid", "https://backend.example.invalid/"] {
+      XCTAssertEqual(
+        ListenClientState.surfaceReportURL(baseURL: base)?.absoluteString,
+        "https://backend.example.invalid/v1/users/client-state")
+    }
+  }
+
 }

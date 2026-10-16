@@ -2574,3 +2574,25 @@ def record_llm_usage_bucket(
 def get_total_llm_cost(uid: str = Depends(auth.get_current_user_uid)):
     total = llm_usage_db.get_total_llm_cost(uid)
     return {'total_cost_usd': total}
+
+
+class SurfaceStateRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    session_id: str = Field(min_length=1, max_length=64, pattern=r'^[a-zA-Z0-9-]+$')
+    surface_open: bool
+    foreground: bool
+    transcript_visible: bool
+
+
+@router.post(
+    '/v1/users/client-state', tags=['users'], response_model=UserStatusResponse, response_model_exclude_none=True
+)
+async def report_surface_state(
+    body: SurfaceStateRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'users:surface_state', fail_closed=True)),
+):
+    """Explicit expiring human-surface intent; no user-document lookup."""
+    from utils.conversations.demand_processing import observe_surface
+
+    await run_blocking(db_executor, observe_surface, uid, body.session_id, body.model_dump())
+    return {'status': 'ok'}

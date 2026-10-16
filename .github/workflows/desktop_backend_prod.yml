@@ -356,6 +356,12 @@ jobs:
             --service-account=desktop-backend-runtime@based-hardware.iam.gserviceaccount.com
             --remove-secrets=PINECONE_API_KEY,PINECONE_HOST,/secrets/firebase/service-account.json
           env_vars: |
+            DEMAND_PROCESSING_ENABLED=false
+            DEMAND_PROCESSING_LAZY_ENABLED=false
+            DEMAND_PROCESSING_TOOL_ENABLED=false
+            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED=false
+            DEMAND_PROCESSING_UID_ALLOWLIST=
+            DEMAND_PROCESSING_PERCENT=0
             PROACTIVITY_V2_POSTHOG_TOKEN=phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
             PROACTIVITY_V2_POSTHOG_HOST=https://us.posthog.com
             FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}

@@ -163,6 +163,12 @@ environment_shared:
         OMI_ENV_STAGE:
           value: '{env}'
           category: runtime_identity
+        DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+        DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
         STT_RESILIENT_RECONNECT:
           value: 'false'
           category: rollout
@@ -451,6 +457,12 @@ environment_shared:
           category: rollout
         MEMORY_ENABLED:
           value: 'on'
+        DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+        DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
         MEMORY_BELIEF_AUTOMATION_PAUSED:
           value: 'false'
           category: rollout
@@ -544,6 +556,12 @@ environment_shared:
         category: rollout
       GOOGLE_CLOUD_PROJECT:
         value: '{compute_project}'
+      DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+      DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+      DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+      DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+      DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+      DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
       GCP_LOCATION:
         value: us-central1
       PROMETHEUS_SIDECAR_PORT:
@@ -791,6 +809,12 @@ environment_shared:
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
+          DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+          DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
           HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -1021,6 +1045,12 @@ environment_shared:
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
+          DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+          DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
           HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -1263,6 +1293,12 @@ environment_shared:
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
+          DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+          DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
           HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -1465,6 +1501,12 @@ environment_shared:
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
+          DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+          DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
@@ -1555,6 +1597,12 @@ environment_shared:
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
+          DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+          DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
       x-connector-sync-job:
         flags:
           --task-timeout: 3600s

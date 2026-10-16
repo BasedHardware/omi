@@ -1,4 +1,9 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/widgets.dart';
+import 'package:omi/backend/http/shared.dart';
+import 'package:omi/env/env.dart';
+import 'package:uuid/uuid.dart';
 
 /// What the user can see of a live capture, reported to `/v4/listen` as
 /// `{"type": "client_state", "foreground": bool, "transcript_visible": bool}`.
@@ -17,6 +22,7 @@ class ListenClientStateSnapshot {
   Map<String, Object> toJson() => {
         'type': 'client_state',
         'foreground': foreground,
+        if (ListenClientState._reportingEnabled) 'surface_open': foreground,
         'transcript_visible': transcriptVisible,
       };
 
@@ -32,9 +38,47 @@ class ListenClientStateSnapshot {
 
 class ListenClientState extends ValueNotifier<ListenClientStateSnapshot> {
   ListenClientState._()
-      : super(ListenClientStateSnapshot(foreground: _initiallyForeground(), transcriptVisible: false));
+      : super(ListenClientStateSnapshot(foreground: _initiallyForeground(), transcriptVisible: false)) {
+    if (_reportingEnabled) {
+      _heartbeat = Timer.periodic(const Duration(seconds: 30), (_) => _reportSurface(heartbeat: true));
+      _reportSurface();
+    }
+  }
+
+  static const _reportingEnabled = bool.fromEnvironment('DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED');
+  final String _surfaceSession = const Uuid().v4();
+  Timer? _heartbeat;
+  bool _reportInFlight = false;
+
+  Future<void> _reportSurface({bool heartbeat = false}) async {
+    if (!_reportingEnabled || _reportInFlight || (heartbeat && !value.foreground)) return;
+    _reportInFlight = true;
+    try {
+      await makeApiCall(
+        url: '${Env.apiBaseUrl}v1/users/client-state',
+        headers: {},
+        method: 'POST',
+        body: jsonEncode({...value.toJson(), 'session_id': _surfaceSession}..remove('type')),
+        timeout: const Duration(seconds: 5),
+        retries: 0,
+        signOutOn401: false,
+      );
+    } finally {
+      _reportInFlight = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _heartbeat?.cancel();
+    super.dispose();
+  }
 
   static final ListenClientState instance = ListenClientState._();
+
+  static void startSurfaceReporting() {
+    if (_reportingEnabled) unawaited(instance._reportSurface());
+  }
 
   bool _foreground = _initiallyForeground();
   int _capturePagesOpen = 0;
@@ -66,6 +110,7 @@ class ListenClientState extends ValueNotifier<ListenClientStateSnapshot> {
 
   void _publish() {
     value = ListenClientStateSnapshot(foreground: _foreground, transcriptVisible: _foreground && _capturePagesOpen > 0);
+    unawaited(_reportSurface());
   }
 
   @visibleForTesting

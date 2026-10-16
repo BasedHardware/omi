@@ -30,6 +30,7 @@ from utils.capture_evidence import SourcePositionMap, parse_live_frame
 from utils.stt.committed_words import CAPTURE_WORD_RANGES_KEY
 from utils.translation_demand import TranslationDemand
 from utils.translation_core.metrics import get_translation_metrics
+from utils.executors import db_executor, run_blocking
 
 lc3: Any = None
 lc3_import_error: Optional[BaseException] = None
@@ -2090,6 +2091,19 @@ class ListenReceiver(ReplayFilterMixin):
         elif kind == 'speaker_assigned':
             await self._handle_speaker_assigned(payload)
         elif kind == 'client_state':
+            from config.demand_processing import enabled as demand_enabled, surface_reporting_enabled
+
+            if (
+                demand_enabled()
+                and surface_reporting_enabled()
+                and demand_enabled(self.host.request.uid)
+                and ('surface_open' in payload or self._telemetry_platform() in {'ios', 'android', 'mobile'})
+            ):
+                from utils.conversations.demand_processing import observe_surface
+
+                await run_blocking(
+                    db_executor, observe_surface, self.host.request.uid, str(self.host.session_id), payload
+                )
             demand = getattr(self, 'live_demand', None)
             if demand is not None:
                 demand.observe(payload)
