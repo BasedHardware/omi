@@ -18,7 +18,8 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
-          FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '1', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
           FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -341,7 +342,8 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
-          FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
           FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -625,7 +627,8 @@ environments:
         LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
         FIRESTORE_READ_LEDGER:
           value: '1'
-        FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+        FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+          category: rollout}
         FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
         FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
         FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -743,7 +746,8 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+              category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -1006,7 +1010,8 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+              category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -1063,7 +1068,7 @@ environments:
               category: rollout
             SYNC_BACKFILL_UID_SEQUENCER:
               provisional: true
-              value: 'on'
+              value: 'off'
               category: rollout
             SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {category: rollout, value: 'false'}
             SYNC_REPROCESS_COALESCE_ENABLED: {category: rollout, value: 'false'}
@@ -1273,7 +1278,8 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+              category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -1331,7 +1337,7 @@ environments:
               category: rollout
             SYNC_BACKFILL_UID_SEQUENCER:
               provisional: true
-              value: 'on'
+              value: 'off'
               category: rollout
             SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {category: rollout, value: 'false'}
             SYNC_REPROCESS_COALESCE_ENABLED: {category: rollout, value: 'false'}
@@ -1528,7 +1534,8 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+              category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -1683,7 +1690,8 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+              category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -1743,7 +1751,8 @@ environments:
               secret: REDIS_DB_PASSWORD
               version: latest
           env:
-            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+              category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -1818,7 +1827,8 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+              category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -1884,7 +1894,8 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+              category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -1936,7 +1947,8 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+              category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -2011,7 +2023,8 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+              category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -2061,7 +2074,8 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+              category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -2142,7 +2156,8 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
-          FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '1', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
           FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -2540,7 +2555,8 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
         env:
-          FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
           FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -2752,7 +2768,8 @@ environments:
         LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
         FIRESTORE_READ_LEDGER:
           value: '1'
-        FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+        FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+          category: rollout}
         FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
         FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
         FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -2900,7 +2917,8 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+              category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -3244,7 +3262,8 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+              category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -3298,7 +3317,7 @@ environments:
               category: rollout
             SYNC_BACKFILL_UID_SEQUENCER:
               provisional: true
-              value: 'on'
+              value: 'off'
               category: rollout
             SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {category: rollout, value: 'true'}
             SYNC_REPROCESS_COALESCE_ENABLED: {category: rollout, value: 'true'}
@@ -3557,7 +3576,8 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+              category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -3612,7 +3632,7 @@ environments:
               category: rollout
             SYNC_BACKFILL_UID_SEQUENCER:
               provisional: true
-              value: 'on'
+              value: 'off'
               category: rollout
             SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {category: rollout, value: 'true'}
             SYNC_REPROCESS_COALESCE_ENABLED: {category: rollout, value: 'true'}
@@ -3858,7 +3878,8 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+              category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -4031,7 +4052,8 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+              category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -4086,7 +4108,8 @@ environments:
               secret: REDIS_DB_PASSWORD
               version: latest
           env:
-            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+              category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -4159,7 +4182,8 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+              category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -4225,7 +4249,8 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+              category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -4278,7 +4303,8 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+              category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -4355,7 +4381,8 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+              category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
@@ -4405,7 +4432,8 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{}', category: rollout}
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+              category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}

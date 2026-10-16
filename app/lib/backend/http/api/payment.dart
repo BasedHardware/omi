@@ -17,7 +17,11 @@ Future<Map<String, dynamic>?> createCheckoutSession({required String priceId, St
     method: 'POST',
     body: jsonEncode(body),
   );
-  if (response != null && response.statusCode == 200) {
+  if (response == null) return null;
+  if (response.statusCode == 409 || response.statusCode == 400) {
+    return _paymentError(response);
+  }
+  if (response.statusCode == 200) {
     final jsonResponse = jsonDecode(response.body) as Map<String, dynamic>;
     final generated = wire.GeneratedPaymentCheckoutSessionResponse.fromJson(jsonResponse);
     Logger.debug('createCheckoutSession response: ${response.body}');
@@ -37,6 +41,15 @@ Future<Map<String, dynamic>?> createCheckoutSession({required String priceId, St
     return {'url': generated.url, 'session_id': generated.sessionId};
   }
   return null;
+}
+
+Map<String, dynamic> _paymentError(dynamic response) {
+  try {
+    final errorBody = misc_wire.GeneratedErrorResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return {'error': true, 'status_code': response.statusCode, 'detail': errorBody.detail};
+  } catch (_) {
+    return {'error': true, 'status_code': response.statusCode};
+  }
 }
 
 Future<bool> cancelSubscription({String? reason, String? reasonDetails}) async {
@@ -74,13 +87,8 @@ Future<Map<String, dynamic>?> upgradeSubscription({required String priceId, Stri
     Logger.debug('upgradeSubscription response: ${response.body}');
     return generated.toJson();
   }
-  if (response.statusCode == 400) {
-    try {
-      final errorBody = misc_wire.GeneratedErrorResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-      return {'error': true, 'detail': errorBody.detail};
-    } catch (_) {
-      return {'error': true};
-    }
+  if (response.statusCode == 400 || response.statusCode == 409) {
+    return _paymentError(response);
   }
   return null;
 }

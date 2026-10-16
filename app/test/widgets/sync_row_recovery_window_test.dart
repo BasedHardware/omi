@@ -67,20 +67,23 @@ class _WalService implements IWalService {
 }
 
 SyncUploadGate _offlineGate() => SyncUploadGate(
-      limiter: SyncRateLimiter.instance,
-      uploader: (files,
-          {onUploadProgress,
-          conversationId,
-          captureEvidence,
-          recordingSessionId,
-          audioStartSeconds,
-          audioEndSeconds,
-          claimLiveCapture = false,
-          geolocation}) async {
+  limiter: SyncRateLimiter.instance,
+  uploader:
+      (
+        files, {
+        onUploadProgress,
+        conversationId,
+        captureEvidence,
+        recordingSessionId,
+        audioStartSeconds,
+        audioEndSeconds,
+        claimLiveCapture = false,
+        geolocation,
+      }) async {
         throw StateError('unexpected upload in a widget test');
       },
-      fairUseStatusLoader: () async => {'stage': 'none'},
-    );
+  fairUseStatusLoader: () async => {'stage': 'none'},
+);
 
 Widget _app(Widget child, SyncProvider provider) {
   return MaterialApp(
@@ -151,14 +154,20 @@ void main() {
   }
 
   Wal makeWal(WalStatus status) => Wal(
-        timerStart: 1700000000,
-        codec: BleAudioCodec.opus,
-        seconds: 60,
-        status: status,
-        storage: WalStorage.disk,
-        device: 'omi',
-        filePath: 'too_old_audio.bin',
-      );
+    timerStart: 1700000000,
+    codec: BleAudioCodec.opus,
+    seconds: 60,
+    status: status,
+    storage: WalStorage.disk,
+    device: 'omi',
+    filePath: 'too_old_audio.bin',
+  );
+
+  testWidgets('a processed recording without a conversation does not claim one was created', (tester) async {
+    await pumpRow(tester, makeWal(WalStatus.synced));
+    expect(find.text('Processed'), findsOneWidget);
+    expect(find.text('Conversation created'), findsNothing);
+  });
 
   testWidgets('the row explains the rejection and offers no Retry', (tester) async {
     await pumpRow(tester, makeWal(WalStatus.outsideRecoveryWindow));
