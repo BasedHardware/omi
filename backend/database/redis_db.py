@@ -568,18 +568,46 @@ def remove_daily_summary_to_uid(summary_id: str) -> None:
 
 # VISIIBILTIY OF CONVERSATIONS
 def store_conversation_to_uid(conversation_id: str, uid: str) -> None:
-    r.set(f'memories-visibility:{conversation_id}', uid)
+    r.set(f'memories-visibility:{conversation_id}', uid, ex=86400)
 
 
 def remove_conversation_to_uid(conversation_id: str) -> None:
-    r.delete(f'memories-visibility:{conversation_id}')
+    with r.pipeline(transaction=True) as pipe:
+        pipe.delete(f'memories-visibility:{conversation_id}')
+        pipe.srem('public-memories', conversation_id)
+        pipe.execute()
 
 
 def get_conversation_uid(conversation_id: str) -> str:
-    uid = r.get(f'memories-visibility:{conversation_id}')
-    if not uid:
-        return ''
-    return uid.decode()
+    """Redis is a hint only; Firestore must authorize every public read."""
+    from database.conversations import discover_public_conversation_owner
+    from fastapi import HTTPException
+
+    try:
+        cached = r.get(f'memories-visibility:{conversation_id}')
+    except redis.exceptions.RedisError:
+        from utils.observability.fallback import record_fallback
+
+        record_fallback(
+            component='other',
+            from_mode='cache_read',
+            to_mode='firestore',
+            reason='other',
+            outcome='recovered',
+            log=logger,
+        )
+        cached = None
+    cached_uid = cached.decode() if isinstance(cached, bytes) else (cached or '')
+    try:
+        uid = discover_public_conversation_owner(conversation_id, cached_uid)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail='Shared conversation unavailable') from exc
+    if uid:
+        try:
+            store_conversation_to_uid(conversation_id, uid)
+        except redis.exceptions.RedisError:
+            _record_cache_write_skipped(f'memories-visibility:{conversation_id}', 'other')
+    return uid
 
 
 def add_public_conversation(conversation_id: str) -> None:

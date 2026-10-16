@@ -358,6 +358,7 @@ def test_public_conversation_read_uses_a_field_mask_and_returns_only_bounded_saf
     assert firestore.path == ['users', 'owner-1', 'conversations', 'conversation-1']
     assert firestore.field_paths == [
         'visibility',
+        'deleted',
         'is_locked',
         'transcript_segments_compressed',
         'transcript_segments',
