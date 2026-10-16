@@ -3149,6 +3149,19 @@ def process_conversation(
         )
         return conversation
 
+    from config.demand_processing import lazy_enabled
+
+    lazy_effects = lazy_enabled(uid) and not discarded
+    if lazy_effects and not defer_derived_effects:
+        from utils.sync.reprocess import mark_effects
+
+        mark_effects(
+            uid,
+            conversation.id,
+            language_code,
+            immediate=trigger in {ProcessingTrigger.USER_REPROCESS, ProcessingTrigger.FIRST_OPEN},
+        )
+
     if relevance is not None:
         emit_recorded_decision(uid, conversation.id, relevance)
 
@@ -3272,14 +3285,16 @@ def process_conversation(
                 conversations_db.update_conversation(uid, conversation.id, app_updates)
             # Durable finalization writes its vector directly behind the fanout claim,
             # including completed replays and terminal intelligence suppression.
-            if not defer_derived_effects and not is_reprocess:
+            if not lazy_effects and not defer_derived_effects and not is_reprocess:
                 submit_with_context(postprocess_executor, save_structured_vector, uid, conversation)
-            if not defer_memory_extraction:
+            if not lazy_effects and not defer_memory_extraction:
                 # Canonical source replacement is universal and intentionally
                 # fail-closed. Do not hide a retryable apply/store failure in an
                 # unobserved future while reporting finalization as successful.
                 _extract_memories(uid, conversation)
-            if is_reprocess:
+            if lazy_effects:
+                pass  # Coalesced memory, vector and task work is durably owned above.
+            elif is_reprocess:
                 # Same fail-closed idea as memory source replacement: a transient
                 # destructive-op fence must be observable on the sync reprocess
                 # path instead of disappearing into postprocess_executor.

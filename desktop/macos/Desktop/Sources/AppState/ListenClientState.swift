@@ -25,6 +25,36 @@ final class ListenClientState: ObservableObject {
 
   @Published private(set) var snapshot: Snapshot
 
+  private var heartbeat: Timer?
+  private let surfaceSession = UUID().uuidString
+  private var reportInFlight = false
+
+  private func reportSurface() {
+    guard ProcessInfo.processInfo.environment["DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED"] == "true",
+      !reportInFlight
+    else { return }
+    let window = ShellSummon.shellWindow()
+    let open = window?.isVisible == true && window?.isMiniaturized == false && !NSApp.isHidden
+    reportInFlight = true
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      defer { self.reportInFlight = false }
+      do {
+        let baseURL = await APIClient.shared.baseURL
+        guard let url = URL(string: baseURL + "/v1/users/client-state") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 5
+        request.allHTTPHeaderFields = try await APIClient.shared.buildHeaders(requireAuth: true, includeBYOK: false)
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+          "session_id": self.surfaceSession, "surface_open": open,
+          "foreground": self.snapshot.foreground, "transcript_visible": self.snapshot.transcriptVisible,
+        ])
+        _ = try await URLSession.shared.data(for: request)
+      } catch { /* Best effort; the server lease expires without renewal. */  }
+    }
+  }
+
   private var foreground: Bool
   private var visibleSurfaces: Set<UUID> = []
   private var observers: [NSObjectProtocol] = []
@@ -34,6 +64,12 @@ final class ListenClientState: ObservableObject {
     self.foreground = initial
     self.snapshot = Snapshot(foreground: initial, transcriptVisible: false)
     guard observeApplication else { return }
+    if ProcessInfo.processInfo.environment["DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED"] == "true" {
+      heartbeat = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+        Task { @MainActor in self?.reportSurface() }
+      }
+      reportSurface()
+    }
     let center = NotificationCenter.default
     observers = [
       center.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) {
@@ -45,6 +81,17 @@ final class ListenClientState: ObservableObject {
         MainActor.assumeIsolated { self?.setForeground(false) }
       },
     ]
+    if ProcessInfo.processInfo.environment["DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED"] == "true" {
+      for name in [
+        NSWindow.didChangeOcclusionStateNotification, NSWindow.didMiniaturizeNotification,
+        NSWindow.didDeminiaturizeNotification, NSWindow.willCloseNotification,
+      ] {
+        observers.append(
+          center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reportSurface() }
+          })
+      }
+    }
   }
 
   func setForeground(_ value: Bool) {
@@ -64,6 +111,7 @@ final class ListenClientState: ObservableObject {
   private func publish() {
     let next = Snapshot(foreground: foreground, transcriptVisible: foreground && !visibleSurfaces.isEmpty)
     if next != snapshot { snapshot = next }
+    reportSurface()
   }
 }
 

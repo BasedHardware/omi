@@ -435,6 +435,15 @@ def _listen_finalization_invoker_sa() -> str:
     return os.getenv('LISTEN_FINALIZATION_TASKS_INVOKER_SA') or _invoker_sa()
 
 
+def listen_finalization_binding() -> dict[str, str]:
+    return {
+        'queue': os.getenv('LISTEN_FINALIZATION_TASKS_QUEUE', ''),
+        'handler': _listen_finalization_handler_url(),
+        'audience': _listen_finalization_audience(),
+        'invoker_sa': _listen_finalization_invoker_sa(),
+    }
+
+
 def enqueue_listen_finalization_job(job_id: str, dispatch_generation: int) -> None:
     """Wake the finalizer with opaque routing data only.
 
