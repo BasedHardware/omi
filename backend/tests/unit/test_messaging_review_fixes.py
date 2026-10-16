@@ -105,16 +105,21 @@ def test_real_turn_streams_before_background_summary_even_on_failures(monkeypatc
             {'user_id': 'u', 'chat_session_id': 's', 'context_message_ids': ['m']},
         )
         assert output == ['Safe answer'] and 'Earlier in this chat' not in str(captures)
-        assert len(tasks) == 1
+        assert sum(task.get_name() == 'shaped-context-refresh' for task in tasks) == 1
+        assert all(task.done() for task in tasks if task.get_name() != 'shaped-context-refresh')
         await asyncio.gather(*tasks)
-        assert fallback and not context._REFRESHING
+        assert fallback
+        # The completed/failed refresh must release the session concurrency slot.
+        context.schedule_refresh('u', 's', ['m'])
+        assert sum(task.get_name() == 'shaped-context-refresh' for task in tasks) == 2
+        await asyncio.gather(*tasks)
         assert bool(summary_called) == (failure != 'index')
         store.save.assert_not_called()
 
     asyncio.run(run())
 
 
-def test_overlong_summary_is_truncated_and_checkpointed(monkeypatch):
+def test_overlong_summary_is_truncated_and_checkpointed(monkeypatch, caplog):
     store = MagicMock()
     store.assert_access = MagicMock()
     store.load.return_value = {'generation': 0, 'revision': 0}
@@ -123,8 +128,14 @@ def test_overlong_summary_is_truncated_and_checkpointed(monkeypatch):
     async def summary(*args):
         return 'a' * 5000
 
-    asyncio.run(context.refresh('u', 's', ['m'], store=store, summary=summary))
+    notices = []
+    monkeypatch.setattr(context, 'record_fallback', lambda **kw: notices.append(kw))
+    with caplog.at_level('INFO', logger=context.__name__):
+        asyncio.run(context.refresh('u', 's', ['m'], store=store, summary=summary))
     assert len(store.save.call_args.args[2]['summary']) == context.SUMMARY_CHARS
+    assert not notices and 'summary capped' in caplog.text
+    assert 'Optional shaped context unavailable' not in caplog.text
+    assert 'a' * 100 not in caplog.text
 
 
 def test_activity_reads_twenty_candidates_without_decrypting_active_session(monkeypatch):
@@ -139,6 +150,7 @@ def test_activity_reads_twenty_candidates_without_decrypting_active_session(monk
     monkeypatch.setattr(history.chat_db, 'iter_all_messages', lambda *a, **kw: pytest.fail('unbounded scan'))
     assert history.recent_activity('u', exclude_session='active') == []
     query.limit.assert_called_once_with(20)
+    query.limit.return_value.stream.assert_called_once_with(timeout=1.0, retry=None)
     decrypt.assert_not_called()
 
 

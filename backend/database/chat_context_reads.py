@@ -4,6 +4,8 @@ from typing import Optional, List, Dict, Any
 from google.cloud.firestore_v1 import FieldFilter
 from database.chat_history_window import cache_aligned_history_limit
 
+ACTIVITY_READ_SECONDS = 1.0
+
 
 def get_cache_aligned_messages(
     uid: str,
@@ -58,7 +60,9 @@ def get_recent_activity(uid, since="", exclude_session=None):
         .limit(20)
     )
     rows = []
-    for document in query.stream(timeout=0.075):
+    # This read now overlaps turn setup. The former 75ms RPC deadline was below
+    # observed Firestore latency, independently of the outer coroutine deadline.
+    for document in query.stream(timeout=ACTIVITY_READ_SECONDS, retry=None):
         row = document.to_dict() or {}
         if exclude_session is not None and row.get('chat_session_id') == exclude_session:
             continue

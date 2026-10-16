@@ -157,6 +157,15 @@ def test_duplicate_policy_fails_before_any_write():
     assert all(c[0] == 'GET' for c in session.calls)
 
 
+def test_context_rate_counts_summary_loss_but_not_digest_only_loss():
+    policy = next(p for p in ops.desired_alerts(CHANNELS) if p['displayName'] == ops.CONTEXT_RATE_POLICY)
+    query = policy['conditions'][0]['conditionPrometheusQueryLanguage']['query']
+    assert 'outcome=~"degraded|summary_pending"' in query
+    assert 'outcome!="unscoped"' in query
+    assert '>= 20' in query and '> 0.05' in query
+    assert 'digest_degraded' not in query
+
+
 @pytest.mark.parametrize('mode', ['validate', 'apply'])
 def test_existing_job_update_uses_v2_job_body_without_mask_or_execution(mode):
     old = ops.desired_job(IMAGE.replace('a' * 64, 'b' * 64))

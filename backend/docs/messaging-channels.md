@@ -184,8 +184,11 @@ and appears immediately after the system prefix. Original messages remain reacha
 Summaries refresh in a tracked background task after the turn, with a 60-second
 budget and at most two concurrent sessions per process. The answer uses stored
 continuity (or none); missing indexes and model/Firestore/CAS errors only degrade
-optional context and never gate streaming. Send-path optional reads have a combined
-150 ms deadline. Over-long model summaries are truncated; empty summaries leave
+optional context and never gate streaming. For shaped app/channel turns, summary
+and digest reads start before router metadata and agentic prompt/tool setup, with
+a one-second background window. The model samples ready components without awaiting
+them: pending reads add no IO wait to the first token. Over-long model summaries
+are clipped before persistence (an informational event); empty summaries leave
 the source checkpoint unchanged.
 Reported, cleared and revised messages erase affected session summary ciphertext
 and increment a generation in the same atomic write;
@@ -194,8 +197,9 @@ checks prevent stale writes from resurrecting removed sessions.
 
 Current activity elsewhere inspects at most twenty newest message candidates and
 is capped at 3,200 characters. Active-session rows are skipped before decryption;
-there is no paginated digest scan. Digest IO has a 75 ms deadline and failures omit
-the digest. It is request-local, not appended to permanent events. Activity, app request scope and the original channel request clock appear only
+there is no paginated digest scan. Its RPC has a one-second timeout with retries
+disabled, matching the overlapping read window. Digest failures or a digest still
+pending at model start omit only the digest when the summary read succeeded. It is request-local, not appended to permanent events. Activity, app request scope and the original channel request clock appear only
 inside the final user message. The app's existing current datetime stays there too.
 
 GPT-5.6 explicit caching uses at most two breakpoints: the system block and one
