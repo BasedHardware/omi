@@ -367,7 +367,12 @@ def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bo
     get_firestore_client().collection(COLLECTION).document(document_id).set(
         {**row, 'version': firestore.Increment(1)}, merge=True
     )
-    _enqueue(row)
+    if valid_effects_binding(row):
+        _enqueue(row)
+    else:
+        # Match the sync outbox's unbound-host contract: visible work survives,
+        # and the configured sweep CAS-rebinds the durable obligation later.
+        UNBOUND.labels(action='mark').inc()
 
 
 def _effects_binding() -> dict[str, str]:
