@@ -4369,12 +4369,27 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Teie $plan pakett lõpeb $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Tellige uuesti kohe, et säilitada oma eelised - tasu ei võeta kuni $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Teie plaan on seatud tühistuma $date.\nTellige uuesti kohe, et säilitada oma eelised - tasu ei võeta kuni $date.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'Teie aastane plaan algab automaatselt, kui teie kuuplaan lõpeb.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Teie $plan pakett uueneb $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4407,6 +4422,9 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get continueText => 'Jätka';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Paketi muutmiseks tellige esmalt uuesti.';
 
   @override
   String get resubscribe => 'Telli uuesti';

@@ -4341,12 +4341,27 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'תוכנית $plan שלך מסתיימת ב-$date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'הירשם מחדש כעת כדי לשמור על ההטבות שלך - לא תחויב עד $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'התוכנית שלך מוגדרת להיות מבוטלת ב-$date.\nהירשם מחדש כעת כדי לשמור על ההטבות שלך - לא תחויב עד $date.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'התוכנית השנתית שלך תתחיל באופן אוטומטי כאשר התוכנית החודשית שלך תסתיים.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'תוכנית $plan שלך תתחדש ב-$date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4379,6 +4394,9 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get continueText => 'המשך';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'הירשמו מחדש קודם כדי לשנות תוכנית.';
 
   @override
   String get resubscribe => 'הירשם מחדש';

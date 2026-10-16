@@ -4384,6 +4384,16 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Ваш план $plan заканчваецца $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Падпішыцеся яшчэ раз, каб сахаваць свае прывілеі - плата адсуцная да $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Ваш план пастаўлены на скасаванне $date.\nПадпішыцеся яшчэ раз, каб сахаваць свае прывілеі - плата адсуцная да $date.';
   }
@@ -4391,6 +4401,11 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Ваш гадавы план пачнецца аўтаматычна, калі скончыцца ваш штомесячны план.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Ваш план $plan будзе падаўжацца $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4423,6 +4438,9 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get continueText => 'Прыступіць';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Спачатку падпішыцеся зноў, каб змяніць план.';
 
   @override
   String get resubscribe => 'Падпішыцеся яшчэ раз';

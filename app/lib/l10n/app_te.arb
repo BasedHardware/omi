@@ -5065,6 +5065,8 @@
             }
         }
     },
+    "yourPlanEndsOn": "మీ {plan} ప్లాన్ {date}న ముగుస్తుంది.",
+    "resubscribeNowNoChargeUntil": "మీ ప్రయోజనాలను ఉంచడానికి ఇప్పుడే సబ్‌స్క్రిప్ట్ చేయండి - {date} వరకు ఛార్జ్ లేదు.",
     "planSetToCancelOn": "మీ ప్లాన్ {date} న రద్దు చేయడానికి సెట్ చేయబడింది.\nమీ ప్రయోజనాలను ఉంచడానికి ఇప్పుడే సబ్‌స్క్రిప్ట్ చేయండి - {date} వరకు ఛార్జ్ లేదు.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5079,6 +5081,7 @@
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
     },
+    "yourPlanWillRenewOn": "మీ {plan} ప్లాన్ {date}న పునరుద్ధరించబడుతుంది.",
     "planRenewsOn": "మీ ప్లాన్ {date} న పునరుద్ధరించబడుతుంది.",
     "@planRenewsOn": {
         "description": "Message showing plan renewal date",
@@ -5125,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "resubscribeFirstToChangePlans": "ప్లాన్ మార్చడానికి ముందు మళ్లీ సబ్‌స్క్రైబ్ చేయండి.",
     "resubscribe": "మళ్లీ సబ్‌స్క్రిప్ట్ చేయండి",
     "@resubscribe": {
         "description": "Button to resubscribe"

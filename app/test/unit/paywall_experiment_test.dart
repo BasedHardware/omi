@@ -185,6 +185,22 @@ void main() {
       ],
     };
 
+    test('a pending cancellation offers the current price instead of Unlimited', () {
+      final offer = PaywallOffer.fromCatalog(
+        catalog,
+        cancelAtPeriodEnd: true,
+        currentPriceId: 'price_plus_m',
+      )!;
+      expect(offer.resubscribe, isTrue);
+      expect(offer.tierId, 'plus');
+      expect(offer.monthly!.priceId, 'price_plus_m');
+      expect(offer.yearly, isNull);
+      expect(
+        PaywallOffer.fromCatalog(catalog, cancelAtPeriodEnd: true, currentPriceId: 'missing'),
+        isNull,
+      );
+    });
+
     test('prefers the Unlimited tier and derives the yearly saving from its own prices', () {
       final offer = PaywallOffer.fromCatalog(catalog)!;
       expect(offer.tierId, 'unlimited_v2');

@@ -4409,12 +4409,27 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'உங்கள் $plan திட்டம் $date அன்று முடிவடைகிறது.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'உங்கள் சலுகைகளை தொடர்ந்து வைக்க இப்போது மீண்டும் சந்தா செய்யவும் - $date வரை எந்த கட்டணமும் இல்லை.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'உங்கள் திட்டம் $date இல் ரத்து செய்ய திட்டமிடப்பட்டுள்ளது।\nஉங்கள் சலுகைகளை தொடர்ந்து வைக்க இப்போது மீண்டும் சந்தா செய்யவும் - $date வரை எந்த கட்டணமும் இல்லை.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'உங்கள் மாசிக திட்டம் முடிந்தவுடன் உங்கள் ஆண்டு திட்டம் தானாக தொடங்கும்.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'உங்கள் $plan திட்டம் $date அன்று புதுப்பிக்கப்படும்.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4447,6 +4462,9 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get continueText => 'தொடரவும்';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'திட்டத்தை மாற்ற முதலில் மீண்டும் சந்தா செய்யவும்.';
 
   @override
   String get resubscribe => 'மீண்டும் சந்தா செய்யவும்';
