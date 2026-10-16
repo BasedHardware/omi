@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the Memories page's filtered view reordering incorrectly by pruning stale entries before recomputing the list"
+}
