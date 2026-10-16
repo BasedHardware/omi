@@ -209,9 +209,16 @@ def test_initial_generation_calls_join_the_chosen_durable_id(monkeypatch, caplog
     assert metrics._scope.get() is None
 
 
-@pytest.mark.asyncio
-async def test_demand_worker_drains_after_flag_rollback_and_reuses_same_artifact(monkeypatch):
+@pytest.fixture(scope='module')
+def sync_router_module():
     from routers import sync
+
+    return sync
+
+
+@pytest.mark.asyncio
+async def test_demand_worker_drains_after_flag_rollback_and_reuses_same_artifact(monkeypatch, sync_router_module):
+    sync = sync_router_module
 
     monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'false')
     row = {
