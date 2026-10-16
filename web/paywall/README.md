@@ -8,8 +8,10 @@ files changes what those readers see with no app release and no store review.
 
 The app opens `https://omi-paywall.vercel.app/` (the `url` in the `web` arm's payload) with
 `source`, `platform`, `locale`, `name`, `free_minutes`, `tier`, `year_amount`/`year_currency`,
-`month_amount`/`month_currency` and, from app builds that have it, the reader's PostHog
-`distinct_id` (or `analytics=off` when the reader turned product analytics off). It listens on the
+`month_amount`/`month_currency` in the query (or `analytics=off` when the reader turned product
+analytics off) and, from app builds that have it, the reader's PostHog `distinct_id` in the fragment
+(`#distinct_id=…`), which never reaches the server; `track.js` keeps it for the webview session and
+drops it from the visible address. It listens on the
 `OmiPaywall` JavaScript channel for
 `{"type":"ready"|"checkout"|"free"|"restore"|"fallback", "interval":"year"|"month"}` and calls
 `window.OmiPaywallHost.onCheckout(outcome)` after checkout. The app runs the real Stripe checkout;

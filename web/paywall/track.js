@@ -1,6 +1,7 @@
 // Web paywall analytics and version assignment, straight against PostHog (project 302298).
 //
-// Identity: the app passes the reader's PostHog `distinct_id`, so page events and the experiment
+// Identity: the app passes the reader's PostHog `distinct_id` in the URL fragment (never sent to
+// the server; kept for this webview session, then dropped from the address), so page events and the experiment
 // exposure join the reader's own app events (`Upgrade Succeeded`, retention, ...). Without it
 // (older app builds) events use an anonymous id kept on this device and create no person
 // profile. A reader who turned product analytics off arrives with `analytics=off`: nothing is
@@ -37,14 +38,19 @@
   function save(list) { store(QUEUE, JSON.stringify(list.slice(-50))); }
 
   var enabled = q.get('analytics') !== 'off';
-  var appId = q.get('distinct_id');
+  var hash = new URLSearchParams(location.hash.slice(1));
+  var appId = null;
+  try {
+    if (hash.get('distinct_id')) sessionStorage.setItem('omi_pw_did', hash.get('distinct_id'));
+    appId = hash.get('distinct_id') || sessionStorage.getItem('omi_pw_did');
+  } catch (e) { appId = hash.get('distinct_id'); }
   var deviceId = store('omi_pw_id');
   if (!deviceId) { deviceId = uuid(); store('omi_pw_id', deviceId); }
   var distinctId = appId || deviceId;
 
   // Assignment details handed over by index.html, then dropped from the visible URL.
   var assigned = q.get('_ps') || (q.get('v') ? 'preview' : 'direct');
-  if (q.has('_ps') || q.has('_pv')) {
+  if (q.has('_ps') || q.has('_pv') || location.hash) {
     q.delete('_ps'); q.delete('_pv');
     try { history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q.toString() : '')); } catch (e) {}
   }

@@ -23,23 +23,25 @@ void main() {
         analyticsEnabled: analyticsEnabled,
       );
 
-  test('carries the reader, prices and the analytics identity', () {
-    final q = build(distinctId: 'user-123').queryParameters;
+  test('carries the reader and prices in the query, the identity only in the fragment', () {
+    final url = build(distinctId: 'user-123');
+    final q = url.queryParameters;
     expect(q['source'], 'onboarding');
     expect(q['tier'], 'unlimited_v2');
     expect(q['month_amount'], '2999');
     expect(q['year_amount'], '26991');
-    expect(q['distinct_id'], 'user-123');
+    expect(q.containsKey('distinct_id'), isFalse);
     expect(q.containsKey('analytics'), isFalse);
+    expect(Uri.splitQueryString(url.fragment)['distinct_id'], 'user-123');
   });
 
   test('omits the identity until one has settled', () {
-    expect(build().queryParameters.containsKey('distinct_id'), isFalse);
+    expect(build().hasFragment, isFalse);
   });
 
   test('a reader who turned analytics off sends no identity and tells the page', () {
-    final q = build(distinctId: 'user-123', analyticsEnabled: false).queryParameters;
-    expect(q['analytics'], 'off');
-    expect(q.containsKey('distinct_id'), isFalse);
+    final url = build(distinctId: 'user-123', analyticsEnabled: false);
+    expect(url.queryParameters['analytics'], 'off');
+    expect(url.hasFragment, isFalse);
   });
 }

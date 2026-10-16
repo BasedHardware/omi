@@ -10,12 +10,12 @@ plans) get more free readers to buy Unlimited than a one-page paywall?
 Every paywall surface that opens the `web` arm runs it (end of onboarding, chat limit, Usage page,
 freemium switch, contextual plans); `source` on every event says which.
 
-**Unit.** A reader the app identifies: the app passes its PostHog `distinct_id` in the URL and the
+**Unit.** A reader the app identifies: the app passes its PostHog `distinct_id` in the URL fragment (never sent to the server) and the
 flag buckets on it, so a reader keeps one page across visits and devices. Exposure is
 `$feature_flag_called` for `web-paywall-version`, sent by the page on load and only when PostHog
 answered with a variant. Readers whose flag read failed or timed out (2.5 s) see `benefits`, are
 tracked with `assignment: cache|fallback`, and are not in the analysis. App builds that predate
-the `distinct_id` parameter send anonymous events without person profiles; they count in the page
+the `distinct_id` fragment send anonymous events without person profiles; they count in the page
 funnel but cannot join `Upgrade Succeeded`. Readers with product analytics off send nothing.
 
 **Primary metric.** `Upgrade Succeeded` per exposed reader (funnel, 7-day window).

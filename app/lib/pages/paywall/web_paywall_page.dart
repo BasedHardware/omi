@@ -24,9 +24,11 @@ import 'package:omi/utils/platform/platform_manager.dart';
 /// `{"type":"ready"}`, `{"type":"checkout","interval":"year"|"month"}`, `{"type":"free"}`,
 /// `{"type":"restore"}`, `{"type":"fallback"}` — and may define `window.OmiPaywallHost.onCheckout(outcome)`.
 /// The URL carries `source`, `platform`, `locale`, `name`, `free_minutes`, `tier`, and per interval
-/// `<interval>_amount` (minor units) and `<interval>_currency`. It also carries the reader's PostHog
-/// `distinct_id`, so the page's events and experiment exposure join the reader's own events (such as
-/// `Upgrade Succeeded`); a reader who turned product analytics off gets `analytics=off` instead.
+/// `<interval>_amount` (minor units) and `<interval>_currency`. The reader's PostHog `distinct_id`
+/// rides in the fragment (`#distinct_id=…`), which the webview never sends to the server, so the
+/// page's events and experiment exposure join the reader's own events (such as `Upgrade Succeeded`)
+/// without the id reaching request logs; a reader who turned product analytics off gets
+/// `analytics=off` instead.
 ///
 /// Fail-open: a page that errors, 4xx/5xxs, or never reports ready within [loadTimeout] is replaced
 /// by the native plans sheet, so a dead URL never costs a purchase.
@@ -58,11 +60,7 @@ class WebPaywallPage extends StatefulWidget {
       ..['locale'] = locale
       ..['free_minutes'] = '$freeMinutes';
     if (name.isNotEmpty) params['name'] = name;
-    if (!analyticsEnabled) {
-      params['analytics'] = 'off';
-    } else if (distinctId != null && distinctId.isNotEmpty) {
-      params['distinct_id'] = distinctId;
-    }
+    if (!analyticsEnabled) params['analytics'] = 'off';
     if (offer != null) {
       params['tier'] = offer.tierId;
       for (final price in [offer.monthly, offer.yearly]) {
@@ -71,7 +69,11 @@ class WebPaywallPage extends StatefulWidget {
         params['${price.interval}_currency'] = price.currency;
       }
     }
-    return base.replace(queryParameters: params);
+    final identified = analyticsEnabled && distinctId != null && distinctId.isNotEmpty;
+    return base.replace(
+      queryParameters: params,
+      fragment: identified ? Uri(queryParameters: {'distinct_id': distinctId}).query : null,
+    );
   }
 
   @override
