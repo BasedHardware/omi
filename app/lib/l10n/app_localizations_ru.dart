@@ -5038,9 +5038,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get content => 'Контент';
 
   @override
-  String get noContentToDisplay => 'Нет контента для отображения';
-
-  @override
   String get noSummary => 'Нет сводки';
 
   @override
@@ -9848,9 +9845,6 @@ class AppLocalizationsRu extends AppLocalizations {
       'Преобразование речи в текст сейчас недоступно. Проверьте подключение к интернету и настройки распознавания речи на устройстве, затем попробуйте ещё раз.';
 
   @override
-  String get processingTakingLonger => 'Ещё обрабатывается — это занимает больше обычного.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Чтобы Omi знал, какой голос ваш, говорите о чём угодно примерно 5 секунд.';
 
@@ -13524,4 +13518,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Новое';
+
+  @override
+  String get activityNeedsAttention => 'Требует внимания';
+
+  @override
+  String get activityRetryAll => 'Повторить все';
+
+  @override
+  String get attentionSummaryFailed => 'Не удалось подвести итоги этого разговора';
 }

@@ -6015,10 +6015,6 @@
     "@content": {
         "description": "Tab label for content"
     },
-    "noContentToDisplay": "No content to display",
-    "@noContentToDisplay": {
-        "description": "Message when there is no content available"
-    },
     "noSummary": "No summary",
     "@noSummary": {
         "description": "Message when no summary is available"
@@ -11675,10 +11671,6 @@
     "@speechToTextUnavailableDesc": {
         "description": "Error dialog body when neither the server transcriber nor on-device speech recognition is available for the speech profile recording"
     },
-    "processingTakingLonger": "Still working — this is taking longer than usual.",
-    "@processingTakingLonger": {
-        "description": "Shown on the homepage processing card after ~2 minutes with a Retry action (#5481)."
-    },
     "speechProfileEnrollmentPrompt": "So Omi knows which voice is yours — talk for about 5 seconds about anything.",
     "@speechProfileEnrollmentPrompt": {
         "description": "First-run onboarding instruction: why Omi needs a short voice sample and the approximate duration."
@@ -16231,5 +16223,17 @@
     "activityNewItem": "New",
     "@activityNewItem": {
         "description": "Screen reader suffix for an Activity row added since the last visit"
+    },
+    "activityNeedsAttention": "Needs attention",
+    "@activityNeedsAttention": {
+        "description": "Activity section header for work that could not finish and needs the user"
+    },
+    "activityRetryAll": "Retry all",
+    "@activityRetryAll": {
+        "description": "Button in Activity's Needs attention section that retries every failed item once"
+    },
+    "attentionSummaryFailed": "Couldn't summarize this conversation",
+    "@attentionSummaryFailed": {
+        "description": "Needs attention row: the server gave up summarizing a conversation"
     }
 }

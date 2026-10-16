@@ -5037,9 +5037,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get content => 'Inhoud';
 
   @override
-  String get noContentToDisplay => 'Geen inhoud om weer te geven';
-
-  @override
   String get noSummary => 'Geen samenvatting';
 
   @override
@@ -9832,9 +9829,6 @@ class AppLocalizationsNl extends AppLocalizations {
       'Spraak naar tekst is momenteel niet beschikbaar. Controleer je internetverbinding en de instellingen voor spraakherkenning op je apparaat en probeer het opnieuw.';
 
   @override
-  String get processingTakingLonger => 'Nog bezig — dit duurt langer dan normaal.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Zodat Omi weet welke stem van jou is — praat ongeveer 5 seconden over wat je maar wilt.';
 
@@ -13514,4 +13508,13 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nieuw';
+
+  @override
+  String get activityNeedsAttention => 'Vraagt aandacht';
+
+  @override
+  String get activityRetryAll => 'Alles opnieuw proberen';
+
+  @override
+  String get attentionSummaryFailed => 'Dit gesprek kon niet worden samengevat';
 }

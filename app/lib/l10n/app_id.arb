@@ -1542,7 +1542,6 @@
     "photos": "Foto",
     "rawData": "Data Mentah",
     "content": "Konten",
-    "noContentToDisplay": "Tidak ada konten untuk ditampilkan",
     "noSummary": "Tidak ada ringkasan",
     "updateOmiFirmware": "Perbarui firmware Omi",
     "anErrorOccurredTryAgain": "Terjadi kesalahan. Silakan coba lagi.",
@@ -3202,7 +3201,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Ketuk tombol rekam untuk mulai merekam",
-    "processingTakingLonger": "Masih diproses — ini memakan waktu lebih lama dari biasanya.",
     "speechProfileEnrollmentPrompt": "Agar Omi tahu suara mana yang milikmu — bicarakan apa saja selama sekitar 5 detik.",
     "home": "Beranda",
     "failedToUpdateBaselineStatus": "Kenangan ini tidak dapat diperbarui. Coba lagi.",
@@ -4169,5 +4167,8 @@
     "activityEmpty": "Belum ada aktivitas",
     "activityNewSemantics": "Aktivitas, item baru",
     "activityLoadFailed": "Tidak dapat memuat semua aktivitas Anda",
-    "activityNewItem": "Baru"
+    "activityNewItem": "Baru",
+    "activityNeedsAttention": "Perlu perhatian",
+    "activityRetryAll": "Coba lagi semua",
+    "attentionSummaryFailed": "Percakapan ini tidak dapat diringkas"
 }

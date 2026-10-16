@@ -5968,10 +5968,6 @@
     "@content": {
         "description": "Tab label for content"
     },
-    "noContentToDisplay": "ತೋರಿಸಲು ವಿಷಯವಸ್ತು ಇಲ್ಲ",
-    "@noContentToDisplay": {
-        "description": "Message when there is no content available"
-    },
     "noSummary": "ಯಾವುದೇ ಸಾರಾಂಶ ಇಲ್ಲ",
     "@noSummary": {
         "description": "Message when no summary is available"
@@ -10593,7 +10589,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಲು ರೆಕಾರ್ಡ್ ಬಟನ್ ಟ್ಯಾಪ್ ಮಾಡಿ",
-    "processingTakingLonger": "ಇನ್ನೂ ಕೆಲಸ ನಡೆಯುತ್ತಿದೆ — ಇದು ಸಾಮಾನ್ಯಕ್ಕಿಂತ ಹೆಚ್ಚು ಸಮಯ ತೆಗೆದುಕೊಳ್ಳುತ್ತಿದೆ.",
     "speechProfileEnrollmentPrompt": "Omi ನಿಮ್ಮ ಧ್ವನಿಯನ್ನು ಗುರುತಿಸಲು — ಯಾವುದೇ ವಿಷಯದ ಬಗ್ಗೆ ಸುಮಾರು 5 ಸೆಕೆಂಡುಗಳ ಕಾಲ ಮಾತನಾಡಿ.",
     "home": "ಮುಖಪುಟ",
     "failedToUpdateBaselineStatus": "ಈ ಸ್ಮೃತಿಯನ್ನು ನವೀಕರಿಸಲಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
@@ -11560,5 +11555,8 @@
     "activityEmpty": "ಇನ್ನೂ ಯಾವುದೇ ಚಟುವಟಿಕೆ ಇಲ್ಲ",
     "activityNewSemantics": "ಚಟುವಟಿಕೆ, ಹೊಸ ಐಟಂಗಳು",
     "activityLoadFailed": "ನಿಮ್ಮ ಎಲ್ಲಾ ಚಟುವಟಿಕೆಯನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
-    "activityNewItem": "ಹೊಸದು"
+    "activityNewItem": "ಹೊಸದು",
+    "activityNeedsAttention": "ಗಮನ ಅಗತ್ಯವಿದೆ",
+    "activityRetryAll": "ಎಲ್ಲವನ್ನೂ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ",
+    "attentionSummaryFailed": "ಈ ಸಂಭಾಷಣೆಯ ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ"
 }

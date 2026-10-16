@@ -1542,7 +1542,6 @@
     "photos": "Фото",
     "rawData": "Необработанные данные",
     "content": "Контент",
-    "noContentToDisplay": "Нет контента для отображения",
     "noSummary": "Нет сводки",
     "updateOmiFirmware": "Обновить прошивку Omi",
     "anErrorOccurredTryAgain": "Произошла ошибка. Пожалуйста, попробуйте снова.",
@@ -3202,7 +3201,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Нажмите кнопку записи, чтобы начать запись",
-    "processingTakingLonger": "Ещё обрабатывается — это занимает больше обычного.",
     "speechProfileEnrollmentPrompt": "Чтобы Omi знал, какой голос ваш, говорите о чём угодно примерно 5 секунд.",
     "home": "Главная",
     "failedToUpdateBaselineStatus": "Не удалось обновить это воспоминание. Попробуйте еще раз.",
@@ -4169,5 +4167,8 @@
     "activityEmpty": "Пока нет активности",
     "activityNewSemantics": "Активность, новые элементы",
     "activityLoadFailed": "Не удалось загрузить всю активность",
-    "activityNewItem": "Новое"
+    "activityNewItem": "Новое",
+    "activityNeedsAttention": "Требует внимания",
+    "activityRetryAll": "Повторить все",
+    "attentionSummaryFailed": "Не удалось подвести итоги этого разговора"
 }

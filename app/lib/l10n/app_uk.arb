@@ -1542,7 +1542,6 @@
     "photos": "Фото",
     "rawData": "Необроблені дані",
     "content": "Вміст",
-    "noContentToDisplay": "Немає вмісту для відображення",
     "noSummary": "Немає підсумку",
     "updateOmiFirmware": "Оновити прошивку Omi",
     "anErrorOccurredTryAgain": "Сталася помилка. Будь ласка, спробуйте ще раз.",
@@ -3167,7 +3166,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Натисніть кнопку запису, щоб почати запис",
-    "processingTakingLonger": "Ще обробляється — це триває довше, ніж зазвичай.",
     "speechProfileEnrollmentPrompt": "Щоб Omi знав, який голос ваш, говоріть про будь-що приблизно 5 секунд.",
     "home": "Головна",
     "failedToUpdateBaselineStatus": "Не вдалося оновити цей спогад. Спробуйте ще раз.",
@@ -4134,5 +4132,8 @@
     "activityEmpty": "Поки немає активності",
     "activityNewSemantics": "Активність, нові елементи",
     "activityLoadFailed": "Не вдалося завантажити всю активність",
-    "activityNewItem": "Нове"
+    "activityNewItem": "Нове",
+    "activityNeedsAttention": "Потребує уваги",
+    "activityRetryAll": "Повторити все",
+    "attentionSummaryFailed": "Не вдалося підсумувати цю розмову"
 }

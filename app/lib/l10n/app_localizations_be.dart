@@ -5038,9 +5038,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get content => 'Змест';
 
   @override
-  String get noContentToDisplay => 'Нема зместу для адлюстравання';
-
-  @override
   String get noSummary => 'Нема рэзюмэ';
 
   @override
@@ -9840,9 +9837,6 @@ class AppLocalizationsBe extends AppLocalizations {
       'Пераўтварэнне маўлення ў тэкст зараз недаступнае. Праверце падключэнне да інтэрнэту і налады распазнавання маўлення на прыладзе, затым паспрабуйце яшчэ раз.';
 
   @override
-  String get processingTakingLonger => 'Яшчэ апрацоўваецца — гэта доўжыцца даўжэй, чым звычайна.';
-
-  @override
   String get speechProfileEnrollmentPrompt => 'Каб Omi ведаў, які голас ваш, гаварыце пра што заўгодна каля 5 секунд.';
 
   @override
@@ -13513,4 +13507,13 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Новае';
+
+  @override
+  String get activityNeedsAttention => 'Патрабуе ўвагі';
+
+  @override
+  String get activityRetryAll => 'Паўтарыць усё';
+
+  @override
+  String get attentionSummaryFailed => 'Не ўдалося падсумаваць гэту размову';
 }

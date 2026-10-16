@@ -5018,9 +5018,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get content => 'Obsah';
 
   @override
-  String get noContentToDisplay => 'Žádný obsah k zobrazení';
-
-  @override
   String get noSummary => 'Žádný souhrn';
 
   @override
@@ -9812,9 +9809,6 @@ class AppLocalizationsCs extends AppLocalizations {
       'Převod řeči na text momentálně není dostupný. Zkontrolujte připojení k internetu a nastavení rozpoznávání řeči v zařízení a zkuste to znovu.';
 
   @override
-  String get processingTakingLonger => 'Stále probíhá — trvá to déle než obvykle.';
-
-  @override
   String get speechProfileEnrollmentPrompt => 'Aby Omi věděl, který hlas je váš — mluvte asi 5 sekund o čemkoli.';
 
   @override
@@ -13480,4 +13474,13 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nové';
+
+  @override
+  String get activityNeedsAttention => 'Vyžaduje pozornost';
+
+  @override
+  String get activityRetryAll => 'Zkusit vše znovu';
+
+  @override
+  String get attentionSummaryFailed => 'Tuto konverzaci se nepodařilo shrnout';
 }

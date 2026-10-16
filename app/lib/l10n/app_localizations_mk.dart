@@ -5049,9 +5049,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get content => 'Содржина';
 
   @override
-  String get noContentToDisplay => 'Нема содржина за приказ';
-
-  @override
   String get noSummary => 'Нема резиме';
 
   @override
@@ -9858,9 +9855,6 @@ class AppLocalizationsMk extends AppLocalizations {
       'Претворањето говор во текст моментално не е достапно. Проверете ги интернет-врската и поставките за препознавање говор на уредот, па обидете се повторно.';
 
   @override
-  String get processingTakingLonger => 'Сè уште се обработува — ова трае подолго од вообичаеното.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'За Omi да знае кој глас е вашиот — зборувајте за што било околу 5 секунди.';
 
@@ -13539,4 +13533,13 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Ново';
+
+  @override
+  String get activityNeedsAttention => 'Потребно е внимание';
+
+  @override
+  String get activityRetryAll => 'Обиди ги сите повторно';
+
+  @override
+  String get attentionSummaryFailed => 'Овој разговор не можеше да се сумира';
 }

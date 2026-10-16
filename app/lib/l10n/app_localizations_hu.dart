@@ -5052,9 +5052,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get content => 'Tartalom';
 
   @override
-  String get noContentToDisplay => 'Nincs megjeleníthető tartalom';
-
-  @override
   String get noSummary => 'Nincs összefoglaló';
 
   @override
@@ -9851,9 +9848,6 @@ class AppLocalizationsHu extends AppLocalizations {
       'A beszéd szöveggé alakítása jelenleg nem érhető el. Ellenőrizd az internetkapcsolatot és az eszköz beszédfelismerési beállításait, majd próbáld újra.';
 
   @override
-  String get processingTakingLonger => 'Még folyamatban — ez tovább tart a szokásosnál.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Hogy az Omi tudja, melyik hang a tiéd — beszélj bármiről körülbelül 5 másodpercig.';
 
@@ -13530,4 +13524,13 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Új';
+
+  @override
+  String get activityNeedsAttention => 'Figyelmet igényel';
+
+  @override
+  String get activityRetryAll => 'Összes újrapróbálása';
+
+  @override
+  String get attentionSummaryFailed => 'Ezt a beszélgetést nem sikerült összefoglalni';
 }
