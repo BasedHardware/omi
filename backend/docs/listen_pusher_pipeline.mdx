@@ -4982,3 +4982,16 @@ clients do not send the optional surface hint, so queued foreground work retains
 Rollback each new flag independently. Existing durable enrichment obligations drain
 with their original queue/audience after rollback. Do not change Train 1 production
 switches as part of the rollback. This PR changes no production runtime configuration.
+
+### Mobile ring-download idle recovery
+
+The phone's ring-storage reader retains its initial five-second response limit
+and 30-minute overall limit, and now ends an incomplete transfer after 15
+seconds without further DATA following BEGIN/data. Radio arrival resets the
+idle window before queued custody/disk work; control chatter does not. STOP
+uses the original connection epoch, accepted notifications drain, and complete
+records enter the existing durable phone WAL pipeline. The source remains
+pending and no unproven frontier advance or processing success is invented.
+This neither changes cloud job dispatch nor makes legacy firmware's early
+reclaim durable. Scope and acceptance checklist:
+`app/docs/offline-sync-stall-recovery.md`.
