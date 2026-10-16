@@ -1,7 +1,7 @@
 """Bounded, deterministic evidence of sentences heard in the same overlap.
 
 No speaker identity, provider, LLM, persistence or configurable scoring cutoffs.
-Unknown timing and work overflow abstain. See docs/operational/capture-shared-speech.md.
+Unknown timing cannot add evidence; work overflow abstains. See docs/operational/capture-shared-speech.md.
 """
 
 from __future__ import annotations
@@ -67,6 +67,8 @@ class OverlapSharedSpeech:
     support_seconds: float = 0.0
     min_words: int = 0
     matched_speech_seconds: float = 0.0
+    dropped_segments: int = 0
+    unknown_words: int = 0
 
     def evidence(self) -> dict:
         return {
@@ -78,6 +80,8 @@ class OverlapSharedSpeech:
             'support_seconds': round(self.support_seconds, 3),
             'min_words': self.min_words,
             'matched_speech_seconds': round(self.matched_speech_seconds, 3),
+            'dropped_segments': self.dropped_segments,
+            'unknown_words': self.unknown_words,
         }
 
 
@@ -129,14 +133,14 @@ def shared_speech_group_guard(rows: Mapping[str, Any], _transaction: Any, _clien
         return False
 
 
-def _lines(row: Any, window: tuple[float, float], lo: float, hi: float) -> list:
+def _lines(row: Any, window: tuple[float, float], lo: float, hi: float) -> tuple[list, int, int]:
     segments = field(row, 'transcript_segments') or []
     if not isinstance(segments, (list, tuple)):
         raise _Rejected('shape')
     if len(segments) > MAX_SEGMENTS:
         raise _Rejected('bounds')
     result = []
-    chars = word_count = 0
+    chars = word_count = unknown_words = dropped_segments = 0
     for segment in segments:
         text = field(segment, 'text')
         if not isinstance(text, str):
@@ -147,35 +151,42 @@ def _lines(row: Any, window: tuple[float, float], lo: float, hi: float) -> list:
         if not text.strip():
             continue
         start, end = field(segment, 'start'), field(segment, 'end')
-        if not _number(start) or not _number(end) or end <= start:
-            raise _Rejected('timing')
         duration = window[1] - window[0]
-        if (
-            start < -ROUNDING_SECONDS
-            or end > duration + ROUNDING_SECONDS
-            or field(segment, 'audio_alignment') == 'unplaced'
-        ):
-            raise _Rejected('timing')
-        start, end = max(0.0, start), min(duration, end)
-        if end <= start:
-            raise _Rejected('timing')
-        # Do not borrow words from a segment straddling the overlap boundary.
-        wall_start, wall_end = window[0] + start, window[0] + end
-        if wall_start < lo - ROUNDING_SECONDS or wall_end > hi + ROUNDING_SECONDS:
-            continue
-        wall_start, wall_end = max(lo, wall_start), min(hi, wall_end)
-        if wall_end <= wall_start:
-            continue
-        if end - start > MAX_SEGMENT_SECONDS:
-            raise _Rejected('bounds')
+        unusable = not _number(start) or not _number(end)
+        if not unusable:
+            unusable = (
+                end <= start
+                or start < -ROUNDING_SECONDS
+                or end > duration + ROUNDING_SECONDS
+                or field(segment, 'audio_alignment') == 'unplaced'
+            )
+        wall_start = wall_end = 0.0
+        if not unusable:
+            start, end = max(0.0, start), min(duration, end)
+            wall_start, wall_end = window[0] + start, window[0] + end
+            if wall_end <= lo or wall_start >= hi:
+                continue  # trusted timestamps place all these words outside the intersection
+            unusable = (
+                end <= start
+                or end - start > MAX_SEGMENT_SECONDS
+                or wall_start < lo - ROUNDING_SECONDS
+                or wall_end > hi + ROUNDING_SECONDS
+            )
+            wall_start, wall_end = max(lo, wall_start), min(hi, wall_end)
         normalized = unicodedata.normalize('NFKC', text).casefold().replace('’', "'").replace("'", '')
         words = tuple(_WORD.findall(normalized))
         word_count += len(words)
         if word_count > MAX_WORDS:
             raise _Rejected('bounds')
+        if unusable:
+            # Unknown placement cannot add evidence or inflate similarity by
+            # disappearing: charge every word as distinct, unshared vocabulary.
+            unknown_words += len(words)
+            dropped_segments += 1
+            continue
         if words:
             result.append((wall_start, words, frozenset(words), frozenset(zip(words, words[1:])), wall_end))
-    return sorted(result)
+    return sorted(result), unknown_words, dropped_segments
 
 
 def _ordered_words(a: tuple[str, ...], b: tuple[str, ...]) -> list[str]:
@@ -220,15 +231,19 @@ def measure_overlap_shared_speech(first: Any, second: Any) -> OverlapSharedSpeec
         lo, hi = max(aw[0], bw[0]), min(aw[1], bw[1])
         if hi <= lo:
             raise _Rejected('no_overlap')
-        a, b = _lines(first, aw, lo, hi), _lines(second, bw, lo, hi)
+        a, unknown_a, dropped_a = _lines(first, aw, lo, hi)
+        b, unknown_b, dropped_b = _lines(second, bw, lo, hi)
+        uncertainty = {'unknown_words': unknown_a + unknown_b, 'dropped_segments': dropped_a + dropped_b}
         minimum = min(sum(len(line[1]) for line in a), sum(len(line[1]) for line in b))
         if minimum < MIN_WORDS:
-            return OverlapSharedSpeech(reason='insufficient_speech', min_words=minimum)
+            return OverlapSharedSpeech(reason='insufficient_speech', min_words=minimum, **uncertainty)
         tokens_a = set().union(*(line[2] for line in a))
         tokens_b = set().union(*(line[2] for line in b))
-        jaccard = len(tokens_a & tokens_b) / len(tokens_a | tokens_b)
+        # A lower bound: adding every unknown token to the union overcharges
+        # its possible size; no unknown token enters the proven intersection.
+        jaccard = len(tokens_a & tokens_b) / (len(tokens_a | tokens_b) + unknown_a + unknown_b)
         if jaccard < MIN_WINDOW_JACCARD:
-            return OverlapSharedSpeech(reason='window_text', window_jaccard=jaccard, min_words=minimum)
+            return OverlapSharedSpeech(reason='window_text', window_jaccard=jaccard, min_words=minimum, **uncertainty)
         # Canonical orientation makes greedy assignment symmetric under pair reversal.
         if [(x[0], x[1]) for x in b] < [(x[0], x[1]) for x in a]:
             a, b = b, a
@@ -303,6 +318,7 @@ def measure_overlap_shared_speech(first: Any, second: Any) -> OverlapSharedSpeec
             support,
             minimum,
             speech_seconds,
+            **uncertainty,
         )
     except _Rejected as error:
         return OverlapSharedSpeech(reason=str(error))

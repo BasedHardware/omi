@@ -52,7 +52,11 @@ Smart merge and EXP-003 Jev remain separate and unchanged.
 ## Matcher contract (overlap_shared_speech_v1)
 
 1. Validate completed, retained captures and compatible lock partitions. Reject
-   unknown/nonfinite/unplaced/out-of-capture timing. Select whole segments inside
+   invalid capture windows. Unusable segment timing contributes no sentence
+   evidence. Charge every word in those segments as distinct unshared vocabulary
+   in the window Jaccard denominator, so dropping noisy lines cannot inflate
+   similarity. This is a conservative lower bound; unknown words never add
+   matched duration or words. Select whole trusted segments inside
    the actual wall intersection. Only sub-microsecond epoch-rounding noise is
    clamped to those bounds; it never contributes outside duration. A boundary-straddling segment
    cannot borrow all its words from outside the overlap.
@@ -88,7 +92,7 @@ shared captures. It cannot determine the meaning of common background broadcast
 audio from transcripts alone. Identical concurrent background speech is a safety
 limitation to evaluate, not a claim of one semantic event.
 
-## Calibration (2026-10-16, provisional)
+## Calibration (2026-10-17, provisional)
 
 Private inputs remain outside Git. Never copy cards, identifiers or text into
 issues, PRs, logs or the knowledge base. Report aggregates only. David's `unsure`
@@ -106,9 +110,9 @@ retained, unlocked, uncorrected rows. Serving admission may abstain further.
 
 | Data and class | Decisive n (same/different) | TP/FP | Precision (95% Wilson) | Recall (95% Wilson) |
 | --- | --- | --- | --- | --- |
-| David, cross-source | 7 (5/2) | 0/0 | undefined, no folds | 0% (0–43.4%) |
-| David, same-source same-device | 12 (8/4) | 0/0 | undefined, no folds | 0% (0–32.4%) |
-| David, all | 19 (13/6) | 0/0 | undefined, no folds | 0% (0–22.8%) |
+| David, cross-source | 7 (5/2) | 2/0 | 100% (34.2–100%) | 40% (11.8–76.9%) |
+| David, same-source same-device | 12 (8/4) | 2/0 | 100% (34.2–100%) | 25% (7.2–59.1%) |
+| David, all | 19 (13/6) | 4/0 | 100% (51.0–100%) | 30.8% (12.7–57.6%) |
 | September agent benchmark, cross-source | 52 (32/20) | 1/0 | 100% (20.7–100%) | 3.1% (0.6–15.7%) |
 | September agent benchmark, same-source same-device | 43 (24/19) | 0/0 | undefined, no folds | 0% (0–13.8%) |
 | September agent benchmark, same-source different-device | 1 (0/1) | 0/0 | undefined, no folds | undefined, no positives |
@@ -138,13 +142,15 @@ strong line combinations, all at least 35.8 seconds apart (best exact line pair
 47.8 seconds apart). Neither has a strong line pair within 15 seconds. Both remain
 separate. These observations do not establish a TV/background-audio diagnosis.
 
-The stricter capture bounds leave zero accepted David pairs. This does not
-establish precision: the automatic-fold denominator is zero. Quality and weak
-sentence evidence dominate abstentions; do not relax safety to manufacture recall.
+The final rule accepts four David positives, including two same-source duplicates
+that the incumbent cannot join. It rejects all six negatives and ten unsure
+pairs. The accepted denominator remains too small to establish fleet safety.
 Negative start values as small as 0.55 microseconds were verified to be epoch
 subtraction noise and are clamped within one microsecond. Actual end overruns of
-0.468 and 2.184 seconds occur among positive-pair captures and remain ineligible.
-Long compacted lines and zero/negative-duration text also need upstream repair.
+0.468 and 2.184 seconds, long compacted lines and zero/negative-duration text
+supply no evidence; their words reduce the similarity lower bound instead of
+vetoing otherwise strong independent sentences. Hard storage/work limits still
+abstain for the whole pair. No score threshold was lowered to recover recall.
 
 The first Luna review found out-of-capture boundary evidence, commit-time
 eligibility/lock races and unfenced correction projections. The revised matcher

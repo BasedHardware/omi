@@ -64,21 +64,26 @@ def test_false_fold_classes_abstain(case):
 @pytest.mark.parametrize('value', [None, '60', float('nan'), float('inf'), True, 10**1000])
 def test_invalid_timing_abstains(value):
     first, second = row(), row()
-    second['transcript_segments'][0]['start'] = value
-    assert matcher.measure_overlap_shared_speech(first, second).reason == 'timing'
+    for segment in second['transcript_segments']:
+        segment['start'] = value
+    decision = matcher.measure_overlap_shared_speech(first, second)
+    assert not decision.would_join and decision.reason == 'insufficient_speech'
+    assert decision.dropped_segments == 3
 
 
 @pytest.mark.parametrize('case', ['long_line', 'too_many', 'huge_text', 'unplaced', 'straddle', 'lock', 'deleted'])
 def test_untrusted_layout_and_privacy_fail_closed(case):
     first, second = row(), row()
     if case == 'long_line':
-        second['transcript_segments'][0]['end'] = 170
+        for segment in second['transcript_segments']:
+            segment['end'] = segment['start'] + 100
     elif case == 'too_many':
         second['transcript_segments'] *= matcher.MAX_SEGMENTS
     elif case == 'huge_text':
         second['transcript_segments'][0]['text'] = 'word ' * matcher.MAX_SEGMENT_CHARS
     elif case == 'unplaced':
-        second['transcript_segments'][0]['audio_alignment'] = 'unplaced'
+        for segment in second['transcript_segments']:
+            segment['audio_alignment'] = 'unplaced'
     elif case == 'straddle':
         # None of the words in this long boundary-crossing line prove overlap speech.
         second['started_at'] = T0 + timedelta(seconds=145)
@@ -191,3 +196,22 @@ def test_percentage_is_stable_and_shadow_is_scoped(monkeypatch):
     modes = [shared_speech_mode(f'synthetic-{i}') for i in range(1000)]
     assert modes == [shared_speech_mode(f'synthetic-{i}') for i in range(1000)]
     assert 20 < modes.count('shadow') < 80
+
+
+def test_isolated_bad_line_cannot_supply_evidence_or_veto_strong_proven_speech():
+    first, second = row(), row()
+    second['transcript_segments'].append({'start': None, 'end': None, 'text': 'uncertain placement'})
+    decision = matcher.measure_overlap_shared_speech(first, second)
+    assert decision.would_join and decision.matched_sentences == 3
+    assert decision.dropped_segments == 1 and decision.unknown_words == 2
+    assert decision.window_jaccard < 1
+
+
+def test_unknown_speech_is_charged_against_window_similarity():
+    first, second = row(), row()
+    second['transcript_segments'].append(
+        {'start': None, 'end': None, 'text': ' '.join(f'unknown{i}' for i in range(200))}
+    )
+    decision = matcher.measure_overlap_shared_speech(first, second)
+    assert not decision.would_join and decision.reason == 'window_text'
+    assert decision.unknown_words == 200 and decision.window_jaccard < 0.25
