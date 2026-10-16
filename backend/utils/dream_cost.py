@@ -157,6 +157,28 @@ def price_weighted_tokens(
     return math.ceil(prompt_tokens - discountable + completion_tokens + discountable * ratio)
 
 
+def minute_burndown_tokens(provider, model, *, weighted_tokens, completion_tokens, prompt_tokens=0):
+    """Reserved-capacity burndown for the shared minute ceiling.
+
+    ``weighted_tokens`` already counts cached input at its rate-card fraction and
+    completion at 1; reserved burndown counts output at the output/input price
+    ratio (5 for gemini-3.8-flash), so the completion is topped up to that ratio.
+    Without a verified card the output is counted at 5, never less.
+    """
+    ratio = Fraction(5, 1)
+    card = rate_card_for(provider or '', model or '')
+    if card is not None:
+        rates = card.effective_rates(max(0, int(prompt_tokens)))
+        if (
+            type(rates.input_micro_usd_per_million) is int
+            and rates.input_micro_usd_per_million > 0
+            and type(rates.output_micro_usd_per_million) is int
+            and rates.output_micro_usd_per_million > 0
+        ):
+            ratio = max(Fraction(1, 1), Fraction(rates.output_micro_usd_per_million, rates.input_micro_usd_per_million))
+    return math.ceil(weighted_tokens + completion_tokens * (ratio - 1))
+
+
 def conservative_attempt_micro(provider, model, input_tokens, completion_tokens):
     """Unknown billed usage: the whole input at the uncached rate, plus completion.
 

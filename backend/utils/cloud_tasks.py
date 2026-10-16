@@ -294,8 +294,12 @@ def enqueue_named_task(
         logger.info('task %s already enqueued, skipping duplicate', task_id)
 
 
-def enqueue_sync_job(payload: Dict[str, Any]) -> None:
-    """Enqueue one named HTTP task (task id = job_id) for a sync job.
+def enqueue_sync_job(payload: Dict[str, Any], *, dispatch_attempt: int = 0) -> None:
+    """Enqueue one named HTTP task for a sync job.
+
+    Sequenced redrives use a persisted dispatch attempt in the task name while
+    retaining the execution epoch in the payload. Re-enqueueing that attempt is
+    idempotent; a later attempt can bypass a deleted task's name tombstone.
 
     Duplicate names are success. Callers retry the same name a bounded number
     of times, then retain staged retry material if acknowledgement remains
@@ -321,6 +325,10 @@ def enqueue_sync_job(payload: Dict[str, Any]) -> None:
     if sequencer_epoch is not None and (not isinstance(sequencer_epoch, int) or sequencer_epoch <= 0):
         raise ValueError('sync job sequencer epoch must be a positive integer')
     task_id = f"{payload['job_id']}-s{sequencer_epoch}" if sequencer_epoch is not None else str(payload['job_id'])
+    if dispatch_attempt:
+        if sequencer_epoch is None or dispatch_attempt < 0:
+            raise ValueError('sync job dispatch attempt requires a sequencer epoch and a positive value')
+        task_id += f'-d{dispatch_attempt}'
     schedule_at = direct_schedule_at(payload)
     schedule_options: Dict[str, Any] = {'schedule_at': schedule_at} if schedule_at is not None else {}
     if payload.get('lane') == 'backfill' and is_sync_backfill_routing_enabled():
