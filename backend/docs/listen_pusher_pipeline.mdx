@@ -6,6 +6,22 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Default-off funded transcription cap
+
+`STT_CAP_DISPATCH_ENFORCEMENT` gates provider creation and audio sends through a
+shared live admission state, including multichannel, replay and replacement legs.
+Denial preserves receiving and existing audio storage paths; accepted provider
+work drains. Custom/on-device STT and flag-off metering retain their behavior.
+The [dispatch contract](stt-cap-dispatch.md) also documents sync holds, recovery,
+BYOK funding, additive metrics and the per-client activation decision.
+Sync recovery fences a provider-bound `dispatched` receipt before paid STT or
+ingestion, and atomically checkpoints ingest proof alongside the conversation.
+Known non-calls clear the intent. After 30 minutes, ambiguous work reconciles
+from that proof or gets one second dispatch; a second ambiguity retains the audio
+as failed reconciliation. Successful siblings finalize independently. Flagged
+oversized GPU empty-result retries become held work without a failure attempt;
+the unflagged retry follows main's behavior.
+
 ## Windowed live transcription deadlines
 
 Parakeet packing is independently gated by `PARAKEET_PACKING_ENABLED=false`

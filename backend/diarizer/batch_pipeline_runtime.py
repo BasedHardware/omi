@@ -15,6 +15,8 @@ from typing import Any, Callable
 
 from prometheus_client import CollectorRegistry, CONTENT_TYPE_LATEST, generate_latest
 
+from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
+from utils.observability.stt_cap_dispatch import AUDIO_SECONDS
 from config.batch_pipeline_providers import provider_config
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_store import FirestoreStore
@@ -57,13 +59,13 @@ class SynchronizedWorker:
         self.memory_probe = memory_probe
         self._unavailable = False
 
-    def process_batch(self, items):
+    def process_batch(self, items, **kwargs):
         if self._unavailable:
             raise FatalGpuError('GPU chain unavailable; restart required')
         try:
             baseline = self.memory_probe.begin() if self.memory_probe else None
             try:
-                return self.worker.process_batch(items)
+                return self.worker.process_batch(items, **kwargs)
             finally:
                 # Python completion is not CUDA completion. Never publish before
                 # quiescence, even for a dedicated GPU with no live reservation.
@@ -86,6 +88,9 @@ class SynchronizedWorker:
 
 
 def health_server(state: RuntimeState, registry: CollectorRegistry, port: int) -> ThreadingHTTPServer:
+    if cap_dispatch_enabled():
+        registry.register(AUDIO_SECONDS)
+
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             if self.path == '/metrics':
