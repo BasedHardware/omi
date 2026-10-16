@@ -27,6 +27,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
+# Retain the real stdlib-only identity module before the legacy parent stub
+# hides its import path; files -> playback imports validate_sources at module scope.
+from utils.other import playback_identity  # noqa: F401
+
 # ---------------------------------------------------------------------------
 # Stubs — isolate from heavy deps before importing sync
 # ---------------------------------------------------------------------------
