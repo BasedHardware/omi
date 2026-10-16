@@ -4374,6 +4374,11 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return '$plan-abonnementet ditt avsluttes $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Abonnementet ditt er satt til å bli kansellert $date.\nAbonner på nytt nå for å beholde fordelene - ingen belastning til $date.';
   }
@@ -4381,6 +4386,11 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Ditt årlige abonnement starter automatisk når ditt månedlige abonnement avsluttes.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return '$plan-abonnementet ditt fornyes $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4413,6 +4423,9 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get continueText => 'Fortsett';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Abonner på nytt først for å bytte abonnement.';
 
   @override
   String get resubscribe => 'Abonner på nytt';

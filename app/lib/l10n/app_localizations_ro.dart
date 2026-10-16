@@ -4395,12 +4395,22 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Planul tău $plan se încheie pe $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Planul dvs. este setat să fie anulat pe $date.\nReabonați-vă acum pentru a vă păstra beneficiile - fără taxă până la $date.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'Planul dvs. anual va începe automat când planul lunar se încheie.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Planul tău $plan se va reînnoi pe $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4433,6 +4443,9 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get continueText => 'Continuă';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Reabonează-te mai întâi ca să schimbi planul.';
 
   @override
   String get resubscribe => 'Reabonează-te';

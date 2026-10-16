@@ -317,6 +317,12 @@ extension SettingsContentView {
               .foregroundColor(Ink.secondary)
           }
 
+          if let confirmation = subscriptionConfirmation {
+            Text(confirmation)
+              .scaledFont(size: OmiType.caption, weight: .semibold)
+              .foregroundColor(Ink.listeningGreen)
+          }
+
           if let userSubscription {
             GlassSeparator()
             Text(TranscriptionAllowancePresentation.statusText(userSubscription.transcriptionAllowance))

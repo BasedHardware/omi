@@ -4383,12 +4383,22 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Gói $plan của bạn kết thúc vào $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Gói của bạn được đặt để hủy vào $date.\nĐăng ký lại ngay để giữ quyền lợi - không tính phí cho đến $date.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'Gói năm của bạn sẽ tự động bắt đầu khi gói tháng kết thúc.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Gói $plan của bạn sẽ gia hạn vào $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4421,6 +4431,9 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get continueText => 'Tiếp tục';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Hãy đăng ký lại trước để đổi gói.';
 
   @override
   String get resubscribe => 'Đăng ký lại';

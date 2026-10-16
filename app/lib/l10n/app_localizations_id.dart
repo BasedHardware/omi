@@ -4378,6 +4378,11 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Paket $plan Anda berakhir pada $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Paket Anda diatur untuk dibatalkan pada $date.\nBerlangganan lagi sekarang untuk mempertahankan manfaat Anda - tidak ada biaya hingga $date.';
   }
@@ -4385,6 +4390,11 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Paket tahunan Anda akan dimulai secara otomatis saat paket bulanan Anda berakhir.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Paket $plan Anda akan diperpanjang pada $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4417,6 +4427,9 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get continueText => 'Lanjutkan';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Berlangganan lagi dulu untuk mengubah paket.';
 
   @override
   String get resubscribe => 'Berlangganan lagi';

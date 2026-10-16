@@ -4370,12 +4370,22 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Váš plán $plan končí $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Váš plán je nastavený na zrušenie $date.\nZnova sa prihláste teraz, aby ste si zachovali výhody - bez poplatku do $date.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'Váš ročný plán sa automaticky spustí po skončení mesačného plánu.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Váš plán $plan sa obnoví $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4408,6 +4418,9 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get continueText => 'Pokračovať';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Ak chcete zmeniť plán, najprv sa znova prihláste.';
 
   @override
   String get resubscribe => 'Znova sa prihlásiť';

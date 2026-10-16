@@ -8355,6 +8355,12 @@ abstract class AppLocalizations {
   /// **'Your plan ended on {date}.\nResubscribe now - you\'ll be charged immediately for a new billing period.'**
   String planEndedOn(String date);
 
+  /// Pending cancellation shown beside the current plan
+  ///
+  /// In en, this message translates to:
+  /// **'Your {plan} plan ends {date}.'**
+  String yourPlanEndsOn(String plan, String date);
+
   /// Message when plan is set to cancel
   ///
   /// In en, this message translates to:
@@ -8366,6 +8372,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your annual plan will start automatically when your monthly plan ends.'**
   String get annualPlanStartsAutomatically;
+
+  /// Confirmation after resubscribing a plan that was set to cancel
+  ///
+  /// In en, this message translates to:
+  /// **'Your {plan} plan will renew on {date}.'**
+  String yourPlanWillRenewOn(String plan, String date);
 
   /// Message showing plan renewal date
   ///
@@ -8426,6 +8438,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Continue'**
   String get continueText;
+
+  /// Why another price is refused while cancellation is pending
+  ///
+  /// In en, this message translates to:
+  /// **'Resubscribe first to change plans.'**
+  String get resubscribeFirstToChangePlans;
 
   /// Button to resubscribe
   ///

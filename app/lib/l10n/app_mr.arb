@@ -5065,6 +5065,7 @@
             }
         }
     },
+    "yourPlanEndsOn": "तुमची {plan} योजना {date} रोजी संपेल.",
     "planSetToCancelOn": "आपली योजना {date} ला रद्द होण्यासाठी सेट केली आहे.\nआपले फायदे कायम राखण्यासाठी आता पुन्हा सदस्यता घ्या - {date} पर्यंत कोणतीही शुल्क नाही.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5079,6 +5080,7 @@
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
     },
+    "yourPlanWillRenewOn": "तुमची {plan} योजना {date} रोजी नूतनीकरण होईल.",
     "planRenewsOn": "आपली योजना {date} ला नवीकरण होईल.",
     "@planRenewsOn": {
         "description": "Message showing plan renewal date",
@@ -5125,6 +5127,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "resubscribeFirstToChangePlans": "योजना बदलण्यासाठी आधी पुन्हा सदस्यता घ्या.",
     "resubscribe": "पुन्हा सदस्यता घ्या",
     "@resubscribe": {
         "description": "Button to resubscribe"

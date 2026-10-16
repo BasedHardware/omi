@@ -4376,12 +4376,22 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return '$plan-pakettisi päättyy $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Tilauksesi on asetettu peruuntumaan $date.\nTilaa uudelleen nyt säilyttääksesi edut - ei veloitusta ennen $date.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'Vuositilauksesi alkaa automaattisesti, kun kuukausitilauksesi päättyy.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return '$plan-pakettisi uusiutuu $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4414,6 +4424,9 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get continueText => 'Jatka';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Tilaa ensin uudelleen, jotta voit vaihtaa pakettia.';
 
   @override
   String get resubscribe => 'Tilaa uudelleen';

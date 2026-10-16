@@ -5065,6 +5065,7 @@
             }
         }
     },
+    "yourPlanEndsOn": "Вашиот план {plan} завршува на {date}.",
     "planSetToCancelOn": "Вашиот план е поставен да се откаже на {date}.\nПретплатете се сега за да ги задржите вашите бенефиции - без наплата до {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5079,6 +5080,7 @@
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
     },
+    "yourPlanWillRenewOn": "Вашиот план {plan} ќе се обнови на {date}.",
     "planRenewsOn": "Вашиот план се обновува на {date}.",
     "@planRenewsOn": {
         "description": "Message showing plan renewal date",
@@ -5125,6 +5127,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "resubscribeFirstToChangePlans": "Прво претплатете се повторно за да го смените планот.",
     "resubscribe": "Претплати се повторно",
     "@resubscribe": {
         "description": "Button to resubscribe"

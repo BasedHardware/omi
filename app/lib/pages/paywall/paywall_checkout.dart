@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import 'package:omi/pages/settings/payment_webview_page.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
+import 'package:omi/utils/cancel_pending_purchase.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -23,17 +25,40 @@ abstract final class PaywallCheckout {
   }) async {
     final provider = context.read<UsageProvider>();
     final l10n = context.l10n;
-    final previousPlan = provider.subscription?.subscription.plan.wireName ?? 'basic';
+    final subscription = provider.subscription?.subscription;
+    final previousPlan = subscription?.plan.wireName ?? 'basic';
+    if (cancelPendingPurchase(
+          cancelAtPeriodEnd: subscription?.cancelAtPeriodEnd == true,
+          currentPriceId: subscription?.currentPriceId,
+          priceId: priceId,
+        ) ==
+        CancelPendingPurchase.blocked) {
+      OmiFeedback.error(context, l10n.resubscribeFirstToChangePlans);
+      return PaywallCheckoutOutcome.failed;
+    }
     PlatformManager.instance.analytics.upgradePlanSelected(plan: plan, billingInterval: interval, source: source);
     try {
       final session = await provider.createUserCheckoutSession(priceId: priceId);
       if (!context.mounted) return PaywallCheckoutOutcome.cancelled;
+      if (session != null && session['error'] == true) {
+        OmiFeedback.error(
+          context,
+          isPendingCancelConflict(session['status_code'])
+              ? l10n.resubscribeFirstToChangePlans
+              : session['detail'] as String? ?? l10n.couldNotProcessSubscription,
+        );
+        return PaywallCheckoutOutcome.failed;
+      }
       if (session == null) {
         OmiFeedback.error(context, l10n.couldNotLaunchUpgradePage);
         return PaywallCheckoutOutcome.failed;
       }
       if (session['status'] == 'reactivated') {
-        OmiFeedback.confirm(context, session['message'] as String? ?? l10n.subscriptionReactivatedDefault);
+        final date = billingDateLabel(context, session['next_billing_date']) ??
+            billingDateLabel(context, subscription?.currentPeriodEnd);
+        final planName = currentPlanDisplayName(context, provider.subscription);
+        final message = date == null ? l10n.subscriptionReactivatedDefault : l10n.yourPlanWillRenewOn(planName, date);
+        OmiFeedback.confirm(context, message);
         PlatformManager.instance.analytics
             .upgradeSucceeded(previousPlan: previousPlan, newPlan: plan, billingInterval: interval);
         await provider.fetchSubscription();

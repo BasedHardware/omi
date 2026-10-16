@@ -4348,12 +4348,22 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'แผน $plan ของคุณสิ้นสุดวันที่ $date';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'แพ็คเกจของคุณถูกตั้งค่าให้ยกเลิกในวันที่ $date\nสมัครใหม่ตอนนี้เพื่อรักษาสิทธิประโยชน์ - ไม่มีค่าใช้จ่ายจนถึง $date';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'แพ็คเกจรายปีของคุณจะเริ่มโดยอัตโนมัติเมื่อแพ็คเกจรายเดือนของคุณสิ้นสุด';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'แผน $plan ของคุณจะต่ออายุวันที่ $date';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4386,6 +4396,9 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get continueText => 'ดำเนินการต่อ';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'สมัครใหม่ก่อนเพื่อเปลี่ยนแผน';
 
   @override
   String get resubscribe => 'สมัครใหม่';

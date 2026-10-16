@@ -4397,12 +4397,22 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'A $plan csomagod $date-án lejár.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'A csomagja $date-án törlésre van beállítva.\nIratkozzon fel újra most, hogy megtartsa előnyeit - nincs díj $date-ig.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'Az éves csomagja automatikusan elindul, amikor a havi csomagja lejár.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'A $plan csomagod $date-án megújul.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4435,6 +4445,9 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get continueText => 'Folytatás';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Csomagváltáshoz először fizess elő újra.';
 
   @override
   String get resubscribe => 'Újra feliratkozás';

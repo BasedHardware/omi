@@ -4300,12 +4300,22 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return '您的 $plan 套餐将于 $date 结束。';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return '您的计划将于$date取消。\n立即重新订阅以保留您的权益 - $date之前不收费。';
   }
 
   @override
   String get annualPlanStartsAutomatically => '您的年度计划将在月度计划结束时自动开始。';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return '您的 $plan 套餐将于 $date 续订。';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4338,6 +4348,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get continueText => '继续';
+
+  @override
+  String get resubscribeFirstToChangePlans => '请先重新订阅再更改套餐。';
 
   @override
   String get resubscribe => '重新订阅';

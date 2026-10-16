@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-cancel-pending-plans.png",
+      "platform": "mobile-ios",
+      "description": "Cancel-pending Plus plan shows Your Plus plan ends Nov 3, 2026.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-resubscribe-button.png",
+      "platform": "mobile-ios",
+      "description": "Monthly Plus stays selected and the primary action is Resubscribe.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-before-yearly-selected.png",
+      "platform": "mobile-ios",
+      "description": "Before the fix, Resubscribe followed the default yearly price.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

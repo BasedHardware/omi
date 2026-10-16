@@ -5065,6 +5065,7 @@
             }
         }
     },
+    "yourPlanEndsOn": "תוכנית {plan} שלך מסתיימת ב-{date}.",
     "planSetToCancelOn": "התוכנית שלך מוגדרת להיות מבוטלת ב-{date}.\nהירשם מחדש כעת כדי לשמור על ההטבות שלך - לא תחויב עד {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5079,6 +5080,7 @@
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
     },
+    "yourPlanWillRenewOn": "תוכנית {plan} שלך תתחדש ב-{date}.",
     "planRenewsOn": "התוכנית שלך מתחדשת ב-{date}.",
     "@planRenewsOn": {
         "description": "Message showing plan renewal date",
@@ -5125,6 +5127,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "resubscribeFirstToChangePlans": "הירשמו מחדש קודם כדי לשנות תוכנית.",
     "resubscribe": "הירשם מחדש",
     "@resubscribe": {
         "description": "Button to resubscribe"

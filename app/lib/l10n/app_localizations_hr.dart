@@ -4387,6 +4387,11 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Tvoj $plan plan završava $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Vaš plan je postavljen da se otkaže $date.\nPrenazovite se sada kako biste zadržali svoju korist - bez naplate do $date.';
   }
@@ -4394,6 +4399,11 @@ class AppLocalizationsHr extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Vaš godišnji plan će se automatski pokrenuti kada se mjesečni plan završi.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Tvoj $plan plan će se obnoviti $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4426,6 +4436,9 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get continueText => 'Nastavi';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Prvo se ponovno pretplati da promijeniš plan.';
 
   @override
   String get resubscribe => 'Ponovo se pretplati';

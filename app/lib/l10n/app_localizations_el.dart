@@ -4407,6 +4407,11 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Το πρόγραμμα $plan λήγει στις $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Το πρόγραμμά σας έχει ρυθμιστεί να ακυρωθεί στις $date.\nΕπανεγγραφείτε τώρα για να διατηρήσετε τα οφέλη σας - χωρίς χρέωση μέχρι $date.';
   }
@@ -4414,6 +4419,11 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Το ετήσιο πρόγραμμά σας θα ξεκινήσει αυτόματα όταν λήξει το μηνιαίο σας πρόγραμμα.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Το πρόγραμμα $plan θα ανανεωθεί στις $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4446,6 +4456,9 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get continueText => 'Συνέχεια';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Επανεγγραφείτε πρώτα για να αλλάξετε πρόγραμμα.';
 
   @override
   String get resubscribe => 'Επανεγγραφή';

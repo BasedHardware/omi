@@ -4415,6 +4415,11 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Votre forfait $plan se termine le $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Votre forfait est programmé pour être annulé le $date.\nRéabonnez-vous maintenant pour conserver vos avantages - pas de frais jusqu\'au $date.';
   }
@@ -4422,6 +4427,11 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Votre forfait annuel débutera automatiquement à la fin de votre forfait mensuel.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Votre forfait $plan sera renouvelé le $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4455,6 +4465,9 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get continueText => 'Continuer';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Réabonnez-vous d\'abord pour changer de forfait.';
 
   @override
   String get resubscribe => 'Se réabonner';

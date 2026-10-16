@@ -4384,12 +4384,22 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Je $plan-abonnement eindigt op $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Uw plan wordt geannuleerd op $date.\nAbonneer nu opnieuw om uw voordelen te behouden - geen kosten tot $date.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'Uw jaarabonnement start automatisch wanneer uw maandabonnement eindigt.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Je $plan-abonnement wordt verlengd op $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4422,6 +4432,9 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get continueText => 'Doorgaan';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Abonneer je eerst opnieuw om van abonnement te wisselen.';
 
   @override
   String get resubscribe => 'Opnieuw abonneren';

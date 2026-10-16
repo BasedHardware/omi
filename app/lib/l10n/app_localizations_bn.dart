@@ -4377,6 +4377,11 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'আপনার $plan প্ল্যান $date এ শেষ হবে।';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'আপনার পরিকল্পনা $date তে বাতিল হওয়ার জন্য নির্ধারিত হয়েছে।\nআপনার সুবিধা রাখতে এখনই পুনরায় সাবস্ক্রাইব করুন - $date পর্যন্ত কোনও চার্জ নেই।';
   }
@@ -4384,6 +4389,11 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'আপনার মাসিক পরিকল্পনা শেষ হলে আপনার বার্ষিক পরিকল্পনা স্বয়ংক্রিয়ভাবে শুরু হবে।';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'আপনার $plan প্ল্যান $date এ নবায়ন হবে।';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4416,6 +4426,9 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get continueText => 'চালিয়ে যান';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'প্ল্যান বদলাতে আগে পুনরায় সাবস্ক্রাইব করুন।';
 
   @override
   String get resubscribe => 'পুনরায় সাবস্ক্রাইব করুন';

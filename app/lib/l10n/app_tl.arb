@@ -5065,6 +5065,7 @@
             }
         }
     },
+    "yourPlanEndsOn": "Magtatapos ang iyong {plan} plan sa {date}.",
     "planSetToCancelOn": "Ang iyong plano ay nakatakda na kanselahin sa {date}.\nMag-subscribe muli upang mapanatili ang iyong mga benepisyo - walang bayad hanggang {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5079,6 +5080,7 @@
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
     },
+    "yourPlanWillRenewOn": "Mare-renew ang iyong {plan} plan sa {date}.",
     "planRenewsOn": "Ang iyong plano ay nag-renew sa {date}.",
     "@planRenewsOn": {
         "description": "Message showing plan renewal date",
@@ -5125,6 +5127,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "resubscribeFirstToChangePlans": "Mag-subscribe muna ulit para magpalit ng plan.",
     "resubscribe": "Mag-subscribe Muli",
     "@resubscribe": {
         "description": "Button to resubscribe"

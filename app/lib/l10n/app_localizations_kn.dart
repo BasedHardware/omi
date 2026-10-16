@@ -4390,6 +4390,11 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'ನಿಮ್ಮ $plan ಯೋಜನೆ $date ರಂದು ಕೊನೆಗೊಳ್ಳುತ್ತದೆ.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'ನಿಮ್ಮ ಯೋಜನೆ $date ಮೇಲೆ ರದ್ದುಗೊಳಿಸುವ ನಿರ್ಧಾರವನ್ನು ಹೊಂದಿದೆ.\nನಿಮ್ಮ ಪ್ರಯೋಜನಗಳನ್ನು ಮುಂದುವರಿಸಲು ಈಗ ಮರುಸದಸ್ಯಗೊಳಿಸಿ - $date ವರೆಗೆ ಯಾವುದೇ ಶುಲ್ಕ ಇಲ್ಲ.';
   }
@@ -4397,6 +4402,11 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'ನಿಮ್ಮ ಮಾಸಿಕ ಯೋಜನೆ ಕೊನೆಗೊಂಡಾಗ ನಿಮ್ಮ ವಾರ್ಷಿಕ ಯೋಜನೆ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಪ್ರಾರಂಭ ಆಗುತ್ತದೆ.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'ನಿಮ್ಮ $plan ಯೋಜನೆ $date ರಂದು ನವೀಕರಿಸಲಾಗುತ್ತದೆ.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4429,6 +4439,9 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get continueText => 'ಮುಂದುವರಿಸಿ';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'ಯೋಜನೆ ಬದಲಾಯಿಸಲು ಮೊದಲು ಮರುಸದಸ್ಯರಾಗಿ.';
 
   @override
   String get resubscribe => 'ಮರುಸದಸ್ಯಗೊಳಿಸಿ';
