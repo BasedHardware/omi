@@ -202,8 +202,9 @@ class PipelineWorker:
 
     def _process(self, items):
         states, windows, failed, results = {}, [], set(), []
+        failure_records = []
 
-        def fail(item, exc):
+        def fail(item, exc, stage):
             # Quarantine poisoned CUDA state without importing a second GPU owner.
             if is_fatal_cuda_error(exc):
                 self._unavailable = True
@@ -211,6 +212,7 @@ class PipelineWorker:
             if item.segment_id not in failed:
                 failed.add(item.segment_id)
                 self.counts['failed'] += 1
+                failure_records.append((type(exc).__name__, stage, item.segment_id))
                 if self.on_failure:
                     try:
                         self.on_failure(item, type(exc).__name__)
@@ -219,11 +221,13 @@ class PipelineWorker:
 
         for item in items:
             self.counts['items'] += 1
+            stage = 'fetch_decode'
             try:
                 samples = self.decode(item)
                 duration = len(samples) / SAMPLE_RATE
                 if not 0 < duration <= self.config.max_unit_seconds or abs(duration - item.duration_seconds) > 0.1:
                     raise ValueError('decoded duration differs from admitted capture')
+                stage = 'vad_windows'
                 spans = list(self.vad(samples))
                 clips = list(speech_windows(item, samples, spans, self.config))
                 speech_spans = vad_speech_spans(spans, len(samples))
@@ -258,7 +262,7 @@ class PipelineWorker:
                 else:
                     windows.extend(clips)
             except Exception as exc:
-                fail(item, exc)
+                fail(item, exc, stage)
 
         for batch in pack_windows(windows, self.config):
             batch = [w for w in batch if w.segment_id not in failed]
@@ -270,7 +274,7 @@ class PipelineWorker:
                     raise ValueError('provider result cardinality mismatch')
             except Exception as exc:
                 for window in batch:
-                    fail(states[window.segment_id]['item'], exc)
+                    fail(states[window.segment_id]['item'], exc, 'asr')
                 continue
             for window, hypothesis in zip(batch, hypotheses):
                 try:
@@ -280,12 +284,13 @@ class PipelineWorker:
                         if window.core_start <= midpoint < window.core_end:
                             states[window.segment_id]['words'].append({**word, 'timestamp': [start, end]})
                 except Exception as exc:
-                    fail(states[window.segment_id]['item'], exc)
+                    fail(states[window.segment_id]['item'], exc, 'word_clocks')
 
         for state in states.values():
             item = state['item']
             if item.segment_id in failed:
                 continue
+            stage = 'assemble_words'
             try:
                 duration = len(state['samples']) / SAMPLE_RATE
                 words = validate_words(sorted(state['words'], key=lambda w: w['timestamp'][0]), duration)
@@ -308,6 +313,7 @@ class PipelineWorker:
                         'outcome': 'skipped_single',
                     }
                 else:
+                    stage = 'diarize'
                     diarization = self.diarize(state['samples'])
                 payload = {
                     'words': words,
@@ -318,8 +324,21 @@ class PipelineWorker:
                     'speech_seconds': state['speech_seconds'],
                     'speech_spans': state['speech_spans'],
                 }
+                stage = 'persist'
                 uri = self.persist(item, payload)
                 results.append(WorkResult(item.segment_id, uri, 'silence' if state['silence'] else 'success'))
             except Exception as exc:
-                fail(item, exc)
+                fail(item, exc, stage)
+        # Emit only strings after every item exception handler has exited.
+        # Handler error printers must not inherit the private worker exception.
+        for error_class, failure_stage, segment_id in failure_records:
+            try:
+                logger.error(
+                    'event=batch_worker_failed error_class=%s stage=%s segment_id=%s',
+                    error_class,
+                    failure_stage,
+                    segment_id,
+                )
+            except Exception:
+                pass  # Observability failure must never discard healthy results.
         return results
