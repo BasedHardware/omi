@@ -32,6 +32,8 @@ from utils.dream_metrics import record_pass, error_code, record_reclaimed
 from database.dream_effect_fence import ACTIVE_RUN
 from utils.executors import db_executor, run_blocking
 
+TAIL_BUDGET_NOTICE_THRESHOLD = 0.20
+
 
 def _cheap_turn(staged, invoke):
     """Bind one named cheap lane. Unset, VERIFY_LANE, or disagreeing lanes stay a no-op."""
@@ -151,12 +153,32 @@ async def run_session(
             await run_blocking(db_executor, dream_turns.settle, uid, lease['run_id'], result)
 
     main_history = {'prompt_tokens': None, 'messages': 0, 'cached_tokens': None}
+    budget_notice_sent = False
 
     async def invoke(lane, mount, messages):
+        nonlocal budget_notice_sent
         await active()
         remaining = (
             limits.tokens - report['price_weighted_tokens'] - session.counters['search_embedding_token_upper_bound']
         )
+        if (
+            lane == dream_harness_transport.MAIN_LANE
+            and not budget_notice_sent
+            and limits.tokens > 0
+            and remaining <= limits.tokens * TAIL_BUDGET_NOTICE_THRESHOLD
+        ):
+            remaining_percent = max(0, min(100, int(100 * remaining / limits.tokens)))
+            messages.append(
+                {
+                    'role': 'user',
+                    'content': (
+                        f"About {remaining_percent}% of this pass's budget remains. "
+                        'Stage your strongest findings now with propose_* (or finish if there is nothing worth '
+                        'proposing); avoid new broad searches.'
+                    ),
+                }
+            )
+            budget_notice_sent = True
         mount = replace(mount, budget=replace(mount.budget, tokens=min(mount.budget.tokens or 0, remaining)))
         if mount.budget.tokens is None or mount.budget.tokens < 1024:
             raise ValueError('dream_input_token_budget')
