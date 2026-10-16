@@ -4361,6 +4361,16 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Dit $plan-abonnement slutter $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Gentilmeld dig nu for at beholde dine fordele - ingen opkrævning indtil $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Dit abonnement er sat til at blive annulleret $date.\nGentilmeld dig nu for at beholde dine fordele - ingen opkrævning indtil $date.';
   }
@@ -4368,6 +4378,11 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Dit årlige abonnement starter automatisk, når dit månedlige abonnement slutter.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Dit $plan-abonnement fornys $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4400,6 +4415,9 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get continueText => 'Fortsæt';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Gentilmelding først for at skifte abonnement.';
 
   @override
   String get resubscribe => 'Gentilmeld';

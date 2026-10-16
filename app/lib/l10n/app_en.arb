@@ -5114,6 +5114,30 @@
             }
         }
     },
+    "yourPlanEndsOn": "Your {plan} plan ends {date}.",
+    "@yourPlanEndsOn": {
+        "description": "Pending cancellation shown beside the current plan",
+        "placeholders": {
+            "plan": {
+                "type": "String",
+                "example": "Plus"
+            },
+            "date": {
+                "type": "String",
+                "example": "Nov 3, 2026"
+            }
+        }
+    },
+    "resubscribeNowNoChargeUntil": "Resubscribe now to keep your plan. No charge until {date}.",
+    "@resubscribeNowNoChargeUntil": {
+        "description": "Reassurance under a pending cancellation that resubscribing is not charged until the end date",
+        "placeholders": {
+            "date": {
+                "type": "String",
+                "example": "Nov 3, 2026"
+            }
+        }
+    },
     "planSetToCancelOn": "Your plan is set to cancel on {date}.\nResubscribe now to keep your benefits - no charge until {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5127,6 +5151,20 @@
     "annualPlanStartsAutomatically": "Your annual plan will start automatically when your monthly plan ends.",
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
+    },
+    "yourPlanWillRenewOn": "Your {plan} plan will renew on {date}.",
+    "@yourPlanWillRenewOn": {
+        "description": "Confirmation after resubscribing a plan that was set to cancel",
+        "placeholders": {
+            "plan": {
+                "type": "String",
+                "example": "Plus"
+            },
+            "date": {
+                "type": "String",
+                "example": "Nov 3, 2026"
+            }
+        }
     },
     "planRenewsOn": "Your plan renews on {date}.",
     "@planRenewsOn": {
@@ -5173,6 +5211,10 @@
     "continueText": "Continue",
     "@continueText": {
         "description": "Continue button text"
+    },
+    "resubscribeFirstToChangePlans": "Resubscribe first to change plans.",
+    "@resubscribeFirstToChangePlans": {
+        "description": "Why another price is refused while cancellation is pending"
     },
     "resubscribe": "Resubscribe",
     "@resubscribe": {

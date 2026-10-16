@@ -5065,6 +5065,8 @@
             }
         }
     },
+    "yourPlanEndsOn": "Ваш план {plan} заканчваецца {date}.",
+    "resubscribeNowNoChargeUntil": "Падпішыцеся яшчэ раз, каб сахаваць свае прывілеі - плата адсуцная да {date}.",
     "planSetToCancelOn": "Ваш план пастаўлены на скасаванне {date}.\nПадпішыцеся яшчэ раз, каб сахаваць свае прывілеі - плата адсуцная да {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5079,6 +5081,7 @@
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
     },
+    "yourPlanWillRenewOn": "Ваш план {plan} будзе падаўжацца {date}.",
     "planRenewsOn": "Ваш план адновіцца {date}.",
     "@planRenewsOn": {
         "description": "Message showing plan renewal date",
@@ -5125,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "resubscribeFirstToChangePlans": "Спачатку падпішыцеся зноў, каб змяніць план.",
     "resubscribe": "Падпішыцеся яшчэ раз",
     "@resubscribe": {
         "description": "Button to resubscribe"
