@@ -104,9 +104,17 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
         "messaging-maintenance-hourly",
         "notifications-job-scheduler-trigger",
         "omi-admin-stats-precompute",
+        "omi-tv-rollup-daily",
         "sentry-feedback-poll",
         "sync-backfill-uid-sequencer",
     }
+    rollup = prod_jobs["omi-tv-rollup-daily"]
+    assert rollup["lifecycle"] == "planned"
+    assert rollup["state"] == "PAUSED"
+    assert rollup["target"]["oauth"]["service_account"] == (
+        "finops-unit-cost-scheduler@based-hardware.iam.gserviceaccount.com"
+    )
+
     assert "agent-vm-reconciler-5m" not in dev_jobs
     assert "candidate-integration-sweep" not in dev_jobs
     assert prod_jobs["candidate-integration-sweep"]["state"] == "ENABLED"
