@@ -34,6 +34,7 @@ _BASES = ('full', 'sampled')
 _REASONS = (
     'contained',
     'no_user_speech',
+    'no_speech',
     'too_small',
     'insufficient_coverage',
     'timing',
@@ -73,6 +74,11 @@ MIN_DISTINCT_WORDS = 20
 MIN_MATCHED_UTTERANCES = 3
 MIN_SUPPORT_SECONDS = 45.0
 MIN_COVERAGE = 0.8
+MIN_ALL_SMALLER_WORDS = 60
+MIN_ALL_MATCHED_WORDS = 60
+MIN_ALL_MATCHED_UTTERANCES = 4
+MIN_ALL_SUPPORT_SECONDS = 60.0
+MIN_ALL_COVERAGE = 0.85
 MIN_PAIR_COVERAGE = 0.8
 MIN_SHARED_BIGRAMS = 2
 MAX_BUNDLE_SECONDS = 90.0
@@ -101,11 +107,12 @@ class CaptureContainment:
     coverage: float = 0.0
     basis: str = 'full'
     dropped_segments: int = 0
+    speech: str = 'user'
 
     def evidence(self) -> dict:
         """Numeric-only record; never carries transcript text or identifiers."""
         return {
-            'method': 'user_speech_containment',
+            'method': 'all_speech_containment' if self.speech == 'all' else 'user_speech_containment',
             'matched_words': self.matched_words,
             'smaller_words': self.smaller_words,
             'matched_utterances': self.matched_utterances,
@@ -137,8 +144,10 @@ def record_capture_containment(
     if not isinstance(dropped, int) or isinstance(dropped, bool):
         dropped = 0
     dropped = max(0, min(dropped, 2 * MAX_SEGMENTS))
+    speech = getattr(decision, 'speech', 'user')
+    speech = speech if speech in ('user', 'all') else 'user'
     logger.info(
-        'event=capture_group_containment mode=%s phase=%s would_join=%s reason=%s jev_p=%s basis=%s dropped_segments=%d',
+        'event=capture_group_containment mode=%s phase=%s would_join=%s reason=%s jev_p=%s basis=%s dropped_segments=%d speech=%s',
         safe_mode,
         safe_phase,
         'true' if decision.would_join else 'false',
@@ -146,6 +155,7 @@ def record_capture_containment(
         score,
         basis,
         dropped,
+        speech,
     )
 
 
@@ -441,12 +451,33 @@ def _measure_capture_containment(first: Any, second: Any, *, mode: str, stats: _
     small, large = (sides[0][0], sides[1][0]) if words_a <= words_b else (sides[1][0], sides[0][0])
     smaller_words = min(words_a, words_b)
     small_user = [(s, e, w) for s, e, is_user, w, _ in small if is_user]
-    large_user = [(s, e, w) for s, e, is_user, w, _ in large if is_user]
-    if not small_user or not large_user:
-        return CaptureContainment(would_join=False, reason='no_user_speech', smaller_words=smaller_words)
-    if smaller_words < MIN_SMALLER_WORDS:
-        return CaptureContainment(would_join=False, reason='too_small', smaller_words=smaller_words)
-    eligible = [(s, e, w) for s, e, w in small_user if len(w) >= MIN_UTTERANCE_WORDS]
+    if small_user:
+        speech = 'user'
+        small_speech = small_user
+        target = [(s, e, w) for s, e, is_user, w, _ in large if is_user]
+        if not target:
+            return CaptureContainment(
+                would_join=False, reason='no_user_speech', smaller_words=smaller_words, speech=speech
+            )
+        min_smaller_words = MIN_SMALLER_WORDS
+        min_matched_words = MIN_MATCHED_WORDS
+        min_matched_utterances = MIN_MATCHED_UTTERANCES
+        min_support_seconds = MIN_SUPPORT_SECONDS
+        min_coverage = MIN_COVERAGE
+    else:
+        speech = 'all'
+        small_speech = [(s, e, w) for s, e, _, w, _ in small]
+        target = [(s, e, w) for s, e, _, w, _ in large]
+        if not small_speech or not target:
+            return CaptureContainment(would_join=False, reason='no_speech', smaller_words=smaller_words, speech=speech)
+        min_smaller_words = MIN_ALL_SMALLER_WORDS
+        min_matched_words = MIN_ALL_MATCHED_WORDS
+        min_matched_utterances = MIN_ALL_MATCHED_UTTERANCES
+        min_support_seconds = MIN_ALL_SUPPORT_SECONDS
+        min_coverage = MIN_ALL_COVERAGE
+    if smaller_words < min_smaller_words:
+        return CaptureContainment(would_join=False, reason='too_small', smaller_words=smaller_words, speech=speech)
+    eligible = [(s, e, w) for s, e, w in small_speech if len(w) >= MIN_UTTERANCE_WORDS]
     eligible_words = sum(len(words) for _, _, words in eligible)
     if mode == 'shadow' and len(eligible) > MAX_SMALLER_UTTERANCES:
         sample = _sample_utterances(eligible)
@@ -457,21 +488,21 @@ def _measure_capture_containment(first: Any, second: Any, *, mode: str, stats: _
     sample_weight = sum(weight for _, _, _, weight in sample)
     try:
         matched_words, matched_tokens, matched_utterances, support_seconds, matched_weight = _match_utterances(
-            sample, large_user
+            sample, target
         )
     except _ContainmentRejected as exc:
-        return CaptureContainment(would_join=False, reason=exc.reason, basis=basis)
+        return CaptureContainment(would_join=False, reason=exc.reason, basis=basis, speech=speech)
     if basis == 'full':
         coverage = matched_words / smaller_words
     else:
         coverage = (matched_weight / sample_weight) * (eligible_words / smaller_words) if sample_weight else 0.0
     decision = CaptureContainment(
         would_join=(
-            matched_words >= MIN_MATCHED_WORDS
+            matched_words >= min_matched_words
             and len(matched_tokens) >= MIN_DISTINCT_WORDS
-            and len(matched_utterances) >= MIN_MATCHED_UTTERANCES
-            and support_seconds >= MIN_SUPPORT_SECONDS
-            and coverage >= MIN_COVERAGE
+            and len(matched_utterances) >= min_matched_utterances
+            and support_seconds >= min_support_seconds
+            and coverage >= min_coverage
         ),
         reason='contained',
         matched_words=matched_words,
@@ -481,12 +512,13 @@ def _measure_capture_containment(first: Any, second: Any, *, mode: str, stats: _
         support_seconds=support_seconds,
         coverage=coverage,
         basis=basis,
+        speech=speech,
     )
     if decision.would_join:
         return decision
     if matched_words == 0:
         reason = 'timing'
-    elif coverage < MIN_COVERAGE:
+    elif coverage < min_coverage:
         reason = 'insufficient_coverage'
     else:
         reason = 'too_small'
@@ -500,4 +532,5 @@ def _measure_capture_containment(first: Any, second: Any, *, mode: str, stats: _
         support_seconds=support_seconds,
         coverage=coverage,
         basis=basis,
+        speech=speech,
     )
