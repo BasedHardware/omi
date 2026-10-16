@@ -55,6 +55,10 @@
         {
           "fieldPath": "segment_id",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -68,6 +72,10 @@
         },
         {
           "fieldPath": "lease_until",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
           "order": "ASCENDING"
         }
       ]
@@ -83,6 +91,10 @@
         {
           "fieldPath": "available_at",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -96,6 +108,10 @@
         },
         {
           "fieldPath": "enqueued_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
           "order": "ASCENDING"
         }
       ]
@@ -111,6 +127,10 @@
         {
           "fieldPath": "state",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -129,6 +149,10 @@
         {
           "fieldPath": "enqueued_at",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -142,6 +166,10 @@
         },
         {
           "fieldPath": "retry_started_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
           "order": "ASCENDING"
         }
       ]
@@ -160,6 +188,10 @@
         },
         {
           "fieldPath": "enqueued_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
           "order": "ASCENDING"
         }
       ]
@@ -183,6 +215,10 @@
         {
           "fieldPath": "segment_id",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -196,6 +232,10 @@
         },
         {
           "fieldPath": "lease_until",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
           "order": "ASCENDING"
         }
       ]
@@ -211,6 +251,10 @@
         {
           "fieldPath": "available_at",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -224,6 +268,10 @@
         },
         {
           "fieldPath": "enqueued_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
           "order": "ASCENDING"
         }
       ]
@@ -239,6 +287,10 @@
         {
           "fieldPath": "state",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -257,6 +309,10 @@
         {
           "fieldPath": "enqueued_at",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -270,6 +326,10 @@
         },
         {
           "fieldPath": "retry_started_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
           "order": "ASCENDING"
         }
       ]
@@ -289,6 +349,10 @@
         {
           "fieldPath": "enqueued_at",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -302,6 +366,10 @@
         },
         {
           "fieldPath": "committed_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
           "order": "ASCENDING"
         }
       ]
@@ -317,6 +385,10 @@
         {
           "fieldPath": "committed_at",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -334,6 +406,10 @@
         },
         {
           "fieldPath": "p0_batch_available_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
           "order": "ASCENDING"
         }
       ]
@@ -353,6 +429,10 @@
         {
           "fieldPath": "p0_live_available_at",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -370,6 +450,10 @@
         },
         {
           "fieldPath": "p1_batch_available_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
           "order": "ASCENDING"
         }
       ]
@@ -389,6 +473,10 @@
         {
           "fieldPath": "p1_live_available_at",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -407,6 +495,10 @@
         {
           "fieldPath": "p2_batch_available_at",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -424,6 +516,10 @@
         },
         {
           "fieldPath": "p2_live_available_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
           "order": "ASCENDING"
         }
       ]
@@ -443,6 +539,10 @@
         {
           "fieldPath": "p0_batch_available_at",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -460,6 +560,10 @@
         },
         {
           "fieldPath": "p0_live_available_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
           "order": "ASCENDING"
         }
       ]
@@ -479,6 +583,10 @@
         {
           "fieldPath": "p1_batch_available_at",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -496,6 +604,10 @@
         },
         {
           "fieldPath": "p1_live_available_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
           "order": "ASCENDING"
         }
       ]
@@ -515,6 +627,10 @@
         {
           "fieldPath": "p2_batch_available_at",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -532,6 +648,10 @@
         },
         {
           "fieldPath": "p2_live_available_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
           "order": "ASCENDING"
         }
       ]
