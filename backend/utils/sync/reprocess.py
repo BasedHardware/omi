@@ -94,7 +94,11 @@ def _enqueue(row: dict[str, Any]) -> None:
     # fresh capacity or audience. These bindings contain no credentials.
     dispatch = row['dispatch']
     handler = dispatch['handler']
-    if not handler.endswith('/v2/sync-jobs/run'):
+    if not (
+        handler.endswith('/v2/sync-jobs/run')
+        or row.get('effects_only')
+        and handler.endswith('/v1/conversation-finalization-jobs/run')
+    ):
         raise RuntimeError('sync reprocessing requires the sync worker handler binding')
     from utils.conversations.demand_processing import schedule
 
@@ -282,10 +286,21 @@ def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bo
         task_token=document_id[:32],
         due_at=current + settle_seconds(),
         task_due_at=current + settle_seconds(),
-        dispatch=_dispatch_binding(),
+        dispatch=_effects_binding(),
         wake_token=uuid.uuid4().hex,
     )
     get_firestore_client().collection(COLLECTION).document(document_id).set(
         {**row, 'version': firestore.Increment(1)}, merge=True
     )
     _enqueue(row)
+
+
+def _effects_binding() -> dict[str, str]:
+    binding = _dispatch_binding()
+    if all(binding.values()):
+        return binding
+    # Listen/pusher already have the durable finalization queue, identity and
+    # worker. Reuse that protected handler for the same sync outbox protocol.
+    from utils.cloud_tasks import listen_finalization_binding
+
+    return listen_finalization_binding()

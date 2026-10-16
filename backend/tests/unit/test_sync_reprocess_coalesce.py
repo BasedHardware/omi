@@ -299,3 +299,20 @@ def test_sweep_reports_repair_errors_without_failing_successful_retirement(
         'reprocess_repaired': 0 if repair_raises else 3,
         'reprocess_repair_errors': 1 if repair_raises else repair_errors,
     }
+
+
+def test_lazy_mark_blind_write_preserves_live_lease(monkeypatch):
+    client, ref = Mock(), Mock()
+    client.collection.return_value.document.return_value = ref
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(reprocess, '_effects_binding', lambda: {'queue': 'existing'})
+    wake = Mock()
+    monkeypatch.setattr(reprocess, '_enqueue', wake)
+    reprocess.mark_effects('owner', 'conversation', 'en')
+    ref.get.assert_not_called()
+    ref.set.assert_called_once()
+    body = ref.set.call_args.args[0]
+    assert body['effects_only'] is True and 'lease_until' not in body and 'owner' not in body
+    assert ref.set.call_args.kwargs == {'merge': True}
+    assert wake.call_args.args[0]['document_id'] == reprocess.key('owner', 'conversation\0effects')
