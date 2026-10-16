@@ -198,7 +198,11 @@ jobs:
           DEPLOY_ENV: ${{ vars.ENV }}
           TARGET_RELEASE: ${{ steps.target.outputs.release_name }}
         run: |
-          if ! kubectl -n "$DEPLOY_NAMESPACE" rollout status "deploy/$TARGET_RELEASE" --timeout=600s; then
+          rollout_timeout=600s
+          if [[ "$SERVICE" == "batch-pipeline-worker" ]]; then
+            rollout_timeout=1800s
+          fi
+          if ! kubectl -n "$DEPLOY_NAMESPACE" rollout status "deploy/$TARGET_RELEASE" --timeout="$rollout_timeout"; then
             python3 backend/scripts/deploy_status_report.py --env "$DEPLOY_ENV" --include-gke --gke-service "$SERVICE" || true
             exit 1
           fi

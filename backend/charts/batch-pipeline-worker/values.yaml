@@ -30,13 +30,15 @@ worker:
   unitSeconds: 3600
   paddedSeconds: 272
 resources:
+  # Dev L4 batch-8 one-hour compute receipt: 9.795Gi cgroup lifetime peak.
+  # Round peak + max(1Gi, 20%) / max(2Gi, 40%) up for request / limit.
   requests:
     cpu: "4"
-    memory: 11Gi
+    memory: 12Gi
     nvidia.com/gpu: "1"
   limits:
     cpu: "8"
-    memory: 13Gi
+    memory: 14Gi
     nvidia.com/gpu: "1"
 autoscaling:
   # Enable only after scoped queue-age series and adapter are verified live.

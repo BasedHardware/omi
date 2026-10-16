@@ -13,6 +13,8 @@ kind: Deployment
 metadata:
   name: {{ .Release.Name }}
 spec:
+  # L4 scale-from-zero, image pull and joint model startup exceeded 600s in dev.
+  progressDeadlineSeconds: 1800
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
