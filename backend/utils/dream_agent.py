@@ -33,6 +33,16 @@ from database.dream_effect_fence import ACTIVE_RUN
 from utils.executors import db_executor, run_blocking
 
 TAIL_BUDGET_NOTICE_THRESHOLD = 0.20
+BUDGET_STOP_CODES = frozenset(
+    {
+        'dream_input_token_budget',
+        'dream_model_context_budget',
+        'dream_search_token_budget',
+        'dream_evidence_token_budget',
+        'dream_reasoning_budget',
+        'dream_triage_budget',
+    }
+)
 
 
 def _cheap_turn(staged, invoke):
@@ -266,6 +276,7 @@ async def run_session(
     try:
         async with asyncio.timeout(timeout_seconds):
             await active()
+            budget_stop_without_staged_work = False
             try:
                 if bootstrap_tools is not None:
                     await session.execute(bootstrap_tools)
@@ -277,11 +288,16 @@ async def run_session(
                     )
                     report['stop_reason'] = result.reason
             except Exception as exc:
-                # Already staged work survives model/budget exhaustion. The live
-                # kill/lease boundary is rechecked before verification and effects.
-                report['stop_reason'] = error_code(exc) or type(exc).__name__
-                if not session.staged:
+                stop_code = error_code(exc)
+                if stop_code not in BUDGET_STOP_CODES:
                     raise
+                # Budget exhaustion is a normal terminal outcome even when it
+                # leaves nothing to verify. Staged proposals still cross the
+                # usual independent-verification boundary below.
+                report['stop_reason'] = stop_code
+                budget_stop_without_staged_work = not session.staged
+                if budget_stop_without_staged_work:
+                    report.update(status='complete', notes='', summary='')
             await active()
             staged = list(session.staged.values())
             verification_telemetry = {}
@@ -294,16 +310,21 @@ async def run_session(
                 8 * 24000,
             )
             verify_budget = min(verify_need, max(0, limits.tokens - report['price_weighted_tokens']))
-            support, calls = await dream_verify.verify(
-                staged,
-                partial(invoke, dream_harness_transport.VERIFY_LANE),
-                tokens=verify_budget,
-                deadline_seconds=max(0, deadline - asyncio.get_running_loop().time() - min(60, timeout_seconds / 10)),
-                verifier_seconds=limits.verifier_seconds,
-                completion_tokens=limits.verifier_completion_tokens,
-                telemetry=verification_telemetry,
-                cheap_turn=_cheap_turn(staged, invoke),
-            )
+            if budget_stop_without_staged_work:
+                support, calls = {}, 0
+            else:
+                support, calls = await dream_verify.verify(
+                    staged,
+                    partial(invoke, dream_harness_transport.VERIFY_LANE),
+                    tokens=verify_budget,
+                    deadline_seconds=max(
+                        0, deadline - asyncio.get_running_loop().time() - min(60, timeout_seconds / 10)
+                    ),
+                    verifier_seconds=limits.verifier_seconds,
+                    completion_tokens=limits.verifier_completion_tokens,
+                    telemetry=verification_telemetry,
+                    cheap_turn=_cheap_turn(staged, invoke),
+                )
             report['verifier_calls'] = calls
             report['verifier_transport_responses'] = max(
                 report.get('verifier_transport_responses', 0), verification_telemetry.get('transport_responses', 0)
