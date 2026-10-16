@@ -39,6 +39,12 @@ def test_missing_key_adds_first_member(fake_r) -> None:
     assert fake_r.smembers('users:u1:filters:topics') == {b'alpha'}
 
 
+def test_add_sets_filter_category_ttl(fake_r) -> None:
+    key = 'users:u1:filters:topics'
+    redis_db.add_filter_category_item('u1', 'topics', 'alpha')
+    assert 0 < fake_r.ttl(key) <= redis_db.FILTER_CATEGORY_TTL_SECONDS
+
+
 def test_grows_to_cap(fake_r) -> None:
     for i in range(499):
         redis_db.add_filter_category_item('u1', 'topics', f't{i}')
