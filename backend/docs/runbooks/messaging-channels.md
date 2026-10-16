@@ -309,14 +309,15 @@ and does not require `--prepare-launch` or an initialized counter:
    and prefer `OMI_TELEGRAM_STREAMING=none` for launch/load shedding. Shared pacing
    records a degraded fallback to local pacing on Redis failure; Telegram 429 responses
    still enforce provider pacing. `off` is safe only with one backend process/instance.
-6. Install the opt-in `backend/charts/messaging-maintenance` chart using the admitted
-   backend image, existing service account and backend secret name, `enabled:true`.
-   The hourly job deletes at most 100 records per category per run. Retention is
-   `OMI_MESSAGING_RETENTION_DAYS` / chart `retentionDays` (default 30, minimum 7).
-   Raise cadence for backlog; do not delete running reconciliation evidence.
-7. Apply `backend/charts/monitoring/messaging/alerts.yaml` beside the monitoring release.
-   Verify Cloud Run Prometheus export/scraping before treating absent alerts as health.
-   This task does not configure a new Cloud Run exporter or deploy the monitoring rules.
+6. Install the Cloud Run cleanup job and its explicitly selected Scheduler trigger
+   using [the production operations sequence](#production-maintenance-and-alert-install).
+   Each execution selects at most 100 records per category; unknown identity
+   subtrees can contain additional records. Running inbox evidence blocks an unknown
+   identity purge. Retention defaults to 30 days,
+   minimum 7. Do not delete running reconciliation evidence.
+7. Install the declared Cloud Monitoring policies through that same sequence. The
+   Kubernetes chart and PrometheusRule remain optional GKE-only resources; neither is
+   the production Cloud Run installation path.
 
 The seat counter counts distinct linked users, including dormant users. Multiple
 identities for one uid share a seat; the last unlink and account deletion release it.
@@ -386,7 +387,8 @@ stopped and external effects are reconciled.
 
 The backend can be deployed while the new indexes build: optional context fails
 open to the existing plain cache-aligned window. Foreground optional reads are
-bounded at 150 ms total, with at most 75 ms for digest IO. Summarization only runs
+bounded at 150 ms total. Stored continuity and digest IO run concurrently, with
+at most 75 ms for digest IO; a digest timeout preserves a successful summary. Summarization only runs
 after the turn in tracked background tasks, at most two per process and 60 seconds
 per job. Failed/missing indexes, model errors, CAS conflicts and timeouts are logged
 by error type and record degraded fallback; they do not fail the answer.
@@ -404,7 +406,7 @@ Deployment order:
    documented `--prepare-launch` reconciliation for inbox metadata and linked-user
    capacity. An initialized counter is required for numeric-cap admission. The
    approved no-cap David cohort continues without this step.
-4. Before enabling the maintenance Helm job, wait for `messaging_done_retention`
+4. Before enabling the maintenance Cloud Run job, wait for `messaging_done_retention`
    (inbox group), `messaging_unknown_retention` (identities collection) and the
    `messaging_waitlist_expiry` expires_at field index. The messaging recovery indexes
    above also serve expiry notices. Install the job only after these are READY.
@@ -469,24 +471,9 @@ Manual operator steps (not executed by this change):
    non-cohort iMessage mint is denied. No client binary change is needed.
 3. Confirm shared Redis connectivity and provider webhook registration with the
    admitted revision. Source bindings establish configuration, not runtime health.
-4. Install cleanup after its retention indexes are READY. Supply the admitted image,
-   existing Kubernetes backend service account, namespace, and secret *name*:
-
-```sh
-helm upgrade --install messaging-maintenance backend/charts/messaging-maintenance \
-  --namespace "$BACKEND_NAMESPACE" \
-  --set enabled=true \
-  --set-string image="$ADMITTED_BACKEND_IMAGE" \
-  --set-string serviceAccountName="$BACKEND_SERVICE_ACCOUNT" \
-  --set-string secretName="$BACKEND_SECRET_NAME" \
-  --set retentionDays=30
-```
-
-This hourly, bounded job is a separate operator install; it is not required for a
-single admitted reply, but is required for sustained retention/cleanup at launch.
-Apply the existing messaging alert rules and verify scraping as described above.
-This work does not establish live indexes, chart installation, Redis reachability,
-provider delivery, or PostHog state. No production reads or writes were performed.
+4. Install cleanup and alerts using the production operations sequence below, after
+   retention indexes are READY. Cloud Run owns scheduled backend jobs; do not also
+   enable the optional GKE maintenance chart.
 
 ## Inbound media contract and acceptance
 
@@ -545,8 +532,15 @@ Telegram albums use one encrypted inbox row with a 1.2-second quiet window, boun
 by three seconds from first arrival. Per-part content-free dedup tombstones survive
 completion. The existing transactional FIFO claim and surface lease prevent competing
 workers from answering twice. Request handlers schedule a timer without waiting;
-periodic recovery handles process loss. Late parts after running/done are distinct
-FIFO turns, never silently discarded. Other user messages remain separate turns.
+periodic recovery handles process loss. Pending or running batches accept late parts
+until a transaction seals the prepared attachment snapshot immediately before the
+model turn. Media IO processes only newly appended parts. Admission after that fence
+creates one debounced follow-up batch; subsequent late parts join it, including while
+it is waiting behind the original turn. Each provider part retains its dedup tombstone.
+Out-of-order delivery does not lose parts. Other user messages remain separate turns.
+A part arriving after a follow-up itself starts generation joins the next coalesced
+batch: arbitrary lateness cannot be folded into an answer already being generated.
+Pre-change running rows are never made appendable during rolling deployment.
 
 Telegram quotes supply bounded provider text. Linq `reply_to.message_id` resolves
 against at most forty encrypted session events, matching only accepted assistant
@@ -576,6 +570,257 @@ and lease release. These reproduce the code-level mechanisms; no production trac
 provider response or real user audio was read, so exact production causality remains
 an inference from the supplied logs and matching source behavior.
 
-Album parts arriving after the debounced job has left `pending` are separate turns
-and may receive a second answer. The 1.2-second quiet window and 3-second maximum
-wait bound this coalescing; they do not guarantee one answer for arbitrarily late parts.
+The 1.2-second quiet window and 3-second maximum wait remain admission bounds.
+The generation fence extends merging through media preparation without sleeping on
+the request path. A queued follow-up is still serialized by the existing inbox/lease.
+
+## Production maintenance and alert install
+
+Decision verified 2026-10-16: `backend` runs on Cloud Run with the existing GMP
+collector. `prod-omi-gke` has namespace `prod-omi-backend`, Ready ExternalSecret
+`prod-omi-backend-secrets`, and KSA `prod-omi-backend-listen` mapped to
+`backend-listen-runtime@based-hardware.iam.gserviceaccount.com`; no backend CronJobs
+are installed. Existing notification/X/FinOps jobs use Cloud Run. Keep cleanup on that
+platform and Scheduler under `backend/deploy/scheduler/jobs.yaml`. The new trigger is
+`lifecycle: planned`, so full reconciliation cannot install it accidentally; explicitly
+select it only after job validation. No new workflow is needed.
+
+`backend-runtime@based-hardware.iam.gserviceaccount.com` already has
+`roles/datastore.user`. Cleanup needs only Firestore and the existing
+`ENCRYPTION_SECRET` import binding, not provider tokens, Redis or the broad Kubernetes
+secret. Use the admitted backend image by digest, one task, 600 seconds, one retry,
+30-day retention, maximum 100 candidates per category (unknown identity subtrees can contain more
+records). A transaction refuses to purge an unknown identity while any running inbox
+row remains, including FIFO-settled reconciliation evidence. Cleanup is idempotent and sends
+nothing. Hourly scheduling exceeds the bounded 20-minute execution/retry window;
+operators must not start overlapping manual executions.
+
+The existing GMP collector exports `omi_*`. Read-only checks at 2026-10-16 06:10 UTC
+confirmed 39 current backend chat-token series in GMP, with newest sample age about
+4.6 seconds, and a current messaging-turn series. The GKE bridge did import data
+within 24h (531 token series and 11 turn series), but it is currently unhealthy:
+`up{job="cloud-run-application-metrics"}=0`, one down target, zero scrape samples,
+connection refused, and no instant messaging/token series in Prometheus. The actual
+Prometheus service is `prod-omi-kube-prometheus-s-prometheus`; its read-only API works.
+The exporter pod was Ready at the later metadata snapshot, with restart count 59
+and last termination reason `OOMKilled`; readiness alone is not scrape acceptance.
+Historical samples do not establish live ingestion or healthy alert evaluation.
+
+Production alerts therefore use Cloud Monitoring directly, bypassing the unhealthy
+bridge: six content-free log-based counters for worker/maintenance failures by reason,
+webhook 5xx, delivery, stale heads and recovery; a decoder startup log condition;
+GMP PromQL for per-surface shaped-context degradation and queue age; built-in job
+failures also catch process/import/OOM errors. No new exporter is needed. Installing `alerts.yaml` while the
+bridge is down would leave those rules without current Cloud Run samples. Repair
+and notification acceptance for the broader Prometheus/Grafana bridge are separate
+operator work; this install establishes an independent alert path.
+
+Cloud Monitoring's `LogMatch` checks one matching entry and cannot express a count
+floor; a notification rate cap does not delay the first incident. Google explicitly
+requires [log-based metrics to count logs](https://docs.cloud.google.com/logging/docs/alerting/log-based-alerts).
+`backend/deploy/messaging/log-metrics.json` declares six DELTA/INT64 counters, with
+only bounded `reason` labels where needed. [ALIGN_SUM and REDUCE_SUM](https://docs.cloud.google.com/monitoring/api/ref_v3/rest/v3/projects.alertPolicies#Aggregation)
+sum matching entries across instances in each alignment window; `COMPARISON_GT 2`
+means at least three entries, not three time series. These are observations, not
+necessarily distinct failed turns. No raw payload or customer label is extracted.
+
+| Policy | Count floor | Rationale |
+| --- | --- | --- |
+| Worker failures, webhook 5xx, outbound failures, stale queue head, recovery unavailable | >=3 entries / 15-minute alignment window (worker failures per reason) | Suppress a lone transient at the observed low traffic volume. |
+| Maintenance failure by reason | >=2 entries / 60-minute alignment window, per reason | One failed attempt can recover on the configured retry; repeated same-reason failures merit investigation. |
+| Decoder unavailable | One exact startup-readiness failure, hourly notification cap | The once-per-startup decoder probe proves that instance cannot decode voice; text health does not offset this outage. |
+| Cleanup execution failed | >=1 failed completed execution / 5 minutes | The hourly job has already exhausted its retry. Requiring multiple executions would conceal an outage for hours; import/OOM may emit no application failure log. |
+
+The shaped-context 20-turn minimum and 10-minute dwell, and queue p95's 10-minute
+dwell, are unchanged. Counter alerts have no additional dwell after their count floor.
+Counter data starts at installation, with [no historical backfill](https://docs.cloud.google.com/logging/docs/logs-based-metrics).
+Allow ingestion/evaluation delay; an absent series before a match is not a zero or
+proof of notification delivery. Install and verify the counters before enabling the
+policies. The tool refuses policy writes until all six metric definitions MATCH.
+Logging has no validate-only metric write API: `log-metrics --check` is the no-write
+plan; `--apply` uses [metrics.update PUT/upsert](https://docs.cloud.google.com/logging/docs/reference/v2/rest/v2/projects.metrics/update)
+and verifies each resource. It refuses incompatible existing metric schemas before
+writing. The existing operator needs `logging.logMetrics.get` and
+`logging.logMetrics.update`; no backend runtime permission is added.
+
+Cloud Run v2 [jobs.patch](https://docs.cloud.google.com/run/docs/reference/rest/v2/projects.locations.jobs/patch)
+accepts the complete `Job` body with `validateOnly`/`allowMissing`, and has no
+`updateMask` parameter. The official [UpdateJobRequest schema](https://github.com/googleapis/googleapis/blob/master/google/cloud/run/v2/job.proto)
+also has no field mask. This tool owns the declared job configuration and sends its
+complete desired body, including the image and task template; do not use it to
+preserve ad hoc sidecars or other untracked job configuration. For an existing job,
+`--validate` sends PATCH with `validateOnly=true`; `--apply` sends the same body with
+`validateOnly=false`. Neither starts an execution. Regression tests exercise both
+existing-job paths and the CLI validation path, not only first creation.
+
+The sequence below is **for the authorized operator**, from the repository root.
+The operations tool uses the explicitly selected gcloud identity; Scheduler
+commands below opt into the same behavior with `--gcloud-auth`. Tokens stay in
+process memory and are never printed. A separate ADC login is not needed.
+All local checks and production reads in this lane used `ro-prod`; no commands that
+write production were run. Use the existing release process first to admit/build the
+changed backend image. Set `ADMITTED_BACKEND_IMAGE` to that receipt's full
+`gcr.io/based-hardware/backend@sha256:...` (or production Artifact Registry digest).
+Do not substitute `latest` or the previously serving image: it lacks the new
+maintenance failure logging/context telemetry. Normal backend deployment starts the
+new context/album behavior; the cleanup job is a separate install.
+
+1. Readiness and dry-run. All seven messaging index requirements were READY at the
+   audit. Recheck from the exact admitted source; no index mutation is required by
+   this change. Exit 1 from an operations `--check` means a reviewed planned diff;
+   other errors must be resolved before applying. `--validate` sends Cloud Run's
+   `validateOnly=true`, never creates a job and never executes cleanup
+   ([create API](https://docs.cloud.google.com/run/docs/reference/rest/v2/projects.locations.jobs/create),
+   [patch API](https://docs.cloud.google.com/run/docs/reference/rest/v2/projects.locations.jobs/patch)).
+
+```sh
+source ~/.local/bin/gcp-agent-env.sh ro-prod
+: "${ADMITTED_BACKEND_IMAGE:?Set the admitted backend image digest}"
+backend/.venv/bin/python backend/scripts/reconcile_firestore_indexes.py \
+  --manifest firestore.indexes.json --source-root "$PWD" \
+  --project based-hardware --database '(default)' --check-only
+backend/.venv/bin/python backend/scripts/messaging_operations.py job \
+  --image "$ADMITTED_BACKEND_IMAGE" --check
+backend/.venv/bin/python backend/scripts/messaging_operations.py log-metrics --check
+backend/.venv/bin/python backend/scripts/messaging_operations.py alerts --check \
+  --notification-channels \
+  projects/based-hardware/notificationChannels/7795172925536204487 \
+  projects/based-hardware/notificationChannels/4018667585736557040
+```
+
+The channels above were the existing production external Grafana dead-man channels
+at audit time, read without destination details. Verify they remain the intended
+operator destinations. The `ro-prod` account currently lacks `cloudscheduler.jobs.list`;
+a Scheduler check may need the operator identity. Do not expand the read-only bot's
+permissions as part of this change. Monitoring has no validate-only create API;
+`alerts --check` is the no-write diff. A missing new metric is expected before the
+backend rollout, not proof of zero fallbacks. Run the job validation as operator if
+read-only IAM denies Cloud Run validation; do not interpret that denial as job drift.
+
+2. Install the job using the existing production operator identity; no execution
+   starts. Recheck after the asynchronous operation finishes, and require MATCH.
+   The read-only identity could not inspect Secret Manager IAM. If validation reports
+   missing runtime access to `ENCRYPTION_SECRET`, the human IAM operator must inspect
+   that secret's policy and, only if absent, grant its accessor role on that secret:
+
+```sh
+source ~/.local/bin/gcp-agent-env.sh human
+gcloud secrets get-iam-policy ENCRYPTION_SECRET --project=based-hardware \
+  --flatten='bindings[].members' \
+  --filter='bindings.members=serviceAccount:backend-runtime@based-hardware.iam.gserviceaccount.com' \
+  --format='value(bindings.role)'
+# Only if runtime access is absent / validation confirms permission denial:
+gcloud secrets add-iam-policy-binding ENCRYPTION_SECRET --project=based-hardware \
+  --member='serviceAccount:backend-runtime@based-hardware.iam.gserviceaccount.com' \
+  --role=roles/secretmanager.secretAccessor
+```
+
+   No secret payload is read. Do not add project-wide Secret Accessor. Then rerun
+   validate-only and apply with the production operator identity:
+
+```sh
+source ~/.local/bin/gcp-agent-env.sh prod-operator
+backend/.venv/bin/python backend/scripts/messaging_operations.py job \
+  --image "$ADMITTED_BACKEND_IMAGE" --validate
+backend/.venv/bin/python backend/scripts/messaging_operations.py job \
+  --image "$ADMITTED_BACKEND_IMAGE" --apply
+gcloud run jobs describe messaging-maintenance-job --project=based-hardware \
+  --region=us-central1 --format='yaml(status.conditions)'
+backend/.venv/bin/python backend/scripts/messaging_operations.py job \
+  --image "$ADMITTED_BACKEND_IMAGE" --check
+```
+
+3. Least-privilege Scheduler identity. IAM requires the human identity. First
+   inspect whether the dedicated account already exists; create only when absent.
+   Grant `roles/run.invoker` **on this job only**, never on the project. The existing
+   Cloud Scheduler service agent retains its existing service-agent role. Do not
+   grant KMS/storage/Firestore roles to this invoker. No context repair IAM grant
+   is needed: its reproducible PermissionError is a logical-ID/address mismatch.
+
+```sh
+source ~/.local/bin/gcp-agent-env.sh human
+gcloud iam service-accounts list --project=based-hardware \
+  --filter='email:messaging-maintenance-scheduler@based-hardware.iam.gserviceaccount.com' \
+  --format='value(email)'
+# Only if the account is absent:
+gcloud iam service-accounts create messaging-maintenance-scheduler \
+  --project=based-hardware --display-name='Messaging cleanup Scheduler invoker'
+gcloud run jobs add-iam-policy-binding messaging-maintenance-job \
+  --project=based-hardware --region=us-central1 \
+  --member='serviceAccount:messaging-maintenance-scheduler@based-hardware.iam.gserviceaccount.com' \
+  --role=roles/run.invoker
+backend/.venv/bin/python backend/scripts/scheduler_reconcile.py \
+  --gcloud-auth --environment prod --project based-hardware --check --jobs messaging-maintenance-hourly
+backend/.venv/bin/python backend/scripts/scheduler_reconcile.py \
+  --gcloud-auth --environment prod --project based-hardware --apply --jobs messaging-maintenance-hourly
+backend/.venv/bin/python backend/scripts/scheduler_reconcile.py \
+  --gcloud-auth --environment prod --project based-hardware --check --jobs messaging-maintenance-hourly
+```
+
+4. Install the six log counters first, then require a real eligible shaped-turn sample in
+   `omi_chat_context_turns_total` before applying the rate policy. An absent series
+   cannot validate the alert. Review and apply only the six declared counters and ten named Monitoring policies. The tool refuses
+   duplicate managed display names, preserves condition identities on update,
+   verifies writes, and leaves every other policy alone. It never prints API error
+   bodies. Use the existing authorized Monitoring operator identity; this example
+   continues the human operator session from the IAM step.
+
+```sh
+backend/.venv/bin/python backend/scripts/messaging_operations.py log-metrics --check
+backend/.venv/bin/python backend/scripts/messaging_operations.py log-metrics --apply
+backend/.venv/bin/python backend/scripts/messaging_operations.py log-metrics --check
+backend/.venv/bin/python backend/scripts/messaging_operations.py alerts --check \
+  --notification-channels \
+  projects/based-hardware/notificationChannels/7795172925536204487 \
+  projects/based-hardware/notificationChannels/4018667585736557040
+backend/.venv/bin/python backend/scripts/messaging_operations.py alerts --apply \
+  --notification-channels \
+  projects/based-hardware/notificationChannels/7795172925536204487 \
+  projects/based-hardware/notificationChannels/4018667585736557040
+backend/.venv/bin/python backend/scripts/messaging_operations.py alerts --check \
+  --notification-channels \
+  projects/based-hardware/notificationChannels/7795172925536204487 \
+  projects/based-hardware/notificationChannels/4018667585736557040
+```
+
+5. Execute one bounded cleanup, verify success and counts-only output, then observe
+   the next scheduled execution. Never run `--prepare-launch` for this no-cap cohort.
+
+```sh
+gcloud run jobs execute messaging-maintenance-job --project=based-hardware \
+  --region=us-central1 --wait
+gcloud run jobs executions list --job=messaging-maintenance-job \
+  --project=based-hardware --region=us-central1 \
+  --format='table(metadata.name,status.conditions[0].type,status.conditions[0].status)'
+```
+
+Inspect only `Messaging maintenance counts=` aggregates or
+`outcome=failed reason=... error_type=...`, not arbitrary execution logs. Verify the
+Scheduler invocation identity and job-level invoker binding. Verify the ten policies
+show the intended notification channels. Test notification delivery through an
+approved test destination; policy creation alone does not prove delivery. Do not
+inject synthetic prod errors or send a test page without the operator's approval.
+
+After rollout, query GMP directly (or Grafana after its bridge is repaired):
+
+```promql
+sum by (surface, outcome) (increase(omi_chat_context_turns_total{cluster="__run__",namespace="backend"}[24h]))
+histogram_quantile(0.50, sum by (surface, phase, le) (rate(omi_chat_context_read_seconds_bucket{cluster="__run__",namespace="backend"}[1h])))
+histogram_quantile(0.95, sum by (surface, phase, le) (rate(omi_chat_context_read_seconds_bucket{cluster="__run__",namespace="backend"}[1h])))
+```
+
+`unscoped` is excluded from eligible-turn rates; `empty` means a successful read
+with no summary yet; `degraded` includes digest-only loss even when summary survives.
+Read histograms include executor admission and are censored at foreground deadlines;
+they are not raw Firestore RPC latency. Warning logs now carry bounded surface/phase,
+exception type and exact code site, never exception text, IDs or payloads. Background
+refresh warnings must be analyzed separately from foreground turns. The deterministic
+app auto-ID boundary failure and serial summary-discard mechanism should be zero
+after deployment; target eligible foreground degraded rate below 5% per surface
+with at least 20 turns/30 minutes. A total production rate cannot be predicted from
+the old unphased logs. Investigate residual phases before changing either budget.
+
+Rollback maintenance by pausing only `messaging-maintenance-hourly`; retain the job,
+indexes and all data. Disable these named Monitoring policies if their routing needs
+repair. Backend code rollback uses the normal release mechanism; existing appendable
+album rows must finish under the new worker before rolling back that protocol.
