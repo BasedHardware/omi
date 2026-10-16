@@ -157,20 +157,40 @@ def _substitute_placeholders(obj: object, *, env: str, compute_project: str, dat
     return obj
 
 
-def _build_config_map_section(env: str) -> ConfigDict:
+def _build_config_map_section(env: str, env_config: ConfigDict) -> ConfigDict:
     keys = list(GKE_CONFIG_MAP_KEYS_BASE)
     if env == 'prod':
         keys.extend(GKE_CONFIG_MAP_KEYS_PROD_ONLY)
     entries: ConfigDict = {}
+    source_entries = env_config.get('gke', {}).get('config_map', {}).get('entries', {})
     for key in keys:
         if key in STT_LITERALS:
-            entries[key] = {'source': 'literal', 'value': STT_LITERALS[key]}
+            source_value = source_entries.get(key, {}).get('value', STT_LITERALS[key])
+            entries[key] = {'source': 'literal', 'value': source_value}
         else:
             entries[key] = {'source': 'environment'}
     return {
         'name': f'{env}-omi-backend-config',
         'entries': entries,
     }
+
+
+def _seed_recovery_defaults(shared: ConfigDict, dev: ConfigDict) -> None:
+    """Keep the safe dev values in base when prod overrides the recovery cohort."""
+    keys = ('BATCH_PIPELINE_RECOVERY_MODE', 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST')
+    host_configs = list(dev.get('cloud_run', {}).get('services', {}).items())
+    host_configs.append(('backend-listen', dev.get('gke', {}).get('backend-listen', {})))
+    for name, dev_host in host_configs:
+        shared_host = (
+            shared.get('cloud_run', {}).get('services', {}).get(name)
+            if name != 'backend-listen'
+            else shared.get('gke', {}).get(name)
+        )
+        if shared_host is None:
+            continue
+        for key in keys:
+            if key in dev_host.get('env', {}):
+                shared_host.setdefault('env', {})[key] = deepcopy(dev_host['env'][key])
 
 
 def _project_fields(env: str, env_config: ConfigDict) -> ConfigDict:
@@ -197,6 +217,7 @@ def main() -> int:
     norm_dev = _normalize(dev, 'dev')
     norm_prod = _normalize(prod, 'prod')
     shared = _extract_common(norm_dev, norm_prod) or {}
+    _seed_recovery_defaults(shared, norm_dev)
 
     dev_substituted = _substitute_placeholders(
         shared,
@@ -215,8 +236,8 @@ def main() -> int:
     prod_overlay_body = _subtract_common(prod_substituted, _strip_legacy_project_keys(prod)) or {}
 
     # Ensure config_map sections live in overlays (env-specific names).
-    dev_overlay_body = _deep_merge(dev_overlay_body, {'gke': {'config_map': _build_config_map_section('dev')}})
-    prod_overlay_body = _deep_merge(prod_overlay_body, {'gke': {'config_map': _build_config_map_section('prod')}})
+    dev_overlay_body = _deep_merge(dev_overlay_body, {'gke': {'config_map': _build_config_map_section('dev', dev)}})
+    prod_overlay_body = _deep_merge(prod_overlay_body, {'gke': {'config_map': _build_config_map_section('prod', prod)}})
 
     base = {
         'schema_version': monolith['schema_version'],

@@ -89,8 +89,8 @@ _DEMAND_LISTEN_ONLY = frozenset(
         'STT_LIVE_DEMAND_MIN_DWELL_SECONDS',
     }
 )
-# main.py mounts sync intake/worker RPC and owns serving startup. pusher.main
-# mounts none of those surfaces and never starts the dedicated GPU process.
+# main.py owns sync intake, recovery RPC and serving startup. pusher.main mounts
+# none of those surfaces and never starts the dedicated GPU process.
 _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
     {
         'BATCH_PIPELINE_ENABLED',
@@ -103,6 +103,8 @@ _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
         'BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT',
         'BATCH_PIPELINE_UNIT_SECONDS',
         'BATCH_PIPELINE_SHARED_LIVE_ENABLED',
+        'BATCH_PIPELINE_RECOVERY_MODE',
+        'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST',
         'BUCKET_BATCH_PIPELINE',
     }
 )

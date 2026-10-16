@@ -279,6 +279,8 @@ def test_batch_intake_and_worker_settings_are_explained_listen_only(gate: Simple
     assert gate._BATCH_PIPELINE_LISTEN_ONLY <= gate.LISTEN_ONLY_ALLOWED[env]
     assert 'BATCH_PIPELINE_ENABLED' in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert 'BUCKET_BATCH_PIPELINE' in gate._BATCH_PIPELINE_LISTEN_ONLY
+    assert 'BATCH_PIPELINE_RECOVERY_MODE' in gate._BATCH_PIPELINE_LISTEN_ONLY
+    assert 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST' in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert gate.validate_preflight(REPO_ROOT) == []
 
 
