@@ -898,6 +898,7 @@ def delete_chat_session(uid: str, chat_session_id: str, cascade_messages: bool =
             return False
         msg_col = user_ref.collection('messages')
         query = msg_col.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
+        needs_generation_bump = False
         while True:
             docs: List[Any] = list(query.limit(BATCH_LIMIT).stream())
             if not docs:
@@ -905,7 +906,16 @@ def delete_chat_session(uid: str, chat_session_id: str, cascade_messages: bool =
             batch = db.batch()
             for doc in docs:
                 batch.delete(msg_col.document(doc.id))
+            if len(docs) < BATCH_LIMIT:
+                batch.update(user_ref, {'chat_context_generation': firestore.Increment(1)})
+                needs_generation_bump = False
+            else:
+                needs_generation_bump = True
             batch.commit()
+        if needs_generation_bump:
+            gen_batch = db.batch()
+            gen_batch.update(user_ref, {'chat_context_generation': firestore.Increment(1)})
+            gen_batch.commit()
 
     session_ref.delete()
     return None
@@ -992,8 +1002,19 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
         if current_level == target_level:
             continue
 
+        raw_text = message_data.get('text')
         plain_data: Dict[str, Any] = _prepare_message_for_read(message_data, uid)
         plain_text = plain_data.get('text')
+        if (
+            current_level == 'enhanced'
+            and target_level == 'standard'
+            and isinstance(raw_text, str)
+            and raw_text != ''
+            and plain_text == raw_text
+        ):
+            logger.warning(f"Message {doc_snapshot.id} failed to decrypt during level migration, skipping.")
+            continue
+
         migrated_text = plain_text
         if target_level == 'enhanced':
             if isinstance(plain_text, str):

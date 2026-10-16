@@ -1462,50 +1462,55 @@ def upload_file_chat(
     thumbs_name = []
     thumb_source_by_name = {}
     files_chat = []
-    for file in files:
-        # Use a UUID-based temp file name to prevent path traversal via user-controlled filename
-        safe_suffix = Path(file.filename).name if file.filename else "upload"
-        temp_file = Path(tempfile.gettempdir()) / f"{uuid.uuid4().hex}_{safe_suffix}"
-        try:
-            with temp_file.open("wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
-
+    try:
+        for file in files:
+            # Use a UUID-based temp file name to prevent path traversal via user-controlled filename
+            safe_suffix = Path(file.filename).name if file.filename else "upload"
+            temp_file = Path(tempfile.gettempdir()) / f"{uuid.uuid4().hex}_{safe_suffix}"
             try:
-                result = FileChatTool.upload(temp_file, file_name=safe_suffix)
-            except UnsupportedChatFileError as error:
-                raise HTTPException(status_code=400, detail=str(error))
+                with temp_file.open("wb") as buffer:
+                    shutil.copyfileobj(file.file, buffer)
 
-            thumb_name = result.get("thumbnail_name", "")
-            if thumb_name != "":
-                thumbnail_path = result.get("thumbnail", "")
-                if thumbnail_path:
-                    thumbs_name.append(thumbnail_path)
-                    thumb_source_by_name[thumb_name] = thumbnail_path
+                try:
+                    result = FileChatTool.upload(temp_file, file_name=safe_suffix)
+                except UnsupportedChatFileError as error:
+                    raise HTTPException(status_code=400, detail=str(error))
 
-            filechat = FileChat(
-                id=str(uuid.uuid4()),
-                name=result.get("file_name", ""),
-                mime_type=result.get("mime_type", ""),
-                openai_file_id=result.get("file_id", ""),
-                created_at=datetime.now(timezone.utc),
-                thumb_name=thumb_name,
-            )
-            files_chat.append(filechat)
-        finally:
-            if temp_file.exists():
-                temp_file.unlink()
+                thumb_name = result.get("thumbnail_name", "")
+                if thumb_name != "":
+                    thumbnail_path = result.get("thumbnail", "")
+                    if thumbnail_path:
+                        thumbs_name.append(thumbnail_path)
+                        thumb_source_by_name[thumb_name] = thumbnail_path
 
-    if len(thumbs_name) > 0:
-        thumbs_path = storage.upload_multi_chat_files(thumbs_name, uid)
-        for fc in files_chat:
-            if not fc.is_image():
-                continue
-            source_path = thumb_source_by_name.get(fc.thumb_name, "")
-            thumb_path = thumbs_path.get(source_path, "")
-            fc.thumbnail = thumb_path
-            # cleanup file thumb
-            if source_path:
-                Path(source_path).unlink(missing_ok=True)
+                filechat = FileChat(
+                    id=str(uuid.uuid4()),
+                    name=result.get("file_name", ""),
+                    mime_type=result.get("mime_type", ""),
+                    openai_file_id=result.get("file_id", ""),
+                    created_at=datetime.now(timezone.utc),
+                    thumb_name=thumb_name,
+                )
+                files_chat.append(filechat)
+            finally:
+                if temp_file.exists():
+                    temp_file.unlink()
+
+        if len(thumbs_name) > 0:
+            thumbs_path = storage.upload_multi_chat_files(thumbs_name, uid)
+            for fc in files_chat:
+                if not fc.is_image():
+                    continue
+                source_path = thumb_source_by_name.get(fc.thumb_name, "")
+                thumb_path = thumbs_path.get(source_path, "")
+                fc.thumbnail = thumb_path
+                # cleanup file thumb
+                if source_path:
+                    Path(source_path).unlink(missing_ok=True)
+    finally:
+        for thumb_path in thumbs_name:
+            if thumb_path:
+                Path(thumb_path).unlink(missing_ok=True)
 
     # save db
     files_chat_dict = [fc.model_dump() for fc in files_chat]
@@ -1534,50 +1539,55 @@ def upload_file_chat_v1(
     thumbs_name = []
     thumb_source_by_name = {}
     files_chat = []
-    for file in files:
-        # Use a UUID-based temp file name to prevent path traversal via user-controlled filename
-        safe_suffix = Path(file.filename).name if file.filename else "upload"
-        temp_file = Path(tempfile.gettempdir()) / f"{uuid.uuid4().hex}_{safe_suffix}"
-        try:
-            with temp_file.open("wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
-
+    try:
+        for file in files:
+            # Use a UUID-based temp file name to prevent path traversal via user-controlled filename
+            safe_suffix = Path(file.filename).name if file.filename else "upload"
+            temp_file = Path(tempfile.gettempdir()) / f"{uuid.uuid4().hex}_{safe_suffix}"
             try:
-                result = FileChatTool.upload(temp_file, file_name=safe_suffix)
-            except UnsupportedChatFileError as error:
-                raise HTTPException(status_code=400, detail=str(error))
+                with temp_file.open("wb") as buffer:
+                    shutil.copyfileobj(file.file, buffer)
 
-            thumb_name = result.get("thumbnail_name", "")
-            if thumb_name != "":
-                thumbnail_path = result.get("thumbnail", "")
-                if thumbnail_path:
-                    thumbs_name.append(thumbnail_path)
-                    thumb_source_by_name[thumb_name] = thumbnail_path
+                try:
+                    result = FileChatTool.upload(temp_file, file_name=safe_suffix)
+                except UnsupportedChatFileError as error:
+                    raise HTTPException(status_code=400, detail=str(error))
 
-            filechat = FileChat(
-                id=str(uuid.uuid4()),
-                name=result.get("file_name", ""),
-                mime_type=result.get("mime_type", ""),
-                openai_file_id=result.get("file_id", ""),
-                created_at=datetime.now(timezone.utc),
-                thumb_name=thumb_name,
-            )
-            files_chat.append(filechat)
-        finally:
-            if temp_file.exists():
-                temp_file.unlink()
+                thumb_name = result.get("thumbnail_name", "")
+                if thumb_name != "":
+                    thumbnail_path = result.get("thumbnail", "")
+                    if thumbnail_path:
+                        thumbs_name.append(thumbnail_path)
+                        thumb_source_by_name[thumb_name] = thumbnail_path
 
-    if len(thumbs_name) > 0:
-        thumbs_path = storage.upload_multi_chat_files(thumbs_name, uid)
-        for fc in files_chat:
-            if not fc.is_image():
-                continue
-            source_path = thumb_source_by_name.get(fc.thumb_name, "")
-            thumb_path = thumbs_path.get(source_path, "")
-            fc.thumbnail = thumb_path
-            # cleanup file thumb
-            if source_path:
-                Path(source_path).unlink(missing_ok=True)
+                filechat = FileChat(
+                    id=str(uuid.uuid4()),
+                    name=result.get("file_name", ""),
+                    mime_type=result.get("mime_type", ""),
+                    openai_file_id=result.get("file_id", ""),
+                    created_at=datetime.now(timezone.utc),
+                    thumb_name=thumb_name,
+                )
+                files_chat.append(filechat)
+            finally:
+                if temp_file.exists():
+                    temp_file.unlink()
+
+        if len(thumbs_name) > 0:
+            thumbs_path = storage.upload_multi_chat_files(thumbs_name, uid)
+            for fc in files_chat:
+                if not fc.is_image():
+                    continue
+                source_path = thumb_source_by_name.get(fc.thumb_name, "")
+                thumb_path = thumbs_path.get(source_path, "")
+                fc.thumbnail = thumb_path
+                # cleanup file thumb
+                if source_path:
+                    Path(source_path).unlink(missing_ok=True)
+    finally:
+        for thumb_path in thumbs_name:
+            if thumb_path:
+                Path(thumb_path).unlink(missing_ok=True)
 
     # save db
     files_chat_dict = [fc.model_dump() for fc in files_chat]
@@ -1674,8 +1684,12 @@ def rate_message(
 ):
     """Rate a chat message (thumbs up/down). Used by desktop client."""
     rating = data.rating
+    if rating is not None and rating not in (1, -1):
+        raise HTTPException(status_code=400, detail='Rating must be 1, -1, or null')
 
-    snapshot = chat_db.update_message_rating(uid, message_id, rating) or {}
+    snapshot = chat_db.update_message_rating(uid, message_id, rating)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail='Message not found')
     value = rating if rating is not None else 0
     platform = (x_app_platform or '').strip().lower()
     if platform not in ('desktop', 'mobile'):
@@ -1710,20 +1724,22 @@ def rate_message(
 
     # Try to submit feedback to LangSmith
     try:
-        message_result = chat_db.get_message(uid, message_id)
-        if message_result:
-            message, _ = message_result
-            langsmith_run_id = getattr(message, 'langsmith_run_id', None)
-            if not langsmith_run_id and isinstance(message, dict):
-                langsmith_run_id = message.get('langsmith_run_id')
+        langsmith_run_id = snapshot.get('langsmith_run_id') if isinstance(snapshot, dict) else None
+        if not langsmith_run_id:
+            message_result = chat_db.get_message(uid, message_id)
+            if message_result:
+                message, _ = message_result
+                langsmith_run_id = getattr(message, 'langsmith_run_id', None)
+                if not langsmith_run_id and isinstance(message, dict):
+                    langsmith_run_id = message.get('langsmith_run_id')
 
-            if langsmith_run_id:
-                score = 1.0 if rating == 1 else (0.0 if rating == -1 else 0.5)
-                submit_langsmith_feedback(
-                    run_id=langsmith_run_id,
-                    score=score,
-                    key="chat_message_rating",
-                )
+        if langsmith_run_id:
+            score = 1.0 if rating == 1 else (0.0 if rating == -1 else 0.5)
+            submit_langsmith_feedback(
+                run_id=langsmith_run_id,
+                score=score,
+                key="chat_message_rating",
+            )
     except Exception as e:
         logger.error(f"LangSmith feedback submission error (non-fatal): {e}")
 
@@ -1739,14 +1755,23 @@ def share_chat_messages(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Create a shareable link for chat messages."""
-    message_ids = data.message_ids
+    raw_ids = data.message_ids or []
+    message_ids: List[str] = []
+    seen_ids: set[str] = set()
+    for mid in raw_ids:
+        if isinstance(mid, str) and mid.strip() and mid not in seen_ids:
+            seen_ids.add(mid)
+            message_ids.append(mid)
     if not message_ids:
         raise HTTPException(status_code=400, detail='No message IDs provided')
 
-    # Validate messages belong to user
+    # Validate messages belong to user and are not reported
     for mid in message_ids:
         msg = chat_db.get_message(uid, mid)
         if not msg:
+            raise HTTPException(status_code=404, detail=f'Message {mid} not found')
+        message, _ = msg
+        if getattr(message, 'reported', False):
             raise HTTPException(status_code=404, detail=f'Message {mid} not found')
 
     display_name = get_user_display_name(uid)
@@ -1769,10 +1794,16 @@ def get_shared_chat_messages(token: str):
     message_ids = share_data['message_ids']
 
     messages = []
+    seen_ids: set[str] = set()
     for mid in message_ids:
+        if not isinstance(mid, str) or not mid.strip() or mid in seen_ids:
+            continue
+        seen_ids.add(mid)
         msg_result = chat_db.get_message(sender_uid, mid)
         if msg_result:
             message, _ = msg_result
+            if getattr(message, 'reported', False):
+                continue
             messages.append(
                 {
                     "id": message.id,

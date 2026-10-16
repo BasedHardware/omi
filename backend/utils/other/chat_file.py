@@ -283,8 +283,14 @@ class FileChatTool:
                 upload_file = (Path(file_name).name, f) if file_name else f
                 response = openai.files.create(file=upload_file, purpose=cast(Any, file.purpose))
             except openai.BadRequestError as error:
+                if file.thumbnail_path:
+                    Path(file.thumbnail_path).unlink(missing_ok=True)
                 # The provider rejects the extension (audio/video, archives it does not index).
                 raise _unsupported_chat_file_error(file_path) from error
+            except Exception:
+                if file.thumbnail_path:
+                    Path(file.thumbnail_path).unlink(missing_ok=True)
+                raise
             if response:
                 file.file_id = response.id
                 file.file_name = response.filename
@@ -526,3 +532,7 @@ class FileChatTool:
                 except Exception as error:
                     logger.error('file chat file deletion failed error_type=%s', type(error).__name__)
             chat_db.delete_multi_files(self.uid, files)
+        update_session = getattr(chat_db, '_update_chat_session_if_exists', None)
+        if callable(update_session):
+            update_session(self.uid, self.chat_session_id, {'file_ids': []}, 'file cleanup')
+        self.chat_session.file_ids = []

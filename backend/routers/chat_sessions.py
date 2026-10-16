@@ -172,6 +172,13 @@ def delete_chat_session(
     session_id: str,
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    try:
+        from utils.other.chat_file import FileChatTool
+
+        fc_tool = FileChatTool(uid, session_id)
+        fc_tool.cleanup()
+    except (ValueError, ImportError):
+        pass
     chat_db.delete_chat_session(uid, session_id, cascade_messages=True)
     return {'status': 'ok'}
 
