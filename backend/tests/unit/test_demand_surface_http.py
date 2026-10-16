@@ -63,3 +63,29 @@ def test_enrichment_checkpoint_is_a_blind_update_and_never_recreates(endpoint):
     assert not conversations.record_demand_enrichment_checkpoint(
         'synthetic-owner', 'conversation', 'digest', firestore_client=client
     )
+
+
+def test_surface_auth_retains_security_fences_without_registration_or_recovery(endpoint, monkeypatch):
+    from types import SimpleNamespace
+
+    _, users, _ = endpoint
+    auth = users.auth
+    monkeypatch.setattr(auth, 'verify_token', lambda _: 'synthetic-owner')
+    admission, deletion, cutover, byok = Mock(), Mock(), Mock(), Mock()
+    monkeypatch.setattr(auth, 'enforce_jit_qa_uid', admission)
+    monkeypatch.setattr(auth, 'enforce_account_deletion_http_access', deletion)
+    monkeypatch.setattr(auth, '_enforce_cutover_http_if_request', cutover)
+    monkeypatch.setattr(auth, 'validate_byok_request', byok)
+    registration, device, recovery = Mock(), Mock(), Mock()
+    monkeypatch.setattr(auth, 'record_user_platform', registration)
+    monkeypatch.setattr(auth, 'record_client_device', device)
+    monkeypatch.setattr(auth, '_recover_locked_content_if_request', recovery)
+    request = SimpleNamespace(url=SimpleNamespace(path='/v1/users/client-state'))
+    assert auth.get_current_user_uid(authorization='Bearer synthetic-token', request=request) == 'synthetic-owner'
+    admission.assert_called_once_with('synthetic-owner')
+    deletion.assert_called_once_with('synthetic-owner')
+    cutover.assert_called_once_with('synthetic-owner', request)
+    byok.assert_called_once_with('synthetic-owner')
+    registration.assert_not_called()
+    device.assert_not_called()
+    recovery.assert_not_called()

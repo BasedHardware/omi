@@ -45,7 +45,9 @@ final class ListenClientState: ObservableObject {
     guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
     let clientState = snapshot
     let window = ShellSummon.shellWindow()
-    let open = window?.isVisible == true && window?.isMiniaturized == false && !NSApp.isHidden
+    let open =
+      window?.isVisible == true && window?.isMiniaturized == false
+      && window?.occlusionState.contains(.visible) == true && !NSApp.isHidden
     reportInFlight = true
     Task { @MainActor [weak self] in
       guard let self else { return }
