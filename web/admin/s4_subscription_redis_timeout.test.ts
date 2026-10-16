@@ -44,7 +44,7 @@ it("bounds real Redis blackholes and still writes without a backend lever", asyn
     expect(getRedis()).toBe(client);
   } finally {
     client?.disconnect();
-    for (const socket of sockets) socket.destroy();
+    sockets.forEach((socket) => socket.destroy());
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
