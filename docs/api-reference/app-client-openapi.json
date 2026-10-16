@@ -31304,6 +31304,17 @@
       },
       "StorefrontUsage": {
         "properties": {
+          "hours_left": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hours Left"
+          },
           "kind": {
             "default": "unavailable",
             "enum": [

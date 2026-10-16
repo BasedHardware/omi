@@ -13730,6 +13730,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get activityNewItem => 'New';
 
   @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% used · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% used · about $hours hours of recording left · $reset';
+  }
+
+  @override
   String get onDeviceGetMoreUsage => 'Get more usage';
 
   @override

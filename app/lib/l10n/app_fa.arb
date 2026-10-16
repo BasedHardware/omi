@@ -11633,6 +11633,8 @@
     "activityNewSemantics": "فعالیت، موارد جدید",
     "activityLoadFailed": "بارگیری همه فعالیت‌های شما ممکن نشد",
     "activityNewItem": "جدید",
+    "onDeviceMeterLineShort": "{percent}% استفاده شده · {reset}",
+    "onDeviceMeterLineHours": "{percent}% استفاده شده · حدود {hours} ساعت ضبط باقی مانده · {reset}",
     "onDeviceGetMoreUsage": "استفادهٔ بیشتر بگیرید",
     "onDeviceGettingSpeechReady": "آماده‌سازی گفتار · {percent}%"
 }

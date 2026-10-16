@@ -4213,6 +4213,8 @@
     "activityNewSemantics": "Активност, нови елементи",
     "activityLoadFailed": "Не можахме да заредим цялата ви активност",
     "activityNewItem": "Ново",
+    "onDeviceMeterLineShort": "{percent}% използвани · {reset}",
+    "onDeviceMeterLineHours": "{percent}% използвани · остават около {hours} часа запис · {reset}",
     "onDeviceGetMoreUsage": "Вземете още потребление",
     "onDeviceGettingSpeechReady": "Подготовка на речта · {percent}%"
 }

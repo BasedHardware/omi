@@ -11633,6 +11633,8 @@
     "activityNewSemantics": "سرگرمی، نئے آئٹمز",
     "activityLoadFailed": "آپ کی تمام سرگرمی لوڈ نہیں ہو سکی",
     "activityNewItem": "نیا",
+    "onDeviceMeterLineShort": "{percent}% استعمال ہوا · {reset}",
+    "onDeviceMeterLineHours": "{percent}% استعمال ہوا · تقریباً {hours} گھنٹے ریکارڈنگ باقی · {reset}",
     "onDeviceGetMoreUsage": "مزید استعمال حاصل کریں",
     "onDeviceGettingSpeechReady": "تقریر تیار ہو رہی ہے · {percent}%"
 }

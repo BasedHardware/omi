@@ -4213,6 +4213,8 @@
     "activityNewSemantics": "Activiteit, nieuwe items",
     "activityLoadFailed": "Niet al je activiteit kon worden geladen",
     "activityNewItem": "Nieuw",
+    "onDeviceMeterLineShort": "{percent}% gebruikt · {reset}",
+    "onDeviceMeterLineHours": "{percent}% gebruikt · nog ongeveer {hours} uur opname · {reset}",
     "onDeviceGetMoreUsage": "Krijg meer gebruik",
     "onDeviceGettingSpeechReady": "Spraak voorbereiden · {percent}%"
 }

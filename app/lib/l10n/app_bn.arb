@@ -11633,6 +11633,8 @@
     "activityNewSemantics": "কার্যকলাপ, নতুন আইটেম",
     "activityLoadFailed": "আপনার সব কার্যকলাপ লোড করা যায়নি",
     "activityNewItem": "নতুন",
+    "onDeviceMeterLineShort": "{percent}% ব্যবহৃত · {reset}",
+    "onDeviceMeterLineHours": "{percent}% ব্যবহৃত · প্রায় {hours} ঘণ্টা রেকর্ডিং বাকি · {reset}",
     "onDeviceGetMoreUsage": "আরও ব্যবহার নিন",
     "onDeviceGettingSpeechReady": "কথা বলার প্রস্তুতি · {percent}%"
 }

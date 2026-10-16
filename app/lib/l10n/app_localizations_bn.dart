@@ -13739,6 +13739,16 @@ class AppLocalizationsBn extends AppLocalizations {
   String get activityNewItem => 'নতুন';
 
   @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% ব্যবহৃত · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% ব্যবহৃত · প্রায় $hours ঘণ্টা রেকর্ডিং বাকি · $reset';
+  }
+
+  @override
   String get onDeviceGetMoreUsage => 'আরও ব্যবহার নিন';
 
   @override

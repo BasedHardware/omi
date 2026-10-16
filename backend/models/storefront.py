@@ -64,6 +64,10 @@ class StorefrontUsage(BaseModel):
     period_id: str | None = None
     reset_label: str | None = None
     meter_line: str | None = None
+    # Remaining recording hours. Present only from 80% up to, but not including, 100%,
+    # and only when that estimate is positive. Clients that localize the meter use this
+    # with percent and reset_label; English keeps meter_line.
+    hours_left: int | None = None
     nudge_line: str | None = None
     # Opens the plans sheet (trigger=usage_budget). Only with a usage_budget meter line.
     more_label: str | None = None
@@ -77,6 +81,8 @@ class StorefrontUsage(BaseModel):
             data.pop('mcp_cap_reached', None)
         if data.get('more_label') is None:
             data.pop('more_label', None)
+        if data.get('hours_left') is None:
+            data.pop('hours_left', None)
         return data
 
 

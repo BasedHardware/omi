@@ -11633,6 +11633,8 @@
     "activityNewSemantics": "פעילות, פריטים חדשים",
     "activityLoadFailed": "לא ניתן היה לטעון את כל הפעילות שלך",
     "activityNewItem": "חדש",
+    "onDeviceMeterLineShort": "{percent}% בשימוש · {reset}",
+    "onDeviceMeterLineHours": "{percent}% בשימוש · נותרו כ-{hours} שעות הקלטה · {reset}",
     "onDeviceGetMoreUsage": "קבלו עוד שימוש",
     "onDeviceGettingSpeechReady": "מכין את הדיבור · {percent}%"
 }

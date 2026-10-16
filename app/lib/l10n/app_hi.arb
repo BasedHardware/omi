@@ -4213,6 +4213,8 @@
     "activityNewSemantics": "गतिविधि, नए आइटम",
     "activityLoadFailed": "आपकी पूरी गतिविधि लोड नहीं हो सकी",
     "activityNewItem": "नया",
+    "onDeviceMeterLineShort": "{percent}% उपयोग हुआ · {reset}",
+    "onDeviceMeterLineHours": "{percent}% उपयोग हुआ · लगभग {hours} घंटे की रिकॉर्डिंग बची है · {reset}",
     "onDeviceGetMoreUsage": "और उपयोग पाएँ",
     "onDeviceGettingSpeechReady": "बोली तैयार हो रही है · {percent}%"
 }

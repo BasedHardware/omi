@@ -4213,6 +4213,8 @@
     "activityNewSemantics": "Aktivita, nové položky",
     "activityLoadFailed": "Nepodarilo sa načítať celú vašu aktivitu",
     "activityNewItem": "Nové",
+    "onDeviceMeterLineShort": "{percent}% využité · {reset}",
+    "onDeviceMeterLineHours": "{percent}% využité · zostáva asi {hours} hodín nahrávania · {reset}",
     "onDeviceGetMoreUsage": "Získajte viac využitia",
     "onDeviceGettingSpeechReady": "Príprava reči · {percent}%"
 }

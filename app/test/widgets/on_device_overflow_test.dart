@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:omi/backend/schema/gen/storefront_wire.g.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -357,6 +359,7 @@ void main() {
             percent: 80,
             resetLabel: 'resets Nov 1',
             meterLine: '80% used · about 3 hours of recording left · resets Nov 1',
+            hoursLeft: 3,
             moreLabel: 'Get more usage',
           ),
           showSaveUsage: true,
@@ -515,6 +518,253 @@ void main() {
       expect(find.byType(OnDeviceSetupPage), findsNothing);
       expect(model.engine, 'speech_analyzer');
       expect(model.downloads, 1);
+    });
+
+    testWidgets('a spanish device localizes the meter and get more usage', (tester) async {
+      final spanish = lookupAppLocalizations(const Locale('es'));
+      final controller = _controller();
+      await tester.pumpWidget(MaterialApp(
+        locale: const Locale('es'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: OnDeviceSettingsView(
+          controller: controller,
+          usage: const StorefrontUsage(
+            kind: 'usage_budget',
+            percent: 80,
+            resetLabel: 'resets Nov 1',
+            meterLine: '80% used · about 3 hours of recording left · resets Nov 1',
+            hoursLeft: 3,
+            moreLabel: 'Get more usage',
+          ),
+          plansSheetAvailable: true,
+          showSaveUsage: false,
+          pendingSeconds: 0,
+          pendingBytes: 0,
+          onGetMoreUsage: () {},
+        ),
+      ));
+      await tester.pump();
+      expect(find.text(spanish.onDeviceMeterLineHours(80, 3, 'resets Nov 1')), findsOneWidget);
+      expect(find.textContaining('hours of recording left'), findsNothing);
+      expect(find.text(spanish.onDeviceGetMoreUsage), findsOneWidget);
+      expect(find.text('Get more usage'), findsNothing);
+    });
+
+    testWidgets('detection failure offers retry and hides the speech model', (tester) async {
+      final model =
+          FakeOnDeviceModel(const OnDeviceModelStatus(phase: OnDeviceModelPhase.unsupported), null, true, true);
+      var refreshes = 0;
+      model.beforeRefresh = () async => refreshes++;
+      final controller = OnDeviceTranscriptionController(model: model, power: const UnknownPhonePowerSource())
+        ..debugActivate(settings: const OnDeviceSettings(enabled: true));
+      await _pump(
+        tester,
+        OnDeviceSettingsView(
+          controller: controller,
+          usage: null,
+          plansSheetAvailable: false,
+          showSaveUsage: false,
+          pendingSeconds: 0,
+          pendingBytes: 0,
+          onGetMoreUsage: () {},
+        ),
+        page: true,
+      );
+      expect(find.byKey(const Key('on_device_settings_model')), findsNothing);
+      await _tap(tester, find.byKey(const Key('on_device_settings_engine_unavailable')));
+      expect(refreshes, 1);
+    });
+  });
+
+  group('engine detection', () {
+    Future<void> mockChannel(Future<dynamic> Function(MethodCall call) handler) async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(AppleOnDeviceModel.channel, handler);
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(AppleOnDeviceModel.channel, null);
+      });
+    }
+
+    testWidgets('a platform failure never opens Parakeet setup', (tester) async {
+      await mockChannel((call) async {
+        if (call.method == 'status') throw PlatformException(code: 'UNAVAILABLE', message: 'down');
+        return null;
+      });
+      final model = AppleOnDeviceModel(detectionTimeout: const Duration(seconds: 1));
+      final controller = OnDeviceTranscriptionController(
+        model: model,
+        power: const UnknownPhonePowerSource(),
+        readGate: () async => true,
+        manageNativeCustody: false,
+      );
+      await _pump(
+        tester,
+        Builder(
+          builder: (context) => TextButton(
+            onPressed: () => openOnDeviceSetup(context, controller: controller),
+            child: const Text('setup'),
+          ),
+        ),
+        page: true,
+      );
+      await _tap(tester, find.text('setup'));
+      await tester.pumpAndSettle();
+      expect(model.detectionFailed, isTrue);
+      expect(model.engine, isNull);
+      expect(model.engineResolved, isTrue);
+      expect(find.byType(OnDeviceSetupPage), findsNothing);
+    });
+
+    testWidgets('a stalled status call becomes unavailable instead of hiding the banner', (tester) async {
+      await mockChannel((call) async {
+        if (call.method == 'status') await Completer<void>().future;
+        return null;
+      });
+      final model = AppleOnDeviceModel(detectionTimeout: const Duration(milliseconds: 40));
+      final controller = OnDeviceTranscriptionController(
+        model: model,
+        power: const UnknownPhonePowerSource(),
+        readGate: () async => true,
+        manageNativeCustody: false,
+      );
+      final loaded = controller.ensureLoaded();
+      await tester.pump(const Duration(milliseconds: 100));
+      await loaded;
+      expect(controller.isActive, isTrue);
+      expect(model.detectionFailed, isTrue);
+      expect(model.engine, isNull);
+      await _pump(
+        tester,
+        OnDeviceQueueBannerView(
+          controller: controller,
+          pendingSeconds: 120,
+          atCap: true,
+          onSetUp: () {},
+          moreLabel: 'Get more usage',
+          onGetMoreUsage: () {},
+        ),
+      );
+      expect(find.byKey(const Key('on_device_engine_unavailable')), findsOneWidget);
+      expect(find.byKey(const Key('on_device_finish_setup_banner')), findsNothing);
+      expect(find.text(l10n.tryAgain), findsOneWidget);
+    });
+
+    testWidgets('Parakeet setup opens only after that engine is detected', (tester) async {
+      await mockChannel((call) async {
+        if (call.method == 'status') {
+          return {'engine': 'parakeet_v2', 'phase': 'notDownloaded', 'progress': 0, 'sizeBytes': 100};
+        }
+        return null;
+      });
+      final model = AppleOnDeviceModel(detectionTimeout: const Duration(seconds: 1));
+      final controller = OnDeviceTranscriptionController(
+        model: model,
+        power: const UnknownPhonePowerSource(),
+        readGate: () async => true,
+        manageNativeCustody: false,
+      );
+      await _pump(
+        tester,
+        Builder(
+          builder: (context) => TextButton(
+            onPressed: () => openOnDeviceSetup(context, controller: controller),
+            child: const Text('setup'),
+          ),
+        ),
+        page: true,
+      );
+      await _tap(tester, find.text('setup'));
+      await tester.pumpAndSettle();
+      expect(model.engine, 'parakeet_v2');
+      expect(model.detectionFailed, isFalse);
+      expect(find.byType(OnDeviceSetupPage), findsOneWidget);
+    });
+  });
+
+  group('queue banner plans sheet', () {
+    test('get more usage stays hidden unless the plans sheet can open', () {
+      final spanish = lookupAppLocalizations(const Locale('es'));
+      expect(
+        onDeviceMoreUsageTitle(
+          plansSheetAvailable: false,
+          moreLabel: 'Get more usage',
+          locale: const Locale('en'),
+          l10n: l10n,
+        ),
+        isNull,
+      );
+      expect(
+        onDeviceMoreUsageTitle(
+          plansSheetAvailable: true,
+          moreLabel: 'Get more usage',
+          locale: const Locale('en'),
+          l10n: l10n,
+        ),
+        'Get more usage',
+      );
+      expect(
+        onDeviceMoreUsageTitle(
+          plansSheetAvailable: true,
+          moreLabel: 'Get more usage',
+          locale: const Locale('es'),
+          l10n: spanish,
+        ),
+        spanish.onDeviceGetMoreUsage,
+      );
+    });
+
+    testWidgets('finish setup hides get more usage when the sheet label is withheld', (tester) async {
+      final controller = _controller(status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.notDownloaded));
+      await _pump(
+        tester,
+        OnDeviceQueueBannerView(
+          controller: controller,
+          pendingSeconds: 120,
+          atCap: true,
+          onSetUp: () {},
+          moreLabel: onDeviceMoreUsageTitle(
+            plansSheetAvailable: false,
+            moreLabel: 'Get more usage',
+            locale: const Locale('en'),
+            l10n: l10n,
+          ),
+          onGetMoreUsage: () {},
+        ),
+      );
+      expect(find.byKey(const Key('on_device_finish_setup_download')), findsOneWidget);
+      expect(find.byKey(const Key('on_device_finish_setup_upgrade')), findsNothing);
+    });
+
+    testWidgets('upgrade from the banner does not open the legacy usage page', (tester) async {
+      final usage = UsageProvider()
+        ..debugSetSubscription(UserSubscriptionResponse(
+          subscription: Subscription(plan: PlanType.unlimited, status: SubscriptionStatus.active),
+          transcriptionSecondsUsed: 0,
+          transcriptionSecondsLimit: 0,
+          wordsTranscribedUsed: 0,
+          wordsTranscribedLimit: 0,
+          insightsGainedUsed: 0,
+          insightsGainedLimit: 0,
+          showSubscriptionUi: false,
+        ));
+      await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+        value: usage,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => openOnDeviceUpgrade(context),
+              child: const Text('more'),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('more'));
+      await tester.pumpAndSettle();
+      expect(find.byType(UsagePage), findsNothing);
     });
   });
 }

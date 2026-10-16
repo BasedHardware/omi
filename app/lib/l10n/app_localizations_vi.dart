@@ -13742,6 +13742,16 @@ class AppLocalizationsVi extends AppLocalizations {
   String get activityNewItem => 'Mới';
 
   @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return 'Đã dùng $percent% · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return 'Đã dùng $percent% · còn khoảng $hours giờ ghi âm · $reset';
+  }
+
+  @override
   String get onDeviceGetMoreUsage => 'Nhận thêm mức sử dụng';
 
   @override

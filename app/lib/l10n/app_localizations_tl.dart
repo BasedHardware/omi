@@ -13854,6 +13854,16 @@ class AppLocalizationsTl extends AppLocalizations {
   String get activityNewItem => 'Bago';
 
   @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% nagamit · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% nagamit · mga $hours oras ng recording ang natitira · $reset';
+  }
+
+  @override
   String get onDeviceGetMoreUsage => 'Kumuha ng higit pang paggamit';
 
   @override

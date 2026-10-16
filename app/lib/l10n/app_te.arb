@@ -11633,6 +11633,8 @@
     "activityNewSemantics": "కార్యాచరణ, కొత్త అంశాలు",
     "activityLoadFailed": "మీ మొత్తం కార్యాచరణను లోడ్ చేయలేకపోయాం",
     "activityNewItem": "కొత్తది",
+    "onDeviceMeterLineShort": "{percent}% ఉపయోగించబడింది · {reset}",
+    "onDeviceMeterLineHours": "{percent}% ఉపయోగించబడింది · దాదాపు {hours} గంటల రికార్డింగ్ మిగిలి ఉంది · {reset}",
     "onDeviceGetMoreUsage": "మరింత వినియోగం పొందండి",
     "onDeviceGettingSpeechReady": "మాట సిద్ధమవుతోంది · {percent}%"
 }

@@ -11633,6 +11633,8 @@
     "activityNewSemantics": "Aktivnost, nove stavke",
     "activityLoadFailed": "Nismo mogli učitati svu vašu aktivnost",
     "activityNewItem": "Novo",
+    "onDeviceMeterLineShort": "{percent}% iskorišteno · {reset}",
+    "onDeviceMeterLineHours": "{percent}% iskorišteno · preostalo je oko {hours} sati snimanja · {reset}",
     "onDeviceGetMoreUsage": "Nabavite još korištenja",
     "onDeviceGettingSpeechReady": "Priprema govora · {percent} %"
 }

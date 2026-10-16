@@ -369,6 +369,7 @@ class StorefrontUsage {
   final String? periodId;
   final String? resetLabel;
   final String? meterLine;
+  final int? hoursLeft;
   final String? nudgeLine;
   final String? moreLabel;
   final Set<String> proGates;
@@ -380,6 +381,7 @@ class StorefrontUsage {
     this.periodId,
     this.resetLabel,
     this.meterLine,
+    this.hoursLeft,
     this.nudgeLine,
     this.moreLabel,
     this.mcpCapReached = false,
@@ -405,12 +407,26 @@ class StorefrontUsage {
       periodId: _optionalText(json, 'period_id'),
       resetLabel: _optionalText(json, 'reset_label'),
       meterLine: _optionalText(json, 'meter_line'),
+      hoursLeft: _optionalCount(json, 'hours_left'),
       nudgeLine: _optionalText(json, 'nudge_line'),
       moreLabel: _optionalText(json, 'more_label'),
       mcpCapReached: json['mcp_cap_reached'] == true,
       proGates: Set<String>.unmodifiable(gates.map((value) => value as String)),
     );
   }
+
+  StorefrontUsage withMeterLine(String? meterLine) => StorefrontUsage(
+        kind: kind,
+        percent: percent,
+        periodId: periodId,
+        resetLabel: resetLabel,
+        meterLine: meterLine,
+        hoursLeft: hoursLeft,
+        nudgeLine: nudgeLine,
+        moreLabel: moreLabel,
+        mcpCapReached: mcpCapReached,
+        proGates: proGates,
+      );
 
   /// At 100%, W4 owns the choice. Never create a competing budget dialog.
   bool get showBudgetNudge =>
@@ -430,6 +446,13 @@ Map<String, dynamic> _object(Object? value) {
 String _text(Map<String, dynamic> json, String key) {
   final value = json[key];
   if (value is! String || value.trim().isEmpty) throw FormatException('Missing storefront $key');
+  return value;
+}
+
+int? _optionalCount(Map<String, dynamic> json, String key) {
+  if (!json.containsKey(key) || json[key] == null) return null;
+  final value = json[key];
+  if (value is! int || value < 0) throw FormatException('Invalid storefront $key');
   return value;
 }
 

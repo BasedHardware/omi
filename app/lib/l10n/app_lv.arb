@@ -4213,6 +4213,8 @@
     "activityNewSemantics": "Aktivitāte, jauni vienumi",
     "activityLoadFailed": "Neizdevās ielādēt visu jūsu aktivitāti",
     "activityNewItem": "Jauns",
+    "onDeviceMeterLineShort": "{percent}% izmantots · {reset}",
+    "onDeviceMeterLineHours": "{percent}% izmantots · atlikušas aptuveni {hours} ieraksta stundas · {reset}",
     "onDeviceGetMoreUsage": "Iegūstiet vairāk lietojuma",
     "onDeviceGettingSpeechReady": "Runa tiek sagatavota · {percent}%"
 }

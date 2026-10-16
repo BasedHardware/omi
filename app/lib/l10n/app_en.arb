@@ -16602,6 +16602,33 @@
     "@activityNewItem": {
         "description": "Screen reader suffix for an Activity row added since the last visit"
     },
+    "onDeviceMeterLineShort": "{percent}% used · {reset}",
+    "@onDeviceMeterLineShort": {
+        "description": "On-device usage meter without an hours estimate, for non-English devices",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            },
+            "reset": {
+                "type": "String"
+            }
+        }
+    },
+    "onDeviceMeterLineHours": "{percent}% used · about {hours} hours of recording left · {reset}",
+    "@onDeviceMeterLineHours": {
+        "description": "On-device usage meter when hours remain, for non-English devices",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            },
+            "hours": {
+                "type": "int"
+            },
+            "reset": {
+                "type": "String"
+            }
+        }
+    },
     "onDeviceGetMoreUsage": "Get more usage",
     "@onDeviceGetMoreUsage": {
         "description": "Settings row that opens the plans sheet for more usage"

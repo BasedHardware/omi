@@ -13801,6 +13801,16 @@ class AppLocalizationsRo extends AppLocalizations {
   String get activityNewItem => 'Nou';
 
   @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% folosit · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% folosit · au rămas aproximativ $hours ore de înregistrare · $reset';
+  }
+
+  @override
   String get onDeviceGetMoreUsage => 'Obțineți mai multă utilizare';
 
   @override

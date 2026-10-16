@@ -13549,6 +13549,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get activityNewItem => '新着';
 
   @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% 使用済み · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% 使用済み · 録音があと約 $hours 時間 · $reset';
+  }
+
+  @override
   String get onDeviceGetMoreUsage => '使用量を追加する';
 
   @override

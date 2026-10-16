@@ -71,6 +71,9 @@ abstract class OnDeviceModel extends ChangeNotifier {
   /// An unknown engine is loading, not Parakeet.
   bool get engineResolved => true;
 
+  /// Detection finished without a usable engine. Never treat this as Parakeet.
+  bool get detectionFailed => false;
+
   bool get isOsManaged => engine == 'speech_analyzer' || engine == 'sfspeech';
 
   /// Re-reads what is on disk.
@@ -242,37 +245,68 @@ class WhisperOnDeviceModel extends OnDeviceModel {
 
 /// Apple assets are OS-managed; Parakeet v2 is an explicit Wi-Fi-aware setup download.
 class AppleOnDeviceModel extends OnDeviceModel {
+  AppleOnDeviceModel({this.detectionTimeout = const Duration(seconds: 4)});
+
+  /// Bounds a native status call that never returns. After this, the UI shows
+  /// unavailable with retry instead of waiting forever or guessing Parakeet.
+  final Duration detectionTimeout;
+
   static const channel = MethodChannel('com.omi/on_device');
   OnDeviceModelStatus _status = const OnDeviceModelStatus(phase: OnDeviceModelPhase.notDownloaded);
   String? _engine;
   bool _engineResolved = false;
+  bool _detectionFailed = false;
   Timer? _poll;
   @override
   String? get engine => _engine;
   @override
   bool get engineResolved => _engineResolved;
   @override
+  bool get detectionFailed => _detectionFailed;
+  @override
   OnDeviceModelStatus get status => _status;
   Map<String, dynamic> get _args => {
         'language':
             SharedPreferencesUtil().userPrimaryLanguage.isEmpty ? 'en' : SharedPreferencesUtil().userPrimaryLanguage
       };
+  void _markDetectionUnavailable() {
+    _engine = null;
+    _detectionFailed = true;
+    _engineResolved = true;
+    _status = const OnDeviceModelStatus(phase: OnDeviceModelPhase.unsupported);
+  }
+
+  void _applyStatus(Map<String, dynamic>? value) {
+    final engine = value?['engine'] as String?;
+    if (engine == null || engine.isEmpty) {
+      _markDetectionUnavailable();
+      return;
+    }
+    _engine = engine;
+    _detectionFailed = false;
+    _engineResolved = true;
+    _status = OnDeviceModelStatus(
+        phase: OnDeviceModelPhase.values
+            .firstWhere((v) => v.name == value?['phase'], orElse: () => OnDeviceModelPhase.failed),
+        progress: (value?['progress'] as num?)?.toDouble() ?? 0,
+        sizeBytes: (value?['sizeBytes'] as num?)?.toInt() ?? 0);
+  }
+
   @override
   Future<void> refresh() async {
     try {
-      final value = await channel.invokeMapMethod<String, dynamic>('status', _args);
-      _engine = value?['engine'] as String?;
-      _status = OnDeviceModelStatus(
-          phase: OnDeviceModelPhase.values
-              .firstWhere((v) => v.name == value?['phase'], orElse: () => OnDeviceModelPhase.failed),
-          progress: (value?['progress'] as num?)?.toDouble() ?? 0,
-          sizeBytes: (value?['sizeBytes'] as num?)?.toInt() ?? 0);
+      final value = await channel.invokeMapMethod<String, dynamic>('status', _args).timeout(detectionTimeout);
+      _applyStatus(value);
+    } on TimeoutException {
+      _markDetectionUnavailable();
     } on PlatformException {
-      _status = const OnDeviceModelStatus(phase: OnDeviceModelPhase.failed);
+      _markDetectionUnavailable();
     } on MissingPluginException {
+      _engine = null;
+      _detectionFailed = false;
+      _engineResolved = true;
       _status = const OnDeviceModelStatus(phase: OnDeviceModelPhase.unsupported);
     }
-    _engineResolved = true;
     notifyListeners();
   }
 

@@ -13746,6 +13746,16 @@ class AppLocalizationsCs extends AppLocalizations {
   String get activityNewItem => 'Nové';
 
   @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% využito · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% využito · zbývá asi $hours hodin nahrávání · $reset';
+  }
+
+  @override
   String get onDeviceGetMoreUsage => 'Získejte více využití';
 
   @override

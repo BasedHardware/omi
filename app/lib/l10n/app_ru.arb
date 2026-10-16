@@ -4248,6 +4248,8 @@
     "activityNewSemantics": "Активность, новые элементы",
     "activityLoadFailed": "Не удалось загрузить всю активность",
     "activityNewItem": "Новое",
+    "onDeviceMeterLineShort": "{percent}% использовано · {reset}",
+    "onDeviceMeterLineHours": "{percent}% использовано · осталось около {hours} часов записи · {reset}",
     "onDeviceGetMoreUsage": "Получить больше использования",
     "onDeviceGettingSpeechReady": "Подготовка речи · {percent}%"
 }

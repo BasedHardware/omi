@@ -4213,6 +4213,8 @@
     "activityNewSemantics": "活动，有新内容",
     "activityLoadFailed": "无法加载全部活动",
     "activityNewItem": "新",
+    "onDeviceMeterLineShort": "已用 {percent}% · {reset}",
+    "onDeviceMeterLineHours": "已用 {percent}% · 大约还可录音 {hours} 小时 · {reset}",
     "onDeviceGetMoreUsage": "获取更多用量",
     "onDeviceGettingSpeechReady": "正在准备语音 · {percent}%"
 }

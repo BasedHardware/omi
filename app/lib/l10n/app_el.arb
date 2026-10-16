@@ -4213,6 +4213,8 @@
     "activityNewSemantics": "Δραστηριότητα, νέα στοιχεία",
     "activityLoadFailed": "Δεν ήταν δυνατή η φόρτωση όλης της δραστηριότητάς σας",
     "activityNewItem": "Νέο",
+    "onDeviceMeterLineShort": "{percent}% χρησιμοποιήθηκε · {reset}",
+    "onDeviceMeterLineHours": "{percent}% χρησιμοποιήθηκε · απομένουν περίπου {hours} ώρες εγγραφής · {reset}",
     "onDeviceGetMoreUsage": "Αποκτήστε περισσότερη χρήση",
     "onDeviceGettingSpeechReady": "Προετοιμασία ομιλίας · {percent}%"
 }

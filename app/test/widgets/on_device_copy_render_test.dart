@@ -43,6 +43,7 @@ void main() {
     required Widget home,
     TargetPlatform platform = TargetPlatform.iOS,
     bool light = false,
+    Locale locale = const Locale('en'),
     Future<void> Function(WidgetTester tester)? afterPump,
   }) async {
     debugDefaultTargetPlatformOverride = platform;
@@ -72,7 +73,7 @@ void main() {
       key: boundaryKey,
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
-        locale: const Locale('en'),
+        locale: locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         theme: titled,
@@ -121,6 +122,7 @@ void main() {
     percent: 80,
     resetLabel: 'resets Nov 1',
     meterLine: '80% used · about 3 hours of recording left · resets Nov 1',
+    hoursLeft: 3,
     moreLabel: 'Get more usage',
   );
 
@@ -269,6 +271,19 @@ void main() {
     await shoot(tester, '26-settings-40-percent-ios.png', home: settings(parakeetSettings(), meter: low));
     expect(find.text('40% used · resets Nov 1'), findsOneWidget);
     expect(find.textContaining('hours of recording left'), findsNothing);
+  });
+
+  testWidgets('spanish settings at 80 localize the meter', (tester) async {
+    final spanish = lookupAppLocalizations(const Locale('es'));
+    await shoot(
+      tester,
+      '27-settings-80-es.png',
+      locale: const Locale('es'),
+      home: settings(parakeetSettings()),
+    );
+    expect(find.text(spanish.onDeviceMeterLineHours(80, 3, 'resets Nov 1')), findsOneWidget);
+    expect(find.textContaining('hours of recording left'), findsNothing);
+    expect(find.text(spanish.onDeviceGetMoreUsage), findsOneWidget);
   });
 
   testWidgets('unsupported banner', (tester) async {

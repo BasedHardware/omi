@@ -160,19 +160,38 @@ def test_floor_to_nice_and_per_day_phrasing():
 
 
 def test_meter_line_includes_hours_only_from_80_until_100():
+    def usage(percent: float, plan_id: str = 'basic') -> StorefrontUsage:
+        return StorefrontUsage(
+            **present_usage(plan_id=plan_id, kind='usage_budget', percent=percent, reset_at=PERIOD_END)
+        )
+
     def line(percent: float, plan_id: str = 'basic') -> str:
-        return present_usage(plan_id=plan_id, kind='usage_budget', percent=percent, reset_at=PERIOD_END)['meter_line']
+        return usage(percent, plan_id).meter_line
 
     assert line(40) == '40% used · resets Nov 1'
+    assert usage(40).hours_left is None
+    assert 'hours_left' not in usage(40).model_dump(mode='json')
     assert line(79) == '79% used · resets Nov 1'
+    assert usage(79).hours_left is None
     assert line(80) == '80% used · about 3 hours of recording left · resets Nov 1'
+    assert usage(80).hours_left == 3
     assert line(99, 'operator') == '99% used · about 5 hours of recording left · resets Nov 1'
+    assert usage(99, 'operator').hours_left == 5
     # A shown percent still in the hours band can round to no hours. Omit the estimate.
     assert line(99) == '99% used · resets Nov 1'
+    assert usage(99).hours_left is None
     assert 'about 0 hours' not in line(99)
+    assert 'hours_left' not in usage(99).model_dump(mode='json')
     assert line(100) == '100% used · resets Nov 1'
+    assert usage(100).hours_left is None
+    assert 'hours_left' not in usage(100).model_dump(mode='json')
     assert 'about 0 hours' not in line(100)
     assert 'about 0 hours' not in line(140)
+    legacy = StorefrontUsage(
+        **present_usage(plan_id='unlimited', kind='transcription', percent=80, reset_at=PERIOD_END)
+    )
+    assert legacy.hours_left is None
+    assert 'hours_left' not in legacy.model_dump(mode='json')
     for code, text in load_copy()['locales'].items():
         assert '{hours}' in text['meter']['line'], code
         assert '{hours}' not in text['meter']['line_short'], code

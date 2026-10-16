@@ -4213,6 +4213,8 @@
     "activityNewSemantics": "Aktivitet, nya objekt",
     "activityLoadFailed": "Kunde inte läsa in all din aktivitet",
     "activityNewItem": "Ny",
+    "onDeviceMeterLineShort": "{percent}% använt · {reset}",
+    "onDeviceMeterLineHours": "{percent}% använt · ungefär {hours} timmars inspelning kvar · {reset}",
     "onDeviceGetMoreUsage": "Få mer användning",
     "onDeviceGettingSpeechReady": "Förbereder tal · {percent} %"
 }

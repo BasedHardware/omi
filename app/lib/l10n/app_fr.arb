@@ -4248,6 +4248,8 @@
     "activityNewSemantics": "Activité, nouveaux éléments",
     "activityLoadFailed": "Impossible de charger toute votre activité",
     "activityNewItem": "Nouveau",
+    "onDeviceMeterLineShort": "{percent} % utilisés · {reset}",
+    "onDeviceMeterLineHours": "{percent} % utilisés · environ {hours} heures d'enregistrement restantes · {reset}",
     "onDeviceGetMoreUsage": "Obtenir plus d'utilisation",
     "onDeviceGettingSpeechReady": "Préparation de la parole · {percent} %"
 }

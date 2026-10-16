@@ -13670,6 +13670,16 @@ class AppLocalizationsAr extends AppLocalizations {
   String get activityNewItem => 'جديد';
 
   @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% مستخدم · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% مستخدم · حوالي $hours ساعات تسجيل متبقية · $reset';
+  }
+
+  @override
   String get onDeviceGetMoreUsage => 'احصل على المزيد من الاستخدام';
 
   @override

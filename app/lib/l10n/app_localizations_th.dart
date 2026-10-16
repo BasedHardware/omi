@@ -13677,6 +13677,16 @@ class AppLocalizationsTh extends AppLocalizations {
   String get activityNewItem => 'ใหม่';
 
   @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return 'ใช้ไป $percent% · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return 'ใช้ไป $percent% · เหลือการบันทึกอีกประมาณ $hours ชั่วโมง · $reset';
+  }
+
+  @override
   String get onDeviceGetMoreUsage => 'รับการใช้งานเพิ่ม';
 
   @override

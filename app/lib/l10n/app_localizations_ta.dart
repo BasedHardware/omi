@@ -13835,6 +13835,16 @@ class AppLocalizationsTa extends AppLocalizations {
   String get activityNewItem => 'புதியது';
 
   @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% பயன்படுத்தப்பட்டது · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% பயன்படுத்தப்பட்டது · சுமார் $hours மணி நேர பதிவு மீதம் · $reset';
+  }
+
+  @override
   String get onDeviceGetMoreUsage => 'மேலும் பயன்பாட்டைப் பெறுங்கள்';
 
   @override

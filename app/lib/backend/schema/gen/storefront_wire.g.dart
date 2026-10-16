@@ -315,6 +315,7 @@ class GeneratedStorefrontTier {
 }
 
 class GeneratedStorefrontUsage {
+  final int? hoursLeft;
   final String kind;
   final bool mcpCapReached;
   final String? meterLine;
@@ -326,6 +327,7 @@ class GeneratedStorefrontUsage {
   final String? resetLabel;
 
   const GeneratedStorefrontUsage({
+    this.hoursLeft,
     this.kind = "unavailable",
     this.mcpCapReached = false,
     this.meterLine,
@@ -339,6 +341,7 @@ class GeneratedStorefrontUsage {
 
   factory GeneratedStorefrontUsage.fromJson(Map<String, dynamic> json) {
     return GeneratedStorefrontUsage(
+      hoursLeft: _readFieldValue<int>(_readField(json, const ["hours_left"]), "hours_left", _readInt, requiredField: false, nullable: true),
       kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: false, nullable: false, defaultValue: "unavailable"), "kind"),
       mcpCapReached: _required(_readFieldValue<bool>(_readField(json, const ["mcp_cap_reached"]), "mcp_cap_reached", _readBool, requiredField: false, nullable: false, defaultValue: false), "mcp_cap_reached"),
       meterLine: _readFieldValue<String>(_readField(json, const ["meter_line"]), "meter_line", _readString, requiredField: false, nullable: true),
@@ -353,6 +356,7 @@ class GeneratedStorefrontUsage {
 
   Map<String, dynamic> toJson() {
     return {
+      'hours_left': hoursLeft,
       'kind': kind,
       'mcp_cap_reached': mcpCapReached,
       'meter_line': meterLine,

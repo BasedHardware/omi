@@ -4213,6 +4213,8 @@
     "activityNewSemantics": "Tegevus, uued üksused",
     "activityLoadFailed": "Kogu tegevust ei õnnestunud laadida",
     "activityNewItem": "Uus",
+    "onDeviceMeterLineShort": "{percent}% kasutatud · {reset}",
+    "onDeviceMeterLineHours": "{percent}% kasutatud · salvestamist on jäänud umbes {hours} tundi · {reset}",
     "onDeviceGetMoreUsage": "Hangi rohkem kasutust",
     "onDeviceGettingSpeechReady": "Kõne ettevalmistamine · {percent}%"
 }

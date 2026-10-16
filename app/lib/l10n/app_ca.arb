@@ -4213,6 +4213,8 @@
     "activityNewSemantics": "Activitat, elements nous",
     "activityLoadFailed": "No s'ha pogut carregar tota la teva activitat",
     "activityNewItem": "Nou",
+    "onDeviceMeterLineShort": "{percent}% utilitzat · {reset}",
+    "onDeviceMeterLineHours": "{percent}% utilitzat · queden unes {hours} hores de gravació · {reset}",
     "onDeviceGetMoreUsage": "Aconsegueix més ús",
     "onDeviceGettingSpeechReady": "Preparant la parla · {percent}%"
 }

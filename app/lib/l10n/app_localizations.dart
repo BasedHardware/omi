@@ -24465,6 +24465,18 @@ abstract class AppLocalizations {
   /// **'New'**
   String get activityNewItem;
 
+  /// On-device usage meter without an hours estimate, for non-English devices
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}% used · {reset}'**
+  String onDeviceMeterLineShort(int percent, String reset);
+
+  /// On-device usage meter when hours remain, for non-English devices
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}% used · about {hours} hours of recording left · {reset}'**
+  String onDeviceMeterLineHours(int percent, int hours, String reset);
+
   /// Settings row that opens the plans sheet for more usage
   ///
   /// In en, this message translates to:

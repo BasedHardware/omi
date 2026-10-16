@@ -13795,6 +13795,16 @@ class AppLocalizationsBg extends AppLocalizations {
   String get activityNewItem => 'Ново';
 
   @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% използвани · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% използвани · остават около $hours часа запис · $reset';
+  }
+
+  @override
   String get onDeviceGetMoreUsage => 'Вземете още потребление';
 
   @override

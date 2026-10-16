@@ -11633,6 +11633,8 @@
     "activityNewSemantics": "Dejavnost, novi elementi",
     "activityLoadFailed": "Ni bilo mogoče naložiti vse vaše dejavnosti",
     "activityNewItem": "Novo",
+    "onDeviceMeterLineShort": "{percent}% porabljeno · {reset}",
+    "onDeviceMeterLineHours": "{percent}% porabljeno · ostane približno {hours} ur snemanja · {reset}",
     "onDeviceGetMoreUsage": "Pridobite več uporabe",
     "onDeviceGettingSpeechReady": "Priprava govora · {percent} %"
 }

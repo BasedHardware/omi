@@ -11633,6 +11633,8 @@
     "activityNewSemantics": "क्रिया, नवीन आयटम",
     "activityLoadFailed": "तुमची सर्व क्रिया लोड करता आली नाही",
     "activityNewItem": "नवीन",
+    "onDeviceMeterLineShort": "{percent}% वापरले · {reset}",
+    "onDeviceMeterLineHours": "{percent}% वापरले · सुमारे {hours} तास रेकॉर्डिंग शिल्लक · {reset}",
     "onDeviceGetMoreUsage": "अधिक वापर मिळवा",
     "onDeviceGettingSpeechReady": "बोलणे तयार होत आहे · {percent}%"
 }

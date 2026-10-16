@@ -3,7 +3,8 @@ import 'package:omi/services/on_device/phone_power_source.dart';
 
 /// An [OnDeviceModel] whose status the test sets directly; records calls.
 class FakeOnDeviceModel extends OnDeviceModel {
-  FakeOnDeviceModel([OnDeviceModelStatus? status, this.engine, this.engineResolved = true])
+  FakeOnDeviceModel(
+      [OnDeviceModelStatus? status, this.engine, this.engineResolved = true, this.detectionFailed = false])
       : _status = status ?? const OnDeviceModelStatus(phase: OnDeviceModelPhase.installed);
 
   @override
@@ -11,6 +12,9 @@ class FakeOnDeviceModel extends OnDeviceModel {
 
   @override
   bool engineResolved;
+
+  @override
+  bool detectionFailed;
 
   /// Runs at the start of [refresh], before the engine is marked resolved.
   Future<void> Function()? beforeRefresh;

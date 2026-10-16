@@ -10,20 +10,34 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
+/// Parakeet setup opens only after a positive non-OS-managed engine. A null or failed
+/// detection stays unavailable; Android Whisper is that positive download engine.
+bool onDeviceOpensDownloadSetup(OnDeviceModel model) {
+  if (!model.engineResolved || model.detectionFailed || !model.status.isSupported || model.isOsManaged) {
+    return false;
+  }
+  if (model is AppleOnDeviceModel) {
+    final engine = model.engine;
+    return engine != null && engine.isNotEmpty;
+  }
+  return true;
+}
+
 /// Opens model setup only when this phone needs a download the user starts.
 ///
-/// An unknown engine is still loading: wait for it, and do not guess Parakeet. SpeechAnalyzer and
-/// the system speech fallback are OS-managed. They turn on here, and a speech-asset install is a
-/// progress row on the settings page, not its own screen. Parakeet and Android keep the download
-/// setup page.
+/// An unknown engine is still loading: wait for it, and do not guess Parakeet. A failed or
+/// timed-out lookup stays unavailable. SpeechAnalyzer and the system speech fallback are
+/// OS-managed. They turn on here, and a speech-asset install is a progress row on the settings
+/// page, not its own screen. Parakeet and Android keep the download setup page.
 Future<void> openOnDeviceSetup(BuildContext context, {OnDeviceTranscriptionController? controller}) async {
   final resolved = controller ?? OnDeviceTranscriptionController.instance;
   final model = resolved.model;
   if (!model.engineResolved) await model.refresh();
-  if (!context.mounted || !model.engineResolved || !model.status.isSupported) return;
-  if (model.isOsManaged) {
-    if (!model.status.isInstalled && model.status.phase != OnDeviceModelPhase.downloading) {
-      unawaited(model.download(wifiOnly: false));
+  if (!context.mounted || !onDeviceOpensDownloadSetup(model)) {
+    if (context.mounted && model.isOsManaged && model.engineResolved && !model.detectionFailed) {
+      if (!model.status.isInstalled && model.status.phase != OnDeviceModelPhase.downloading) {
+        unawaited(model.download(wifiOnly: false));
+      }
     }
     return;
   }

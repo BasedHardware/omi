@@ -4248,6 +4248,8 @@
     "activityNewSemantics": "Etkinlik, yeni öğeler",
     "activityLoadFailed": "Etkinliğinizin tamamı yüklenemedi",
     "activityNewItem": "Yeni",
+    "onDeviceMeterLineShort": "{percent}% kullanıldı · {reset}",
+    "onDeviceMeterLineHours": "{percent}% kullanıldı · yaklaşık {hours} saat kayıt kaldı · {reset}",
     "onDeviceGetMoreUsage": "Daha fazla kullanım alın",
     "onDeviceGettingSpeechReady": "Konuşma hazırlanıyor · %{percent}"
 }

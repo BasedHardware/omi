@@ -13800,6 +13800,16 @@ class AppLocalizationsTe extends AppLocalizations {
   String get activityNewItem => 'కొత్తది';
 
   @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% ఉపయోగించబడింది · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% ఉపయోగించబడింది · దాదాపు $hours గంటల రికార్డింగ్ మిగిలి ఉంది · $reset';
+  }
+
+  @override
   String get onDeviceGetMoreUsage => 'మరింత వినియోగం పొందండి';
 
   @override

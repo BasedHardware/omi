@@ -11633,6 +11633,8 @@
     "activityNewSemantics": "ಚಟುವಟಿಕೆ, ಹೊಸ ಐಟಂಗಳು",
     "activityLoadFailed": "ನಿಮ್ಮ ಎಲ್ಲಾ ಚಟುವಟಿಕೆಯನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
     "activityNewItem": "ಹೊಸದು",
+    "onDeviceMeterLineShort": "{percent}% ಬಳಕೆಯಾಗಿದೆ · {reset}",
+    "onDeviceMeterLineHours": "{percent}% ಬಳಕೆಯಾಗಿದೆ · ಸುಮಾರು {hours} ಗಂಟೆ ರೆಕಾರ್ಡಿಂಗ್ ಉಳಿದಿದೆ · {reset}",
     "onDeviceGetMoreUsage": "ಹೆಚ್ಚಿನ ಬಳಕೆಯನ್ನು ಪಡೆಯಿರಿ",
     "onDeviceGettingSpeechReady": "ಮಾತನ್ನು ಸಿದ್ಧಪಡಿಸಲಾಗುತ್ತಿದೆ · {percent}%"
 }

@@ -13555,6 +13555,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String get activityNewItem => '새 항목';
 
   @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% 사용 · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% 사용 · 녹음이 약 $hours시간 남음 · $reset';
+  }
+
+  @override
   String get onDeviceGetMoreUsage => '사용량을 더 받기';
 
   @override

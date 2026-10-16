@@ -4213,6 +4213,8 @@
     "activityNewSemantics": "アクティビティ、新着あり",
     "activityLoadFailed": "アクティビティの一部を読み込めませんでした",
     "activityNewItem": "新着",
+    "onDeviceMeterLineShort": "{percent}% 使用済み · {reset}",
+    "onDeviceMeterLineHours": "{percent}% 使用済み · 録音があと約 {hours} 時間 · {reset}",
     "onDeviceGetMoreUsage": "使用量を追加する",
     "onDeviceGettingSpeechReady": "音声を準備しています · {percent}%"
 }

@@ -4306,6 +4306,8 @@
     "activityNewSemantics": "Tevékenység, új elemek",
     "activityLoadFailed": "Nem sikerült betölteni az összes tevékenységet",
     "activityNewItem": "Új",
+    "onDeviceMeterLineShort": "{percent}% felhasználva · {reset}",
+    "onDeviceMeterLineHours": "{percent}% felhasználva · körülbelül {hours} óra felvétel maradt · {reset}",
     "onDeviceGetMoreUsage": "Szerezzen több használatot",
     "onDeviceGettingSpeechReady": "A beszéd előkészítése · {percent}%"
 }

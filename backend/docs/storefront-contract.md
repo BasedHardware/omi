@@ -31,7 +31,7 @@ not expose the sheet.
   when the sheet is hidden.
 - `usage`: `kind` (`usage_budget`, `transcription`, `unavailable`), nullable
   `percent`, nullable `period_id`, nullable `reset_label`, nullable
-  `meter_line`, nullable `nudge_line`, nullable `more_label`, `pro_gates`.
+  `meter_line`, nullable `hours_left`, nullable `nudge_line`, nullable `more_label`, `pro_gates`.
   Never raw unit amounts. `more_label` is present only for `usage_budget`
   when `meter_line` is set; it is the words that open this sheet with
   `trigger=usage_budget`. It is omitted for legacy transcription usage and
@@ -155,6 +155,7 @@ otherwise the rate card in the copy config (Plus 16360, Pro 44090, Architect
 189463). `units_per_recorded_hour` is provisional; replace it with the shadow
 ledger p50 (#21369). Meter hours apply that definition to remaining units.
 Hours appear only from 80% to below 100%.
+`hours_left` is set only in that band when the estimate is positive, so a client can localize the wording while the backend stays authoritative for the number; it is omitted otherwise, including at the cap.
 The client does not hardcode hours.
 
 Price reads use `stripe_price:{price_id}` with a 24-hour TTL. Cache failures

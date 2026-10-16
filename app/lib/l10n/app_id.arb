@@ -4248,6 +4248,8 @@
     "activityNewSemantics": "Aktivitas, item baru",
     "activityLoadFailed": "Tidak dapat memuat semua aktivitas Anda",
     "activityNewItem": "Baru",
+    "onDeviceMeterLineShort": "{percent}% terpakai · {reset}",
+    "onDeviceMeterLineHours": "{percent}% terpakai · sekitar {hours} jam rekaman tersisa · {reset}",
     "onDeviceGetMoreUsage": "Dapatkan lebih banyak penggunaan",
     "onDeviceGettingSpeechReady": "Menyiapkan ucapan · {percent}%"
 }

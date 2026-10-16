@@ -453,6 +453,7 @@ def present_usage(
         if 80 <= shown < 100:
             left = recording_hours_left(plan_id, shown)
             if left > 0:
+                payload['hours_left'] = left
                 payload['meter_line'] = text['meter']['line'].format(
                     percent=shown, hours=f'{left:,}', reset=payload['reset_label']
                 )

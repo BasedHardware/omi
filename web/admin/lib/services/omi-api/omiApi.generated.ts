@@ -5128,6 +5128,7 @@ export interface StorefrontTier {
 }
 
 export interface StorefrontUsage {
+  hours_left?: number | null;
   kind?: "usage_budget" | "transcription" | "unavailable";
   mcp_cap_reached?: boolean;
   meter_line?: string | null;

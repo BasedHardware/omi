@@ -4255,6 +4255,8 @@
     "activityNewSemantics": "Aktivitet, nye elementer",
     "activityLoadFailed": "Kunne ikke indlæse al din aktivitet",
     "activityNewItem": "Ny",
+    "onDeviceMeterLineShort": "{percent}% brugt · {reset}",
+    "onDeviceMeterLineHours": "{percent}% brugt · cirka {hours} timers optagelse tilbage · {reset}",
     "onDeviceGetMoreUsage": "Få mere forbrug",
     "onDeviceGettingSpeechReady": "Gør tale klar · {percent} %"
 }

@@ -11633,6 +11633,8 @@
     "activityNewSemantics": "செயல்பாடு, புதிய உருப்படிகள்",
     "activityLoadFailed": "உங்கள் எல்லா செயல்பாடுகளையும் ஏற்ற முடியவில்லை",
     "activityNewItem": "புதியது",
+    "onDeviceMeterLineShort": "{percent}% பயன்படுத்தப்பட்டது · {reset}",
+    "onDeviceMeterLineHours": "{percent}% பயன்படுத்தப்பட்டது · சுமார் {hours} மணி நேர பதிவு மீதம் · {reset}",
     "onDeviceGetMoreUsage": "மேலும் பயன்பாட்டைப் பெறுங்கள்",
     "onDeviceGettingSpeechReady": "பேச்சு தயாராகிறது · {percent}%"
 }

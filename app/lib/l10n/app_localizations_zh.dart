@@ -13530,6 +13530,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get activityNewItem => '新';
 
   @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '已用 $percent% · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '已用 $percent% · 大约还可录音 $hours 小时 · $reset';
+  }
+
+  @override
   String get onDeviceGetMoreUsage => '获取更多用量';
 
   @override

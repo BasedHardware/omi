@@ -4213,6 +4213,8 @@
     "activityNewSemantics": "กิจกรรม, รายการใหม่",
     "activityLoadFailed": "โหลดกิจกรรมทั้งหมดของคุณไม่ได้",
     "activityNewItem": "ใหม่",
+    "onDeviceMeterLineShort": "ใช้ไป {percent}% · {reset}",
+    "onDeviceMeterLineHours": "ใช้ไป {percent}% · เหลือการบันทึกอีกประมาณ {hours} ชั่วโมง · {reset}",
     "onDeviceGetMoreUsage": "รับการใช้งานเพิ่ม",
     "onDeviceGettingSpeechReady": "กำลังเตรียมเสียงพูด · {percent}%"
 }

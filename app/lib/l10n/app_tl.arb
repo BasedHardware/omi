@@ -11633,6 +11633,8 @@
     "activityNewSemantics": "Aktibidad, mga bagong item",
     "activityLoadFailed": "Hindi ma-load ang lahat ng iyong aktibidad",
     "activityNewItem": "Bago",
+    "onDeviceMeterLineShort": "{percent}% nagamit · {reset}",
+    "onDeviceMeterLineHours": "{percent}% nagamit · mga {hours} oras ng recording ang natitira · {reset}",
     "onDeviceGetMoreUsage": "Kumuha ng higit pang paggamit",
     "onDeviceGettingSpeechReady": "Inihahanda ang pananalita · {percent}%"
 }

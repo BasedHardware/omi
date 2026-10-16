@@ -13788,6 +13788,16 @@ class AppLocalizationsKn extends AppLocalizations {
   String get activityNewItem => 'ಹೊಸದು';
 
   @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% ಬಳಕೆಯಾಗಿದೆ · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% ಬಳಕೆಯಾಗಿದೆ · ಸುಮಾರು $hours ಗಂಟೆ ರೆಕಾರ್ಡಿಂಗ್ ಉಳಿದಿದೆ · $reset';
+  }
+
+  @override
   String get onDeviceGetMoreUsage => 'ಹೆಚ್ಚಿನ ಬಳಕೆಯನ್ನು ಪಡೆಯಿರಿ';
 
   @override

@@ -13758,6 +13758,16 @@ class AppLocalizationsUr extends AppLocalizations {
   String get activityNewItem => 'نیا';
 
   @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% استعمال ہوا · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% استعمال ہوا · تقریباً $hours گھنٹے ریکارڈنگ باقی · $reset';
+  }
+
+  @override
   String get onDeviceGetMoreUsage => 'مزید استعمال حاصل کریں';
 
   @override

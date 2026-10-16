@@ -13798,6 +13798,16 @@ class AppLocalizationsHu extends AppLocalizations {
   String get activityNewItem => 'Új';
 
   @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% felhasználva · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% felhasználva · körülbelül $hours óra felvétel maradt · $reset';
+  }
+
+  @override
   String get onDeviceGetMoreUsage => 'Szerezzen több használatot';
 
   @override

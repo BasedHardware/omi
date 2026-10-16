@@ -13749,6 +13749,16 @@ class AppLocalizationsFi extends AppLocalizations {
   String get activityNewItem => 'Uusi';
 
   @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% käytetty · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% käytetty · noin $hours tuntia tallennusta jäljellä · $reset';
+  }
+
+  @override
   String get onDeviceGetMoreUsage => 'Hanki lisää käyttöä';
 
   @override

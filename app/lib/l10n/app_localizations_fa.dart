@@ -13738,6 +13738,16 @@ class AppLocalizationsFa extends AppLocalizations {
   String get activityNewItem => 'جدید';
 
   @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% استفاده شده · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% استفاده شده · حدود $hours ساعت ضبط باقی مانده · $reset';
+  }
+
+  @override
   String get onDeviceGetMoreUsage => 'استفادهٔ بیشتر بگیرید';
 
   @override

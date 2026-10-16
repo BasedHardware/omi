@@ -116,15 +116,19 @@ class OnDeviceSettingsView extends StatelessWidget {
           final settings = controller.settings;
           final status = controller.model.status;
           final meter = usage;
-          final meterLine = meter?.meterLine;
+          final locale = Localizations.localeOf(context);
+          final meterLine = meter == null ? null : onDeviceMeterLine(meter, locale, l10n);
           final showMeter = meter != null && meterLine != null && meterLine.isNotEmpty;
-          final moreLabel = meter?.moreLabel;
-          final showMore = plansSheetAvailable && moreLabel != null && moreLabel.isNotEmpty;
-          final moreTitle = showMore
-              ? (onDeviceUsesLocalizedCopy(Localizations.localeOf(context)) ? l10n.onDeviceGetMoreUsage : moreLabel)
-              : null;
+          final moreTitle = onDeviceMoreUsageTitle(
+            plansSheetAvailable: plansSheetAvailable,
+            moreLabel: meter?.moreLabel,
+            locale: locale,
+            l10n: l10n,
+          );
+          final showMore = moreTitle != null;
           final modelKnown = controller.model.engineResolved;
-          final showModelRows = modelKnown && !controller.model.isOsManaged;
+          final detectionFailed = controller.model.detectionFailed;
+          final showModelRows = modelKnown && !detectionFailed && !controller.model.isOsManaged;
           final showSpeechProgress =
               modelKnown && controller.model.isOsManaged && status.phase == OnDeviceModelPhase.downloading;
           return ListView(
@@ -133,14 +137,28 @@ class OnDeviceSettingsView extends StatelessWidget {
               if (showMeter || showMore) ...[
                 OmiSettingsGroup(
                   children: [
-                    if (showMeter) StorefrontUsageMeter(usage: meter, embedded: true),
+                    if (showMeter) StorefrontUsageMeter(usage: meter.withMeterLine(meterLine), embedded: true),
                     if (showMore)
                       OmiSettingsRow(
                         key: const Key('on_device_settings_more_usage'),
                         leading: const Icon(Icons.bolt),
-                        title: moreTitle!,
+                        title: moreTitle,
                         onTap: onGetMoreUsage,
                       ),
+                  ],
+                ),
+                const SizedBox(height: OmiSpacing.lg),
+              ],
+              if (detectionFailed) ...[
+                OmiSettingsGroup(
+                  children: [
+                    OmiSettingsRow(
+                      key: const Key('on_device_settings_engine_unavailable'),
+                      leading: const Icon(Icons.graphic_eq),
+                      title: l10n.onDeviceModelUnsupported,
+                      value: l10n.tryAgain,
+                      onTap: () => unawaited(controller.model.refresh()),
+                    ),
                   ],
                 ),
                 const SizedBox(height: OmiSpacing.lg),

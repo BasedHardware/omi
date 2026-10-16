@@ -10,20 +10,19 @@ import 'package:omi/models/local_recording.dart';
 import 'package:omi/models/plan_storefront.dart';
 import 'package:omi/pages/on_device/on_device_components.dart';
 import 'package:omi/pages/on_device/on_device_setup_page.dart';
-import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/settings/widgets/plans/contextual_plans.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/experiments/plan_storefront_gate.dart';
 import 'package:omi/services/on_device/on_device_model.dart';
 import 'package:omi/services/on_device/on_device_schedule_policy.dart';
 import 'package:omi/services/on_device/on_device_settings.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/other/temp.dart';
 
-/// Opens the plans sheet for the shared usage budget.
-void openOnDeviceUpgrade(BuildContext context) => unawaited(_openOnDeviceUpgrade(context));
+/// Opens the plans sheet for the shared usage budget. There is no legacy usage-page fallback.
+void openOnDeviceUpgrade(BuildContext context) => unawaited(openOnDeviceUsagePlans(context));
 
 /// Opens that sheet from the settings "Get more usage" row.
 ///
@@ -42,19 +41,19 @@ Future<StorefrontUsage?> loadOnDeviceUsage(String locale) async {
   return usage;
 }
 
-Future<void> _openOnDeviceUpgrade(BuildContext context) async {
-  if (await openContextualPlans(context, source: 'on_device_overflow', trigger: 'usage_budget')) return;
-  if (context.mounted) {
-    await routeToPage(context, const UsagePage(showUpgradeDialog: true, paywallSource: 'on_device_overflow'));
-  }
+Future<bool> onDevicePlansSheetAvailable(BuildContext context) async {
+  final provider = context.read<UsageProvider>();
+  return provider.showSubscriptionUI && await PlanStorefrontGate.sheetEnabled();
 }
 
 /// The conversations list's banner for recordings waiting on this phone. Renders nothing unless the
 /// on-device flag is on and something is waiting.
 class OnDeviceQueueBanner extends StatefulWidget {
-  const OnDeviceQueueBanner({super.key, this.controller});
+  const OnDeviceQueueBanner({super.key, this.controller, this.loadUsage, this.plansSheetAvailable});
 
   final OnDeviceTranscriptionController? controller;
+  final Future<StorefrontUsage?> Function(String locale)? loadUsage;
+  final Future<bool> Function(BuildContext context)? plansSheetAvailable;
 
   @override
   State<OnDeviceQueueBanner> createState() => _OnDeviceQueueBannerState();
@@ -64,6 +63,7 @@ class _OnDeviceQueueBannerState extends State<OnDeviceQueueBanner> {
   OnDeviceTranscriptionController get _controller => widget.controller ?? OnDeviceTranscriptionController.instance;
   int _evaluatedSeconds = -1;
   String? _moreLabel;
+  bool _plansSheet = false;
   Future<void>? _usageLoad;
 
   @override
@@ -83,8 +83,15 @@ class _OnDeviceQueueBannerState extends State<OnDeviceQueueBanner> {
     // The conversations page mounts this banner while the flag is off. Do not
     // construct the storefront client until the gate is on; that reads Env.
     if (!mounted || !_controller.isActive) return;
-    final usage = await loadOnDeviceUsage(context.l10n.localeName);
-    if (mounted) setState(() => _moreLabel = usage?.moreLabel);
+    final sheet = await (widget.plansSheetAvailable ?? onDevicePlansSheetAvailable)(context);
+    if (!mounted) return;
+    final usage = await (widget.loadUsage ?? loadOnDeviceUsage)(context.l10n.localeName);
+    if (mounted) {
+      setState(() {
+        _plansSheet = sheet;
+        _moreLabel = usage?.moreLabel;
+      });
+    }
   }
 
   @override
@@ -106,12 +113,18 @@ class _OnDeviceQueueBannerState extends State<OnDeviceQueueBanner> {
           return OmiErrorState(
               message: context.l10n.failedToTranscribeAudio, onRetry: () => unawaited(_controller.transcribeNow()));
         }
+        final moreLabel = onDeviceMoreUsageTitle(
+          plansSheetAvailable: _plansSheet,
+          moreLabel: _moreLabel,
+          locale: Localizations.localeOf(context),
+          l10n: context.l10n,
+        );
         return OnDeviceQueueBannerView(
           controller: _controller,
           pendingSeconds: pendingSeconds,
           atCap: atCap,
           onSetUp: () => unawaited(openOnDeviceSetup(context, controller: widget.controller)),
-          moreLabel: _moreLabel,
+          moreLabel: moreLabel,
           onGetMoreUsage: () => openOnDeviceUpgrade(context),
         );
       },
@@ -150,6 +163,9 @@ class OnDeviceQueueBannerView extends StatelessWidget {
     if (!controller.isActive || pendingSeconds <= 0) return const SizedBox.shrink();
     final settings = controller.settings;
     final status = controller.model.status;
+    if (controller.model.detectionFailed) {
+      return settings.enabled || atCap ? _engineUnavailable(context) : const SizedBox.shrink();
+    }
     if (!status.isSupported) {
       return atCap ? _unsupported(context) : const SizedBox.shrink();
     }
@@ -285,6 +301,24 @@ class OnDeviceQueueBannerView extends StatelessWidget {
             expand: true,
             onPressed: onGetMoreUsage,
           ),
+      ],
+    );
+  }
+
+  Widget _engineUnavailable(BuildContext context) {
+    final l10n = context.l10n;
+    return _card(
+      key: const Key('on_device_engine_unavailable'),
+      children: [
+        _title(Icons.graphic_eq, l10n.onDeviceModelUnsupported),
+        const SizedBox(height: OmiSpacing.sm),
+        OmiButton(
+          key: const Key('on_device_engine_retry'),
+          label: l10n.tryAgain,
+          size: OmiButtonSize.compact,
+          expand: true,
+          onPressed: () => unawaited(controller.model.refresh()),
+        ),
       ],
     );
   }

@@ -4213,6 +4213,8 @@
     "activityNewSemantics": "Aktiviti, item baharu",
     "activityLoadFailed": "Tidak dapat memuatkan semua aktiviti anda",
     "activityNewItem": "Baharu",
+    "onDeviceMeterLineShort": "{percent}% digunakan · {reset}",
+    "onDeviceMeterLineHours": "{percent}% digunakan · kira-kira {hours} jam rakaman lagi · {reset}",
     "onDeviceGetMoreUsage": "Dapatkan lebih banyak penggunaan",
     "onDeviceGettingSpeechReady": "Menyediakan pertuturan · {percent}%"
 }

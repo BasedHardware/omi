@@ -4213,6 +4213,8 @@
     "activityNewSemantics": "النشاط، عناصر جديدة",
     "activityLoadFailed": "تعذّر تحميل كل نشاطك",
     "activityNewItem": "جديد",
+    "onDeviceMeterLineShort": "{percent}% مستخدم · {reset}",
+    "onDeviceMeterLineHours": "{percent}% مستخدم · حوالي {hours} ساعات تسجيل متبقية · {reset}",
     "onDeviceGetMoreUsage": "احصل على المزيد من الاستخدام",
     "onDeviceGettingSpeechReady": "جارٍ تجهيز الكلام · {percent}%"
 }

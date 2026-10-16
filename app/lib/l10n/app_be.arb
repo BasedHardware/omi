@@ -11633,6 +11633,8 @@
     "activityNewSemantics": "Актыўнасць, новыя элементы",
     "activityLoadFailed": "Не ўдалося загрузіць усю вашу актыўнасць",
     "activityNewItem": "Новае",
+    "onDeviceMeterLineShort": "{percent}% выкарыстана · {reset}",
+    "onDeviceMeterLineHours": "{percent}% выкарыстана · засталося каля {hours} гадзін запісу · {reset}",
     "onDeviceGetMoreUsage": "Атрымайце больш выкарыстання",
     "onDeviceGettingSpeechReady": "Падрыхтоўка маўлення · {percent}%"
 }

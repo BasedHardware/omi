@@ -4213,6 +4213,8 @@
     "activityNewSemantics": "Aktivitet, nye elementer",
     "activityLoadFailed": "Kunne ikke laste inn all aktiviteten din",
     "activityNewItem": "Ny",
+    "onDeviceMeterLineShort": "{percent}% brukt · {reset}",
+    "onDeviceMeterLineHours": "{percent}% brukt · omtrent {hours} timer opptak igjen · {reset}",
     "onDeviceGetMoreUsage": "Få mer bruk",
     "onDeviceGettingSpeechReady": "Gjør tale klar · {percent}%"
 }

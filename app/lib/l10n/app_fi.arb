@@ -4213,6 +4213,8 @@
     "activityNewSemantics": "Toiminta, uusia kohteita",
     "activityLoadFailed": "Kaikkea toimintaa ei voitu ladata",
     "activityNewItem": "Uusi",
+    "onDeviceMeterLineShort": "{percent}% käytetty · {reset}",
+    "onDeviceMeterLineHours": "{percent}% käytetty · noin {hours} tuntia tallennusta jäljellä · {reset}",
     "onDeviceGetMoreUsage": "Hanki lisää käyttöä",
     "onDeviceGettingSpeechReady": "Puhe valmistellaan · {percent} %"
 }

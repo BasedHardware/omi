@@ -4213,6 +4213,8 @@
     "activityNewSemantics": "Activitate, elemente noi",
     "activityLoadFailed": "Nu am putut încărca toată activitatea ta",
     "activityNewItem": "Nou",
+    "onDeviceMeterLineShort": "{percent}% folosit · {reset}",
+    "onDeviceMeterLineHours": "{percent}% folosit · au rămas aproximativ {hours} ore de înregistrare · {reset}",
     "onDeviceGetMoreUsage": "Obțineți mai multă utilizare",
     "onDeviceGettingSpeechReady": "Se pregătește vorbirea · {percent}%"
 }
