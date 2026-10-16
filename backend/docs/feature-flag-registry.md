@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-09-24 -->
+<!-- feature-flag-registry as-of: 2026-10-16 -->
 
 # Feature-flag authority registry
 
@@ -114,7 +114,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-09-24.
+None as of 2026-10-16.
 
 ## Flags
 
@@ -189,6 +189,9 @@ and an explicit empty literal renders as `''`.
 | `BUCKET_AUDIO_DERIVED` | Default-off as-captured audio rollout setting BUCKET_AUDIO_DERIVED; David then <=5 percent for >=12h | backend | env | closed | {value: '', category: rollout} | '' (backend-listen (chart), pusher (chart)); {value: '', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | '' (backend-listen (chart), pusher (chart)); {value: '', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | pending | 2026-11-14 | dazheng |
 | `CAPTURE_EVIDENCE_V1_DARK_WRITE` | Piggyback bounded capture evidence metadata on existing writes | backend, mobile, macos | env | closed | {value: 'false', category: rollout} | true (backend-listen (chart), pusher (chart)); {value: 'true', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | true (backend-listen (chart), pusher (chart)); {value: 'true', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | pending | 2026-10-27 | dazheng |
 | `CAPTURE_GROUP_CONTAINMENT_MODE` | Time-aligned user utterance containment for complementary cross-source capture groups; off\|shadow\|on, default shadow, unknown off | backend | env | closed | {value: 'shadow', category: rollout} | shadow (backend-listen (chart), pusher (chart)); {value: 'shadow', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | shadow (backend-listen (chart), pusher (chart)); {value: 'shadow', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | pending | 2026-11-03 | dazheng |
+| `CAPTURE_SHARED_SPEECH_MODE` | Default off; shadow logs deterministic overlap sentence evidence; on replaces automatic grouping in the selected cohort, including complementary call linking | backend | env | closed | — | — | — | — | pending | 2026-11-15 | dazheng |
+| `CAPTURE_SHARED_SPEECH_PERCENT` | Stable account percentage admitted to shared speech mode; default 0; invalid value admits nobody by percentage | backend | env | closed | — | — | — | — | pending | 2026-11-15 | dazheng |
+| `CAPTURE_SHARED_SPEECH_UID_ALLOWLIST` | Comma-separated exact accounts admitted to shared speech mode; default empty, union with stable percentage cohort | backend | env | closed | — | — | — | — | pending | 2026-11-15 | dazheng |
 | `CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED` | Read calendar context during conversation processing | backend | env | closed | declared | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | graduate | 2026-10-23 | dazheng |
 | `CONVERSATION_LLM_INPUT_DEDUPE_ENABLED` | Reuse notes and L1 for exact successful effective inputs; code/dev off, Train 1 prod sync hosts on | backend | env | closed | false | false | true | — | pending | 2026-11-14 | dazheng |
 | `CONVERSATION_OCR_CONTEXT_ENABLED` | Read OCR meeting identity during conversation processing | backend | env | closed | declared | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | graduate | 2026-10-23 | dazheng |
@@ -478,6 +481,9 @@ their code default (`fail` tells you which way a missing value resolves).
 - `CAPTURE_JEV_SHADOW_EXPIRY` — Shorten the Jev capture shadow hard deadline (fail: closed)
 - `CAPTURE_JEV_SHADOW_GLOBAL_DAILY_CAP` — Global daily Jev capture shadow call budget (fail: closed)
 - `CAPTURE_JEV_SHADOW_USER_DAILY_CAP` — Per-user daily Jev capture shadow call budget (fail: closed)
+- `CAPTURE_SHARED_SPEECH_MODE` — Default off; shadow logs deterministic overlap sentence evidence; on replaces automatic grouping in the selected cohort, including complementary call linking (fail: closed)
+- `CAPTURE_SHARED_SPEECH_PERCENT` — Stable account percentage admitted to shared speech mode; default 0; invalid value admits nobody by percentage (fail: closed)
+- `CAPTURE_SHARED_SPEECH_UID_ALLOWLIST` — Comma-separated exact accounts admitted to shared speech mode; default empty, union with stable percentage cohort (fail: closed)
 - `COMMITMENT_FOLLOWUP_TASKS_HANDLER_URL` — One-shot commitment due callback transport; absent disables scheduling (fail: closed)
 - `COMMITMENT_FOLLOWUP_TASKS_INVOKER_SA` — One-shot commitment due callback transport; absent disables scheduling (fail: closed)
 - `COMMITMENT_FOLLOWUP_TASKS_QUEUE` — One-shot commitment due callback transport; absent disables scheduling (fail: closed)

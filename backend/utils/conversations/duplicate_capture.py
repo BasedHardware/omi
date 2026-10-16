@@ -14,13 +14,16 @@ meeting-role and window contract, and pins the desktop primary.
 from __future__ import annotations
 
 import logging
+import json
 import math
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from config.desktop_pendant_call_link import call_link_mode, call_pair
+from config.capture_shared_speech import shared_speech_mode
 from utils.conversations.desktop_pendant_call_link import link_call_pair, reserved_for_call
 from database import capture_groups as capture_groups_db
 from database import conversations as conversations_db
@@ -30,6 +33,7 @@ from utils.conversations.capture_containment import (
     record_capture_containment,
 )
 from utils.conversations.shared_speech import measure_shared_speech
+from utils.conversations.overlap_shared_speech import measure_overlap_shared_speech, pair_category, VERSION
 from utils.conversations.capture_jev_shadow import submit_resummary, submit_same_scene
 from utils.observability.fallback import record_fallback
 from utils.product_metrics import record_product_event
@@ -102,6 +106,7 @@ def link_duplicate_captures(uid: str, conversation: Any) -> None:
     candidate = capture_record(conversation)
     if candidate is None:
         return
+    speech_mode = shared_speech_mode(uid)
     try:
         seconds = _threshold('CROSS_DEVICE_DEDUP_MIN_OVERLAP_SECONDS', MIN_OVERLAP_SECONDS)
         ratio = _threshold('CROSS_DEVICE_DEDUP_MIN_OVERLAP_RATIO', MIN_WINDOW_COVERAGE, 1.0)
@@ -110,8 +115,11 @@ def link_duplicate_captures(uid: str, conversation: Any) -> None:
         )
         if len(rows) == CANDIDATE_PAGE_LIMIT:
             _record_degraded()
-        link_call_pair(uid, candidate.conversation_id, rows, saturated=len(rows) == CANDIDATE_PAGE_LIMIT)
-        link_mode = call_link_mode(uid)
+        # The selected on cohort requires shared sentences even for call pairs.
+        # Off/shadow retain the incumbent complementary-call policy unchanged.
+        if speech_mode != 'on':
+            link_call_pair(uid, candidate.conversation_id, rows, saturated=len(rows) == CANDIDATE_PAGE_LIMIT)
+        link_mode = call_link_mode(uid) if speech_mode != 'on' else 'off'
         by_id = {row['id']: row for row in rows if row.get('id')} if link_mode == 'on' else {}
         own = by_id.get(candidate.conversation_id) or {}
         if link_mode == 'on' and not own:
@@ -142,7 +150,22 @@ def link_duplicate_captures(uid: str, conversation: Any) -> None:
         # Exception strings can carry request data; keep telemetry content-free.
         _record_degraded()
         return
-    _group_confirmed_captures(uid, conversation, candidate, matches[:MAX_CONTENT_CHECKS])
+    if speech_mode != 'on':
+        _group_confirmed_captures(uid, conversation, candidate, matches[:MAX_CONTENT_CHECKS])
+    if speech_mode != 'off':
+        overlapping = [
+            other
+            for other in others
+            if other.conversation_id != candidate.conversation_id
+            and min(candidate.finished_at, other.finished_at) > max(candidate.started_at, other.started_at)
+        ]
+        _group_with_overlap_speech(
+            uid,
+            candidate,
+            overlapping[:MAX_CONTENT_CHECKS],
+            mode=speech_mode,
+            legacy_ids={other.conversation_id for other in matches[:MAX_CONTENT_CHECKS]},
+        )
     # The shadow sees overlapping candidates even when source, window threshold,
     # or content threshold kept the shipped rule from grouping them.
     shadow_candidates = 0
@@ -165,6 +188,79 @@ def _segments_of(record: Any):
         if isinstance(record, Mapping)
         else getattr(record, 'transcript_segments', None)
     )
+
+
+def _group_with_overlap_speech(
+    uid: str, candidate: CaptureRecord, matches: list[CaptureRecord], *, mode: str, legacy_ids: set[str]
+) -> None:
+    """Observe or apply bounded same-sentence decisions through the fenced writer.
+
+    Shadow adds at most seven decrypted reads, no new writes. On replaces all
+    automatic grouping policies for the cohort and keeps existing groups intact.
+    """
+    if not matches:
+        return
+    try:
+        own, own_fingerprint = conversations_db.get_conversation_for_capture_check(uid, candidate.conversation_id)
+    except Exception:
+        _record_degraded(to_mode='separate_captures')
+        return
+    for other in matches:
+        try:
+            row, fingerprint = conversations_db.get_conversation_for_capture_check(uid, other.conversation_id)
+            started = time.perf_counter()
+            decision = measure_overlap_shared_speech(own, row)
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            incumbent = False
+            if other.conversation_id in legacy_ids:
+                incumbent = measure_shared_speech(_segments_of(own), _segments_of(row)).confirms()
+                if not incumbent and capture_group_containment_mode() == 'on':
+                    containment = measure_capture_containment(own, row, mode='on')
+                    incumbent = containment.would_join and containment.basis == 'full'
+            own_group = (own or {}).get('capture_group') or {}
+            other_group = (row or {}).get('capture_group') or {}
+            already_grouped = bool(own_group.get('id') and own_group.get('id') == other_group.get('id'))
+            outcome = 'shadow' if mode == 'shadow' else 'none'
+            if mode == 'on' and decision.would_join:
+                group_id = capture_groups_db.join_capture_group(
+                    uid,
+                    candidate.conversation_id,
+                    other.conversation_id,
+                    decision.evidence(),
+                    expected_windows={r.conversation_id: (r.started_at, r.finished_at) for r in (candidate, other)},
+                    expected_fingerprints={
+                        candidate.conversation_id: own_fingerprint,
+                        other.conversation_id: fingerprint,
+                    },
+                )
+                outcome = 'applied' if group_id else 'conflict'
+                record_product_event('capture_group_joined', outcome=outcome)
+            logger.info(
+                'capture_shared_speech %s',
+                json.dumps(
+                    {
+                        'event': 'capture_shared_speech',
+                        'version': VERSION,
+                        'mode': mode,
+                        'uid': uid,
+                        'first_id': candidate.conversation_id,
+                        'second_id': other.conversation_id,
+                        'category': pair_category(own, row),
+                        'current_would_join': bool(incumbent),
+                        'already_grouped': already_grouped,
+                        'would_join': decision.would_join,
+                        'reason': decision.reason,
+                        'outcome': outcome,
+                        'matcher_ms': round(elapsed_ms, 3),
+                        **decision.evidence(),
+                    },
+                    sort_keys=True,
+                    separators=(',', ':'),
+                ),
+            )
+        except Exception:
+            logger.warning('event=capture_shared_speech outcome=error')
+            _record_degraded(to_mode='separate_captures')
 
 
 def _group_confirmed_captures(uid: str, conversation: Any, candidate: CaptureRecord, matches: list) -> None:
