@@ -36,13 +36,6 @@ QUEUE_AGE_SAMPLERS: Dict[str, Dict[str, Any]] = {
         'created_at_field': 'created_at',
         'collection_group': True,
     },
-    'chat_first_proactive_intents': {
-        'collection': 'chat_first_proactive_intents',
-        'status_field': 'delivery_state',
-        'ready_statuses': ('ready', 'pending_kernel_receipt'),
-        'created_at_field': 'created_at',
-        'collection_group': True,
-    },
     'vector_repair_outbox': {
         'collection': 'memory_outbox',
         'status_field': 'status',
@@ -62,13 +55,6 @@ QUEUE_AGE_SAMPLERS: Dict[str, Dict[str, Any]] = {
         'collection': 'frame_deletion_outbox',
         'status_field': None,
         'ready_statuses': (),
-        'created_at_field': 'created_at',
-        'collection_group': True,
-    },
-    'projection_repairs': {
-        'collection': 'projection_repairs',
-        'status_field': 'status',
-        'ready_statuses': ('queued', 'failed'),
         'created_at_field': 'created_at',
         'collection_group': True,
     },

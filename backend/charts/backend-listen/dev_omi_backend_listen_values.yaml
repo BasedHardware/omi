@@ -106,6 +106,50 @@ envFrom:
       name: dev-omi-backend-config
 
 env:
+  - name: BATCH_PIPELINE_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_UID_ALLOWLIST
+    value: ""
+  - name: BATCH_PIPELINE_PERCENT
+    value: "0"
+  - name: BATCH_PIPELINE_SERVING_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_WORKER_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_API_URL
+    value: ""
+  - name: BATCH_PIPELINE_WORKER_AUDIENCE
+    value: ""
+  - name: BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT
+    value: ""
+  - name: BUCKET_BATCH_PIPELINE
+    value: ""
+  - name: BATCH_PIPELINE_UNIT_SECONDS
+    value: "3600"
+  - name: BATCH_PIPELINE_SHARED_LIVE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_LIVE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_READ_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_STOP_PCM_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_SYNC_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_COALESCE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_PERCENT
+    value: "0"
+  - name: AUDIO_ARCHIVE_UID_ALLOWLIST
+    value: ""
+  - name: BUCKET_AUDIO_DERIVED
+    value: ""
+  - name: AUDIO_MERGE_WORKER_URL
+    value: ""
   # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
   - name: PROACTIVITY_V2_POSTHOG_TOKEN
     value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
@@ -221,6 +265,12 @@ env:
     value: "gateway"
   - name: OMI_SHAPED_AGENT_MODE
     value: "on"
+  - name: DREAM_AGENT_ELIGIBILITY
+    value: 'allowlist'
+  - name: DREAM_AGENT_UID_ALLOWLIST
+    value: ""
+  - name: DREAM_ON_DEMAND_ENABLED
+    value: 'true'
   - name: REVIEW_SURFACE_MODE
     value: "on"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
@@ -308,13 +358,17 @@ env:
   - name: BUCKET_TEMPORAL_SYNC_LOCAL
     value: "syncing-local-development"
   - name: HOSTED_VAD_API_URL
-    value: "http://vad.omiapi.com:80/v1/vad"
+    value: "http://172.16.48.49/vad/v1/vad"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
-    value: "http://diarizer.omiapi.com:80"
+    value: "http://172.16.48.49/diarizer"
   - name: HOSTED_TRANSLATION_API_URL
-    value: "http://nllb.omiapi.com"
+    value: "http://172.16.48.49/nllb"
   - name: TRANSLATION_SERVICE_MODELS
     value: "nllb,gemini"
+  - name: TRANSLATION_CACHE_TTL
+    value: "86400"
+  - name: TRANSLATION_NEGATIVE_CACHE_TTL
+    value: "21600"
   - name: TRANSLATION_DEMAND_SHADOW_ENABLED
     value: "false"
   - name: TRANSLATION_DEMAND_GATE_ENABLED
@@ -370,6 +424,14 @@ env:
     value: "false"
   - name: STT_RESILIENT_RECONNECT
     value: "false"
+  - name: STT_LIVE_DEMAND_ENABLED
+    value: "false"
+  - name: STT_LIVE_DEMAND_PERCENT
+    value: "0"
+  - name: STT_LIVE_DEMAND_UID_ALLOWLIST
+    value: ""
+  - name: STT_LIVE_DEMAND_MIN_DWELL_SECONDS
+    value: "15"
   - name: STT_FAILOVER_RECOVERY_ENABLED
     value: "false"
   - name: STT_ROUTING_MODE
@@ -408,6 +470,10 @@ env:
     value: "8"
   - name: PARAKEET_WINDOW_DIARIZATION
     value: "false"
+  - name: PARAKEET_WINDOW_DEADLINE_CUT_ENABLED
+    value: "false"
+  - name: PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS
+    value: "1.2"
   - name: PARAKEET_WINDOW_PACE_SECONDS
     value: "6"
   - name: PARAKEET_WINDOW_MAX_CONTEXT_SECONDS

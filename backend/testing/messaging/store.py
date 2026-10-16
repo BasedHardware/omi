@@ -15,6 +15,8 @@ class MemoryStore:
     def __init__(self):
         self.proofs, self.identities, self.jobs, self.sessions, self.logs, self.leases = {}, {}, {}, {}, {}, {}
         self.chat_heads = {}
+        self.album_parts = set()
+        self.notices = {}
         self.lock = RLock()
 
     def mint(self, uid, channel, provider, kind, *, now=None):
@@ -50,14 +52,36 @@ class MemoryStore:
             message.provider_message_id,
         )
         with self.lock:
-            if path in self.jobs:
+            if path in self.jobs or path in self.album_parts:
                 return None
             payload = asdict(message)
             payload['received_at'] = message.received_at.isoformat()
+            if message.media_group_id:
+                from utils.messaging.albums import merge_album, album_ready_at
+
+                album_path = key(
+                    message.channel,
+                    message.provider,
+                    message.external_user_id,
+                    message.external_chat_id,
+                    'album:' + message.media_group_id,
+                )
+                row = self.jobs.get(album_path)
+                if row is None or row['status'] == 'pending':
+                    self.album_parts.add(path)
+                    path = album_path
+                    payload = merge_album(row['payload'] if row else None, payload)
+                    ready = album_ready_at(row, datetime.now(timezone.utc))
+                else:
+                    ready = None
+            else:
+                ready = None
+            created_at = self.jobs[path]['created_at'] if path in self.jobs else datetime.now(timezone.utc)
             self.jobs[path] = dict(
                 payload=payload,
                 status='pending',
-                created_at=datetime.now(timezone.utc),
+                created_at=created_at,
+                album_ready_at=ready,
                 identity=(message.channel, message.provider, message.external_user_id),
             )
             chat = (message.channel, message.provider, message.external_user_id, message.external_chat_id)
@@ -109,6 +133,8 @@ class MemoryStore:
                     continue
                 if row['status'] == 'running' or (not take_head and candidate != path):
                     return None
+                if row.get('album_ready_at') and row['album_ready_at'] > now:
+                    return None
                 row.update(status='running', started_at=now)
                 return candidate, copy.deepcopy(row['payload'])
         return None
@@ -157,6 +183,34 @@ class MemoryStore:
         log = self.logs.setdefault((uid, session), [])
         if not any(e['id'] == event['id'] for e in log):
             log.append(copy.deepcopy(event))
+
+    def assert_link_capacity(self, message, link):
+        pass
+
+    def assert_notice_link(self, message, link):
+        current = self.lookup(message)
+        if not current or not current.get('active') or current.get('generation') != link['generation']:
+            raise PermissionError('Link revoked')
+
+    def has_event(self, uid, session, event_ids):
+        return any(e['id'] in event_ids for e in self.events(uid, session))
+
+    def notice_allowed(self, message, reason, window=3600):
+        identity = (message.channel, message.external_user_id, reason)
+        now = datetime.now(timezone.utc)
+        with self.lock:
+            if identity in self.notices and (now - self.notices[identity]).total_seconds() < window:
+                return False
+            self.notices[identity] = now
+            return True
+
+    def reset_session(self, uid, message, link):
+        surface = 'channel:' + key(message.channel, message.external_chat_id)
+        self.sessions[(uid, surface)] = {'id': uuid4().hex, 'surface': surface}
+        return self.sessions[(uid, surface)]
+
+    def claim_expired(self, channel, provider, limit=20):
+        return []
 
     def persist_message(self, uid, document, session_id):
         return document

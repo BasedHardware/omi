@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-incomplete-histogram-export",
+  "violated_contract": "Accepted bucket-only fleet summaries must reach GMP with their cumulative counts intact. Development run 38822553412 accepted the signed summary with HTTP 200 and exported its event counter, but GMP had no histogram descriptor or bucket/count series: the histogram family omitted a sum, which Google's exporter requires before completing a distribution.",
+  "canonical_prevention": "Export bucket-only summaries through the shared independent-counter collector, without claiming an unavailable measured sum. Exercise all registered families through actual Prometheus exposition and parsing, requiring complete counter metadata, cumulative bucket/count conservation, bounded labels and the reviewed series bound. Verify the authenticated development probe's counter and buckets in GMP before production deployment.",
+  "canonical_prevention_artifact": [
+    "backend/utils/observability/fleet.py",
+    "backend/tests/unit/test_fleet_metrics_export.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/observability/fleet.py",
+    "backend/tests/unit/test_fleet_metrics_export.py",
+    "backend/telemetry/"
+  ],
+  "status": "open"
+}

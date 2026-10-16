@@ -62,8 +62,9 @@ class _RingBuffer:
 
 def _host(websocket, sample_rate: int, ring_buffer, audio_bytes):
     return SimpleNamespace(
-        request=SimpleNamespace(websocket=websocket, codec='opus', sample_rate=sample_rate),
+        request=SimpleNamespace(websocket=websocket, uid='test-uid', codec='opus', sample_rate=sample_rate),
         state=SimpleNamespace(
+            current_conversation_id=None,
             active=True,
             close_code=1001,
             last_audio_received_time=None,
@@ -139,8 +140,10 @@ async def test_multi_channel_receiver_decodes_frames_longer_than_twenty_millisec
     sample_rate = 16000
     samples_per_frame = sample_rate // 1000 * 60
     host = SimpleNamespace(
-        request=SimpleNamespace(codec='opus', sample_rate=sample_rate),
-        state=SimpleNamespace(fair_use_dg_budget_exhausted=False, fair_use_track_dg_usage=False),
+        request=SimpleNamespace(uid='test-uid', codec='opus', sample_rate=sample_rate),
+        state=SimpleNamespace(
+            current_conversation_id=None, fair_use_dg_budget_exhausted=False, fair_use_track_dg_usage=False
+        ),
         is_multi_channel=True,
         use_custom_stt=True,
         audio_bytes_send=None,

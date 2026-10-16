@@ -508,7 +508,7 @@ class TestRosterPromptPrefix:
         # the transcript, byte-for-byte. The one-name guard still binds.
         assert prefix.context == (
             'CONVERSATION METADATA\n'
-            '- Captured at: 2026-08-18T14:00:00 (UTC)\n'
+            '- Captured at: Tue 18 Aug 2026, 14:00 UTC\n'
             '- Meeting title: Scaling Forever sync\n'
             '- Participants: David, Ash Kalb <ash@fulcra.com>\n'
             '- Platform: Zoom\n'
@@ -866,6 +866,7 @@ class TestRichFailOpen:
         monkeypatch.setattr(pc, '_proposes_task_candidates', lambda conversation: False)
         monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda uid: 'UTC')
         monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda uid: 'en')
+        monkeypatch.setattr(pc, 'conversation_known_spellings', lambda *_: '')
         monkeypatch.setattr(pc, 'track_usage', lambda *a, **k: contextlib.nullcontext())
         monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *a, **k: [])
         monkeypatch.setattr(pc, 'validate_structured_source_segment_ids', lambda *a, **k: None)

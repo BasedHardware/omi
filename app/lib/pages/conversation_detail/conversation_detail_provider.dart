@@ -882,6 +882,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
+  // The open detail page derives its conversation from ConversationProvider
+  // (conversationOrNull); this notify is how it sees server updates. Only the
+  // detail page listens, so the cost is bounded to that page.
+  // omi-perf-allow: proxy-hook-notify -- the open detail page derives its conversation from upstream
   void setProviders(AppProvider provider, ConversationProvider conversationProvider) {
     this.conversationProvider = conversationProvider;
     appProvider = provider;

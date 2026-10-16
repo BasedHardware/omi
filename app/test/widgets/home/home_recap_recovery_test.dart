@@ -7,6 +7,7 @@ import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/daily_recap_recovery_action.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
+import 'package:omi/services/recap_events.dart';
 import 'package:omi/ui/ui.dart';
 import '../../helpers/proactivity_fakes.dart';
 
@@ -85,5 +86,23 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text(recap.headline), findsOneWidget);
     expect(find.byType(OmiErrorState), findsNothing);
+  });
+
+  testWidgets('shared arrivals refresh Home while a late read cannot resurrect a deleted recap', (tester) async {
+    final late = Completer<Page>();
+    var reads = 0;
+    await pump(tester, () => reads++ == 0 ? Future.value((items: [recap], ok: true)) : late.future);
+    await tester.pumpAndSettle();
+    expect(find.text(recap.headline), findsOneWidget);
+    announceRecapArrived();
+    await tester.pump();
+    expect(reads, 2);
+    announceRecapDeleted(recap.id);
+    await tester.pump();
+    expect(find.text(recap.headline), findsNothing);
+    late.complete((items: [recap], ok: true));
+    await tester.pumpAndSettle();
+    expect(find.text(recap.headline), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 }

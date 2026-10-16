@@ -17,7 +17,12 @@ from collections.abc import Mapping
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
-from config.plan_catalog import PlanType, RECOGNIZED_STRIPE_PRICE_PLAN_TYPES, resolve_stripe_price_plan
+from config.plan_catalog import (
+    LADDER_V1_STRIPE_PRICES,
+    PlanType,
+    RECOGNIZED_STRIPE_PRICE_PLAN_TYPES,
+    resolve_stripe_price_plan,
+)
 from utils.metrics import OMI_SUBSCRIPTION_EVENTS
 
 logger = logging.getLogger(__name__)
@@ -40,11 +45,6 @@ _REASONS = frozenset({'cancellation_requested', 'payment_failure', 'payment_disp
 
 _PAYMENT_FAILED_STATUSES = frozenset({'past_due', 'unpaid'})
 
-# Ladder-v1 Stripe prices do not exist yet. Every recognized catalog price is a
-# legacy entitlement price. Add ids here when those prices ship; do not infer
-# the generation from the plan id. Spec §3 keys entitlements by price.
-_LADDER_V1_PRICE_IDS: frozenset[str] = frozenset()
-
 # `reason` describes why a subscription ended, so only this event can ever carry
 # one; every other event pins 'none'. Both the recording path and the zero
 # initialization below read this, so the reachable label space cannot drift from
@@ -57,7 +57,7 @@ def price_catalog_generation(price_id: str | None) -> str:
 
     if not isinstance(price_id, str) or not price_id:
         return 'unknown'
-    if price_id in _LADDER_V1_PRICE_IDS:
+    if price_id in LADDER_V1_STRIPE_PRICES:
         return 'ladder_v1'
     if price_id in RECOGNIZED_STRIPE_PRICE_PLAN_TYPES:
         return 'legacy'

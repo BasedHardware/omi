@@ -106,8 +106,8 @@ def main() -> int:
     if not token:
         print("skipping omi-tv apply: GRAFANA_TOKEN is unset")
         return 0
-    for path in sorted(DASHBOARD_DIR.glob("*.json")):
-        apply(token, path)
+    for uid in sorted(ALLOWED_UIDS):
+        apply(token, DASHBOARD_DIR / f"{uid}.json")
     return 0
 
 

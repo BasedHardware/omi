@@ -1764,6 +1764,9 @@ class AppLocalizationsLt extends AppLocalizations {
       'Atrodo, kad įraše yra keli kalbėtojai. Įsitikinkite, kad esate tylioje vietoje, ir bandykite dar kartą.';
 
   @override
+  String get discardedOnlyRecording => 'That recording was too short or empty to keep.';
+
+  @override
   String get tooShortDesc => 'Neaptikta pakankamai kalbos. Kalbėkite daugiau ir bandykite dar kartą.';
 
   @override
@@ -5643,11 +5646,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get downloadingFromSdCard => 'Atsisiunčiama iš SD kortelės';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Apdorojama $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return 'Sukurta pokalbių: $count';
   }
@@ -9100,18 +9098,10 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current iš $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'Jūsų įrenginyje';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Atsisiunčiama iš jūsų įrenginio';
-
-  @override
-  String get newestFirst => 'Pirma naujausi';
 
   @override
   String get noSyncedRecordingsYet => 'Sinchronizuotų įrašų dar nėra';
@@ -9861,6 +9851,33 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get memoryGraph => 'Prisiminimų grafas';
+
+  @override
+  String guidedVoiceExperience(String part) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'unavailable': 'Voice transcription is unavailable right now. Type your answer instead.',
+        'type': 'Type Your Answer Instead',
+        'typing': 'Your answer',
+        'heard': 'Here\'s what I heard',
+        'transcribing': 'Got it, transcribing…',
+        'confirm': 'Use This Answer',
+        'answer': 'Save Answer',
+        'retry': 'Try Speaking Again',
+        'title': 'Here\'s what I\'ll remember',
+        'question': 'What should I focus on this week?',
+        'fallback': 'I’ll use these to help you.',
+        'thinking': 'Thinking about your answers…',
+        'failed': 'We couldn\'t transcribe that answer. You can type it instead or try speaking again.',
+        'engine': 'The microphone couldn\'t start. Try again or type your answer instead.',
+        'retryTranscription': 'Retry transcription',
+        'namePrompt': 'My name is ___, and I usually ___.',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String voiceIntroduction(String part) {
@@ -11989,9 +12006,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Vietinės kopijos';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -12310,6 +12324,9 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Pokalbio kontekstas';
+
+  @override
   String get reviewQuestionSpelling => 'Kaip tai rašoma?';
 
   @override
@@ -12406,6 +12423,15 @@ class AppLocalizationsLt extends AppLocalizations {
   String get reviewRecentChanges => 'Naujausi pakeitimai';
 
   @override
+  String get reviewChangeAfter => 'Po';
+
+  @override
+  String get reviewChangeBefore => 'Prieš';
+
+  @override
+  String get reviewChangeRemoved => 'Pašalinta iš aktyvaus sąrašo';
+
+  @override
   String get reviewChangesIntro =>
       'Ką Omi pats pakeitė per pastarąsias 30 dienų. Atšaukite viską, kas atrodo neteisinga.';
 
@@ -12423,6 +12449,59 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get reviewNoChangesBody => 'Kai Omi sutvarkys jūsų užrašus, pakeitimai atsiras čia.';
+
+  @override
+  String get reviewChangesSectionTerms => 'Vardai ir terminai';
+
+  @override
+  String get reviewChangesSectionTitles => 'Pavadinimai ir santraukos';
+
+  @override
+  String get reviewChangesSectionOther => 'Kiti pakeitimai';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pokalbių: $count',
+      one: '1 pokalbis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vietų: $count',
+      one: '1 vieta',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Rodyti visus ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Atšaukti viską';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Žiūrėti įrodymus';
+
+  @override
+  String get reviewChangeViewConversation => 'Peržiūrėti pokalbį';
+
+  @override
+  String get reviewChangeViewTask => 'Peržiūrėti užduotį';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Nepavyko atšaukti $failed iš $total. Bandykite dar kartą.';
+  }
 
   @override
   String get reviewShowMore => 'Rodyti daugiau';
@@ -13045,4 +13124,382 @@ class AppLocalizationsLt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'Recommended';
+
+  @override
+  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
+
+  @override
+  String get paywallOtherPlans => 'See all plans';
+
+  @override
+  String get paywallComparePlans => 'See plans';
+
+  @override
+  String get paywallYourPlan => 'Your plan';
+
+  @override
+  String get paywallNotNow => 'Not now';
+
+  @override
+  String get paywallTryAgain => 'Try again';
+
+  @override
+  String get paywallManageBilling => 'Manage billing';
+
+  @override
+  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
+
+  @override
+  String get paywallPlans => 'Plans';
+
+  @override
+  String get firstCaptureTitle => 'How will you capture?';
+
+  @override
+  String get firstCaptureDescription => 'Choose how you want to capture your first conversation.';
+
+  @override
+  String get firstCaptureOmi => 'I Have an Omi';
+
+  @override
+  String get firstCapturePhone => 'This Phone';
+
+  @override
+  String get firstCaptureWatch => 'Apple Watch';
+
+  @override
+  String get firstCaptureSkip => 'Skip for Now';
+
+  @override
+  String get firstCapturePrompt =>
+      'Tell Omi what you\'re working on today, or what\'s on your mind. Talk for about 30 seconds.';
+
+  @override
+  String get firstCaptureKeepGoing => 'Keep going… 30 seconds is ideal.';
+
+  @override
+  String get firstCaptureReady => 'You can finish now, or keep talking.';
+
+  @override
+  String get firstCaptureStart => 'Start Recording';
+
+  @override
+  String get firstCaptureFinish => 'Finish Recording';
+
+  @override
+  String get firstCaptureListening => 'Listening… your words will appear here.';
+
+  @override
+  String get firstCaptureProcessing => 'Creating your first conversation…';
+
+  @override
+  String get firstCaptureResult => 'Your first conversation';
+
+  @override
+  String get firstCaptureEmpty => 'I didn\'t catch enough speech, try again with a few sentences';
+
+  @override
+  String get watchCaptureTitle => 'Record from your Apple Watch';
+
+  @override
+  String get watchCaptureOpen => 'Open Omi on your Apple Watch.';
+
+  @override
+  String get watchCaptureRecord => 'Tap Record. Allow microphone access if asked.';
+
+  @override
+  String get watchCaptureSync => 'Your recording syncs to Omi on this phone.';
+
+  @override
+  String get pairingBluetoothOff => 'Turn on Bluetooth on your phone, then try again.';
+
+  @override
+  String get pairingBluetoothPermission => 'Allow Bluetooth access for Omi in Settings, then try again.';
+
+  @override
+  String get pairingNearbyPermission => 'Allow Nearby devices access for Omi in Settings, then try again.';
+
+  @override
+  String get pairingLocationPermission =>
+      'Allow location access for Omi in Settings so this phone can find your device, then try again.';
+
+  @override
+  String get pairingNotFoundOrDropped =>
+      'Couldn\'t reach your Omi. Make sure it\'s charged, close to your phone, and its light is blinking, then try again.';
+
+  @override
+  String get pairingBondRecovery => 'Forget Omi in your phone’s Bluetooth settings, then try pairing again.';
+
+  @override
+  String get pairingHowTo => 'How to pair';
+
+  @override
+  String get firstCaptureWatchInstructions =>
+      'Open Omi on your Apple Watch and tap Record. Allow microphone access if asked. Your capture will sync to Omi on this phone.';
+
+  @override
+  String get firstCaptureWatchInstall =>
+      'In the Watch app on your iPhone, install Omi on your Apple Watch. Then open Omi on your watch and tap Record.';
+
+  @override
+  String get firstCaptureWatchPair =>
+      'Pair your Apple Watch with this iPhone using the Watch app, then install and open Omi on your watch.';
+
+  @override
+  String get firstCaptureUnavailable =>
+      'Recording could not start. Check microphone access and your connection, then try again.';
+
+  @override
+  String get firstCaptureDelayed =>
+      'Your recording is taking longer to process. You can check your conversations on Home or try again.';
+
+  @override
+  String get firstCaptureEmptyTitle => 'Let\'s try that again';
+
+  @override
+  String get firstCaptureShortTitle => 'Finish This Recording?';
+
+  @override
+  String get firstCaptureShortWarning => 'A few more sentences help Omi understand you. About 30 seconds is ideal.';
+
+  @override
+  String get firstCaptureCancelTitle => 'Leave This Recording?';
+
+  @override
+  String get firstCaptureCancelWarning =>
+      'Going back stops this recording. Keep talking to give Omi a few more sentences.';
+
+  @override
+  String get firstCaptureSiriTip => 'Tip: Enable Omi in Shortcuts → Siri.';
+
+  @override
+  String get paywallOutlineHeadline => 'Daugiau nepraleiskite nė žodžio.';
+
+  @override
+  String get paywallCancelAnytime => 'Atšaukite bet kada.';
+
+  @override
+  String get connectAnAgent => 'Prijungti agentą';
+
+  @override
+  String get connectAnAgentSubtitle => 'Gaukite sąrankos užklausą Claude, ChatGPT, Codex ar bet kuriam agentui';
+
+  @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Sinchronizuojama $amount garso įrašų';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Sinchronizuojami jūsų įrašai';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Atsisiunčiama iš Omi · $done iš $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Įkeliama · $done iš $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return '$amount paverčiama pokalbiais';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return 'Atlikta $done iš $total · galite palikti šį ekraną';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount paruošta sinchronizuoti';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → telefonas';
+
+  @override
+  String get syncStepLabelUpload => 'Įkėlimas';
+
+  @override
+  String get syncStepLabelTranscribe => 'Transkribavimas';
+
+  @override
+  String get syncDetailsTitle => 'Sinchronizavimo informacija';
+
+  @override
+  String get syncDetailsRightNow => 'Šiuo metu';
+
+  @override
+  String get syncDetailsYourOmi => 'Jūsų Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Perdavimo sparta';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Laukia Omi';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Laukia šiame telefone';
+
+  @override
+  String get syncDetailsTranscribing => 'Transkribuojama Omi';
+
+  @override
+  String get syncDetailsForSupport => 'Palaikymo komandai';
+
+  @override
+  String get syncDetailsAudioFiles => 'Garso failai';
+
+  @override
+  String get syncDetailsServerJobs => 'Serverio užduotys (atlikta / iš viso)';
+
+  @override
+  String get syncDetailsCopy => 'Kopijuoti informaciją palaikymo komandai';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Prieinama su Operator ir Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app užpildytas';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Prisijungti prie laukiančiųjų sąrašo';
+
+  @override
+  String get chatAppsOnWaitlist => 'Esate laukiančiųjų sąraše';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Esate laukiančiųjų sąraše. Pranešime, kai atsiras vietos.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Viskas paruošta, $name';
+  }
+
+  @override
+  String get onboardingActDemoSummary =>
+      'Pietūs su Sem, kuri birželį persikelia į Lisaboną. Iki penktadienio norite išsiųsti komandai pristatymą ir grįžtant nupirkti pieno.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Iki penktadienio nusiųsti pristatymą komandai';
+
+  @override
+  String get onboardingActDemoTask2 => 'Grįžtant namo nupirkti pieno';
+
+  @override
+  String get onboardingActDemoTitle => 'Pietūs su Sem';
+
+  @override
+  String get onboardingActDictateBody => 'Sakykite savaip. Visa kita padarys Omi.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Tiesiog kalbėkite. Jūsų Omi klauso.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Ką tik pietavau su Sem, birželį ji kraustosi į Lisaboną! Primink man iki penktadienio nusiųsti pristatymą komandai ir grįžtant namo nupirkti pieno.';
+
+  @override
+  String get onboardingActDictateHint => 'Baigę bakstelėkite varnelę';
+
+  @override
+  String get onboardingActDictateTitle => 'Papasakokite Omi apie savo dieną';
+
+  @override
+  String get onboardingActIntro => 'Išbandykime Omi.';
+
+  @override
+  String get onboardingActJustNow => 'Ką tik';
+
+  @override
+  String get onboardingActMicAllow => 'Leisti mikrofoną';
+
+  @override
+  String get onboardingActMicBody => 'Kad Omi girdėtų, kai su juo kalbate.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi dar nesiunčia garso. Kol kas naudokite telefoną.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi reikia mikrofono';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Omi negirdėti. Patikrinkite, ar jis įjungtas ir šalia.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Dar jūsų negirdime. Pabandykite kalbėti šiek tiek garsiau.';
+
+  @override
+  String get onboardingActNotesLabel => 'Jūsų diena trumpai';
+
+  @override
+  String get onboardingActPhoneMic => 'Telefono mikrofonas';
+
+  @override
+  String get onboardingActRateTitle => 'Ar Omi jums patinka?';
+
+  @override
+  String get onboardingActRemembers => 'Omi prisimena, kad jums nereikėtų';
+
+  @override
+  String get onboardingActSavedToTasks => 'Išsaugota jūsų užduotyse';
+
+  @override
+  String get onboardingActTasksLabel => 'Omi pastebėjo jūsų darbus';
+
+  @override
+  String get onboardingActWriting => 'Apibendriname…';
+
+  @override
+  String get onboardingActYourWords => 'Štai ką pasakėte';
+
+  @override
+  String get onboardingConnectOmi => 'Prijunkite Omi';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Palieskite savo Omi, kad prisijungtumėte.';
+
+  @override
+  String get onboardingNoOmiYet => 'Dar neturite Omi?';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Dar neužsisakiau';
+
+  @override
+  String get onboardingOmiOrdered => 'Jau užsisakiau';
+
+  @override
+  String get onboardingPermissionTapToFix => 'Bakstelėkite, kad pataisytumėte';
+
+  @override
+  String get homePendingTitle => 'Pokalbiai pakeliui';
+
+  @override
+  String get homePendingCatchingUp => 'Apdorojamas ankstesnis garsas';
+
+  @override
+  String get onTheWayTitle => 'Pakeliui';
+
+  @override
+  String get onTheWayAlmostReady => 'Beveik paruošta';
+
+  @override
+  String get activityEmpty => 'Veiklos dar nėra';
+
+  @override
+  String get activityNewSemantics => 'Veikla, nauji elementai';
+
+  @override
+  String get activityLoadFailed => 'Nepavyko įkelti visos jūsų veiklos';
+
+  @override
+  String get activityNewItem => 'Nauja';
 }

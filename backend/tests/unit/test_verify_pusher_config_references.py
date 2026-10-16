@@ -188,6 +188,17 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert preflight.direct_pusher_bindings(deployment) == expected
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
+        "AUDIO_ARCHIVE_LIVE_ENABLED": "false",
+        "AUDIO_ARCHIVE_READ_ENABLED": "false",
+        "AUDIO_ARCHIVE_STOP_PCM_ENABLED": "false",
+        "AUDIO_ARCHIVE_SYNC_ENABLED": "false",
+        "AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED": "false",
+        "AUDIO_ARCHIVE_COALESCE_ENABLED": "false",
+        "AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED": "false",
+        "AUDIO_ARCHIVE_PERCENT": "0",
+        "AUDIO_ARCHIVE_UID_ALLOWLIST": "",
+        "BUCKET_AUDIO_DERIVED": "",
+        "AUDIO_MERGE_WORKER_URL": "",
         "ACTION_ITEM_REFRESH_PRESERVE_ENABLED": "true",
         "AUDIO_TIMELINE_SPANS": "false",
         "BUCKET_SCREEN_FRAMES": "based-hardware-dev-screen-frames",
@@ -200,6 +211,9 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP": "60000",
         "CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST": "",
         "CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT": "0",
+        "DREAM_AGENT_ELIGIBILITY": "allowlist",
+        "DREAM_AGENT_UID_ALLOWLIST": "",
+        "DREAM_ON_DEMAND_ENABLED": "true",
         "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED": "true",
         "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE": "shadow",
         "OMI_SHAPED_AGENT_MODE": "on",
@@ -216,7 +230,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "FREE_TIER_EMERGENCY_STOP": "false",
         "GOOGLE_CLOUD_PROJECT": "based-hardware-dev",
         "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
-        "HOSTED_SPEAKER_EMBEDDING_API_URL": "http://diarizer.omiapi.com:80",
+        "HOSTED_SPEAKER_EMBEDDING_API_URL": "http://172.16.48.49/diarizer",
         "LLM_GATEWAY_ACCOUNTING_ENABLED": "true",
         "LIVE_CAPTURE_WINDOW_RETENTION": "false",
         "LIVE_CAPTURE_WINDOW_STRICT_PROJECTION": "false",
@@ -287,7 +301,7 @@ def test_dev_pusher_dedicated_posthog_literals_reject_rendered_drift(
         assert f"dev pusher binding contract has unclassified rendered binding for {env_name}" in failures
 
 
-def test_prod_pusher_retains_the_explicit_self_hosted_deepgram_contract(preflight: SimpleNamespace):
+def test_prod_pusher_retires_self_hosted_deepgram_without_changing_cloud_policy(preflight: SimpleNamespace):
     deployment = preflight.rendered_pusher_deployment("prod")
     bindings = preflight.direct_pusher_bindings(deployment)
     literals = preflight.literal_pusher_values(deployment)
@@ -300,8 +314,8 @@ def test_prod_pusher_retains_the_explicit_self_hosted_deepgram_contract(prefligh
     assert literals["CONVERSATION_RELEVANCE_JEV_ENABLED"] == "true"
     assert literals["CONVERSATION_RELEVANCE_JEV_PERCENT"] == "100"
     assert "MEMORY_OWNER_JEV_FLIP_ENABLED" not in literals
-    assert literals["DEEPGRAM_SELF_HOSTED_ENABLED"] == "true"
-    assert literals["DEEPGRAM_SELF_HOSTED_URL"] == "https://dg.omi.me"
+    assert literals["DEEPGRAM_SELF_HOSTED_ENABLED"] == "false"
+    assert "DEEPGRAM_SELF_HOSTED_URL" not in literals
     assert literals["STT_SERVICE_MODELS"] == "modulate-velma-2,soniox,dg-nova-3,parakeet"
 
 

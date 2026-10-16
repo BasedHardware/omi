@@ -19,6 +19,7 @@ import render_backend_runtime_env  # noqa: E402
 import repair_cloud_run_traffic  # noqa: E402
 from attach_cloud_run_gmp_sidecar import SIDECAR_NAME  # noqa: E402
 from runtime_env_validation.common import compute_project  # noqa: E402
+from runtime_env_capability_contracts import validate_voice_transcription_storage  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
@@ -60,6 +61,11 @@ def main() -> int:
 
     services = tuple(args.services or DEFAULT_SERVICES)
     exit_code = 0
+
+    if 'backend' in services:
+        config = {'cloud_run': {'services': _cloud_run_service_configs(env=args.env, manifest_path=args.manifest)}}
+        for error in validate_voice_transcription_storage(args.env, config):
+            parser.error(error.message)
 
     if args.legacy_public_binding_services:
         try:

@@ -69,6 +69,7 @@ jobs:
           cp .workflow-source/backend/deploy/cloud_run_gmp_sidecar.yaml "$controls/backend/deploy/"
           cp .workflow-source/backend/scripts/attach_cloud_run_gmp_sidecar.py "$controls/backend/scripts/"
           cp .workflow-source/backend/scripts/render_backend_runtime_env.py "$controls/backend/scripts/"
+          cp .workflow-source/backend/scripts/runtime_env_compat.py "$controls/backend/scripts/"
           cp .workflow-source/backend/config/free_tier_rollout.py "$controls/backend/config/"
           cp .workflow-source/backend/deploy/runtime_env.yaml "$controls/backend/deploy/"
           cp .workflow-source/backend/scripts/firebase_release_probe_token.py "$controls/backend/scripts/"

@@ -8,6 +8,7 @@ from enum import Enum
 from functools import wraps
 import hashlib
 import hmac
+import logging
 import os
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, TypeVar, TypedDict, cast
 
@@ -23,6 +24,9 @@ except ImportError:  # pragma: no cover - local unit tests mock Firestore.
 from database._client import data_plane_db as db
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.legal_holds import (
+    DestructiveGateTakeover,
+    LegalHoldAuthorityUnavailable,
+    assert_destructive_gate_still_ours,
     assert_destructive_operation_transaction,
     assert_no_destructive_operation_transaction,
     destructive_operation_gate,
@@ -73,6 +77,8 @@ from models.product_memory import (
 from models.memory_state_head import trusted_memory_state_head_fields
 from utils.memory.memory_use import MemoryUseConflict, build_memory_use_patch
 
+logger = logging.getLogger(__name__)
+
 
 class MemoryFirestoreApplyError(Exception):
     pass
@@ -89,7 +95,7 @@ class CanonicalMemoryIntakePausedError(MemoryFirestoreApplyError):
     """The deployment-wide incident fence has paused canonical mutations."""
 
 
-def _require_canonical_intake_enabled() -> None:
+def require_canonical_intake_enabled() -> None:
     """Fence every canonical intake boundary with the global deployment mode."""
 
     try:
@@ -726,7 +732,7 @@ def apply_long_term_patch_firestore(
     adapter owns authoritative Firestore reads/writes and never trusts caller
     snapshots for control state, operation state, or evidence/source state.
     """
-    _require_canonical_intake_enabled()
+    require_canonical_intake_enabled()
     transaction = db_client.transaction()
     return _apply_long_term_patch_firestore_transaction(
         transaction,
@@ -811,7 +817,7 @@ def replace_conversation_source_firestore(
     canonical write therefore restarts planning instead of committing a partial
     or stale replacement.
     """
-    _require_canonical_intake_enabled()
+    require_canonical_intake_enabled()
     transaction = db_client.transaction()
     return _replace_conversation_source_firestore_transaction(
         transaction,
@@ -1042,7 +1048,7 @@ def _write_canonical_review_resolution(
         "permitted_uses": [],
     }
     review_ref = db_client.document(f"{collections.memory_review_queue}/{request.review_id}")
-    transaction.set(review_ref, _firestore_data(redacted))
+    transaction.set(review_ref, firestore_data(redacted))
     if request.correction_record is not None:
         correction_id = request.correction_record.get("correction_id")
         if request.authority == "canonical_memory" or not isinstance(correction_id, str) or not correction_id.strip():
@@ -1052,7 +1058,7 @@ def _write_canonical_review_resolution(
                 review_item=review_item,
             )
         correction_ref = db_client.document(f"{collections.user_root}/memory_corrections/{correction_id}")
-        transaction.set(correction_ref, _firestore_data(request.correction_record))
+        transaction.set(correction_ref, firestore_data(request.correction_record))
 
 
 def _privacy_tombstoned_evidence(evidence: MemoryEvidence, *, scrub_source_identity: bool = False) -> MemoryEvidence:
@@ -1354,7 +1360,7 @@ def _tombstone_memory_items_firestore_transaction(
 
     for evidence in tombstoned_evidence.values():
         evidence_ref = db_client.document(f"{collections.memory_evidence}/{evidence.evidence_id}")
-        transaction.set(evidence_ref, _firestore_data(evidence))
+        transaction.set(evidence_ref, firestore_data(evidence))
     for item in tombstoned_items:
         receipt_id = privacy_deletion_receipt_id(uid, item.memory_id)
         receipt_ref = db_client.document(f"{collections.memory_deletion_receipts}/{receipt_id}")
@@ -1369,7 +1375,7 @@ def _tombstone_memory_items_firestore_transaction(
                 "expires_at": now + timedelta(days=30),
             },
         )
-    _write_apply_result(
+    write_apply_result(
         transaction=transaction,
         db_client=db_client,
         collections=collections,
@@ -2176,15 +2182,15 @@ def _replace_conversation_source_firestore_transaction(
     # and mutation preflight above.
     for evidence in tombstoned_evidence.values():
         evidence_ref = db_client.document(f"{collections.memory_evidence}/{evidence.evidence_id}")
-        transaction.set(evidence_ref, _firestore_data(evidence))
+        transaction.set(evidence_ref, firestore_data(evidence))
     for write in writes:
         for evidence in write.evidence:
             evidence_ref = db_client.document(f"{collections.memory_evidence}/{evidence.evidence_id}")
-            transaction.set(evidence_ref, _firestore_data(evidence))
+            transaction.set(evidence_ref, firestore_data(evidence))
     for memory_id, item in tombstoned_items.items():
         if memory_id not in new_memory_ids:
             item_ref = db_client.document(f"{collections.memory_items}/{memory_id}")
-            transaction.set(item_ref, _firestore_data(item))
+            transaction.set(item_ref, firestore_data(item))
             assertion_ref = db_client.document(f"{collections.memory_graph_assertions}/{memory_id}")
             transaction.delete(assertion_ref)
         if not writes:
@@ -2202,7 +2208,7 @@ def _replace_conversation_source_firestore_transaction(
             )
     for result in [replacement_apply_result, *results]:
         operation_ref = db_client.document(f"{collections.memory_operations}/{result.operation.operation_id}")
-        _write_apply_result(
+        write_apply_result(
             transaction=transaction,
             db_client=db_client,
             collections=collections,
@@ -2222,7 +2228,7 @@ def _replace_conversation_source_firestore_transaction(
         tombstoned_evidence_ids=sorted(old_evidence_ids),
         committed_at=now,
     )
-    transaction.set(replacement_ref, _firestore_data(receipt))
+    transaction.set(replacement_ref, firestore_data(receipt))
 
     return ConversationSourceReplacementResult(
         control_state=working_control,
@@ -2269,7 +2275,7 @@ def _atomic_bump_source_generation_transaction(
             "updated_at": now,
         }
     )
-    transaction.set(control_ref, _firestore_data(bumped))
+    transaction.set(control_ref, firestore_data(bumped))
     return bumped
 
 
@@ -2384,7 +2390,7 @@ def _apply_long_term_patch_firestore_transaction(
     control_ref = db_client.document(collections.memory_apply_control_state)
     operation_ref = db_client.document(f"{collections.memory_operations}/{operation_id}")
 
-    control_state = _required_model(
+    control_state = read_model(
         ref=control_ref,
         transaction=transaction,
         model=MemoryControlState,
@@ -2502,7 +2508,7 @@ def _apply_long_term_patch_firestore_transaction(
         # source must fail without persisting that stale content anywhere.
         return source_validation
     if committed_replay.status in {ApplyStatus.generation_mismatch, ApplyStatus.retryable_head_mismatch}:
-        _write_apply_result(
+        write_apply_result(
             transaction=transaction,
             db_client=db_client,
             collections=collections,
@@ -2526,7 +2532,7 @@ def _apply_long_term_patch_firestore_transaction(
         control_state=control_state,
     )
     if target_validation is not None:
-        _write_apply_result(
+        write_apply_result(
             transaction=transaction,
             db_client=db_client,
             collections=collections,
@@ -2770,8 +2776,8 @@ def _apply_long_term_patch_firestore_transaction(
         result = result.model_copy(update={"control_state": result.control_state.model_copy(update=control_updates)})
     if result.status == ApplyStatus.committed:
         for evidence_ref, evidence in staged_evidence:
-            transaction.set(evidence_ref, _firestore_data(evidence))
-    _write_apply_result(
+            transaction.set(evidence_ref, firestore_data(evidence))
+    write_apply_result(
         transaction=transaction,
         db_client=db_client,
         collections=collections,
@@ -2788,7 +2794,7 @@ def _apply_long_term_patch_firestore_transaction(
             raise MemoryFirestoreApplyError("memory-use feedback did not update exactly one memory")
         transaction.set(
             memory_use_feedback_event_ref,
-            _firestore_data(expected_memory_use_feedback_event),
+            firestore_data(expected_memory_use_feedback_event),
         )
     if result.status == ApplyStatus.committed:
         _write_canonical_review_resolution(
@@ -2806,7 +2812,7 @@ def _apply_long_term_patch_firestore_transaction(
             replacement = result.memory_items[0]
             if replacement.memory_id != ledger_reopen_receipt.replacement_memory_id:
                 raise MemoryFirestoreApplyError("standalone ledger reopen replacement identity mismatch")
-            transaction.set(reopen_receipt_ref, _firestore_data(ledger_reopen_receipt))
+            transaction.set(reopen_receipt_ref, firestore_data(ledger_reopen_receipt))
         if trigger_feedback_receipt is not None:
             if (
                 feedback_receipt_ref is None
@@ -2818,13 +2824,13 @@ def _apply_long_term_patch_firestore_transaction(
             applied_item = result.memory_items[0]
             transaction.set(
                 feedback_receipt_ref,
-                _firestore_data(
+                firestore_data(
                     trigger_feedback_receipt.model_copy(update={"applied_trigger_revision": applied_item.item_revision})
                 ),
             )
             transaction.set(
                 feedback_event_ref,
-                _firestore_data(
+                firestore_data(
                     feedback_event_receipt.model_copy(update={"feedback_id": trigger_feedback_receipt.feedback_id})
                 ),
             )
@@ -2849,7 +2855,7 @@ def _read_trigger_feedback_replay_transaction(
     )
     if account_deletion_blocks_access(deletion_status):
         raise MemoryFirestoreApplyError("trigger feedback replay blocked by account deletion fence")
-    control = _required_model(
+    control = read_model(
         ref=db_client.document(collections.memory_apply_control_state),
         transaction=transaction,
         model=MemoryControlState,
@@ -2868,7 +2874,7 @@ def _read_trigger_feedback_replay_transaction(
         raise MemoryFirestoreApplyError("trigger feedback id was reused with a different payload")
     if receipt.account_generation != control.account_generation or receipt.applied_trigger_revision is None:
         raise MemoryFirestoreApplyError("trigger feedback replay generation is stale")
-    event = _required_model(
+    event = read_model(
         ref=db_client.document(f"{collections.jit_proactivity_events}/{receipt.event_id}"),
         transaction=transaction,
         model=JITProactivityEventReceipt,
@@ -2882,7 +2888,7 @@ def _read_trigger_feedback_replay_transaction(
         or event.feedback_id != receipt.feedback_id
     ):
         raise MemoryFirestoreApplyError("trigger feedback replay event authority is stale")
-    item = _required_model(
+    item = read_model(
         ref=db_client.document(f"{collections.memory_items}/{receipt.trigger_memory_id}"),
         transaction=transaction,
         model=MemoryItem,
@@ -2937,7 +2943,7 @@ def _read_memory_use_feedback_replay_transaction(
         raise MemoryFirestoreApplyError("memory-use feedback replay blocked by account deletion fence")
     if feedback.uid != uid:
         raise MemoryFirestoreApplyError("memory-use feedback owner mismatch")
-    control = _required_model(
+    control = read_model(
         ref=db_client.document(MemoryCollections(uid=uid).memory_apply_control_state),
         transaction=transaction,
         model=MemoryControlState,
@@ -3191,7 +3197,7 @@ def _source_not_active(control_state: MemoryControlState, operation: MemoryOpera
     )
 
 
-def _write_apply_result(
+def write_apply_result(
     *,
     transaction: Any,
     db_client: Any,
@@ -3199,15 +3205,15 @@ def _write_apply_result(
     operation_ref: Any,
     result: ApplyResult,
 ) -> None:
-    transaction.set(operation_ref, _firestore_data(result.operation))
+    transaction.set(operation_ref, firestore_data(result.operation))
     if result.status != ApplyStatus.committed:
         return
 
     control_ref = db_client.document(collections.memory_apply_control_state)
     commit_ref = db_client.document(f"{collections.memory_commits}/{result.control_state.head_commit_id}")
     state_head_ref = db_client.document(collections.memory_state_head)
-    transaction.set(control_ref, _firestore_data(result.control_state))
-    transaction.set(state_head_ref, _firestore_data(_memory_state_head_from_control(result.control_state)))
+    transaction.set(control_ref, firestore_data(result.control_state))
+    transaction.set(state_head_ref, firestore_data(_memory_state_head_from_control(result.control_state)))
     commit_doc: MemoryApplyDoc = {
         "commit_id": result.control_state.head_commit_id,
         "uid": result.control_state.uid,
@@ -3219,17 +3225,17 @@ def _write_apply_result(
         "outbox_event_ids": result.operation.committed_outbox_event_ids,
         "updated_at": result.control_state.updated_at,
     }
-    transaction.set(commit_ref, _firestore_data(commit_doc))
+    transaction.set(commit_ref, firestore_data(commit_doc))
     for item in result.memory_items:
         item_ref = db_client.document(f"{collections.memory_items}/{item.memory_id}")
-        transaction.set(item_ref, _firestore_data(item))
+        transaction.set(item_ref, firestore_data(item))
         assertion_ref = db_client.document(f"{collections.memory_graph_assertions}/{item.memory_id}")
         matching_assertion = next(
             (assertion for assertion in result.graph_assertions if assertion.memory_id == item.memory_id),
             None,
         )
         if matching_assertion is not None:
-            transaction.set(assertion_ref, _firestore_data(matching_assertion))
+            transaction.set(assertion_ref, firestore_data(matching_assertion))
         elif item.status != MemoryItemStatus.tombstoned and (
             item.status != MemoryItemStatus.active or not item.graph_ready
         ):
@@ -3254,10 +3260,10 @@ def _write_apply_result(
                 now=item.updated_at,
             )
             review_ref = db_client.document(f"{collections.memory_review_queue}/{review_item['review_id']}")
-            transaction.set(review_ref, _firestore_data(review_item))
+            transaction.set(review_ref, firestore_data(review_item))
     for event in result.outbox_events:
         event_ref = db_client.document(f"{collections.memory_outbox}/{event.event_id}")
-        transaction.set(event_ref, _firestore_data(event))
+        transaction.set(event_ref, firestore_data(event))
 
 
 def _memory_state_head_from_control(control_state: MemoryControlState) -> MemoryApplyDoc:
@@ -3272,25 +3278,25 @@ def _memory_state_head_from_control(control_state: MemoryControlState) -> Memory
     return cast(MemoryApplyDoc, {**trusted_fields, "updated_at": control_state.updated_at})
 
 
-def _required_model(*, ref: Any, transaction: Any, model: type[M], label: str) -> M:
+def read_model(*, ref: Any, transaction: Any, model: type[M], label: str) -> M:
     snapshot = ref.get(transaction=transaction)
     if not snapshot.exists:
         raise MissingMemoryDocument(f"missing {label}: {ref.path}")
     return parse_snapshot_strict(model, snapshot, payload_from_snapshot=_typed_doc)
 
 
-def _firestore_data(value: object) -> Any:
+def firestore_data(value: object) -> Any:
     if isinstance(value, BaseModel):
-        return _firestore_data(value.model_dump(mode="python"))
+        return firestore_data(value.model_dump(mode="python"))
     if isinstance(value, Enum):
         return value.value
     if isinstance(value, list):
-        return [_firestore_data(item) for item in cast(List[Any], value)]
+        return [firestore_data(item) for item in cast(List[Any], value)]
     if isinstance(value, tuple):
-        return [_firestore_data(item) for item in cast(List[Any], value)]
+        return [firestore_data(item) for item in cast(List[Any], value)]
     if isinstance(value, dict):
         mapping = cast(Dict[str, Any], value)
-        return {key: _firestore_data(item) for key, item in mapping.items()}
+        return {key: firestore_data(item) for key, item in mapping.items()}
     return value
 
 
@@ -3316,6 +3322,10 @@ def cleanup_expired_memory_deletion_receipts(
         rows = list(query.stream())
     except Exception:
         return 0
+    if not rows:
+        return 0
+    deleted = 0
+    takeover_aborted = False
     try:
         # Legal hold and retention cleanup share the same account-wide
         # linearization gate. A hold that wins first preserves every receipt;
@@ -3326,7 +3336,7 @@ def cleanup_expired_memory_deletion_receipts(
             firestore_client=db_client,
         ):
             deleted = 0
-            for row in rows:
+            for index, row in enumerate(rows):
                 try:
                     payload = row.to_dict()
                     if not isinstance(payload, dict):
@@ -3343,6 +3353,7 @@ def cleanup_expired_memory_deletion_receipts(
                         and expires_at.utcoffset() is not None
                         and expires_at <= cutoff
                     ):
+                        assert_destructive_gate_still_ours(uid, "retention_cleanup", firestore_client=db_client)
                         row.reference.delete()
                         deleted += 1
                         continue
@@ -3392,11 +3403,27 @@ def cleanup_expired_memory_deletion_receipts(
                             break
                     if not items_match:
                         continue
+                    assert_destructive_gate_still_ours(uid, "retention_cleanup", firestore_client=db_client)
                     row.reference.delete()
                     deleted += 1
+                except DestructiveGateTakeover:
+                    logger.info(
+                        "receipt cleanup stopped after takeover deleted=%d skipped-after-takeover=%d",
+                        deleted,
+                        len(rows) - index,
+                    )
+                    takeover_aborted = True
+                    return deleted
+                except LegalHoldAuthorityUnavailable:
+                    return deleted
                 except Exception:
                     continue
             return deleted
+    except DestructiveGateTakeover:
+        # A same-kind takeover aborted this sweep's gate exit. Deletes that
+        # already ran under valid authority stand: recover the mid-loop count
+        # rather than reporting total failure for work that genuinely happened.
+        return deleted if takeover_aborted else 0
     except Exception:
         # Active/malformed/unavailable legal-hold authority fails closed.
         return 0

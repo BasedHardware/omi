@@ -1,10 +1,10 @@
-# slice-2 impersonated-mint bake trigger (2026-09-18)
 import asyncio
 import json
 import logging
 import os
 
 from utils.env_loader import firebase_admin_options, load_backend_env
+from utils.logging_config import configure_split_stream_logging
 from utils.firebase_admin_runtime import (
     firebase_verify_only_credential,
     install_firebase_auth_mutation_guard,
@@ -15,7 +15,8 @@ from config.chat_first_e2e_fixture import is_chat_first_e2e_harness_runtime
 load_backend_env()  # No-op if no env files exist (production); stage + local overrides otherwise
 install_google_adc_guard()
 
-logging.basicConfig(level=logging.INFO)
+# INFO/DEBUG to stdout, WARNING+ to stderr, so GKE does not store routine lines as ERROR.
+configure_split_stream_logging(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 import firebase_admin
@@ -28,8 +29,12 @@ from database.google_credentials import prepare_google_credentials
 prepare_google_credentials()
 install_firebase_auth_mutation_guard()
 
+from utils.observability.sync_upload import SyncUploadMetricsMiddleware
 from routers import messaging
 from routers import (
+    fleet_telemetry,
+    budget_choice,
+    candidate_integration_sweep,
     chat_receipts,
     dream_cohort,
     dream_report,
@@ -52,8 +57,10 @@ from routers import (
     support,
     trends,
     sync,
+    batch_pipeline,
     apps,
     payment,
+    storefront,
     integration,
     conversations,
     conversation_mutations,
@@ -126,6 +133,7 @@ from routers import (
     email_preferences,
     mobile_feedback,
     device_diagnostics,
+    client_telemetry,
 )
 from routers.listen.registry import proactive_message_dispatcher
 
@@ -144,6 +152,7 @@ from utils.executors import (
     db_executor,
 )
 from utils.executors import start_background_task
+from utils.batch_pipeline.serving import start_serving_from_env, stop_serving
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
 from utils.stt.streaming import validate_streaming_stt_env
 from utils.stt.soniox_runway import poll_forever
@@ -206,6 +215,10 @@ app.add_middleware(
     allow_methods=['*'],
     allow_headers=['*'],
     expose_headers=[
+        'X-Omi-Effective-Limit',
+        'X-Omi-Has-More',
+        'X-Omi-Next-Offset',
+        'X-Omi-Next-Cursor',
         'X-Next-Cursor',
         'X-Scan-Truncated',
         'X-Omi-Memory-As-Of',
@@ -218,11 +231,13 @@ app.add_middleware(
     ],
 )
 
+app.include_router(budget_choice.router)
 app.include_router(messaging.router)
 app.include_router(proactivity.router)
 app.include_router(dream_cohort.router)
 app.include_router(dream_report.router)
 app.include_router(dream_sweep.router)
+app.include_router(candidate_integration_sweep.router)
 app.include_router(transcribe.router)
 app.include_router(static_map.router)
 app.include_router(omni_relay.router)
@@ -274,16 +289,17 @@ app.include_router(other.router)
 app.include_router(firmware.router)
 app.include_router(updates.router)
 app.include_router(sync.router)
+app.include_router(batch_pipeline.router)
 
 app.include_router(apps.router)
 app.include_router(calendar_meetings.router)
 app.include_router(google_calendar.router)
 app.include_router(calendar_onboarding.router)
-app.include_router(oauth.router)  # Added oauth router (for Omi Apps)
-app.include_router(auth.router)  # Added auth router (for the main Omi App, this is the core auth router)
-
+app.include_router(oauth.router)
+app.include_router(auth.router)
 
 app.include_router(payment.router)
+app.include_router(storefront.router)
 app.include_router(api_key_management.mcp_router)
 app.include_router(mcp.router)
 app.include_router(mcp_sse.router)
@@ -302,6 +318,8 @@ app.include_router(phone_calls.router)
 app.include_router(agent_tools.router)
 app.include_router(tools.router)
 app.include_router(metrics.router)
+app.include_router(client_telemetry.router)
+app.include_router(fleet_telemetry.router)
 app.include_router(fair_use_admin.router)
 app.include_router(staged_tasks.router)
 app.include_router(focus_sessions.router)
@@ -329,7 +347,6 @@ app.include_router(screen_frames.router)
 app.include_router(review.router)
 jit_rollout.validate_jit_rollout_contract(app)
 
-
 methods_timeout = {
     "GET": os.environ.get('HTTP_GET_TIMEOUT'),
     "POST": os.environ.get('HTTP_POST_TIMEOUT'),
@@ -338,12 +355,11 @@ methods_timeout = {
     "DELETE": os.environ.get('HTTP_DELETE_TIMEOUT'),
 }
 
-# The Cloud Tasks sync-job handler runs the whole pipeline inside the request,
-# so it needs a much higher cap than the default. Must stay below the job run
-# lock TTL (1800s) so a lock can never expire under a live run.
+# Keep the in-request Cloud Tasks pipeline cap below its 1800s lock TTL so no lock expires under live work.
 paths_timeout = {
     "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
     "/v2/dream-agent/sweep": 150,  # Drain has its own 120s bound; Scheduler allows 180s.
+    "/v2/candidate-integrations/sweep": 90,  # Sweep stops at 50s; Scheduler allows 120s.
     "/v2/dream-agent/canary": 90,
     "/v1/dream/runs": 90,
     "/v2/sync-backfill-sequencer/sweep": 150,  # Below Scheduler's 180s deadline.
@@ -359,22 +375,26 @@ paths_timeout = {
 app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout, paths_timeout=paths_timeout)
 
 from utils.byok import BYOKMiddleware
+from utils.llm.desktop_proxy_lifetime import DesktopProxyDeadlineMiddleware
 
 app.add_middleware(BYOKMiddleware)
 
 from database.firestore_tier_context import FirestoreTierMiddleware
 
 app.add_middleware(FirestoreTierMiddleware)
+app.add_middleware(SyncUploadMetricsMiddleware)
+app.add_middleware(DesktopProxyDeadlineMiddleware)
 
 
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
     from utils.messaging.adapters.runtime import start_adapters
 
-    app.state.messaging_runtime = start_adapters(messaging.register_adapter)
+    app.state.messaging_runtime = await start_adapters(messaging.register_adapter)
     start_metrics_sidecar_server()
     start_background_task(live_stt_health.refresh_forever(), name='live_stt_fleet_health')
     batch_pressure.start_from_env()
+    app.state.batch_pipeline_serving = start_serving_from_env()
     if os.getenv('SONIOX_MONTHLY_CEILING_USD', '0') not in ('', '0'):
         start_background_task(poll_forever(), name='soniox_runway')
     validate_account_deletion_dispatch_configuration()
@@ -534,6 +554,8 @@ async def shutdown_event():
             await task
         except asyncio.CancelledError:
             pass
+    if (serving_task := getattr(app.state, 'batch_pipeline_serving', None)) is not None:
+        await stop_serving(serving_task)
     await batch_pressure.stop()
     await drain_background_tasks(timeout=10.0)
     await shutdown_managed_spend_ledger()

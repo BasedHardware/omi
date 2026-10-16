@@ -152,6 +152,9 @@ env:
     value: "1"
   - name: LLM_GATEWAY_ACCOUNTING_MAX_PENDING_TRACES
     value: "1000"
+  # Dream's on-demand 3.8 lane also requires the backend's per-request allowlist assertion.
+  - name: DREAM_ON_DEMAND_ENABLED
+    value: "true"
 
 resources:
   requests:

@@ -175,6 +175,11 @@ class InertSyncProvider extends ChangeNotifier implements SyncProvider {
   @override
   bool get isRateLimited => false;
   @override
+  ({int processed, int total}) get offlineServerProcessingCounts => (processed: 0, total: 0);
+  @override
+  ({int doneSeconds, int totalSeconds, bool tracked}) get offlineServerProcessingSeconds =>
+      (doneSeconds: 0, totalSeconds: 0, tracked: false);
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 

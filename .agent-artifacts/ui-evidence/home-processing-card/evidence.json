@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-offline-processing.png",
+      "platform": "mobile-ios",
+      "description": "Home's Offline Sync status card while a 40m recording processes on the server: 'Turning 55m into conversations', 15m of 55m done, three-step bar on the transcribe step",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-home-offline-processing-ready.png",
+      "platform": "mobile-ios",
+      "description": "Home's Offline Sync status card with 1h of recordings waiting for a sync; tapping opens the Offline Sync page",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

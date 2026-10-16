@@ -219,7 +219,12 @@ def _vertex_tools(value: Any) -> list[dict[str, Any]] | None:
             declaration['description'] = description
         parameters = function.get('parameters')
         if isinstance(parameters, Mapping) and parameters:
-            declaration['parameters'] = dict(cast(Mapping[str, Any], parameters))
+            if '$defs' in parameters or '$ref' in parameters:
+                # Agent tools share nested Pydantic contracts. Vertex's Schema arm
+                # cannot represent local refs; its JSON Schema arm can.
+                declaration['parametersJsonSchema'] = vertex_response_json_schema(parameters)
+            else:
+                declaration['parameters'] = dict(cast(Mapping[str, Any], parameters))
         declarations.append(declaration)
     return [{'functionDeclarations': declarations}]
 
@@ -479,6 +484,8 @@ def _vertex_to_openai_stream_chunk(
     }
     if usage is not None:
         body['usage'] = _openai_usage_payload(usage)
+    if isinstance(response.get('_gateway_cache_receipt'), Mapping):
+        body['_gateway_cache_receipt'] = response['_gateway_cache_receipt']
     return _openai_sse(body), finish_reason is not None
 
 

@@ -2,6 +2,97 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.490",
+      "date": "2026-10-16",
+      "changes": [
+        "Screen intelligence requests now stop promptly when the server deadline is reached."
+      ]
+    },
+    {
+      "version": "0.12.489",
+      "date": "2026-10-15",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.488",
+      "date": "2026-10-15",
+      "changes": [
+        "Fixed memories that refused to disappear: memories deleted everywhere else (or on emptied accounts) no longer linger on the desktop, stuck unsynced local memories are cleared after 30 days, and a delayed server delete now retries in the background instead of popping back"
+      ]
+    },
+    {
+      "version": "0.12.487",
+      "date": "2026-10-15",
+      "changes": [
+        "Transcript corrections preserve the original recording text and remain reversible"
+      ]
+    },
+    {
+      "version": "0.12.486",
+      "date": "2026-10-15",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.485",
+      "date": "2026-10-14",
+      "changes": [
+        "Saved conversations waiting on your allowance show a waiting state instead of a padlock"
+      ]
+    },
+    {
+      "version": "0.12.484",
+      "date": "2026-10-14",
+      "changes": [
+        "Added Connect an Agent in Settings → Advanced and the connect sheets, opening copy-paste setup prompts and MCP and API keys on the web, and renamed the bring-your-own model keys section to Model Provider Keys"
+      ]
+    },
+    {
+      "version": "0.12.483",
+      "date": "2026-10-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.482",
+      "date": "2026-10-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.481",
+      "date": "2026-10-13",
+      "changes": [
+        "Fixed silent microphone recovery interrupting system-audio recordings, with a microphone-signal warning that clears when audio returns"
+      ]
+    },
+    {
+      "version": "0.12.480",
+      "date": "2026-10-13",
+      "changes": [
+        "Made onboarding shortcuts ready to accept, kept Continue visible while connecting context, and clarified notification benefits"
+      ]
+    },
+    {
+      "version": "0.12.479",
+      "date": "2026-10-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.478",
+      "date": "2026-10-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.477",
       "date": "2026-10-12",
       "changes": [

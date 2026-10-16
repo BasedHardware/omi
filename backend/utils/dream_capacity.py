@@ -1,4 +1,4 @@
-"""Evidence is advisory; explicit cooldowns and bounded slots control admission."""
+"""Fail-closed Dream reservation admission and bounded concurrency slots."""
 
 import asyncio
 import json
@@ -14,7 +14,7 @@ from llm_gateway.gateway.providers import VertexAccessTokenSupplier
 from utils.http_client import get_desktop_gemini_client
 from utils.llm.vertex_reservation_probe import probe_reservation
 from utils.llm.vertex_reservation_state import reservation_state
-from utils.llm.vertex_pt_routing import PT_MODEL_CURRENT, reserved_generation_model
+from llm_gateway.gateway.dream_lanes import DREAM_MODEL
 from utils.observability.fallback import record_fallback
 
 SLOT_SECONDS = 240
@@ -57,14 +57,6 @@ def _decision(model, reason, *, waiting=False, source='evidence'):
             sort_keys=True,
         )
     )
-    if not waiting:
-        record_fallback(
-            component='vertex_reservations',
-            from_mode='evidence_gate',
-            to_mode='gateway_admission',
-            reason=reason,
-            outcome='degraded',
-        )
     return None if waiting else model
 
 
@@ -79,6 +71,8 @@ def _vertex_tokens():
 
 async def _probe(model, location):
     local = _local()
+    if model == DREAM_MODEL:
+        location = 'us'
     try:
         outcome = await probe_reservation(
             get_desktop_gemini_client(), _vertex_tokens().get_access_token, model, location
@@ -88,52 +82,64 @@ async def _probe(model, location):
     if outcome == 'capacity_error':
         await mark_saturated(model)
     elif outcome == 'dedicated_success':
-        local.probe_failed_until = 0
+        if model == DREAM_MODEL:
+            local.probe_failed_until = 0
     else:
-        local.probe_failed_until = time.monotonic() + PROBE_SECONDS
+        if model == DREAM_MODEL:
+            local.probe_failed_until = time.monotonic() + PROBE_SECONDS
         logger.warning('dream_capacity_probe outcome=probe_failed model=%s', model)
+    if model == DREAM_MODEL:
+        try:
+            client = reservation_state.client()
+            if client is not None:
+                async with asyncio.timeout(0.3):
+                    key = reservation_state.key() + ':dream-probe-failed:' + model
+                    if outcome == 'dedicated_success':
+                        await client.delete(key)
+                    elif outcome != 'capacity_error':
+                        await client.set(key, '1', ex=PROBE_SECONDS)
+        except Exception:
+            # Admission independently requires a readable shared store.
+            local.probe_failed_until = time.monotonic() + PROBE_SECONDS
     return outcome
 
 
-async def available_model():
-    # This hint never authorizes shared/pay-as-you-go Gemini: the reserved-only
-    # gateway remains the final provider authority, as before step 5.
-    model = os.getenv('OMI_VERTEX_PT_MODEL', '')
-    model = model if model in RESERVATIONS else PT_MODEL_CURRENT
+def on_demand_allowed(owner_allowlisted):
+    return owner_allowlisted is True and os.getenv('DREAM_ON_DEMAND_ENABLED', '').strip().lower() in {
+        '1',
+        'true',
+        'yes',
+    }
+
+
+async def available_model(*, mode='reserved', owner_allowlisted=False):
+    if mode == 'on_demand':
+        if on_demand_allowed(owner_allowlisted):
+            return _decision(DREAM_MODEL, 'allowlisted_on_demand', source='policy')
+        return _decision(DREAM_MODEL, 'on_demand_disabled', waiting=True, source='policy')
+    if mode != 'reserved':
+        return _decision(DREAM_MODEL, 'invalid_mode', waiting=True, source='policy')
     local = _local()
-    reason = None
-    states = {}
+    if local.cooldowns.get(DREAM_MODEL, 0) > time.monotonic():
+        return _decision(DREAM_MODEL, 'saturated', waiting=True, source='local_cooldown')
     try:
-        client = reservation_state.client()
-        states = await reservation_state.refresh(_probe)
-        active = reserved_generation_model(PT_MODEL_CURRENT, states, override=os.getenv('OMI_VERTEX_PT_MODEL', ''))
-        if active is not None:
-            model = active
-        if client is None:
-            reason = 'no_client'
-        elif local.probe_failed_until > time.monotonic():
-            reason = 'probe_failed' if active is None else None
-        elif not states or all(state == State.UNKNOWN for state in states.values()):
-            reason = 'no_states'
-        elif active is None:
-            reason = 'no_active_model'
+        if reservation_state.client() is None:
+            return _decision(DREAM_MODEL, 'no_client', waiting=True)
+        states = await reservation_state.refresh(_probe, apply_overrides=False)
+        if states.get(DREAM_MODEL) != State.ACTIVE:
+            return _decision(DREAM_MODEL, 'no_states' if not states else 'no_active_model', waiting=True)
+        if local.probe_failed_until > time.monotonic():
+            return _decision(DREAM_MODEL, 'probe_failed', waiting=True)
+        fresh_seconds = float(os.getenv('DREAM_RESERVATION_FRESH_SECONDS', '900'))
+        utilization_limit = float(os.getenv('DREAM_DEDICATED_UTILIZATION_LIMIT', '0.7'))
+        if not 0 < fresh_seconds <= 900 or not 0 < utilization_limit <= 1:
+            return _decision(DREAM_MODEL, 'invalid_headroom_policy', waiting=True)
+        reason = await reservation_state.dream_headroom(
+            DREAM_MODEL, fresh_seconds=fresh_seconds, utilization_limit=utilization_limit
+        )
     except Exception:
-        states = {}
-        client = None
         reason = 'probe_failed'
-    # Without unique active evidence, honor either exclusive-order alias's cooldown.
-    models = [model] if states.get(model) == State.ACTIVE and reason is None else list(RESERVATIONS)
-    if any(local.cooldowns.get(candidate, 0) > time.monotonic() for candidate in models):
-        return _decision(model, 'saturated', waiting=True, source='local_cooldown')
-    if client is not None:
-        try:
-            async with asyncio.timeout(0.5):
-                for candidate in models:
-                    if await client.get(reservation_state.key() + ':saturated:' + candidate):
-                        return _decision(model, 'saturated', waiting=True, source='redis_cooldown')
-        except Exception:
-            reason = 'probe_failed'
-    return _decision(model, reason) if reason else model
+    return _decision(DREAM_MODEL, reason or 'fresh_reservation_saturation_clear', waiting=reason is not None)
 
 
 async def mark_saturated(model):
@@ -152,6 +158,18 @@ async def mark_saturated(model):
         logger.warning('dream_capacity_cooldown reason=saturated model=%s', model)
 
 
+async def wait_for_capacity(deadline, required_seconds, *, clock=None, mode='reserved', owner_allowlisted=False):
+    """One cooldown, then recheck shared/local saturation; never outlive the pass."""
+    clock = asyncio.get_running_loop().time if clock is None else clock
+    if deadline - clock() < COOLDOWN_SECONDS + required_seconds:
+        return False
+    await asyncio.sleep(COOLDOWN_SECONDS)
+    return (
+        deadline - clock() >= required_seconds
+        and await available_model(mode=mode, owner_allowlisted=owner_allowlisted) is not None
+    )
+
+
 def _release_local(token):
     slots = _local().slots
     for index, (own, _) in list(slots.items()):
@@ -159,36 +177,42 @@ def _release_local(token):
             del slots[index]
 
 
-async def claim(limit):
-    model = await available_model()
+async def claim(limit, *, slot_seconds=SLOT_SECONDS, mode='reserved', owner_allowlisted=False):
+    model = await available_model(mode=mode, owner_allowlisted=owner_allowlisted)
     if model is None:
         return None
-    limit = max(1, min(limit, 8))
+    limit = max(1, min(limit, 512))
     token = str(uuid4())
     local = _local()
     index = next((i for i in range(limit) if local.slots.get(i, ('', 0))[1] <= time.monotonic()), None)
     if index is None:
         return _decision(model, 'saturated', waiting=True, source='local_slots')
-    local.slots[index] = token, time.monotonic() + SLOT_SECONDS
+    local.slots[index] = token, time.monotonic() + slot_seconds
     fallback = ('dream-local:' + str(index), token)
     try:
         client = reservation_state.client()
         if client is None:
-            return fallback
+            if mode == 'on_demand':
+                return fallback
+            _release_local(token)
+            return _decision(model, 'no_client', waiting=True, source='shared_slots')
         async with asyncio.timeout(0.5):
             for index in range(limit):
                 key = reservation_state.key() + ':dream-slot:' + str(index)
-                if await client.set(key, token, nx=True, ex=SLOT_SECONDS):
+                if await client.set(key, token, nx=True, ex=slot_seconds):
                     return key, token
     except Exception:
-        record_fallback(
-            component='vertex_reservations',
-            from_mode='shared_slots',
-            to_mode='local_slots',
-            reason='connection_lost',
-            outcome='degraded',
-        )
-        return fallback
+        if mode == 'on_demand':
+            record_fallback(
+                component='vertex_reservations',
+                from_mode='shared_slots',
+                to_mode='local_slots',
+                reason='connection_lost',
+                outcome='degraded',
+            )
+            return fallback
+        _release_local(token)
+        return _decision(model, 'probe_failed', waiting=True, source='shared_slots')
     _release_local(token)
     return _decision(model, 'saturated', waiting=True, source='shared_slots')
 

@@ -117,9 +117,12 @@ MONITORING_CONTRACT_SOURCES = (
     'backend/charts/diarizer/',
     'backend/charts/nllb-translation/',
     'backend/charts/deepgram-self-hosted/nova-3/',
+    'backend/scripts/alert_backtest.py',
+    'backend/charts/monitoring/metric-inventory.prod.json',
     'backend/charts/monitoring/expected-targets.prod.yaml',
     'backend/charts/monitoring/kube-prometheus-stack/',
     'backend/charts/monitoring/alerts/',
+    'backend/charts/monitoring/notifications/',
     'backend/charts/monitoring/alert-rules.json',
     'backend/charts/monitoring/live-alert-gate.json',
     'backend/charts/monitoring/prometheus-stackdriver-exporter/',
@@ -184,6 +187,7 @@ AREA_TESTS = (
             'backend/scripts/generate_plan_catalog.py',
             'backend/models/users.py',
             'backend/utils/subscription.py',
+            'backend/utils/subscription_state_machine.py',
             'backend/utils/overage.py',
             'backend/utils/fair_use.py',
             'backend/utils/sync/rate_limit.py',
@@ -447,6 +451,10 @@ def is_selectable_backend_path(path: str) -> bool:
     if not path.startswith('backend/'):
         return False
     if path.endswith('.md'):
+        return False
+    # Duration exemptions are not product sources. Treating this list as an
+    # unmapped backend path would select the full unit suite on every edit.
+    if path == 'backend/tests/fast_unit_duration_allowlist.txt':
         return False
     if path.startswith('backend/docs/'):
         return False

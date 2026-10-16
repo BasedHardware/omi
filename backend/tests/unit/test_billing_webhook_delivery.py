@@ -1,6 +1,7 @@
 import asyncio
 from types import SimpleNamespace
 from uuid import UUID
+from unittest.mock import Mock
 
 import pytest
 from fastapi import BackgroundTasks
@@ -144,9 +145,8 @@ def test_trial_to_active_is_not_another_start(captures):
 def isolated_clients(monkeypatch):
     for name in ('POSTHOG_PROJECT_API_KEY', 'POSTHOG_API_KEY', 'POSTHOG_BILLING_API_KEY'):
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.setattr(product_telemetry, '_posthog_client', None)
-    monkeypatch.setattr(product_telemetry, '_posthog_disabled', False)
-    monkeypatch.setattr(product_telemetry, '_billing_client', None)
+    monkeypatch.setattr(product_telemetry, '_posthog_clients', {})
+    monkeypatch.setattr(product_telemetry, '_invalid_key_logged', False)
 
 
 def test_no_key_never_constructs_sdk(isolated_clients, monkeypatch):
@@ -154,27 +154,20 @@ def test_no_key_never_constructs_sdk(isolated_clients, monkeypatch):
     product_telemetry.emit_product_event(uid='user', event='Billing Subscription Started', properties={})
 
 
-def test_alias_only_constructs_billing_sync_client(isolated_clients, monkeypatch):
-    created = []
-
-    class Client:
-        def __init__(self, **kwargs):
-            created.append(kwargs)
-
-        def capture(self, **kwargs):
-            created.append(kwargs)
-
-    monkeypatch.setenv('POSTHOG_BILLING_API_KEY', 'fake-offline-key')
-    monkeypatch.setattr(product_telemetry.importlib, 'import_module', lambda _: SimpleNamespace(Posthog=Client))
-    product_telemetry.emit_product_event(uid='user', event='Task Extracted', properties={})
-    assert created == []
+def test_billing_uses_shared_client_and_preserves_delivery_metadata(isolated_clients, monkeypatch):
+    client = SimpleNamespace(capture=Mock())
+    monkeypatch.setattr(product_telemetry, '_injected_client', client)
     product_telemetry.emit_product_event(
-        uid='user', event='Billing Subscription Started', properties={'$insert_id': 'uuid-fixture'}
+        uid='user',
+        event='Billing Subscription Started',
+        properties={
+            '$insert_id': 'uuid-fixture',
+            'occurred_at': '2026-10-15T12:00:00Z',
+        },
     )
-    assert created[0]['sync_mode'] is True
-    assert created[0]['timeout'] == 2
-    assert created[0]['max_retries'] == 0
-    assert created[1]['uuid'] == 'uuid-fixture'
+    assert client.capture.call_args.kwargs['uuid'] == 'uuid-fixture'
+    assert client.capture.call_args.kwargs['timestamp'].isoformat() == '2026-10-15T12:00:00+00:00'
+    assert client.capture.call_args.kwargs['properties']['emitter'] == 'server'
 
 
 def test_capture_failure_after_response_preserves_entitlement(monkeypatch):
@@ -218,7 +211,7 @@ def test_capture_failure_after_response_preserves_entitlement(monkeypatch):
         (payment.action_items_db, 'unlock_all_action_items'),
     ]:
         monkeypatch.setattr(module, name, lambda *args: None)
-    monkeypatch.setattr(product_telemetry, '_billing_client', Client())
+    monkeypatch.setattr(product_telemetry, '_injected_client', Client())
 
     async def run():
         tasks = BackgroundTasks()

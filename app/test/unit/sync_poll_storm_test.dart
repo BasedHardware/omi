@@ -142,6 +142,102 @@ void main() {
     expect(sync.testWals.every((wal) => wal.status == WalStatus.uploaded), isTrue);
   });
 
+  test('127 restored uploads recover without deleting audio or letting a queued job starve siblings', () async {
+    final requests = <DateTime>[];
+    final persisted = <Map<String, dynamic>>[];
+    var throttle = true;
+    var transient = true;
+    var uploads = 0;
+    final originals = <String, List<int>>{};
+    final wals = List.generate(127, pending);
+    wals[0].jobId = null;
+    wals[1].jobId = '   ';
+    wals[2].jobId = '';
+    // One orphan no longer has local audio. It must remain unavailable, not
+    // be acknowledged as processed or silently removed to unblock the queue.
+    for (var i = 0; i < wals.length; i++) {
+      if (i == 2) continue;
+      final bytes = <int>[i, 1, 2, 3];
+      originals[wals[i].filePath!] = bytes;
+      await File('${dir.path}/${wals[i].filePath}').writeAsBytes(bytes);
+    }
+    final sync = LocalWalSyncImpl(
+      _Listener(),
+      now: () => now,
+      persistWals: (items) async {
+        persisted
+          ..clear()
+          ..addAll(items.map((wal) => wal.toJson()));
+      },
+      uploadGate: SyncUploadGate(
+        limiter: limiter,
+        fairUseStatusLoader: () async => {'stage': 'none'},
+        uploader: (files,
+            {onUploadProgress,
+            conversationId,
+            captureEvidence,
+            recordingSessionId,
+            audioStartSeconds,
+            audioEndSeconds,
+            claimLiveCapture = false,
+            geolocation}) async {
+          uploads++;
+          expect(files.length, 2, reason: 'only the retained orphan files need re-upload');
+          for (final file in files) {
+            expect(await file.readAsBytes(), originals[file.path.split('/').last]);
+          }
+          return UploadFilesResult.queued('recovered-orphans');
+        },
+      ),
+      jobStatusFetcher: (id) async {
+        requests.add(now);
+        if (throttle) {
+          throttle = false;
+          return SyncJobFetch.throttled(
+              SyncRateLimitedException(kind: SyncRateLimitKind.edgeThrottle, retryAfterSeconds: 120));
+        }
+        if (id == 'job-4' && transient) {
+          transient = false;
+          return const SyncJobFetch(SyncJobFetchOutcome.transient);
+        }
+        return SyncJobFetch(
+            SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: id == 'job-3' ? 'queued' : 'completed'));
+      },
+    );
+    sync.testWals = wals;
+    await sync.reconcileUploadedWals();
+    expect(requests, hasLength(1), reason: 'the first 429 stops the entire pass');
+    expect(wals.take(2).every((wal) => wal.status == WalStatus.miss), isTrue);
+    expect(wals[2].status, WalStatus.corrupted);
+    expect(wals.skip(3).every((wal) => wal.status == WalStatus.uploaded), isTrue);
+    await sync.reconcileUploadedWals();
+    expect(requests, hasLength(1), reason: 'repeated wakes respect the account cooldown');
+
+    now = now.add(const Duration(minutes: 2));
+    await sync.syncAll();
+    expect(uploads, 1);
+    for (var pass = 0; pass < 12; pass++) {
+      now = now.add(const Duration(minutes: 1));
+      await sync.reconcileUploadedWals();
+    }
+    expect(wals.where((wal) => wal.status == WalStatus.synced), hasLength(125));
+    expect(wals[2].status, WalStatus.corrupted);
+    expect(wals[3].status, WalStatus.uploaded, reason: 'queued is never fabricated as successful');
+    expect(wals[3].jobId, 'job-3');
+    expect(wals.where((wal) => wal.status != WalStatus.corrupted).every((wal) => wal.retryCount == 0), isTrue);
+    expect(persisted.map(Wal.fromJson).where((wal) => wal.status == WalStatus.synced), hasLength(125));
+    for (final request in requests) {
+      expect(
+          requests
+              .where((other) => other.isAfter(request.subtract(const Duration(minutes: 1))) && !other.isAfter(request))
+              .length,
+          lessThanOrEqualTo(SyncJobPoller.maxRequestsPerMinute));
+    }
+    for (final entry in originals.entries) {
+      expect(await File('${dir.path}/${entry.key}').readAsBytes(), entry.value);
+    }
+  });
+
   test('shared budget, per-job cadence, server hint, fairness and sliding window', () async {
     final poller = SyncJobPoller(clock: () => now);
     final seen = <String>[];

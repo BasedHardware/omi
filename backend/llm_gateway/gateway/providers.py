@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 from contextvars import ContextVar
 from collections import deque
-from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass
+from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
+from dataclasses import asdict, dataclass, replace
 import json
 import os
 import time
@@ -27,6 +27,8 @@ from llm_gateway.gateway.accounting import (
     openai_usage_from_response,
     vertex_usage_from_response,
 )
+from llm_gateway.gateway.cache_policy import INTERNAL_POLICY, cache_owner_scope, provider_cache_request
+from llm_gateway.gateway.vertex_cache import CacheReceipt, VertexContentCache, scoped_cache_stream, validated_stream
 from llm_gateway.gateway.credentials import CredentialContext
 from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef, ProviderRejection
 from llm_gateway.gateway.provider_types import (  # noqa: F401 — re-exported provider contract
@@ -130,6 +132,8 @@ class OpenAICompatibleChatCompletionProvider:
         credentials: CredentialContext,
         timeout_ms: int,
     ) -> ProviderResponse:
+        cache_policy = request.get(INTERNAL_POLICY, {})
+        request = provider_cache_request(request, owner=cache_owner_scope(credentials.caller))
         api_key = _resolve_provider_api_key(
             credentials=credentials,
             provider_ref=provider_ref,
@@ -172,7 +176,16 @@ class OpenAICompatibleChatCompletionProvider:
         _validate_chat_completion_response_shape(parsed)
         return ProviderResponse(
             response=parsed,
-            accounting=openai_usage_from_response(parsed, cache_requested=cache_requested_for_openai_request(request)),
+            accounting=replace(
+                openai_usage_from_response(parsed, cache_requested=cache_requested_for_openai_request(request)),
+                lane_id=cache_policy.get('lane', 'unknown'),
+                cache_mode=(
+                    'explicit'
+                    if cache_requested_for_openai_request(request) and request.get('prompt_cache_options')
+                    else 'none' if request.get('prompt_cache_options') else 'implicit'
+                ),
+                cacheable_prefix_tokens=cache_policy.get('prefix_tokens', 0),
+            ),
         )
 
     async def stream_chat_completion(
@@ -183,6 +196,8 @@ class OpenAICompatibleChatCompletionProvider:
         credentials: CredentialContext,
         timeout_ms: int,
     ):
+        cache_policy = request.get(INTERNAL_POLICY, {})
+        request = provider_cache_request(request, owner=cache_owner_scope(credentials.caller))
         api_key = _resolve_provider_api_key(
             credentials=credentials,
             provider_ref=provider_ref,
@@ -209,9 +224,30 @@ class OpenAICompatibleChatCompletionProvider:
                         credential_mode=credentials.mode,
                         retry_after_header=response.headers.get('retry-after'),
                     )
+                decoder = SSEEventDecoder()
                 async for chunk in response.aiter_bytes():
-                    if chunk:
-                        yield chunk
+                    if not cache_policy:
+                        if chunk:
+                            yield chunk
+                        continue
+                    for event in decoder.feed(chunk):
+                        try:
+                            data = json.loads(event.data)
+                        except (ValueError, TypeError):
+                            yield f'data: {event.data}\n\n'.encode()
+                            continue
+                        if isinstance(data, dict) and isinstance(data.get('usage'), Mapping):
+                            data['_gateway_cache_receipt'] = {
+                                'lane': cache_policy.get('lane', 'unknown'),
+                                'mode': (
+                                    'explicit'
+                                    if cache_requested_for_openai_request(request)
+                                    and request.get('prompt_cache_options')
+                                    else 'none' if request.get('prompt_cache_options') else 'implicit'
+                                ),
+                                'prefix_tokens': cache_policy.get('prefix_tokens', 0),
+                            }
+                        yield f'data: {json.dumps(data, separators=(",", ":"))}\n\n'.encode()
         except httpx.TimeoutException as exc:
             raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
         except httpx.HTTPError as exc:
@@ -443,6 +479,13 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         self._reservation_state_context: ContextVar[dict[str, State]] = ContextVar(
             'gateway_vertex_reservations', default={}
         )
+        self._thinking_budget_context: ContextVar[int | None] = ContextVar(
+            'gateway_dream_thinking_budget', default=None
+        )
+        self._content_cache = VertexContentCache(self._http_client, now=now)
+        self._cache_context: ContextVar[tuple[Mapping[str, Any], str | None, CacheReceipt] | None] = ContextVar(
+            'vertex_cache_request', default=None
+        )
         self._reservations = ReservationState()
         self._model_unavailable_at: dict[str, float] = {}
 
@@ -455,16 +498,27 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         timeout_ms: int,
     ) -> ProviderResponse:
         self._reject_byok(credentials)
-        origin_model = ptr.overflow_origin_from_request(request)
+        request = self._with_product_policy(request, credentials)
         payload = _vertex_request(request)
-        parsed = await self._generate_content(
-            payload,
-            anchor=provider_ref.model,
-            credentials=credentials,
-            timeout_ms=timeout_ms,
-            origin_model=origin_model,
-        )
-        accounting = vertex_usage_from_response(parsed)
+        receipt = CacheReceipt()
+        cache_token = self._cache_context.set((request, cache_owner_scope(credentials.caller), receipt))
+        token = self._thinking_budget_context.set(request.get('_dream_thinking_budget'))
+        try:
+            origin_model = '' if self._dream_mode is not None else ptr.overflow_origin_from_request(request)
+            parsed = await self._generate_content(
+                payload,
+                anchor=provider_ref.model,
+                credentials=credentials,
+                timeout_ms=timeout_ms,
+                origin_model=origin_model,
+            )
+        except ProviderFailure as exc:
+            exc.accounting = exc.accounting or receipt.accounting()
+            raise
+        finally:
+            self._thinking_budget_context.reset(token)
+            self._cache_context.reset(cache_token)
+        accounting = receipt.accounting(vertex_usage_from_response(parsed))
         normalized = _vertex_to_openai_response(
             parsed,
             requested_model=provider_ref.model,
@@ -482,51 +536,124 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         timeout_ms: int,
     ):
         self._reject_byok(credentials)
-        origin_model = ptr.overflow_origin_from_request(request)
-        payload = _vertex_request(request)
-        # State I/O has its own bounded allowance; preserve the inference budget.
-        await self._refresh_reservations(max(timeout_ms, 0) / 4000.0)
-        deadline = self._now() + max(timeout_ms, 0) / 1000.0
-        attempts = self._attempt_plan(provider_ref.model, origin_model=origin_model)
-        while attempts:
-            model, capacity = attempts.pop(0)
-            remaining_ms = int((deadline - self._now()) * 1000)
-            if remaining_ms <= 0:
-                raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT)
-            try:
-                async for chunk in self._stream_content_once(
-                    payload,
-                    model=model,
-                    capacity=capacity,
-                    requested_model=provider_ref.model,
-                    timeout_ms=remaining_ms,
-                ):
-                    yield chunk
-                yield _openai_sse_done()
-                return
-            except _VertexHttpError as error:
-                await self._reservations.record(model, capacity, error.status_code, None)
-                self._observe_attempt(model, capacity, error.status_code, error.preview)
-                recovery = self._recovery_attempts(
-                    model, error.status_code, error.preview, origin_model=origin_model, capacity=capacity
-                )
-                if recovery:
-                    attempts = recovery
-                    continue
-                _raise_for_status(
-                    error.status_code,
-                    error.preview,
-                    credential_mode=credentials.mode,
-                    retry_after_header=error.retry_after_header,
-                )
-            except Exception as exc:
-                if isinstance(exc, httpx.TimeoutException):
-                    raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
-                if isinstance(exc, httpx.HTTPError):
-                    raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
-                raise
+        request = self._with_product_policy(request, credentials)
+        receipt = CacheReceipt()
+        stream = self._stream_chat_completion_in_scope(
+            request, provider_ref=provider_ref, credentials=credentials, timeout_ms=timeout_ms, receipt=receipt
+        )
+        async for chunk in scoped_cache_stream(
+            self._cache_context, (request, cache_owner_scope(credentials.caller), receipt), stream
+        ):
+            yield chunk
+
+    async def _stream_chat_completion_in_scope(
+        self,
+        request: Mapping[str, Any],
+        *,
+        provider_ref: ProviderRef,
+        credentials: CredentialContext,
+        timeout_ms: int,
+        receipt: CacheReceipt,
+    ) -> AsyncGenerator[bytes, None]:
+        try:
+            origin_model = '' if self._dream_mode is not None else ptr.overflow_origin_from_request(request)
+            payload = _vertex_request(request)
+            if self._dream_mode is None:
+                await self._refresh_reservations(max(timeout_ms, 0) / 4000.0)
+            deadline = self._now() + max(timeout_ms, 0) / 1000.0
+            attempts = self._attempt_plan(provider_ref.model, origin_model=origin_model)
+            while attempts:
+                model, capacity = attempts.pop(0)
+                remaining_ms = int((deadline - self._now()) * 1000)
+                if remaining_ms <= 0:
+                    raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT)
+                try:
+                    async for chunk in validated_stream(
+                        self._stream_content_once(
+                            payload,
+                            model=model,
+                            capacity=capacity,
+                            requested_model=provider_ref.model,
+                            timeout_ms=remaining_ms,
+                        ),
+                        enabled=self._hold_retiring_stream(model),
+                        max_bytes=_configured_max_response_bytes,
+                    ):
+                        yield chunk
+                    yield _openai_sse_done()
+                    return
+                except _VertexHttpError as error:
+                    await self._reservations.record(model, capacity, error.status_code, None)
+                    self._observe_attempt(model, capacity, error.status_code, error.preview)
+                    recovery = self._recovery_attempts(
+                        model, error.status_code, error.preview, origin_model=origin_model, capacity=capacity
+                    )
+                    if recovery:
+                        attempts = recovery
+                        continue
+                    _raise_for_status(
+                        error.status_code,
+                        error.preview,
+                        credential_mode=credentials.mode,
+                        retry_after_header=error.retry_after_header,
+                    )
+                except Exception as exc:
+                    if isinstance(exc, httpx.TimeoutException):
+                        raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
+                    if isinstance(exc, httpx.HTTPError):
+                        raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
+                    raise
+
+        except ProviderFailure as exc:
+            exc.accounting = exc.accounting or receipt.accounting()
+            raise
 
     async def _stream_content_once(
+        self, payload, *, model, capacity, requested_model, timeout_ms
+    ) -> AsyncGenerator[bytes, None]:
+        context = self._cache_context.get()
+        if context is None:
+            async for chunk in self._stream_content_uncached_once(
+                payload, model=model, capacity=capacity, requested_model=requested_model, timeout_ms=timeout_ms
+            ):
+                yield chunk
+            return
+        request, owner, receipt = context
+        receipt.resolved_model = model
+        receipt.traffic_type = 'PROVISIONED_THROUGHPUT' if capacity == ptr.REQUEST_TYPE_DEDICATED else 'ON_DEMAND'
+        for retry in range(1 if self._dream_mode is not None else 3):
+            body, key = (
+                (dict(payload), None)
+                if retry == 2
+                else await self._content_cache.prepare(
+                    payload,
+                    request=request,
+                    owner=owner,
+                    receipt=receipt,
+                    endpoint=self._endpoint(model, method='streamGenerateContent', capacity=capacity),
+                    model=model,
+                    headers=_vertex_headers(await self._vertex_access_token(), capacity),
+                    recreate=retry > 0,
+                )
+            )
+            if retry == 2:
+                receipt.mode = 'implicit'
+            emitted = False
+            try:
+                async for chunk in self._stream_content_uncached_once(
+                    body, model=model, capacity=capacity, requested_model=requested_model, timeout_ms=timeout_ms
+                ):
+                    emitted = True
+                    yield chunk
+                return
+            except _VertexHttpError as error:
+                if emitted or not key or error.status_code not in {400, 404, 412}:
+                    raise
+                self._content_cache.invalidate(key)
+                if self._dream_mode is not None:
+                    raise
+
+    async def _stream_content_uncached_once(
         self,
         payload: Mapping[str, Any],
         *,
@@ -537,17 +664,21 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
     ):
         observation_deadline = self._now() + max(timeout_ms, 0) / 1000
         self._reservations.note_request(model, capacity, self._reservation_states.get(model, State.UNKNOWN))
-        if capacity != ptr.REQUEST_TYPE_DEDICATED:
+        if capacity != ptr.REQUEST_TYPE_DEDICATED and not (
+            capacity == ptr.REQUEST_TYPE_SHARED and self._dream_on_demand()
+        ):
             raise ProviderFailure(FailureClass.INVALID_CONFIG)
         endpoint = self._endpoint(model, method='streamGenerateContent', capacity=capacity)
         headers = _vertex_headers(await self._vertex_access_token(), capacity)
         decoder = SSEEventDecoder()
         evidence = ReservationResponseEvidence()
+        reported_paygo = False
+        self._observe_managed_dispatch(model, capacity)
         async with self._http_client.stream(
             'POST',
             endpoint,
             params={'alt': 'sse'},
-            json=ptr.model_payload(payload, model),
+            json=dict(payload) if self._dream_mode is not None else ptr.model_payload(payload, model),
             headers=headers,
             timeout=timeout_ms / 1000.0,
         ) as response:
@@ -562,6 +693,10 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                     if not data or data == '[DONE]':
                         continue
                     parsed = _parse_limited_json_response(data.encode('utf-8'))
+                    reported_paygo = self._observe_stream_traffic(model, parsed, reported_paygo)
+                    context = self._cache_context.get()
+                    if context is not None:
+                        parsed = {**parsed, '_gateway_cache_receipt': asdict(context[2])}
                     translated, _ = _vertex_to_openai_stream_chunk(
                         parsed,
                         requested_model=requested_model,
@@ -712,6 +847,9 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         if self._owns_http_client:
             await self._http_client.aclose()
 
+    def _dream_on_demand(self) -> bool:
+        return self._dream_mode == 'on_demand'
+
     async def _generate_content(
         self,
         payload: Mapping[str, Any],
@@ -722,8 +860,9 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         origin_model: str = '',
     ) -> Mapping[str, Any]:
         """Run generateContent through the PT ladder: pin, overflow, fallback."""
-        # State I/O has its own bounded allowance; preserve the inference budget.
-        await self._refresh_reservations(max(timeout_ms, 0) / 4000.0)
+        # Dream admission is upstream; no desktop reservation probe or remap here.
+        if self._dream_mode is None:
+            await self._refresh_reservations(max(timeout_ms, 0) / 4000.0)
         deadline = self._now() + max(timeout_ms, 0) / 1000.0
         attempts = self._attempt_plan(anchor, origin_model=origin_model)
         last_error: _VertexHttpError | None = None
@@ -769,7 +908,34 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         )
         raise AssertionError('unreachable: _raise_for_status always raises')
 
-    async def _generate_content_once(
+    async def _generate_content_once(self, *, model, capacity, payload, credentials, timeout_ms):
+        context = self._cache_context.get()
+        if context is None:
+            return await self._generate_content_uncached_once(
+                model=model, capacity=capacity, payload=payload, credentials=credentials, timeout_ms=timeout_ms
+            )
+        request, owner, receipt = context
+        receipt.resolved_model = model
+        receipt.traffic_type = 'PROVISIONED_THROUGHPUT' if capacity == ptr.REQUEST_TYPE_DEDICATED else 'ON_DEMAND'
+
+        async def send(body):
+            return await self._generate_content_uncached_once(
+                model=model, capacity=capacity, payload=body, credentials=credentials, timeout_ms=timeout_ms
+            )
+
+        return await self._content_cache.generate(
+            send,
+            payload,
+            request=request,
+            owner=owner,
+            receipt=receipt,
+            endpoint=self._endpoint(model, method='generateContent', capacity=capacity),
+            model=model,
+            headers=_vertex_headers(await self._vertex_access_token(), capacity),
+            allow_recreate=self._dream_mode is None,
+        )
+
+    async def _generate_content_uncached_once(
         self,
         *,
         model: str,
@@ -780,15 +946,29 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
     ) -> Mapping[str, Any]:
         observation_deadline = self._now() + max(timeout_ms, 0) / 1000
         self._reservations.note_request(model, capacity, self._reservation_states.get(model, State.UNKNOWN))
-        if capacity != ptr.REQUEST_TYPE_DEDICATED:
+        if capacity != ptr.REQUEST_TYPE_DEDICATED and not (
+            capacity == ptr.REQUEST_TYPE_SHARED and self._dream_on_demand()
+        ):
             raise ProviderFailure(FailureClass.INVALID_CONFIG)
         endpoint = self._endpoint(model, method='generateContent', capacity=capacity)
+        adapted = dict(payload) if self._dream_mode is not None else ptr.model_payload(payload, model)
+        thinking_budget = self._thinking_budget_context.get()
+        if thinking_budget is not None:
+            generation_config = adapted.get('generationConfig', {})
+            config = dict(generation_config) if isinstance(generation_config, Mapping) else {}
+            config['thinkingConfig'] = (
+                {'thinkingLevel': 'high'}
+                if ptr.RESERVATIONS[model].thinking_level
+                else {'thinkingBudget': thinking_budget}
+            )
+            adapted['generationConfig'] = config
         try:
             headers = _vertex_headers(await self._vertex_access_token(), capacity)
+            self._observe_managed_dispatch(model, capacity)
             async with self._http_client.stream(
                 'POST',
                 endpoint,
-                json=ptr.model_payload(payload, model),
+                json=adapted,
                 headers=headers,
                 timeout=timeout_ms / 1000.0,
             ) as response:
@@ -803,6 +983,8 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                     await _read_limited_response(response, max_bytes=_configured_max_response_bytes())
                 )
             traffic_type = completed_provisioned_traffic(parsed)
+            self._observe_managed_traffic(model, vertex_usage_from_response(parsed).traffic_type)
+            self._reject_managed_on_demand(model, parsed)
             self._observe_attempt(model, capacity, response.status_code, b'', traffic_type=traffic_type)
             await self._reservations.record(
                 model,
@@ -825,7 +1007,9 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         async def probe(model: str, location: str) -> str:
             return await probe_reservation(self._http_client, self._vertex_access_token, model, location)
 
-        self._reservation_states = await self._reservations.refresh(probe, timeout_seconds=min(1.6, budget_seconds))
+        self._reservation_states = await self._reservations.refresh(
+            probe, timeout_seconds=min(1.6, budget_seconds), apply_overrides=False
+        )
 
     async def _vertex_access_token(self) -> str:
         try:
@@ -1162,6 +1346,16 @@ _PROVIDER_REJECTION_PARAMS = {
     'stream_options': 'stream',
 }
 
+# Attachment-shaped param suffixes under ``messages``: rejections naming them
+# are about the user's file, not the request the gateway constructed.
+_ATTACHMENT_PARAM_SUFFIXES = (
+    '.file.file_id',
+    '.file',
+    '.file_id',
+    '.image_url',
+    '.image_url.url',
+)
+
 
 def _provider_rejection(body: bytes) -> ProviderRejection:
     """Extract only allowlisted provider error semantics from a bounded body preview."""
@@ -1186,6 +1380,16 @@ def _provider_rejection(body: bytes) -> ProviderRejection:
         prefix = 'invalid'
     if prefix is not None:
         raw_param = error.get('param')
+        if isinstance(raw_param, str) and raw_param.endswith(_ATTACHMENT_PARAM_SUFFIXES):
+            # Attachment-shaped params (stale file id, unreadable image) live
+            # under ``messages`` but are about the user's file, not our request
+            # shape. Keep them distinguishable so composition boundaries do
+            # not report unreadable input as a server fault.
+            return (
+                ProviderRejection.INVALID_ATTACHMENT
+                if prefix == 'invalid'
+                else ProviderRejection.UNSUPPORTED_ATTACHMENT
+            )
         root_param = raw_param.split('[', 1)[0].split('.', 1)[0] if isinstance(raw_param, str) else ''
         bounded_param = _PROVIDER_REJECTION_PARAMS.get(root_param, 'other')
         return ProviderRejection(f'{prefix}_{bounded_param}')

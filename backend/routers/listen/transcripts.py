@@ -60,6 +60,7 @@ from utils.transcribe_decisions import (
     should_queue_speaker_embedding,
     should_skip_speaker_detection,
 )
+from database._client import is_permanent_firestore_write_rejection
 from utils.transcribe_store import conversations_db, user_db
 from utils.translation import TranslationService
 from utils.translation_cache import ConversationLanguageState, TranscriptSegmentLanguageCache
@@ -69,6 +70,21 @@ from utils.product_telemetry import emit_product_event
 
 logger = logging.getLogger(__name__)
 MAX_V2_PERSIST_ATTEMPTS = 5
+# Cadence for the mid-session rollover probe against a conversation whose every
+# content write is permanently rejected (Firestore 1 MiB ceiling): rare enough
+# not to multiply generation churn, frequent enough to relieve a session whose
+# saturated row never shrinks.
+OVERSIZED_ROLLOVER_PROBE_SECONDS = 60.0
+# A permanent rejection must still reach an escape even while live speech keeps
+# refilling the backlog: below this many retained segments the whole batch is
+# retried (the tail drop buys nothing once the batch is small) and above it the
+# newest segment is dropped per attempt so the oldest speech can land.
+LEGACY_PERSIST_SHRINK_FLOOR = 4
+# Rejections a full-cap backlog may absorb before the loop probes the rollover
+# even though the batch never shrank — the all-day storm shape where every
+# dropped tail is instantly replaced by fresh speech. At the 8s backoff cap
+# this is roughly five minutes of refusals.
+LEGACY_PERSIST_STALL_REJECTS = 100
 
 
 def _observe_refusal(speaker, reason, scope=None):
@@ -169,6 +185,15 @@ class TranscriptProcessor:
         # stream_transcript task and tear the session down.
         self._legacy_retry_until = 0.0
         self._legacy_persist_failures = 0
+        # A conversation at Firestore's 1 MiB ceiling rejects every content write
+        # permanently. Retry the retained batch without its newest tail until the
+        # remainder fits the row again; probe the mid-session rollover only when
+        # even one segment cannot land.
+        self._oversized_rollover_probe_at = 0.0
+        # Rejections absorbed since the last successful persist. Drives the
+        # stall-escape probe: a backlog that never shrinks because live speech
+        # keeps replacing every dropped tail still has to reach the rollover.
+        self._legacy_persist_rejects = 0
 
     def _queue_v2_retry(self, segments: List[Dict[str, Any]]) -> None:
         """Retry uncommitted text, then retain it for unplaced v1 persistence."""
@@ -822,6 +847,24 @@ class TranscriptProcessor:
             )
         await self._translate(updated, conversation.id, removed)
 
+    def _handle_oversized_legacy_persist(self, error: Exception) -> bool:
+        """True when a legacy persist failed with a permanent Firestore rejection.
+
+        A conversation at Firestore's 1 MiB ceiling refuses every content write,
+        and the same permanence holds for permission-denied or policy-refused
+        rows: re-persisting the same retained batch can never succeed, so the
+        loop would burn one rejected transaction per backoff tick while
+        ``segment_buffer``'s maxlen silently evicted the oldest retained
+        speech. The caller reacts by retrying the drain without its newest tail
+        (oldest speech keeps its place and persists first on the smaller row)
+        and, once the batch is at the shrink floor, by probing the mid-session
+        rollover — the same recovery the no-merge-result path already
+        exercises — so retained and fresh speech land on a conversation
+        Firestore still accepts. Transient failures return False and keep
+        today's whole-batch retry.
+        """
+        return is_permanent_firestore_write_rejection(error)
+
     def _requeue_legacy_persist(self, segments, photos) -> None:
         """Retain a failed legacy drain for the next tick (buffers are bounded deques)."""
         for raw in segments or []:
@@ -1029,10 +1072,68 @@ class TranscriptProcessor:
                 self._requeue_legacy_persist(legacy_retry_segments, photos)
                 raise
             except Exception as error:
-                self._requeue_legacy_persist(legacy_retry_segments, photos)
+                oversized = self._handle_oversized_legacy_persist(error)
+                retained_count = len(legacy_retry_segments or [])
                 failures = getattr(self, '_legacy_persist_failures', 0) + 1
                 self._legacy_persist_failures = failures
                 self._legacy_retry_until = time.monotonic() + min(8.0, 0.5 * 2 ** min(failures - 1, 4))
+                if oversized:
+                    # Permanent rejection: the write itself is refused and no
+                    # replay of the same payload against the same row can
+                    # succeed. Above the shrink floor the newest tail is
+                    # dropped, not retried, so the oldest speech keeps its
+                    # place and persists first on the smaller row; at or below
+                    # the floor the drop buys nothing, so the batch is kept
+                    # whole. Escape comes from the rollover probe — the same
+                    # recovery the no-merge-result path already uses — at a
+                    # bounded cadence, with the speech kept queued for the
+                    # fresh generation.
+                    self._legacy_persist_rejects = getattr(self, '_legacy_persist_rejects', 0) + 1
+                    below_floor = retained_count <= LEGACY_PERSIST_SHRINK_FLOOR
+                    saturated = below_floor
+                    buffer_cap = self.segment_buffer.maxlen
+                    stalled = (
+                        buffer_cap is not None
+                        and retained_count >= buffer_cap
+                        and self._legacy_persist_rejects >= LEGACY_PERSIST_STALL_REJECTS
+                    )
+                    requeue: Optional[List[Dict[str, Any]]] = legacy_retry_segments
+                    if requeue and not below_floor:
+                        requeue = requeue[:-1]
+                    self._requeue_legacy_persist(requeue, photos)
+                    escaped = False
+                    if (
+                        (saturated or stalled)
+                        and time.monotonic() >= self._oversized_rollover_probe_at
+                        and (conversation_id)
+                    ):
+                        self._oversized_rollover_probe_at = time.monotonic() + OVERSIZED_ROLLOVER_PROBE_SECONDS
+                        try:
+                            await self.host.conversations.create_new_in_progress_conversation(rollover=True)
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception as probe_error:
+                            logger.error('Live transcript rollover probe failed type=%s', type(probe_error).__name__)
+                        else:
+                            if self.host.state.current_conversation_id != conversation_id:
+                                escaped = True
+                                logger.warning(
+                                    'Live transcript rollover escaped an over-limit conversation; '
+                                    'retried %d retained segment(s) on a fresh generation',
+                                    len(self.segment_buffer),
+                                )
+                    if escaped:
+                        self._legacy_persist_rejects = 0
+                    record_fallback(
+                        component='other',
+                        from_mode='live_transcript_persist',
+                        to_mode='none' if not self.segment_buffer else 'shrink_retry',
+                        reason='document_size_limit',
+                        outcome='degraded',
+                        log=logger,
+                    )
+                    continue
+                self._requeue_legacy_persist(legacy_retry_segments, photos)
                 logger.error(
                     'Live transcript persist failed; retained %d segment(s) for retry type=%s',
                     len(legacy_retry_segments or []),
@@ -1041,6 +1142,7 @@ class TranscriptProcessor:
                 continue
             self._legacy_persist_failures = 0
             self._legacy_retry_until = 0.0
+            self._legacy_persist_rejects = 0
             if rolled_over:
                 record_fallback(
                     component='other',

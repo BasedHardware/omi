@@ -5,8 +5,35 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/wals/wal.dart';
 
 /// One batch is one server-side sync job, and a job must finish inside the
-/// backend's 600s stale guard (backend/database/sync_jobs.py).
-const _syncUploadBatchLimit = 5;
+/// backend's 600s stale guard (backend/database/sync_jobs.py). The job's cost
+/// follows its audio, so the batch is bounded by audio seconds: the 300s that
+/// five 60s chunks always carried. Pendant ring custody drains audio into
+/// ~10s WALs, and a five-file limit then shrank every job to 50s, so the same
+/// audio needed six times the jobs against the same rate limiter.
+const _syncUploadBatchAudioSeconds = 5 * chunkSizeInSeconds;
+
+/// A batch that claims a live-capture manifest sends every file in it to
+/// `/v2/sync-capture-manifest`, whose request accepts at most 20 files
+/// (`SyncCaptureManifestRequest.files`, published as `maxItems` in
+/// docs/api-reference/app-client-openapi.json). A larger batch would pass the
+/// whole-conversation claim check and then be refused by the server. With
+/// this ceiling, a conversation too large for one batch never claims at all.
+const syncUploadBatchMaxFiles = 20;
+
+bool _batchHasRoom(int batchFiles, int batchSeconds, Wal next) =>
+    batchFiles == 0 ||
+    (batchFiles < syncUploadBatchMaxFiles && batchSeconds + next.seconds <= _syncUploadBatchAudioSeconds);
+
+List<Wal> _takeWithinBudget(Iterable<Wal> wals) {
+  final batch = <Wal>[];
+  var seconds = 0;
+  for (final wal in wals) {
+    if (!_batchHasRoom(batch.length, seconds, wal)) break;
+    batch.add(wal);
+    seconds += wal.seconds;
+  }
+  return batch;
+}
 
 const _captureEvidenceV1DarkWrite = bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE');
 
@@ -53,8 +80,10 @@ bool captureEvidenceWalClaimable(Wal wal) =>
 
 final _syncTimestampTokenPattern = RegExp(r'_([0-9]+(?:\.[0-9]+)?)\.bin$');
 
+bool isMobileStandardBatchWal(Wal wal) => _walUploadFileName(wal).startsWith('audio_omimobilebatch');
+
 double _syncWalAudioStart(Wal wal) {
-  if (captureEvidenceWalClaimable(wal)) {
+  if (captureEvidenceWalClaimable(wal) || isMobileStandardBatchWal(wal)) {
     final match = _syncTimestampTokenPattern.firstMatch(_walUploadFileName(wal));
     final parsed = match == null ? null : double.tryParse(match.group(1)!);
     if (parsed != null && parsed.isFinite) return parsed;
@@ -68,7 +97,7 @@ double _syncWalAudioStart(Wal wal) {
   var end = double.negativeInfinity;
   for (final wal in wals) {
     final walStart = _syncWalAudioStart(wal);
-    final walEnd = captureEvidenceWalClaimable(wal)
+    final walEnd = captureEvidenceWalClaimable(wal) || isMobileStandardBatchWal(wal)
         ? walStart + wal.totalFrames / wal.codec.getFramesPerSecond()
         : (wal.timerStart + wal.seconds).toDouble();
     if (walStart < start) start = walStart;
@@ -111,15 +140,15 @@ List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
     final conversationId = ordered.first.conversationId;
     final recordingSessionId = ordered.first.recordingSessionId;
     final locationKey = _walLocationBatchKey(ordered.first);
-    return ordered
-        .where(
-          (wal) =>
-              wal.conversationId == conversationId &&
-              wal.recordingSessionId == recordingSessionId &&
-              _walLocationBatchKey(wal) == locationKey,
-        )
-        .take(_syncUploadBatchLimit)
-        .toList();
+    return _takeWithinBudget(
+      ordered.where(
+        (wal) =>
+            wal.conversationId == conversationId &&
+            wal.recordingSessionId == recordingSessionId &&
+            isMobileStandardBatchWal(wal) == isMobileStandardBatchWal(ordered.first) &&
+            _walLocationBatchKey(wal) == locationKey,
+      ),
+    );
   }
   final indexed = [for (var i = 0; i < pending.length; i++) (pending[i], i)]..sort((a, b) {
       final byStart = b.$1.timerStart.compareTo(a.$1.timerStart);
@@ -135,20 +164,19 @@ List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
         (wal) =>
             wal.conversationId == conversationId &&
             wal.recordingSessionId == recordingSessionId &&
+            isMobileStandardBatchWal(wal) == isMobileStandardBatchWal(ordered.first) &&
             _walLocationBatchKey(wal) == locationKey,
       )
       .toList();
   if (_captureEvidenceClaim(group.first, _walUploadFileName(group.first)) == null) {
-    return group
-        .where((wal) => _captureEvidenceClaim(wal, _walUploadFileName(wal)) == null)
-        .take(_syncUploadBatchLimit)
-        .toList();
+    return _takeWithinBudget(group.where((wal) => _captureEvidenceClaim(wal, _walUploadFileName(wal)) == null));
   }
   final batch = <Wal>[];
   final claims = <Map<String, dynamic>>[];
   final names = <String>{};
+  var batchSeconds = 0;
   for (final wal in group) {
-    if (batch.length >= _syncUploadBatchLimit) break;
+    if (!_batchHasRoom(batch.length, batchSeconds, wal)) break;
     final name = _walUploadFileName(wal);
     final claim = _captureEvidenceClaim(wal, name);
     if (claim == null) continue;
@@ -157,6 +185,7 @@ List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
     claims.add(claim);
     names.add(name);
     batch.add(wal);
+    batchSeconds += wal.seconds;
   }
   return batch;
 }

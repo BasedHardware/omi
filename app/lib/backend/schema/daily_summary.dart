@@ -179,6 +179,10 @@ class DailySummary {
   final String date; // YYYY-MM-DD
   final DateTime createdAt;
 
+  /// False when the server sent no creation time and [createdAt] is the parse time: it moves on
+  /// every fetch, so it must not be read as when the recap arrived.
+  final bool createdAtKnown;
+
   // Headline & Overview
   final String headline;
   final String overview;
@@ -206,6 +210,7 @@ class DailySummary {
     required this.id,
     required this.date,
     required this.createdAt,
+    this.createdAtKnown = true,
     required this.headline,
     required this.overview,
     this.dayEmoji = '📅',
@@ -229,6 +234,7 @@ class DailySummary {
         id: '',
         date: '',
         createdAt: DateTime.now(),
+        createdAtKnown: false,
         headline: 'Your Day in Review',
         overview: '',
         dayEmoji: '📅',
@@ -242,6 +248,7 @@ class DailySummary {
       id: generated.id ?? '',
       date: generated.date ?? '',
       createdAt: createdAt ?? generated.createdAt ?? DateTime.now(),
+      createdAtKnown: createdAt != null || generated.createdAt != null,
       headline: generated.headline ?? 'Your Day in Review',
       overview: generated.overview ?? '',
       dayEmoji: generated.dayEmoji ?? '📅',

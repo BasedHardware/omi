@@ -1188,8 +1188,40 @@ def apply_long_term_patch_transaction(
             )
             memory_items.append(superseded_item)
 
+    outbox_events = memory_item_outbox_events(memory_items, operation, control_state, next_control, commit_id)
+    committed_operation = operation.mark_committed(
+        commit_id,
+        committed_sequence=next_control.commit_sequence,
+        committed_memory_item_ids=[item.memory_id for item in memory_items],
+        committed_outbox_event_ids=[event.event_id for event in outbox_events],
+    )
+    return ApplyResult(
+        status=ApplyStatus.committed,
+        control_state=next_control,
+        operation=committed_operation,
+        memory_items=memory_items,
+        graph_assertions=graph_assertions,
+        outbox_events=outbox_events,
+    )
+
+
+__all__ = [
+    "ApplyResult",
+    "ApplyStatus",
+    "MemoryControlState",
+    "MemoryOutboxEvent",
+    "MemoryOutboxEventType",
+    "MemoryOutboxStatus",
+    "apply_long_term_patch_transaction",
+    "build_patch_mutation_identity",
+    "memory_content_hash",
+]
+
+
+def memory_item_outbox_events(items, operation, control_state, next_control, commit_id):
+    """Shared projection/vector intents for canonical applies and Review reversal."""
     outbox_events: List[MemoryOutboxEvent] = []
-    for changed_item in memory_items:
+    for changed_item in items:
         has_restricted_sensitivity = bool(
             set(changed_item.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS)
         )
@@ -1233,30 +1265,4 @@ def apply_long_term_patch_transaction(
             )
             for event_type in [MemoryOutboxEventType.projection_sync, MemoryOutboxEventType.vector_sync]
         )
-    committed_operation = operation.mark_committed(
-        commit_id,
-        committed_sequence=next_control.commit_sequence,
-        committed_memory_item_ids=[item.memory_id for item in memory_items],
-        committed_outbox_event_ids=[event.event_id for event in outbox_events],
-    )
-    return ApplyResult(
-        status=ApplyStatus.committed,
-        control_state=next_control,
-        operation=committed_operation,
-        memory_items=memory_items,
-        graph_assertions=graph_assertions,
-        outbox_events=outbox_events,
-    )
-
-
-__all__ = [
-    "ApplyResult",
-    "ApplyStatus",
-    "MemoryControlState",
-    "MemoryOutboxEvent",
-    "MemoryOutboxEventType",
-    "MemoryOutboxStatus",
-    "apply_long_term_patch_transaction",
-    "build_patch_mutation_identity",
-    "memory_content_hash",
-]
+    return outbox_events

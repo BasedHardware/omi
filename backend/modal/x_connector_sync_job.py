@@ -7,9 +7,7 @@ runs ``run_x_sync_job()`` — do not reintroduce hour-modulo gating here.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-import os
 
 import firebase_admin
 
@@ -22,13 +20,8 @@ logger = logging.getLogger(__name__)
 
 
 def _init_firebase() -> None:
-    service_account_json = os.getenv("SERVICE_ACCOUNT_JSON")
-    if service_account_json:
-        service_account_info = json.loads(service_account_json)
-        credentials = firebase_admin.credentials.Certificate(service_account_info)
-        firebase_admin.initialize_app(credentials, options=firebase_admin_options())  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
-    else:
-        firebase_admin.initialize_app(options=firebase_admin_options())  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
+    # ADC selects the attached runtime SA; the customer project stays explicit.
+    firebase_admin.initialize_app(options=firebase_admin_options())  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 
 
 def main() -> None:

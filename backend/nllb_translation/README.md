@@ -2,6 +2,14 @@
 
 Self-hosted translation using **Meta NLLB-200** (No Language Left Behind) — a 200-language neural machine translation model running on GPU via CTranslate2. Replaces Gemini 2.5 Flash-Lite for realtime transcript translation in the Omi listen pipeline.
 
+## Logging and image build
+
+Build from the repository root: `docker build -f backend/nllb_translation/Dockerfile .`.
+The image copies the shared standalone logger into `/app`. GCP logs use JSON with
+service `nllb` and request trace context, including each inference executor submission.
+General access logs remain enabled until matching Gateway/Ingress coverage is proven;
+successful health, liveness, readiness and metrics requests are filtered.
+
 ## Architecture
 
 ```

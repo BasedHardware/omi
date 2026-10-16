@@ -52,6 +52,7 @@ class MessageServiceStatusEvent extends MessageEvent {
   final String? provider;
   final bool? retryable;
   final String? reason;
+  final bool mobileStandardBatch;
 
   MessageServiceStatusEvent({
     required this.status,
@@ -60,6 +61,7 @@ class MessageServiceStatusEvent extends MessageEvent {
     this.provider,
     this.retryable,
     this.reason,
+    this.mobileStandardBatch = false,
   }) : super(eventType: 'service_status');
 
   factory MessageServiceStatusEvent.fromJson(Map<String, dynamic> json) {
@@ -70,6 +72,7 @@ class MessageServiceStatusEvent extends MessageEvent {
       provider: json['provider'] as String?,
       retryable: json['retryable'] as bool?,
       reason: json['reason'] as String?,
+      mobileStandardBatch: json['mobile_standard_batch'] == true,
     );
   }
 }

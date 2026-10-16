@@ -4,6 +4,34 @@ loki_anchors:
   nodeSelector: &nodeSelector
     service: monitoring
     env: prod
+  # 2026-10-14: the Loki read path (ingester, querier, index-gateway, ruler)
+  # ran BestEffort on the monitoring nodes and was first in line for CPU
+  # starvation whenever Prometheus pinned the node (Grafana 502 incident).
+  # Modest requests move them to Burstable with a guaranteed share, sized over
+  # measured use: ingester 128-210m/231Mi, querier 21-45m/115Mi,
+  # index-gateway 5m/69Mi, ruler 9m/88Mi. Limits stay unset - log ingestion
+  # and querying must never be CPU-throttled below demand.
+  #
+  # Requests arithmetic on the two 1930m-allocatable pool nodes (2026-10-14
+  # live listing, nominal replica spread):
+  #   jzv7: 1373m (system daemons 373m + Prometheus request 1000m)
+  #         + grafana 250m + operator 50m + adapter 100m
+  #         + ingester 50m + querier 50m + index-gateway 20m + ruler 20m
+  #         = 1913m <= 1930m
+  #   mczx: 1368m (incl. the two 500m memcached caches)
+  #         + ingester 50m + querier 50m + index-gateway 20m = 1488m <= 1930m
+  # Replica spread is scheduler-chosen, not anti-affinity-pinned: a replica
+  # that does not fit jzv7's 17m remainder schedules onto mczx instead. The
+  # durable fix for the pool is the 4-vCPU resize runbook in the monitoring
+  # README.
+  readPathRequests: &readPathRequests
+    requests:
+      cpu: 50m
+      memory: 256Mi
+  smallReadPathRequests: &smallReadPathRequests
+    requests:
+      cpu: 20m
+      memory: 128Mi
 
 loki:
   schemaConfig:
@@ -27,7 +55,7 @@ loki:
     volume_enabled: true
     retention_period: 360h # 15 days retention
   compactor:
-    retention_enabled: true 
+    retention_enabled: true
     delete_request_store: gcs
   ruler:
     enable_api: true
@@ -57,12 +85,14 @@ ingester:
     enabled: false
   nodeSelector:
     <<: *nodeSelector
-  
+  resources: *readPathRequests
+
 querier:
   replicas: 2
   maxUnavailable: 2
   nodeSelector:
     <<: *nodeSelector
+  resources: *readPathRequests
 
 queryFrontend:
   replicas: 2
@@ -91,18 +121,20 @@ indexGateway:
   maxUnavailable: 1
   nodeSelector:
     <<: *nodeSelector
+  resources: *smallReadPathRequests
 
 ruler:
   replicas: 1
   maxUnavailable: 1
   nodeSelector:
     <<: *nodeSelector
+  resources: *smallReadPathRequests
 
 # This exposes the Loki gateway so it can be written to and queried externaly
 gateway:
   service:
     type: ClusterIP
-  basicAuth: 
+  basicAuth:
     enabled: true
     existingSecret: loki-basic-auth
   nodeSelector:

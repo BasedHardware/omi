@@ -3,6 +3,7 @@ Tools for accessing and managing user action items.
 """
 
 from datetime import datetime, timedelta, timezone
+import re
 from typing import Any, Dict, List, Optional, Tuple, cast
 import contextvars
 
@@ -13,15 +14,16 @@ from utils.messaging.undo import record_write
 from utils.messaging.projection import surface_runtime
 from utils.messaging.turn_context import phone_reminder_confirmation
 import database.action_items as action_items_db
-import database.notifications as notification_db
 from utils.notifications import (
     send_action_item_completed_notification,
     send_action_item_created_notification,
     send_action_item_data_message,
     sync_action_item_reminder,
 )
-from utils.conversations.render import format_local_time, resolve_display_tz
+from utils.model_text import count_header, format_date, format_instant, truncation_note
+from utils.user_clock import clock_for_config
 from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
+from utils.retrieval.turn_refs import register_record_ref, resolve_edit_ref
 import logging
 
 logger = logging.getLogger(__name__)
@@ -54,7 +56,7 @@ def _cap_action_items_for_llm(items: List[Dict[str, Any]]) -> Tuple[List[Dict[st
     return list(items), False
 
 
-def _bounded_action_items_result(result: str, truncated: bool) -> str:
+def _bounded_action_items_result(result: str, truncated: bool, order: str = "database order") -> str:
     """Apply a hard character budget and, when the set was truncated, append a note telling the
     model to summarize what it has and to offer to narrow, so it answers instead of freezing.
 
@@ -69,10 +71,12 @@ def _bounded_action_items_result(result: str, truncated: bool) -> str:
         result = clipped[:boundary] if boundary > 0 else clipped
         truncated = True
     if truncated:
-        result += (
-            "\n\n[Only the most relevant action items are shown here to stay within limits; more may exist. "
-            "Summarize what is shown and tell the user they can ask about a narrower topic or date range, "
-            "or page with the offset, for the rest.]"
+        result += "\n\n" + truncation_note(
+            shown=len(re.findall(r"(?m)^\d+\. \[", result)),
+            total=None,
+            cut=True,
+            unit="action items",
+            how_to_get_more=f"Rows are ordered {order}. Ask for a narrower topic or date range, or page with the offset.",
         )
     return result
 
@@ -179,6 +183,7 @@ def get_action_items_tool(
                 f"❌ get_action_items_tool - no user_id in config. Configurable keys: {list(configurable.keys()) if configurable else 'None'}"
             )
             return "Error: User ID not found in configuration"
+        clock = clock_for_config(cfg, uid)
 
         logger.info(f"✅ get_action_items_tool - uid: {uid}, limit: {limit}")
     except Exception as config_error:
@@ -214,7 +219,7 @@ def get_action_items_tool(
             start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
             if start_dt.tzinfo is None:
                 return f"Error: start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {start_date}"
-            logger.info(f"📅 Parsed start_date '{start_date}' as {start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            logger.info("Parsed action-item start_date")
         except ValueError:
             return (
                 f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date}"
@@ -226,7 +231,7 @@ def get_action_items_tool(
             end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
             if end_dt.tzinfo is None:
                 return f"Error: end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {end_date}"
-            logger.info(f"📅 Parsed end_date '{end_date}' as {end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            logger.info("Parsed action-item end_date")
         except ValueError:
             return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date}"
 
@@ -240,9 +245,7 @@ def get_action_items_tool(
             due_start_dt = datetime.fromisoformat(due_start_date.replace('Z', '+00:00'))
             if due_start_dt.tzinfo is None:
                 return f"Error: due_start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {due_start_date}"
-            logger.info(
-                f"📅 Parsed due_start_date '{due_start_date}' as {due_start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}"
-            )
+            logger.info("Parsed action-item due_start_date")
         except ValueError:
             return f"Error: Invalid due_start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_start_date}"
 
@@ -252,7 +255,7 @@ def get_action_items_tool(
             due_end_dt = datetime.fromisoformat(due_end_date.replace('Z', '+00:00'))
             if due_end_dt.tzinfo is None:
                 return f"Error: due_end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {due_end_date}"
-            logger.info(f"📅 Parsed due_end_date '{due_end_date}' as {due_end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            logger.info("Parsed action-item due_end_date")
         except ValueError:
             return f"Error: Invalid due_end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_end_date}"
 
@@ -287,32 +290,24 @@ def get_action_items_tool(
         logger.error(f"❌ Error getting action items: {e}", exc_info=True)
         return "Error retrieving action items. Please try again."
 
-    channel_items = configurable.get('channel_items')
-    if isinstance(channel_items, list):
-        channel_items.extend(
-            {'kind': 'task', 'id': item['id'], 'title': item.get('description', 'Task')}
-            for item in action_items or ()
-            if item.get('id')
-        )
-
     action_items_count = len(action_items) if action_items else 0
     logger.info(f"📊 get_action_items_tool - found {action_items_count} action items")
 
     if not action_items:
         date_info = ""
         if start_dt and end_dt:
-            date_info = f" created between {start_dt.strftime('%Y-%m-%d')} and {end_dt.strftime('%Y-%m-%d')}"
+            date_info = f" created between {format_date(start_dt, clock)} and {format_date(end_dt, clock)}"
         elif start_dt:
-            date_info = f" created after {start_dt.strftime('%Y-%m-%d')}"
+            date_info = f" created after {format_date(start_dt, clock)}"
         elif end_dt:
-            date_info = f" created before {end_dt.strftime('%Y-%m-%d')}"
+            date_info = f" created before {format_date(end_dt, clock)}"
 
         if due_start_dt and due_end_dt:
-            date_info += f" due between {due_start_dt.strftime('%Y-%m-%d')} and {due_end_dt.strftime('%Y-%m-%d')}"
+            date_info += f" due between {format_date(due_start_dt, clock)} and {format_date(due_end_dt, clock)}"
         elif due_start_dt:
-            date_info += f" due after {due_start_dt.strftime('%Y-%m-%d')}"
+            date_info += f" due after {format_date(due_start_dt, clock)}"
         elif due_end_dt:
-            date_info += f" due before {due_end_dt.strftime('%Y-%m-%d')}"
+            date_info += f" due before {format_date(due_end_dt, clock)}"
 
         status_info = ""
         if completed is True:
@@ -335,14 +330,19 @@ def get_action_items_tool(
     # Format action items. Render timestamps in the user's local timezone so the
     # chat model labels the time of day correctly (issue #4643). A timezone lookup
     # failure must never abort retrieval, so fall back to UTC formatting.
-    try:
-        display_tz, tz_label = resolve_display_tz(notification_db.get_user_time_zone(uid))
-    except Exception as tz_error:
-        logger.warning(f"get_action_items_tool - timezone lookup failed, formatting in UTC: {tz_error}")
-        display_tz, tz_label = timezone.utc, "UTC"
-    result = f"User Action Items ({len(action_items)} shown):\n\n"
+    order = (
+        "pending first, soonest due date first, newest created first (undated last)"
+        if completed is None
+        else "soonest due date first, newest created first (undated last)"
+    )
+    header = (
+        count_header("Action items", shown=len(action_items), order=order, more_may_exist=results_truncated) + "\n\n"
+    )
+    result = header
+    shown = 0
 
     for i, item in enumerate(action_items, 1):
+        previous_result = result
         status = "✅ Completed" if item.get('completed', False) else "⬜ Pending"
         result += f"{i}. [{status}] {item.get('description', 'No description')}\n"
 
@@ -351,21 +351,32 @@ def get_action_items_tool(
 
         # Add dates if available (rendered in the user's local timezone)
         if item.get('created_at'):
-            result += f"   Created: {format_local_time(item['created_at'], display_tz, tz_label)}\n"
+            result += f"   Created: {format_instant(item['created_at'], clock)}\n"
 
         if item.get('due_at'):
-            result += f"   Due: {format_local_time(item['due_at'], display_tz, tz_label)}\n"
+            result += f"   Due: {format_instant(item['due_at'], clock)}\n"
 
         if item.get('completed_at'):
-            result += f"   Completed: {format_local_time(item['completed_at'], display_tz, tz_label)}\n"
+            result += f"   Completed: {format_instant(item['completed_at'], clock)}\n"
 
         if item.get('conversation_id'):
             result += f"   From conversation: {item['conversation_id']}\n"
 
         result += "\n"
+        if len(result) > MAX_RESULT_CHARS:
+            result = previous_result
+            results_truncated = True
+            break
+        register_record_ref(configurable, 'tasks', item.get('id'))
+        shown += 1
+        channel_items = configurable.get('channel_items')
+        if item.get('id') and isinstance(channel_items, list):
+            channel_items.append({'kind': 'task', 'id': item['id'], 'title': item.get('description', 'Task')})
 
-    logger.info(f"✅ get_action_items_tool END - returning {len(action_items)} items")
-    return _bounded_action_items_result(result.strip(), results_truncated)
+    final_header = count_header("Action items", shown=shown, order=order, more_may_exist=results_truncated) + "\n\n"
+    result = final_header + result[len(header) :]
+    logger.info(f"✅ get_action_items_tool END - returning {shown} items")
+    return _bounded_action_items_result(result.strip(), results_truncated, order=order)
 
 
 @tool
@@ -434,6 +445,7 @@ def create_action_item_tool(
     if not uid:
         logger.info(f"❌ create_action_item_tool - no user_id in config")
         return "Error: User ID not found in configuration"
+    clock = clock_for_config(cfg, uid)
 
     # Validate description
     if not description or not description.strip():
@@ -458,7 +470,7 @@ def create_action_item_tool(
         if anchor is None:
             return 'Error: Original message time unavailable. Ask for an explicit reminder time.'
         anchored_relative = channel
-        due_at = (anchor + timedelta(minutes=minutes)).isoformat()
+        due_at = (anchor + timedelta(minutes=minutes)).isoformat()  # not-model-facing: database timestamp input
 
     # Parse or set due date
     if due_at is not None:
@@ -475,7 +487,7 @@ def create_action_item_tool(
                 logger.warning('create_action_item_tool rejected past due_at')
                 return (
                     f"Error: due_at '{due_at}' is in the past. "
-                    f"The current time is {now_utc.strftime('%Y-%m-%dT%H:%M:%SZ')}. "
+                    f"The current time is {format_instant(now_utc, clock)}. "
                     "Please use a future date for the due date."
                 )
             action_item_data['due_at'] = due_dt
@@ -508,7 +520,7 @@ def create_action_item_tool(
 
         if created_item.get('due_at'):
             due = created_item['due_at']
-            result += f" (due {due.strftime('%b %d')})"
+            result += f" (due {format_instant(due, clock)})"
 
             # Send FCM notification for scheduled reminder
             try:
@@ -519,7 +531,7 @@ def create_action_item_tool(
                         user_id=uid,
                         action_item_id=action_item_id,
                         description=task_desc,
-                        due_at=due.isoformat(),
+                        due_at=due.isoformat(),  # not-model-facing: client notification payload
                         completed=bool(created_item.get('completed')),
                         status=created_item.get('status'),
                         deleted=bool(created_item.get('deleted')),
@@ -622,8 +634,14 @@ def update_action_item_tool(
     if not uid:
         logger.info(f"❌ update_action_item_tool - no user_id in config")
         return "Error: User ID not found in configuration"
+    clock = clock_for_config(cfg, uid)
 
     # Check if action item exists
+    resolved_id, ref_error = resolve_edit_ref(configurable, 'tasks', action_item_id, parameter='action_item_id')
+    if ref_error:
+        return ref_error
+    assert resolved_id is not None
+    action_item_id = resolved_id
     existing_item = action_items_db.get_action_item(uid, action_item_id)
     if not existing_item:
         return f"Error: Action item with ID '{action_item_id}' not found. Please use get_action_items_tool first to get the correct ID."
@@ -661,17 +679,15 @@ def update_action_item_tool(
             # Reject due dates more than 1 day in the past (allow 1-day grace for timezone differences)
             now_utc = datetime.now(timezone.utc)
             if due_dt < now_utc - timedelta(days=1):
-                logger.warning(
-                    f"⚠️ update_action_item_tool - rejected past due_at: {due_at} (now: {now_utc.isoformat()})"
-                )
+                logger.warning("⚠️ update_action_item_tool - rejected past due_at")
                 return (
                     f"Error: due_at '{due_at}' is in the past. "
-                    f"The current time is {now_utc.strftime('%Y-%m-%dT%H:%M:%SZ')}. "
+                    f"The current time is {format_instant(now_utc, clock)}. "
                     "Please use a future date for the due date."
                 )
 
             update_data['due_at'] = due_dt
-            changes.append(f"due date set to {due_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            changes.append(f"due date set to {format_instant(due_dt, clock)}")
         except ValueError:
             return f"Error: Invalid due_at format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_at}"
 

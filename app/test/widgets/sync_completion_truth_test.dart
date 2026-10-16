@@ -42,6 +42,11 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   @override
   List<Wal> get missingWals => wals.where((w) => w.status == WalStatus.miss).toList();
   @override
+  int get missingWalsInSeconds => missingWals.fold(0, (sum, wal) => sum + wal.seconds);
+  @override
+  ({int doneSeconds, int totalSeconds, bool tracked}) get offlineServerProcessingSeconds =>
+      (doneSeconds: 0, totalSeconds: uploadedWals.fold(0, (sum, wal) => sum + wal.seconds), tracked: true);
+  @override
   List<Wal> get displaySortedWals => wals;
   @override
   int get needsAttentionWalsCount => wals.where((w) => w.status == WalStatus.corrupted).length;
@@ -86,22 +91,23 @@ class _User extends ChangeNotifier implements UserProvider {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-Future<void> _pump(WidgetTester tester, Widget page, WalStatus status) async {
+Future<void> _pump(WidgetTester tester, Widget page, WalStatus status, {List<Wal>? recordings}) async {
   SharedPreferences.setMockInitialValues({});
   await SharedPreferencesUtil.init();
   tester.view.physicalSize = const Size(390, 844);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  final sync = _Sync([
-    Wal(
-        timerStart: 1790730000,
-        codec: BleAudioCodec.opus,
-        seconds: 30,
-        status: status,
-        storage: WalStorage.disk,
-        device: 'phone')
-  ]);
+  final sync = _Sync(recordings ??
+      [
+        Wal(
+            timerStart: 1790730000,
+            codec: BleAudioCodec.opus,
+            seconds: 30,
+            status: status,
+            storage: WalStorage.disk,
+            device: 'phone')
+      ]);
   final device = _Device(), user = _User();
   addTearDown(sync.dispose);
   addTearDown(device.dispose);
@@ -144,7 +150,13 @@ Future<void> _pump(WidgetTester tester, Widget page, WalStatus status) async {
             debugShowCheckedModeBanner: false,
             home: page,
           ))));
-  await tester.pumpAndSettle();
+  if (status == WalStatus.uploaded) {
+    // An indeterminate processing spinner is expected until the server settles.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+  } else {
+    await tester.pumpAndSettle();
+  }
 }
 
 Future<void> _capture(WidgetTester tester, String name) async {
@@ -172,12 +184,34 @@ void main() {
 
   testWidgets('Auto Sync reports processing without inventing a conversation result', (tester) async {
     await _pump(tester, const AutoSyncPage(), WalStatus.synced);
-    await tester.tap(find.text('All'));
+    await tester.tap(find.text('Synced'));
     await tester.pumpAndSettle();
     expect(find.text('Processed'), findsOneWidget);
     expect(find.text('Conversation created'), findsNothing);
     expect(find.textContaining('Cloud copies are kept'), findsNothing);
     expect(tester.takeException(), isNull);
     await _capture(tester, '004-mobile-ios-sync-processed.png');
+  });
+
+  testWidgets('127 uploaded recordings remain processing, not complete or a queue-clearing instruction',
+      (tester) async {
+    await _pump(tester, const AutoSyncPage(), WalStatus.uploaded, recordings: [
+      for (var i = 0; i < 127; i++)
+        Wal(
+            timerStart: 1790730000 + i * 10,
+            codec: BleAudioCodec.opus,
+            seconds: 10,
+            status: WalStatus.uploaded,
+            storage: WalStorage.disk,
+            device: 'pendant')
+          ..jobId = 'job-$i',
+    ]);
+    final l = AppLocalizations.of(tester.element(find.byType(AutoSyncPage)));
+    expect(find.text(l.syncCardTranscribingAmount(OmiDuration.compact(1270, l))), findsOneWidget);
+    expect(find.text('All recordings synced'), findsNothing);
+    expect(find.text('All caught up'), findsNothing);
+    expect(find.text('Conversation created'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await _capture(tester, '005-mobile-ios-sync-pending-backlog.png');
   });
 }

@@ -20,7 +20,9 @@ not a creation path for these in-tree clients.
   `DailySummaryCreationApi` uses the shared typed HTTP/auth path and refuses a
   late result after an account switch. Success opens the returned record; the
   recap list reloads server pagination rather than inventing an older first-page
-  row. Successful recovery invalidates mounted Home readers even when recovery
+  row. Successful recovery uses the shared `announceRecapArrived` event to refresh
+  Home and Activity, rather than adding a second recap event owner. It refreshes
+  mounted Home readers even when recovery
   was opened from Settings and Home previously had no recaps. A read generation
   rejects older responses; failed reads preserve cards and expose retry.
 - Web: Conversations → Generate recap uses `useRecaps.generateForDate`, updates
@@ -51,6 +53,10 @@ Tracked by [#11821](https://github.com/BasedHardware/omi/issues/11821).
 - [x] Publish recovery to Home and fence older recap reads across mutations.
 - [x] Reconcile restored uploads without a job handle through retained-file retry.
 - [x] Test retained file → upload → polling → confirmed processing and persistence.
+- [x] Preserve current duration-based sync progress, storage controls, Home
+  arrival/deletion events and Activity state when integrating current main.
+- [x] Exercise a 127-row backlog with a 429, a transient read, missing job
+  handles, unavailable audio and one still-queued owner; keep retained bytes.
 - [x] Display failed/processing outcomes honestly on both Offline Sync screens.
 - [ ] Release the mobile and web clients after merge.
 
@@ -71,11 +77,35 @@ recording needs attention. Local-copy retention copy states the deletion period
 without promising a cloud audio copy. These changes do not alter retention,
 upload batching, account capacity controls, or the customer's cloud-storage setting.
 
-The backend's October scheduler/gateway/retry fixes are already deployed. This
-change requires mobile and web releases after merge and uses existing backend
-contracts. Existing #21347 read-validation work and #21319 pendant batching work
-remain separate; neither is proven to match this report. Account outcome checks
+This change requires mobile and web releases after merge and uses existing
+backend contracts. Existing #21347 read-validation work and the merged #21319
+pendant batching work remain separate; neither is proven to match this report. Account outcome checks
 remain tracked by [#21360](https://github.com/BasedHardware/omi/issues/21360).
+
+### Offline Sync stall investigation (#21279 / Discord 0/127)
+
+The custody pipeline remains: pendant → durable phone WAL → accepted server
+job → paced status reconciliation → confirmed terminal result → synced WAL.
+An upload acknowledgement is not processing completion. A queued result is
+not failure, and an empty completed result is not proof of a conversation.
+
+- #21387 is merged: a poll 429 installs the shared cooldown and stops the pass.
+  Its explicit Delete Pending action is destructive cleanup, not recovery.
+- #21319 is merged: short WALs share bounded upload batches. It neither changes
+  BLE throughput nor measures speaker quality.
+- #21755 is merged: legacy backfill admission/release retain a discoverable
+  per-account dispatcher owner. Its production repair procedure is a separate,
+  operator-authorized operation; this client PR does not run it.
+- This PR repairs missing/blank job handles through the existing deduplicated
+  upload authority. Normal queued jobs keep their handle and retained audio.
+  A permanently queued job does not prevent completed siblings from reconciling.
+
+Verification uses synthetic local files and injected upload/status transports,
+not customer accounts or a physical BLE link. The Discord report supplies build
+1400 but no firmware, job responses or debug export. Its reported 1.4 KB/s,
+capture interruption and claimed head-of-line link to recaps are not established
+by these tests. Keep the customer outcome open; do not clear pending audio or
+claim a release/deployment has happened from a merge or green test alone.
 
 ## Featurebase status reporting
 

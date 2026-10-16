@@ -216,6 +216,9 @@ export interface UserSubscription {
   plan_identity?: PlanIdentity;
   status: string;
   is_unlimited: boolean;
+  // Server-resolved legacy monthly allowance; zero means no transcription cap.
+  transcription_seconds_used?: number;
+  transcription_seconds_limit?: number;
   current_period_end?: number;
   stripe_subscription_id?: string;
   cancel_at_period_end?: boolean;

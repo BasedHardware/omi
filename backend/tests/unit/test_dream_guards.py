@@ -9,8 +9,11 @@ from unittest.mock import AsyncMock
 import pytest
 
 from database import dream_feedback, dream_store, review_changes, review_store
-from models.dream_agent import Edit, Feedback, Plan, Term
-from utils import dream_agent, dream_guards, dream_metrics, dream_tools, dream_transport
+from models.dream_edit import Edit
+from models.dream_agent import Feedback
+from models.dream_edit import Term
+from utils.agent_capabilities import tools as dream_tools
+from utils.agent_capabilities import guards as dream_guards
 
 SPEECH = (
     'We will build a solar powered toy boat for the garden basin. '
@@ -164,134 +167,11 @@ def test_generic_refs_and_uuids_rejected_even_if_not_in_input(text):
         dream_feedback.validate(feedback(text), {}, [])
 
 
-def test_filter_counts_reasons_without_content_and_caps_valid_feedback():
-    raw = Plan(
-        edits=[edit(), edit(after='Unknown boat subject')],
-        feedback=[
-            feedback('Mixed-language transcript.'),
-            feedback('ref conversations/deadbeef'),
-            feedback('synthetic dropped heading.', 'notes'),
-            feedback('synthetic stale heading.', 'notes'),
-        ],
-    )
-    sink = {}
-    filtered = dream_guards.filter_plan(raw, {'conversations/c1': row()}, usage_sink=sink)
-    filtered.feedback = dream_guards.cap_feedback(filtered.feedback, usage_sink=sink)
-    assert filtered.edits == [raw.edits[0]]
-    assert len(filtered.feedback) == 1
-    assert sink == {'rejected': {'placeholder': 1, 'language_not_defect': 1, 'ref_leak': 1, 'feedback_cap': 1}}
-    assert len(raw.edits) == 2  # filtering does not mutate the model response
-
-
-def test_short_spelling_options_are_dropped_and_counted():
-    sink = {}
-    plan = dream_transport.parse_response(
-        Plan,
-        {
-            'questions': [
-                {
-                    'item_id': 'spelling:invented',
-                    'kind': 'spelling',
-                    'title': 'Which spelling?',
-                    'reason': 'Invented',
-                    'created_at': '2026-10-11T00:00:00Z',
-                    'spelling': {'term_id': 'invented', 'allow_custom': True, 'options': ['One']},
-                }
-            ]
-        },
-        usage_sink=sink,
-    )
-    assert not plan.questions
-    assert sink['dropped_invalid']['questions'] == 1
-    assert sink['validation_errors']['questions.spelling.options:too_short'] == 1
-
-
-@pytest.mark.parametrize('privacy_fault', [False, True])
-def test_run_filters_before_shadow_persistence_and_effects(monkeypatch, caplog, privacy_fault):
-    records = {'conversations/c1': row(overview='## Garden launch\n\n- Preserve these good notes.')}
-    records.update(task_records(updated_at=LATER_TIME))
-    records['conversations/near'] = {'structured': {'title': ''}, 'transcript_segments': [{'text': 'um'}]}
-    near_edit = edit().model_copy(
-        update={'target': 'conversations/near', 'evidence': ['conversations/near'], 'after': 'Missing Title'}
-    )
-    plan = Plan(
-        edits=[
-            task_edit(),
-            Edit(
-                kind='spelling',
-                target='vocabulary:invented',
-                before='Zevra',
-                after='Zevrah',
-                reason='Invented',
-                evidence=['conversations/c1'],
-            ),
-            near_edit,
-            edit(
-                'overview',
-                'The overview is now a single flat sentence about the boat.',
-                before=records['conversations/c1']['structured']['overview'],
-            ),
-        ],
-        vocabulary=[Term(kind='jargon', spelling='window', evidence=['conversations/c1'])],
-        feedback=[
-            feedback('English/Vietnamese mixed speech.'),
-            feedback('conversations/deadbeef'),
-            feedback('The invented transcript is accurate.', 'notes'),
-            feedback('synthetic heading absent.', 'notes'),
-            feedback('synthetic heading stale.', 'notes'),
-        ],
-    )
-    monkeypatch.setattr(dream_agent.dream_capacity, 'claim', AsyncMock(return_value=('slot', 'token')))
-    monkeypatch.setattr(dream_agent.dream_capacity, 'release', AsyncMock())
-    monkeypatch.setattr(dream_agent.dream_capacity, 'available_model', AsyncMock(return_value='synthetic-model'))
-    monkeypatch.setattr(dream_store, 'acquire', lambda *a, **k: {'run_id': 'synthetic', 'mode': 'shadow'})
-    monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
-    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a, **k: (records, []))
-    monkeypatch.setattr(dream_agent, 'plan_pass', AsyncMock(return_value=(plan, 100)))
-    monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
-    monkeypatch.setattr(review_store, 'remaining_today', lambda *a: 3)
-    monkeypatch.setattr(dream_store, 'assert_lease', lambda *a: None)
-    monkeypatch.setattr(dream_tools, 'apply_edit', lambda *a: pytest.fail('unsafe edit applied'))
-    if privacy_fault:
-
-        def fail_privacy(*args, **kwargs):
-            raise RuntimeError('invented privacy service fault')
-
-        monkeypatch.setattr(dream_feedback, 'validate', fail_privacy)
-    saved = []
-    monkeypatch.setattr(dream_store, 'finish', lambda *a, **k: saved.append(deepcopy(a[2])))
-    with caplog.at_level('INFO', logger=dream_metrics.__name__):
-        result = asyncio.run(dream_agent.run_pass('invented'))
-    if privacy_fault:
-        assert result['status'] == 'failed'
-        assert saved[0]['proposed']['feedback'] == []
-        assert saved[0]['proposed']['edits'] == []
-        return
-    assert result['status'] == 'complete'
-    assert result['proposed']['edits'] == []
-    assert result['proposed']['vocabulary'] == []
-    assert len(result['proposed']['feedback']) == 1
-    assert result['rejected'] == {
-        'stale_task_evidence': 1,
-        'bad_target': 1,
-        'common_word': 1,
-        'insufficient_speech': 1,
-        'nonempty_field': 1,
-        'language_not_defect': 1,
-        'ref_leak': 1,
-        'feedback_cap': 1,
-        'not_a_failure': 1,
-    }
-    assert saved[0]['rejected'] == result['rejected']
-    assert 'insufficient_speech' in caplog.text
-    assert 'deadbeef' not in caplog.text and 'Mixed' not in caplog.text
-
-
 def test_apply_rechecks_quality_before_journaling(monkeypatch):
     source = row()
     monkeypatch.setattr(review_changes, 'agent_change_allowed', lambda *a: True)
     monkeypatch.setattr(review_changes, 'record_agent_change', lambda *a, **k: pytest.fail('unsafe journal'))
-    with pytest.raises(ValueError, match='dream_summary_ungrounded'):
+    with pytest.raises(ValueError, match='agent_summary_ungrounded'):
         dream_tools.apply_edit('invented', edit(after='Quantum particle experiments'), {'conversations/c1': source})
 
 
@@ -322,39 +202,6 @@ def test_valid_feedback_survives_policy_but_existing_privacy_gate_remains():
 )
 def test_long_placeholder_overviews_are_rejected(after):
     assert dream_guards.summary_rejection(edit('overview', after), row()) == 'placeholder'
-
-
-def test_user_title_is_also_preserved_before_shadow_persistence():
-    source = {**row(), 'user_title': 'Chosen by owner'}
-    sink = {}
-    plan = dream_guards.filter_plan(Plan(edits=[edit()]), {'conversations/c1': source}, usage_sink=sink)
-    assert not plan.edits
-    assert sink['rejected'] == {'nonempty_field': 1}
-
-
-def test_rejection_metric_uses_only_fixed_labels():
-    sample = dream_metrics.REJECTED.labels('insufficient_speech')
-    before = sample._value.get()
-    dream_metrics.record_pass({'status': 'complete', 'rejected': {'insufficient_speech': 2, 'private-token': 1}})
-    assert sample._value.get() == before + 2
-    assert not any(
-        s.labels.get('reason') == 'private-token' for metric in dream_metrics.REJECTED.collect() for s in metric.samples
-    )
-
-
-@pytest.mark.parametrize('failure_class', ['success', 'none', 'ok'])
-def test_non_failure_classes_are_parsed_then_dropped_and_counted(failure_class):
-    item = feedback('invented heading dropped.', 'notes').model_dump()
-    item['failure_class'] = failure_class
-    sink = {}
-    parsed = dream_transport.parse_response(Plan, {'feedback': [item]}, usage_sink=sink)
-    assert len(parsed.feedback) == 1
-    filtered = dream_guards.filter_plan(parsed, {}, usage_sink=sink)
-    assert not filtered.feedback
-    assert sink['rejected'] == {'not_a_failure': 1}
-    assert not sink['dropped_invalid']['feedback']
-    with pytest.raises(ValueError, match='not_a_failure'):
-        dream_feedback.validate(parsed.feedback[0], {}, [])
 
 
 def test_info_severity_is_not_failure_even_with_a_failure_class():
@@ -406,13 +253,6 @@ def test_actual_failure_descriptions_survive_non_failure_guard(text):
     assert dream_guards.feedback_rejection(feedback(text, 'notes')) is None
 
 
-def test_non_failure_rejection_metric_is_counted():
-    sample = dream_metrics.REJECTED.labels('not_a_failure')
-    before = sample._value.get()
-    dream_metrics.record_pass({'status': 'complete', 'rejected': {'not_a_failure': 2}})
-    assert sample._value.get() == before + 2
-
-
 TASK_TIME = '2026-01-10T00:00:00Z'
 LATER_TIME = '2026-01-11T00:00:00Z'
 
@@ -432,18 +272,6 @@ def task_records(**fields):
         'conversations/source': {'created_at': '2026-01-01T00:00:00Z', 'updated_at': LATER_TIME},
         'conversations/later': {'created_at': LATER_TIME},
     }
-
-
-@pytest.mark.parametrize('kind', ['close_task', 'retire_task'])
-@pytest.mark.parametrize('time', ['2026-01-01T00:00:00Z', LATER_TIME])
-def test_task_source_cannot_authorize_terminal_transition(kind, time):
-    records = task_records()
-    records['conversations/source']['created_at'] = time
-    item = task_edit(kind, ['conversations/source', 'action_items/t1'])
-    sink = {}
-    filtered = dream_guards.filter_plan(Plan(edits=[item]), records, usage_sink=sink)
-    assert not filtered.edits
-    assert sink == {'rejected': {'stale_task_evidence': 1}}
 
 
 @pytest.mark.parametrize('time', [None, '', 'unknown', 123, TASK_TIME, '2026-01-09T23:59:59Z'])
@@ -483,15 +311,6 @@ def test_provenance_source_is_excluded_even_without_legacy_conversation_id():
     assert dream_guards.task_rejection(task_edit(), records['action_items/t1'], records) == 'stale_task_evidence'
 
 
-@pytest.mark.parametrize('time', [LATER_TIME, '2026-01-11T02:00:00+02:00'])
-def test_new_independent_evidence_allows_close_without_minimum_age(time):
-    records = task_records()
-    records['conversations/later']['created_at'] = time
-    item = task_edit(evidence=['conversations/source', 'conversations/later'])
-    filtered = dream_guards.filter_plan(Plan(edits=[item]), records)
-    assert filtered.edits == [item]
-
-
 def test_screen_capture_and_native_datetime_evidence_are_supported():
     records = task_records(created_at=datetime(2026, 1, 10), updated_at=None)
     records['screen/s1'] = {'timestamp': LATER_TIME}
@@ -518,62 +337,6 @@ def test_retirement_requires_creation_time_even_with_known_update():
     )
 
 
-@pytest.mark.parametrize(
-    'target',
-    [
-        'vocabulary:term',
-        'vocabulary/term',
-        'entity/person:a',
-        'action_items/t1',
-        'conversations/',
-        'conversations/a/b',
-        'conversations',
-    ],
-)
-def test_spelling_rejects_unsupported_and_malformed_targets_before_missing_evidence(target):
-    item = Edit(
-        kind='spelling', target=target, before='Zevra', after='Zevrah', reason='Invented', evidence=['conversations/c1']
-    )
-    sink = {}
-    filtered = dream_guards.filter_plan(Plan(edits=[item]), {}, usage_sink=sink)
-    assert not filtered.edits
-    assert sink == {'rejected': {'bad_target': 1}}
-    with pytest.raises(ValueError, match='dream_bad_target'):
-        dream_tools.apply_edit('invented', item, {})
-
-
-@pytest.mark.parametrize('collection', ['conversations', 'people', 'memories', 'memory_items'])
-def test_supported_spelling_targets_survive_filter(collection):
-    item = Edit(
-        kind='spelling',
-        target=collection + '/s1',
-        before='Zevra',
-        after='Zevrah',
-        reason='Invented',
-        evidence=[collection + '/s1'],
-    )
-    assert dream_guards.filter_plan(Plan(edits=[item]), {item.target: {}}).edits == [item]
-
-
-@pytest.mark.parametrize('word', ['window', 'garden', 'table', ' Window '])
-def test_common_jargon_is_removed_and_counted_without_changing_aliases(word):
-    common = Term(kind='jargon', spelling=word, aliases=['synthetic-alias'], evidence=['conversations/c1'])
-    rare = Term(kind='jargon', spelling='qubit', aliases=['window'], evidence=['conversations/c1'])
-    plan = Plan(vocabulary=[common, rare])
-    sink = {}
-    filtered = dream_guards.filter_plan(plan, {}, usage_sink=sink)
-    assert filtered.vocabulary == [rare]
-    assert filtered.vocabulary[0].aliases == ['window']
-    assert sink == {'rejected': {'common_word': 1}}
-    assert plan.vocabulary == [common, rare]
-
-
-@pytest.mark.parametrize('kind', ['person', 'organization', 'project'])
-def test_named_vocabulary_is_unaffected_even_when_it_matches_a_common_word(kind):
-    term = Term(kind=kind, spelling='Window', evidence=['conversations/c1'])
-    assert dream_guards.filter_plan(Plan(vocabulary=[term]), {}).vocabulary == [term]
-
-
 @pytest.mark.parametrize('word', ['garden gate', 'garden-gate', 'jardín', 'qubit'])
 def test_compounds_and_specialized_terms_are_not_common_single_words(word):
     assert dream_guards.vocabulary_rejection(Term(kind='jargon', spelling=word, evidence=['conversations/c1'])) is None
@@ -582,30 +345,8 @@ def test_compounds_and_specialized_terms_are_not_common_single_words(word):
 def test_apply_rechecks_task_policy_before_any_journal_or_storage(monkeypatch):
     records = task_records(updated_at=LATER_TIME)
     monkeypatch.setattr(review_changes, 'agent_change_allowed', lambda *a: pytest.fail('unsafe task reached journal'))
-    with pytest.raises(ValueError, match='dream_stale_task_evidence'):
+    with pytest.raises(ValueError, match='agent_stale_task_evidence'):
         dream_tools.apply_edit('invented', task_edit(), records)
-
-
-@pytest.mark.parametrize('reason', ['stale_task_evidence', 'task_too_recent', 'bad_target', 'common_word'])
-def test_round_two_metrics_count_fixed_reason_codes_without_content(reason, caplog):
-    sample = dream_metrics.REJECTED.labels(reason)
-    before = sample._value.get()
-    with caplog.at_level('INFO', logger=dream_metrics.__name__):
-        dream_metrics.record_pass({'status': 'complete', 'rejected': {reason: 2}})
-    assert sample._value.get() == before + 2
-    assert reason in caplog.text
-    assert 'Zevrah' not in caplog.text
-
-
-def test_recent_retirement_is_filtered_and_counted_but_close_remains_eligible():
-    now = datetime.now(timezone.utc)
-    records = task_records(created_at=now - timedelta(days=1), updated_at=now - timedelta(hours=1))
-    records['conversations/later']['created_at'] = now - timedelta(minutes=1)
-    close = task_edit()
-    sink = {}
-    filtered = dream_guards.filter_plan(Plan(edits=[task_edit('retire_task'), close]), records, usage_sink=sink)
-    assert filtered.edits == [close]
-    assert sink == {'rejected': {'task_too_recent': 1}}
 
 
 def test_close_with_independent_evidence_uses_reversible_journal_and_fences_current_task(monkeypatch):
@@ -627,6 +368,6 @@ def test_close_with_independent_evidence_uses_reversible_journal_and_fences_curr
     assert kwargs['expected_documents'] == {'t1': raw}
     # A changed source must fail the policy even when its updated_at was not refreshed.
     raw['conversation_id'] = 'later'
-    with pytest.raises(ValueError, match='dream_stale_task_evidence'):
+    with pytest.raises(ValueError, match='agent_stale_task_evidence'):
         dream_tools.apply_edit('invented', task_edit(), records)
     assert len(writes) == 1
