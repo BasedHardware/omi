@@ -70,6 +70,7 @@ Legacy text logs do not provide equivalent phase attribution. Do not infer a Goo
 | `outcome=provider_timeout`, HTTP 504 | Provider returned 408/504 | upstream status and provider status page |
 | `outcome=provider_unavailable`, HTTP 502 | Provider returned another 5xx | upstream status class and provider route |
 | `outcome=client_cancelled`, HTTP 499 | Caller disconnected; upstream work was cancelled | client lifecycle and request correlation |
+| `outcome=client_send_deadline_exceeded`, HTTP 504 | Provider healthy but downstream client stopped reading until the send deadline | client platform logs and network path, not provider status |
 | `phase=validation` or `metering` | Request rejected before provider work | allowlist, size/complexity, quota |
 
 Compare Cloud Run request count, latency, container CPU, memory, concurrent requests, instance count, startup latency, and 5xx by exact revision. Saturation plus `pool` outcomes indicates local concurrency pressure; normal service metrics plus provider-phase outcomes indicates the stall is beyond local dispatch. Treat this as attribution, not proof of a vendor-wide incident.
@@ -79,7 +80,7 @@ Compare Cloud Run request count, latency, container CPU, memory, concurrent requ
 Create log-based counters from the terminal event and scope every policy to service `desktop-backend` and runtime `python`.
 
 - Page on routing/credential failures when at least 3 occur in 5 minutes; these are operator-actionable and should never silently fall back to another credential path.
-- Page on `(connect_timeout + write_timeout + read_timeout + provider_deadline_exceeded + provider_timeout) / accepted requests > 5%` for 10 minutes with at least 20 accepted requests. Do not page on raw timeout count at low traffic.
+- Page on `(connect_timeout + write_timeout + read_timeout + provider_deadline_exceeded + provider_timeout) / accepted requests > 5%` for 10 minutes with at least 20 accepted requests. Do not page on raw timeout count at low traffic. `client_send_deadline_exceeded` is deliberately excluded: it is downstream backpressure while the provider stayed healthy, so it trends with client network health, not provider availability.
 - Ticket when terminal events are missing or duplicated by request ID, or the release probe sees a missing/wrong runtime marker.
 - Dashboard terminal outcome ratio by revision/provider/phase and the Cloud Run saturation metrics above.
 

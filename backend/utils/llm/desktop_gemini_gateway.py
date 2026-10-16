@@ -43,6 +43,11 @@ DESKTOP_STREAM_DEADLINE_SECONDS = 270.0
 # Releasing the upstream stream after a send-path deadline hit still does
 # network I/O; bound that teardown so it cannot itself reach Cloud Run's kill.
 STREAM_CLOSE_GRACE_SECONDS = 5.0
+# Terminal SSE error events are yielded only after the upstream read deadline
+# has already fired, so their downstream sends are bounded slightly beyond the
+# stream deadline: a writable client still receives the terminal envelope
+# instead of a truncated 200 stream. The budget stays 270s + 5s + 5s < 300s.
+STREAM_SEND_GRACE_SECONDS = 5.0
 # BYOK keeps its historical output ceiling; server-paid clamps lower in the proxy.
 _MAX_OUTPUT_TOKENS = 8192
 _DEFAULT_THINKING_BUDGET = 1024
@@ -117,9 +122,18 @@ class DeadlineStreamingResponse(StreamingResponse):
         self._telemetry = telemetry
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        terminal_deadline = self._deadline + STREAM_SEND_GRACE_SECONDS
+
         async def send_before_deadline(message: Any) -> None:
+            # Once the stream deadline has passed, the only sends the body
+            # generators still make are terminal error events (upstream
+            # iteration has already stopped); grant those the send grace so a
+            # writable client receives the terminal envelope instead of a
+            # truncated 200 stream.
+            now = asyncio.get_running_loop().time()
+            deadline = terminal_deadline if now >= self._deadline else self._deadline
             try:
-                await await_before_deadline(send(message), self._deadline)
+                await await_before_deadline(send(message), deadline)
             except TimeoutError as exc:
                 raise StreamSendDeadlineExceeded from exc
 
@@ -128,8 +142,11 @@ class DeadlineStreamingResponse(StreamingResponse):
         except StreamSendDeadlineExceeded:
             # The response is already mid-flight to a client that stopped
             # reading, so the terminal evidence is the telemetry event plus the
-            # connection close this re-raise produces.
-            self._telemetry.complete(outcome='provider_deadline_exceeded', status_code=504, retryable=False)
+            # connection close this re-raise produces. A deadline hit while the
+            # provider was healthy is downstream backpressure, not a provider
+            # failure: record the distinct client-path outcome so slow clients
+            # cannot page the provider-timeout alert ratio.
+            self._telemetry.complete(outcome='client_send_deadline_exceeded', status_code=504, retryable=False)
             aclose = getattr(self.body_iterator, 'aclose', None)
             if aclose is not None:
                 with suppress(Exception):
@@ -712,7 +729,11 @@ async def gateway_desktop_chat_stream(
                     if event is not None:
                         yield f'data: {json.dumps(event, separators=(",", ":"))}\n\n'.encode('utf-8')
         finally:
-            await stream_cm.__aexit__(None, None, None)
+            # Bound the teardown: an httpx transport close that stalls here
+            # would otherwise hold the gateway semaphore past the deadline and
+            # into Cloud Run's request cutoff.
+            with suppress(Exception):
+                await asyncio.wait_for(stream_cm.__aexit__(None, None, None), STREAM_CLOSE_GRACE_SECONDS)
     finally:
         semaphore.release()
 

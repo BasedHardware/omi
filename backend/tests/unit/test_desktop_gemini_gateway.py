@@ -453,6 +453,131 @@ async def test_gateway_stream_idle_timeout_stays_provider_timeout(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_terminal_error_send_gets_grace_beyond_stream_deadline(monkeypatch):
+    """The terminal SSE event yielded after the wall clock must still be sent."""
+
+    async def expiring_source(*_args, **_kwargs):
+        yield b'data: {"candidates":[{"content":{"parts":[{"text":"x"}}]}}\n\n'
+        # The real gateway generator enforces the deadline on its upstream
+        # reads; simulate that expiry once the wall clock has passed.
+        await asyncio.sleep(0.15)
+        raise TimeoutError
+
+    monkeypatch.setattr(dgg, 'DESKTOP_STREAM_DEADLINE_SECONDS', 0.1)
+    monkeypatch.setattr(dgg, 'gateway_desktop_chat_stream', expiring_source)
+    completed: dict = {}
+    telemetry = SimpleNamespace(
+        started=asyncio.get_running_loop().time(),
+        complete=lambda **kwargs: completed.update(kwargs),
+        request_id='11111111-1111-1111-1111-111111111111',
+        lane='focus',
+        client_platform='macos',
+        phase='gateway',
+    )
+    events: list[str] = []
+    response = await dgg.proxy_company_paid_via_gateway(
+        None,
+        b'{"contents":[{"parts":[{"text":"hi"}]}]}',
+        model='gemini-2.5-flash',
+        action='streamGenerateContent',
+        streaming=True,
+        uid='synthetic-user',
+        telemetry=telemetry,
+        envelope=_gateway_stream_envelope(events),
+    )
+
+    sent: list[bytes] = []
+
+    async def send(message):
+        sent.append(message.get('body', b''))
+
+    async def receive():
+        await asyncio.sleep(10)
+
+    started = asyncio.get_running_loop().time()
+    # A writable client: every send completes. Without the send grace the
+    # terminal event's send would exceed the already-expired stream deadline
+    # and the client would only ever see a truncated 200 stream.
+    await response({'type': 'http', 'asgi': {'spec_version': '2.4'}}, receive, send)
+    assert asyncio.get_running_loop().time() - started < 5
+    assert events == ['provider_deadline_exceeded']
+    assert completed['outcome'] == 'provider_deadline_exceeded'
+    assert b'provider_deadline_exceeded' in b''.join(sent)
+
+
+@pytest.mark.asyncio
+async def test_gateway_stream_teardown_is_bounded_by_close_grace(monkeypatch):
+    """A stalled httpx close must not hold the gateway semaphore past the grace."""
+
+    class StalledExitContext:
+        def __init__(self):
+            self.entered = asyncio.Event()
+
+        async def __aenter__(self):
+            return SimpleNamespace(status_code=200, aiter_text=self._aiter_text)
+
+        async def __aexit__(self, *_args):
+            self.entered.set()
+            await asyncio.sleep(10)
+
+        @staticmethod
+        async def _aiter_text():
+            yield 'data: {"choices":[{"delta":{"content":"x"}}]}\n\n'
+            await asyncio.sleep(10)
+
+    stalled = StalledExitContext()
+    semaphore = asyncio.Semaphore(1)
+
+    class Client:
+        def stream(self, *args, **kwargs):
+            return stalled
+
+    monkeypatch.setattr(dgg, 'DESKTOP_STREAM_DEADLINE_SECONDS', 0.1)
+    monkeypatch.setattr(dgg, 'get_llm_gateway_semaphore', lambda: semaphore)
+    monkeypatch.setattr(dgg, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
+    monkeypatch.setattr(dgg, 'llm_gateway_headers', lambda **kwargs: {})
+    monkeypatch.setattr(dgg, 'get_llm_gateway_client', lambda: Client())
+    completed: dict = {}
+    telemetry = SimpleNamespace(
+        started=asyncio.get_running_loop().time(),
+        complete=lambda **kwargs: completed.update(kwargs),
+        request_id='11111111-1111-1111-1111-111111111111',
+        lane='focus',
+        client_platform='macos',
+        phase='gateway',
+    )
+    events: list[str] = []
+    response = await dgg.proxy_company_paid_via_gateway(
+        None,
+        b'{"contents":[{"parts":[{"text":"hi"}]}]}',
+        model='gemini-2.5-flash',
+        action='streamGenerateContent',
+        streaming=True,
+        uid='synthetic-user',
+        telemetry=telemetry,
+        envelope=_gateway_stream_envelope(events),
+    )
+
+    # With the close bound by STREAM_CLOSE_GRACE_SECONDS the stalled
+    # __aexit__ is abandoned after ~5s, the semaphore is released, and the
+    # terminal event still reaches the client. Without the bound the stalled
+    # close holds everything for the full sleep.
+    started = asyncio.get_running_loop().time()
+    chunks = await asyncio.wait_for(_collect_list(response.body_iterator), 7)
+    elapsed = asyncio.get_running_loop().time() - started
+    assert 4.5 < elapsed < 6.5, f'expected bounded ~5s teardown, got {elapsed:.2f}s'
+    assert semaphore.locked() is False
+    assert events == ['provider_deadline_exceeded']
+
+
+async def _collect_list(iterator):
+    out = []
+    async for chunk in iterator:
+        out.append(chunk)
+    return out
+
+
+@pytest.mark.asyncio
 async def test_gateway_stream_deadline_ends_slow_downstream_sends(monkeypatch):
     source_closed = {'closed': False}
 
@@ -507,7 +632,10 @@ async def test_gateway_stream_deadline_ends_slow_downstream_sends(monkeypatch):
 
     assert delivered[0]['type'] == 'http.response.start'
     assert any(item['type'] == 'http.response.body' and item['body'] for item in delivered)
-    assert completed['outcome'] == 'provider_deadline_exceeded'
+    # The gateway source was healthy and producing; only the downstream client
+    # stalled, so the terminal outcome must attribute the deadline to the
+    # client send path instead of paging the provider-timeout alert ratio.
+    assert completed['outcome'] == 'client_send_deadline_exceeded'
     # The send-path teardown must close the gateway hop (releasing its upstream
     # stream and semaphore) instead of leaving it for GC.
     assert source_closed['closed'] is True

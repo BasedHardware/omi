@@ -1667,7 +1667,10 @@ async def test_stream_deadline_ends_slow_downstream_sends(monkeypatch):
     assert delivered[0]["type"] == "http.response.start"
     assert any(item["type"] == "http.response.body" and item["body"] for item in delivered)
     event = json.loads(output.getvalue())
-    assert event["outcome"] == "provider_deadline_exceeded"
+    # The upstream was healthy and producing; only the downstream client
+    # stalled, so the terminal outcome must attribute the deadline to the
+    # client send path instead of paging the provider-timeout alert ratio.
+    assert event["outcome"] == "client_send_deadline_exceeded"
     assert event["phase"] == "body"
     # The send-path teardown must close the upstream provider stream instead of
     # leaving it for GC while Cloud Run's request timeout keeps ticking.
