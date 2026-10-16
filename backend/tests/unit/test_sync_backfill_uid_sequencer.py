@@ -1022,3 +1022,78 @@ def test_operator_window_option_reaches_shared_helper_and_rejects_zero(db, monke
     assert '"repaired_owners": 1' in capsys.readouterr().out
     with pytest.raises(ValueError, match='repair window'):
         repair_script.repair(db, repair_window=0)
+
+
+def test_sweep_defers_failing_owner_and_unblocks_healthy_owners(db, monkeypatch):
+    current = datetime.now(timezone.utc)
+    _register('failing', 'job-failing', 0, db=db)
+    registry.claim_next('failing', now=current - timedelta(hours=1))
+
+    _register('healthy', 'job-healthy', 0, db=db)
+    registry.claim_next('healthy', now=current - timedelta(hours=1))
+
+    orig_reconcile = uid_sequencer.reconcile_uid
+
+    def mock_reconcile(uid, owner, **kwargs):
+        if uid == 'failing':
+            raise RuntimeError('Firestore document missing or corrupted')
+        return orig_reconcile(uid, owner, **kwargs)
+
+    monkeypatch.setattr(uid_sequencer, 'reconcile_uid', mock_reconcile)
+    monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
+    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: {'status': 'queued'})
+    dispatched = []
+    monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
+
+    # Tick 1 with limit=1: 'failing' encounters an error, but must be deferred
+    outcomes1 = uid_sequencer.sweep(limit=1)
+    assert outcomes1.get('error') == 1
+    failing_owner = registry.get_owner('failing')
+    assert failing_owner['reconcile_at'] >= current + timedelta(seconds=registry.HEARTBEAT_SECONDS - 5)
+
+    # Tick 2 with limit=1: 'failing' is now deferred, so 'healthy' is reached and processed!
+    outcomes2 = uid_sequencer.sweep(limit=1)
+    assert outcomes2.get('lease_expired') == 1
+    assert len(dispatched) == 1
+    assert dispatched[0]['job_id'] == 'job-healthy'
+
+
+def test_sweep_tolerates_due_owners_query_failure(db, monkeypatch):
+    _register('a', 'job', 0, db=db)
+    dispatched = []
+    monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
+    monkeypatch.setattr(registry, 'due_owners', MagicMock(side_effect=RuntimeError('firestore unavailable')))
+    assert uid_sequencer.sweep() == {'due_owners_error': 1, 'pending_dispatched': 1}
+    assert dispatched[0]['job_id'] == 'job'
+
+
+def test_sweep_tolerates_due_pending_query_failure(db, monkeypatch):
+    _register('a', 'job', 0, db=db)
+    monkeypatch.setattr(registry, 'due_pending', MagicMock(side_effect=RuntimeError('firestore unavailable')))
+    outcomes = uid_sequencer.sweep()
+    assert outcomes['due_pending_error'] == 1
+
+
+def test_defer_owner_tolerates_missing_document(db, monkeypatch):
+    from google.api_core.exceptions import NotFound
+
+    def failing_commit(txn):
+        raise NotFound('Document does not exist')
+
+    monkeypatch.setattr(db, 'transaction', lambda **kwargs: MagicMock())
+    monkeypatch.setattr(registry.firestore, 'transactional', lambda fn: failing_commit)
+    # Must not raise NotFound
+    registry.defer_owner('missing_uid', 120)
+
+
+def test_redrive_job_tolerates_missing_document(db, monkeypatch):
+    from google.api_core.exceptions import NotFound
+
+    def failing_commit(txn):
+        raise NotFound('Document does not exist')
+
+    monkeypatch.setattr(db, 'transaction', lambda **kwargs: MagicMock())
+    monkeypatch.setattr(registry.firestore, 'transactional', lambda fn: failing_commit)
+    # Must return None instead of raising NotFound
+    assert registry.redrive_job('missing_uid', 'job', 1) is None
+
