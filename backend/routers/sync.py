@@ -347,7 +347,14 @@ def precache_conversation_audio_endpoint(
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
-    return sync_playback.precache_audio_files(uid, conversation_id, conversation.get('audio_files', []))
+    return sync_playback.precache_audio_files(
+        uid,
+        conversation_id,
+        conversation.get('audio_files', []),
+        **(
+            {'playback_epoch': conversation['playback_eager_epoch']} if conversation.get('playback_eager_epoch') else {}
+        ),
+    )
 
 
 @router.get("/v1/sync/audio/{conversation_id}/urls", response_model=AudioUrlsResponse, tags=['v1'])
@@ -449,7 +456,15 @@ def download_audio_file_endpoint(
         raise HTTPException(status_code=404, detail="Audio file not found in conversation")
 
     return sync_playback.download_audio_file_response(
-        uid, conversation_id, audio_file['id'], audio_file, request, format
+        uid,
+        conversation_id,
+        audio_file['id'],
+        audio_file,
+        request,
+        format,
+        **(
+            {'playback_epoch': conversation['playback_eager_epoch']} if conversation.get('playback_eager_epoch') else {}
+        ),
     )
 
 
@@ -2449,21 +2464,19 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
     # artifact is never rebuilt until audio_files change. _run_conversation_merge_job
     # validates its own payload and returns 200-dropped for genuinely malformed input.
     if playback_on_demand() and not payload.get('on_demand'):
-        # An empty ACK burns the eager task's name. Transfer its obligation
-        # to a distinct delayed task before acknowledging; on rollback that
-        # successor builds with the original eager protocol within one minute.
-        # New eager enqueues are suppressed while enabled, so only pre-enable
-        # queued work follows this transitional chain. No Firestore read/write.
+        # ACK burns this eager name. Persist an opaque recovery namespace first;
+        # open/play readers reuse their already loaded row to escape that name
+        # after rollback. Update-only: no read, transcript write or resurrection.
         try:
             await run_blocking(
                 db_executor,
-                enqueue_audio_merge_job_deferred,
-                {**payload, 'playback_deferrals': int(payload.get('playback_deferrals', 0)) + 1},
-                60,
-                reason='playback',
+                conversations_db.mark_playback_deferred,
+                payload['uid'],
+                payload['conversation_id'],
+                _uuid.uuid4().hex,
             )
         except Exception as e:
-            logger.warning('audio_merge: playback deferral enqueue failed exception_type=%s', type(e).__name__)
+            logger.warning('audio_merge: playback deferral stamp failed exception_type=%s', type(e).__name__)
             return JSONResponse(status_code=503, content={'status': 'retry'})
         PLAYBACK_BUILDS.labels('conversation' if schema_version == 2 else 'file', 'deferred').inc()
         return JSONResponse(status_code=200, content={'status': 'deferred_until_playback'})

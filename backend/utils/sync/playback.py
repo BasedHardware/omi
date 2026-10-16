@@ -143,12 +143,20 @@ def _run_parallel_precache(
             logger.error(f"Error in parallel {error_label}: {e}")
 
 
-def precache_audio_files(uid: str, conversation_id: str, audio_files: list[dict[str, Any]]) -> dict[str, Any]:
+def precache_audio_files(
+    uid: str, conversation_id: str, audio_files: list[dict[str, Any]], *, playback_epoch: str | None = None
+) -> dict[str, Any]:
     if not audio_files:
         return {"status": "no_audio", "message": "No audio files in conversation"}
 
     if is_audio_merge_dispatch_enabled():
-        enqueue_conversation_audio_merge(uid, conversation_id, audio_files, caller='precache_endpoint')
+        enqueue_conversation_audio_merge(
+            uid,
+            conversation_id,
+            audio_files,
+            caller='precache_endpoint',
+            **({'playback_epoch': playback_epoch} if playback_epoch else {}),
+        )
         return {"status": "started", "audio_file_count": len(audio_files)}
 
     # Start background parallel pre-caching with bounded concurrency (#7387)
@@ -205,7 +213,14 @@ def _conversation_audio_urls_entry(
             }
     if get_conversation_playback_unavailable_fingerprint(uid, conversation_id) == fingerprint:
         return {"status": "unavailable", "signed_url": None, "spans": []}
-    enqueue_conversation_artifact_build(uid, conversation_id, fingerprint, caller='sync_urls')
+    epoch = (conversation or {}).get('playback_eager_epoch') or (stamped if immutable else None)
+    enqueue_conversation_artifact_build(
+        uid,
+        conversation_id,
+        fingerprint,
+        caller='sync_urls',
+        **({'playback_epoch': epoch} if epoch else {}),
+    )
     return {"status": "pending", "signed_url": None, "spans": []}
 
 
@@ -265,7 +280,14 @@ def _get_audio_urls_via_artifacts(
             to_enqueue.append(af)
 
     if to_enqueue:
-        enqueue_conversation_audio_merge(uid, conversation_id, to_enqueue, caller='sync_urls')
+        epoch = (conversation or {}).get('playback_eager_epoch')
+        enqueue_conversation_audio_merge(
+            uid,
+            conversation_id,
+            to_enqueue,
+            caller='sync_urls',
+            **({'playback_epoch': epoch} if epoch else {}),
+        )
 
     conversation_audio = _conversation_audio_urls_entry(uid, conversation_id, audio_files, conversation)
 
@@ -363,7 +385,7 @@ def get_audio_signed_urls(
 
 
 def _get_artifact_download_payload(
-    uid: str, conversation_id: str, audio_file_id: str, audio_file: dict[str, Any]
+    uid: str, conversation_id: str, audio_file_id: str, audio_file: dict[str, Any], *, playback_epoch: str | None = None
 ) -> tuple[bytes, str, str] | None:
     # Artifact-backed mode: serve only prebuilt audio, never merge in-request. On
     # miss, enqueue the merge task and tell the client to poll /urls.
@@ -380,7 +402,13 @@ def _get_artifact_download_payload(
     if legacy_data is not None:
         return legacy_data, "audio/wav", "wav"
 
-    enqueue_conversation_audio_merge(uid, conversation_id, [audio_file], caller='sync_download')
+    enqueue_conversation_audio_merge(
+        uid,
+        conversation_id,
+        [audio_file],
+        caller='sync_download',
+        **({'playback_epoch': playback_epoch} if playback_epoch else {}),
+    )
     return None
 
 
@@ -470,13 +498,21 @@ def download_audio_file_response(
     audio_file: dict[str, Any],
     request: Request,
     format: str,
+    *,
+    playback_epoch: str | None = None,
 ) -> Response:
     try:
         if not audio_file.get('chunk_timestamps'):
             raise HTTPException(status_code=500, detail="Audio file has no chunk timestamps")
 
         if format == "wav" and is_audio_merge_dispatch_enabled():
-            payload = _get_artifact_download_payload(uid, conversation_id, audio_file_id, audio_file)
+            payload = _get_artifact_download_payload(
+                uid,
+                conversation_id,
+                audio_file_id,
+                audio_file,
+                **({'playback_epoch': playback_epoch} if playback_epoch else {}),
+            )
             if payload is None:
                 return JSONResponse(
                     status_code=202,

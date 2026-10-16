@@ -1713,7 +1713,7 @@ def is_playback_unavailable(uid: str, conversation_id: str, audio_file_id: str) 
 
 
 def enqueue_conversation_audio_merge(
-    uid: str, conversation_id: str, audio_files: List[Dict[str, Any]], caller: str
+    uid: str, conversation_id: str, audio_files: List[Dict[str, Any]], caller: str, *, playback_epoch: str | None = None
 ) -> None:
     """Enqueue one audio-merge Cloud Task per audio file (named-task deduped).
 
@@ -1737,6 +1737,7 @@ def enqueue_conversation_audio_merge(
                     'timestamps': timestamps,
                     **({'source_fingerprint': af.get('source_fingerprint')} if playback_on_demand() else {}),
                     'caller': caller,
+                    **({'playback_epoch': playback_epoch} if playback_epoch and not playback_on_demand() else {}),
                     **({'on_demand': True, 'requested_at': time.time()} if playback_on_demand() else {}),
                 }
             )
@@ -1856,7 +1857,9 @@ def get_conversation_playback_unavailable_fingerprint(uid: str, conversation_id:
     return content.split(':', 1)[0] if content else None
 
 
-def enqueue_conversation_artifact_build(uid: str, conversation_id: str, fingerprint: str, caller: str) -> None:
+def enqueue_conversation_artifact_build(
+    uid: str, conversation_id: str, fingerprint: str, caller: str, *, playback_epoch: str | None = None
+) -> None:
     """Enqueue the conversation-level artifact build (named-task deduped on the
     fingerprint). Failures are swallowed: the next /urls poll re-enqueues."""
     if playback_on_demand() and caller not in {'precache_endpoint', 'sync_urls', 'sync_download'}:
@@ -1869,6 +1872,7 @@ def enqueue_conversation_artifact_build(uid: str, conversation_id: str, fingerpr
                 'conversation_id': conversation_id,
                 'fingerprint': fingerprint,
                 'caller': caller,
+                **({'playback_epoch': playback_epoch} if playback_epoch and not playback_on_demand() else {}),
                 **({'on_demand': True, 'requested_at': time.time()} if playback_on_demand() else {}),
             }
         )

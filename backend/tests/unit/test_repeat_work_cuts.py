@@ -259,9 +259,9 @@ def sync_router_module():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('schema', [1, 2])
+@pytest.mark.parametrize(('schema', 'surface'), [(1, 'urls'), (2, 'urls'), (1, 'precache'), (1, 'download')])
 async def test_deferred_eager_task_survives_tombstone_and_builds_after_rollback(
-    monkeypatch, sync_router_module, schema
+    monkeypatch, sync_router_module, schema, surface
 ):
     from copy import deepcopy
     from utils import cloud_tasks
@@ -283,7 +283,8 @@ async def test_deferred_eager_task_survives_tombstone_and_builds_after_rollback(
             queued[name] = (deepcopy(body), kwargs)
 
     monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
-    monkeypatch.setattr(sync, 'enqueue_audio_merge_job_deferred', cloud_tasks.enqueue_audio_merge_job_deferred)
+    stamp = Mock(side_effect=lambda u, c, epoch: row.update(playback_eager_epoch=epoch) or True)
+    monkeypatch.setattr(sync.conversations_db, 'mark_playback_deferred', stamp, raising=False)
     monkeypatch.setattr(sync, 'try_acquire_job_run_lock', lambda *_: 'lock')
     monkeypatch.setattr(sync, 'release_job_run_lock', lambda *_: None)
     monkeypatch.setattr(sync, 'should_skip_background_account_mutation', lambda *_: False)
@@ -301,24 +302,40 @@ async def test_deferred_eager_task_survives_tombstone_and_builds_after_rollback(
     cloud_tasks.enqueue_audio_merge_job(payload)
     eager_name = next(iter(queued))
     monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'true')
-    for _ in range(2):
-        name = next(iter(queued))
-        delivered, _ = queued.pop(name)
-        response = await sync.run_audio_merge_job(SimpleNamespace(json=AsyncMock(return_value=delivered)), 0)
-        assert response.status_code == 200 and b'deferred_until_playback' in response.body
-        assert len(queued) == 1  # A durable successor exists before the old name is acknowledged.
-        successor = next(iter(queued))
-        assert successor != name and successor != eager_name
-        assert queued[successor][1]['schedule_at'] > 0
-        # A duplicate delivery must coalesce onto the same reserved successor.
-        response = await sync.run_audio_merge_job(SimpleNamespace(json=AsyncMock(return_value=delivered)), 0)
-        assert response.status_code == 200 and len(queued) == 1
+    delivered, _ = queued.pop(eager_name)
+    response = await sync.run_audio_merge_job(SimpleNamespace(json=AsyncMock(return_value=delivered)), 0)
+    assert response.status_code == 200 and b'deferred_until_playback' in response.body
+    assert row.get('playback_eager_epoch')  # Recovery survives the acknowledgement and its tombstone.
+    assert not queued  # No recurring queue delivery while enabled.
+    stamp.assert_called_once()
     file_build.assert_not_called()
     conversation_build.assert_not_called()
     monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'false')
-    cloud_tasks.enqueue_audio_merge_job(payload)  # Reusing the original tombstone cannot erase the successor.
-    assert len(queued) == 1
-    delivered, _ = queued.pop(next(iter(queued)))
+    cloud_tasks.enqueue_audio_merge_job(payload)  # AlreadyExists cannot recreate the old eager task.
+    assert not queued
+    playback = sync.sync_playback
+    monkeypatch.setattr(playback, 'get_playback_artifact_signed_url', lambda *_: None)
+    monkeypatch.setattr(playback, 'get_merged_audio_signed_url', lambda *_: None)
+    monkeypatch.setattr(playback, 'is_playback_unavailable', lambda *_: False)
+    monkeypatch.setattr(playback, 'get_conversation_playback_signed_url', lambda *a, **kw: None)
+    monkeypatch.setattr(playback, 'get_conversation_playback_unavailable_fingerprint', lambda *_: None)
+    monkeypatch.setattr(playback, 'is_audio_merge_dispatch_enabled', lambda: True)
+    monkeypatch.setattr(playback, 'download_playback_artifact', lambda *_: None)
+
+    def request_playback():
+        if surface == 'precache':
+            return sync.precache_conversation_audio_endpoint('c', 'u')
+        if surface == 'download':
+            return sync.download_audio_file_endpoint('c', 'legacy-file', SimpleNamespace(headers={}), 'wav', 'u')
+        return playback._get_audio_urls_via_artifacts('u', 'c', files, row)
+
+    request_playback()
+    fresh_name = cloud_tasks._audio_merge_task_id({**payload, 'playback_epoch': row['playback_eager_epoch']})
+    assert fresh_name != eager_name and fresh_name in queued
+    count = len(queued)
+    request_playback()
+    assert len(queued) == count  # Concurrent readers share the persisted recovery namespace.
+    delivered, _ = queued.pop(fresh_name)
     response = await sync.run_audio_merge_job(SimpleNamespace(json=AsyncMock(return_value=delivered)), 0)
     assert response.status_code == 200 and b'done' in response.body
     (conversation_build if schema == 2 else file_build).assert_called_once()
@@ -328,14 +345,14 @@ async def test_deferred_eager_task_survives_tombstone_and_builds_after_rollback(
 
 
 @pytest.mark.asyncio
-async def test_eager_deferral_enqueue_failure_keeps_original_task_retryable(monkeypatch, sync_router_module):
+async def test_eager_deferral_stamp_failure_keeps_original_task_retryable(monkeypatch, sync_router_module):
     monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'true')
-    enqueue = Mock(side_effect=RuntimeError('synthetic queue failure'))
-    monkeypatch.setattr(sync_router_module, 'enqueue_audio_merge_job_deferred', enqueue)
+    stamp = Mock(side_effect=RuntimeError('synthetic write failure'))
+    monkeypatch.setattr(sync_router_module.conversations_db, 'mark_playback_deferred', stamp, raising=False)
     request = SimpleNamespace(json=AsyncMock(return_value=dict(schema_version=2, uid='u', conversation_id='c')))
     response = await sync_router_module.run_audio_merge_job(request, 0)
     assert response.status_code == 503
-    enqueue.assert_called_once()
+    stamp.assert_called_once()
 
 
 def test_flag_off_reader_reuses_matching_demand_stamp(monkeypatch):
@@ -355,6 +372,28 @@ def test_flag_off_reader_reuses_matching_demand_stamp(monkeypatch):
     assert playback._conversation_audio_urls_entry('u', 'c', files, row)['status'] == 'cached'
     signed.assert_called_once_with('u', 'c', fingerprint=fingerprint)
     enqueue.assert_not_called()
+
+
+@pytest.mark.parametrize('outcome', ['written', 'missing', 'failed'])
+def test_playback_recovery_marker_is_update_only_without_a_read(monkeypatch, outcome):
+    from google.api_core.exceptions import NotFound
+
+    client, ref = Mock(), Mock()
+    client.collection.return_value.document.return_value.collection.return_value.document.return_value = ref
+    monkeypatch.setattr(conversations, 'db', client)
+    ref.get.side_effect = AssertionError('must not add a Firestore read')
+    if outcome == 'missing':
+        ref.update.side_effect = NotFound('gone')
+    elif outcome == 'failed':
+        ref.update.side_effect = RuntimeError('write failed')
+    if outcome == 'failed':
+        with pytest.raises(RuntimeError):
+            conversations.mark_playback_deferred('u', 'c', 'opaque-epoch')
+    else:
+        assert conversations.mark_playback_deferred('u', 'c', 'opaque-epoch') is (outcome == 'written')
+    ref.update.assert_called_once_with({'playback_eager_epoch': 'opaque-epoch'})
+    ref.get.assert_not_called()
+    ref.set.assert_not_called()
 
 
 @pytest.mark.asyncio

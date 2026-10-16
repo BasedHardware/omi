@@ -1717,6 +1717,16 @@ def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: b
         cursor = snapshots[-1]
 
 
+def mark_playback_deferred(uid: str, conversation_id: str, epoch: str) -> bool:
+    """Write opaque rollback metadata without reading or recreating the owner."""
+    ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    try:
+        ref.update({'playback_eager_epoch': epoch})
+    except NotFound:
+        return False
+    return True
+
+
 @after_write('conversations')
 def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bool:
     """Apply ``update_data`` to a conversation.

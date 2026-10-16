@@ -4939,12 +4939,12 @@ Demand tasks carry their source-identity protocol through rollback and use separ
 first play; run locks coalesce cross-hour deliveries. The first request may return
 pending. Measure `omi_playback_demand_to_ready_seconds` (queue/retry included),
 `omi_playback_build_seconds`, and `omi_playback_artifacts_total` before widening.
-Pre-enable eager tasks transfer to a distinct 60-second delayed successor in the
-same Cloud Tasks queue before acknowledgement. They keep deferring while enabled
-and build eagerly after rollback; a failed transfer returns 503. This preserves
-the obligation despite the original name's tombstone, without a Firestore read.
-Track the transitional `omi_playback_artifacts_total{outcome="deferred"}` rate and
-queue depth: retained pre-enable work adds one delivery per minute until rollback.
+Before acknowledging a pre-enable eager task, write an opaque playback recovery
+epoch to the existing conversation, without reading or recreating it. A failed
+write returns 503. On rollback, open/play readers reuse their loaded conversation
+to select a fresh, deduped eager task name, escaping the old task's tombstone.
+This adds one metadata write per deferred delivery, without a recurring queue
+wake or a new Firestore read. Track `omi_playback_artifacts_total{outcome="deferred"}`.
 Flag-off readers also reuse a matching immutable demand artifact and its spans.
 
 `REPEAT_WORK_REVISION_ENABLED=false` preserves Train 1 controls. Enabled uses the
