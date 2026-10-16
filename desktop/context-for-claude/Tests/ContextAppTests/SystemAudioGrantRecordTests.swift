@@ -7,10 +7,9 @@ import XCTest
 ///
 /// Two defects, one cause, and it is the cause `ScreenStaleGrantTests` and the keychain fix already
 /// document from their own side: a durable record that claims to know what TCC will do, consulted by
-/// something that runs on a clock. TCC keys every grant to a code signature and drops the record
-/// without a word when that signature changes — a re-sign, or an update shipped under a different
-/// identity, which is exactly what 1.0.4 was. `UserDefaults` does not change, so both records survive
-/// the thing they describe.
+/// something that runs on a clock. TCC tracks a signing requirement, not each build's cdhash. A
+/// re-sign or an update under a different identity can invalidate the grant, as 1.0.4 did.
+/// `UserDefaults` does not change, so both records survive the thing they describe.
 ///
 /// - `context.permission.systemAudio.prompted` claims the consent dialog has been spent. Left true
 ///   over a dropped record it licensed the background poll to build a global CoreAudio process tap,
@@ -104,8 +103,9 @@ final class SystemAudioGrantRecordTests: XCTestCase {
         defaults.set(1_785_696_758.0, forKey: Self.probedAt)
         defaults.set(true, forKey: Self.prompted)
 
-        XCTAssertTrue(
-            Permissions.reconcileSystemAudioRecords(defaults: defaults, signature: "notarized-1.0.4"))
+        XCTAssertEqual(
+            Permissions.reconcileSystemAudioRecords(defaults: defaults, signature: "notarized-1.0.4"),
+            .identityChanged)
 
         XCTAssertNil(
             defaults.object(forKey: Self.granted),
@@ -122,12 +122,14 @@ final class SystemAudioGrantRecordTests: XCTestCase {
     /// the user could never keep.
     func testTheSameSignatureSpendsNothingTwice() throws {
         let defaults = try suite(#function)
-        Permissions.reconcileSystemAudioRecords(defaults: defaults, signature: "sig-a")
+        XCTAssertEqual(
+            Permissions.reconcileSystemAudioRecords(defaults: defaults, signature: "sig-a"), .initialized)
 
         defaults.set(true, forKey: Self.granted)
         defaults.set(true, forKey: Self.prompted)
 
-        XCTAssertFalse(Permissions.reconcileSystemAudioRecords(defaults: defaults, signature: "sig-a"))
+        XCTAssertEqual(
+            Permissions.reconcileSystemAudioRecords(defaults: defaults, signature: "sig-a"), .unchanged)
         XCTAssertEqual(defaults.object(forKey: Self.granted) as? Bool, true)
         XCTAssertEqual(defaults.object(forKey: Self.prompted) as? Bool, true)
     }
@@ -138,7 +140,8 @@ final class SystemAudioGrantRecordTests: XCTestCase {
         defaults.set(true, forKey: Self.granted)
         defaults.set("sig-a", forKey: Self.signature)
 
-        XCTAssertFalse(Permissions.reconcileSystemAudioRecords(defaults: defaults, signature: nil))
+        XCTAssertEqual(
+            Permissions.reconcileSystemAudioRecords(defaults: defaults, signature: nil), .identityUnavailable)
         XCTAssertEqual(defaults.object(forKey: Self.granted) as? Bool, true)
         XCTAssertEqual(defaults.string(forKey: Self.signature), "sig-a")
     }
@@ -161,6 +164,98 @@ final class SystemAudioGrantRecordTests: XCTestCase {
             Permissions.unattendedProbeIsDue(
                 cached: cached, tapAnsweredInThisProcess: false, secondsSinceProbe: 3_600),
             "every updating install would meet the consent dialog on a 30 second loop")
+    }
+
+    /// Apple TN2206, "Code Requirements": a designated requirement identifies updates of the
+    /// same program. A cdhash changes with code. Keeping the old cdhash policy fails this test.
+    func testSignedUpdatesKeepBothGrantedAndDeniedAnswersButANewIdentityClearsThem() throws {
+        let defaults = try suite(#function)
+        let requirement = Data("release requirement".utf8)
+        let before = try XCTUnwrap(Permissions.systemAudioIdentity(
+            cdhash: "build-one", certificateSigned: true, designatedRequirement: requirement))
+        let after = try XCTUnwrap(Permissions.systemAudioIdentity(
+            cdhash: "build-two", certificateSigned: true, designatedRequirement: requirement))
+
+        for granted in [true, false] {
+            defaults.set(before, forKey: Self.signature)
+            defaults.set(granted, forKey: Self.granted)
+            defaults.set(true, forKey: Self.prompted)
+            defaults.set(123.0, forKey: Self.probedAt)
+            XCTAssertEqual(
+                Permissions.reconcileSystemAudioRecords(defaults: defaults, signature: after), .unchanged)
+            XCTAssertEqual(defaults.object(forKey: Self.granted) as? Bool, granted)
+            XCTAssertEqual(defaults.object(forKey: Self.prompted) as? Bool, true)
+            XCTAssertEqual(defaults.double(forKey: Self.probedAt), 123.0)
+        }
+
+        let replacement = try XCTUnwrap(Permissions.systemAudioIdentity(
+            cdhash: "build-three", certificateSigned: true,
+            designatedRequirement: Data("different signer or bundle requirement".utf8)))
+        defaults.set(true, forKey: "context.permission.microphone.prompted")
+        XCTAssertEqual(
+            Permissions.reconcileSystemAudioRecords(defaults: defaults, signature: replacement), .identityChanged)
+        XCTAssertNil(defaults.object(forKey: Self.granted))
+        XCTAssertNil(defaults.object(forKey: Self.prompted))
+        XCTAssertNil(defaults.object(forKey: Self.probedAt))
+        XCTAssertTrue(defaults.bool(forKey: "context.permission.microphone.prompted"))
+    }
+
+    func testAdHocBuildsCannotShareCachedConsentEvenWithAnExplicitRequirement() throws {
+        let defaults = try suite(#function)
+        let requirement = Data("explicit requirement".utf8)
+        let before = try XCTUnwrap(Permissions.systemAudioIdentity(
+            cdhash: "adhoc-one", certificateSigned: false, designatedRequirement: requirement))
+        let after = try XCTUnwrap(Permissions.systemAudioIdentity(
+            cdhash: "adhoc-two", certificateSigned: false, designatedRequirement: requirement))
+        defaults.set(before, forKey: Self.signature)
+        defaults.set(true, forKey: Self.granted)
+        defaults.set(true, forKey: Self.prompted)
+        XCTAssertEqual(
+            Permissions.reconcileSystemAudioRecords(defaults: defaults, signature: after), .identityChanged)
+        XCTAssertNil(defaults.object(forKey: Self.granted))
+        XCTAssertNil(defaults.object(forKey: Self.prompted))
+    }
+
+    func testLegacyMigrationRequiresTheSameBinaryAndThenKeepsTheNewStamp() throws {
+        let defaults = try suite(#function)
+        let identity = try XCTUnwrap(Permissions.systemAudioIdentity(
+            cdhash: "current-build", certificateSigned: true,
+            designatedRequirement: Data("release requirement".utf8)))
+        for legacyHash in ["current-build", "unknown-older-build"] {
+            defaults.set(legacyHash, forKey: Self.signature)
+            defaults.set(true, forKey: Self.granted)
+            defaults.set(true, forKey: Self.prompted)
+            defaults.set(321.0, forKey: Self.probedAt)
+            let outcome = Permissions.reconcileSystemAudioRecords(
+                defaults: defaults, signature: identity, legacySignature: "current-build")
+            if legacyHash == "current-build" {
+                XCTAssertEqual(outcome, .legacyMigrated)
+                XCTAssertEqual(defaults.object(forKey: Self.granted) as? Bool, true)
+                XCTAssertEqual(defaults.object(forKey: Self.prompted) as? Bool, true)
+                XCTAssertEqual(defaults.double(forKey: Self.probedAt), 321.0)
+            } else {
+                XCTAssertEqual(outcome, .identityChanged)
+                XCTAssertNil(defaults.object(forKey: Self.granted))
+                XCTAssertNil(defaults.object(forKey: Self.prompted))
+                XCTAssertNil(defaults.object(forKey: Self.probedAt))
+            }
+            XCTAssertEqual(defaults.string(forKey: Self.signature), identity)
+            XCTAssertEqual(Permissions.reconcileSystemAudioRecords(
+                defaults: defaults, signature: identity, legacySignature: "current-build"), .unchanged)
+        }
+    }
+
+    func testMissingSignedRequirementDoesNotFallBackToAChangingBuildHash() throws {
+        let defaults = try suite(#function)
+        defaults.set("retained-identity", forKey: Self.signature)
+        defaults.set(true, forKey: Self.granted)
+        let identity = Permissions.systemAudioIdentity(
+            cdhash: "new-build", certificateSigned: true, designatedRequirement: nil)
+        XCTAssertNil(identity)
+        XCTAssertEqual(Permissions.reconcileSystemAudioRecords(
+            defaults: defaults, signature: identity, legacySignature: "new-build"), .identityUnavailable)
+        XCTAssertEqual(defaults.string(forKey: Self.signature), "retained-identity")
+        XCTAssertEqual(defaults.object(forKey: Self.granted) as? Bool, true)
     }
 
     // MARK: - Plumbing
