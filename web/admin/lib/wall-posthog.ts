@@ -31,24 +31,29 @@ function raw(start: Date, end: Date, cohort = "") {
     qualified AS (SELECT *,${CAPTURE_TIME_SQL} qt FROM flagged)`;
 }
 
-/** Six nonoverlapping complete periods, ranking iOS/Android before folding Mobile. */
-export function activityQuery(
+/** Qualified actor × platform × period rows and the primary-platform ranking.
+ * Shared by the snapshot activity query and the v3 weekly growth series, so both
+ * count exactly the same people for a period.
+ */
+function activityCtes(
+  start: Date,
   end: Date,
   days: number,
-  kind: "active" | "saved" | "assistant" = "active",
-  periods = 6
+  kind: "active" | "saved" | "assistant",
+  extra = { app: "", mcp: "" }
 ) {
-  const start = shiftDay(end, -days * periods);
   const predicate =
     kind === "assistant"
       ? "p='macos' AND event='chat_agent_query_completed'"
       : "(fg OR cap)";
   const at = kind === "assistant" ? "timestamp" : "qt";
-  return `WITH ${raw(start, end)},
+  return `${raw(start, end)},
     app_pd AS (SELECT actor,p,intDiv(dateDiff('second',${at},${sqlTime(
     end
   )})-1,${days * 86400}) period,
-      uniqExact(toDate(${at})) days,max(${at}) latest,countIf(cap) captures FROM qualified
+      uniqExact(toDate(${at})) days,max(${at}) latest,countIf(cap) captures${
+    extra.app
+  } FROM qualified
       WHERE ${predicate} AND ${at} >= ${sqlTime(start)} AND ${at} < ${sqlTime(
     end
   )} GROUP BY actor,p,period),
@@ -59,10 +64,23 @@ export function activityQuery(
       intDiv(dateDiff('second',mcp_days.latest,${sqlTime(end)})-1,${
             days * 86400
           }) period,
-      count() days,max(mcp_days.latest) latest,0 captures FROM mcp_days GROUP BY actor,period`
+      count() days,max(mcp_days.latest) latest,0 captures${
+        extra.mcp
+      } FROM mcp_days GROUP BY actor,period`
         : ""
     }),
-    ranked AS (SELECT *,sum(captures) OVER (PARTITION BY actor,period) saved,row_number() OVER (PARTITION BY actor,period ORDER BY (p!='integrations') DESC,days DESC,latest DESC,${PLATFORM_RANK_SQL} ASC) rn FROM pd)
+    ranked AS (SELECT *,sum(captures) OVER (PARTITION BY actor,period) saved,row_number() OVER (PARTITION BY actor,period ORDER BY (p!='integrations') DESC,days DESC,latest DESC,${PLATFORM_RANK_SQL} ASC) rn FROM pd)`;
+}
+
+/** Six nonoverlapping complete periods, ranking iOS/Android before folding Mobile. */
+export function activityQuery(
+  end: Date,
+  days: number,
+  kind: "active" | "saved" | "assistant" = "active",
+  periods = 6
+) {
+  const start = shiftDay(end, -days * periods);
+  return `WITH ${activityCtes(start, end, days, kind)}
     SELECT period,p,count()${
       kind === "active" ? ",(SELECT count() FROM mcp_raw) marker_rows" : ""
     } FROM ranked WHERE rn=1 ${
@@ -74,6 +92,115 @@ export function activityQuery(
         : ""
     }
     LIMIT 100`;
+}
+
+export const CHURNED_ROW = "__churned";
+export const DAYS_ROW_PREFIX = "__days_";
+/** UTC day number: HogQL's toDate() follows the project timezone. */
+const UTC_DAY = (at: string) => `intDiv(toUnixTimestamp(${at}),86400)`;
+
+/** v3 weekly growth: the snapshot's qualified actors and primary platform per
+ * trailing 7-day period, plus growth accounting, person-days and the L1–L7
+ * histogram. Scans one extra period so the oldest returned period still knows
+ * who was active the week before. One pass per actor (CTEs are inlined, so no
+ * joins): the primary platform is the snapshot ranking's first row via argMax.
+ * Columns: period, label, people, person_days, retained, new. `label` is the
+ * primary platform, CHURNED_ROW (prior-period people absent this period) or
+ * DAYS_ROW_PREFIX + qualified UTC days in the period; those reuse `people`.
+ */
+export function weeklyGrowthQuery(end: Date, periods = 4) {
+  const start = shiftDay(end, -7 * (periods + 1));
+  const stop = sqlTime(end);
+  const el = (t: string, i: number) => `tupleElement(${t},${i})`;
+  return `WITH ${activityCtes(start, end, 7, "active", {
+    app: `,groupUniqArray(${UTC_DAY("qt")}) ds,min(anchor) a`,
+    mcp: `,groupUniqArray(mcp_days.utc_day) ds,toDateTime('1970-01-01 00:00:00','UTC') a`,
+  })},
+    ap AS (SELECT actor,period,
+        argMax(p,tuple(p!='integrations',days,latest,-(${PLATFORM_RANK_SQL}))) primary,
+        length(groupUniqArrayArray(ds)) n,
+        minIf(a,p!='integrations') anchor
+      FROM pd GROUP BY actor,period),
+    pa AS (SELECT actor,groupArray(tuple(period,primary,n)) rs,groupArray(period) ps,
+        minIf(anchor,anchor > toDateTime('1970-01-01 00:00:00','UTC')) first_seen
+      FROM ap GROUP BY actor),
+    labelled AS (SELECT arrayConcat(
+        arrayMap(r -> tuple(${el("r", 2)},${el("r", 1)},${el(
+    "r",
+    3
+  )},has(ps,${el("r", 1)}+1),
+          NOT has(ps,${el(
+            "r",
+            1
+          )}+1) AND first_seen > toDateTime('1970-01-01 00:00:00','UTC')
+          AND first_seen >= ${stop} - toIntervalDay(7*(${el("r", 1)}+1))),rs),
+        arrayMap(q -> tuple('${CHURNED_ROW}',q-1,0,false,false),arrayFilter(q -> q >= 1 AND NOT has(ps,q-1),ps)),
+        arrayMap(r -> tuple(concat('${DAYS_ROW_PREFIX}',toString(least(${el(
+    "r",
+    3
+  )},7))),${el("r", 1)},0,false,false),rs)) ts FROM pa)
+    SELECT ${el("t", 2)} period,${el("t", 1)} label,count(),sum(${el(
+    "t",
+    3
+  )}),countIf(${el("t", 4)}),countIf(${el("t", 5)})
+    FROM labelled ARRAY JOIN ts AS t WHERE ${el("t", 2)} < ${periods}
+    GROUP BY period,label LIMIT 100`;
+}
+
+/** Qualified MAU (snapshot definition, MCP included) for 30-day windows ending
+ * `offset` complete days before `end`. One row per offset: offset, people.
+ * Like the snapshot, an event counts only when both its qualified time and its
+ * ingestion timestamp fall inside the window (client clocks can disagree).
+ */
+export function mauOffsetsQuery(end: Date, offsets: number[]) {
+  const start = shiftDay(end, -(Math.max(...offsets) + 30));
+  const stop = sqlTime(end);
+  const ago = (at: string) =>
+    `intDiv(dateDiff('second',${at},${stop})-1,86400)`;
+  return `WITH ${raw(start, end)},${mcpActivityCtes(start, end)},
+    ad AS (SELECT actor,groupUniqArray(tuple(lo,hi)) spans FROM (
+        SELECT actor,least(${ago("qt")},${ago("timestamp")}) lo,greatest(${ago(
+    "qt"
+  )},${ago("timestamp")}) hi
+        FROM qualified WHERE (fg OR cap) AND qt >= ${sqlTime(
+          start
+        )} AND qt < ${stop}
+        UNION ALL SELECT actor,${ago("latest")} lo,${ago(
+    "latest"
+  )} hi FROM mcp_days)
+      GROUP BY actor)
+    SELECT o,countIf(arrayExists(s -> tupleElement(s,1) >= o AND tupleElement(s,2) < o + 30,spans)) FROM ad
+    ARRAY JOIN [${offsets.join(",")}] AS o GROUP BY o LIMIT 100`;
+}
+
+/** Weekly first-seen cohorts (snapshot cohort anchor and 180-day history check),
+ * qualified in week k after the anchor. A person contributes to week k only
+ * once that week is fully observed before `observedEnd`.
+ * Columns: period, week, observed people, active people.
+ */
+export function retentionCurveQuery(
+  end: Date,
+  periods: number,
+  observedEnd: Date,
+  weeks = 9
+) {
+  const start = shiftDay(end, -7 * periods);
+  const obs = sqlTime(observedEnd);
+  return `WITH ${raw(
+    shiftDay(start, -180),
+    observedEnd,
+    `AND person.created_at >= ${sqlTime(
+      start
+    )} AND person.created_at < ${sqlTime(end)}`
+  )},
+    people AS (SELECT actor,min(anchor) a,min(timestamp) first_event,
+      groupUniqArrayIf(intDiv(dateDiff('second',anchor,qt),604800),(fg OR cap) AND qt >= anchor) active_weeks
+      FROM qualified GROUP BY actor)
+    SELECT intDiv(dateDiff('second',a,${sqlTime(end)})-1,604800) period,k,
+      countIf(a + toIntervalDay(7*(k+1)) <= ${obs}) observed,
+      countIf(a + toIntervalDay(7*(k+1)) <= ${obs} AND has(active_weeks,k)) active
+    FROM people ARRAY JOIN range(${weeks}) AS k
+    WHERE first_event >= a GROUP BY period,k HAVING observed > 0 LIMIT 100`;
 }
 
 /** Entry platform is frozen before outcome filtering, retaining zero-qualified-day people. */
@@ -245,4 +372,94 @@ export async function periodQueries(
       ? chunks.map((r) => r.sourceRefreshedAt!).sort()[0]
       : null,
   });
+}
+
+export const CAPTURE_SEGMENTS = [
+  "Omi pendant",
+  "Multiple devices",
+  "Limitless",
+  "Apple Watch",
+  "Other device",
+  "Omi, model unknown",
+  "Phone + Mac",
+  "Mac only",
+  "Phone mic only",
+  "No capture",
+] as const;
+
+/** Week-one activation by first-week capture source for the latest matured
+ * weekly cohort: the snapshot cohort (same anchor, 180-day history check and
+ * ≥2 qualified days), so segment people sum to the activation denominator.
+ * Exclusive segments follow the 2026-10-15 device-surface audit: any hardware
+ * family evidence first (more than one family = multiple devices), then
+ * phone mic / Mac capture, else no capture. Columns: segment, people, activated.
+ */
+export function captureSourceQuery(end: Date) {
+  const cohortEnd = shiftDay(end, -7);
+  const start = shiftDay(cohortEnd, -7);
+  const week = (at: string) =>
+    `${at} >= anchor AND ${at} < anchor + interval 7 day`;
+  const family = (name: string, fam: string[], type: string[] = []) =>
+    `dev AND (fam IN (${fam.map((f) => `'${f}'`).join(",")})${
+      type.length
+        ? ` OR properties.type IN (${type.map((t) => `'${t}'`).join(",")})`
+        : ""
+    }),'${name}'`;
+  return `WITH ${raw(
+    shiftDay(start, -180),
+    end,
+    `AND person.created_at >= ${sqlTime(
+      start
+    )} AND person.created_at < ${sqlTime(cohortEnd)}`
+  )},
+    cls AS (SELECT *,
+      if(event='Memory Created' AND p IN ('ios','android'),parseDateTimeBestEffort(coalesce(toString(properties.timestamp),'1970-01-01')),timestamp) et,
+      (event='Memory Created' AND properties.memory_result='saved' AND toString(properties.memory_discarded)='false' AND properties.memory_id IS NOT NULL) saved_mem,
+      event IN ('Device Connected','Device Paired','Device Session Ended') dev,
+      coalesce(toString(properties.hardware_family),'') fam,
+      coalesce(toString(properties.conversation_source),'') src FROM qualified),
+    hw AS (SELECT *,multiIf(${family("Omi pendant", ["omi_cv1"])},
+      ${family("Omi Neo", ["omi_neo"])},${family("Omi devkit", [
+    "omi_devkit",
+    "friend_devkit",
+  ])},
+      ${family("Omi Glass", ["omi_glass"], ["openglass"])},${family(
+    "Apple Watch",
+    ["apple_watch"],
+    ["appleWatch"]
+  )},
+      ${family("Plaud", ["plaud"], ["plaud"])},${family(
+    "Bee",
+    ["bee"],
+    ["bee"]
+  )},${family("Fieldy", ["fieldy"], ["fieldy"])},
+      ${family(
+        "Friend pendant",
+        ["friend_pendant"],
+        ["friendPendant"]
+      )},${family("Limitless", ["limitless"], ["limitless"])},
+      ${family(
+        "Ray-Ban Meta",
+        ["rayban_meta"],
+        ["raybanMeta"]
+      )},dev AND properties.type='omi','Omi unspecified',
+      saved_mem AND src='omi','Omi unspecified',saved_mem AND src='openglass','Omi Glass',saved_mem AND src='apple_watch','Apple Watch',
+      saved_mem AND src='limitless','Limitless',saved_mem AND src='fieldy','Fieldy',saved_mem AND src='bee','Bee',
+      saved_mem AND src='friend_com','Friend pendant',saved_mem AND src='rayban_meta','Ray-Ban Meta',
+      saved_mem AND properties.recording_hardware_type='plaud','Plaud','') h,
+      (event='Phone Mic Recording Started' OR (saved_mem AND src='phone')) phone,
+      ((event='Memory Created' AND src='desktop') OR event='Desktop Recording Started') mac FROM cls),
+    people AS (SELECT actor,min(anchor) a,min(timestamp) first_event,
+      uniqExactIf(toDate(qt),(fg OR cap) AND ${week("qt")}) days7,
+      groupUniqArrayIf(h,h!='' AND ${week("et")}) hws,
+      countIf(phone AND ${week("et")}) > 0 ph,countIf(mac AND ${week(
+    "et"
+  )}) > 0 mc
+      FROM hw GROUP BY actor),
+    seg AS (SELECT *,arrayFilter(x -> x!='Omi unspecified' OR NOT hasAny(hws,['Omi pendant','Omi devkit','Omi Glass','Omi Neo']),hws) hc
+      FROM people WHERE first_event >= a)
+    SELECT multiIf(length(hc)>1,'Multiple devices',length(hc)=1 AND hc[1] IN ('Omi pendant','Limitless','Apple Watch'),hc[1],
+      length(hc)=1 AND hc[1]='Omi unspecified','Omi, model unknown',length(hc)=1,'Other device',
+      ph AND mc,'Phone + Mac',mc,'Mac only',ph,'Phone mic only','No capture') segment,
+      count(),countIf(days7>=2) FROM seg GROUP BY segment LIMIT 100`;
 }
