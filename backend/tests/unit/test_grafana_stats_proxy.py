@@ -6,6 +6,7 @@ import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from http.client import HTTPConnection
+from pathlib import Path
 from urllib.error import HTTPError
 
 import pytest
@@ -17,6 +18,8 @@ from charts.monitoring.grafana.stats_proxy import (
     Handler,
     Server,
     StatsProxy,
+    REFRESHING_TTL,
+    SERIES_NAMES,
     allowed_path,
 )
 
@@ -37,14 +40,28 @@ from charts.monitoring.grafana.stats_proxy import (
         "/api/omi/stats/wall/",
         "/API/OMI/STATS/WALL",
         "/api/omi/stats/wall ",
+        "/api/omi/stats/wall/series/",
+        "/api/omi/stats/wall/series/unknown",
+        "/api/omi/stats/wall/series/growth/",
+        "/api/omi/stats/wall/series/growth?x=1",
+        "/api/omi/stats/wall/series/../../users",
     ],
 )
 def test_only_literal_stats_paths(path):
     assert not allowed_path(path)
 
 
-def test_the_exact_wall_route_is_the_single_admitted_path():
+def test_the_wall_route_and_named_series_are_the_only_admitted_paths():
     assert allowed_path("/api/omi/stats/wall")
+    for name in ("headline", "growth", "activation", "retention", "revenue", "health"):
+        assert allowed_path(f"/api/omi/stats/wall/series/{name}")
+
+
+def test_series_names_match_the_admin_route():
+    source = (Path(__file__).resolve().parents[3] / "web/admin/lib/wall-series.ts").read_text()
+    block = source.split("export const SERIES_NAMES = [", 1)[1].split("]", 1)[0]
+    names = tuple(part.strip().strip('"') for part in block.split(",") if part.strip())
+    assert names == SERIES_NAMES
 
 
 def token(exp):
@@ -273,3 +290,27 @@ def test_http_cold_wall_burst_queues_every_panel_and_coalesces_upstream(monkeypa
         server.shutdown()
         server.server_close()
         serving.join(timeout=10)
+
+
+def test_refreshing_body_is_cached_briefly_then_refetched():
+    now = [10000]
+    transport = Transport(now)
+    bodies = [b'{"refreshing":true,"frames":{}}', b'{"refreshing":false,"frames":{"weekly":[1]}}']
+    original = transport.open
+
+    def open_(request, timeout):
+        if request.full_url.startswith("https://admin.omi.me"):
+            transport.calls.append(request.full_url)
+            return io.BytesIO(bodies.pop(0))
+        return original(request, timeout)
+
+    transport.open = open_
+    proxy = StatsProxy(transport, lambda: now[0])
+    path = "/api/omi/stats/wall/series/growth"
+    assert proxy.fetch(path) == (200, b'{"refreshing":true,"frames":{}}')
+    now[0] += 5
+    assert proxy.fetch(path)[1] == b'{"refreshing":true,"frames":{}}'  # coalesced within the short TTL
+    now[0] += REFRESHING_TTL
+    assert proxy.fetch(path)[1] == b'{"refreshing":false,"frames":{"weekly":[1]}}'
+    now[0] += REFRESHING_TTL + 60
+    assert proxy.fetch(path)[1] == b'{"refreshing":false,"frames":{"weekly":[1]}}'  # settled body cached 900s
