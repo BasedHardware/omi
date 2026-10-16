@@ -5065,6 +5065,8 @@
             }
         }
     },
+    "yourPlanEndsOn": "உங்கள் {plan} திட்டம் {date} அன்று முடிவடைகிறது.",
+    "resubscribeNowNoChargeUntil": "உங்கள் சலுகைகளை தொடர்ந்து வைக்க இப்போது மீண்டும் சந்தா செய்யவும் - {date} வரை எந்த கட்டணமும் இல்லை.",
     "planSetToCancelOn": "உங்கள் திட்டம் {date} இல் ரத்து செய்ய திட்டமிடப்பட்டுள்ளது।\nஉங்கள் சலுகைகளை தொடர்ந்து வைக்க இப்போது மீண்டும் சந்தா செய்யவும் - {date} வரை எந்த கட்டணமும் இல்லை.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5079,6 +5081,7 @@
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
     },
+    "yourPlanWillRenewOn": "உங்கள் {plan} திட்டம் {date} அன்று புதுப்பிக்கப்படும்.",
     "planRenewsOn": "உங்கள் திட்டம் {date} இல் புதுப்பிக்கப்படும்.",
     "@planRenewsOn": {
         "description": "Message showing plan renewal date",
@@ -5125,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "resubscribeFirstToChangePlans": "திட்டத்தை மாற்ற முதலில் மீண்டும் சந்தா செய்யவும்.",
     "resubscribe": "மீண்டும் சந்தா செய்யவும்",
     "@resubscribe": {
         "description": "Button to resubscribe"

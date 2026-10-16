@@ -761,7 +761,11 @@ Future<({List<DailySummary> items, bool ok})> getDailySummaries({int limit = 30,
   if (response == null || response.statusCode != 200) return (items: const <DailySummary>[], ok: false);
 
   try {
-    final data = wire.GeneratedDailySummariesResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    final raw = jsonDecode(response.body);
+    if (raw is! Map<String, dynamic> || raw['summaries'] is! List) {
+      throw const FormatException('Invalid daily recap list response');
+    }
+    final data = wire.GeneratedDailySummariesResponse.fromJson(raw);
     return (items: data.summaries?.map(DailySummary.fromGenerated).toList() ?? <DailySummary>[], ok: true);
   } catch (e) {
     Logger.debug('Error parsing daily summaries: $e');
@@ -857,26 +861,6 @@ Future<bool> deleteDailySummary(String summaryId) async {
   if (response.statusCode != 200) return false;
   final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   return data.status == 'ok';
-}
-
-/// Generate a daily summary for a specific date (or today if not specified)
-/// Returns the summary_id on success, null on failure
-Future<String?> generateDailySummary({String? date}) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/daily-summary-settings/test',
-    headers: {},
-    method: 'POST',
-    body: date != null ? jsonEncode({'date': date}) : '',
-  );
-  if (response == null || response.statusCode != 200) return null;
-
-  try {
-    final data = wire.GeneratedDailySummaryTestResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    return data.summaryId;
-  } catch (e) {
-    Logger.debug('Error parsing generate summary response: $e');
-    return null;
-  }
 }
 
 // Onboarding State

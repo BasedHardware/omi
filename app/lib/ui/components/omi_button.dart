@@ -243,8 +243,13 @@ class _OmiButtonState extends State<OmiButton> {
     final colors = _colors(enabled);
     final visualHeight = widget.height ?? (compact ? 36.0 : 48.0);
     final baseStyle = compact ? OmiType.subhead : OmiType.callout;
+    // A label with no family drops the surrounding face. Keep it so a themed
+    // page, and the widget render harness, draw the words in that face.
+    final ambient = DefaultTextStyle.of(context).style;
     final textStyle = (widget.labelStyle ?? baseStyle.copyWith(fontWeight: FontWeight.w600)).copyWith(
       color: colors.foreground,
+      fontFamily: widget.labelStyle?.fontFamily ?? ambient.fontFamily,
+      fontFamilyFallback: widget.labelStyle?.fontFamilyFallback ?? ambient.fontFamilyFallback,
     );
 
     Widget label = Text(
