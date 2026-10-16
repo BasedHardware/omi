@@ -240,7 +240,7 @@ and an explicit empty literal renders as `''`.
 | `OMI_MESSAGING_CHANNELS_UIDS` | Comma-separated exact uid allowlist for messaging channels; empty admits nobody. | backend | env | closed | — | — | vi7SA9ckQCe4ccobWNxlbdcNdC23 | — | keep | 2026-11-09 | dazheng |
 | `OMI_SHAPED_AGENT_MODE` | Notes and mobile/app chat shaped invocation. on serves shaped to everyone; off/unset/unknown disables shaped serving. cohort is an alias of on after legacy removal. Legacy comparison and shadow serving have been removed. Default off. | backend | env | closed | — | on (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | on (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | keep | 2026-11-05 | dazheng |
 | `OMI_TELEGRAM_ENABLED` | Default-off registration of the private-chat Telegram adapter. | backend | env | closed | — | — | on | — | keep | 2026-11-09 | dazheng |
-| `OMI_TV_ROLLUP_ENABLED` | Default off; 1 prefers complete BigQuery daily rollup windows for TV history; missing coverage falls back to HogQL | web-admin | env | open | — | — | — | — | pending | 2026-11-15 | dazheng |
+| `OMI_TV_ROLLUP_ENABLED` | Default off; 1 prefers complete BigQuery daily rollup windows for TV history; missing coverage falls back to HogQL | web-admin | env | closed | — | — | — | — | pending | 2026-11-15 | dazheng |
 | `OWNER_IDENTITY_RETRY_COALESCE_ENABLED` | Default false; bounded per-UID late identity coalescing, 16 cohorts, 128 candidates and eight eligible passes per cohort; two workers unchanged | backend | env | closed | — | — | true (pusher (chart)) | — | pending | 2026-11-13 | dazheng |
 | `PARAKEET_EXPLICIT_CUDA_GRAPHS` | Default-off persistent NeMo CUDA graph selection across timestamp initialization | backend | env | closed | — | false (parakeet (chart)) | false (parakeet (chart)) | — | pending | 2026-10-28 | dazheng |
 | `PARAKEET_PACKING_ENABLED` | Default-off bounded historical GPU quanta and strict live dispatch priority | backend | env | closed | — | false (parakeet (chart)) | false (parakeet (chart)) | — | pending | 2026-10-28 | dazheng |
@@ -530,7 +530,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `OMI_LLM_GATEWAY_OBSERVABILITY_LOGS_ENABLED` — Enable gateway observability logs (fail: closed)
 - `OMI_MESSAGING_KILL_SWITCH_DOC` — Optional Firestore channel switch document, cached at most 60 seconds; missing/read failure denies. Unset uses env admission only. (fail: closed)
 - `OMI_MESSAGING_RETENTION_DAYS` — Hourly messaging maintenance retains done inbox markers and unknown identities for 30 days by default; minimum seven; does not send. (fail: closed)
-- `OMI_TV_ROLLUP_ENABLED` — Default off; 1 prefers complete BigQuery daily rollup windows for TV history; missing coverage falls back to HogQL (fail: open)
+- `OMI_TV_ROLLUP_ENABLED` — Default off; 1 prefers complete BigQuery daily rollup windows for TV history; missing coverage falls back to HogQL (fail: closed)
 - `OMI_VERTEX_PT_TARGET_LOCATION` — Moved Vertex order location; default us; global explicitly widens residency (fail: closed)
 - `PARAKEET_DIARIZATION` — Enable prerecorded Parakeet diarization (fail: closed)
 - `PARAKEET_USE_V2` — Select Parakeet prerecorded v2 pipeline (fail: open)

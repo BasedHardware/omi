@@ -65,7 +65,8 @@ export function dailyExtractQuery(
 ) {
   const start = closedDay(day),
     end = shiftDay(start, 1);
-  const age = (at: string) => `floor(dateDiff('second',anchor,${at})/86400)`;
+  const age = (at: string) =>
+    `floor(dateDiff('microsecond',anchor,${at})/86400000000)`;
   const dayOf = (at: string) => `formatDateTime(${at},'%Y-%m-%d','UTC')`;
   const features: Record<FeatureKind, string> = {
     identity: `SELECT actor,'identity' kind,p,min(anchor) a,min(timestamp) first_at,max(timestamp) latest,
@@ -139,7 +140,13 @@ function timestamp(v: unknown): string {
     /[zZ]|[+-]\d\d:\d\d$/.test(text) ? text : `${text.replace(" ", "T")}Z`
   );
   if (!Number.isFinite(+d)) throw new Error("Rollup timestamp unavailable");
-  return d.toISOString();
+  // Date normalizes timezone but truncates sub-millisecond precision. BigQuery
+  // and PostHog both support microseconds; preserve them for recency/cohort ties.
+  const fraction = text.match(/\.(\d+)(?:Z|[+-]\d\d:\d\d)?$/i)?.[1];
+  const iso = d.toISOString();
+  return fraction && fraction.length > 3
+    ? iso.replace(/\.\d{3}Z$/, `.${fraction}Z`)
+    : iso;
 }
 export function anonymize(day: string, r: unknown[], key: string): DailyRow {
   if (
@@ -155,8 +162,7 @@ export function anonymize(day: string, r: unknown[], key: string): DailyRow {
     row_key: hashId(key, String(r[13]), "row"),
     kind: String(r[1]),
     p: String(r[2]),
-    anchor:
-      timestamp(r[3]) === "1970-01-01T00:00:00.000Z" ? null : timestamp(r[3]),
+    anchor: Date.parse(timestamp(r[3])) === 0 ? null : timestamp(r[3]),
     first_at: timestamp(r[4]),
     latest: timestamp(r[5]),
     activity_day: String(r[6]),

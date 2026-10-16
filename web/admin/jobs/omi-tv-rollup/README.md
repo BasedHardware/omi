@@ -19,7 +19,8 @@ The feature key is person × kind × platform × capture UTC date × signup-rela
 24h bin × capture evidence. Rows carry only HMACs, closed-enum dimensions, counts,
 first/last timestamps and the PostHog person-created anchor (the existing proxy).
 `activity_day` deduplicates capture days across arrival days/retries; `age_day`
-retains signup-relative clocks when a signup day crosses midnight. Primary
+retains signup-relative clocks when a signup day crosses midnight. Source
+microseconds are preserved for recency and signup-boundary comparisons. Primary
 platform ranks distinct qualified days, latest activity, fixed platform order;
 UI precedes MCP to match the snapshot. Cohorts freeze **entry platform** from
 all-event observations; established retention freezes the denominator platform.

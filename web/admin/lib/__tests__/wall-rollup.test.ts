@@ -46,6 +46,19 @@ it("hashes resolved person IDs with a domain-separated key; raw IDs never persis
   expect(() => closedDay("2026-02-30")).toThrow();
   expect(() => closedDay("2026-10-13", end)).toThrow();
 });
+it("preserves microseconds for exact recency and signup-window boundaries", () => {
+  const r = feature("u", "identity");
+  r[3] = "2026-10-01 12:00:00.900001";
+  r[4] = "2026-10-01 12:00:00.900002";
+  r[5] = "2026-10-08 12:00:00.100001";
+  const row = anonymize(day, r, key);
+  expect(row.anchor).toBe("2026-10-01T12:00:00.900001Z");
+  expect(row.first_at).toBe("2026-10-01T12:00:00.900002Z");
+  expect(row.latest).toBe("2026-10-08T12:00:00.100001Z");
+  expect(dailyExtractQuery(day, "", "activity")).toContain(
+    "dateDiff('microsecond',anchor,qt)/86400000000"
+  );
+});
 it("extracts closed days with a one-day MCP probe and keyset pages, never OFFSET", () => {
   const sql = dailyExtractQuery(day, "a'\\b");
   const starts = Array.from(
