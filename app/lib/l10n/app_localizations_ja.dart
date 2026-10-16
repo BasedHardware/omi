@@ -4943,9 +4943,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get content => 'コンテンツ';
 
   @override
-  String get noContentToDisplay => '表示するコンテンツがありません';
-
-  @override
   String get noSummary => '要約なし';
 
   @override
@@ -9655,9 +9652,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get speechToTextUnavailableDesc => '現在、音声をテキストに変換できません。インターネット接続とデバイスの音声認識設定を確認してから、もう一度お試しください。';
 
   @override
-  String get processingTakingLonger => 'まだ処理中です。通常より時間がかかっています。';
-
-  @override
   String get speechProfileEnrollmentPrompt => 'Omiがあなたの声を識別できるように、好きなことを5秒ほど話してください。';
 
   @override
@@ -13290,4 +13284,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get activityNewItem => '新着';
+
+  @override
+  String get activityNeedsAttention => '要対応';
+
+  @override
+  String get activityRetryAll => 'すべて再試行';
+
+  @override
+  String get attentionSummaryFailed => 'この会話を要約できませんでした';
 }

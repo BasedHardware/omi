@@ -1542,7 +1542,6 @@
     "photos": "Fotky",
     "rawData": "Nespracované dáta",
     "content": "Obsah",
-    "noContentToDisplay": "Žiadny obsah na zobrazenie",
     "noSummary": "Žiadny súhrn",
     "updateOmiFirmware": "Aktualizovať firmvér Omi",
     "anErrorOccurredTryAgain": "Vyskytla sa chyba. Skúste to znova.",
@@ -3167,7 +3166,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Ťuknutím na tlačidlo nahrávania spustíte nahrávanie",
-    "processingTakingLonger": "Stále prebieha — trvá to dlhšie ako zvyčajne.",
     "speechProfileEnrollmentPrompt": "Aby Omi vedel, ktorý hlas je váš — hovorte asi 5 sekúnd o čomkoľvek.",
     "home": "Domov",
     "failedToUpdateBaselineStatus": "Túto spomienku sa nepodarilo aktualizovať. Skúste to znova.",
@@ -4134,5 +4132,8 @@
     "activityEmpty": "Zatiaľ žiadna aktivita",
     "activityNewSemantics": "Aktivita, nové položky",
     "activityLoadFailed": "Nepodarilo sa načítať celú vašu aktivitu",
-    "activityNewItem": "Nové"
+    "activityNewItem": "Nové",
+    "activityNeedsAttention": "Vyžaduje pozornosť",
+    "activityRetryAll": "Skúsiť všetko znova",
+    "attentionSummaryFailed": "Tento rozhovor sa nepodarilo zhrnúť"
 }

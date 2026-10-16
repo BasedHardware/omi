@@ -5024,9 +5024,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get content => 'Content';
 
   @override
-  String get noContentToDisplay => 'No content to display';
-
-  @override
   String get noSummary => 'No summary';
 
   @override
@@ -9798,9 +9795,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Speech-to-text isn\'t available right now. Check your internet connection and your device\'s speech recognition settings, then try again.';
 
   @override
-  String get processingTakingLonger => 'Still working — this is taking longer than usual.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'So Omi knows which voice is yours — talk for about 5 seconds about anything.';
 
@@ -13463,4 +13457,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get activityNewItem => 'New';
+
+  @override
+  String get activityNeedsAttention => 'Needs attention';
+
+  @override
+  String get activityRetryAll => 'Retry all';
+
+  @override
+  String get attentionSummaryFailed => 'Couldn\'t summarize this conversation';
 }

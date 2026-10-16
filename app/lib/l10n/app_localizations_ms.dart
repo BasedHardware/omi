@@ -5041,9 +5041,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get content => 'Kandungan';
 
   @override
-  String get noContentToDisplay => 'Tiada kandungan untuk dipaparkan';
-
-  @override
   String get noSummary => 'Tiada ringkasan';
 
   @override
@@ -9830,9 +9827,6 @@ class AppLocalizationsMs extends AppLocalizations {
       'Penukaran pertuturan kepada teks tidak tersedia sekarang. Semak sambungan internet dan tetapan pengecaman pertuturan peranti anda, kemudian cuba lagi.';
 
   @override
-  String get processingTakingLonger => 'Masih diproses — ini mengambil masa lebih lama daripada biasa.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Supaya Omi tahu suara yang mana milik anda — bercakap tentang apa sahaja selama kira-kira 5 saat.';
 
@@ -13509,4 +13503,13 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Baharu';
+
+  @override
+  String get activityNeedsAttention => 'Perlu perhatian';
+
+  @override
+  String get activityRetryAll => 'Cuba semua semula';
+
+  @override
+  String get attentionSummaryFailed => 'Perbualan ini tidak dapat diringkaskan';
 }

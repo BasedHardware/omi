@@ -9,6 +9,8 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/activity/activity_bell_button.dart';
 import 'package:omi/pages/activity/activity_page.dart';
 import 'package:omi/pages/activity/activity_seen.dart';
+import 'package:omi/backend/schema/pending_work.dart';
+import 'package:omi/services/pending_work/pending_work_store.dart';
 
 /// An in-memory bell state starting at [stored] (0: never visited).
 (ActivitySeen, int Function()) _seen(int stored) {
@@ -24,6 +26,12 @@ DailySummary _recap(String id, DateTime createdAt) => DailySummary(
       overview: '',
       dayEmoji: '📊',
       stats: DayStats(totalConversations: 1, actionItemsCount: 0),
+    );
+
+/// No server pending work or attention items, and no I/O.
+PendingWorkStore _noWork() => PendingWorkStore(
+      loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
+      loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
     );
 
 Widget _app(Widget home) => MaterialApp(
@@ -105,7 +113,8 @@ void main() {
   group('ActivityBellButton', () {
     testWidgets('is always there, with a dot only when something is new', (tester) async {
       final (seen, _) = _seen(yesterday.millisecondsSinceEpoch);
-      await tester.pumpWidget(_app(Scaffold(body: Center(child: ActivityBellButton(seen: seen)))));
+      await tester
+          .pumpWidget(_app(Scaffold(body: Center(child: ActivityBellButton(pendingWork: _noWork(), seen: seen)))));
       expect(find.byKey(const ValueKey('home_activity_button')), findsOneWidget);
       expect(find.byKey(const ValueKey('home_activity_dot')), findsNothing);
       expect(find.bySemanticsLabel('Activity'), findsOneWidget);
@@ -122,6 +131,7 @@ void main() {
       final (seen, stored) = _seen(yesterday.millisecondsSinceEpoch);
       seen.observe([anHourAgo]);
       await tester.pumpWidget(_app(ActivityPage(
+        pendingWork: _noWork(),
         seen: seen,
         probeDreamReport: () async => false,
         loadRecaps: () async => (items: <DailySummary>[], ok: false),
@@ -135,6 +145,7 @@ void main() {
 
     Widget page(ActivitySeen seen, {bool changesOk = true, ApiProblemKind failure = ApiProblemKind.notFound}) =>
         ActivityPage(
+          pendingWork: _noWork(),
           seen: seen,
           probeDreamReport: () async => false,
           loadRecaps: () async => (items: [_recap('new', anHourAgo), _recap('old', yesterday)], ok: true),
@@ -202,6 +213,7 @@ void main() {
       final (seen, _) = _seen(yesterday.millisecondsSinceEpoch);
       var recapsOk = true;
       await tester.pumpWidget(_app(ActivityPage(
+        pendingWork: _noWork(),
         seen: seen,
         probeDreamReport: () async => false,
         loadRecaps: () async => (items: recapsOk ? [_recap('kept', anHourAgo)] : <DailySummary>[], ok: recapsOk),
@@ -223,6 +235,7 @@ void main() {
     testWidgets('says so when there is nothing yet', (tester) async {
       final (seen, _) = _seen(0);
       await tester.pumpWidget(_app(ActivityPage(
+        pendingWork: _noWork(),
         seen: seen,
         probeDreamReport: () async => false,
         loadRecaps: () async => (items: <DailySummary>[], ok: true),
@@ -236,6 +249,7 @@ void main() {
       final (seen, _) = _seen(yesterday.millisecondsSinceEpoch);
       final ahead = DateTime.now().add(const Duration(minutes: 10));
       await tester.pumpWidget(_app(ActivityPage(
+        pendingWork: _noWork(),
         seen: seen,
         probeDreamReport: () async => false,
         loadRecaps: () async => (items: [_recap('ahead', ahead)], ok: true),
@@ -268,6 +282,7 @@ void main() {
       final (seen, _) = _seen(yesterday.millisecondsSinceEpoch);
       var recaps = <DailySummary>[];
       await tester.pumpWidget(_app(ActivityPage(
+        pendingWork: _noWork(),
         seen: seen,
         probeDreamReport: () async => false,
         loadRecaps: () async => (items: recaps, ok: true),

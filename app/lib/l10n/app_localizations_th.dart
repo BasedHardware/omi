@@ -4997,9 +4997,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get content => 'เนื้อหา';
 
   @override
-  String get noContentToDisplay => 'ไม่มีเนื้อหาที่จะแสดง';
-
-  @override
   String get noSummary => 'ไม่มีสรุป';
 
   @override
@@ -9750,9 +9747,6 @@ class AppLocalizationsTh extends AppLocalizations {
       'ขณะนี้ไม่สามารถแปลงเสียงเป็นข้อความได้ โปรดตรวจสอบการเชื่อมต่ออินเทอร์เน็ตและการตั้งค่าการรู้จำเสียงของอุปกรณ์ แล้วลองอีกครั้ง';
 
   @override
-  String get processingTakingLonger => 'ยังทำงานอยู่ — ใช้เวลานานกว่าปกติ';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'เพื่อให้ Omi รู้ว่าเสียงไหนเป็นของคุณ — พูดเรื่องอะไรก็ได้ประมาณ 5 วินาที';
 
@@ -13412,4 +13406,13 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get activityNewItem => 'ใหม่';
+
+  @override
+  String get activityNeedsAttention => 'ต้องดำเนินการ';
+
+  @override
+  String get activityRetryAll => 'ลองใหม่ทั้งหมด';
+
+  @override
+  String get attentionSummaryFailed => 'ไม่สามารถสรุปบทสนทนานี้ได้';
 }
