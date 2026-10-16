@@ -26,7 +26,7 @@ async def test_piece_plan_is_durable_before_dispatch_and_replays_frozen_audio(tm
             blobs[blob] = source.read()
         return {'audio_path': blob, 'metadata': json.dumps(context)}
 
-    monkeypatch.setattr(plan.cap_hold, '_upload', upload)
+    monkeypatch.setattr(plan.cap_hold, 'upload_held_audio', upload)
     monkeypatch.setattr(plan.cap_hold, 'read_audio', lambda uid, row, path: None)
     piece = tmp_path / '1792152000.wav'
     with wave.open(str(piece), 'wb') as output:

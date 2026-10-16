@@ -70,7 +70,7 @@ def _exists(uid: str, identity: str) -> bool:
         return bool(holds(uid).document(identity).get().exists)
 
 
-def _upload(uid: str, path: str, identity: str, metadata: dict) -> dict:
+def upload_held_audio(uid: str, path: str, identity: str, metadata: dict) -> dict:
     blob_path = f'chunks/{uid}/cap-held/{identity}.wav.enc'
     bucket = get_private_cloud_sync_bucket()
     with external_write_fence(uid), owner_storage_write_gate(uid, bucket):
@@ -125,7 +125,7 @@ def hold_segment(uid: str, path: str, metadata: dict[str, Any], *, receipt: dict
     identity, seconds, metadata = _describe(path, metadata)
     created = False
     if not _exists(uid, identity):
-        fields = _upload(uid, path, identity, metadata)
+        fields = upload_held_audio(uid, path, identity, metadata)
         created = _publish(uid, identity, seconds, fields)
     return _finish(identity, seconds, funded_allowance(uid).reason, receipt, created)
 
@@ -135,7 +135,7 @@ async def _hold_capture(uid: str, path: str, metadata: dict, reason: str, receip
     identity, seconds, metadata = await run_blocking(storage_executor, _describe, path, metadata)
     created = False
     if not await run_blocking(db_executor, _exists, uid, identity):
-        fields = await run_blocking(storage_executor, _upload, uid, path, identity, metadata)
+        fields = await run_blocking(storage_executor, upload_held_audio, uid, path, identity, metadata)
         created = await run_blocking(db_executor, _publish, uid, identity, seconds, fields)
     _finish(identity, seconds, reason, receipt, created)
 

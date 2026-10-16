@@ -6,7 +6,6 @@ content persistence and idempotent usage settlement succeed, including silence.
 
 import asyncio
 import logging
-from pathlib import Path
 import threading
 import time
 
@@ -109,9 +108,9 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
         embeddings = {}
     geolocation = Geolocation.model_validate(meta['geolocation']) if meta.get('geolocation') else None
     directory = await run_blocking(storage_executor, cap_hold.recovery_directory, uid)
-    receipts = dict(row.get('piece_receipts') or {})
+    receipts: dict[str, dict[str, Any]] = dict(row.get('piece_receipts') or {})
 
-    async def save_receipt(name, receipt):
+    async def save_receipt(name: str, receipt: dict[str, Any] | None) -> bool:
         updated = dict(receipts)
         if receipt is None:
             updated.pop(name, None)
@@ -139,7 +138,7 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                 return False
             if name in processed:
                 continue
-            receipt = receipts.get(name)
+            receipt: dict[str, Any] | None = receipts.get(name)
             if receipt and receipt.get('state') == 'failed_reconciliation':
                 continue
             attempt = 1
@@ -192,7 +191,7 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                     )
                     pending = True
                     continue
-                intent = {
+                intent: dict[str, Any] = {
                     'state': 'dispatched',
                     'provider': service[0],
                     'model': service[2],

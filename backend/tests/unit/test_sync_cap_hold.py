@@ -250,7 +250,7 @@ async def test_capture_hold_coordinates_db_and_storage_leaves(monkeypatch):
     )
     monkeypatch.setattr(cap_hold, '_describe', Mock(return_value=('held', 20, {'source': 'omi'})))
     monkeypatch.setattr(cap_hold, '_exists', Mock(return_value=False))
-    monkeypatch.setattr(cap_hold, '_upload', Mock(return_value={'audio_path': 'synthetic'}))
+    monkeypatch.setattr(cap_hold, 'upload_held_audio', Mock(return_value={'audio_path': 'synthetic'}))
     monkeypatch.setattr(cap_hold, '_publish', Mock(return_value=True))
     calls = []
 
@@ -267,7 +267,7 @@ async def test_capture_hold_coordinates_db_and_storage_leaves(monkeypatch):
         (cap_hold.db_executor, cap_hold.funded_allowance),
         (cap_hold.storage_executor, cap_hold._describe),
         (cap_hold.db_executor, cap_hold._exists),
-        (cap_hold.storage_executor, cap_hold._upload),
+        (cap_hold.storage_executor, cap_hold.upload_held_audio),
         (cap_hold.db_executor, cap_hold._publish),
     ]
     assert admission == {'reason': 'allowance_unavailable'}
