@@ -654,7 +654,9 @@ overlay:
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           # Spelling fixes go to Review until auto-apply requires supporting context (Run Now passes run here).
           # Dogfood self-report + Run Now (GET/POST /v1/dream/runs) for the dream cohort only.
-          DREAM_AGENT_PASSES_PER_DAY: {value: '2', category: rollout}
+          # 2026-10-16: no fixed pass count for the allowlisted owner; the daily USD ceiling bounds spend.
+          DREAM_AGENT_PASSES_PER_DAY: {value: '48', category: rollout}
+          DREAM_AGENT_HUNT_INTERVAL_HOURS: {value: '2', category: rollout}
           DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
           DREAM_AGENT_DAILY_USD: {value: '10', category: rollout}
           DREAM_AGENT_TOKENS_PER_MINUTE: {value: '2000000', category: rollout}
@@ -917,7 +919,9 @@ overlay:
           DREAM_AGENT_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
-          DREAM_AGENT_PASSES_PER_DAY: {value: '2', category: rollout}
+          # 2026-10-16: no fixed pass count for the allowlisted owner; the daily USD ceiling bounds spend.
+          DREAM_AGENT_PASSES_PER_DAY: {value: '48', category: rollout}
+          DREAM_AGENT_HUNT_INTERVAL_HOURS: {value: '2', category: rollout}
           DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
           DREAM_AGENT_DAILY_USD: {value: '10', category: rollout}
           DREAM_AGENT_TOKENS_PER_MINUTE: {value: '2000000', category: rollout}
