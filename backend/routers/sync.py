@@ -59,6 +59,8 @@ from models.sync_contract import SYNC_LOCAL_FILES_V2_RESPONSES
 from models.geolocation import geolocation_from_private_header
 from models.sync_audio import AudioPrecacheResponse, AudioUrlsResponse
 from routers.listen.contracts import persisted_started_seconds
+from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
+from utils.sync.cap_hold import hold_capture_if_exhausted
 from utils.sync.admission_responses import sync_content_in_progress_response
 from utils.analytics import record_sync_v1_usage as record_usage
 from utils.other import endpoints as auth
@@ -623,6 +625,30 @@ async def sync_local_files(
         except HTTPException as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail, headers=_V1_DEPRECATION_HEADERS)
 
+        cap_held = False
+        if cap_dispatch_enabled():
+            cap_held = await run_blocking(
+                sync_executor,
+                hold_capture_if_exhausted,
+                uid,
+                wav_paths,
+                source,
+                target_conversation_id=conversation_id,
+                client_device_id=client_device_context.client_device_id,
+                client_platform=client_device_context.platform,
+            )
+        if cap_held:
+            return JSONResponse(
+                status_code=200,
+                headers=_V1_DEPRECATION_HEADERS,
+                content={
+                    'new_memories': [],
+                    'updated_memories': [],
+                    'credits_exhausted': True,
+                    'held_audio': True,
+                    'held_files': len(wav_paths),
+                },
+            )
         vad_errors = []
         vad_segment_lock = threading.Lock()
 

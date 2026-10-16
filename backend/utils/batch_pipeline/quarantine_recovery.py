@@ -6,6 +6,9 @@ import logging
 import time
 import wave
 
+from utils.stt_cap_dispatch import sync_allowed, funded_allowance
+from config.stt_cap_dispatch import enabled as cap_enabled
+from utils.observability.stt_cap_dispatch import record_audio
 from config.batch_pipeline import recovery_owners
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
@@ -87,9 +90,13 @@ class QuarantineRecovery:
                 if self.clock() - job['recovery']['started_at'] > 900:
                     self.protocol.settle(segment_id, token, self.clock())
                 return 'held'
+            if not sync_allowed(owner_id, item.duration_seconds):
+                return 'held'
             audio = self.artifacts.fetch_audio(item)
             # Privacy and the intent token are rechecked after download and
             # immediately before issuing the sole application-level STT call.
+            if not sync_allowed(owner_id, item.duration_seconds):
+                return 'held'
             if owner_id not in recovery_owners() or not self.protocol.start(segment_id, token, self.clock()):
                 return 'held'
             from database.batch_pipeline_projection_protocol import normalized_binding
@@ -100,6 +107,10 @@ class QuarantineRecovery:
             )
             try:
                 payload = self.stt(item, normalized_binding(job['projection_binding']), audio)
+                if cap_enabled():
+                    record_audio(
+                        'sync', 'accepted', 'unknown', item.duration_seconds, not funded_allowance(owner_id).managed
+                    )
             except Exception:
                 self.protocol.settle(segment_id, token, self.clock())
                 return 'failed_held'

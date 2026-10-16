@@ -3,6 +3,7 @@
 import math
 import time
 
+from utils.stt_cap_dispatch import sync_allowed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline.scheduler import owns_lease
 from utils.fair_use import get_hard_restriction_status, is_daily_audio_ceiling_exceeded
@@ -34,6 +35,9 @@ def authorize(store, leases: list[dict], *, now: float | None = None) -> dict:
                 retries[segment] = 30
                 continue
             job, binding, intake = snapshot
+            if not sync_allowed(job['owner_id'], float(job.get('duration_seconds', 0)), 'parakeet'):
+                retries[segment] = 60
+                continue
             if int(job['priority']) == 0:
                 restricted, retry_after = get_hard_restriction_status(job['owner_id'])
                 if restricted:

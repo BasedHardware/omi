@@ -420,3 +420,33 @@ def test_recovery_cas_lost_token_and_artifact_registration_are_fenced(setup):
     with pytest.raises(BatchPrivacyBlocked):
         register_batch_artifact(store, binding.owner_id, 'bad', 'gs://synthetic/' + 'b' * 32 + '.enc', 'results', 0)
     stt.assert_not_called()
+
+
+@pytest.mark.parametrize('enforce', [False, True])
+def test_exhausted_recovery_never_starts_a_provider_call(setup, monkeypatch, enforce):
+    from types import SimpleNamespace
+    from utils import stt_cap_dispatch as cap
+
+    _, _, _, artifacts, stt, recovery = setup
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
+    monkeypatch.setattr(
+        cap, 'funded_allowance', Mock(return_value=SimpleNamespace(managed=False, reason='plan_allowance_exhausted'))
+    )
+    result = recovery.recover('bad', 'synthetic-owner')
+    if enforce:
+        assert result == 'held'
+        stt.assert_not_called()
+        artifacts.fetch_audio.assert_not_called()
+    else:
+        stt.assert_called_once()
+        cap.funded_allowance.assert_not_called()
+
+
+def test_recovery_rechecks_after_audio_download(setup, monkeypatch):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    _, _, _, artifacts, stt, recovery = setup
+    monkeypatch.setattr(module, 'sync_allowed', Mock(side_effect=[True, False]))
+    assert recovery.recover('bad', 'synthetic-owner') == 'held'
+    artifacts.fetch_audio.assert_called_once()
+    stt.assert_not_called()

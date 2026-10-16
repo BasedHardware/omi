@@ -12,9 +12,11 @@ import logging
 import threading
 from typing import Any, Callable, Mapping, Sequence
 
+from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
+from utils.observability.stt_cap_dispatch import record_audio
 from config.batch_pipeline_providers import ProviderConfig
 from config.sync_live_dedupe import sync_live_dedupe_active_for
-from utils.batch_pipeline.contracts import WorkItem, WorkResult
+from utils.batch_pipeline.contracts import WorkItem, WorkResult, HeldWork
 from utils.batch_pipeline.errors import FatalGpuError
 
 SAMPLE_RATE = 16000
@@ -231,7 +233,7 @@ class PipelineWorker:
         self._unavailable = False
         self.counts = {'items': 0, 'reused_live': 0, 'silence': 0, 'failed': 0}
 
-    def process_batch(self, items: Sequence[WorkItem]) -> Sequence[WorkResult]:
+    def process_batch(self, items: Sequence[WorkItem], *, authorize_dispatch=None) -> Sequence[WorkResult | HeldWork]:
         if len(items) > 32 or len({i.segment_id for i in items}) != len(items):
             raise ValueError('pull must contain at most 32 distinct conversations')
         if any(item.duration_seconds > self.config.max_unit_seconds for item in items):
@@ -247,16 +249,17 @@ class PipelineWorker:
             # Bound decoded host memory to two audio-hours (~460 MB float32).
             for item in items:
                 if group and seconds + item.duration_seconds > 7200:
-                    results.extend(self._process(group))
+                    results.extend(self._process(group, authorize_dispatch=authorize_dispatch))
                     group, seconds = [], 0
                 group.append(item)
                 seconds += item.duration_seconds
-            results.extend(self._process(group))
+            results.extend(self._process(group, authorize_dispatch=authorize_dispatch))
             return results
 
-    def _process(self, items):
+    def _process(self, items, *, authorize_dispatch=None):
         states, windows, failed, results = {}, [], set(), []
         failure_records = []
+        held = set()
         shapes = {item.segment_id: {'samples': -1, 'vad_spans': -1, 'windows': -1, 'asr_words': 0} for item in items}
 
         def fail(item, exc, stage):
@@ -338,11 +341,29 @@ class PipelineWorker:
                 fail(item, exc, stage)
 
         for batch in pack_windows(windows, self.config):
-            batch = [w for w in batch if w.segment_id not in failed]
+            batch = [w for w in batch if w.segment_id not in failed and w.segment_id not in held]
+            if cap_dispatch_enabled():
+                # Authorization belongs immediately before ASR, after potentially
+                # slow decode/VAD and between successive microbatches. Missing
+                # policy authority is a hold, never provider permission.
+                required = {w.segment_id for w in batch}
+                try:
+                    allowed = set(authorize_dispatch(required)) if authorize_dispatch is not None else set()
+                except Exception:
+                    allowed = set()
+                held.update(required - allowed)
+                batch = [w for w in batch if w.segment_id not in held]
             if not batch:
                 continue
             try:
                 hypotheses = self.words.transcribe_batch([w.samples for w in batch])
+                if cap_dispatch_enabled():
+                    for window in batch:
+                        record_audio('sync', 'accepted', self.config.words, window.duration)
+                        state = states[window.segment_id]
+                        state['cap_provider_audio_seconds'] = (
+                            state.get('cap_provider_audio_seconds', 0) + window.duration
+                        )
                 if len(hypotheses) != len(batch):
                     raise ValueError('provider result cardinality mismatch')
             except Exception as exc:
@@ -363,6 +384,9 @@ class PipelineWorker:
 
         for state in states.values():
             item = state['item']
+            if item.segment_id in held:
+                results.append(HeldWork(item.segment_id))
+                continue
             if item.segment_id in failed:
                 continue
             stage = 'assemble_words'
@@ -403,6 +427,11 @@ class PipelineWorker:
                     'speech_seconds': state['speech_seconds'],
                     'speech_spans': state['speech_spans'],
                 }
+                if cap_dispatch_enabled():
+                    payload['cap_dispatch'] = {
+                        'omi_funded_accepted_provider_audio_seconds': state.get('cap_provider_audio_seconds', 0),
+                        'admission': 'authorized_compute',
+                    }
                 stage = 'persist'
                 uri = self.persist(item, payload)
                 results.append(WorkResult(item.segment_id, uri, 'silence' if state['silence'] else 'success'))

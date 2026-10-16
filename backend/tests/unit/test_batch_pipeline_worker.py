@@ -597,3 +597,45 @@ def test_capture_vad_groups_keep_words_and_diarization_on_original_span_clocks()
         assert part_payload['words'] == [{'word': ['first', 'second'][index], 'timestamp': [0.25, 0.75]}]
         assert part_payload['diarization']['turns'] == [{'start': 0.0, 'end': 2.0, 'speaker': ['left', 'right'][index]}]
         assert part_payload['speech_seconds'] == 2.0
+
+
+@pytest.mark.parametrize('enforce', [False, True])
+def test_cap_provenance_is_additive_and_uses_actual_padded_provider_audio(monkeypatch, enforce):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
+    worker, words, saved, _, _, _ = setup_worker()
+    worker.process_batch([item('a', 2)], authorize_dispatch=lambda ids: ids)
+    if enforce:
+        assert saved['a']['cap_dispatch'] == {
+            'omi_funded_accepted_provider_audio_seconds': 2,
+            'admission': 'authorized_compute',
+        }
+    else:
+        assert 'cap_dispatch' not in saved['a']
+    assert saved['a']['speech_seconds'] == 2
+    assert words.calls == [[2]]
+
+
+def test_worker_rechecks_immediately_before_asr_and_holds_without_failure(monkeypatch):
+    from utils.batch_pipeline.contracts import HeldWork
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    worker, words, saved, _, diarized, failures = setup_worker()
+    checks = []
+
+    def authorize(ids):
+        checks.append(ids)
+        return set()
+
+    result = worker.process_batch([item('a', 2)], authorize_dispatch=authorize)
+    assert result == [HeldWork('a')]
+    assert checks == [{'a'}]
+    assert not words.calls and not saved and not diarized and not failures
+
+
+def test_worker_missing_authority_does_not_spend_at_cap(monkeypatch):
+    from utils.batch_pipeline.contracts import HeldWork
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    worker, words, saved, _, _, _ = setup_worker()
+    assert worker.process_batch([item('a', 2)]) == [HeldWork('a')]
+    assert not words.calls and not saved

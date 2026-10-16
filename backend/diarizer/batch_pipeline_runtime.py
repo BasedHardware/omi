@@ -57,13 +57,13 @@ class SynchronizedWorker:
         self.memory_probe = memory_probe
         self._unavailable = False
 
-    def process_batch(self, items):
+    def process_batch(self, items, **kwargs):
         if self._unavailable:
             raise FatalGpuError('GPU chain unavailable; restart required')
         try:
             baseline = self.memory_probe.begin() if self.memory_probe else None
             try:
-                return self.worker.process_batch(items)
+                return self.worker.process_batch(items, **kwargs)
             finally:
                 # Python completion is not CUDA completion. Never publish before
                 # quiescence, even for a dedicated GPU with no live reservation.

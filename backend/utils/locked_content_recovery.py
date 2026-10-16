@@ -8,6 +8,7 @@ import logging
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from config.stt_cap_dispatch import enabled as stt_cap_dispatch_enabled
 from utils.locked_content_flags import reset_recovery_enabled
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,13 @@ def _memory_page_drained(count: int, page_size: int) -> bool:
 
 
 def recover_locked_content(uid: str, *, now: datetime | None = None) -> None:
+    if stt_cap_dispatch_enabled():
+        from utils.sync.cap_hold_recovery import kick
+
+        try:
+            kick(uid)
+        except Exception as error:
+            logger.warning('event=stt_cap_recovery outcome=schedule_deferred exception_type=%s', type(error).__name__)
     if not reset_recovery_enabled():
         return
     # Lazy imports keep the flag-off auth path free of additional dependencies.

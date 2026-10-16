@@ -2894,6 +2894,13 @@ _add(
 )
 
 
+_add(
+    DriverEntry(
+        'utils.sync.cap_hold.pending_holds',
+        base={'uid': UID},
+        neutrals={'limit': (10, 'bounded recovery page; does not affect filters')},
+    )
+)
 _add(DriverEntry('database.locked_content.has_recoverable_locked_content', base={'uid': UID}))
 _add(
     CoveredByEntry(

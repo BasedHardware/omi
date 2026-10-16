@@ -6,6 +6,15 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Default-off funded transcription cap
+
+`STT_CAP_DISPATCH_ENFORCEMENT` gates provider creation and audio sends through a
+shared live admission state, including multichannel, replay and replacement legs.
+Denial preserves receiving and existing audio storage paths; accepted provider
+work drains. Custom/on-device STT and flag-off metering retain their behavior.
+The [dispatch contract](stt-cap-dispatch.md) also documents sync holds, recovery,
+BYOK funding, additive metrics and the per-client activation decision.
+
 ## Windowed live transcription deadlines
 
 `PARAKEET_WINDOW_DEADLINE_CUT_ENABLED` defaults to `false` in code and

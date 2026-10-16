@@ -12,6 +12,7 @@ from starlette.websockets import WebSocketState
 from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.observability.routing_cohort import current_routing_cohort
+from utils.stt_cap_dispatch import CapSocket, session_admission, suppress_socket_audio
 from utils.stt import streaming as st
 from utils.dream_vocabulary import keyterms
 from utils.stt.live_failure import PendingLiveFailover, settle_terminal_socket
@@ -86,6 +87,7 @@ class LiveChainSession:
     def to_json_log(self) -> dict[str, Any]:
         return {'event': 'managed_live_vad_metrics', **self.get_metrics()}
 
+    @session_admission
     async def connect(
         self,
         sample_rate: int,
@@ -303,10 +305,28 @@ class LiveChainSession:
                 if is_window:
                     from utils.stt.parakeet_window import connect_window
 
-                    raw = connect_window(callback, sample_rate)
-                    if self.no_text_rescue.enabled:
-                        raw.allow_no_text_rescue = self.no_text_rescue.allow_window_rescue
-                        raw.progress_deadline_enabled = True
+                    def new_window():
+                        window_raw = connect_window(callback, sample_rate)
+                        if self.no_text_rescue.enabled:
+                            window_raw.allow_no_text_rescue = self.no_text_rescue.allow_window_rescue
+                            window_raw.progress_deadline_enabled = True
+                        return window_raw
+
+                    admission = getattr(self.receiver, 'cap_admission', None)
+                    if admission is None:
+                        raw = new_window()
+                    else:
+
+                        async def open_window():
+                            return new_window()
+
+                        raw = CapSocket(
+                            admission,
+                            'parakeet',
+                            sample_rate,
+                            open_window,
+                            new_window() if admission.allowed('parakeet') else None,
+                        )
                 elif service == st.STTService.parakeet:
                     raw = await st.process_audio_parakeet(callback, language, sample_rate, 1, keywords=keywords)
                 elif service == st.STTService.soniox:
@@ -591,7 +611,11 @@ class LiveLegSocket(STTSocket):
         if window:
             from utils.stt.parakeet_window import SessionPcmGain, WINDOW_INGEST_AGC, WindowedParakeetSocket
 
-            if isinstance(raw, WindowedParakeetSocket):
+            if isinstance(raw, CapSocket):
+                raw.on_open(
+                    lambda transport: transport.set_replay_progress_callback(self._trim_window_replay_to_anchor)
+                )
+            elif isinstance(raw, WindowedParakeetSocket):
                 raw.set_replay_progress_callback(self._trim_window_replay_to_anchor)
             if WINDOW_INGEST_AGC:
                 self._ingest_gain = SessionPcmGain()
@@ -798,6 +822,8 @@ class LiveLegSocket(STTSocket):
 
         if self._routing_active:
             self._health_success, self._health_close = on_success, on_close
+        elif self.window and isinstance(self.raw, CapSocket):
+            self.raw.on_open(lambda transport: transport.set_health_callbacks(on_success, on_close))
         elif isinstance(self.raw, WindowedParakeetSocket):
             self.raw.set_health_callbacks(on_success, on_close)
 
@@ -850,6 +876,8 @@ class LiveLegSocket(STTSocket):
         setattr(gate, 'process_audio', process_replay_capture)
 
     def send(self, data: bytes, start_sample: int | None = None) -> bool:
+        if suppress_socket_audio(self.raw, data):
+            return True
         if self._closing_for_health:
             return False
         if self.is_connection_dead:
@@ -1068,6 +1096,8 @@ class LiveLegSocket(STTSocket):
             commit()
 
     def send_admitted_audio(self, data: bytes, spans: Any) -> bool:
+        if suppress_socket_audio(self.raw, data):
+            return True
         from utils.stt.soniox_idle import unaccepted_onset
 
         data, spans = unaccepted_onset(data, spans, self._send_tracker)

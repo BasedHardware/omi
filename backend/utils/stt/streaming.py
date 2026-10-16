@@ -1,3 +1,4 @@
+from utils.stt_cap_dispatch import live_provider
 import asyncio
 import inspect
 import io
@@ -1098,6 +1099,7 @@ def _deepgram_is_available() -> bool:
     return _managed_deepgram_client() is not None or bool(get_byok_key('deepgram'))
 
 
+@live_provider('deepgram', 2)
 async def process_audio_dg(
     stream_transcript: Callable[[List[Dict[str, Any]]], None],
     language: str,
@@ -1847,6 +1849,7 @@ class SafeModulateSocket(STTSocket):
         self._stream_transcript(segments)
 
 
+@live_provider('modulate', 1)
 async def process_audio_modulate(
     stream_transcript: Callable[[List[Dict[str, Any]]], None],
     sample_rate: int,
@@ -2320,6 +2323,7 @@ class ParakeetWebSocketSocket(STTSocket):
                 self._mark_dead(f"parakeet ws recv: {e}")
 
 
+@live_provider('parakeet', 2)
 async def process_audio_parakeet(
     stream_transcript: Callable[[List[Dict[str, Any]]], None],
     language: str,
