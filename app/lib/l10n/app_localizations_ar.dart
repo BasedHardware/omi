@@ -13023,19 +13023,19 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Recommended';
+  String get paywallRecommended => 'موصى به';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'See all plans';
+  String get paywallOtherPlans => 'عرض كل الخطط';
 
   @override
   String get paywallComparePlans => 'See plans';
 
   @override
-  String get paywallYourPlan => 'Your plan';
+  String get paywallYourPlan => 'خطتك';
 
   @override
   String get paywallNotNow => 'Not now';

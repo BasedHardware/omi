@@ -13133,19 +13133,19 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Recommended';
+  String get paywallRecommended => 'Polecane';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'See all plans';
+  String get paywallOtherPlans => 'Zobacz wszystkie plany';
 
   @override
   String get paywallComparePlans => 'See plans';
 
   @override
-  String get paywallYourPlan => 'Your plan';
+  String get paywallYourPlan => 'Twój plan';
 
   @override
   String get paywallNotNow => 'Not now';

@@ -157,6 +157,30 @@ class _BudgetUpsellBannerState extends State<BudgetUpsellBanner> {
   }
 }
 
+/// Keeps a CJK segment together so the meter wraps at the `·` separators.
+String meterLineForLayout(String line) {
+  const separator = ' · ';
+  return line.split(separator).map((part) {
+    if (!_containsCjk(part)) return part;
+    final buffer = StringBuffer();
+    var first = true;
+    for (final rune in part.runes) {
+      if (!first) buffer.write('\u2060');
+      buffer.writeCharCode(rune);
+      first = false;
+    }
+    return buffer.toString();
+  }).join(separator);
+}
+
+bool _containsCjk(String text) => text.runes.any(_isCjk);
+
+bool _isCjk(int rune) =>
+    (rune >= 0x3040 && rune <= 0x30FF) ||
+    (rune >= 0x3400 && rune <= 0x9FFF) ||
+    (rune >= 0xF900 && rune <= 0xFAFF) ||
+    (rune >= 0xFF00 && rune <= 0xFFEF);
+
 /// Usage-screen meter. The line is the backend string; there is no separate title.
 class StorefrontUsageMeter extends StatelessWidget {
   const StorefrontUsageMeter({super.key, required this.usage, this.embedded = false});
@@ -171,7 +195,7 @@ class StorefrontUsageMeter extends StatelessWidget {
     if (line == null || line.isEmpty) return const SizedBox.shrink();
     final percent = usage.percent;
     final body = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(line, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+      Text(meterLineForLayout(line), style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
       if (percent != null) ...[
         const SizedBox(height: OmiSpacing.xs),
         LinearProgressIndicator(

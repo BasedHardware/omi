@@ -42,6 +42,8 @@ void main() {
     InlineSpan paint(InlineSpan span) {
       if (span is! TextSpan) return span;
       final style = span.style ?? const TextStyle();
+      const iconFamilies = {'MaterialIcons', 'CupertinoIcons'};
+      if (iconFamilies.contains(style.fontFamily)) return span;
       return TextSpan(
         text: span.text,
         style: style.copyWith(fontFamily: 'Arial Unicode', fontFamilyFallback: const ['Arial Unicode']),
@@ -80,10 +82,14 @@ void main() {
     addTearDown(() => OmiColors.active = previous);
     await tester.runAsync(() async {
       final unicode = File('/System/Library/Fonts/Supplemental/Arial Unicode.ttf');
-      if (!unicode.existsSync()) return;
-      final loader = FontLoader('Arial Unicode')
-        ..addFont(Future.value(ByteData.sublistView(unicode.readAsBytesSync())));
-      await loader.load();
+      if (unicode.existsSync()) {
+        final loader = FontLoader('Arial Unicode')
+          ..addFont(Future.value(ByteData.sublistView(unicode.readAsBytesSync())));
+        await loader.load();
+      }
+      await _loadIconFont('MaterialIcons', _materialIconsFont());
+      final cupertino = _packageAsset('cupertino_icons', 'assets/CupertinoIcons.ttf');
+      if (cupertino != null) await _loadIconFont('CupertinoIcons', cupertino);
     });
     final theme = buildOmiTheme(brightness: Brightness.dark).copyWith(
       platform: TargetPlatform.iOS,
@@ -159,7 +165,29 @@ void main() {
           onGetMoreUsage: () {},
         ),
       );
-      expect(find.text(usage.meterLine!), findsOneWidget);
+      expect(
+        find.byWidgetPredicate((widget) {
+          if (widget is! Text) return false;
+          final shown = (widget.data ?? widget.textSpan?.toPlainText() ?? '').replaceAll('\u2060', '');
+          return shown == usage.meterLine;
+        }),
+        findsOneWidget,
+      );
+      if (locale.$2 == 'ja') {
+        final element = find
+            .byWidgetPredicate((widget) {
+              if (widget is! RichText) return false;
+              return widget.text.toPlainText().contains('リセット'.split('').join('\u2060'));
+            })
+            .evaluate()
+            .single;
+        final paragraph = element.renderObject! as RenderParagraph;
+        final plain = paragraph.text.toPlainText();
+        final start = plain.indexOf('1');
+        final end = plain.indexOf('ト') + 1;
+        final boxes = paragraph.getBoxesForSelection(TextSelection(baseOffset: start, extentOffset: end));
+        expect(boxes.map((box) => box.top.round()).toSet(), hasLength(1));
+      }
       expect(find.text(usage.moreLabel!), findsOneWidget);
       expect(find.textContaining('hours of recording left'), findsNothing);
       expect(find.text('Get more usage'), findsNothing);
@@ -167,4 +195,36 @@ void main() {
       await capture(tester, 'settings-${locale.$2}.png');
     });
   }
+}
+
+Future<void> _loadIconFont(String family, File file) async {
+  final loader = FontLoader(family)
+    ..addFont(Future.value(ByteData.sublistView(Uint8List.fromList(file.readAsBytesSync()))));
+  await loader.load();
+}
+
+File? _packageAsset(String package, String asset) {
+  final path = File('.dart_tool/package_config.json');
+  if (!path.existsSync()) return null;
+  final packages = (jsonDecode(path.readAsStringSync()) as Map<String, dynamic>)['packages'] as List<dynamic>;
+  for (final entry in packages) {
+    if (entry['name'] != package) continue;
+    final root = path.parent.uri.resolveUri(Uri.parse(entry['rootUri'] as String));
+    final file = File.fromUri(root.resolve(asset));
+    if (file.existsSync()) return file;
+  }
+  return null;
+}
+
+File _materialIconsFont() {
+  var dir = File(Platform.resolvedExecutable).absolute.parent;
+  for (var i = 0; i < 10; i++) {
+    final candidate = File('${dir.path}/artifacts/material_fonts/MaterialIcons-Regular.otf');
+    if (candidate.existsSync()) return candidate;
+    final direct = File('${dir.path}/material_fonts/MaterialIcons-Regular.otf');
+    if (direct.existsSync()) return direct;
+    if (dir.path == dir.parent.path) break;
+    dir = dir.parent;
+  }
+  throw StateError('MaterialIcons-Regular.otf not found above ${Platform.resolvedExecutable}');
 }

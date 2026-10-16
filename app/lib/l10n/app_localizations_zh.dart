@@ -12891,19 +12891,19 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Recommended';
+  String get paywallRecommended => '推荐';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'See all plans';
+  String get paywallOtherPlans => '查看所有套餐';
 
   @override
   String get paywallComparePlans => 'See plans';
 
   @override
-  String get paywallYourPlan => 'Your plan';
+  String get paywallYourPlan => '你的套餐';
 
   @override
   String get paywallNotNow => 'Not now';

@@ -13102,19 +13102,19 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Recommended';
+  String get paywallRecommended => 'शिफारस केलेले';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'See all plans';
+  String get paywallOtherPlans => 'सर्व योजना पहा';
 
   @override
   String get paywallComparePlans => 'See plans';
 
   @override
-  String get paywallYourPlan => 'Your plan';
+  String get paywallYourPlan => 'तुमची योजना';
 
   @override
   String get paywallNotNow => 'Not now';

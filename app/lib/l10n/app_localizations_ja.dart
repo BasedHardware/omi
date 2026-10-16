@@ -12910,19 +12910,19 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Recommended';
+  String get paywallRecommended => 'おすすめ';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'See all plans';
+  String get paywallOtherPlans => 'すべてのプランを見る';
 
   @override
   String get paywallComparePlans => 'See plans';
 
   @override
-  String get paywallYourPlan => 'Your plan';
+  String get paywallYourPlan => '現在のプラン';
 
   @override
   String get paywallNotNow => 'Not now';

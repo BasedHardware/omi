@@ -487,7 +487,7 @@ def build_storefront(
         reset_at = int(datetime(year + (month == 12), month % 12 + 1, 1, tzinfo=timezone.utc).timestamp())
         chat_pause = ChatAtCap(**chat_at_cap(current_plan, reset_at, locale))
         at_cap = dict(copy_for(locale)['at_cap'])
-        at_cap['body'] = at_cap['body'].format(date=(usage.reset_label or '').removeprefix('resets '))
+        at_cap['body'] = at_cap['body'].format(date=format_date(reset_at, locale))
     return StorefrontResponse(
         chat_at_cap=chat_pause,
         at_cap=StorefrontCapChoice(**at_cap) if at_cap is not None else None,

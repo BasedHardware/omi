@@ -13134,19 +13134,19 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Recommended';
+  String get paywallRecommended => 'ಶಿಫಾರಸು';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'See all plans';
+  String get paywallOtherPlans => 'ಎಲ್ಲಾ ಯೋಜನೆಗಳನ್ನು ನೋಡಿ';
 
   @override
   String get paywallComparePlans => 'See plans';
 
   @override
-  String get paywallYourPlan => 'Your plan';
+  String get paywallYourPlan => 'ನಿಮ್ಮ ಯೋಜನೆ';
 
   @override
   String get paywallNotNow => 'Not now';

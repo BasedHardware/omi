@@ -193,6 +193,34 @@ def test_at_cap_backend_owned_copy_golden(monkeypatch, cap_presentation):
     assert at_cap['on_device_upgrade_line'] == 'Upgrade to Pro for speaker separation and higher accuracy'
 
 
+def test_at_cap_body_uses_the_locale_date_not_the_reset_label(monkeypatch, cap_presentation):
+    sheet_for, ladder_catalog = cap_presentation
+
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    rows, recognized = ladder_catalog()
+
+    def body(locale):
+        response = sheet_for(
+            'plus',
+            price_id='price_plus_month',
+            rows=rows,
+            recognized=recognized,
+            bindings=list(rows),
+            percent=100,
+            trigger='usage_budget',
+            locale=locale,
+        )
+        return response.at_cap.body
+
+    assert body(None) == 'New recordings are saved and waiting. Choose how to handle them until Nov 1.'
+    assert body('es') == 'Las nuevas grabaciones se guardan y esperan. Elige cómo quieres gestionarlas hasta el 1 nov.'
+    assert 'se reinicia' not in body('es')
+    assert body('ja') == '新しい録音は保存され、待機しています。11月1日 までの扱い方を選んでください。'
+    assert 'リセット' not in body('ja')
+    assert body('ar') == 'التسجيلات الجديدة محفوظة وبانتظارك. اختر كيف تريد التعامل معها حتى 1 نوفمبر.'
+    assert 'يُعاد' not in body('ar')
+
+
 def test_atomic_daily_reservations_boundary_and_reset():
     from database.ladder_v1 import reserve_daily_request
     from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore

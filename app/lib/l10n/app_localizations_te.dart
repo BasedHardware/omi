@@ -13146,19 +13146,19 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Recommended';
+  String get paywallRecommended => 'సిఫార్సు చేయబడింది';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'See all plans';
+  String get paywallOtherPlans => 'అన్ని ప్లాన్‌లు చూడండి';
 
   @override
   String get paywallComparePlans => 'See plans';
 
   @override
-  String get paywallYourPlan => 'Your plan';
+  String get paywallYourPlan => 'మీ ప్లాన్';
 
   @override
   String get paywallNotNow => 'Not now';
