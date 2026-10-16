@@ -86,6 +86,44 @@ def test_failure_is_not_silence_and_siblings_survive():
     assert failures == [('bad', 'ValueError')]
 
 
+@pytest.mark.parametrize(
+    'stage', ['fetch_decode', 'vad_windows', 'asr', 'word_clocks', 'assemble_words', 'diarize', 'persist']
+)
+def test_item_failures_log_class_and_stage_without_callback_or_private_content(stage, caplog):
+    private_marker = 'synthetic-private-content-must-not-be-logged'
+
+    def broken(*args):
+        raise ValueError(private_marker)
+
+    class BrokenWords:
+        def transcribe_batch(self, samples):
+            if stage == 'asr':
+                return broken()
+            if stage == 'word_clocks':
+                # Multiple windows of one item must still emit one failure.
+                return [[{'word': private_marker, 'timestamp': [-1, 0]}] for _ in samples]
+            return [[] for _ in samples]
+
+    settings = {'on_failure': None}
+    if stage == 'fetch_decode':
+        settings['decode'] = broken
+    elif stage == 'vad_windows':
+        settings['vad'] = broken
+    elif stage in {'asr', 'word_clocks', 'assemble_words'}:
+        settings['words_providers'] = {'parakeet': BrokenWords()}
+    elif stage == 'diarize':
+        settings['diarizers'] = {'pyannote': broken}
+    else:
+        settings['persist'] = broken
+    worker, *_ = setup_worker(**settings)
+    assert worker.process_batch([item(duration=60)]) == []
+    records = [record for record in caplog.records if 'event=batch_worker_failed' in record.getMessage()]
+    assert len(records) == worker.counts['failed'] == 1
+    assert records[0].getMessage() == f'event=batch_worker_failed error_class=ValueError stage={stage} segment_id=a'
+    assert records[0].exc_info is None
+    assert private_marker not in caplog.text
+
+
 def test_batch_failure_retries_all_affected_conversations():
     class Broken:
         def transcribe_batch(self, samples):

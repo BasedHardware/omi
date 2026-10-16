@@ -138,6 +138,11 @@ audio seconds, CUDA allocated/reserved baselines and peaks in bytes, process
 lifetime host peak, and cgroup lifetime peak when the kernel exports it. CUDA
 peaks reset after models load and before decode/VAD/ASR/diarization/persistence;
 the receipt is emitted after CUDA synchronization. Host peaks include startup.
+This receipt also runs when individual items fail; it is not an item-success
+receipt. Nonfatal item failures log `event=batch_worker_failed` with only
+`error_class`, a bounded `stage` and `segment_id`, once per item per flight,
+even without an `on_failure` callback. Never add exception messages, traceback
+locals, transcript/audio, object URIs or lease/admission tokens to this event.
 For qualification run a synthetic one-hour unit with the intended model batch
 size and retain the GPU model/VRAM, exact image digest/config and receipt.
 Set the chart **host RAM** limit from the larger measured process/container peak
