@@ -108,6 +108,8 @@ def _get_http_client() -> Tuple[httpx.AsyncClient, bool]:
 
 
 def _safe_int(value: Any, default: int, minimum: int = 1, maximum: int = 10) -> int:
+    if isinstance(value, bool) or value is None:
+        return default
     try:
         number = int(value)
     except (TypeError, ValueError):
@@ -116,6 +118,8 @@ def _safe_int(value: Any, default: int, minimum: int = 1, maximum: int = 10) -> 
 
 
 def _parse_float(value: Any) -> Optional[float]:
+    if isinstance(value, bool) or value is None:
+        return None
     try:
         number = float(value)
         if not math.isfinite(number):
@@ -475,13 +479,14 @@ async def tool_earthquake_details(request: Request):
     body, error = await _read_json_body(request)
     if error:
         return error
-    event_id = str(body.get("event_id") or "").strip()
-    if not event_id:
+    raw_event_id = body.get("event_id")
+    if raw_event_id is None or isinstance(raw_event_id, bool) or not str(raw_event_id).strip():
         return ChatToolResponse(
             success=False,
             message="event_id is required",
             data={"error": "event_id is required"},
         )
+    event_id = str(raw_event_id).strip()
 
     payload = await _usgs_get({"format": "geojson", "eventid": event_id})
     if "error" in payload:
