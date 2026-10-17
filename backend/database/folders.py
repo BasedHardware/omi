@@ -316,6 +316,16 @@ def initialize_system_folders(uid: str) -> List[Dict[str, Any]]:
     return created_folders
 
 
+def _extract_folder_conversation_doc(doc: Any, conversations_db: Any) -> Optional[Dict[str, Any]]:
+    conv_data = conversations_db.document_data_with_revision(doc)
+    if not isinstance(conv_data, dict):
+        return None
+    doc_id = getattr(doc, 'id', None)
+    if isinstance(doc_id, str) and doc_id:
+        conv_data['id'] = doc_id
+    return conv_data
+
+
 def get_conversations_in_folder(
     uid: str,
     folder_id: str,
@@ -324,6 +334,8 @@ def get_conversations_in_folder(
     include_discarded: bool = False,
 ) -> List[Dict[str, Any]]:
     """Get all conversations in a specific folder."""
+    from database import conversations as conversations_db
+
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection('conversations')
 
@@ -333,15 +345,67 @@ def get_conversations_in_folder(
         query = query.where(filter=FieldFilter('discarded', '==', False))
 
     query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
-    query = query.offset(offset).limit(limit)
+
+    raw_conversations: List[Dict[str, Any]] = []
+    if include_discarded:
+        skipped_visible = 0
+        for doc in query.stream():
+            conv_data = _extract_folder_conversation_doc(doc, conversations_db)
+            if conv_data is None or not conversations_db.is_visible_conversation(
+                conv_data, include_discarded=include_discarded
+            ):
+                continue
+            if skipped_visible < offset:
+                skipped_visible += 1
+                continue
+            raw_conversations.append(conv_data)
+            if len(raw_conversations) >= limit:
+                break
+    else:
+        page_query = query.offset(offset).limit(limit)
+        last_doc = None
+        fetched = 0
+        for doc in page_query.stream():
+            fetched += 1
+            last_doc = doc
+            conv_data = _extract_folder_conversation_doc(doc, conversations_db)
+            if conv_data is None or not conversations_db.is_visible_conversation(conv_data, include_discarded=False):
+                continue
+            raw_conversations.append(conv_data)
+
+        skip_cap = getattr(conversations_db, '_RULE_DISCARD_PAGE_SKIP_CAP', 64)
+        skipped = fetched - len(raw_conversations)
+        while (
+            len(raw_conversations) < limit
+            and fetched == limit
+            and last_doc is not None
+            and skipped <= skip_cap
+            and hasattr(query, 'start_after')
+        ):
+            follow_query = query.start_after(last_doc).limit(limit)
+            fetched = 0
+            for doc in follow_query.stream():
+                fetched += 1
+                last_doc = doc
+                conv_data = _extract_folder_conversation_doc(doc, conversations_db)
+                if conv_data is None or not conversations_db.is_visible_conversation(
+                    conv_data, include_discarded=False
+                ):
+                    skipped += 1
+                    if skipped > skip_cap:
+                        break
+                    continue
+                raw_conversations.append(conv_data)
+                if len(raw_conversations) >= limit:
+                    break
+            if len(raw_conversations) >= limit or skipped > skip_cap or fetched < limit:
+                break
 
     conversations: List[Dict[str, Any]] = []
-    for doc in query.stream():
-        conv_data = _typed_doc(doc)
-        if conv_data.get('deleted'):
-            continue
-        conv_data['id'] = doc.id
-        conversations.append(conv_data)
+    for conv_data in raw_conversations:
+        prepared = conversations_db.prepare_conversation_for_read(conv_data, uid)
+        if prepared is not None:
+            conversations.append(prepared)
 
     return conversations
 
@@ -436,6 +500,20 @@ def update_folder_conversation_count(uid: str, folder_id: str, *, firestore_clie
     count_query = query.count()
     result = count_query.get()
     count = int(result[0][0].value or 0)
+    try:
+        from database import conversation_visibility_counts
+
+        count = max(
+            0,
+            count
+            - conversation_visibility_counts.count_hidden(
+                conversations_ref,
+                include_discarded=False,
+                folder_id=folder_id,
+            ),
+        )
+    except ImportError:
+        pass
 
     folder_ref = user_ref.collection('folders').document(folder_id)
     try:
