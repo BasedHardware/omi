@@ -115,7 +115,12 @@ def get_calendar_meeting(
         raise HTTPException(status_code=404, detail="Meeting not found")
 
 
-@router.delete('/v1/calendar/meetings/{meeting_id}', response_model=DeleteMeetingResponse, tags=['calendar'])
+@router.delete(
+    '/v1/calendar/meetings/{meeting_id}',
+    response_model=DeleteMeetingResponse,
+    tags=['calendar'],
+    include_in_schema=False,
+)
 def delete_calendar_meeting(
     meeting_id: str,
     uid: str = Depends(auth.get_current_user_uid),
