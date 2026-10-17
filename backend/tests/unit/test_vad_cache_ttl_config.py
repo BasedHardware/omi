@@ -7,6 +7,10 @@ import yaml
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 EXPECTED_SERVICES = {'backend', 'backend-sync', 'backend-sync-backfill'}
+EXPECTED_TTLS = {
+    'dev': {'backend': '86400', 'backend-sync': '86400', 'backend-sync-backfill': '86400'},
+    'prod': {'backend': '86400', 'backend-sync': '7200', 'backend-sync-backfill': '7200'},
+}
 
 
 def _load_yaml(path: Path) -> dict:
@@ -14,7 +18,7 @@ def _load_yaml(path: Path) -> dict:
     return yaml.load(path.read_text(), Loader=loader)
 
 
-def test_sync_vad_services_keep_the_24_hour_ttl_in_dev_and_prod():
+def test_sync_vad_services_keep_the_configured_ttl_in_dev_and_prod():
     manifest = _load_yaml(REPOSITORY_ROOT / 'backend/deploy/runtime_env.yaml')
 
     for environment in ('dev', 'prod'):
@@ -22,7 +26,10 @@ def test_sync_vad_services_keep_the_24_hour_ttl_in_dev_and_prod():
         declared = {name for name, service in services.items() if 'VAD_CACHE_TTL_SECONDS' in service.get('env', {})}
         assert declared == EXPECTED_SERVICES
         for service_name in EXPECTED_SERVICES:
-            assert services[service_name]['env']['VAD_CACHE_TTL_SECONDS']['value'] == '86400'
+            assert (
+                services[service_name]['env']['VAD_CACHE_TTL_SECONDS']['value']
+                == EXPECTED_TTLS[environment][service_name]
+            )
 
 
 def test_sync_vad_cache_ttl_is_registered_as_nonsecret_config_and_documented():
