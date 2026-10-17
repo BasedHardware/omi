@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { beforeAll, afterAll, describe, it, expect, vi } from 'vitest';
 import { ChatMarkdown } from '../ChatMarkdown';
 
 const { push } = vi.hoisted(() => ({ push: vi.fn() }));
@@ -8,6 +8,23 @@ const memories = [
   { id: 'meeting/a', created_at: '', structured: { title: 'Planning', emoji: '' } },
   { id: 'meeting-b', created_at: '', structured: { title: 'Review', emoji: '' } },
 ];
+
+// jsdom omits element scrolling used by Streamdown's streaming code-block view.
+const originalScrollTo = Object.getOwnPropertyDescriptor(
+  HTMLElement.prototype,
+  'scrollTo',
+);
+beforeAll(() =>
+  Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
+    configurable: true,
+    value: vi.fn(),
+  }),
+);
+afterAll(() => {
+  if (originalScrollTo)
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', originalScrollTo);
+  else Reflect.deleteProperty(HTMLElement.prototype, 'scrollTo');
+});
 
 describe('message-local chat citations', () => {
   it('makes every numeric marker form usable with one-based message memories', () => {
@@ -52,32 +69,35 @@ describe('message-local chat citations', () => {
     expect(screen.getByText(/Claim/).textContent).toBe('Claim 1 2 1 2 1, 2 1, 2.');
   });
 
-  it('protects code and existing links and removes only missing-memory numeric markers', () => {
-    const { container } = render(
-      <ChatMarkdown memories={memories}>
-        {
-          '`[1]`\n\n```text\n[#2] 【1】\n```\n\n[1](https://example.com) and [link [2]](https://example.org). [keep](#omi-chat-citation-1)'
-        }
-      </ChatMarkdown>,
-    );
-    expect(screen.getAllByRole('link')).toHaveLength(3);
-    expect(screen.getByRole('link', { name: 'keep' })).toHaveAttribute(
-      'href',
-      '#omi-chat-citation-1',
-    );
-    expect(screen.getByRole('link', { name: '1' })).toHaveAttribute(
-      'href',
-      'https://example.com/',
-    );
-    expect(container.querySelector('code')?.textContent).toBe('[1]');
-    const other = render(
-      <ChatMarkdown>
-        {'Only [1] 【2】 [^1] [0] [#3] [1, 2; 9] [see appendix] [RFC-123]'}
-      </ChatMarkdown>,
-    );
-    expect(other.container.querySelector('a')).toBeNull();
-    expect(other.container.textContent).toBe('Only       [see appendix] [RFC-123]');
-  });
+  it.each([false, true])(
+    'protects code and links and removes only unresolved numeric markers (streaming: %s)',
+    (isStreaming) => {
+      const { container } = render(
+        <ChatMarkdown memories={memories} isStreaming={isStreaming}>
+          {
+            '`[1]`\n\n```text\n[#2] 【1】\n```\n\n[1](https://example.com) and [link [2]](https://example.org). [keep](#omi-chat-citation-1)'
+          }
+        </ChatMarkdown>,
+      );
+      expect(screen.getAllByRole('link')).toHaveLength(3);
+      expect(screen.getByRole('link', { name: 'keep' })).toHaveAttribute(
+        'href',
+        '#omi-chat-citation-1',
+      );
+      expect(screen.getByRole('link', { name: '1' })).toHaveAttribute(
+        'href',
+        'https://example.com/',
+      );
+      expect(container.querySelector('code')?.textContent).toBe('[1]');
+      const other = render(
+        <ChatMarkdown isStreaming={isStreaming}>
+          {'Only [1] 【2】 [^1] [0] [#3] [1, 2; 9] [see appendix] [RFC-123]'}
+        </ChatMarkdown>,
+      );
+      expect(other.container.querySelector('a')).toBeNull();
+      expect(other.container.textContent).toBe('Only       [see appendix] [RFC-123]');
+    },
+  );
 
   it('binds the same marker to its own message when history changes', () => {
     const { rerender } = render(
