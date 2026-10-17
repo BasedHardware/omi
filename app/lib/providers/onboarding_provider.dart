@@ -20,6 +20,8 @@ import 'package:omi/pages/onboarding/permissions/onboarding_permission_decision.
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/bluetooth_readiness.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
+import 'package:omi/services/devices/device_pairing_roles.dart';
 import 'package:omi/services/devices/pairing_failure.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
@@ -365,9 +367,26 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         }
       }
 
+      final preferences = SharedPreferencesUtil();
+      final primary = preferences.btDevice;
+      if (DevicePairingRoles.canPairAsCompanion(primary, device)) {
+        await _pairCompanion(device, isFromOnboarding: isFromOnboarding, goNext: goNext);
+        return;
+      }
+
       final connection = await ServiceManager.instance().device.ensureConnection(device.id, force: true);
       if (connection == null || connection.status != DeviceConnectionState.connected) {
         throw StateError('Device initialization did not complete');
+      }
+      if (primary.id.isNotEmpty && primary.id != device.id) {
+        // Replacing the primary: only tear down the old link after the new one
+        // is live, and drop a companion that no longer pairs with it.
+        await ServiceManager.instance().device.forgetDevice(primary.id);
+        final companion = preferences.companionBtDevice;
+        if (companion != null && !DevicePairingRoles.canPairAsCompanion(device, companion)) {
+          preferences.forgetSavedBtDevice(companion.id);
+          await ServiceManager.instance().device.forgetDevice(companion.id);
+        }
       }
       Logger.debug('Connected to device: ${device.name}');
       deviceId = device.id;
@@ -411,7 +430,9 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       Logger.debug('Error connecting to device: $e');
       isClicked = false; // Allow clicks again after finishing the operation
       connectingToDeviceId = null; // Reset the connecting device
-      deviceProvider?.setIsConnected(false);
+      // A failed second-device pairing must not report the still-connected
+      // primary device as disconnected.
+      if (deviceProvider?.connectedDevice == null) deviceProvider?.setIsConnected(false);
       pairingFailureVersion++;
       pairingFailureReason =
           connectFailureReason(e, staleBond: ServiceManager.instance().device.staleBondRecoveryRequired);
@@ -421,6 +442,48 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     }
 
     notifyListeners();
+  }
+
+  /// Pairs [device] next to the current primary device (Omi + OmiGlass) instead
+  /// of replacing it. The primary keeps its connection; [DeviceProvider]
+  /// assigns audio/photo roles once both are connected.
+  Future<void> _pairCompanion(BtDevice device, {required bool isFromOnboarding, VoidCallback? goNext}) async {
+    final preferences = SharedPreferencesUtil();
+    final previousCompanion = preferences.companionBtDevice;
+
+    final connection = await ServiceManager.instance().device.ensureConnection(device.id, force: true);
+    if (connection == null) {
+      throw DeviceConnectionException('Could not connect to companion device ${device.id}');
+    }
+
+    if (previousCompanion != null && previousCompanion.id != device.id) {
+      preferences.forgetSavedBtDevice(previousCompanion.id);
+      await ServiceManager.instance().device.forgetDevice(previousCompanion.id);
+    }
+    Logger.debug('Connected to companion device: ${device.name}');
+    preferences.companionBtDevice = connection.device;
+    _syncSavedDevices();
+    await deviceProvider?.registerConnectedDevice(connection.device);
+
+    deviceId = device.id;
+    deviceName = device.name;
+    deviceType = device.type;
+    batteryPercentage = deviceProvider?.companionDevice?.id == device.id
+        ? deviceProvider!.companionBatteryLevel
+        : deviceProvider?.batteryLevel ?? -1;
+    isConnected = true;
+    isClicked = false;
+    connectingToDeviceId = null;
+    notifyListeners();
+    await Future.delayed(const Duration(seconds: 2));
+
+    foundDevicesMap.clear();
+    deviceList.clear();
+    if (isFromOnboarding) {
+      goNext!();
+    } else {
+      notifyInfo('DEVICE_CONNECTED');
+    }
   }
 
   void deviceAlreadyUnpaired() {
@@ -444,10 +507,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   Future<void> scanDevices({required VoidCallback onShowDialog, VoidCallback? onShowLocationDialog}) async {
     final epoch = ++_scanEpoch;
     _reportNativeScanBlocks = true;
-    if (SharedPreferencesUtil().btDevice.id.isEmpty) {
-      // it means the device has been unpaired
-      deviceAlreadyUnpaired();
-    }
+    // The picker always opens ready to pair: either nothing is paired yet, or
+    // the user wants a second device next to the connected one. Clear the
+    // "pairing successful" state left by the previous pairing either way.
+    deviceAlreadyUnpaired();
     if (_isDisposed || epoch != _scanEpoch) return;
     await _ensureOsFacts();
     if (_isDisposed || epoch != _scanEpoch) return;
@@ -506,6 +569,16 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     _armInstructionsTimer(epoch, scanStarted: true);
 
     await deviceProvider?.initiateConnection("Onboarding");
+    // With a device already paired the default loop only reconnects saved
+    // devices; keep scanning so a second device shows up in the list.
+    if (SharedPreferencesUtil().pairedDeviceIds.isNotEmpty) {
+      deviceProvider?.startDiscoveryScanning();
+    }
+  }
+
+  /// Stops the nearby scan started for the picker (page closed).
+  void stopScanningDevices() {
+    deviceProvider?.stopDiscoveryScanning();
   }
 
   /// Arms the delayed "No Omi Found" help (Scan Again, pairing guide, Contact Support). A blocked

@@ -88,7 +88,7 @@ void main() {
 
     final transport = _TrackingTransport();
     final failedConnection = _FailsAfterGattLinkConnection(device, transport);
-    final service = DeviceService(connectionBuilder: (_) => failedConnection);
+    final service = DeviceService(connectionFactory: (_) => failedConnection);
 
     await expectLater(service.ensureConnection(device.id, force: true), throwsStateError);
 
@@ -109,7 +109,7 @@ void main() {
 
     final transport = _TimingOutTransport();
     final connection = _TimingOutConnection(device, transport);
-    final service = DeviceService(connectionBuilder: (_) => connection);
+    final service = DeviceService(connectionFactory: (_) => connection);
 
     // Initial connection attempt times out
     final initialResult = await service.ensureConnection(device.id, force: true);

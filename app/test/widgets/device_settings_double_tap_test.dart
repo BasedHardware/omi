@@ -42,6 +42,9 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   String get latestStableFirmwareVersion => '';
 
   @override
+  BtDevice? get pairedCompanionDevice => null;
+
+  @override
   Future<void> getDeviceInfo() async {}
 
   @override

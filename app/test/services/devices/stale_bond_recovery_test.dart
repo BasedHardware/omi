@@ -3,7 +3,7 @@ import 'package:omi/services/devices.dart';
 
 void main() {
   test('ensureConnection is blocked while stale bond recovery is required', () async {
-    final service = DeviceService(connectionBuilder: (_) => null);
+    final service = DeviceService(connectionFactory: (_) => null);
     service.requireStaleBondRecovery();
 
     final result = await service.ensureConnection('AA:BB:CC:DD:EE:FF', force: true);
@@ -12,7 +12,7 @@ void main() {
   });
 
   test('forgetDevice clears stale bond recovery requirement', () async {
-    final service = DeviceService(connectionBuilder: (_) => null);
+    final service = DeviceService(connectionFactory: (_) => null);
     service.requireStaleBondRecovery();
 
     await service.forgetDevice('AA:BB:CC:DD:EE:FF');

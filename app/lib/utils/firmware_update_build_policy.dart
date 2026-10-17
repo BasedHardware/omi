@@ -1,4 +1,5 @@
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/services/devices/device_pairing_roles.dart';
 
 /// Firmware-update capabilities that differ between the standard app and the
 /// Ray-Ban DAT build.
@@ -21,14 +22,7 @@ class FirmwareUpdateBuildPolicy {
     return isOpenGlass ? allowsOpenGlassFirmwareUpdate : allowsOmiFirmwareUpdate;
   }
 
-  bool isOpenGlassDevice(BtDevice? device) {
-    if (device == null) return false;
-    if (device.type == DeviceType.openglass) return true;
-    if (device.type != DeviceType.omi) return false;
-
-    final name = device.name.toLowerCase();
-    return name.contains('openglass') || name.contains('omiglass') || name.contains('glass');
-  }
+  bool isOpenGlassDevice(BtDevice? device) => DevicePairingRoles.isCameraDevice(device);
 
   bool allowsFirmwareUpdateForDevice(BtDevice? device) {
     if (device?.type == DeviceType.raybanMeta) return false;

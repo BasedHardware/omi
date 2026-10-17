@@ -84,7 +84,7 @@ void main() {
 
       final transport = NativeBleTransport(_deviceId);
       final connection = FriendPendantDeviceConnection(device, transport);
-      final service = DeviceService(connectionBuilder: (_) => connection);
+      final service = DeviceService(connectionFactory: (_) => connection);
 
       // Launch connection attempt starts
       var connectionDone = false;
