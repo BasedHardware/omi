@@ -4616,7 +4616,10 @@ async def test_sync_task_budget_expiry_during_lock_acquire_still_defers():
     executor thread can still land the lock after the await was cancelled, so a
     mid-acquire expiry must keep the preserved-lock deferral — marker, delayed
     replacement and all — never the queue-owned retry that could redeliver into
-    a lock nobody expects."""
+    a lock nobody expects. The acquire lands after the expiry here, inside the
+    post-budget drain: the replacement's schedule must be anchored to that
+    confirmed acquisition — the drained completion upper-bounds when Redis
+    started the TTL — not to the earlier expiry instant."""
 
     module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
     request = _configure_task_handler(
@@ -4630,15 +4633,21 @@ async def test_sync_task_budget_expiry_during_lock_acquire_still_defers():
         },
     )
     passthrough_run_blocking = module.run_blocking
+    acquire_settled_at = {}
 
-    async def _acquire_hangs(_executor, fn, *args, **kwargs):
+    async def _acquire_lands_after_expiry(_executor, fn, *args, **kwargs):
         if fn is module.try_acquire_sync_job_run_lock:
-            await asyncio.sleep(30)
+            # Past the 0.05s budget, comfortably inside the drain's deadline:
+            # late enough that an expiry-anchored schedule would come due while
+            # this late-acquired lock is still held.
+            await asyncio.sleep(1.5)
+            acquire_settled_at['at'] = time.time()
         return await passthrough_run_blocking(_executor, fn, *args, **kwargs)
 
     try:
         module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
-        module.run_blocking = _acquire_hangs
+        module.SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS = 2.0
+        module.run_blocking = _acquire_lands_after_expiry
         module.update_sync_job = MagicMock(return_value={'job_id': 'job-1', 'status': 'processing'})
 
         response = await module.run_sync_job(request, task_retry_count=0)
@@ -4647,6 +4656,11 @@ async def test_sync_task_budget_expiry_during_lock_acquire_still_defers():
         assert json.loads(response.body) == {'status': module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS}
         module.enqueue_sync_job_budget_replacement.assert_called_once()
         payload, schedule_at = module.enqueue_sync_job_budget_replacement.call_args.args
+        # Anchored to the confirmed acquisition: the whole replacement delay
+        # must outlive the drained settle instant, not the earlier expiry. (The
+        # 1s slack absorbs only int() truncation — an expiry-anchored schedule
+        # sits ~1.45s earlier and cannot pass.)
+        assert schedule_at >= acquire_settled_at['at'] + module.SYNC_JOB_BUDGET_REPLACEMENT_DELAY_SECONDS - 1
         module.update_sync_job.assert_called_once_with(
             'job-1', {'deferred_until': schedule_at + module.QUEUED_DISPATCH_STALE_SECONDS}
         )
@@ -5132,8 +5146,94 @@ async def test_sync_task_budget_deferral_timeout_during_marker_is_not_uncertain_
     NOT an uncertain enqueue: the enqueue call never ran, so no replacement can
     exist and retaining the marker would leave the queue's retries exhausting
     against the preserved lock with no delayed continuation to resume the job.
-    The fallback must classify it as a marker timeout and clear any
-    late-applied marker, exactly like a deterministic enqueue failure."""
+    The fallback must classify it as a marker timeout and clear the
+    late-applied marker — but only after draining the timed-out write: the clear
+    must never run while the write's CAS can still be mid-flight and overwrite
+    it afterwards."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+
+    async def _pipeline_that_never_finishes(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    marker_writes = []
+    marker_events = []
+
+    async def _marker_settles_just_past_deadline(job_id, updates):
+        marker_writes.append(dict(updates))
+        if updates.get('deferred_until') is not None:
+            # Consumes the whole enqueue deadline, then settles just past it —
+            # still inside the cleanup deadline the drain waits on, so the
+            # clear below runs strictly after the late-applied write.
+            await asyncio.sleep(0.15)
+            marker_events.append('marker_settled')
+            return {'job_id': job_id, 'status': 'processing'}
+        marker_events.append('clear_started')
+        return {'job_id': job_id, 'status': 'processing'}
+
+    async def _awaiting_run_blocking(_executor, fn, *args, **kwargs):
+        # The passthrough run_blocking returns fn(*args) without awaiting it,
+        # which would make the marker coroutine "complete" instantly; the
+        # deadline must expire while the marker write is genuinely awaited.
+        result = fn(*args, **kwargs)
+        if asyncio.iscoroutine(result):
+            result = await result
+        return result
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module.SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_that_never_finishes
+        module.run_blocking = _awaiting_run_blocking
+        # The deadline expires while the marker write awaits: the update is
+        # abandoned before the enqueue is ever attempted.
+        module.update_sync_job = MagicMock(
+            side_effect=lambda job_id, updates: _marker_settles_just_past_deadline(job_id, updates)
+        )
+        module.enqueue_sync_job_budget_replacement = MagicMock(
+            side_effect=AssertionError('enqueue must never run when the marker write timed out')
+        )
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        module.enqueue_sync_job_budget_replacement.assert_not_called()
+        # Marker write attempted, then cleared strictly after it settled: no
+        # replacement was scheduled, so the marker must not outlive the
+        # queue-owned retry handback — and the clear must not race the write.
+        assert any(call.get('deferred_until') is not None for call in marker_writes)
+        assert any(call.get('deferred_until') is None for call in marker_writes)
+        assert marker_events == ['marker_settled', 'clear_started']
+        assert [call['reason'] for call in fallback_calls] == ['marker_timeout']
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_sync_task_budget_deferral_marker_drain_failure_skips_clear():
+    """A marker write still mid-CAS when the cleanup deadline expires cannot be
+    ordered behind the clear: clearing anyway would race the detached executor
+    leaf — a late-applied marker could overwrite the clear and keep stale
+    recovery suppressed with no replacement ever scheduled. The fallback must
+    keep the 409 and leave the marker alone rather than pretend a racy clear
+    settled the state."""
 
     module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
     request = _configure_task_handler(
@@ -5152,18 +5252,16 @@ async def test_sync_task_budget_deferral_timeout_during_marker_is_not_uncertain_
 
     marker_writes = []
 
-    async def _marker_that_uses_whole_deadline(job_id, updates):
+    async def _marker_never_settles(job_id, updates):
         marker_writes.append(dict(updates))
-        # Only the marker write consumes the deadline; the fallback's marker
-        # clear (deferred_until=None) must return fast so this test exercises
-        # classification, not a real cleanup-timeout wait.
         if updates.get('deferred_until') is not None:
-            await asyncio.sleep(30)
+            # Still mid-CAS when both the enqueue deadline and the cleanup
+            # deadline have passed: the drain cannot order the clear behind it.
+            await asyncio.sleep(0.3)
+            return {'job_id': job_id, 'status': 'processing'}
+        raise AssertionError('clear must not run while the marker write is unsettled')
 
     async def _awaiting_run_blocking(_executor, fn, *args, **kwargs):
-        # The passthrough run_blocking returns fn(*args) without awaiting it,
-        # which would make the marker coroutine "complete" instantly; the
-        # deadline must expire while the marker write is genuinely awaited.
         result = fn(*args, **kwargs)
         if asyncio.iscoroutine(result):
             result = await result
@@ -5172,13 +5270,10 @@ async def test_sync_task_budget_deferral_timeout_during_marker_is_not_uncertain_
     try:
         module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
         module.SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS = 0.05
+        module.SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS = 0.05
         module._run_full_pipeline_background_async = _pipeline_that_never_finishes
         module.run_blocking = _awaiting_run_blocking
-        # The deadline expires while the marker write awaits: the update is
-        # cancelled before the enqueue is ever attempted.
-        module.update_sync_job = MagicMock(
-            side_effect=lambda job_id, updates: _marker_that_uses_whole_deadline(job_id, updates)
-        )
+        module.update_sync_job = MagicMock(side_effect=lambda job_id, updates: _marker_never_settles(job_id, updates))
         module.enqueue_sync_job_budget_replacement = MagicMock(
             side_effect=AssertionError('enqueue must never run when the marker write timed out')
         )
@@ -5188,11 +5283,67 @@ async def test_sync_task_budget_deferral_timeout_during_marker_is_not_uncertain_
         assert response.status_code == 409
         assert json.loads(response.body) == {'status': 'locked'}
         module.enqueue_sync_job_budget_replacement.assert_not_called()
-        # Marker write attempted, then cleared: no replacement was scheduled,
-        # so the marker must not outlive the queue-owned retry handback.
-        assert any(call.get('deferred_until') is not None for call in marker_writes)
-        assert any(call.get('deferred_until') is None for call in marker_writes)
+        # Only the marker write ran: the clear is skipped because the write
+        # never settled inside the shared cleanup deadline.
+        assert len(marker_writes) == 1
+        assert marker_writes[0].get('deferred_until') is not None
         assert [call['reason'] for call in fallback_calls] == ['marker_timeout']
+        # Let the abandoned write settle before the loop closes so its detached
+        # task does not die pending.
+        await asyncio.sleep(0.35)
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_sync_task_budget_deferral_unsettleable_acquire_keeps_queue_retry():
+    """A run-lock acquire still mid-flight when the post-budget deadline expires
+    leaves the lock's TTL start unbounded: any replacement schedule could come
+    due while that late-acquired lock is held and exhaust the replacement's
+    short-backoff attempts on 409s. The deferral must refuse to schedule against
+    an unconfirmed acquisition — no marker write, no enqueue, queue-owned 409."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not start'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+    passthrough_run_blocking = module.run_blocking
+
+    async def _acquire_never_settles(_executor, fn, *args, **kwargs):
+        if fn is module.try_acquire_sync_job_run_lock:
+            await asyncio.sleep(0.3)
+        return await passthrough_run_blocking(_executor, fn, *args, **kwargs)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module.SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS = 0.05
+        module.run_blocking = _acquire_never_settles
+        module.update_sync_job = MagicMock(return_value={'job_id': 'job-1', 'status': 'processing'})
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        # Nothing was scheduled against the unconfirmed acquisition.
+        module.update_sync_job.assert_not_called()
+        module.enqueue_sync_job_budget_replacement.assert_not_called()
+        assert [call['reason'] for call in fallback_calls] == ['acquire_unsettled']
+        # Let the abandoned acquire settle before the loop closes so its
+        # detached task does not die pending.
+        await asyncio.sleep(0.3)
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)

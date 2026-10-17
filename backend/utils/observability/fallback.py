@@ -144,6 +144,7 @@ ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
         'marker_failed',
         'enqueue_uncertain',
         'marker_timeout',
+        'acquire_unsettled',
         'owner_write_failed',
         'pre_lock_expiry',
         'deferrals_exhausted',

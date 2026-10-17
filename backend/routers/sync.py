@@ -2226,19 +2226,15 @@ def _budget_deferral_fallback(reason: str, outcome: str) -> JSONResponse:
     return JSONResponse(status_code=409, content={'status': 'locked'})
 
 
-async def _mark_sync_job_deferred_until(job_id: str, deferred_until: float) -> None:
-    """Marker read by is_sync_job_stale: the preserved run lock expires before
-    the replacement is due, and a status poll in that unlocked gap would
-    otherwise acquire the lock and terminally fail a job whose continuation is
-    already scheduled. The write is required before the deferral ack — a lost
-    marker under a live replacement would leave that poll window unprotected —
-    so its failure falls back to the queue-owned 409 instead of acking dark."""
-    updated = await run_blocking(db_executor, update_sync_job, job_id, {'deferred_until': deferred_until})
-    if updated is None:
-        # update_sync_job's failure sentinel: a missing/nonmutable job or a
-        # CAS that lost every retry. The marker is not on the job, so the
-        # deferral must not continue as if it were.
-        raise RuntimeError('deferred marker write did not apply')
+def _consume_detached_outcome(task: asyncio.Future) -> None:
+    """Retrieve a detached task's eventual outcome once it settles, so a late
+    failure of work its handler has stopped waiting on cannot resurface as an
+    unretrieved-exception warning."""
+    if not task.done():
+        task.add_done_callback(_consume_detached_outcome)
+        return
+    if not task.cancelled():
+        task.exception()
 
 
 def _is_uncertain_enqueue_error(error: BaseException) -> bool:
@@ -2299,19 +2295,46 @@ async def _defer_sync_job_after_handler_budget_expiry(
             deferrals,
         )
         return _budget_deferral_fallback('deferrals_exhausted', 'exhausted')
-    schedule_at = int(time.time()) + SYNC_JOB_BUDGET_REPLACEMENT_DELAY_SECONDS
-    payload[SYNC_JOB_BUDGET_DEFERRALS_PAYLOAD_KEY] = deferrals + 1
-    # One absolute deadline for all post-budget work — marker, replacement
-    # enqueue, and the sequencer-owner count below: each block getting its own
-    # margin-sized timeout would sum to the whole route margin, letting the
-    # middleware 504 fire before the deferral response is returned. The same
-    # deadline object is carried into the post-attempt cleanup waits (marker
-    # clear, heartbeat drain) through attempt_state, so a slow enqueue cannot
-    # buy each cleanup wait a fresh margin-sized timeout either.
+    # One absolute deadline for all post-budget work — run-lock acquire drain,
+    # marker, replacement enqueue, and the sequencer-owner count below: each
+    # block getting its own margin-sized timeout would sum to the whole route
+    # margin, letting the middleware 504 fire before the deferral response is
+    # returned. The same deadline object is carried into the post-attempt
+    # cleanup waits (marker drain and clear, heartbeat drain) through
+    # attempt_state, so a slow enqueue cannot buy each cleanup wait a fresh
+    # margin-sized timeout either.
     post_budget_deadline = time.monotonic() + SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS
     if attempt_state is not None:
         attempt_state['post_budget_deadline'] = post_budget_deadline
+    # The expiry that reached here may have cancelled only the await of the run
+    # lock acquire: its executor leaf can still land the TTL'd SET minutes
+    # later, so a schedule computed from now can come due while that lock is
+    # held and spend the replacement's whole short-backoff attempt contract on
+    # 409s. The replacement is therefore anchored to a confirmed acquisition —
+    # the drained acquire's completion upper-bounds the instant Redis started
+    # the TTL — and an acquire that cannot be settled inside the shared
+    # deadline leaves that start unbounded: no schedule is provably past the
+    # lock, so the deferral refuses to guess and keeps the queue-owned 409.
+    acquire = attempt_state.get('run_lock_acquire') if attempt_state is not None else None
+    acquired_at: Optional[float] = None
+    if acquire is not None:
+        try:
+            async with asyncio.timeout_at(post_budget_deadline):
+                await asyncio.shield(acquire)
+            acquired_at = time.time()
+        except Exception as error:
+            logger.warning(
+                'event=sync_transcription_job outcome=handler_budget_deferral_acquire_unsettleable exception_type=%s',
+                type(error).__name__,
+            )
+            _consume_detached_outcome(acquire)
+            return _budget_deferral_fallback('acquire_unsettled', 'degraded')
+    schedule_at = int(
+        (acquired_at if acquired_at is not None else time.time()) + SYNC_JOB_BUDGET_REPLACEMENT_DELAY_SECONDS
+    )
+    payload[SYNC_JOB_BUDGET_DEFERRALS_PAYLOAD_KEY] = deferrals + 1
     enqueue_started = False
+    marker_write: Optional[asyncio.Future] = None
     try:
         async with asyncio.timeout_at(post_budget_deadline):
             # Marker first, and required: the preserved run lock expires before
@@ -2327,8 +2350,26 @@ async def _defer_sync_job_after_handler_budget_expiry(
             # (QUEUED_DISPATCH_STALE_SECONDS) is exactly the horizon to reuse —
             # the marker expires only after the job would already be
             # dispatch-lost by normal queued-staleness had it never deferred.
+            # The write runs as a retained, shielded task: the deadline expiry
+            # cancels only the await below while the CAS keeps running in
+            # db_executor, and the retained task is what the cleanup path
+            # drains before any clear — a late-applied marker can then never
+            # land after the clear that exists to remove it.
+            marker_write = asyncio.ensure_future(
+                run_blocking(
+                    db_executor,
+                    update_sync_job,
+                    job_id,
+                    {'deferred_until': schedule_at + QUEUED_DISPATCH_STALE_SECONDS},
+                )
+            )
             try:
-                await _mark_sync_job_deferred_until(job_id, schedule_at + QUEUED_DISPATCH_STALE_SECONDS)
+                # update_sync_job's failure sentinel on a non-None check: a
+                # missing/nonmutable job or a CAS that lost every retry. The
+                # marker is not on the job, so the deferral must not continue
+                # as if it were.
+                if await asyncio.shield(marker_write) is None:
+                    raise RuntimeError('deferred marker write did not apply')
             except Exception as error:
                 logger.warning(
                     'event=sync_transcription_job outcome=handler_budget_deferral_marker_failed exception_type=%s',
@@ -2375,6 +2416,25 @@ async def _defer_sync_job_after_handler_budget_expiry(
         # clear it before handing the retry back to the queue. Best-effort and
         # bounded by the remaining headroom on the one shared post-attempt
         # cleanup deadline — a lost clear only keeps today's stall.
+        # The clear is ordered behind the marker write: the expiry cancelled
+        # only the await, so the write's CAS can still be mid-flight in
+        # db_executor, and a clear that completed first would be overwritten by
+        # the late-applied marker — recreating the exact stall this clear
+        # exists to remove. A write that still has not settled by the cleanup
+        # deadline skips the clear: a racy clear buys nothing the surviving
+        # marker does not already cost.
+        if marker_write is not None and not marker_write.done():
+            try:
+                async with asyncio.timeout_at(post_budget_deadline + SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS):
+                    await asyncio.shield(marker_write)
+            except Exception:
+                # The write's own late failure also settles it — the clear
+                # below is then ordered and safe to run. Only a write still
+                # running past the cleanup deadline forces the skip.
+                if not marker_write.done():
+                    _consume_detached_outcome(marker_write)
+                    logger.warning('event=sync_transcription_job outcome=handler_budget_deferral_marker_drain_failed')
+                    return _budget_deferral_fallback(fallback_reason, 'degraded')
         try:
             async with asyncio.timeout_at(post_budget_deadline + SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS):
                 cleared = await run_blocking(db_executor, update_sync_job, job_id, {'deferred_until': None})
@@ -2629,7 +2689,16 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
     # mid-acquire can still leave the Redis lock held, so the expiry handler
     # must already treat this attempt as lock-owning (conservative deferral).
     attempt_state['run_lock_reached'] = True
-    lock_token = await run_blocking(db_executor, acquire_task_lock, job_id)
+    # The acquire itself runs as a retained, shielded task: a budget expiry
+    # cancels only the await — the executor leaf can still land the TTL'd SET
+    # afterwards — so the pending task is left on attempt_state for the
+    # deferral to drain and anchor the replacement's schedule to the confirmed
+    # acquisition. A settle here (token or empty) leaves nothing to drain, and
+    # the entry is removed before the attempt continues.
+    acquire = asyncio.ensure_future(run_blocking(db_executor, acquire_task_lock, job_id))
+    attempt_state['run_lock_acquire'] = acquire
+    lock_token = await asyncio.shield(acquire)
+    attempt_state.pop('run_lock_acquire', None)
     attempt_state['lock_token'] = lock_token
     if not lock_token:
         logger.warning(f'sync job {job_id}: run-lock held by another attempt, deferring')

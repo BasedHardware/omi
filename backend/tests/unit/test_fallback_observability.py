@@ -171,6 +171,7 @@ def test_sync_budget_deferral_reasons_keep_their_exact_labels():
     # create becomes indistinguishable from a marker timeout in metrics.
     assert fallback_mod.bucket_reason('enqueue_uncertain') == 'enqueue_uncertain'
     assert fallback_mod.bucket_reason('marker_timeout') == 'marker_timeout'
+    assert fallback_mod.bucket_reason('acquire_unsettled') == 'acquire_unsettled'
 
 
 def test_web_search_security_reasons_keep_their_exact_labels():
