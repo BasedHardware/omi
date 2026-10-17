@@ -155,6 +155,8 @@ class ListenSessionRuntime:
     receiver: Any = None
 
     def __init__(self, request: ListenRequest):
+        self.batch_record_capture: dict[str, Any] | None = None
+        self.batch_preview_admitted = False
         self.demand_telemetry = None
         self._demand_cohort = None
         self.recovery_enabled = recovery_enabled()

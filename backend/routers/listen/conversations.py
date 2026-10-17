@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Optional
 
+from config.batch_live_preview import capture_snapshot
 from config.sync_lineage import sync_lineage_resolve_enabled
 from database.firestore_read_metrics import FirestoreReadSite
 from models.conversation import Conversation
@@ -143,6 +144,7 @@ class LiveConversationController:
         ):
             return False
         self.host.recording_session_id = pointer['recording_session_id']
+        self.host.batch_record_capture = capture_snapshot(existing)
         self.host.state.current_conversation_id = binding['conversation_id']
         self.host.recording_session_ids_by_conversation[binding['conversation_id']] = self.host.recording_session_id
         self._adopt_capture_timeline(binding['conversation_id'], (existing or {}).get('started_at'))
@@ -491,6 +493,7 @@ class LiveConversationController:
                         await self.process_conversation(conversation_id)
                     await self.create_new_in_progress_conversation(rollover=True)
                     return
+                self.host.batch_record_capture = capture_snapshot(existing)
                 self.host.state.current_conversation_id = conversation_id
                 self._adopt_capture_timeline(conversation_id, existing.get('started_at'))
                 # Persist the custom-STT marker on resume so a conversation that
@@ -591,12 +594,13 @@ class LiveConversationController:
         payload = omit_null_processing_state(conversation.model_dump())
         if carry:
             payload['manual_speaker_assignments'] = carry
-        await self.host.persistence.call(
+        created = await self.host.persistence.call(
             lifecycle_service.create_in_progress_conversation,
             request.uid,
             payload,
             idempotent=bool(self.host.client_conversation_id and conversation_id == self.host.client_conversation_id),
         )
+        self.host.batch_record_capture = capture_snapshot(payload) if created else None
         if rollover:
             proposed = {'conversation_id': conversation_id, 'recording_session_id': self.host.recording_session_id}
             adopted = await self._continuation(proposed)
@@ -708,6 +712,7 @@ class LiveConversationController:
                 await self.create_new_in_progress_conversation(rollover=True)
                 return None
             existing = current
+        self.host.batch_record_capture = capture_snapshot(existing)
         self.host.state.current_conversation_id = existing['id']
         self.host.recording_session_ids_by_conversation[existing['id']] = self.host.recording_session_id
         self._adopt_capture_timeline(existing['id'], existing.get('started_at'))

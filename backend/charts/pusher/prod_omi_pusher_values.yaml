@@ -114,6 +114,10 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: FIRST_SUMMARY_DEADLINE_PERCENT
+    value: "0"
+  - name: BATCH_LIVE_STT_RETIRE_PERCENT
+    value: "0"
   - name: BATCH_PIPELINE_LIVE_ADMISSION_ENABLED
     value: "false"
   - name: DEMAND_PROCESSING_ENABLED

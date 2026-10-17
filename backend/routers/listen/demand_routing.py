@@ -195,7 +195,7 @@ class LiveDemandRouting:
 
 def attach_live_demand(receiver) -> LiveDemandRouting | None:
     host = receiver.host
-    if not resolve_live_demand().enabled:
+    if getattr(host, 'batch_preview_isolated', False) or not resolve_live_demand().enabled:
         return None
     capture_demand_admission(host)
     return LiveDemandRouting(receiver, eligible=getattr(host, '_demand_cohort', None) == 'admitted')

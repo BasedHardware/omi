@@ -35,6 +35,8 @@ environments:
           ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
+          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+          BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_WORKER_ENABLED:
@@ -359,6 +361,8 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
+          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+          BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
@@ -739,6 +743,8 @@ environments:
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
+            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+            BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
@@ -1016,6 +1022,8 @@ environments:
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
+            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+            BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
@@ -1308,6 +1316,8 @@ environments:
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
+            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+            BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
@@ -1581,6 +1591,8 @@ environments:
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
+            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+            BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {category: rollout, value: 'false'}
             BATCH_PIPELINE_WORKER_ENABLED:
@@ -2285,6 +2297,8 @@ environments:
           ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
+          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+          BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_WORKER_ENABLED:
@@ -2682,6 +2696,8 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
         env:
+          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+          BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
@@ -3020,6 +3036,8 @@ environments:
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
+            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+            BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
@@ -3384,6 +3402,8 @@ environments:
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '7200', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
+            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+            BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
@@ -3751,6 +3771,8 @@ environments:
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '7200', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
+            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+            BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
@@ -4099,6 +4121,8 @@ environments:
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
+            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+            BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {category: rollout, value: 'true'}
             BATCH_PIPELINE_WORKER_ENABLED:
