@@ -222,6 +222,7 @@ def mark(
         if old and old.get('summary_blocked_reason') == EMPTY_BLOCKED_REASON:
             return old, ({**old, '_wake': False}, True)
         row = dict(old or {})
+        row.pop('_wake', None)  # Dispatch intent belongs to this CAS result, not its persisted replay.
         row.update(
             document_id=key(uid, conversation_id + ('\0effects' if effects_only else '')),
             uid=uid,
@@ -266,8 +267,7 @@ def mark(
         if old is not None and (old.get('dormant') or (row.get('task_due_at') or 0) > row['due_at']):
             row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
             wake = True
-        row['_wake'] = wake
-        return row, (row, old is not None)
+        return row, ({**row, '_wake': wake}, old is not None)
 
     document_id = key(uid, conversation_id + ('\0effects' if effects_only else ''))
     row, coalesced = (mutate or _mutate)(document_id, update)

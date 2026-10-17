@@ -155,6 +155,7 @@ def test_projection_enrichment_and_receipt_share_transaction_on_unbound_host(bin
         ('receipts', 'segment'),
     ]
     outbox = transaction.sets[0][1]
+    assert '_wake' not in outbox
     assert (outbox['dispatch'] is not None) == bound
     assert enqueue.call_count == int(bound)
     session.guard.assert_called_once_with(transaction, ['c'])

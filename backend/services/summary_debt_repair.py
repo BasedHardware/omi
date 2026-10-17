@@ -76,10 +76,10 @@ def redrive(client: Any, uid: str, conversation_id: str, *, now: float) -> bool:
             # A repair wake must not invalidate an earlier delivery still
             # waiting for capacity. Leases and the conversation owner fence
             # duplicates; later revisions rotate the token as before.
-            new.update(wake_generation=new.get('wake_generation', 0) + 1, task_due_at=now, _wake=True)
+            new.update(wake_generation=new.get('wake_generation', 0) + 1, task_due_at=now)
             transaction.set(outbox, new)
             admitted = True
-            return new, False
+            return {**new, '_wake': True}, False
 
         try:
             result = commit(client.transaction())
