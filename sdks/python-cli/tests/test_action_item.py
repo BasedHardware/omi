@@ -109,3 +109,21 @@ def test_action_item_get_stops_on_empty_page(authed_profile, respx_mock, cli_run
     result = cli_runner.invoke(app, ["--json", "action-item", "get", "missing"])
     assert result.exit_code == 5
     assert route.call_count == 1
+
+
+def test_action_item_list_rejects_inverted_date_range(authed_profile, respx_mock, cli_runner) -> None:
+    result = cli_runner.invoke(
+        app,
+        [
+            "--json",
+            "action-item",
+            "list",
+            "--start-date",
+            "2026-10-01T00:00:00Z",
+            "--end-date",
+            "2026-09-01T00:00:00Z",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "invalid date filter range" in result.stderr.lower()
+    assert not respx_mock.calls
