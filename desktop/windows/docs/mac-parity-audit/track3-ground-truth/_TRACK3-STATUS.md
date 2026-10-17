@@ -32,7 +32,7 @@ Mac reference (frozen ground truth): `.worktrees/mac-ref` @ tag `v0.12.72+12072-
 - [ ] **P6 Auto daily goal gen + advice** — goal-completion uses BACKEND contract (C10, Mac wrong).
       Goals nav = GATE G-C.
 - [ ] **P7 Unified connectors** — publish 3 entry points (Memories page / onboarding / Apps hub).
-- [ ] **P8 Home widgets** WhatMattersNowSection + FocusedGoalsSection; delete legacy QuickTask/QuickGoals.
+- [x] **P8 Home widgets** WhatMattersNowSection + FocusedGoalsSection — built as the Home intelligence loop (knows list + canonical goals chips + durable feedback outbox); see gt-home-intelligence-build.md. Legacy HomeGoalsChips retained as the out-of-rollout fallback rather than deleted.
 - [ ] **P9 Page surfaces** to Mac spec: Memories (filters, cards, detail sheet, undo toast, BrainGraph
       mount via props), Tasks (grouped-by-due; NOT rich multi-filter = G-D), Goals (G-C; emoji/gradient/confetti).
 
