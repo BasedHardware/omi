@@ -188,6 +188,33 @@ it("caps the rollup status lookup at one second and keeps filling the cache", as
   expect(second.through).toBe("2026-10-11");
   expect(second.reason).toBeNull();
 });
+it("coalesces concurrent status cache misses into one shared lookup", async () => {
+  vi.stubEnv("OMI_TV_ROLLUP_ENABLED", "1");
+  vi.stubEnv("CRON_SECRET", key);
+  vi.resetModules();
+  const { rollupStatus: fresh } = await import("../wall-rollup");
+  let queries = 0;
+  let release: ((rows: unknown) => void) | undefined;
+  const slow = {
+    query: () =>
+      new Promise<[Record<string, unknown>[]]>((resolve) => {
+        queries++;
+        release = (rows) => resolve([rows as Record<string, unknown>[]]);
+      }),
+  } as unknown as import("../wall-rollup").RollupDb;
+  // Five concurrent misses during a >1s slowdown must share one BigQuery query.
+  const calls = Array.from({ length: 5 }, () => fresh(slow));
+  await new Promise((r) => setTimeout(r, 1_100));
+  expect(queries).toBe(1);
+  release?.([{ through: "2026-10-11" }]);
+  for (const r of await Promise.all(calls)) expect(r.reason).toBe("slow");
+  await new Promise((r) => setTimeout(r, 20));
+  // Once the shared flight settles, the cache serves everyone without querying.
+  const settled = await fresh(slow);
+  expect(settled.through).toBe("2026-10-11");
+  expect(settled.reason).toBeNull();
+  expect(queries).toBe(1);
+});
 it("guards cohort lookback, exact signup-relative bins, entry platform, and frozen retention platform", () => {
   const cohort = rollupSql({ kind: "cohort", end, maturity: 37, periods: 6 });
   expect(+cohort.start).toBe(+end - (37 + 42 + 180) * 86400000);

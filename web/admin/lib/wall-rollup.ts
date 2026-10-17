@@ -76,6 +76,9 @@ export async function readRollup(
 }
 
 let statusCache: { at: number; value: RollupStatus } | undefined;
+// One shared in-flight lookup: concurrent cache misses coalesce here instead of
+// each starting a BigQuery query that may run under its 30s job timeout.
+let statusFlight: Promise<RollupStatus> | undefined;
 export async function rollupStatus(
   db: RollupDb = client()
 ): Promise<RollupStatus> {
@@ -86,8 +89,9 @@ export async function rollupStatus(
   // Supplemental display text only: never hold a headline response on a slow or
   // degraded BigQuery. The lookup is capped at one second and keeps filling the
   // cache in the background, so a timed-out read retries on a later request and
-  // serves the stale cached value in the meantime.
-  const lookup = (async (): Promise<RollupStatus> => {
+  // serves the stale cached value in the meantime. Concurrent misses share the
+  // in-flight lookup; it clears once the repopulated cache takes over again.
+  const lookup = (statusFlight ||= (async (): Promise<RollupStatus> => {
     let value: RollupStatus;
     try {
       const [rows] = await db.query({
@@ -107,8 +111,9 @@ export async function rollupStatus(
       value = { through: null, reason: "unavailable" };
     }
     statusCache = { at: Date.now(), value };
+    statusFlight = undefined;
     return value;
-  })();
+  })());
   let timer: ReturnType<typeof setTimeout>;
   const capped = new Promise<RollupStatus>((resolve) => {
     timer = setTimeout(
