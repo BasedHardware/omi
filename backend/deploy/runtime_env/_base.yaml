@@ -1326,6 +1326,9 @@ environment_shared:
           MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
+          CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED:
+            value: 'false'
+            category: rollout
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'false'
             category: rollout

@@ -1197,9 +1197,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// Re-reads the open conversation. With [trackLoad] the outcome is kept in [detailLoad] so a tab
   /// with nothing to show can say it is loading or offer Try Again; untracked refreshes stay
   /// silent and never overwrite a tracked failure with "loading".
-  Future<void> refreshConversation({bool trackLoad = false}) async {
+  Future<bool> refreshConversation({bool trackLoad = false}) async {
     final openedId = conversationOrNull?.id;
-    if (openedId == null) return;
+    if (openedId == null) return false;
     final generation = ++_refreshGeneration;
     if (trackLoad) {
       detailLoad = ConversationDetailLoad.loading;
@@ -1213,10 +1213,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     }
     // A newer read, another conversation or a reprocess result superseded this one: it owns the
     // page now, including [detailLoad].
-    if (_isDisposed || generation != _refreshGeneration || conversationOrNull?.id != openedId) return;
+    if (_isDisposed || generation != _refreshGeneration || conversationOrNull?.id != openedId) return false;
     if (updatedConversation != null) {
       if (updatedConversation.id != openedId) {
-        if (!_syncConversationId.hasMatch(openedId)) return;
+        if (!_syncConversationId.hasMatch(openedId)) return false;
         _adoptBridgedConversation(openedId, updatedConversation);
       } else {
         conversationProvider?.updateConversation(updatedConversation);
@@ -1229,6 +1229,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       detailLoad = ConversationDetailLoad.idle;
     }
     notifyListeners();
+    // True only when a fresh read actually landed, so callers (the busy failure card's
+    // "Check Again") can keep their retry action instead of dismissing on a failed read.
+    return updatedConversation != null;
   }
 
   /// The open sync donor was bridged into [survivor]: it becomes the open conversation, and every

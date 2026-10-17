@@ -934,6 +934,7 @@ environments:
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
@@ -3197,6 +3198,7 @@ environments:
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}

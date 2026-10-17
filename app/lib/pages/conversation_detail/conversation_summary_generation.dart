@@ -49,12 +49,14 @@ class SummaryFailure {
 }
 
 /// Whether [conversation] carries the summary a reprocess asked for: the template's non-empty
-/// result when [appId] is set, otherwise a non-empty Omi overview (or any non-empty result).
+/// result when [appId] is set, otherwise a non-empty Omi summary — the compatibility overview or
+/// the rendered sections, which is exactly what [ConversationSummarySelection.firstParty] accepts —
+/// or any non-empty result.
 bool conversationHasRequestedSummary(ServerConversation conversation, String? appId) {
   if (appId != null) {
     return conversation.appResults.any((result) => result.appId == appId && result.content.trim().isNotEmpty);
   }
-  return conversation.structured.overview.trim().isNotEmpty ||
+  return ConversationSummarySelection.firstParty(conversation).kind != ConversationSummaryKind.empty ||
       conversation.appResults.any((result) => result.content.trim().isNotEmpty);
 }
 

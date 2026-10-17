@@ -306,8 +306,11 @@ class SummaryFailureCard extends StatelessWidget {
           l10n.summaryBusyBody,
           l10n.summaryCheckAgain,
           () async {
-            await provider.refreshConversation();
-            provider.dismissSummaryFailure();
+            // Keep the busy card (its retry action) unless a fresh read actually landed;
+            // a failed or superseded refresh must not silently dismiss it.
+            if (await provider.refreshConversation()) {
+              provider.dismissSummaryFailure();
+            }
           },
           null,
           null,

@@ -18,6 +18,10 @@ abstract final class SummaryGenerationV2Gate {
 
   static final ValueNotifier<bool> _enabled = ValueNotifier<bool>(false);
 
+  /// Guards [refresh]: only the newest call may publish, so an older overlapping read cannot
+  /// overwrite a newer decision.
+  static int _refreshGeneration = 0;
+
   /// Tests force the gate with this (reset it in a tearDown); null reads the flag.
   @visibleForTesting
   static bool? debugOverride;
@@ -28,8 +32,12 @@ abstract final class SummaryGenerationV2Gate {
   /// Notifies when [refresh] changes the flag's value.
   static ValueListenable<bool> get listenable => _enabled;
 
-  /// Re-reads the flag. Never throws; failure leaves the redesign off.
+  /// Re-reads the flag. Never throws; failure leaves the redesign off. The cached value is
+  /// cleared while the read is pending (fail-closed) and a stale overlapping read can never
+  /// publish over a newer one.
   static Future<bool> refresh({Future<bool> Function(String key)? readFlag}) async {
+    final generation = ++_refreshGeneration;
+    _enabled.value = false;
     bool enabled;
     try {
       enabled =
@@ -37,6 +45,7 @@ abstract final class SummaryGenerationV2Gate {
     } catch (_) {
       enabled = false;
     }
+    if (generation != _refreshGeneration) return isEnabled;
     _enabled.value = enabled;
     return isEnabled;
   }

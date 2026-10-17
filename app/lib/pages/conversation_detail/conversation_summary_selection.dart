@@ -63,13 +63,19 @@ class ConversationSummarySelection {
   }
 
   /// Every summary [conversation] holds: Omi's own first (when it has one), then each non-empty
-  /// app result in server order.
+  /// app result in server order — except results that share a source identity: duplicate app ids
+  /// are valid read-only data, but sibling chips with the same `sourceKey` would both look
+  /// selected and the second could never be resolved by key, so only the first is offered (the
+  /// freshest result once the reprocess contract lands it first). Legacy results without an app
+  /// id keep their per-result keys and stay individually viewable.
   static List<ConversationSummarySelection> available(ServerConversation conversation) {
     final omi = firstParty(conversation);
+    final seenKeys = <String>{};
     return [
       if (omi.kind != ConversationSummaryKind.empty) omi,
       for (var index = 0; index < conversation.appResults.length; index++)
-        if (_appResult(conversation, index) case final selection?) selection,
+        if (_appResult(conversation, index) case final selection?)
+          if (seenKeys.add(selection.sourceKey)) selection,
     ];
   }
 
