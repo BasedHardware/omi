@@ -87,7 +87,7 @@ async def test_imports_file_write_filesystem_error_sanitized(monkeypatch):
 
 
 def test_phone_calls_verification_twilio_error_sanitized(monkeypatch):
-    """Verify Twilio API error strings and credentials in verify_phone_number are masked."""
+    """Verify Twilio API error strings and credentials in verify_phone_number are masked (valid E.164 format)."""
     monkeypatch.setattr(phone_routes, "check_call_access", MagicMock())
     monkeypatch.setattr(phone_routes.phone_calls_db, "get_phone_number_by_number", MagicMock(return_value=None))
     monkeypatch.setattr(phone_routes.phone_calls_db, "set_pending_verification", MagicMock())
@@ -100,6 +100,7 @@ def test_phone_calls_verification_twilio_error_sanitized(monkeypatch):
             )
         ),
     )
+    # Valid E.164 phone number satisfying ^\+[1-9]\d{1,14}$ regex pattern to bypass 400 and test 500 error sanitization
     req = VerifyPhoneNumberRequest(phone_number="+15551234567")
 
     with pytest.raises(HTTPException) as exc_info:
