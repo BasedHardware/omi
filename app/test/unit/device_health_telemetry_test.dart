@@ -474,6 +474,135 @@ void main() {
     expect(record['open_since'], DateTime(2026, 10, 9, 23).millisecondsSinceEpoch);
   });
 
+  test('stale native outage on a connected device is not a full lost day', () async {
+    final day = DateTime(2026, 10, 15);
+    final start = day.millisecondsSinceEpoch;
+    final poisoned = DeviceHealthTelemetry.rollup({
+      'observed_at': start + 86400000,
+      'outage_open_since': start - 86400000,
+      'connected_at': start + 90000,
+    }, day);
+    expect(poisoned['connected_time_fraction'], greaterThan(0.99));
+    expect(poisoned['lost_audio_seconds'], 90);
+    expect(poisoned['unresolved_outage_seconds'], 90);
+
+    const id = 'stale-connected';
+    await DeviceHealthTelemetry.recordOutage(id, at: DateTime.fromMillisecondsSinceEpoch(start - 86400000));
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: (_) async => jsonEncode({
+              'observed_at': start + 86400000,
+              'audio_outage_started_at': start - 86400000,
+              'connected_at': start + 90000,
+              'audio_packets_received': 5000,
+              'audio_packet_days': [
+                {'ts': start, 'received': 5000, 'expected': 5000, 'last_at': start + 3600000}
+              ],
+            }),
+        emit: (_, props) => events.add(props));
+    expect(events.map((e) => e['day']), ['2026-10-15']);
+    expect(events.single['connected_time_fraction'], greaterThan(0.99));
+    expect(events.single['lost_audio_seconds'], 90);
+    expect(events.single['unresolved_outage_open'], isFalse);
+    expect(events.single['lost_audio_seconds'], isNot(86400));
+  });
+
+  test('stalled Android retry does not close an open audio outage', () async {
+    final day = DateTime(2026, 10, 15);
+    final start = day.millisecondsSinceEpoch;
+    final disconnectAt = start + 10 * 3600000;
+    final retryAt = start + 12 * 3600000;
+    const id = 'android-stalled-retry';
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: (_) async => jsonEncode({
+              'observed_at': retryAt,
+              'audio_outage_started_at': disconnectAt,
+              // Attempt start, before GATT. The previous session's counter is
+              // still set; packet evidence is older than this attempt.
+              'connected_at': retryAt,
+              'audio_packets_received': 5000,
+              'audio_packet_days': [
+                {'ts': start, 'received': 5000, 'expected': 5000, 'last_at': disconnectAt - 1000}
+              ],
+              'disconnect_history_v2': [
+                {
+                  'timestamp': disconnectAt,
+                  'eventType': 'disconnect',
+                  'connectionDurationMs': 10 * 3600000,
+                  'audioPacketsReceived': 5000,
+                }
+              ],
+            }),
+        emit: (_, props) => events.add(props));
+    expect(events.map((e) => e['day']), ['2026-10-15']);
+    expect(events.single['unresolved_outage_open'], isTrue);
+    expect(events.single['lost_audio_seconds'], 2 * 3600);
+    final record =
+        jsonDecode((await SharedPreferences.getInstance()).getString(DeviceHealthTelemetry.outageKey(id))!) as Map;
+    expect(record['open_since'], disconnectAt);
+  });
+
+  test('recovery stamp closes an outage while the start marker is still present', () async {
+    const id = 'recovery-stamp';
+    final start = DateTime(2026, 10, 15, 10);
+    final resolved = DateTime(2026, 10, 15, 12);
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: (_) async => jsonEncode({
+              'observed_at': DateTime(2026, 10, 16).millisecondsSinceEpoch,
+              'audio_outage_started_at': start.millisecondsSinceEpoch,
+              'audio_outage_resolved_start': start.millisecondsSinceEpoch,
+              'audio_outage_resolved_at': resolved.millisecondsSinceEpoch,
+            }),
+        emit: (_, props) => events.add(props));
+    expect(events.single['unresolved_outage_open'], isFalse);
+    expect(events.single['lost_audio_seconds'], 2 * 3600);
+    final record =
+        jsonDecode((await SharedPreferences.getInstance()).getString(DeviceHealthTelemetry.outageKey(id))!) as Map;
+    expect(record['open_since'], isNull);
+    expect(record['last_resolved_start'], start.millisecondsSinceEpoch);
+  });
+
+  test('replayed days before the retention horizon exclude the unknown prefix', () {
+    final day = DateTime(2026, 10, 9);
+    final start = day.millisecondsSinceEpoch;
+    final observedAt = DateTime(2026, 10, 16, 23).millisecondsSinceEpoch;
+    final horizon = observedAt - 7 * 24 * 3600 * 1000;
+    final survived = {
+      'timestamp': horizon + 30 * 60 * 1000,
+      'eventType': 'disconnect',
+      'connectionDurationMs': 30 * 60 * 1000,
+    };
+    final withPackets = DeviceHealthTelemetry.rollup({
+      'observed_at': observedAt,
+      'outage_open_since': start,
+      'audio_packet_days': [
+        {'ts': start, 'received': 100, 'expected': 100, 'last_at': start + 22 * 3600000}
+      ],
+      'disconnect_history_v2': [survived],
+    }, day);
+    expect(withPackets['connection_history_incomplete'], isTrue);
+    expect(withPackets['lost_audio_seconds'], 30 * 60);
+    expect(withPackets['unresolved_outage_open'], isTrue);
+    // No packet row: the pruned prefix is still unknown budget, and the
+    // outage stays open. The surviving 30 minutes after the horizon remain.
+    final withoutPackets = DeviceHealthTelemetry.rollup({
+      'observed_at': observedAt,
+      'outage_open_since': start,
+      'disconnect_history_v2': [survived],
+    }, day);
+    expect(withoutPackets['connection_history_incomplete'], isTrue);
+    expect(withoutPackets['lost_audio_seconds'], 30 * 60);
+    expect(withoutPackets['unresolved_outage_open'], isTrue);
+  });
+
   test('sign-out sends native retirement before subsequent recording', () async {
     final policies = <Map>[];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
