@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from uuid import uuid4
@@ -93,6 +94,24 @@ def event(reservation, cost=1000):
             configured_model='gpt-6-luna',
         )
     )
+
+
+def test_reserve_and_settle_emit_aggregate_info_logs(store, caplog):
+    authority = money.BudgetAuthority(firestore_client=store, redis_client=Redis(), clock=lambda: NOW)
+    item = claim(store)
+    with caplog.at_level(logging.INFO, logger=money.__name__):
+        reservation = reserve(authority, item, amount=2000, call='call-secret')
+        assert authority.settle(reservation=reservation, event=event(reservation, 1500))
+
+    lines = [record.getMessage() for record in caplog.records if record.levelno == logging.INFO]
+    assert lines == [
+        'proactivity_v2_budget_reserved producer=commitment_followup day=2026-10-03 '
+        'reserved_micro_usd=2000 policy_version=1',
+        'proactivity_v2_budget_settled producer=commitment_followup priced_micro_usd=1500 '
+        'result=True policy_version=1',
+    ]
+    for line in lines:
+        assert 'uid' not in line and item['item_id'] not in line and 'call-secret' not in line
 
 
 @pytest.mark.parametrize(
