@@ -75,10 +75,35 @@ def main():
         assert replacement['token'] != token
         assert not store.checkpoint(uid, token, owner, {'state': 'processing'})
         assert store.claim(uid, replacement['token'], '2026-10') is None
+        # An upgrade while an earlier partial choice runs queues consent instead
+        # of losing the new allowance or replacing the live worker's lease.
+        fresh = replacement['token']
+        owner2 = store.claim(uid, fresh, '2026-11')
+        queued = store.start(
+            uid, period='2026-11', remaining=200, cutoff=300, request_key='upgrade-while-running', automatic=True
+        )
+        assert queued['token'] == fresh and queued['pending_upgrade']['remaining'] == 200
+        assert store.finish(uid, fresh, owner2, '2026-11')
+        extended = store.read(uid)
+        assert extended['token'] != fresh and extended['remaining'] == 200 and extended['cutoff'] == 300
+        assert not store.checkpoint(uid, fresh, owner2, {'remaining': 0})
+        # Duplicate webhook cannot requeue consumed intent.
+        store.start(
+            uid, period='2026-11', remaining=300, cutoff=400, request_key='upgrade-while-running', automatic=True
+        )
+        assert not store.read(uid)['pending_upgrade']
+        owner3 = store.claim(uid, extended['token'], '2026-11')
+        store.start(
+            uid, period='2026-11', remaining=400, cutoff=500, request_key='second-upgrade-while-running', automatic=True
+        )
+        assert not store.finish(uid, extended['token'], owner3, '2026-12')
+        assert store.read(uid)['state'] == 'waiting_choice' and not store.read(uid)['pending_upgrade']
         persist(client.transaction(), {'processing_deferred': False})
         assert store.read(uid)['count'] == 0 and store.read(uid)['units'] == 0
         assert not store.items(uid).document('text').get().exists
-    print('PASS: atomic totals/update/clear, concurrent consent, completed replay, month and stale-token fences')
+    print(
+        'PASS: atomic totals/update/clear, concurrent consent, completed replay, month/stale-token fences, queued upgrade intent'
+    )
 
 
 if __name__ == '__main__':

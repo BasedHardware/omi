@@ -196,7 +196,10 @@ waiting; smaller older items may fit. Existing audio reconciliation receipts and
 claims remain authoritative. A previous month's choice never funds a new month.
 Checkout and immediate plan changes start a run only when its whole estimate fits;
 monthly renewal does not mint backlog intent. Declined/empty upgrade estimates
-also get an idempotency receipt, so a later retry cannot auto-spend after reset. No retention/deletion policy changes.
+also get an idempotency receipt, so a later retry cannot auto-spend after reset.
+An upgrade arriving during an active choice queues a same-month continuation; it
+never replaces the live worker lease or extends consent across a reset.
+No retention/deletion policy changes.
 
 Subscription adds one deferred-summary document read to the existing one held
 summary plus <=20 held-row reads; enabled monthly counter reporting now shares a

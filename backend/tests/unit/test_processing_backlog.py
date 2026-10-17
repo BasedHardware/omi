@@ -156,6 +156,13 @@ async def test_explicit_worker_selects_newest_first_and_leaves_unfitting_rows(mo
         return True
 
     monkeypatch.setattr(worker.store, 'checkpoint', save)
+
+    def finish(uid, token, lease, period):
+        assert period == '2026-10'
+        save(uid, token, lease, {'state': 'waiting_choice'})
+        return False
+
+    monkeypatch.setattr(worker.store, 'finish', finish)
     rows = [
         (
             'text',
@@ -177,6 +184,42 @@ async def test_explicit_worker_selects_newest_first_and_leaves_unfitting_rows(mo
     assert processed == ['new', 'old']
     assert job['remaining'] == 1 and job['state'] == 'waiting_choice'
     assert job['reserved'] == {}
+
+
+async def test_finishing_choice_schedules_an_already_accepted_upgrade(monkeypatch):
+    import asyncio
+
+    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'period_id', lambda: '2026-10')
+    monkeypatch.setattr(worker.cap_hold, 'recovery_cooldown', lambda uid: True)
+    monkeypatch.setattr(
+        worker.store,
+        'read',
+        lambda uid: {
+            'state': 'processing',
+            'period': '2026-10',
+            'token': 'choice',
+            'reserved': {},
+        },
+    )
+    monkeypatch.setattr(worker.store, 'claim', lambda *args: 'lease')
+    monkeypatch.setattr(worker.store, 'checkpoint', lambda *args: False)
+    finished = Mock(return_value=True)
+    monkeypatch.setattr(worker.store, 'finish', finished)
+    monkeypatch.setattr(worker, '_page', lambda *args: [])
+    scheduled = []
+
+    def schedule(coroutine, *, name):
+        scheduled.append(name)
+        if name == 'processing_backlog_continuation':
+            coroutine.close()
+            return None
+        return asyncio.create_task(coroutine)
+
+    monkeypatch.setattr(worker, 'start_background_task', schedule)
+    await worker.run('synthetic')
+    finished.assert_called_once_with('synthetic', 'choice', 'lease', '2026-10')
+    assert scheduled == ['processing_backlog_lease', 'processing_backlog_continuation']
 
 
 async def test_previous_month_intent_cannot_spend_the_new_month(monkeypatch):

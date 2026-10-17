@@ -153,7 +153,9 @@ async def run(uid: str, *, continuation: bool = False):
         if len(candidates) == PAGE:
             continuation = True
         else:
-            await save({'state': 'waiting_choice'})
+            continuation = await run_blocking(
+                db_executor, store.finish, uid, token, lease, funded_processing.period_id()
+            )
     except Exception as exc:
         logger.warning('event=processing_backlog outcome=deferred exception_type=%s', type(exc).__name__)
     finally:

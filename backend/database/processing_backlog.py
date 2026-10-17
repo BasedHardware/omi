@@ -96,6 +96,12 @@ def start(
         if not begin:
             return current
         if current.get('state') == 'processing' and current.get('period') == period:
+            if automatic:
+                # Upgrade intent may extend an earlier partial choice, without
+                # replacing the lease/cursors of work already in progress.
+                pending = {'period': period, 'remaining': remaining, 'cutoff': cutoff}
+                tx.update(ref, {'pending_upgrade': pending})
+                return {**current, 'pending_upgrade': pending}
             return current
         updates = {
             'state': 'processing',
@@ -105,6 +111,7 @@ def start(
             'remaining': remaining,
             'lease_until': 0,
             'automatic': automatic,
+            'pending_upgrade': {},
             'reserved': {},
             'cursor_audio': None,
             'cursor_text': None,
@@ -146,6 +153,45 @@ def checkpoint(uid: str, token: str, lease: str, updates: dict) -> bool:
             return False
         tx.update(ref, updates)
         return True
+
+    with external_write_fence(uid, firestore_client=client):
+        return commit(client.transaction())
+
+
+def finish(uid: str, token: str, lease: str, period: str) -> bool:
+    """Finish one choice and consume an already-authorized same-month upgrade.
+
+    Returns true only when a new fenced run needs scheduling. This transaction
+    serializes with upgrade arrival; the old worker can never overwrite its job.
+    """
+    client = get_firestore_client()
+    ref = summary_ref(uid)
+
+    @firestore.transactional
+    def commit(tx):
+        row = ref.get(transaction=tx).to_dict() or {}
+        if row.get('token') != token or row.get('lease') != lease or row.get('lease_until', 0) <= time.time():
+            return False
+        pending = row.get('pending_upgrade') or {}
+        if pending.get('period') == period == row.get('period'):
+            tx.update(
+                ref,
+                {
+                    'state': 'processing',
+                    'token': uuid4().hex,
+                    'cutoff': pending['cutoff'],
+                    'remaining': pending['remaining'],
+                    'automatic': True,
+                    'pending_upgrade': {},
+                    'reserved': {},
+                    'cursor_audio': None,
+                    'cursor_text': None,
+                    'lease_until': 0,
+                },
+            )
+            return True
+        tx.update(ref, {'state': 'waiting_choice', 'pending_upgrade': {}, 'lease_until': 0})
+        return False
 
     with external_write_fence(uid, firestore_client=client):
         return commit(client.transaction())
