@@ -27,6 +27,7 @@ from models.chat_session import (
 )
 from models.shared import StatusResponse
 from utils.chat import initial_message_util
+from utils.other.chat_file import FileChatTool
 from utils.chat_rating_triage import extract_rating_triage_fields
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import Features, track_usage
@@ -172,6 +173,13 @@ def delete_chat_session(
     session_id: str,
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    # Session files live outside Firestore (OpenAI + users/{uid}/files) — they
+    # must be cleaned before the session doc disappears or they orphan.
+    try:
+        FileChatTool(uid, session_id).cleanup()
+    except ValueError:
+        # No session doc means no tracked files — delete stays idempotent.
+        pass
     chat_db.delete_chat_session(uid, session_id, cascade_messages=True)
     return {'status': 'ok'}
 

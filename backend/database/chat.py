@@ -899,10 +899,15 @@ def delete_chat_session(uid: str, chat_session_id: str, cascade_messages: bool =
         msg_col = user_ref.collection('messages')
         query = msg_col.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
         while True:
-            docs: List[Any] = list(query.limit(BATCH_LIMIT).stream())
+            # Leave one op of headroom in the batch for the user-doc
+            # context-generation bump — 500 is the hard Firestore cap.
+            docs: List[Any] = list(query.limit(BATCH_LIMIT - 1).stream())
             if not docs:
                 break
             batch = db.batch()
+            # Deleting messages changes what the prompt-prefix cache may serve —
+            # match batch_delete_messages and bump the generation every batch.
+            batch.update(user_ref, {'chat_context_generation': firestore.Increment(1)})
             for doc in docs:
                 batch.delete(msg_col.document(doc.id))
             batch.commit()
@@ -992,8 +997,20 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
         if current_level == target_level:
             continue
 
+        raw_text = message_data.get('text')
         plain_data: Dict[str, Any] = _prepare_message_for_read(message_data, uid)
         plain_text = plain_data.get('text')
+        if (
+            current_level == 'enhanced'
+            and target_level == 'standard'
+            and isinstance(raw_text, str)
+            and plain_text == raw_text
+        ):
+            # Decryption returned the ciphertext unchanged — relabeling now
+            # would strand the ciphertext as plaintext forever. Skip this row.
+            logger.warning(f"Message {doc_snapshot.id} decryption failed during level migration, skipping.")
+            continue
+
         migrated_text = plain_text
         if target_level == 'enhanced':
             if isinstance(plain_text, str):
