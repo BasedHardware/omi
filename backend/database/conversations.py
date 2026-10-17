@@ -1775,6 +1775,19 @@ def refresh_conversation_after_chat_edit(uid: str, conversation_id: str) -> None
     _sync_conversation_search_index(uid, conversation_id)
 
 
+def record_demand_enrichment_checkpoint(
+    uid: str, conversation_id: str, digest: str, *, firestore_client: Any = None
+) -> bool:
+    """Blind metadata-only checkpoint. Never recreate a removed conversation."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    try:
+        ref.update({'demand_enrichment_applied_hash': digest})
+    except NotFound:
+        return False
+    return True
+
+
 def update_conversation_chat(uid: str, conversation_id: str, expected: dict, update_data: dict) -> dict:
     """Apply a confirmed correction without touching transcript or lifecycle fields."""
     raw = get_conversation_raw_snapshot(uid, conversation_id)

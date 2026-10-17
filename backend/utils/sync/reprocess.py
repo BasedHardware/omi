@@ -101,6 +101,34 @@ def valid_dispatch_binding(dispatch: object) -> TypeGuard[dict[str, str]]:
     )
 
 
+def valid_effects_binding(row: dict[str, Any]) -> bool:
+    dispatch = row.get('dispatch')
+    if valid_dispatch_binding(dispatch):
+        return True
+    if not row.get('effects_only') or not isinstance(dispatch, dict):
+        return False
+    if not all(
+        isinstance(dispatch.get(field), str) and dispatch[field].strip() == dispatch[field] and dispatch[field]
+        for field in ('queue', 'handler', 'audience', 'invoker_sa')
+    ):
+        return False
+    try:
+        handler, audience = urlsplit(dispatch['handler']), urlsplit(dispatch['audience'])
+        return (
+            handler.scheme == audience.scheme == 'https'
+            and bool(handler.netloc)
+            and handler.netloc == audience.netloc
+            and not handler.query
+            and not handler.fragment
+            and handler.path.endswith('/v1/conversation-finalization-jobs/run')
+            and audience.path in ('', '/', handler.path)
+            and not audience.query
+            and not audience.fragment
+        )
+    except ValueError:
+        return False
+
+
 def _dispatch_binding() -> dict[str, str] | None:
     handler = os.getenv('SYNC_TASKS_HANDLER_URL', '')
     binding = {
@@ -119,17 +147,43 @@ def _enqueue(row: dict[str, Any]) -> None:
     # the originating queue/worker/identity rather than borrowing that sweep's
     # fresh capacity or audience. These bindings contain no credentials.
     dispatch = row.get('dispatch')
-    if not valid_dispatch_binding(dispatch):
-        raise RuntimeError('sync reprocessing requires a complete sync worker binding')
+    if not valid_effects_binding(row):
+        raise RuntimeError('sync reprocessing requires a complete worker binding')
+    assert isinstance(dispatch, dict)
     handler = dispatch['handler']
+    if not (
+        handler.endswith('/v2/sync-jobs/run')
+        or row.get('effects_only')
+        and handler.endswith('/v1/conversation-finalization-jobs/run')
+    ):
+        raise RuntimeError('sync reprocessing requires the sync worker handler binding')
+    from utils.conversations.demand_processing import schedule
+
+    document_id = row.get('document_id') or key(row['uid'], row['conversation_id'])
+    payload = {'kind': 'sync_reprocess', 'key': document_id, 'task_token': row['task_token']}
+    name = f"sr-{document_id}-{row['task_token']}"
+    if schedule(
+        row['uid'],
+        document_id,
+        payload,
+        dispatch,
+        name,
+        not_before=row['due_at'],
+        effects_only=bool(row.get('effects_only')),
+        immediate=bool(row.get('immediate')),
+    ):
+        return
+    from config.demand_processing import enabled
+
+    eager_recovery = bool(row.get('effects_only')) and enabled(row['uid'])
     enqueue_named_task(
         dispatch['queue'],
         handler,
-        f"sr-{key(row['uid'], row['conversation_id'])}-{row['task_token']}",
-        {'kind': 'sync_reprocess', 'key': key(row['uid'], row['conversation_id']), 'task_token': row['task_token']},
+        name,
+        payload,
         audience=dispatch['audience'],
         invoker_sa=dispatch['invoker_sa'],
-        schedule_at=math.ceil(row['due_at']),
+        schedule_at=math.ceil(time.time() if eager_recovery else row['due_at']),
     )
 
 
@@ -140,6 +194,7 @@ def mark(
     *,
     now: float | None = None,
     mutate: Callable | None = None,
+    effects_only: bool = False,
 ) -> None:
     """Record one enrichment obligation.
 
@@ -154,17 +209,23 @@ def mark(
     def update(old: Row | None) -> tuple[Row, tuple[Row, bool]]:
         row = dict(old or {})
         row.update(
+            document_id=key(uid, conversation_id + ('\0effects' if effects_only else '')),
             uid=uid,
             conversation_id=conversation_id,
             language=language,
             version=row.get('version', 0) + 1,
             due_at=max(row.get('due_at', 0), current + settle_seconds()),
         )
-        if revision_reuse():
-            # Extend the existing quiet window, but never postpone a dirty
-            # obligation indefinitely under a continuous trickle of revisions.
+        from config.demand_processing import enabled
+
+        demand_enabled = enabled(uid)
+        if demand_enabled or revision_reuse():
+            # Keep demand's processing headroom when both policies are enabled;
+            # revision reuse alone retains its upstream one-hour ceiling.
             row['first_pending_at'] = row.get('first_pending_at', current)
-            row['due_at'] = min(row['due_at'], row['first_pending_at'] + 3600)
+            ceiling = 3540 if demand_enabled else 3600
+            row['due_at'] = min(row['due_at'], row['first_pending_at'] + ceiling)
+        row.update(effects_only=effects_only)
         if old is None:
             row.update(
                 task_token=uuid.uuid4().hex, task_due_at=row['due_at'], lease_until=0, dispatch=_dispatch_binding()
@@ -173,7 +234,8 @@ def mark(
             row['dispatch'] = None
         return row, (row, old is not None)
 
-    row, coalesced = (mutate or _mutate)(key(uid, conversation_id), update)
+    document_id = key(uid, conversation_id + ('\0effects' if effects_only else ''))
+    row, coalesced = (mutate or _mutate)(document_id, update)
     if coalesced:
         COALESCED.inc()
     elif valid_dispatch_binding(row.get('dispatch')):
@@ -184,6 +246,11 @@ def mark(
 
 def run(document_id: str, task_token: str, process: Callable[[str, str, str], Any], *, now: float | None = None) -> str:
     current = time.time() if now is None else now
+    from utils.conversations.demand_processing import admit
+    from config.demand_processing import enabled
+
+    if not admit(document_id, now=current, token=task_token):
+        return 'priority_wait'
     owner = uuid.uuid4().hex
 
     def claim(old: Row | None) -> tuple[Row | None, tuple[str, Row | None]]:
@@ -192,7 +259,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         if old.get('lease_until', 0) > current:
             return old, ('busy', None)
         row = dict(old)
-        if row['due_at'] > current:
+        if row['due_at'] > current and (not row.get('effects_only') or not enabled(row['uid'])):
             row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
             return row, ('deferred', row)
         row.update(lease_until=current + LEASE_SECONDS, owner=owner)
@@ -207,7 +274,12 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         return status
     assert row is not None
     # Exceptions leave a leased, dirty row. Retry/sweep recovers after expiry.
-    process(row['uid'], row['conversation_id'], row['language'])
+    if row.get('effects_only'):
+        from utils.conversations.lazy_enrichment import enrich_settled
+
+        enrich_settled(row['uid'], row['conversation_id'], row['language'])
+    else:
+        process(row['uid'], row['conversation_id'], row['language'])
 
     def finish(old: Row | None) -> tuple[Row | None, Row | None]:
         if old is None or old.get('owner') != owner:
@@ -215,7 +287,11 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         if old['version'] == row['version']:
             return None, None
         pending = dict(old)
-        pending.update(lease_until=0, task_token=uuid.uuid4().hex, task_due_at=pending['due_at'])
+        pending.update(
+            lease_until=0,
+            task_token=uuid.uuid4().hex,
+            task_due_at=pending['due_at'],
+        )
         return pending, pending
 
     pending = _mutate(document_id, finish)
@@ -240,7 +316,7 @@ def sweep(*, now: float | None = None, limit: int = 100) -> dict[str, int]:
             if old is None or old.get('lease_until', 0) > current:
                 return old, ('skipped', None)
             row = dict(old)
-            if not valid_dispatch_binding(row.get('dispatch')):
+            if not valid_effects_binding(row):
                 if binding is None:
                     return old, ('unbound', None)
                 # Claim and fence the repaired binding in the same CAS. Any old
@@ -261,3 +337,51 @@ def sweep(*, now: float | None = None, limit: int = 100) -> dict[str, int]:
             counts['error'] += 1
             logger.error('event=sync_reprocess action=repair outcome=error exception_type=%s', type(error).__name__)
     return counts
+
+
+def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bool = False) -> None:
+    """Blind-write lazy debt: no extra Firestore read on visible completion.
+
+    Increment preserves concurrent dirtying; merge preserves an active worker's
+    lease. The existing CAS completion sees that increment and retains the debt.
+    Token changes fence older deliveries; all effects read the settled row.
+    """
+    if not owns_runtime():
+        raise RuntimeError('lazy enrichment requires production or a Firestore emulator')
+    current = time.time()
+    # Preserve the daytime merge window as far as the hard completion ceiling
+    # permits; open/explicit demand still bypasses this closed-surface wait.
+    quiet_seconds = 3540
+    document_id = key(uid, conversation_id + '\0effects')
+    row = dict(
+        document_id=document_id,
+        uid=uid,
+        conversation_id=conversation_id,
+        language=language,
+        effects_only=True,
+        immediate=immediate,
+        task_token=uuid.uuid4().hex,
+        due_at=current + quiet_seconds,
+        task_due_at=current + quiet_seconds,
+        dispatch=_effects_binding(),
+    )
+    get_firestore_client().collection(COLLECTION).document(document_id).set(
+        {**row, 'version': firestore.Increment(1)}, merge=True
+    )
+    if valid_effects_binding(row):
+        _enqueue(row)
+    else:
+        # Match the sync outbox's unbound-host contract: visible work survives,
+        # and the configured sweep CAS-rebinds the durable obligation later.
+        UNBOUND.labels(action='mark').inc()
+
+
+def _effects_binding() -> dict[str, str]:
+    binding = _dispatch_binding()
+    if binding is not None:
+        return binding
+    # Listen/pusher already have the durable finalization queue, identity and
+    # worker. Reuse that protected handler for the same sync outbox protocol.
+    from utils.cloud_tasks import listen_finalization_binding
+
+    return listen_finalization_binding()

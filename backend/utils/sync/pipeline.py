@@ -1709,7 +1709,9 @@ def _reprocess_merged_conversations(
     """
     from config.sync_reprocess import coalesce_enabled
 
-    coalescing = coalesce_enabled() and not user_selected
+    from config.demand_processing import enabled as demand_enabled
+
+    coalescing = (coalesce_enabled() or demand_enabled(uid)) and not user_selected
     merged = response.pop('_merged', {})
     if coalescing:
         # Partial-result IDs survive a crash after append/checkpoint but before
@@ -1738,6 +1740,10 @@ def _reprocess_merged_conversations(
                 mark(uid, conversation_id, language)
             else:
                 _reprocess_conversation_after_update(uid, conversation_id, language)
+                if user_selected:
+                    from utils.conversations.demand_processing import promote_conversation_effects
+
+                    promote_conversation_effects(uid, conversation_id)
         except SyncConversationPersistenceFenced:
             fenced_ids.add(conversation_id)
             response.setdefault(_RESPONSE_FENCED_CONVERSATION_IDS, set()).add(conversation_id)

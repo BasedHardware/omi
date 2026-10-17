@@ -306,6 +306,34 @@ def test_sweep_reports_repair_errors_without_failing_successful_retirement(
     }
 
 
+def test_lazy_mark_blind_write_preserves_live_lease(monkeypatch):
+    client, ref = Mock(), Mock()
+    client.collection.return_value.document.return_value = ref
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(
+        reprocess,
+        '_effects_binding',
+        lambda: {
+            'queue': 'existing',
+            'handler': 'https://worker.invalid/v2/sync-jobs/run',
+            'audience': 'https://worker.invalid/v2/sync-jobs/run',
+            'invoker_sa': 'worker@example.invalid',
+        },
+    )
+    monkeypatch.setattr(reprocess.time, 'time', lambda: 1000)
+    wake = Mock()
+    monkeypatch.setattr(reprocess, '_enqueue', wake)
+    reprocess.mark_effects('owner', 'conversation', 'en')
+    ref.get.assert_not_called()
+    ref.set.assert_called_once()
+    body = ref.set.call_args.args[0]
+    assert body['effects_only'] is True and 'lease_until' not in body and 'owner' not in body
+    assert body['due_at'] == 4540 and body['task_due_at'] == 4540
+    assert ref.set.call_args.kwargs == {'merge': True}
+    assert wake.call_args.args[0]['document_id'] == reprocess.key('owner', 'conversation\0effects')
+
+
 @pytest.fixture
 def sweep_query(state, monkeypatch):
     rows, _ = state
@@ -448,6 +476,83 @@ def test_rebind_cas_conflict_rereads_a_new_lease(state, sweep_query, monkeypatch
     assert len(tasks) == 1  # The failed CAS never dispatches its tentative token.
 
 
+def test_lazy_unbound_host_keeps_debt_without_failing_visible_completion(monkeypatch):
+    client, ref = Mock(), Mock()
+    client.collection.return_value.document.return_value = ref
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(reprocess, '_effects_binding', lambda: {})
+    wake = Mock()
+    monkeypatch.setattr(reprocess, '_enqueue', wake)
+    reprocess.mark_effects('owner', 'conversation', 'en')
+    ref.set.assert_called_once()
+    ref.get.assert_not_called()
+    wake.assert_not_called()
+
+
+def test_repaired_delivery_token_always_gets_a_new_cloud_task_name(state, monkeypatch):
+    from utils import cloud_tasks
+
+    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    row = dict(tasks[0], wake_token='obsolete-name')
+    enqueue = Mock()
+    monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
+    _ENQUEUE(row)
+    first = enqueue.call_args.args[2]
+    row['task_token'] = 'new-fenced-delivery'
+    _ENQUEUE(row)
+    assert enqueue.call_args.args[2] != first
+    assert enqueue.call_args.args[3]['task_token'] == 'new-fenced-delivery'
+
+
+@pytest.mark.parametrize('revision_enabled', [False, True])
+@pytest.mark.parametrize('redis_available', [False, True])
+@pytest.mark.parametrize('opened', [False, True])
+def test_demand_master_preserves_production_settle_and_one_pass(
+    state, monkeypatch, redis_available, opened, revision_enabled
+):
+    import fakeredis
+    from utils import cloud_tasks
+    from utils.conversations import demand_processing as demand
+
+    rows, _ = state
+    monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true' if revision_enabled else 'false')
+    clock = [1000000]
+    monkeypatch.setattr(reprocess.time, 'time', lambda: clock[0])
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'true')
+    monkeypatch.setenv('DEMAND_PROCESSING_PERCENT', '100')
+    monkeypatch.setenv('DEMAND_PROCESSING_LAZY_ENABLED', 'false')
+    monkeypatch.setenv('DEMAND_PROCESSING_TOOL_ENABLED', 'false')
+    monkeypatch.setenv('DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED', 'true')
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(demand, 'client', (lambda: redis) if redis_available else Mock(side_effect=ConnectionError()))
+    enqueue = Mock()
+    monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
+    monkeypatch.setattr(reprocess, '_enqueue', _ENQUEUE)
+    if opened:
+        demand.observe_surface('u', 'phone', {'surface_open': True, 'transcript_visible': False})
+    for offset in range(0, 500, 100):
+        clock[0] = 1000000 + offset
+        reprocess.mark('u', 'c', 'en')
+    key = reprocess.key('u', 'c')
+    assert enqueue.call_count == 1
+    assert enqueue.call_args.kwargs['schedule_at'] == 1000600
+    assert rows[key]['due_at'] == 1001000
+    process = Mock()
+    clock[0] = 1000600
+    assert reprocess.run(key, rows[key]['task_token'], process) == 'deferred'
+    process.assert_not_called()
+    assert enqueue.call_count == 2
+    assert enqueue.call_args.kwargs['schedule_at'] == 1001000
+    clock[0] = 1001000
+    assert reprocess.run(key, rows[key]['task_token'], process) == 'processed'
+    process.assert_called_once_with('u', 'c', 'en')
+    assert not rows
+
+
 def test_repeat_work_window_has_a_hard_ceiling_without_a_second_queue(state, monkeypatch):
     rows, tasks = state
     monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
@@ -480,3 +585,24 @@ def test_repeat_work_deadline_survives_overlapping_revision_and_next_mark(state,
     assert reprocess.run(key, tasks[-1]['task_token'], process, now=3900) == 'processed'
     process.assert_called_once_with('u', 'c', 'en')
     assert not rows
+
+
+@pytest.mark.parametrize(
+    'demand_enabled,revision_enabled,expected_due',
+    [(False, False, 4600), (False, True, 3600), (True, False, 3540), (True, True, 3540)],
+)
+def test_demand_and_revision_reuse_keep_their_existing_ceilings(
+    state, monkeypatch, demand_enabled, revision_enabled, expected_due
+):
+    rows, tasks = state
+    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'true' if demand_enabled else 'false')
+    monkeypatch.setenv('DEMAND_PROCESSING_PERCENT', '100')
+    monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true' if revision_enabled else 'false')
+    reprocess.mark('u', 'c', 'en', now=0)
+    key = reprocess.key('u', 'c')
+    assert rows[key]['due_at'] == 600
+    for now in range(100, 4001, 100):
+        reprocess.mark('u', 'c', 'en', now=now)
+    assert rows[key]['due_at'] == expected_due
+    assert rows[key]['effects_only'] is False
+    assert len(tasks) == 1
