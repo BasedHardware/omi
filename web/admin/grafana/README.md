@@ -219,9 +219,18 @@ Charts read the admin-authenticated `GET /api/omi/stats/wall/series/<name>`
   five seconds; failed legs keep their last good value (≤24h, marked stale);
   partial legs retry only their missing reads after two minutes with
   exponential backoff; PostHog reads run one at a time per instance after any
-  snapshot refresh. 30-day MAU is split into `mauRecent` (headline) and
-  `mauHistory` (charts) so a slow older window never holds back the headline.
-  Request-path store calls are bounded at 2 s.
+  snapshot refresh. 30-day MAU is read for every day the unit-economics chart
+  draws (one read per week of seven daily offsets) and split into `mauPrior`
+  (days 7–13, the headline's week-ago priors) and `mauDaily` (the rest) so a
+  slow older window never holds back the headline.
+  Request-path store calls are bounded at 2 s; a fresh process's first read,
+  which also opens the Firestore channel, at 4.5 s, so a new revision serves
+  the last good instead of "—".
+- Cohort charts roll daily: week-one activation and capture always end 8 days
+  back, retained-if-activated 38 days back. The series carry a `maturing` /
+  `retainedMaturing` frame (newest closed cohort → now) that the board draws as
+  a faint full-height band with a legend entry, so a line never stops
+  unexplained.
 - Observability: one `wall_series_leg` log line per leg attempt (leg, outcome
   `ok|partial:<class>|timeout|http_<status>|error|lease_lost|store_unavailable`, error class, duration_ms,
   rows, failures, served_stale, instance = revision + process id) and one
