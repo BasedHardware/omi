@@ -1,6 +1,5 @@
 from unittest.mock import MagicMock, patch
 import fakeredis
-import pytest
 
 from database.redis_pubsub import RedisPubSubManager
 import database.cache as cache_module
