@@ -15,7 +15,11 @@ from typing import Any, Callable
 from google.cloud import firestore
 
 from database._client import get_data_plane_firestore_client
-from database.conversations import conversations_collection, prepare_photo_for_write
+from database.conversations import (
+    conversations_collection,
+    is_soft_deleted,
+    prepare_photo_for_write,
+)
 from database.durable_queue import ProcessOutcome, drain_isolated
 from database.firestore_index_registry import (
     FRAME_REQUEST_METADATA_EXPIRY_QUERY,
@@ -370,7 +374,8 @@ def attach_frame_request_to_conversation(
             raise ValueError("only uploaded frame requests may be promoted")
 
         conversation_snapshot = conversation_ref.get(transaction=transaction)
-        if not conversation_snapshot.exists:
+        conversation_data = conversation_snapshot.to_dict() if conversation_snapshot.exists else None
+        if not conversation_snapshot.exists or is_soft_deleted(conversation_data):
             raise KeyError("conversation not found")
 
         # Firestore reads in this transaction establish a contention fence for
@@ -398,7 +403,7 @@ def attach_frame_request_to_conversation(
             if existing_storage_id != permanent_storage_id:
                 raise ValueError("conversation photo id is already used")
         else:
-            level = (conversation_snapshot.to_dict() or {}).get("data_protection_level", "standard")
+            level = (conversation_data or {}).get("data_protection_level", "standard")
             photo_data = prepare_photo_for_write(
                 {
                     "id": request.request_id,
