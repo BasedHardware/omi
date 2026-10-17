@@ -206,19 +206,29 @@ def kick(uid: str, *, retire_limit: int = MAX_EXPIRED_RETIREMENTS, progress: _Cl
     return True
 
 
-def _finalize_abandoned_budget_chain_job(job_id: str) -> None:
+def _finalize_abandoned_budget_chain_job(job_id: str) -> bool:
     """Terminalize a capped budget-deferral chain's Redis job, conservatively.
 
-    The sweep just released the sequencer owner because the chain spent its
-    whole attempt contract; the Redis job still reads ``processing``, and
-    ``is_sync_job_stale`` deliberately excludes sequenced dispatch, so no
-    status poll can ever finalize it — the client would see a nonterminal job
-    until the 24h Redis TTL and the durable content claim could not recover
-    through the normal terminal path. Marking it failed here is the terminal
-    handoff. Best-effort and fenced by the run lock's absence: a still-held
-    lock means an attempt may be running under the old lease, and its own
-    terminal write must win; a failed finalize degrades to today's behavior
-    (nonterminal until TTL) rather than double-terminalizing.
+    The sweep is about to release the sequencer owner because the chain spent
+    its whole attempt contract; ``is_sync_job_stale`` deliberately excludes
+    sequenced dispatch, so no status poll can ever finalize it — the client
+    would see a nonterminal job until the 24h Redis TTL and the durable
+    content claim could not recover through the normal terminal path. Marking
+    it failed here is the terminal handoff. Fenced by the run lock's absence:
+    a still-held lock means an attempt may be running under the old lease, and
+    its own terminal write must win. ``queued`` is accepted alongside
+    ``processing`` because the final whole-budget attempt can expire during
+    staged-file download or another pre-pipeline step, before the attempt ever
+    marked the job processing — that job is exactly as abandoned as the
+    processing one, and nothing else will finalize it either.
+
+    Returns whether the terminal state is assured: ``True`` once the job is
+    failed, was already terminal, vanished (its own expiry owns recovery), or
+    a live run lock names another writer that owns the terminal write;
+    ``False`` only for transient Redis read/write failures, which the caller
+    must retry before releasing the owner — after the release no sweep
+    retains an identity for this job, so a skipped handoff would strand the
+    accepted job and its durable claim until the TTL.
     """
     try:
         job = get_sync_job(job_id)
@@ -228,16 +238,16 @@ def _finalize_abandoned_budget_chain_job(job_id: str) -> None:
             job_id,
             type(error).__name__,
         )
-        return
+        return False
     if not isinstance(job, dict) or job.get('status') in TERMINAL_STATUSES:
-        return
-    if job.get('status') != 'processing':
-        return
+        return True
+    if job.get('status') not in ('processing', 'queued'):
+        return True
     if sync_job_run_lock_present(job_id):
         # An attempt still holds the run lock under the released lease: its
         # own terminal write (or its deferral) must win, never the sweep's.
         logger.warning('event=sync_uid_sequencer action=budget_chain_finalize outcome=lock_held job_id=%s', job_id)
-        return
+        return True
     try:
         finalized = mark_job_failed(
             job_id,
@@ -250,11 +260,12 @@ def _finalize_abandoned_budget_chain_job(job_id: str) -> None:
             job_id,
             type(error).__name__,
         )
-        return
+        return False
     if finalized is not None:
         logger.error('event=sync_uid_sequencer action=budget_chain_finalize outcome=failed job_id=%s', job_id)
     else:
         logger.warning('event=sync_uid_sequencer action=budget_chain_finalize outcome=cas_lost job_id=%s', job_id)
+    return True
 
 
 def reconcile_uid(
@@ -353,14 +364,20 @@ def reconcile_uid(
             backfill_cutover.uid_hash(uid),
             deferrals,
         )
+        # The terminal handoff must be assured BEFORE the owner is released:
+        # after release no sweep retains an identity for this job, and status
+        # polling cannot stale-finalize sequenced jobs. A transient Redis
+        # failure here keeps the owner on the books (deferred one heartbeat)
+        # so the next sweep retries the finalize-and-release sequence; only a
+        # settled job releases the owner and lets the lane advance to the
+        # next waiting capture.
+        if not _finalize_abandoned_budget_chain_job(job_id):
+            registry.defer_owner(uid, registry.HEARTBEAT_SECONDS, now=current)
+            return 'finalize_deferred'
         if registry.finish_expired_job(uid, job_id, epoch, 'budget_chain_exhausted', now=current):
             # The Redis job is deliberately left nonterminal here only if it
-            # is already gone (key absent = retired/expired) or this
-            # best-effort finalize fails; those degrade to the abandoned-attempt
-            # recovery below. finalize is what unblocks the client's terminal
-            # status poll and the durable content claim's recovery path —
-            # without it the job reads processing until the 24h Redis TTL.
-            _finalize_abandoned_budget_chain_job(job_id)
+            # is already gone (key absent = retired/expired) — those degrade
+            # to the same recovery as any other abandoned attempt.
             kick(uid, retire_limit=retire_limit, progress=progress)
             return 'budget_chain_exhausted'
         return 'raced'

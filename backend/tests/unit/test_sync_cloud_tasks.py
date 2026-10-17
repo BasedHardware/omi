@@ -4260,7 +4260,13 @@ def test_deferred_processing_job_is_not_stale_until_its_replacement_is_due():
     assert sync_jobs.is_sync_job_stale(job, now=5_000.0) is True
     assert sync_jobs.is_sync_job_stale({**job, 'deferred_until': 'later'}, now=silent_past_threshold) is True
     assert sync_jobs.is_sync_job_stale({**job, 'dispatch_mode': 'sequenced'}, now=6_000.0) is False
-    assert sync_jobs.is_sync_job_stale({**job, 'status': 'queued', 'attempt': 1}, now=6_000.0) is False
+    # Overdue marker on a queued job is the recovery signal even when an
+    # earlier retryable failure left attempt/started_at populated: the
+    # budget-deferral chain already spent the queue's attempts, so no pending
+    # queue retry exists to protect.
+    assert (
+        sync_jobs.is_sync_job_stale({**job, 'status': 'queued', 'attempt': 1, 'started_at': 900.0}, now=6_000.0) is True
+    )
 
 
 def test_deferred_queued_job_is_not_dispatch_lost_before_its_replacement_is_due():

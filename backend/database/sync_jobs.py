@@ -280,7 +280,10 @@ def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bo
     job no attempt ever started qualifies: a worker re-queuing between Cloud
     Tasks retries (mark_job_queued_for_retry) sets ``attempt``/``started_at``,
     and that pending retry must never be flipped terminal by a poll, however
-    long its backoff.
+    long its backoff — unless an overdue ``deferred_until`` marker proves the
+    budget-deferral chain already consumed the whole attempt contract, in
+    which case no queue retry is coming and the marker's horizon is the
+    recovery bound.
     """
     # The UID owner/sweeper, not a polling reader, owns liveness for accepted
     # sequenced jobs. Waiting in the per-UID queue is expected to exceed the
@@ -319,6 +322,18 @@ def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bo
         # exactly as the processing branch does, then resume normal
         # queued-dispatch staleness once the replacement is overdue.
         return False
+    elif status == 'queued' and job.get('dispatch_mode') == 'cloud_tasks' and deferred:
+        # Overdue deferred marker: the final replacement either exhausted the
+        # attempt contract (deferrals_exhausted) or was never scheduled, and no
+        # sequencer owner or run lock remains to resume the job. A prior
+        # retryable failure (mark_job_queued_for_retry) leaves attempt/started_at
+        # populated, but that pending queue retry can never run — the queue's
+        # attempts were already spent earning those deferrals — so the
+        # never-stale pending-retry exemption must not strand the job and its
+        # content claim until the Redis TTL. The overdue marker itself is the
+        # recovery signal: make the queued state stale on the processing
+        # threshold, the same bound the marker-horizon comment above promises.
+        threshold = STALE_THRESHOLD_SECONDS
     elif (
         status == 'queued'
         and job.get('dispatch_mode') == 'cloud_tasks'

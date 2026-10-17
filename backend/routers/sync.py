@@ -85,6 +85,7 @@ from utils.other.storage import (
     mark_conversation_playback_unavailable,
 )
 from utils.byok import has_byok_keys
+from google.api_core import exceptions as google_api_exceptions
 from utils.cloud_tasks import (
     DISPATCH_DEADLINE_SECONDS,
     enqueue_sync_job,
@@ -2247,17 +2248,13 @@ def _is_uncertain_enqueue_error(error: BaseException) -> bool:
     """
     if isinstance(error, (TimeoutError, ConnectionError)):
         return True
-    try:
-        from google.api_core import exceptions as google_api_errors
-    except Exception:
-        return False
     return isinstance(
         error,
         (
-            google_api_errors.ServiceUnavailable,
-            google_api_errors.DeadlineExceeded,
-            google_api_errors.GatewayTimeout,
-            google_api_errors.InternalServerError,
+            google_api_exceptions.ServiceUnavailable,
+            google_api_exceptions.DeadlineExceeded,
+            google_api_exceptions.GatewayTimeout,
+            google_api_exceptions.InternalServerError,
         ),
     )
 
