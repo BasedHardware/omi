@@ -46,8 +46,25 @@ def admit(
             # Never take a legacy content owner, including ambiguous/expired
             # Redis ownership. Its existing recovery path remains authoritative.
             return {'outcome': 'busy', 'job_id': existing.get('job_id')}
-        if not enabled_for(binding.owner_id):
+        pending = tx.get('jobs', binding.segment_ids[0])
+        reserved_recording = (
+            pending.get('state') == 'record_pending'
+            and pending.get('owner_id') == binding.owner_id
+            and pending.get('conversation_id') == binding.target_conversation_id
+            and pending.get('record_content_id') == binding.content_id
+        )
+        if not reserved_recording and not enabled_for(binding.owner_id):
             raise AdmissionDisabled('cohort no longer enabled')
+        if binding.record_origin:
+            key = f'{binding.owner_id}/{binding.target_conversation_id}'
+            row = tx.get('conversations', key)
+            if not row or row.get('deleted') or row.get('uses_custom_stt'):
+                raise ValueError('registered record target unavailable')
+            expected = 'batch_live_v1' if reserved_recording else 'batch_sync_v1'
+            if row.get('record_lane_owner') not in {None, expected}:
+                raise ValueError('record owner is immutable')
+            row['record_lane_owner'] = expected
+            tx.put('conversations', key, row)
         for item in items:
             if require_artifacts:
                 key = artifact_id(item.segment_id, item.audio_uri)

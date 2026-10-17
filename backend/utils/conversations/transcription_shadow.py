@@ -105,6 +105,8 @@ def _enabled(uid: str, conversation: Conversation) -> bool:
         return False
     if os.getenv('TRANSCRIPTION_SHADOW_ENABLED', 'false').lower() != 'true':
         return False
+    if getattr(conversation, 'record_lane_owner', None) in {'batch_live_v1', 'batch_sync_v1'}:
+        return False
     if not conversation.private_cloud_sync_enabled or conversation.discarded or conversation.uses_custom_stt:
         return False
     allowlist = {
@@ -463,6 +465,16 @@ def _run_shadow(uid: str, conversation_id: str) -> None:
             return
         conversation = deserialize_conversation(raw)
         if not _enabled(uid, conversation):
+            return
+        owner = raw.get('record_lane_owner')
+        if owner is None:
+            revision = conversations_db.claim_record_lane_owner(
+                uid, conversation_id, 'legacy_final_pass_v1', raw.get('updated_at')
+            )
+            if revision is None:
+                return
+            raw['updated_at'], conversation.updated_at = revision, revision
+        elif owner != 'legacy_final_pass_v1':
             return
         record_result = True
         if not conversation.audio_files:

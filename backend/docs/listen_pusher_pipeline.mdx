@@ -5209,3 +5209,124 @@ Worker label/retry flags apply only to already-admitted work. Warm capacity and
 budget checks precede each percentage flip. Close admission everywhere to roll
 back, retaining worker, integration and recovery drain paths. Unsetting producer
 flags does not remove persisted label authority or reset paid recovery intents.
+
+## Durable live and desktop record admission (dark)
+
+`BATCH_PIPELINE_LIVE_ADMISSION_ENABLED=false` is the sole new producer control.
+When true, retained server-STT captures use the existing
+`BATCH_PIPELINE_ENABLED/PERCENT/UID_ALLOWLIST` hash cohort. New in-progress rows
+reserve `record_lane_owner=batch_live_v1` in their existing create write. Captures
+already in progress at enablement reserve the same owner from the finalizer's
+already-loaded revision using a conditional write, with zero extra reads. The
+legacy final pass claims its own owner from its already-loaded revision before
+compute; only one compare-and-set can win. Deploy dark and drain pre-protocol
+legacy work before enabling the new flag. BYOK,
+E2EE, missing retention consent and unsupported/unspecified multilingual routes
+keep their existing supported processing path. The closed Parakeet language
+vocabulary is shared with the STT policy; this switch never changes the live
+provider wire.
+
+Finalization registers a `record_pending` job before completing its durable job.
+The pusher flushes the final buffered audio on finalize, conversation switch or
+disconnect, then writes a blind `record_audio_closed` receipt only after every
+queued upload succeeds. Queue/buffer drops and exhausted uploads never certify
+completeness. CPU reconciliation waits for both that receipt and the completed,
+retained conversation. This is a durability barrier, not an upload-grace timer.
+
+The coordinator lists the already retained audio, verifies overlaps, and freezes
+one-hour capture units as encrypted **reference manifests**, not copies of the
+recording. Each owner/conversation-scoped raw reference pins its GCS generation,
+PCM digest and exact sample slice. The worker authenticates/decrypts existing raw
+objects and materializes the ordinary WAV contract. The existing artifact eraser
+owns the temporary manifest only; its encrypted reference proof stays through
+the 45-day receipt window for first late WAL uploads (GPU results retain their
+24-hour cleanup), and privacy erasure is immediate; raw capture retention/deletion remains with its
+original owner. `record_pending` uses the existing state/available-at query shape
+and existing privacy erasure machinery; pending obligations have no TTL.
+
+Named safety WALs and recording-session WALs resolve the registered record before
+any provider dispatch. An eligible in-progress pre-enable capture holds its WAL
+until finalization reserves the native owner. An earlier WAL freezes its own
+batch-sync or legacy owner with a conditional write against the routing snapshot;
+cohort changes cannot switch that dispatcher or admit a later native twin.
+They can return the native public job only after exact
+PCM interval/byte coverage is proven against its pinned references. A successful
+proof aliases the existing upload-content ledger to that public job, so retries
+survive artifact expiry and producer rollback. Missing tails, clock/byte conflicts,
+privacy refusals and pending capture uploads return retryable 503 with local audio
+retained; they never create a legacy twin. Desktop uploads targeting an existing
+from-segments row use the same projection contract and atomically reserve
+`batch_sync_v1`; sync upload metering remains on the existing sync path. Native
+live record projection does not charge the same live speech a second time.
+
+Record projection is transactional against the original conversation ID. It waits
+for finalize, replaces unannotated provisional segments within the capture unit,
+and increments the existing sync transcript revision. That revision fences a
+stale finalizer. Delayed full-transcript/socket writes yield after record
+projection; field-scoped translation/manual mutations remain supported. Annotated
+segments retain their IDs, edited text, translations and references through the
+shared fail-closed speaker remap. Ambiguous remaps retain the annotated sentence and explicitly abstain from
+acoustic attribution; the user's manual receipt still wins. Genuine VAD silence clears only unprotected
+provisional speech; empty ASR with nonempty VAD retains #21981's recovery contract.
+Persisted record ownership excludes both the old #21424 shadow/final pass and
+automatic smart merge. Producer flag rollback never grants the old owner anew.
+
+### Rollout and read envelope
+
+Deploy CPU/listen/pusher/integration and the record worker dark together. Keep
+#21981's authority, required-target, empty-ASR recovery and correctness telemetry
+controls enabled for the selected cohort. Enable the new producer control on CPU
+intake/listen hosts; integration's existing serving loop drains it. Pusher always
+drains upload closure and does not select this cohort or consume the new flag.
+Use David's allowlist at percent 0, then fleet percent 5, then 100 jointly with
+sync, with at least 30 minutes of nonempty correctness sentinels per step.
+Prewarm capacity before admission. Existing unsupported-language/private routes
+must remain provisioned. No quality A/B bake is required.
+
+Rollback closes `BATCH_PIPELINE_ENABLED/PERCENT` everywhere and retains the live
+flag, serving, worker and recovery drain controls until accepted obligations and
+upload closures finish. Do not roll back to an image lacking the persisted
+owner/reference-manifest protocol. Unsetting label flags does not remove record
+authority.
+
+There are **zero additional Firestore reads per audio frame, provisional segment,
+or pusher flush**. The close receipt is one blind metadata write per retained
+recording including when admission is off, so an accepted capture still closes after
+selective flag rollback. This is rollout metadata, not record admission. Cold named-WAL routing adds one conversation point read per upload,
+plus one recording-session point read when the conversation ID is absent. An
+unowned named target adds one conditional owner write using that same snapshot,
+including while live admission is off. This routing fence remains active after
+rollback. Background pending scans add at
+most one query per serving-loop iteration (nominally 4,320/day per integration
+process at 20 seconds, minimum one billed read for an empty query), plus returned
+documents. Each new pending registration performs 11 point reads under the
+existing twice-checked privacy protocol; a held-barrier retry adds eight point
+reads and is deferred for 60 seconds. Accepted processing reuses the existing
+artifact/admission/worker/projection read profile. Batch sync intake removes its
+two duplicate profile reads by returning the snapshots already loaded by privacy
+authorization. Transaction retries multiply these counts; actual daily traffic
+must be attributed in the existing Firestore budget before enabling.
+
+For daily recording count `N`, named-WAL uploads `W`, session-only lookups `S`,
+pending scan documents `D`, held retries `R`, raw-manifest fetches `F` and integration
+process count `I`, the added native metadata envelope is approximately
+`4320*I + D + 19*N + W + S + 8*R + 5*F` reads/day, before the existing
+artifact/admission/worker/projection protocol for newly admitted units. The `19*N`
+includes registration, successful-barrier/source authorization and the atomic
+conversation-owner check. `5*F` is the additional post-source privacy recheck.
+For an exact first WAL coverage proof against `K` native units, budget up to
+`22+17*K` point reads total (including its routing read, current privacy, pinned
+manifest authentication, alias and durable status); an already-aliased replay is
+`14+K` before any scheduler redrive. A pending native upload without an admitted
+intake is eight reads; a source/provenance refusal is one. Add the session lookup
+when needed. These cold upload cases replace their normal processing path, so do
+not count both complete upload paths. Subtract `2*sync_admissions` for removed
+duplicate profile reads. Retries/redrives add their existing protocol costs.
+These are source-derived formulas, not measured daily traffic or a billing
+receipt; qualify caller attribution in the existing Firestore budget before
+enabling. There is no new client polling loop.
+
+Selective live rollback may set only `BATCH_PIPELINE_LIVE_ADMISSION_ENABLED=false`;
+already accepted record owners, upload closures and proof replay still drain.
+The sync cohort can remain enabled. Closure and legacy-owner metadata scaffolding
+is write-active before admission, with no new reads on the streaming path.

@@ -50,6 +50,7 @@ from utils.speaker_learning_jobs import schedule_person_voice_learning_retry
 from services.conversation_keyframes import ensure_conversation_keyframe_job, reconcile_conversation_keyframe_jobs
 from utils.retrieval.frame_request_authority import resolve_frame_request_authority
 from utils.observability.fallback import record_fallback
+from utils.batch_pipeline.live import register_recording, reserve_recording
 
 logger = logging.getLogger(__name__)
 
@@ -265,6 +266,10 @@ async def finalize_persisted_conversation(
                 conversation_id,
             )
             return ConversationFinalizationDisposition.fenced
+
+        # Producer rollback never abandons an already reserved retained recording.
+        # Persist its obligation before the finalization job can complete.
+        await run_blocking(db_executor, register_recording, uid, {**conversation_data, **conversation.model_dump()})
 
         # Ownership fence before any canonical side effect.  The lifecycle
         # transaction re-reads the durable conversation together with the job
@@ -546,6 +551,9 @@ async def _load_admitted_conversation(
         return ConversationFinalizationDisposition.fenced, None, None
 
     conversation = deserialize_conversation(conversation_data)
+    owner = await run_blocking(db_executor, reserve_recording, uid, conversation_data)
+    if owner:
+        conversation.record_lane_owner = owner
     if conversation.status != ConversationStatus.completed and conversation.status != ConversationStatus.processing:
         admitted = await run_blocking(db_executor, lifecycle_service.ensure_processing, uid, conversation.id)
         if not admitted:

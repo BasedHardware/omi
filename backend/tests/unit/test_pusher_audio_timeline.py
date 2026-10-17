@@ -492,3 +492,56 @@ async def test_upload_metric_counts_span_and_spanless_objects_once_each(env, mon
     await _run(FakeWebSocket(list(frames)))
     assert OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(reason='with_spans')._value.get() == with_before + len(env)
     assert len(env) == 2
+
+
+async def test_record_upload_close_receipt_follows_successful_tail_flush(env, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'true')
+    sealed = []
+
+    def seal(uid, conversation):
+        assert env and env[-1][0] == conversation
+        sealed.append(conversation)
+        return True
+
+    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', seal)
+    ws = FakeWebSocket([_conversation('record'), _audio(100, b'\x01\x00' * RATE)])
+    await _run(ws)
+    assert sealed == ['record']
+
+
+async def test_record_close_receipt_drains_with_admission_off_and_failed_upload_never_seals(env, monkeypatch):
+    sealed = []
+    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', lambda *args: sealed.append(args))
+    ws = FakeWebSocket([_conversation('record'), _audio(100, b'\x01\x00' * RATE)])
+    await _run(ws)
+    assert len(sealed) == 1
+    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'true')
+
+    def failed(*args, **kwargs):
+        raise ValueError('synthetic storage failure')
+
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', failed)
+    ws = FakeWebSocket([_conversation('other'), _audio(100, b'\x01\x00' * RATE)])
+    await _run(ws)
+    assert len(sealed) == 1
+
+
+async def test_failed_record_upload_does_not_block_another_durable_record(env, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'true')
+    original = pusher.upload_audio_chunks_batch
+
+    def upload(chunks, uid, cid, *args, **kwargs):
+        if cid == 'failed-record':
+            raise ValueError('synthetic source failure')
+        return original(chunks, uid, cid, *args, **kwargs)
+
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', upload)
+    sealed = []
+    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', lambda uid, cid: sealed.append(cid) or True)
+    pcm = b'\x01\x00' * RATE
+    await _run(
+        FakeWebSocket(
+            [_conversation('failed-record'), _audio(100, pcm), _conversation('durable-record'), _audio(200, pcm)]
+        )
+    )
+    assert sealed == ['durable-record']

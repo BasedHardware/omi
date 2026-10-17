@@ -10,6 +10,7 @@ import time
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_staging import reap
 from utils.batch_pipeline.intake import artifacts_for
+from utils.batch_pipeline.live import drain_recordings
 from utils.batch_pipeline.projection import Projector
 from utils.executors import run_blocking, start_background_task, sync_executor
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
@@ -124,6 +125,7 @@ def start_serving_from_env():
             try:
                 service = await run_blocking(sync_executor, serving_for_stage, current_stage())
                 await run_blocking(sync_executor, service.reconcile, recover_quarantine=True)
+                await drain_recordings(service.store)
             except Exception as error:
                 logging.getLogger(__name__).error(
                     'event=batch_serving outcome=retry exception_type=%s', type(error).__name__

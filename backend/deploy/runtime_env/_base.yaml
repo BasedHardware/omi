@@ -546,6 +546,9 @@ environment_shared:
         BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
           value: 'false'
           category: rollout
+        BATCH_PIPELINE_LIVE_ADMISSION_ENABLED:
+          value: 'false'
+          category: rollout
         BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
           value: 'false'
           category: rollout
@@ -1351,6 +1354,9 @@ environment_shared:
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_LIVE_ADMISSION_ENABLED:
+            value: 'false'
+            category: rollout
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
             value: 'false'
             category: rollout
@@ -1768,6 +1774,9 @@ environment_shared:
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_LIVE_ADMISSION_ENABLED:
+            value: 'false'
+            category: rollout
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
             value: 'false'
             category: rollout
@@ -2150,6 +2159,9 @@ environment_shared:
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_LIVE_ADMISSION_ENABLED:
+            value: 'false'
+            category: rollout
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
             value: 'false'
             category: rollout
@@ -2455,6 +2467,9 @@ environment_shared:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_LIVE_ADMISSION_ENABLED:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:

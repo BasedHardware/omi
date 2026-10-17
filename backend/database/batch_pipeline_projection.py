@@ -209,6 +209,8 @@ class ProjectionStore:
             job = self.ref('jobs', sid).get().to_dict() or {}
             if job.get('priority') == 0:
                 source = 'sync_fresh'
+        if binding.native_record:
+            return {'seconds': seconds, 'source': 'realtime', 'updates': {}, 'hour': '', 'completed': True}
         stamp = datetime.fromtimestamp(now, timezone.utc)
         updates = {}
         ledger = sync_content_ledger_ref(self.client, binding.owner_id, binding.content_id).get().to_dict() or {}

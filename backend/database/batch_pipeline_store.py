@@ -45,6 +45,9 @@ class FirestoreTransaction:
         self.writes: dict[tuple[str, str], dict] = {}
 
     def _ref(self, table: str, key: str):
+        if table == 'conversations':
+            uid, conversation_id = key.split('/', 1)
+            return self.client.collection('users').document(uid).collection('conversations').document(conversation_id)
         if table == 'content':
             uid, content_id = key.split('/', 1)
             return (
@@ -187,9 +190,14 @@ def first_pending(client: Any, namespace: str, owner_key: str, *, transaction: A
 
 
 def due(client: Any, namespace: str, state: str, now: float, limit: int = 100) -> list[str]:
-    if state not in {'leased', 'retry', 'result_ready'}:
+    if state not in {'leased', 'retry', 'result_ready', 'record_pending'}:
         raise ValueError('only recoverable states may be scanned')
-    field = {'leased': 'lease_until', 'retry': 'available_at', 'result_ready': 'enqueued_at'}[state]
+    field = {
+        'leased': 'lease_until',
+        'retry': 'available_at',
+        'result_ready': 'enqueued_at',
+        'record_pending': 'available_at',
+    }[state]
     docs = (
         client.collection(f'{namespace}_jobs')
         .where('state', '==', state)
