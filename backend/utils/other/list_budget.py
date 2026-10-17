@@ -301,21 +301,33 @@ def budgeted_stream_list(query: Any, budget: Optional[ListReadBudget]) -> List[A
         # Test fakes predating the budget seam do not accept a timeout kwarg;
         # the deadline still bites on the next charge/check.
         iterator = query.stream()
-    docs = []
+    docs: List[Any] = []
+    exhausted: Optional[_FirestoreDeadlineExceeded] = None
     try:
-        for doc in iterator:
-            docs.append(doc)
-            budget.charge(1)
-    except (_FirestoreDeadlineExceeded, ListReadBudgetExhausted) as exc:
-        if isinstance(exc, _FirestoreDeadlineExceeded):
+        try:
+            # Accumulate the full bounded page so the charge equals the rows
+            # the RPC physically fetched; a streaming loop abandoned at the
+            # allowance would under-count them (budget == physical reads).
+            for doc in iterator:
+                docs.append(doc)
+        except _FirestoreDeadlineExceeded as exc:
+            exhausted = exc
             budget.mark_exhausted('deadline')
-        exhausted = ListReadBudgetExhausted(budget.exhaustion_reason or 'deadline')
-        setattr(exhausted, 'partial_snapshots', docs)
-        raise exhausted from exc
-    finally:
-        close = getattr(iterator, 'close', None)
-        if callable(close):
-            close()
+        finally:
+            close = getattr(iterator, 'close', None)
+            if callable(close):
+                close()
+        if docs:
+            budget.charge(len(docs))
+        else:
+            budget.check()
+    except ListReadBudgetExhausted as exc:
+        setattr(exc, 'partial_snapshots', docs)
+        raise
+    if exhausted is not None:
+        failure = ListReadBudgetExhausted('deadline')
+        setattr(failure, 'partial_snapshots', docs)
+        raise failure from exhausted
     return docs
 
 
