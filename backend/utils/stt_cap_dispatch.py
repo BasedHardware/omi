@@ -123,33 +123,35 @@ class LiveAdmission:
     def allowed(self, provider):
         return customer_funded(provider) or self.managed and (self.remaining is None or self.remaining > 0)
 
-    def send(self, raw, data, provider, rate, *args, **kwargs):
+    def packet_allowed(self, data, provider, rate):
         if not self.allowed(provider):
+            return False
+        if self.remaining_units is not None and not customer_funded(provider):
+            debit = len(data) / (2 * rate) * _units_per_second(str(getattr(provider, 'value', provider)))
+            if debit > self.remaining_units:
+                # Suppress before timeline adapters can record an accepted span.
+                # Capture/archive owns these bytes independently of the provider.
+                self.remaining_units, self.remaining = 0, 0
+                self.reason = 'usage_budget_exhausted'
+                return False
+        return True
+
+    def send(self, raw, data, provider, rate, *args, **kwargs):
+        if not self.packet_allowed(data, provider, rate):
             record_audio(
                 'live', 'suppressed', provider, len(data) / (2 * rate), self.reason == 'plan_allowance_exhausted'
             )
             # Policy absorption is not a transport failure. The receive/archive
             # paths continue, and recovery must not fail over or close capture.
             return True
-        seconds = len(data) / (2 * rate)
-        unit_debit = (
-            seconds * _units_per_second(str(getattr(provider, 'value', provider)))
-            if self.remaining_units is not None and not customer_funded(provider)
-            else 0
-        )
-        if self.remaining_units is not None and unit_debit > self.remaining_units:
-            # Never overspend even for a large replay packet. Capture/archive
-            # owns these bytes independently; policy suppression is success.
-            self.remaining_units, self.remaining = 0, 0
-            self.reason = 'usage_budget_exhausted'
-            record_audio('live', 'suppressed', provider, seconds, False)
-            return True
         accepted = raw.send(data, *args, **kwargs)
         if accepted is not False and not customer_funded(provider):
             seconds = len(data) / (2 * rate)
             record_audio('live', 'accepted', provider, seconds, self.reason == 'plan_allowance_exhausted')
             if self.remaining_units is not None:
-                self.remaining_units = max(0, self.remaining_units - unit_debit)
+                self.remaining_units = max(
+                    0, self.remaining_units - seconds * _units_per_second(str(getattr(provider, 'value', provider)))
+                )
                 self.remaining = self.remaining_units / _units_per_second()
                 if self.remaining_units == 0:
                     self.reason = 'usage_budget_exhausted'
@@ -236,7 +238,7 @@ class CapSocket(STTSocket):
         return self.raw.death_reason if self.raw is not None else None
 
     def suppress(self, data):
-        if self.raw is None or not self.admission.allowed(self.provider):
+        if self.raw is None or not self.admission.packet_allowed(data, self.provider, self.rate):
             record_audio(
                 'live',
                 'suppressed',

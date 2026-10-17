@@ -126,9 +126,15 @@ def test_queued_sync_always_resolves_omi_funding(managed, monkeypatch):
 
 
 @pytest.mark.parametrize('kind', ['recording', 'gated', 'managed', 'replay', 'idle-replay'])
-def test_suppression_never_fabricates_provider_timeline_spans(kind):
+@pytest.mark.parametrize('ladder_packet', [False, True])
+def test_suppression_never_fabricates_provider_timeline_spans(kind, ladder_packet):
     state = cap.LiveAdmission('synthetic')
     state.reason = 'plan_allowance_exhausted'
+    if ladder_packet:
+        state.managed = True
+        state.remaining = 1 / 32000
+        state.remaining_units = cap._units_per_second('parakeet') / 32000
+        state.reason = 'usage_budget_available'
     raw = Mock()
     guarded = cap.CapSocket(state, 'parakeet', 16000, AsyncMock(), raw)
     tracker = Mock()
