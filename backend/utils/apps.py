@@ -917,7 +917,9 @@ async def generate_persona_prompt(uid: str, persona: Dict[str, Any]):
 def generate_persona_desc(uid: str, persona_name: str):
     """Generate a persona description based on user memories."""
     universal_memories = MemoryService(db_client=firestore_db).read(uid, limit=250, offset=0)
-    memories = [m.dict() for m in universal_memories]
+    # generate_persona_prompt already filters locked memories — a public
+    # persona description must not leak paywalled content either.
+    memories = [m.dict() for m in universal_memories if not m.is_locked]
 
     with track_usage(uid, Features.PERSONA):
         persona_description = generate_persona_description(memories, persona_name)
