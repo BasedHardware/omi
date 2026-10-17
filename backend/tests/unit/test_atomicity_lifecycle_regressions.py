@@ -22,6 +22,9 @@ from utils.memory.memory_system import (
     ensure_canonical_apply_control_state,
 )
 
+from database.memory_collections import MemoryCollections  # noqa: E402
+from google.api_core.exceptions import PermissionDenied, ServiceUnavailable  # noqa: E402
+
 _BACKEND = Path(__file__).resolve().parents[2]
 
 
@@ -586,9 +589,6 @@ def test_ensure_canonical_apply_control_still_provisions_live_accounts():
 
 
 def test_ensure_canonical_apply_control_retries_transient_read_blip(monkeypatch):
-    from database.memory_collections import MemoryCollections
-    from google.api_core.exceptions import ServiceUnavailable
-
     uid = "uid-transient"
     db = _Db()
     original_get = _Ref.get
@@ -608,9 +608,6 @@ def test_ensure_canonical_apply_control_retries_transient_read_blip(monkeypatch)
 
 
 def test_ensure_canonical_apply_control_bounds_transient_retries(monkeypatch):
-    from database.memory_collections import MemoryCollections
-    from google.api_core.exceptions import ServiceUnavailable
-
     uid = "uid-outage"
     db = _Db()
     original_get = _Ref.get
@@ -630,9 +627,6 @@ def test_ensure_canonical_apply_control_bounds_transient_retries(monkeypatch):
 
 
 def test_ensure_canonical_apply_control_fails_closed_on_permanent_read_fault(monkeypatch):
-    from database.memory_collections import MemoryCollections
-    from google.api_core.exceptions import PermissionDenied
-
     uid = "uid-denied"
     db = _Db()
     original_get = _Ref.get

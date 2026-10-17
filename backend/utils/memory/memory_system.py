@@ -57,42 +57,47 @@ def ensure_canonical_apply_control_state(uid: str, *, db_client: Any) -> MemoryC
     if db_client is None:
         raise CanonicalApplyStateUnavailable("canonical apply control state requires a database client")
 
-    # Account deletion (or a completed wipe marker) must not re-enroll maintenance
-    # or recreate apply control under a fresh account_generation=1. The fence is
-    # re-read after transient recovery below: the retry budget widens the window
-    # in which a deletion can start and remove the control document.
-    try:
-        deletion_fence = read_account_deletion_projection_fence(
-            uid,
-            db_client=db_client,
-            retry=None,
-            timeout=CANONICAL_APPLY_READ_TIMEOUT_SECONDS,
-        )
-    except Exception as exc:
-        raise CanonicalApplyStateUnavailable("canonical apply control state is unreadable") from exc
-    if deletion_fence.blocks_projection_writes:
-        raise CanonicalApplyStateUnavailable("canonical apply control refused during account deletion")
-
     ref = db_client.document(MemoryCollections(uid=uid).memory_apply_control_state)
 
-    def _read_snapshot(target_ref: Any, *, unavailable_message: str) -> Any:
-        # A transient store fault on this read must not fail the apply gate:
-        # Firestore's own retry can be exhausted by a brief regional blip.
-        # Classified transient faults get the same three-attempt budget as the
-        # MCP OAuth refresh rotation; permanent faults fail closed immediately.
-        # Each attempt disables the SDK's own (default 300 s deadline) retry and
-        # passes an explicit per-attempt timeout: this boundary owns the budget,
-        # so a typed transient error must surface here directly — an exhausted
-        # SDK Retry policy would instead raise RetryError, which the transient
-        # classifier (and therefore this loop) does not treat as retryable.
+    def _with_transient_budget(fn, *, unavailable_message: str) -> Any:
+        # A transient store fault on this boundary's reads must not fail the
+        # apply gate: Firestore's own retry can be exhausted by a brief
+        # regional blip. Classified transient faults get the same three-attempt
+        # budget as the MCP OAuth refresh rotation; permanent faults fail
+        # closed immediately. Each attempt disables the SDK's own (default
+        # 300 s deadline) retry and passes an explicit per-attempt timeout:
+        # this boundary owns the budget, so a typed transient error must
+        # surface here directly — an exhausted SDK Retry policy would instead
+        # raise RetryError, which the transient classifier (and therefore this
+        # loop) does not treat as retryable.
         for attempt in range(3):
             try:
-                return target_ref.get(retry=None, timeout=CANONICAL_APPLY_READ_TIMEOUT_SECONDS)
+                return fn()
             except Exception as exc:
                 if attempt < 2 and transient_store_error(exc):
                     time.sleep((0.1, 0.3)[attempt])
                     continue
                 raise CanonicalApplyStateUnavailable(unavailable_message) from exc
+
+    def _read_snapshot(target_ref: Any, *, unavailable_message: str) -> Any:
+        return _with_transient_budget(
+            lambda: target_ref.get(retry=None, timeout=CANONICAL_APPLY_READ_TIMEOUT_SECONDS),
+            unavailable_message=unavailable_message,
+        )
+
+    def _read_fence() -> Any:
+        # The deletion-fence read gets the same bounded per-attempt policy and
+        # the same transient budget as the control read: with the SDK retry
+        # disabled, a single fence-read blip must not fail the whole gate.
+        return _with_transient_budget(
+            lambda: read_account_deletion_projection_fence(
+                uid,
+                db_client=db_client,
+                retry=None,
+                timeout=CANONICAL_APPLY_READ_TIMEOUT_SECONDS,
+            ),
+            unavailable_message="canonical apply control state is unreadable",
+        )
 
     def _control_from_snapshot(snapshot: Any) -> MemoryControlState:
         if not getattr(snapshot, "exists", False):
@@ -110,17 +115,15 @@ def ensure_canonical_apply_control_state(uid: str, *, db_client: Any) -> MemoryC
 
     def _recheck_deletion_fence() -> None:
         """A deletion may have started while the retry loop was waiting."""
-        try:
-            deletion_fence = read_account_deletion_projection_fence(
-                uid,
-                db_client=db_client,
-                retry=None,
-                timeout=CANONICAL_APPLY_READ_TIMEOUT_SECONDS,
-            )
-        except Exception as exc:
-            raise CanonicalApplyStateUnavailable("canonical apply control state is unreadable") from exc
+        deletion_fence = _read_fence()
         if deletion_fence.blocks_projection_writes:
             raise CanonicalApplyStateUnavailable("canonical apply control refused during account deletion")
+
+    # Account deletion (or a completed wipe marker) must not re-enroll maintenance
+    # or recreate apply control under a fresh account_generation=1. The fence is
+    # re-read after transient recovery below: the retry budget widens the window
+    # in which a deletion can start and remove the control document.
+    _recheck_deletion_fence()
 
     snapshot = _read_snapshot(
         ref,
