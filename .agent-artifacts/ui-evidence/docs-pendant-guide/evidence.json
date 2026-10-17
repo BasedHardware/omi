@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-web-pendant-guide-overview.png",
+      "platform": "web",
+      "description": "Pendant guide on the local Mintlify docs server (dark theme)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}
