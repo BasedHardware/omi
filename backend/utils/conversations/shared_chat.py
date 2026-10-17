@@ -172,6 +172,7 @@ def resolve_shared_public_conversation(
         not isinstance(visibility, str)
         or visibility not in {'shared', 'public'}
         or conversation.get('is_locked', False)
+        or conversations_db.is_soft_deleted(conversation)
     ):
         raise SharedConversationUnavailable()
 

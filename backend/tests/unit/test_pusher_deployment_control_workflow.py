@@ -349,3 +349,11 @@ def test_real_config_and_capacity_gates_precede_every_pusher_helm_mutation() -> 
     assert render_only < apply_config < reconciled_config < live < helm
     assert "--render-only" in MANUAL[render_only:apply_config]
     assert "--image \"$PUSHER_IMAGE_REFERENCE\"" in MANUAL[live:helm]
+
+
+def test_prod_canary_reuses_the_workload_identity_bound_shared_ksa() -> None:
+    canary = MANUAL.index('helm -n prod-omi-backend upgrade --install "$PUSHER_CANARY"')
+    rollout = MANUAL.index('kubectl -n prod-omi-backend rollout status "deployment/$PUSHER_CANARY"')
+    install = MANUAL[canary:rollout]
+    assert "--set serviceAccount.create=false" in install
+    assert "--set-string serviceAccount.name=prod-omi-pusher" in install

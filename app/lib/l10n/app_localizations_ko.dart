@@ -4305,12 +4305,27 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return '$plan 플랜은 $date에 종료됩니다.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return '혜택을 유지하려면 지금 재구독하세요 - $date까지 요금이 청구되지 않습니다.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return '플랜이 $date에 취소될 예정입니다.\n혜택을 유지하려면 지금 재구독하세요 - $date까지 요금이 청구되지 않습니다.';
   }
 
   @override
   String get annualPlanStartsAutomatically => '월간 플랜이 종료되면 연간 플랜이 자동으로 시작됩니다.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return '$plan 플랜은 $date에 갱신됩니다.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4343,6 +4358,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get continueText => '계속';
+
+  @override
+  String get resubscribeFirstToChangePlans => '플랜을 변경하려면 먼저 다시 구독하세요.';
 
   @override
   String get resubscribe => '재구독';
@@ -4942,9 +4960,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get content => '콘텐츠';
-
-  @override
-  String get noContentToDisplay => '표시할 콘텐츠가 없습니다';
 
   @override
   String get noSummary => '요약 없음';
@@ -5558,11 +5573,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get downloadingFromSdCard => 'SD 카드에서 다운로드 중';
-
-  @override
-  String processingProgress(int current, int total) {
-    return '처리 중 $current/$total';
-  }
 
   @override
   String conversationsCreated(int count) {
@@ -8961,18 +8971,10 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$total개 중 $current개';
-  }
-
-  @override
   String get syncStatusOnDevice => '기기에 있음';
 
   @override
   String get syncStatusDownloadingFromDevice => '기기에서 다운로드 중';
-
-  @override
-  String get newestFirst => '최신순';
 
   @override
   String get noSyncedRecordingsYet => '아직 동기화된 녹음이 없습니다';
@@ -9669,9 +9671,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get speechToTextUnavailableDesc => '지금은 음성을 텍스트로 변환할 수 없습니다. 인터넷 연결과 기기의 음성 인식 설정을 확인한 후 다시 시도해주세요.';
-
-  @override
-  String get processingTakingLonger => '아직 처리 중입니다. 평소보다 더 오래 걸리고 있어요.';
 
   @override
   String get speechProfileEnrollmentPrompt => 'Omi가 내 목소리를 구별할 수 있도록 아무 주제로나 약 5초 동안 말해 주세요.';
@@ -11852,9 +11851,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => '로컬 사본';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -12171,6 +12167,9 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => '대화 맥락';
+
+  @override
   String get reviewQuestionSpelling => '이건 어떻게 쓰나요?';
 
   @override
@@ -12267,6 +12266,15 @@ class AppLocalizationsKo extends AppLocalizations {
   String get reviewRecentChanges => '최근 변경 사항';
 
   @override
+  String get reviewChangeAfter => '변경 후';
+
+  @override
+  String get reviewChangeBefore => '변경 전';
+
+  @override
+  String get reviewChangeRemoved => '활성 목록에서 제거됨';
+
+  @override
   String get reviewChangesIntro => '지난 30일 동안 Omi가 자동으로 바꾼 내용이에요. 잘못된 것은 되돌리세요.';
 
   @override
@@ -12283,6 +12291,59 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get reviewNoChangesBody => 'Omi가 노트를 정리하면 변경 사항이 여기에 표시돼요.';
+
+  @override
+  String get reviewChangesSectionTerms => '이름 및 용어';
+
+  @override
+  String get reviewChangesSectionTitles => '제목 및 요약';
+
+  @override
+  String get reviewChangesSectionOther => '기타 변경 사항';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '대화 $count개',
+      one: '대화 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count곳',
+      one: '1곳',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return '$count개 모두 보기';
+  }
+
+  @override
+  String get reviewChangeUndoAll => '모두 실행 취소';
+
+  @override
+  String get reviewChangeSeeEvidence => '근거 보기';
+
+  @override
+  String get reviewChangeViewConversation => '대화 보기';
+
+  @override
+  String get reviewChangeViewTask => '할 일 보기';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return '실행 취소하지 못함: $failed/$total개. 다시 시도하세요.';
+  }
 
   @override
   String get reviewShowMore => '더 보기';
@@ -12900,6 +12961,36 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get paywallRecommended => 'Recommended';
+
+  @override
+  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
+
+  @override
+  String get paywallOtherPlans => 'See all plans';
+
+  @override
+  String get paywallComparePlans => 'See plans';
+
+  @override
+  String get paywallYourPlan => 'Your plan';
+
+  @override
+  String get paywallNotNow => 'Not now';
+
+  @override
+  String get paywallTryAgain => 'Try again';
+
+  @override
+  String get paywallManageBilling => 'Manage billing';
+
+  @override
+  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
+
+  @override
+  String get paywallPlans => 'Plans';
+
+  @override
   String get firstCaptureTitle => 'How will you capture?';
 
   @override
@@ -12946,6 +13037,41 @@ class AppLocalizationsKo extends AppLocalizations {
   String get firstCaptureEmpty => 'I didn\'t catch enough speech, try again with a few sentences';
 
   @override
+  String get watchCaptureTitle => 'Record from your Apple Watch';
+
+  @override
+  String get watchCaptureOpen => 'Open Omi on your Apple Watch.';
+
+  @override
+  String get watchCaptureRecord => 'Tap Record. Allow microphone access if asked.';
+
+  @override
+  String get watchCaptureSync => 'Your recording syncs to Omi on this phone.';
+
+  @override
+  String get pairingBluetoothOff => 'Turn on Bluetooth on your phone, then try again.';
+
+  @override
+  String get pairingBluetoothPermission => 'Allow Bluetooth access for Omi in Settings, then try again.';
+
+  @override
+  String get pairingNearbyPermission => 'Allow Nearby devices access for Omi in Settings, then try again.';
+
+  @override
+  String get pairingLocationPermission =>
+      'Allow location access for Omi in Settings so this phone can find your device, then try again.';
+
+  @override
+  String get pairingNotFoundOrDropped =>
+      'Couldn\'t reach your Omi. Make sure it\'s charged, close to your phone, and its light is blinking, then try again.';
+
+  @override
+  String get pairingBondRecovery => 'Forget Omi in your phone’s Bluetooth settings, then try pairing again.';
+
+  @override
+  String get pairingHowTo => 'How to pair';
+
+  @override
   String get firstCaptureWatchInstructions =>
       'Open Omi on your Apple Watch and tap Record. Allow microphone access if asked. Your capture will sync to Omi on this phone.';
 
@@ -12983,4 +13109,240 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get firstCaptureSiriTip => 'Tip: Enable Omi in Shortcuts → Siri.';
+
+  @override
+  String get paywallOutlineHeadline => '이제 단 한마디도 놓치지 마세요.';
+
+  @override
+  String get paywallCancelAnytime => '언제든지 해지할 수 있습니다.';
+
+  @override
+  String get connectAnAgent => '에이전트 연결';
+
+  @override
+  String get connectAnAgentSubtitle => 'Claude, ChatGPT, Codex 등 모든 에이전트용 설정 프롬프트 받기';
+
+  @override
+  String syncCardSyncingAmount(String amount) {
+    return '$amount 분량의 오디오 동기화 중';
+  }
+
+  @override
+  String get syncCardSyncingTitle => '녹음 동기화 중';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Omi에서 다운로드 중 · $done / $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return '업로드 중 · $done / $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return '$amount을(를) 대화로 변환 중';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done / $total 완료 · 이 화면을 나가도 됩니다';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount 동기화 준비됨';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → 휴대폰';
+
+  @override
+  String get syncStepLabelUpload => '업로드';
+
+  @override
+  String get syncStepLabelTranscribe => '텍스트 변환';
+
+  @override
+  String get syncDetailsTitle => '동기화 상세 정보';
+
+  @override
+  String get syncDetailsRightNow => '현재';
+
+  @override
+  String get syncDetailsYourOmi => '내 Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => '전송 속도';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Omi에서 대기 중';
+
+  @override
+  String get syncDetailsWaitingOnPhone => '이 휴대폰에서 대기 중';
+
+  @override
+  String get syncDetailsTranscribing => 'Omi에서 텍스트 변환 중';
+
+  @override
+  String get syncDetailsForSupport => '지원팀용';
+
+  @override
+  String get syncDetailsAudioFiles => '오디오 파일';
+
+  @override
+  String get syncDetailsServerJobs => '서버 작업 (완료 / 전체)';
+
+  @override
+  String get syncDetailsCopy => '지원팀용 상세 정보 복사';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Operator 및 Architect에서 사용 가능';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app 정원이 찼습니다';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => '대기자 명단 등록';
+
+  @override
+  String get chatAppsOnWaitlist => '대기자 명단에 등록되었습니다';
+
+  @override
+  String get chatAppsWaitlistJoined => '대기자 명단에 등록되었습니다. 자리가 나면 알려 드릴게요.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return '$name님, 준비가 끝났어요';
+  }
+
+  @override
+  String get onboardingActDemoSummary => '6월에 리스본으로 이사하는 샘과 점심. 금요일까지 팀에 자료를 보내고, 집에 가는 길에 우유를 사야 해요.';
+
+  @override
+  String get onboardingActDemoTask1 => '금요일까지 팀에 발표 자료 보내기';
+
+  @override
+  String get onboardingActDemoTask2 => '집에 가는 길에 우유 사기';
+
+  @override
+  String get onboardingActDemoTitle => '샘과 점심';
+
+  @override
+  String get onboardingActDictateBody => '편하게 말하세요. 나머지는 Omi가 할게요.';
+
+  @override
+  String get onboardingActDictateBodyOmi => '그냥 말하세요. Omi가 듣고 있어요.';
+
+  @override
+  String get onboardingActDictateExample =>
+      '방금 샘이랑 점심 먹었어. 6월에 리스본으로 이사 간대! 금요일까지 팀에 발표 자료 보내는 거랑, 집에 가는 길에 우유 사는 거 알려 줘.';
+
+  @override
+  String get onboardingActDictateHint => '다 말했으면 체크를 누르세요';
+
+  @override
+  String get onboardingActDictateTitle => 'Omi에게 오늘 하루를 말해 보세요';
+
+  @override
+  String get onboardingActIntro => 'Omi를 써 볼까요?';
+
+  @override
+  String get onboardingActJustNow => '방금';
+
+  @override
+  String get onboardingActMicAllow => '마이크 허용';
+
+  @override
+  String get onboardingActMicBody => '말할 때 Omi가 들을 수 있도록요.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi가 아직 오디오를 보내지 않아요. 지금은 휴대폰을 사용하세요.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi에 마이크 권한이 필요해요';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Omi 소리가 들리지 않아요. 켜져 있고 가까이 있는지 확인하세요.';
+
+  @override
+  String get onboardingActNoAudioPhone => '아직 목소리가 들리지 않아요. 조금 더 크게 말해 보세요.';
+
+  @override
+  String get onboardingActNotesLabel => '오늘 하루 요약';
+
+  @override
+  String get onboardingActPhoneMic => '휴대폰 마이크';
+
+  @override
+  String get onboardingActRateTitle => 'Omi 마음에 드시나요?';
+
+  @override
+  String get onboardingActRemembers => '기억은 Omi가 대신해요';
+
+  @override
+  String get onboardingActSavedToTasks => '할 일에 저장됨';
+
+  @override
+  String get onboardingActTasksLabel => 'Omi가 할 일을 찾았어요';
+
+  @override
+  String get onboardingActWriting => '요약하는 중…';
+
+  @override
+  String get onboardingActYourWords => '이렇게 말했어요';
+
+  @override
+  String get onboardingConnectOmi => 'Omi 연결';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Omi를 탭해서 연결하세요.';
+
+  @override
+  String get onboardingNoOmiYet => '아직 Omi가 없으신가요?';
+
+  @override
+  String get onboardingOmiNotOrdered => '아직 주문하지 않았어요';
+
+  @override
+  String get onboardingOmiOrdered => '주문했어요';
+
+  @override
+  String get onboardingPermissionTapToFix => '탭하여 해결';
+
+  @override
+  String get homePendingTitle => '대화 준비 중';
+
+  @override
+  String get homePendingCatchingUp => '이전 오디오 처리 중';
+
+  @override
+  String get onTheWayTitle => '준비 중';
+
+  @override
+  String get onTheWayAlmostReady => '거의 완료';
+
+  @override
+  String get activityEmpty => '아직 활동이 없습니다';
+
+  @override
+  String get activityNewSemantics => '활동, 새 항목';
+
+  @override
+  String get activityLoadFailed => '활동을 모두 불러오지 못했습니다';
+
+  @override
+  String get activityNewItem => '새 항목';
+
+  @override
+  String get activityNeedsAttention => '확인 필요';
+
+  @override
+  String get activityRetryAll => '모두 다시 시도';
+
+  @override
+  String get attentionSummaryFailed => '이 대화를 요약하지 못했습니다';
 }

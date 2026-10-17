@@ -11,7 +11,7 @@ from utils.messaging import undo
 from utils.conversations.meeting_notes_wiring import confirmed_corrections_context
 from database import chat_edits
 
-CONFIG = {'configurable': {'user_id': 'owner', 'chat_session_id': 'session'}}
+CONFIG = {'configurable': {'user_id': 'owner', 'chat_session_id': 'session', 'user_timezone': 'UTC'}}
 
 
 @pytest.fixture

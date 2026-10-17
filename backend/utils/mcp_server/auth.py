@@ -120,8 +120,29 @@ def authenticate_mcp_request(
     if authorization.startswith("Bearer "):
         token = authorization[7:]
 
+    from utils.api_key_families import (
+        MCP_FAMILY,
+        wrong_key_family_detail,
+        malformed_api_key_detail,
+        unknown_api_key_detail,
+    )
+
+    mismatch = wrong_key_family_detail(token, MCP_FAMILY)
+    if mismatch:
+        raise invalid_mcp_auth_exception(
+            mismatch,
+            path_kind="legacy_sse" if request is not None and request.url.path == "/v1/mcp/sse" else "canonical",
+        )
+    path_kind = "legacy_sse" if request is not None and request.url.path == "/v1/mcp/sse" else "canonical"
+    if token.startswith("omi_mcp_"):
+        malformed = malformed_api_key_detail(token, MCP_FAMILY)
+        if malformed:
+            raise invalid_mcp_auth_exception(malformed, path_kind=path_kind)
     try:
-        return _authenticate_mcp_token(token, request)
+        context = _authenticate_mcp_token(token, request)
+        if context is None and token.startswith("omi_mcp_"):
+            raise invalid_mcp_auth_exception(unknown_api_key_detail(MCP_FAMILY), path_kind=path_kind)
+        return context
     except google_api_exceptions.GoogleAPIError as exc:
         logger.warning("MCP auth lookup failed against the token store: %s", exc)
         raise mcp_auth_store_unavailable_exception() from exc
@@ -182,7 +203,7 @@ def authenticate_api_key(authorization: Optional[str]) -> Optional[str]:
 
 
 def invalid_mcp_auth_exception(
-    detail: str = "Invalid or missing API key. Provide via Authorization header.",
+    detail: str = "Missing, malformed, unknown, or revoked MCP credential. Use an omi_mcp_ key or MCP OAuth bearer token in Authorization; omi_dev_ keys belong to /v1/dev/.",
     path_kind: str = "canonical",
 ) -> HTTPException:
     """Return an MCP OAuth discovery hint for clients that need authorization.

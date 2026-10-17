@@ -2,8 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import {
-  Check,
-  Copy,
   X,
   Plus,
   Trash2,
@@ -19,6 +17,8 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { buildDevApiPrompt, configuredApiBase } from '@/lib/agentPrompts';
+import { KeyHandoff } from '@/components/developers/KeyHandoff';
 import type { DeveloperApiKey, McpApiKey, DeveloperWebhooks } from '@/types/user';
 import { Toggle } from './SettingsToggle';
 import { Card } from './SettingsCard';
@@ -37,7 +37,7 @@ const scopeSelection = (mode: 'none' | 'read' | 'full') =>
   );
 
 // Create API Key Dialog
-function CreateApiKeyDialog({
+export function CreateApiKeyDialog({
   isOpen,
   onClose,
   onCreateKey,
@@ -52,7 +52,6 @@ function CreateApiKeyDialog({
   );
   const [isCreating, setIsCreating] = useState(false);
   const [createdKey, setCreatedKey] = useState<DeveloperApiKey | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const selectedScopes = Object.entries(scopes)
     .filter(([, v]) => v)
@@ -74,19 +73,10 @@ function CreateApiKeyDialog({
     setIsCreating(false);
   };
 
-  const handleCopy = () => {
-    if (createdKey?.key) {
-      navigator.clipboard.writeText(createdKey.key);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
   const handleClose = () => {
     setKeyName('');
     setScopes(scopeSelection('none'));
     setCreatedKey(null);
-    setCopied(false);
     onClose();
   };
 
@@ -98,51 +88,22 @@ function CreateApiKeyDialog({
       onClick={handleClose}
     >
       <div
-        className="mx-4 w-full max-w-md overflow-hidden rounded-2xl bg-bg-secondary"
+        className="mx-4 max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-bg-secondary"
         onClick={(e) => e.stopPropagation()}
       >
-        {createdKey ? (
-          <div className="p-6">
-            <div className="mb-4 flex items-center gap-3">
-              <div className="rounded-xl bg-green-500/20 p-3">
-                <Check className="h-6 w-6 text-green-400" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-text-primary">
-                  API Key Created
-                </h3>
-                <p className="text-sm text-text-tertiary">
-                  Save this key now - you won&apos;t see it again!
-                </p>
-              </div>
-            </div>
-            <div className="mb-4 rounded-xl bg-bg-tertiary p-4">
-              <p className="mb-2 text-xs text-text-tertiary">Your API Key</p>
-              <code className="break-all font-mono text-sm text-text-primary">
-                {createdKey.key}
-              </code>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={handleCopy}
-                className={cn(
-                  'flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 font-medium transition-colors',
-                  copied
-                    ? 'bg-green-500/20 text-green-400'
-                    : 'bg-text-primary text-bg-primary hover:bg-text-primary/90',
-                )}
-              >
-                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                {copied ? 'Copied!' : 'Copy Key'}
-              </button>
-              <button
-                onClick={handleClose}
-                className="rounded-xl bg-bg-tertiary px-4 py-3 text-text-secondary transition-colors hover:bg-bg-quaternary"
-              >
-                Done
-              </button>
-            </div>
-          </div>
+        {createdKey?.key ? (
+          <KeyHandoff
+            secret={createdKey.key}
+            keyLabel="API Key"
+            buildPrompt={(source) =>
+              buildDevApiPrompt(
+                configuredApiBase(),
+                source,
+                createdKey.scopes ?? selectedScopes,
+              )
+            }
+            onDone={handleClose}
+          />
         ) : (
           <div className="p-6">
             <div className="mb-6 flex items-center justify-between">

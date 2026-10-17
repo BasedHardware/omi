@@ -4410,6 +4410,16 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Magtatapos ang iyong $plan plan sa $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Mag-subscribe muli upang mapanatili ang iyong mga benepisyo - walang bayad hanggang $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Ang iyong plano ay nakatakda na kanselahin sa $date.\nMag-subscribe muli upang mapanatili ang iyong mga benepisyo - walang bayad hanggang $date.';
   }
@@ -4417,6 +4427,11 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Ang iyong annual plan ay awtomatikong magsisimula kapag nagtatapos ang iyong monthly plan.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Mare-renew ang iyong $plan plan sa $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4449,6 +4464,9 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get continueText => 'Magpatuloy';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Mag-subscribe muna ulit para magpalit ng plan.';
 
   @override
   String get resubscribe => 'Mag-subscribe Muli';
@@ -5065,9 +5083,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get content => 'Content';
-
-  @override
-  String get noContentToDisplay => 'Walang content na ipapakita';
 
   @override
   String get noSummary => 'Walang summary';
@@ -5691,11 +5706,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get downloadingFromSdCard => 'Dine-download mula sa SD Card';
-
-  @override
-  String processingProgress(int current, int total) {
-    return 'Pinoproseso ang $current/$total';
-  }
 
   @override
   String conversationsCreated(int count) {
@@ -9172,18 +9182,10 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current ng $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'Nasa iyong device';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Dina-download mula sa iyong device';
-
-  @override
-  String get newestFirst => 'Pinakabago muna';
 
   @override
   String get noSyncedRecordingsYet => 'Wala pang naka-sync na recording';
@@ -9907,9 +9909,6 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Hindi available ang pag-convert ng boses sa teksto sa ngayon. Suriin ang iyong koneksyon sa internet at ang mga setting ng pagkilala sa boses ng iyong device, pagkatapos ay subukan muli.';
-
-  @override
-  String get processingTakingLonger => 'Ginagawa pa — mas matagal ito kaysa karaniwan.';
 
   @override
   String get speechProfileEnrollmentPrompt =>
@@ -12127,9 +12126,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Mga Lokal na Kopya';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -12449,6 +12445,9 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Konteksto ng pag-uusap';
+
+  @override
   String get reviewQuestionSpelling => 'Paano ito ibabaybay?';
 
   @override
@@ -12545,6 +12544,15 @@ class AppLocalizationsTl extends AppLocalizations {
   String get reviewRecentChanges => 'Mga Kamakailang Pagbabago';
 
   @override
+  String get reviewChangeAfter => 'Pagkatapos';
+
+  @override
+  String get reviewChangeBefore => 'Bago';
+
+  @override
+  String get reviewChangeRemoved => 'Inalis sa aktibong listahan';
+
+  @override
   String get reviewChangesIntro =>
       'Ang mga binago ng Omi nang mag-isa sa nakalipas na 30 araw. I-undo ang anumang mukhang mali.';
 
@@ -12562,6 +12570,59 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get reviewNoChangesBody => 'Kapag inayos ng Omi ang mga tala mo, lalabas dito ang mga pagbabago.';
+
+  @override
+  String get reviewChangesSectionTerms => 'Mga pangalan at termino';
+
+  @override
+  String get reviewChangesSectionTitles => 'Mga pamagat at buod';
+
+  @override
+  String get reviewChangesSectionOther => 'Iba pang pagbabago';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pag-uusap',
+      one: '1 pag-uusap',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lugar',
+      one: '1 lugar',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Ipakita lahat ng $count';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'I-undo lahat';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Tingnan ang ebidensya';
+
+  @override
+  String get reviewChangeViewConversation => 'Tingnan ang pag-uusap';
+
+  @override
+  String get reviewChangeViewTask => 'Tingnan ang gawain';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Hindi ma-undo ang $failed sa $total. Subukang muli.';
+  }
 
   @override
   String get reviewShowMore => 'Magpakita Pa';
@@ -13188,6 +13249,36 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String get paywallRecommended => 'Recommended';
+
+  @override
+  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
+
+  @override
+  String get paywallOtherPlans => 'See all plans';
+
+  @override
+  String get paywallComparePlans => 'See plans';
+
+  @override
+  String get paywallYourPlan => 'Your plan';
+
+  @override
+  String get paywallNotNow => 'Not now';
+
+  @override
+  String get paywallTryAgain => 'Try again';
+
+  @override
+  String get paywallManageBilling => 'Manage billing';
+
+  @override
+  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
+
+  @override
+  String get paywallPlans => 'Plans';
+
+  @override
   String get firstCaptureTitle => 'How will you capture?';
 
   @override
@@ -13234,6 +13325,41 @@ class AppLocalizationsTl extends AppLocalizations {
   String get firstCaptureEmpty => 'I didn\'t catch enough speech, try again with a few sentences';
 
   @override
+  String get watchCaptureTitle => 'Record from your Apple Watch';
+
+  @override
+  String get watchCaptureOpen => 'Open Omi on your Apple Watch.';
+
+  @override
+  String get watchCaptureRecord => 'Tap Record. Allow microphone access if asked.';
+
+  @override
+  String get watchCaptureSync => 'Your recording syncs to Omi on this phone.';
+
+  @override
+  String get pairingBluetoothOff => 'Turn on Bluetooth on your phone, then try again.';
+
+  @override
+  String get pairingBluetoothPermission => 'Allow Bluetooth access for Omi in Settings, then try again.';
+
+  @override
+  String get pairingNearbyPermission => 'Allow Nearby devices access for Omi in Settings, then try again.';
+
+  @override
+  String get pairingLocationPermission =>
+      'Allow location access for Omi in Settings so this phone can find your device, then try again.';
+
+  @override
+  String get pairingNotFoundOrDropped =>
+      'Couldn\'t reach your Omi. Make sure it\'s charged, close to your phone, and its light is blinking, then try again.';
+
+  @override
+  String get pairingBondRecovery => 'Forget Omi in your phone’s Bluetooth settings, then try pairing again.';
+
+  @override
+  String get pairingHowTo => 'How to pair';
+
+  @override
   String get firstCaptureWatchInstructions =>
       'Open Omi on your Apple Watch and tap Record. Allow microphone access if asked. Your capture will sync to Omi on this phone.';
 
@@ -13271,4 +13397,241 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get firstCaptureSiriTip => 'Tip: Enable Omi in Shortcuts → Siri.';
+
+  @override
+  String get paywallOutlineHeadline => 'Huwag nang palampasin ang kahit isang salita.';
+
+  @override
+  String get paywallCancelAnytime => 'Kanselahin anumang oras.';
+
+  @override
+  String get connectAnAgent => 'Ikonekta ang isang Agent';
+
+  @override
+  String get connectAnAgentSubtitle => 'Kumuha ng setup prompt para sa Claude, ChatGPT, Codex, o anumang agent';
+
+  @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Sini-sync ang $amount ng audio';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Sini-sync ang mga recording mo';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Dina-download mula sa Omi mo · $done sa $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Ina-upload · $done sa $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'Ginagawang mga usapan ang $amount';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done sa $total tapos na · puwede mong iwan ang screen na ito';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount handa nang i-sync';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → phone';
+
+  @override
+  String get syncStepLabelUpload => 'Upload';
+
+  @override
+  String get syncStepLabelTranscribe => 'Transcribe';
+
+  @override
+  String get syncDetailsTitle => 'Mga detalye ng sync';
+
+  @override
+  String get syncDetailsRightNow => 'Ngayon';
+
+  @override
+  String get syncDetailsYourOmi => 'Ang Omi mo';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Bilis ng paglipat';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Naghihintay sa Omi mo';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Naghihintay sa phone na ito';
+
+  @override
+  String get syncDetailsTranscribing => 'Tina-transcribe sa Omi';
+
+  @override
+  String get syncDetailsForSupport => 'Para sa support';
+
+  @override
+  String get syncDetailsAudioFiles => 'Mga audio file';
+
+  @override
+  String get syncDetailsServerJobs => 'Mga server job (tapos / kabuuan)';
+
+  @override
+  String get syncDetailsCopy => 'Kopyahin ang mga detalye para sa support';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Available sa Operator at Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return 'Puno na ang $app';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Sumali sa waitlist';
+
+  @override
+  String get chatAppsOnWaitlist => 'Nasa waitlist ka na';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Nasa waitlist ka na. Sasabihan ka namin kapag may puwesto na.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Handa ka na, $name';
+  }
+
+  @override
+  String get onboardingActDemoSummary =>
+      'Tanghalian kasama si Sam, na lilipat sa Lisbon sa Hunyo. Gusto mong ipadala ang deck sa team bago mag-Biyernes at bumili ng gatas pauwi.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Ipadala ang deck sa team bago mag-Biyernes';
+
+  @override
+  String get onboardingActDemoTask2 => 'Bumili ng gatas pauwi';
+
+  @override
+  String get onboardingActDemoTitle => 'Lunch kasama si Sam';
+
+  @override
+  String get onboardingActDictateBody => 'Sabihin mo sa sarili mong paraan. Ang Omi na ang bahala.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Magsalita ka lang. Nakikinig ang Omi mo.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Kakatapos ko lang mag-lunch kasama si Sam, lilipat na siya sa Lisbon sa Hunyo! Ipaalala mo sa akin na ipadala ang deck sa team bago mag-Biyernes, at bumili ng gatas pauwi.';
+
+  @override
+  String get onboardingActDictateHint => 'I-tap ang check kapag tapos ka na';
+
+  @override
+  String get onboardingActDictateTitle => 'Ikuwento sa Omi ang araw mo';
+
+  @override
+  String get onboardingActIntro => 'Subukan natin ang Omi.';
+
+  @override
+  String get onboardingActJustNow => 'Ngayon lang';
+
+  @override
+  String get onboardingActMicAllow => 'Payagan ang Mikropono';
+
+  @override
+  String get onboardingActMicBody => 'Para marinig ka ng Omi kapag kinakausap mo ito.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Hindi pa nagpapadala ng audio ang Omi mo. Gamitin muna ang iyong phone.';
+
+  @override
+  String get onboardingActMicTitle => 'Kailangan ng Omi ang mikropono mo';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Hindi marinig ang Omi mo. Siguraduhing naka-on ito at malapit.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Hindi ka pa marinig. Subukang magsalita nang medyo malakas.';
+
+  @override
+  String get onboardingActNotesLabel => 'Ang araw mo, buod';
+
+  @override
+  String get onboardingActPhoneMic => 'Mikropono ng phone';
+
+  @override
+  String get onboardingActRateTitle => 'Gusto mo ba ang Omi sa ngayon?';
+
+  @override
+  String get onboardingActRemembers => 'Tinatandaan ng Omi para hindi mo na kailangan';
+
+  @override
+  String get onboardingActSavedToTasks => 'Na-save sa mga gawain mo';
+
+  @override
+  String get onboardingActTasksLabel => 'Nahuli ng Omi ang mga gagawin mo';
+
+  @override
+  String get onboardingActWriting => 'Binubuod…';
+
+  @override
+  String get onboardingActYourWords => 'Ito ang sinabi mo';
+
+  @override
+  String get onboardingConnectOmi => 'Ikonekta ang Omi';
+
+  @override
+  String get onboardingConnectTapToConnect => 'I-tap ang iyong Omi para kumonekta.';
+
+  @override
+  String get onboardingNoOmiYet => 'Wala ka pang Omi?';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Hindi pa naka-order';
+
+  @override
+  String get onboardingOmiOrdered => 'Na-order ko na';
+
+  @override
+  String get onboardingPermissionTapToFix => 'I-tap para ayusin';
+
+  @override
+  String get homePendingTitle => 'Paparating na ang mga usapan';
+
+  @override
+  String get homePendingCatchingUp => 'Hinahabol ang naunang audio';
+
+  @override
+  String get onTheWayTitle => 'Paparating';
+
+  @override
+  String get onTheWayAlmostReady => 'Halos handa na';
+
+  @override
+  String get activityEmpty => 'Wala pang aktibidad';
+
+  @override
+  String get activityNewSemantics => 'Aktibidad, mga bagong item';
+
+  @override
+  String get activityLoadFailed => 'Hindi ma-load ang lahat ng iyong aktibidad';
+
+  @override
+  String get activityNewItem => 'Bago';
+
+  @override
+  String get activityNeedsAttention => 'Kailangang tingnan';
+
+  @override
+  String get activityRetryAll => 'Subukan muli lahat';
+
+  @override
+  String get attentionSummaryFailed => 'Hindi ma-summarize ang usapang ito';
 }

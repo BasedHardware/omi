@@ -43,7 +43,7 @@ def test_prod_parakeet_autoscaling_and_zone_spread_contract():
     values = _values('prod')
 
     assert values['autoscaling']['minReplicas'] == 3
-    assert values['autoscaling']['maxReplicas'] == 7
+    assert values['autoscaling']['maxReplicas'] == 12
     assert values['topologySpreadConstraints'] == [
         {
             'maxSkew': 1,
@@ -51,6 +51,44 @@ def test_prod_parakeet_autoscaling_and_zone_spread_contract():
             'whenUnsatisfiable': 'ScheduleAnyway',
         }
     ]
+
+
+def test_demand_scaler_renders_requests_and_queue_ages_without_raw_tail_or_gpu():
+    helm = shutil.which('helm')
+    if helm is None:
+        pytest.skip('helm not installed')
+    command = [
+        helm,
+        'template',
+        'prod-omi-parakeet',
+        str(CHART),
+        '-f',
+        str(CHART / 'prod_omi_parakeet_values.yaml'),
+        '--set',
+        'autoscaling.demand.enabled=true',
+        '--set-string',
+        'image.tag=packing-contract-test',
+        '--show-only',
+        'templates/hpa.yaml',
+    ]
+    hpa = yaml.safe_load(subprocess.run(command, check=True, text=True, capture_output=True).stdout)
+    assert hpa['spec']['minReplicas'] == 3 and hpa['spec']['maxReplicas'] == 12
+    metrics = hpa['spec']['metrics']
+    assert all(metric['type'] == 'Pods' for metric in metrics)
+    targets = {metric['pods']['metric']['name']: str(metric['pods']['target']['averageValue']) for metric in metrics}
+    assert targets == {
+        'parakeet_active_requests_total': '2',
+        'parakeet_live_queue_age_seconds': '0.75',
+        'parakeet_backfill_queue_age_seconds': '30',
+    }
+
+
+def test_packing_is_dark_and_admission_remains_two_thirty_five():
+    values = _values('prod')
+    assert _literal_env(values)['PARAKEET_PACKING_ENABLED'] == 'false'
+    assert _literal_env(values)['PARAKEET_EXPLICIT_CUDA_GRAPHS'] == 'false'
+    assert values['autoscaling']['requestsPerPod'] == 2
+    assert values['autoscaling']['targetGPUUtilization'] == 35
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
@@ -103,7 +141,7 @@ def test_rendered_prod_deployment_contains_stream_admission_settings():
         document for document in yaml.safe_load_all(rendered) if document.get('kind') == 'HorizontalPodAutoscaler'
     )
     assert hpa['spec']['minReplicas'] == 3
-    assert hpa['spec']['maxReplicas'] == 7
+    assert hpa['spec']['maxReplicas'] == 12
     assert hpa['spec']['metrics'] == [
         {
             'type': 'Pods',
@@ -119,6 +157,13 @@ def test_rendered_prod_deployment_contains_stream_admission_settings():
                 'target': {'type': 'Value', 'value': '35'},
             },
         },
+        {
+            'type': 'External',
+            'external': {
+                'metric': {'name': 'parakeet_request_latency_p99'},
+                'target': {'type': 'Value', 'value': '3'},
+            },
+        },
     ]
     assert hpa['spec']['behavior'] == {
         'scaleUp': {
@@ -126,8 +171,8 @@ def test_rendered_prod_deployment_contains_stream_admission_settings():
             'policies': [{'type': 'Pods', 'value': 1, 'periodSeconds': 60}],
         },
         'scaleDown': {
-            'stabilizationWindowSeconds': 600,
-            'policies': [{'type': 'Pods', 'value': 1, 'periodSeconds': 600}],
+            'stabilizationWindowSeconds': 900,
+            'policies': [{'type': 'Pods', 'value': 1, 'periodSeconds': 900}],
         },
     }
     assert 'progressDeadlineSeconds' not in deployment['spec']

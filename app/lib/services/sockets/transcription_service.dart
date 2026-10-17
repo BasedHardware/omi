@@ -107,6 +107,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
   /// Reports foreground / live-transcript visibility to the server while connected.
   VoidCallback? _clientStateListener;
+  Timer? _clientStateHeartbeat;
 
   TranscriptSegmentSocketService.create(
     this.sampleRate,
@@ -269,7 +270,9 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
   void _sendClientState() {
     if (_socket.status != PureSocketStatus.connected) return;
-    _socket.send(jsonEncode(ListenClientState.instance.value.toJson()));
+    final state = ListenClientState.instance.value.toJson();
+    if (!customSttMode && !onboardingMode) state['mobile_batch_capability_v1'] = true;
+    _socket.send(jsonEncode(state));
   }
 
   void _attachClientState() {
@@ -278,9 +281,12 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     _clientStateListener = listener;
     ListenClientState.instance.addListener(listener);
     _sendClientState();
+    _clientStateHeartbeat = Timer.periodic(const Duration(seconds: 60), (_) => _sendClientState());
   }
 
   void _detachClientState() {
+    _clientStateHeartbeat?.cancel();
+    _clientStateHeartbeat = null;
     final listener = _clientStateListener;
     if (listener != null) ListenClientState.instance.removeListener(listener);
     _clientStateListener = null;

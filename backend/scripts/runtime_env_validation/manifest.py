@@ -18,6 +18,7 @@ from scripts.runtime_env_capability_contracts import (
     validate_conversation_finalization_capabilities,
     validate_free_tier_deploy_contract,
     validate_speaker_embedding_hosts,
+    validate_voice_transcription_storage,
 )  # noqa: E402
 from scripts.runtime_env_memory_contract import validate_retired_memory_manifest  # noqa: E402
 from scripts.runtime_env_jev_contract import validate_jev_uid_allowlist  # noqa: E402
@@ -376,8 +377,6 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
         errors.append(ValidationError(scope, 'missing env MEMORY_ENABLED'))
     for required_env in (
         'MEMORY_CANONICAL_MAINTENANCE_ENABLED',
-        'MEMORY_CANONICAL_MAINTENANCE_FLEX',
-        'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
         'OMI_BACKGROUND_FLEX_CAPABLE',
         'PINECONE_INDEX_NAME',
         'TYPESENSE_HOST_PORT',
@@ -447,14 +446,11 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
                         'OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE must be true for production canonical maintenance',
                     )
                 )
-        job_flex = (_manifest_literal_env_value(job_env, 'MEMORY_CANONICAL_MAINTENANCE_FLEX') or '').strip().lower()
-        if job_flex != 'true':
-            errors.append(
-                ValidationError(
-                    scope,
-                    'MEMORY_CANONICAL_MAINTENANCE_FLEX must be true while canonical maintenance is enabled',
-                )
-            )
+        if (_manifest_literal_env_value(job_env, 'OMI_BACKGROUND_FLEX_CAPABLE') or '').strip().lower() != 'true':
+            errors.append(ValidationError(scope, 'OMI_BACKGROUND_FLEX_CAPABLE must be true for owed required intake'))
+        for retired_flag in ('MEMORY_CANONICAL_MAINTENANCE_FLEX', 'MEMORY_CANONICAL_CONSOLIDATION_ENABLED'):
+            if retired_flag in job_env:
+                errors.append(ValidationError(scope, f'retired cleanup env {retired_flag} must be absent'))
 
     # Non-job hosts must not enable the ST→LT cron (would duplicate maintenance).
     for other_job_name, raw_other_job in jobs.items():
@@ -595,13 +591,7 @@ def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list
     gke = _as_config_dict(env_config.get('gke')) or {}
     for service, raw_service in gke.items():
         service_config = _as_config_dict(raw_service) or {}
-        surfaces.append(
-            (
-                f'{env}/gke/{service}',
-                _as_config_dict(service_config.get('env')) or {},
-                {},
-            )
-        )
+        surfaces.append((f'{env}/gke/{service}', _as_config_dict(service_config.get('env')) or {}, {}))
 
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
     cloud_run_services = _as_config_dict(cloud_run.get('services')) or {}
@@ -657,7 +647,7 @@ def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list
 
 
 def _validate_stt_serving_model_policy(env: str, env_config: ConfigDict) -> list[ValidationError]:
-    """Require deployable model values to match the code-owned serving policy."""
+    """Require deployed STT lists to follow the code-owned serving policy."""
     errors: list[ValidationError] = []
     model_policy = {
         'STT_PRERECORDED_MODEL': canonical_model_config(STTServingSurface.PRERECORDED),
@@ -678,10 +668,17 @@ def _validate_stt_serving_model_policy(env: str, env_config: ConfigDict) -> list
 
     for scope, env_map in surfaces:
         for env_name, expected_value in model_policy.items():
-            if scope == f'{env}/gke/backend-listen' and env_name == 'STT_SERVICE_MODELS':
-                models = (_manifest_literal_env_value(env_map, env_name) or '').split(',')
-                if models and all(model_is_enabled(model.strip(), STTServingSurface.STREAMING) for model in models):
-                    continue
+            if env_name == 'STT_SERVICE_MODELS':
+                models = [model.strip() for model in (_manifest_literal_env_value(env_map, env_name) or '').split(',')]
+                if scope == f'{env}/gke/backend-listen':
+                    # The live listener may also use reviewed route aliases such as parakeet-window.
+                    if models and all(model_is_enabled(model, STTServingSurface.STREAMING) for model in models):
+                        continue
+                else:
+                    # Other services may omit providers while retaining canonical policy order.
+                    ordered_subset = [model for model in expected_value.split(',') if model in models]
+                    if models and models == ordered_subset:
+                        continue
             if env_name not in env_map:
                 continue
             actual_value = _manifest_literal_env_value(env_map, env_name)
@@ -828,6 +825,7 @@ def validate_runtime_env(
             )
     errors.extend(validate_conversation_finalization_capabilities(env, env_config))
     errors.extend(validate_speaker_embedding_hosts(env, env_config))
+    errors.extend(validate_voice_transcription_storage(env, env_config))
     errors.extend(validate_free_tier_deploy_contract(env, env_config))
     errors.extend(_validate_stt_serving_model_policy(env, env_config))
     errors.extend(validate_parakeet_admission_contract(env, env_config))

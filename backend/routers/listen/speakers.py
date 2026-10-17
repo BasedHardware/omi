@@ -33,13 +33,13 @@ from utils.stt.conversation_speakers import VOICE_MATCH_THRESHOLD
 from utils.stt.owner_profile import load_owner_embedding, validated_embedding
 from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
 from utils.stt.speaker_match import (
+    select_speaker_match,
     SPEAKER_MATCH_MAX_CLIPS,
     SPEAKER_MATCH_MIN_EVIDENCE_SECONDS,
     SpeakerMatchDecision,
     arbitrate_owner_matches,
     mean_embedding,
     owner_near_miss,
-    select_speaker_match,
 )
 from utils.stt.speaker_recovery import VoiceRecovery, recovery_voice_blocked
 from utils.transcribe_decisions import USER_SELF_PERSON_ID, should_spawn_speaker_match

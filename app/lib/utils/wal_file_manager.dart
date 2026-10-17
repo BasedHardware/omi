@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:pool/pool.dart';
@@ -7,7 +10,9 @@ import 'package:pool/pool.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/services/wals/mobile_batch_buffer.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/startup/boot_journal.dart';
 
 class WalFileManager {
@@ -31,9 +36,9 @@ class WalFileManager {
       await init();
     }
 
-    if (_walFile == null || !await _walFile!.exists()) return await _loadFromBackup();
-    final loaded = await _loadIndex(_walFile!);
-    return loaded ?? await _loadFromBackup();
+    final loaded = _walFile != null && await _walFile!.exists() ? await _loadIndex(_walFile!) : null;
+    final indexed = loaded ?? await _loadFromBackup();
+    return MobileBatchBuffer.recover(_walFile!.parent, indexed);
   }
 
   /// Null means the index is unusable; a partially valid index retains every
@@ -119,9 +124,43 @@ class WalFileManager {
     }
   }
 
-  static Future<bool> saveWals(List<Wal> wals) => _saveLock.withResource(() => _saveWals(wals));
+  /// Indexes at or above this size are JSON-encoded on a background isolate.
+  /// The index is rewritten whole on every save and grows with every recording
+  /// a user keeps, so encoding it on the UI isolate stalls scrolling during
+  /// sync. Small indexes stay inline: spawning costs more than it saves.
+  @visibleForTesting
+  static int backgroundEncodeThreshold = 200;
 
-  static Future<bool> _saveWals(List<Wal> wals) async {
+  /// The save queued behind the one in flight, if any. Every caller passes a
+  /// full snapshot of the in-memory index, and the last snapshot written always
+  /// wins on disk, so a newer request may replace a queued (not yet started)
+  /// one: the final file is identical and the superseded caller resolves only
+  /// after a write at least as new as its own. The newest superseded snapshot
+  /// becomes the backup, exactly as if each save had been written in turn.
+  static _QueuedSave? _queued;
+
+  /// Length and modification time of the index as this process last wrote it.
+  /// While the file still matches, it is known-valid JSON (we encoded it), so
+  /// the backup can be copied without reading and decoding the whole index.
+  static ({String path, int length, DateTime modified})? _lastWritten;
+
+  static Future<bool> saveWals(List<Wal> wals) {
+    final queued = _queued;
+    if (queued != null) {
+      queued.superseded = queued.wals;
+      queued.wals = wals;
+      return queued.completer.future;
+    }
+    final save = _QueuedSave(wals);
+    _queued = save;
+    _saveLock.withResource(() {
+      if (identical(_queued, save)) _queued = null;
+      return _saveWals(save.wals, superseded: save.superseded);
+    }).then(save.completer.complete, onError: save.completer.completeError);
+    return save.completer.future;
+  }
+
+  static Future<bool> _saveWals(List<Wal> wals, {List<Wal>? superseded}) async {
     if (_walFile == null) {
       await init();
     }
@@ -131,31 +170,68 @@ class WalFileManager {
       return false;
     }
 
-    await _createBackup();
+    if (superseded != null && _walBackupFile != null) {
+      // Serial saves would have left the newest superseded snapshot on disk as
+      // the backup; write it there directly. Best effort, like _createBackup:
+      // a backup failure must never block the index write.
+      try {
+        final backupTmp = File('${_walBackupFile!.path}.tmp');
+        await backupTmp.writeAsString(await _encodeIndex(superseded), flush: true);
+        await backupTmp.rename(_walBackupFile!.path);
+      } on FileSystemException catch (e) {
+        Logger.debug('WalFileManager: Failed to write superseded backup: $e');
+      }
+    } else {
+      await _createBackup();
+    }
 
-    final jsonData = {
-      'version': 1,
-      'timestamp': DateTime.now().millisecondsSinceEpoch,
-      'wals': wals.map((wal) => wal.toJson()).toList(),
-    };
-
-    final jsonString = jsonEncode(jsonData);
+    final jsonString = await _encodeIndex(wals);
     final tmp = File('${_walFile!.path}.tmp');
     await tmp.writeAsString(jsonString, flush: true);
     await tmp.rename(_walFile!.path);
+    await _recordWrite(_walFile!);
 
     Logger.debug('Successfully saved ${wals.length} WALs to file');
     return true;
   }
 
+  static Future<String> _encodeIndex(List<Wal> wals) {
+    final jsonData = {
+      'version': 1,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+      'wals': wals.map((wal) => wal.toJson()).toList(),
+    };
+    return offUiIsolate(() => jsonEncode(jsonData),
+        size: wals.length, threshold: backgroundEncodeThreshold, debugName: 'wal_index_encode');
+  }
+
+  static Future<void> _recordWrite(File file) async {
+    try {
+      final stat = await FileStat.stat(file.path);
+      _lastWritten = (path: file.path, length: stat.size, modified: stat.modified);
+    } on FileSystemException {
+      _lastWritten = null;
+    }
+  }
+
   static Future<void> _createBackup() async {
     try {
-      if (_walFile != null && _walFile!.existsSync() && _walBackupFile != null) {
-        final content = await _walFile!.readAsString();
+      final walFile = _walFile;
+      final backupFile = _walBackupFile;
+      if (walFile == null || backupFile == null) return;
+      final stat = await FileStat.stat(walFile.path);
+      if (stat.type == FileSystemEntityType.notFound) return;
+      final last = _lastWritten;
+      final unchangedSinceOurWrite =
+          last != null && last.path == walFile.path && last.length == stat.size && last.modified == stat.modified;
+      if (!unchangedSinceOurWrite) {
+        // Written by an earlier process or changed under us: prove it parses
+        // before it may replace the last good backup.
+        final content = await walFile.readAsString();
         if (content.isEmpty) return;
         jsonDecode(content);
-        await _walFile!.copy(_walBackupFile!.path);
       }
+      await walFile.copy(backupFile.path);
     } on FileSystemException catch (e) {
       Logger.debug('WalFileManager: Failed to create backup: $e');
     } on FormatException catch (e) {
@@ -347,4 +423,12 @@ class WalFileManager {
 
     return needsSave;
   }
+}
+
+class _QueuedSave {
+  _QueuedSave(this.wals);
+
+  List<Wal> wals;
+  List<Wal>? superseded;
+  final completer = Completer<bool>();
 }

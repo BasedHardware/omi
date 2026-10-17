@@ -33,7 +33,7 @@ def _stub_module(name):
 # Stub database package
 database_mod = _stub_module("database")
 if not hasattr(database_mod, '__path__'):
-    database_mod.__path__ = []
+    database_mod.__path__ = [str(Path(__file__).resolve().parents[2] / "database")]
 for sub in [
     "redis_db",
     "memories",

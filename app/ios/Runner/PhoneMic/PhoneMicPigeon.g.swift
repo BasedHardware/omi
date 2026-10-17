@@ -235,8 +235,9 @@ protocol PhoneMicFlutterApiProtocol {
   /// Non-fatal runtime failures (capture self-heals): converter_failed,
   /// rebuild_failed, resume_failed, media_services_reset, batch_storage_full.
   func onCaptureError(code codeArg: String, message messageArg: String, sessionId sessionIdArg: Int64, completion: @escaping (Result<Void, PhoneMicPigeonError>) -> Void)
-  /// Emitted at 1Hz while batch capture runs. Its arrival is the liveness signal
-  /// for the Dart batch watchdog; the value is derived from the number of frames
+  /// Emitted while batch capture runs (iOS: 4s while healthy, 1s on fault or
+  /// foreground; Android: 1Hz). Its arrival is the liveness signal for the Dart
+  /// batch watchdog; the value is derived from the number of frames
   /// actually written to disk, so mutes and interruptions freeze it while the
   /// event keeps arriving.
   func onBatchProgress(capturedSeconds capturedSecondsArg: Double, sessionId sessionIdArg: Int64, completion: @escaping (Result<Void, PhoneMicPigeonError>) -> Void)
@@ -310,8 +311,9 @@ class PhoneMicFlutterApi: PhoneMicFlutterApiProtocol {
       }
     }
   }
-  /// Emitted at 1Hz while batch capture runs. Its arrival is the liveness signal
-  /// for the Dart batch watchdog; the value is derived from the number of frames
+  /// Emitted while batch capture runs (iOS: 4s while healthy, 1s on fault or
+  /// foreground; Android: 1Hz). Its arrival is the liveness signal for the Dart
+  /// batch watchdog; the value is derived from the number of frames
   /// actually written to disk, so mutes and interruptions freeze it while the
   /// event keeps arriving.
   func onBatchProgress(capturedSeconds capturedSecondsArg: Double, sessionId sessionIdArg: Int64, completion: @escaping (Result<Void, PhoneMicPigeonError>) -> Void) {

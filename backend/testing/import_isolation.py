@@ -236,6 +236,7 @@ def load_module_fresh(name: str, path: str) -> ModuleType:
 # real files so the policy under test is production's, never a copy.
 PURE_RELEVANCE_MODULES = (
     'utils.conversations.processing_trigger',
+    'utils.conversations.relevance_circuit',
     'utils.conversations.relevance_rules',
     'utils.conversations.relevance',
     'utils.conversations.fragment_visibility',

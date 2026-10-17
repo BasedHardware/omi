@@ -295,3 +295,17 @@ def test_initial_enablement_drains_backlog_midmonth(env):
     env.module.recover_locked_content('test-user', now=midmonth)
     assert not any(env.locks.values())
     assert env.state_data['completed_period'] == '2026-11'
+
+
+def test_cap_audio_recovery_is_kicked_even_with_legacy_reset_flag_off(env, monkeypatch):
+    from unittest.mock import Mock
+
+    fake = ModuleType('utils.sync.cap_hold_recovery')
+    fake.kick = Mock()
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setenv('LOCKED_CONTENT_RESET_RECOVERY_ENABLED', 'false')
+    env.module.register_cap_audio_recovery(fake.kick)
+    env.module.recover_locked_content('test-user', now=NOW)
+    env.module.recover_locked_content('test-user', now=NOW)
+    assert fake.kick.call_count == 2
+    env.state.get.assert_not_called()

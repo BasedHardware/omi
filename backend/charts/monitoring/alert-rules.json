@@ -116,7 +116,7 @@
     ],
     "updated": "2026-06-20T02:27:45Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -260,7 +260,7 @@
     ],
     "updated": "2026-06-20T02:27:45Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "3m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -404,7 +404,7 @@
     ],
     "updated": "2026-06-20T02:27:45Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -527,7 +527,7 @@
     ],
     "updated": "2026-06-20T02:27:46Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -671,7 +671,7 @@
     ],
     "updated": "2026-06-20T04:06:09Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -793,7 +793,7 @@
     ],
     "updated": "2026-07-08T21:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -938,7 +938,7 @@
     ],
     "updated": "2026-06-20T02:27:39Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -1082,7 +1082,7 @@
     ],
     "updated": "2026-06-20T02:27:41Z",
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "3m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -1226,7 +1226,7 @@
     ],
     "updated": "2026-06-23T01:20:17Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -1375,7 +1375,7 @@
     ],
     "updated": "2026-06-20T02:27:42Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -1519,7 +1519,7 @@
     ],
     "updated": "2026-06-20T02:27:42Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -1689,7 +1689,7 @@
     ],
     "updated": "2026-06-23T01:27:10Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -1862,7 +1862,7 @@
     ],
     "updated": "2026-06-23T01:27:10Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "3m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -2029,7 +2029,7 @@
       "component": "api",
       "impact": "product"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
@@ -2175,7 +2175,7 @@
     ],
     "updated": "2026-06-20T02:27:34Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -2349,7 +2349,7 @@
     ],
     "updated": "2026-06-20T02:27:34Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -2516,7 +2516,7 @@
       "component": "api",
       "impact": "product"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
@@ -2666,7 +2666,7 @@
     ],
     "updated": "2026-06-23T01:27:10Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -2836,7 +2836,7 @@
     ],
     "updated": "2026-06-23T01:27:10Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "3m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -3002,7 +3002,7 @@
     ],
     "updated": "2026-06-20T02:27:43Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -3176,7 +3176,7 @@
     ],
     "updated": "2026-06-20T02:27:43Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -3443,7 +3443,7 @@
     ],
     "updated": "2026-06-20T02:27:44Z",
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "3m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -3584,7 +3584,7 @@
     ],
     "updated": "2026-06-20T08:36:19Z",
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -3728,7 +3728,7 @@
     ],
     "updated": "2026-06-20T02:28:35Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "0s",
     "keep_firing_for": "0s",
     "annotations": {
@@ -3871,7 +3871,7 @@
     ],
     "updated": "2026-06-20T02:27:44Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -4014,7 +4014,7 @@
     ],
     "updated": "2026-07-20T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -4158,7 +4158,7 @@
     ],
     "updated": "2026-07-20T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -4303,7 +4303,7 @@
     ],
     "updated": "2026-06-20T02:27:38Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -4447,7 +4447,7 @@
     ],
     "updated": "2026-06-20T02:27:37Z",
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "3m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -4592,7 +4592,7 @@
     ],
     "updated": "2026-06-23T01:20:17Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -4741,7 +4741,7 @@
     ],
     "updated": "2026-06-20T02:27:38Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -4897,7 +4897,7 @@
     ],
     "updated": "2026-06-20T02:27:39Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -5218,7 +5218,7 @@
       "component": "live-transcription",
       "impact": "product"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
@@ -5363,6 +5363,128 @@
       "instatus_component": "live-transcription",
       "severity": "ticket",
       "alert_identity": "df2a40h2fbjswe",
+      "component": "live-transcription",
+      "impact": "infrastructure"
+    },
+    "isPaused": true,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+    },
+    "record": null
+  },
+  {
+    "id": 86,
+    "uid": "omi-listen-audio-decode-failures",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Transcription Services",
+    "title": "Transcription Service Error Rate: undecodable audio frames",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_listen_audio_decode_failures_total{job=\"backend-listen-metrics\"}[15m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-14T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "__panelId__": "63",
+      "summary": "Transcription service alert: audio frames the transcription path cannot decode.",
+      "user_impact": "No confirmed user impact yet; sessions that keep sending undecodable frames may lose their transcript, one-off frames self-heal on reconnect.",
+      "scope": "backend-listen omi_listen_audio_decode_failures_total summed across job=backend-listen-metrics over 15m; metric replacement for the paused raw-line Loki rule df2a40h2fbjswe (corrupted stream).",
+      "verification": "Verify in the linked panel that corrupted-stream log lines are still arriving, and check backend-listen readiness before intervention.",
+      "safe_next_action": "Inspect backend-listen readiness and the codec or client_platform labels on the counter before intervening; use the documented scaling or rollback path only if the condition persists.",
+      "threshold": "sum(increase(omi_listen_audio_decode_failures_total{job=\"backend-listen-metrics\"}[15m])) or vector(0) > 0",
+      "evaluated_bad": "Synthetic contract: at least one undecodable audio frame in the rolling 15m window fires after the 5m pending period.",
+      "evaluated_good": "Synthetic contract: zero undecodable audio frames in the rolling 15m window stays healthy."
+    },
+    "labels": {
+      "instatus_component": "live-transcription",
+      "severity": "ticket",
+      "alert_identity": "omi-listen-audio-decode-failures",
       "component": "live-transcription",
       "impact": "infrastructure"
     },
@@ -5520,7 +5642,7 @@
     ],
     "updated": "2026-06-23T01:27:11Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -5690,7 +5812,7 @@
     ],
     "updated": "2026-06-23T01:27:11Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "3m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -5856,7 +5978,7 @@
     ],
     "updated": "2026-06-23T01:20:16Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -6030,7 +6152,7 @@
     ],
     "updated": "2026-06-23T01:20:16Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -6190,7 +6312,7 @@
     ],
     "updated": "2026-06-20T02:27:44Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -6364,7 +6486,7 @@
     ],
     "updated": "2026-06-20T02:27:36Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -6530,7 +6652,7 @@
     ],
     "updated": "2026-06-20T02:27:36Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -6704,7 +6826,7 @@
     ],
     "updated": "2026-06-23T01:20:17Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -6825,7 +6947,7 @@
       }
     ],
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -6946,7 +7068,7 @@
       }
     ],
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -7067,7 +7189,7 @@
       }
     ],
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -7188,7 +7310,7 @@
       }
     ],
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -7309,7 +7431,7 @@
       }
     ],
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -7450,7 +7572,7 @@
       }
     ],
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -7572,7 +7694,7 @@
     ],
     "updated": "2026-07-08T21:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -7714,7 +7836,7 @@
     ],
     "updated": "2026-07-15T00:00:00Z",
     "noDataState": "NoData",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -7854,7 +7976,7 @@
     ],
     "updated": "2026-07-15T00:00:00Z",
     "noDataState": "NoData",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -7994,7 +8116,7 @@
     ],
     "updated": "2026-07-15T00:00:00Z",
     "noDataState": "NoData",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -8090,7 +8212,7 @@
     ],
     "updated": "2026-07-25T00:00:00Z",
     "noDataState": "NoData",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -8190,7 +8312,7 @@
     ],
     "updated": "2026-07-15T00:00:00Z",
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -8291,7 +8413,7 @@
     ],
     "updated": "2026-07-17T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -8392,7 +8514,7 @@
     ],
     "updated": "2026-07-17T00:00:00Z",
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -8532,7 +8654,7 @@
     ],
     "updated": "2026-07-20T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -8633,7 +8755,7 @@
     ],
     "updated": "2026-07-23T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -8733,7 +8855,7 @@
     ],
     "updated": "2026-07-23T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "0s",
     "keep_firing_for": "0s",
     "annotations": {
@@ -8833,7 +8955,7 @@
     ],
     "updated": "2026-07-23T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "1m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -8932,7 +9054,7 @@
     ],
     "updated": "2026-07-23T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -9216,7 +9338,7 @@
     ],
     "updated": "2026-08-21T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -9359,7 +9481,7 @@
     ],
     "updated": "2026-08-21T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -9502,7 +9624,7 @@
     ],
     "updated": "2026-08-21T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -9643,7 +9765,7 @@
     ],
     "updated": "2026-08-21T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -9784,7 +9906,7 @@
     ],
     "updated": "2026-08-21T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -9928,7 +10050,7 @@
     ],
     "updated": "2026-08-30T00:00:00Z",
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -10072,7 +10194,7 @@
     ],
     "updated": "2026-08-21T00:00:00Z",
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -10174,7 +10296,7 @@
     ],
     "updated": "2026-08-25T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "2h",
     "keep_firing_for": "0s",
     "annotations": {
@@ -10274,7 +10396,7 @@
     ],
     "updated": "2026-08-25T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -10374,7 +10496,7 @@
     ],
     "updated": "2026-08-25T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -10474,7 +10596,7 @@
     ],
     "updated": "2026-08-25T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "3h",
     "keep_firing_for": "0s",
     "annotations": {
@@ -10574,7 +10696,7 @@
     ],
     "updated": "2026-08-25T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "1h",
     "keep_firing_for": "0s",
     "annotations": {
@@ -10674,7 +10796,7 @@
     ],
     "updated": "2026-08-25T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -10775,7 +10897,7 @@
     ],
     "updated": "2026-08-30T00:00:00Z",
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "0s",
     "keep_firing_for": "0s",
     "annotations": {
@@ -10916,7 +11038,7 @@
     ],
     "updated": "2026-08-30T00:00:00Z",
     "noDataState": "NoData",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -11057,7 +11179,7 @@
     ],
     "updated": "2026-08-30T00:00:00Z",
     "noDataState": "NoData",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -11198,7 +11320,7 @@
     ],
     "updated": "2026-08-30T00:00:00Z",
     "noDataState": "NoData",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -11339,7 +11461,7 @@
     ],
     "updated": "2026-08-30T00:00:00Z",
     "noDataState": "NoData",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -11483,7 +11605,7 @@
     ],
     "updated": "2026-08-30T00:00:00Z",
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -11627,7 +11749,7 @@
     ],
     "updated": "2026-08-30T00:00:00Z",
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -11931,7 +12053,7 @@
     ],
     "updated": "2026-09-20T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -12074,7 +12196,7 @@
     ],
     "updated": "2026-09-20T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -12217,7 +12339,7 @@
     ],
     "updated": "2026-09-20T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -12340,7 +12462,7 @@
     ],
     "updated": "2026-09-26T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -12810,7 +12932,7 @@
     ],
     "updated": "2026-09-21T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -12952,7 +13074,7 @@
     ],
     "updated": "2026-09-21T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -13094,7 +13216,7 @@
     ],
     "updated": "2026-09-21T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -13236,7 +13358,7 @@
     ],
     "updated": "2026-09-26T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -13378,7 +13500,7 @@
     ],
     "updated": "2026-09-26T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -13500,7 +13622,7 @@
     ],
     "updated": "2026-09-28T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -13622,7 +13744,7 @@
     ],
     "updated": "2026-09-28T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -13764,7 +13886,7 @@
     ],
     "updated": "2026-09-28T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -13906,7 +14028,7 @@
     ],
     "updated": "2026-09-28T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -14048,7 +14170,7 @@
     ],
     "updated": "2026-09-28T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -14190,7 +14312,7 @@
     ],
     "updated": "2026-09-21T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -14332,7 +14454,7 @@
     ],
     "updated": "2026-09-21T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -14474,7 +14596,7 @@
     ],
     "updated": "2026-09-21T00:00:00Z",
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -14616,7 +14738,7 @@
     ],
     "updated": "2026-09-21T00:00:00Z",
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -14758,7 +14880,7 @@
     ],
     "updated": "2026-09-21T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -14880,7 +15002,7 @@
     ],
     "updated": "2026-09-28T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "0s",
     "keep_firing_for": "0s",
     "annotations": {
@@ -15022,7 +15144,7 @@
     ],
     "updated": "2026-10-04T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -15164,7 +15286,7 @@
     ],
     "updated": "2026-10-04T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -15306,7 +15428,7 @@
     ],
     "updated": "2026-10-04T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -15448,7 +15570,7 @@
     ],
     "updated": "2026-10-04T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -15590,7 +15712,7 @@
     ],
     "updated": "2026-10-04T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -15732,7 +15854,7 @@
     ],
     "updated": "2026-10-04T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -15874,7 +15996,7 @@
     ],
     "updated": "2026-10-04T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "1m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -16016,7 +16138,7 @@
     ],
     "updated": "2026-10-04T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -16158,7 +16280,7 @@
     ],
     "updated": "2026-10-04T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "1m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -16300,7 +16422,7 @@
     ],
     "updated": "2026-10-04T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -16442,7 +16564,7 @@
     ],
     "updated": "2026-10-04T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "1m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -16604,7 +16726,7 @@
     ],
     "updated": "2026-10-08T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "2h",
     "keep_firing_for": "0s",
     "annotations": {
@@ -16749,7 +16871,7 @@
     ],
     "updated": "2026-10-09T14:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -16891,7 +17013,7 @@
     ],
     "updated": "2026-10-09T14:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -17067,7 +17189,7 @@
     ],
     "updated": "2026-10-13T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -17190,7 +17312,7 @@
     ],
     "updated": "2026-10-13T00:00:00Z",
     "noDataState": "NoData",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -17311,7 +17433,7 @@
     ],
     "updated": "2026-10-13T00:00:00Z",
     "noDataState": "NoData",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -17432,7 +17554,7 @@
     ],
     "updated": "2026-10-13T00:00:00Z",
     "noDataState": "NoData",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -17553,7 +17675,7 @@
     ],
     "updated": "2026-10-13T00:00:00Z",
     "noDataState": "NoData",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -17674,7 +17796,7 @@
     ],
     "updated": "2026-10-13T00:00:00Z",
     "noDataState": "NoData",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -17795,7 +17917,7 @@
     ],
     "updated": "2026-10-13T00:00:00Z",
     "noDataState": "NoData",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -17916,7 +18038,7 @@
     ],
     "updated": "2026-10-13T00:00:00Z",
     "noDataState": "NoData",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -17941,5 +18063,264 @@
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
+  },
+  {
+    "uid": "omi-datasource-prometheus",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Datasource health",
+    "title": "Prometheus - alert query path unavailable",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "A",
+          "intervalMs": 60000,
+          "maxDataPoints": 20,
+          "expr": "max(up)",
+          "instant": true,
+          "range": false
+        }
+      },
+      {
+        "refId": "B",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "type": "reduce",
+          "expression": "A",
+          "reducer": "last",
+          "refId": "B",
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          }
+        }
+      },
+      {
+        "refId": "C",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "type": "threshold",
+          "expression": "B",
+          "refId": "C",
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "conditions": [
+            {
+              "evaluator": {
+                "type": "lt",
+                "params": [
+                  1
+                ]
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "type": "last",
+                "params": []
+              },
+              "type": "query"
+            }
+          ]
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "Alerting",
+    "for": "2m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Prometheus alert query path failed or returned no sentinel samples.",
+      "user_impact": "Monitoring coverage may be unavailable; this infrastructure signal does not prove a product outage.",
+      "scope": "Production Grafana datasource prometheus.",
+      "verification": "Run the exact canary query through Grafana and inspect datasource error details; verify Telegram recovery separately.",
+      "safe_next_action": "Check datasource credentials, reachability and upstream readiness before intervention. Keep existing business alert state while queries recover.",
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null,
+    "labels": {
+      "severity": "critical",
+      "alert_identity": "omi-datasource-prometheus",
+      "component": "monitoring",
+      "impact": "infrastructure",
+      "datasource_uid": "prometheus"
+    }
+  },
+  {
+    "uid": "omi-datasource-cloud-monitoring",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Datasource health",
+    "title": "Cloud Monitoring - alert query path unavailable",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "timeSeriesList",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "beuxmaq8oxhq8e",
+        "model": {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "refId": "A",
+          "intervalMs": 60000,
+          "maxDataPoints": 20,
+          "queryType": "timeSeriesList",
+          "instant": false,
+          "range": true,
+          "timeSeriesList": {
+            "projectName": "based-hardware",
+            "filters": [
+              "metric.type",
+              "=",
+              "run.googleapis.com/container/instance_count",
+              "AND",
+              "resource.type",
+              "=",
+              "cloud_run_revision",
+              "AND",
+              "resource.label.service_name",
+              "=",
+              "backend"
+            ],
+            "alignmentPeriod": "60s",
+            "perSeriesAligner": "ALIGN_MEAN",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupBys": [],
+            "view": "FULL"
+          }
+        }
+      },
+      {
+        "refId": "B",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "type": "reduce",
+          "expression": "A",
+          "reducer": "last",
+          "refId": "B",
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          }
+        }
+      },
+      {
+        "refId": "C",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "type": "threshold",
+          "expression": "B",
+          "refId": "C",
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "conditions": [
+            {
+              "evaluator": {
+                "type": "lt",
+                "params": [
+                  0
+                ]
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "type": "last",
+                "params": []
+              },
+              "type": "query"
+            }
+          ]
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "Alerting",
+    "for": "2m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Cloud Monitoring alert query path failed or returned no sentinel samples.",
+      "user_impact": "Monitoring coverage may be unavailable; this infrastructure signal does not prove a product outage.",
+      "scope": "Production Grafana datasource beuxmaq8oxhq8e.",
+      "verification": "Run the exact canary query through Grafana and inspect datasource error details; verify Telegram recovery separately.",
+      "safe_next_action": "Check datasource credentials, reachability and upstream readiness before intervention. Keep existing business alert state while queries recover.",
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null,
+    "labels": {
+      "severity": "critical",
+      "alert_identity": "omi-datasource-cloud-monitoring",
+      "component": "monitoring",
+      "impact": "infrastructure",
+      "datasource_uid": "beuxmaq8oxhq8e"
+    }
   }
 ]

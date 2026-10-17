@@ -21,6 +21,7 @@ import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
 import 'package:omi/pages/chat/chat_scroll_policy.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/jump_to_latest_button.dart';
+import 'package:omi/pages/paywall/paywall_router.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
@@ -737,17 +738,22 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     await provider.retryFailedReply(failed);
   }
 
-  void _showPlansSheetOnQuotaExceeded() {
+  Future<void> _showPlansSheetOnQuotaExceeded() async {
     if (!mounted) return;
     final usage = context.read<UsageProvider>();
     // Refresh subscription data so the plans sheet is up-to-date
     usage.fetchSubscription();
+    if (await PaywallRouter.openVariant(context, source: 'chat_quota_exceeded')) return;
+    if (!mounted) return;
     PlatformManager.instance.analytics.paywallOpened(
       'chat_quota_exceeded',
       currentPlan: usage.subscription?.subscription.plan.wireName ?? 'unknown',
     );
+    final title = await plansSheetTitle(context);
+    if (!mounted) return;
     showOmiSheet<void>(
       context: context,
+      title: title,
       padding: EdgeInsets.zero,
       builder: (_) => const _PlansSheetWrapper(analyticsSource: 'chat_quota_exceeded'),
     );

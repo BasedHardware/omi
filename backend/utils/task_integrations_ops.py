@@ -151,7 +151,7 @@ async def refresh_oauth_token(
         raise
     except Exception as e:
         logger.error(f'{app_key}: Error refreshing token: {e}')
-        raise HTTPException(status_code=500, detail=f"Error refreshing token: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to refresh {name} token due to an internal error")
 
 
 async def ensure_valid_oauth_token(
@@ -426,4 +426,4 @@ async def create_task_internal(
         # ``not_sent`` is still before the provider could have accepted the create.
         # ``in_doubt`` means the POST was issued and the response was not a definite error.
         error_code = "in_doubt" if request_sent else "not_sent"
-        return {"success": False, "error": str(e), "error_code": error_code}
+        return {"success": False, "error": "Failed to create task due to an internal error", "error_code": error_code}

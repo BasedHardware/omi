@@ -167,8 +167,10 @@ def test_unrelated_body_edit_leaves_detection_and_witnesses_unchanged(tmp_path, 
 
 
 def test_profile_membership_rejects_widened_domains():
-    target = 'database.conversations.get_conversations'
-    names = WITNESSES['routers/developer.py:get_conversations:database.conversations.get_conversations'].profiles
+    target = 'database.conversations.get_conversations_without_photos'
+    names = WITNESSES[
+        'routers/developer.py:get_conversations:database.conversations.get_conversations_without_photos'
+    ].profiles
     base = {
         'uid': 'u1',
         'limit': 25,
@@ -180,11 +182,10 @@ def test_profile_membership_rejects_widened_domains():
         'categories': [],
         'folder_id': None,
         'starred': None,
-        'date_field': 'created_at',
-        'metadata_only': False,
+        'sources': None,
     }
     assert matching_profile(target, dict(base), names) is not None
     assert matching_profile(target, dict(base, categories=['unreviewed-category']), names) is None
     assert matching_profile(target, dict(base, statuses=['failed']), names) is None
-    assert matching_profile(target, dict(base, date_field='started_at'), names) is None
+    assert matching_profile(target, dict(base, sources=['unreviewed-source']), names) is None
     assert matching_profile(target, dict(base, starred=True, include_discarded=True), names) is None

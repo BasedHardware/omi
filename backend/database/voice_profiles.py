@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 from google.cloud import firestore
 
 from utils.owner_voice_evidence import owner_base
+from utils.speaker_tag_prompts.keys import ignored_voice_key
 
 from ._client import get_firestore_client, run_transactional
 from .speaker_profile_authority import owner_teaching_authorized
@@ -214,10 +215,6 @@ def add_owner_voice_confirmation(
 IGNORED_VOICES_LIMIT = 200
 
 
-def ignored_voice_key(conversation_id: str, speaker_id: int) -> str:
-    return f'{conversation_id}:{speaker_id}'
-
-
 def ignored_voices(state: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Stored "Not a Person" markers, newest first."""
     entries = [
@@ -286,9 +283,20 @@ def remove_ignored_voice(
         snapshot = ref.get(transaction=transaction)
         state = snapshot.to_dict() or {}
         ignored = dict(state.get('ignored_voices') or {})
-        marker = ignored.pop(ignored_voice_key(conversation_id, speaker_id), None)
-        if marker is None:
+        # Entry identity is independent of the historical map-key encoding.
+        marker_key = next(
+            (
+                key
+                for key, entry in ignored.items()
+                if isinstance(entry, dict)
+                and entry.get('conversation_id') == conversation_id
+                and entry.get('speaker_id') == speaker_id
+            ),
+            None,
+        )
+        if marker_key is None:
             return False
+        marker = ignored.pop(marker_key)
         from database import conversations as conversations_db
 
         conversation_ref = (

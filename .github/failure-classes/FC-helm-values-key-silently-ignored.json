@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-helm-values-key-silently-ignored",
+  "violated_contract": "A Helm values change must land under a key the chart actually reads. Charts ignore unknown keys silently, so a misnamed key (a top-level 'operator:' instead of kube-prometheus-stack's 'prometheusOperator:') renders and rolls out green while the intended setting never reaches the workload.",
+  "canonical_prevention": "Validate prod values files against the set of top-level keys the pinned chart version reads, and assert the rendered workload carries the intended field.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_monitoring_values_chart_keys.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/charts/**"
+  ],
+  "status": "open"
+}

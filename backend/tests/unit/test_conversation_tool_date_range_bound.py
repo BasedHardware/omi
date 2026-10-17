@@ -66,7 +66,7 @@ for _p in [
     importlib.import_module(_p)
 for _name, _attrs in {
     "database.conversations": [],
-    "database.notifications": ["get_user_time_zone"],
+    "database.auth": ["get_user_name"],
     "database.users": ["get_people_by_ids"],
     "database.vector_db": [],
     "models.conversation": ["Conversation"],
@@ -86,6 +86,8 @@ for _name, _attrs in {
     _m = _mod(_name)
     for _a in _attrs:
         setattr(_m, _a, MagicMock())
+
+sys.modules["database.auth"].get_user_name.return_value = "Test User"
 
 
 class _ChatTranscriptSearch:
@@ -147,18 +149,25 @@ class TestExactConversationReference:
             )
         )
         ct.conversations_to_string = MagicMock(return_value="[formatted]")
-        ct.notification_db.get_user_time_zone = MagicMock(return_value="UTC")
 
         result = ct.search_conversations_tool.invoke(
             {"query": conversation_id},
-            config={"configurable": {"user_id": "test-uid", "conversations_collected": []}},
+            config={
+                "configurable": {
+                    "user_id": "test-uid",
+                    "user_timezone": "UTC",
+                    "conversations_collected": [],
+                }
+            },
         )
 
         assert "matching exactly" in result
         assert "[formatted]" in result
         ct.keyword_search_conversation_ids.assert_not_called()
         ct.vector_db.query_vectors.assert_not_called()
-        ct.conversations_db.get_conversations_by_id.assert_called_once_with("test-uid", [conversation_id])
+        ct.conversations_db.get_conversations_by_id.assert_called_once_with(
+            "test-uid", [conversation_id], include_discarded=True
+        )
 
 
 class TestCapConversationsForLlm:
@@ -189,8 +198,8 @@ class TestBoundedResult:
     def test_truncated_appends_guidance_note(self):
         out = ct._bounded_result("Conversation #1\nsome summary", total_found=150, truncated=True)
         assert "150 conversations" in out
-        assert "Summarize what is shown" in out
-        assert "narrow" in out
+        assert "remaining 149 were omitted, not absent" in out
+        assert "Narrow the date range" in out
 
     def test_not_truncated_short_result_unchanged(self):
         body = "Conversation #1\nshort"
@@ -203,7 +212,7 @@ class TestBoundedResult:
         assert "Conversation #2" not in out
         assert "yyyy" not in out
         assert len(out) <= ct.MAX_RESULT_CHARS + 400  # budget plus the appended note
-        assert "Summarize what is shown" in out
+        assert "remaining 1 were omitted, not absent" in out
 
 
 class TestJITConversationRetrieval:
@@ -225,7 +234,7 @@ class TestJITConversationRetrieval:
 
         assert card["conversation_ref"] == "conversation:conv-42"
         assert card["summary_evidence_ref"] == "conversation:conv-42:summary"
-        assert card["action_items"] == ["Ship the plan"]
+        assert card["action_items"] == [{"description": "Ship the plan", "completed": False}]
         assert "A bounded overview" in result
         assert "conversation:conv-42:summary" in result
         assert "must not be in the card" not in result

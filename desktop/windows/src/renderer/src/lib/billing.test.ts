@@ -281,10 +281,28 @@ describe('currentPlanPeriodText', () => {
         cancel_at_period_end: true
       })
     )
-    expect(t).toMatch(/^Access ends on /)
+    expect(t).toMatch(/^Your Pro plan ends /)
+    expect(t).toContain('2026')
   })
   it('is empty for a free plan', () => {
     expect(currentPlanPeriodText(sub({ plan: 'basic' }))).toBe('')
+  })
+  it('is empty when a cancellation is pending and the end date is missing', () => {
+    expect(
+      currentPlanPeriodText(
+        sub({ plan: 'operator', status: 'active', cancel_at_period_end: true })
+      )
+    ).toBe('')
+    expect(
+      currentPlanPeriodText(
+        sub({
+          plan: 'operator',
+          status: 'active',
+          cancel_at_period_end: true,
+          current_period_end: 0
+        })
+      )
+    ).toBe('')
   })
 })
 
@@ -461,13 +479,33 @@ describe('startCheckout', () => {
         currentSubscription: sub({
           plan: 'unlimited',
           status: 'active',
-          cancel_at_period_end: true
+          cancel_at_period_end: true,
+          current_price_id: 'price_op_m'
         })
       },
       deps
     )
     expect(deps.upgradeSubscription).not.toHaveBeenCalled()
     expect(deps.createCheckoutSession).toHaveBeenCalled()
+  })
+
+  it('refuses a different price while cancellation is pending without calling the API', async () => {
+    const deps = makeDeps()
+    const res = await startCheckout(
+      {
+        priceId: 'price_op_y',
+        currentSubscription: sub({
+          plan: 'operator',
+          status: 'active',
+          cancel_at_period_end: true,
+          current_price_id: 'price_op_m'
+        })
+      },
+      deps
+    )
+    expect(res).toEqual({ kind: 'blocked' })
+    expect(deps.createCheckoutSession).not.toHaveBeenCalled()
+    expect(deps.upgradeSubscription).not.toHaveBeenCalled()
   })
 
   it('opens the Stripe URL for a free user and completes on success', async () => {
@@ -478,6 +516,32 @@ describe('startCheckout', () => {
     )
     expect(deps.openCheckout).toHaveBeenCalledWith('https://checkout.stripe.com/x')
     expect(res.kind).toBe('completed')
+  })
+
+  it('names the plan and renew date when a cancel-pending subscription is reactivated', async () => {
+    const end = Math.floor(new Date('2026-11-03T00:00:00').getTime() / 1000)
+    const deps = makeDeps({
+      createCheckoutSession: vi.fn().mockResolvedValue({ status: 'reactivated', next_billing_date: end })
+    })
+    const res = await startCheckout(
+      {
+        priceId: 'price_op_m',
+        currentSubscription: sub({
+          plan: 'operator',
+          status: 'active',
+          cancel_at_period_end: true,
+          current_price_id: 'price_op_m',
+          current_period_end: end
+        })
+      },
+      deps
+    )
+    expect(res.kind).toBe('reactivated')
+    if (res.kind === 'reactivated') {
+      expect(res.message).toMatch(/^Your Pro plan will renew on /)
+      expect(res.message).toContain('2026')
+    }
+    expect(deps.openCheckout).not.toHaveBeenCalled()
   })
 
   it('skips the browser when the session reports reactivated', async () => {

@@ -178,6 +178,10 @@ def record_llm_usage(
     input_tokens: int,
     output_tokens: int,
     *,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
+    surface: str | None = None,
+    turn_id: str | None = None,
     cost_usd: float | None = None,
     cost_status: str = 'missing',
     cost_exclusion: str | None = None,
@@ -245,6 +249,35 @@ def record_llm_usage(
         cost_exclusion=cost_exclusion,
     )
 
+    for prefix in (f'{feature}.{safe_model}', plan_prefix):
+        if feature == 'chat_agent':
+            update_data[f'{prefix}.cache_read_tokens'] = firestore.Increment(cache_read_tokens)
+            update_data[f'{prefix}.cache_write_tokens'] = firestore.Increment(cache_write_tokens)
+    if feature == 'chat_agent' and surface in {'app', 'telegram', 'imessage', 'other'}:
+        counters = {
+            'input_tokens': input_tokens,
+            'output_tokens': output_tokens,
+            'cache_read_tokens': cache_read_tokens,
+            'cache_write_tokens': cache_write_tokens,
+            'call_count': 1,
+        }
+        for field, value in counters.items():
+            update_data[f'chat_agent_surfaces.{surface}.{safe_model}.{field}'] = firestore.Increment(value)
+        if turn_id:
+            batch = client.batch()
+            batch.set(usage_ref, nest_usage_fields(update_data), merge=True)
+            turn_ref = usage_ref.collection('chat_agent_turns').document(hashlib.sha256(turn_id.encode()).hexdigest())
+            batch.set(
+                turn_ref,
+                {
+                    'surface': surface,
+                    'updated_at': now,
+                    'models': {safe_model: {k: firestore.Increment(v) for k, v in counters.items()}},
+                },
+                merge=True,
+            )
+            batch.commit()
+            return
     usage_ref.set(nest_usage_fields(update_data), merge=True)
 
 

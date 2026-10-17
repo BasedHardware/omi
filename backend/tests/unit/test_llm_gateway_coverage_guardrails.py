@@ -100,6 +100,7 @@ _RESOLVER_DEFINITION_FILE = 'utils/llm/model_config.py'
 # clients._so_gemini: iterates the active profile.
 # judge.py: model_feature defaults to the pinned screen_frame_judge key.
 # managed_compute.py: pass-through of authorize_managed_compute's feature into get_provider.
+# llm_input_dedupe.py: checkpoint identity follows the actual notes / L1 extractor route.
 KNOWN_DYNAMIC_FEATURE_SITES = frozenset(
     {
         ('utils/llm/persona.py', 'get_llm', 'feature'),
@@ -110,6 +111,11 @@ KNOWN_DYNAMIC_FEATURE_SITES = frozenset(
         ('utils/llm/clients.py', '_get_model_config', 'f'),
         ('utils/screen_frames/judge.py', 'get_llm', 'model_feature'),
         ('utils/managed_compute.py', 'get_provider', 'feature'),
+        (
+            'utils/conversations/llm_input_dedupe.py',
+            'get_route_ref',
+            "'conv_structure' if feature == 'notes' else 'memory_l1'",
+        ),
     }
 )
 _FEATURE_SCAN_SKIP_DIRS = {'.venv', 'venv', '.openapi-venv', '__pycache__', 'tests'}
@@ -732,6 +738,12 @@ def test_resolver_feature_literals_are_configured_and_dynamic_sites_are_reviewed
         unknown_literals
     )
     assert dynamic_sites == KNOWN_DYNAMIC_FEATURE_SITES
+
+
+def test_dedupe_checkpoint_route_choices_are_configured():
+    # The reviewed conditional above is a dynamic site to the AST scanner;
+    # both possible literal routes must still be configured, without fallback.
+    assert {'conv_structure', 'memory_l1'} <= get_all_configured_features()
 
 
 def test_file_chat_completions_hop_the_gateway_in_feature_mode():
