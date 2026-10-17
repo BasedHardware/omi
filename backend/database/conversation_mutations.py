@@ -11,7 +11,13 @@ from google.cloud import firestore
 
 from ._client import get_firestore_client, run_transactional
 from .conversation_revisions import ensure_timezone_aware, firestore_revision_datetime
-from .conversations import conversations_collection
+from .conversations import (
+    _SEARCH_INDEXED_FIELD_ROOTS,
+    _sync_conversation_search_index,
+    conversations_collection,
+    effective_user_title,
+    is_soft_deleted,
+)
 
 _RECEIPTS_COLLECTION = 'mutation_receipts'
 
@@ -45,8 +51,8 @@ def _sync_state(data: Dict[str, Any], revision: Any) -> Dict[str, Any]:
     """Build the bounded user-owned projection stored in mutation receipts."""
     structured = data.get('structured')
     generated_title = structured.get('title') if isinstance(structured, Mapping) else None
-    user_title = data.get('user_title')
-    title = user_title if isinstance(user_title, str) else generated_title if isinstance(generated_title, str) else None
+    user_title = effective_user_title(data.get('user_title'))
+    title = user_title if user_title is not None else generated_title if isinstance(generated_title, str) else None
     return {
         'revision': revision,
         'title': title,
@@ -129,10 +135,13 @@ def apply_conversation_sync_mutation(
     receipt_ref = conversation_ref.collection(_RECEIPTS_COLLECTION).document(_receipt_id(client_mutation_id))
     fingerprint = _fingerprint(base_revision, operation)
     replayed = False
+    committed_patch: Dict[str, Any] = {}
 
     @firestore.transactional
     def _apply(transaction) -> None:
-        nonlocal replayed
+        nonlocal replayed, committed_patch
+        replayed = False
+        committed_patch = {}
         # Firestore requires every read to finish before the first write.
         receipt_snapshot = receipt_ref.get(transaction=transaction)
         conversation_snapshot = conversation_ref.get(transaction=transaction)
@@ -156,6 +165,8 @@ def apply_conversation_sync_mutation(
             raise ConversationMutationNotFoundError(conversation_id)
 
         current = conversation_snapshot.to_dict() or {}
+        if is_soft_deleted(current):
+            raise ConversationMutationNotFoundError(conversation_id)
         if current.get('is_locked', False):
             raise ConversationMutationLockedError(conversation_id)
         current_revision = _normalized_revision(getattr(conversation_snapshot, 'update_time', None))
@@ -215,6 +226,7 @@ def apply_conversation_sync_mutation(
         }
         if patch:
             transaction.update(conversation_ref, patch)
+            committed_patch = patch
         transaction.create(
             receipt_ref,
             {
@@ -227,6 +239,8 @@ def apply_conversation_sync_mutation(
         )
 
     run_transactional(client, _apply)
+    if not replayed and _SEARCH_INDEXED_FIELD_ROOTS.intersection(str(key).split('.', 1)[0] for key in committed_patch):
+        _sync_conversation_search_index(uid, conversation_id)
 
     receipt_snapshot = receipt_ref.get()
     if not getattr(receipt_snapshot, 'exists', False):

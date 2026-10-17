@@ -333,3 +333,78 @@ def test_http_contract_rejects_untyped_or_ambiguous_operations():
     response = client.post('/v1/conversations/conversation-1/mutations', json=payload)
 
     assert response.status_code == 422
+
+
+def test_new_mutation_rejects_soft_deleted_tombstone_without_creating_receipt():
+    database = _Firestore(_conversation(deleted=True))
+
+    with pytest.raises(mutations_db.ConversationMutationNotFoundError):
+        _apply(database)
+
+    assert len(database.rows) == 1
+    assert database.rows[database.conversation_path].get('user_title') is None
+    assert database.rows[database.conversation_path]['structured']['title'] == 'Generated title'
+    assert database.transactions[0].write_paths == []
+
+
+def test_retry_replays_receipt_even_if_conversation_is_later_soft_deleted():
+    database = _Firestore(_conversation())
+    first = _apply(database)
+    database.rows[database.conversation_path]['deleted'] = True
+    database.update_times[database.conversation_path] = COMMIT_REVISION + timedelta(minutes=1)
+
+    replay = _apply(database)
+
+    assert replay == first
+    assert database.transactions[1].write_paths == []
+
+
+def test_title_mutation_syncs_search_index_only_on_non_replayed_title_change(monkeypatch: pytest.MonkeyPatch):
+    synced: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        mutations_db,
+        '_sync_conversation_search_index',
+        lambda uid, conversation_id: synced.append((uid, conversation_id)),
+    )
+    database = _Firestore(_conversation())
+
+    _apply(database, mutation_id='mutation-title-1', operation={'type': 'set_title', 'title': 'Renamed'})
+    assert synced == [('user-1', 'conversation-1')]
+
+    # Replaying the same mutation ID must not re-sync Typesense.
+    _apply(database, mutation_id='mutation-title-1', operation={'type': 'set_title', 'title': 'Renamed'})
+    assert synced == [('user-1', 'conversation-1')]
+
+    # A no-op title mutation at the new revision must not re-sync Typesense.
+    _apply(
+        database,
+        mutation_id='mutation-title-noop',
+        base_revision=COMMIT_REVISION,
+        operation={'type': 'set_title', 'title': 'Renamed'},
+    )
+    assert synced == [('user-1', 'conversation-1')]
+
+    # A starred-only mutation must not sync Typesense.
+    _apply(
+        database,
+        mutation_id='mutation-star-1',
+        base_revision=COMMIT_REVISION,
+        operation={'type': 'set_starred', 'starred': True},
+    )
+    assert synced == [('user-1', 'conversation-1')]
+
+
+def test_blank_user_title_falls_back_to_generated_title_in_sync_state():
+    database = _Firestore(_conversation(user_title='   '))
+
+    response = _apply(database, operation={'type': 'set_starred', 'starred': True})
+
+    assert response['conversation']['title'] == 'Generated title'
+    assert response['conversation']['starred'] is True
+
+    stale = BASE_REVISION - timedelta(seconds=1)
+    with pytest.raises(mutations_db.ConversationMutationConflictError) as conflict:
+        _apply(database, mutation_id='mutation-stale', base_revision=stale)
+
+    assert conflict.value.response['code'] == 'base_revision_mismatch'
+    assert conflict.value.response['conversation']['title'] == 'Generated title'
