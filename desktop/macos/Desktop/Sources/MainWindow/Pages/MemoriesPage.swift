@@ -1935,21 +1935,37 @@ class MemoriesViewModel: ObservableObject {
     }
   }
 
-  func saveEditedMemory(_ memory: ServerMemory) async {
-    guard !editText.isEmpty else { return }
+  @Published var editError: String? = nil
+
+  @discardableResult
+  func saveEditedMemory(_ memory: ServerMemory) async -> Bool {
+    let trimmed = editText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return false }
+    editError = nil
 
     do {
-      try await APIClient.shared.editMemory(id: memory.id, content: editText)
+      let replacement = try await APIClient.shared.editMemory(id: memory.id, content: trimmed)
+      let resolvedId = replacement?.id ?? memory.id
 
-      // Update content in SQLite so auto-refresh doesn't revert the edit
-      try await MemoryStorage.shared.updateContentByBackendId(memory.id, content: editText)
+      if let replacement {
+        try await MemoryStorage.shared.syncServerMemories([replacement])
+        if selectedMemory?.id == memory.id {
+          selectedMemory = replacement
+        }
+      } else {
+        // Update content in SQLite so auto-refresh doesn't revert the edit
+        try await MemoryStorage.shared.updateContentByBackendId(memory.id, content: trimmed)
+      }
 
       editingMemory = nil
       editText = ""
       await loadMemories()
-      await refreshSelectedMemory()
+      await refreshSelectedMemory(preferredId: resolvedId)
+      return true
     } catch {
+      editError = error.localizedDescription
       logError("Failed to edit memory", error: error)
+      return false
     }
   }
 
@@ -1959,15 +1975,18 @@ class MemoriesViewModel: ObservableObject {
   /// immutable, so a successful edit left the detail panel rendering the text
   /// the user had just replaced. As a modal that dismissed on save this was
   /// invisible; as a persistent side panel it reads as "Save did nothing".
-  func refreshSelectedMemory() async {
+  /// When a canonical correction mints a replacement memory ID, `preferredId`
+  /// switches the open panel to the replacement record.
+  func refreshSelectedMemory(preferredId: String? = nil) async {
     guard let current = selectedMemory else { return }
-    if let refreshed = memories.first(where: { $0.id == current.id }) {
+    let targetId = preferredId ?? current.id
+    if let refreshed = memories.first(where: { $0.id == targetId }) {
       selectedMemory = refreshed
       return
     }
     // The reloaded page is scope-filtered and may not contain it; the cache is
     // authoritative for a single known id.
-    if let cached = await self.memories(withIDs: [current.id]).first {
+    if let cached = await self.memories(withIDs: [targetId]).first {
       selectedMemory = cached
     }
   }
@@ -3494,19 +3513,31 @@ struct MemoryDetailPanel: View {
           .cornerRadius(OmiChrome.elementRadius)
           .frame(minHeight: 260)
 
+        if let editError = viewModel.editError, !editError.isEmpty {
+          Text(editError)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(OmiColors.error)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+
         HStack(spacing: OmiSpacing.sm) {
-          Button("Cancel") { isEditingContent = false }
-            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+          Button("Cancel") {
+            viewModel.editError = nil
+            isEditingContent = false
+          }
+          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
 
           Button("Save") {
             viewModel.editText = editContentText
             Task {
-              await viewModel.saveEditedMemory(memory)
-              isEditingContent = false
+              let saved = await viewModel.saveEditedMemory(memory)
+              if saved {
+                isEditingContent = false
+              }
             }
           }
           .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-          .disabled(editContentText.isEmpty)
+          .disabled(editContentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
       }
     } else if memory.content.hasPrefix("[Protected") || memory.content.hasPrefix("[Encrypted") {

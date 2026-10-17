@@ -70,7 +70,7 @@ async function patchMemoryOptimistic(
   urlPath: string,
   value: string,
   apply: (m: Memory) => Memory
-): Promise<void> {
+): Promise<Memory | null> {
   const originUid = getCacheUid()
   const prev = cache.list ?? []
   publish(
@@ -78,7 +78,17 @@ async function patchMemoryOptimistic(
     cache.view
   )
   try {
-    await omiApi.patch(urlPath, null, { params: { value } })
+    const res = await omiApi.patch(urlPath, { value }, { params: { value } })
+    const rawReplacement = (res as { data?: { memory?: unknown } } | undefined)?.data?.memory
+    const parsedReplacement = rawReplacement ? parseKnowledgeLedgerMemory(rawReplacement) : null
+    if (parsedReplacement && getCacheUid() === originUid) {
+      const current = cache.list ?? []
+      const next = current
+        .map((m) => (m.id === id || m.id === parsedReplacement.id ? parsedReplacement : m))
+        .filter((m, idx, arr) => arr.findIndex((x) => x.id === m.id) === idx)
+      publish(next, cache.view)
+    }
+    return parsedReplacement
   } catch (e) {
     // Revert only if still the same account — a switch mid-request already reset
     // A's cache, so re-publishing A's `prev` list would stamp it under B.
@@ -97,7 +107,7 @@ export function useMemories(requestedView: MemoryReadView = 'useful_now'): {
   // Read at render time; publish() surfaces the fresh value.
   canonicalLifecycleExposed: boolean
   createMemory: (content: string, extra?: CreateMemoryExtra) => Promise<void>
-  editMemory: (id: string, content: string) => Promise<void>
+  editMemory: (id: string, content: string) => Promise<Memory | null>
   setMemoryVisibility: (id: string, visibility: 'public' | 'private') => Promise<void>
   setMemoryUse: (id: string, action: MemoryUseAction) => Promise<void>
   deleteMemory: (id: string) => Promise<void>
@@ -203,11 +213,14 @@ export function useMemories(requestedView: MemoryReadView = 'useful_now'): {
     if (getCacheUid() === originUid) publish(list, effectiveRequestedView)
   }
 
-  // Edit a memory's content.
-  const editMemory = async (id: string, content: string): Promise<void> => {
+  // Edit a memory's content and return any canonical replacement record.
+  const editMemory = async (id: string, content: string): Promise<Memory | null> => {
     const text = content.trim()
-    if (!text) return
-    await patchMemoryOptimistic(id, `/v3/memories/${id}`, text, (m) => ({ ...m, content: text }))
+    if (!text) return null
+    return await patchMemoryOptimistic(id, `/v3/memories/${id}`, text, (m) => ({
+      ...m,
+      content: text
+    }))
   }
 
   // Same query-param contract as editMemory, for PATCH /v3/memories/{id}/visibility.

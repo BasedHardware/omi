@@ -37,8 +37,10 @@ vi.mock('../assistants/core/notify', () => ({ notifyProactive }))
 
 import {
   filterAssistantPatch,
+  getAssistantSettingsOwner,
   projectAssistantSettings,
   registerAssistantSettingsHandlers,
+  setAssistantSettingsOwner,
   _resetAssistantSettingsForTests
 } from './assistantSettings'
 import { getAppSettings, _resetForTests } from '../appSettings'
@@ -129,6 +131,29 @@ describe('assistantSettings IPC', () => {
       expect(view.memoryEnabled).toBe(true)
       expect(view.notificationsEnabled).toBe(false)
       expect(getAppSettings().memoryEnabled).toBe(true)
+    })
+
+    it('fences stale-owner writes across a reauth/account switch while allowing active-owner writes', () => {
+      setAssistantSettingsOwner('user-b')
+      expect(getAssistantSettingsOwner()).toBe('user-b')
+
+      // Stale in-flight write from user-a must be dropped without mutating user-b's settings
+      const afterStale = invoke(
+        'assistants:setSettings',
+        { memoryEnabled: true, notificationFrequency: 4 },
+        'user-a'
+      ) as AssistantSettingsView
+      expect(afterStale.memoryEnabled).toBe(false)
+      expect(afterStale.notificationFrequency).toBe(0)
+
+      // Matching owner write succeeds
+      const afterValid = invoke(
+        'assistants:setSettings',
+        { memoryEnabled: true, notificationFrequency: 4 },
+        'user-b'
+      ) as AssistantSettingsView
+      expect(afterValid.memoryEnabled).toBe(true)
+      expect(afterValid.notificationFrequency).toBe(4)
     })
   })
 

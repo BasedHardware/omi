@@ -65,6 +65,32 @@ final class MemoryDetailPanelTests: XCTestCase {
     XCTAssertNil(viewModel.selectedMemory)
   }
 
+  func testSavedEditSelectsReplacementMemoryWhenBackendReturnsNewCanonicalId() async {
+    let viewModel = MemoriesViewModel()
+    let original = makeMemory(id: "m1-original", content: "before correction")
+    let replacement = makeMemory(id: "m1-replacement", content: "after canonical correction")
+
+    viewModel.selectedMemory = original
+    viewModel.memories = [replacement]
+
+    await viewModel.refreshSelectedMemory(preferredId: replacement.id)
+
+    XCTAssertEqual(viewModel.selectedMemory?.id, "m1-replacement")
+    XCTAssertEqual(viewModel.selectedMemory?.content, "after canonical correction")
+  }
+
+  func testStaticCheckerSaveKeepsEditorOpenWhenSaveFails() throws {
+    let source = try memoriesPageSource()
+    guard let start = source.range(of: "struct MemoryDetailPanel: View {") else {
+      return XCTFail("The Memories detail surface must be a panel")
+    }
+    let panel = String(source[start.lowerBound...].prefix(12000))
+
+    XCTAssertTrue(
+      panel.contains("let saved = await viewModel.saveEditedMemory(memory)"),
+      "MemoryDetailPanel must check whether saveEditedMemory succeeded before closing the editor")
+  }
+
   func testStaticCheckerPanelIsRebuiltPerMemory() throws {
     // STATIC CHECKER. SwiftUI's reuse of a same-position view is not
     // observable without a rendered hierarchy. Without an identity the panel
