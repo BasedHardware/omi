@@ -1,9 +1,12 @@
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
+
+logger = logging.getLogger(__name__)
 from models.announcement import Announcement, AnnouncementType, TriggerType
 
 
@@ -231,37 +234,63 @@ def create_announcement(announcement: Announcement) -> Announcement:
     return announcement
 
 
-def update_announcement(announcement_id: str, updates: Dict[str, Any]) -> Optional[Announcement]:
-    """Update an existing announcement."""
-    doc_ref = db.collection("announcements").document(announcement_id)
+def update_announcement(
+    announcement_id: str, updates: Dict[str, Any], *, firestore_client: Any = None
+) -> Optional[Announcement]:
+    """Update an existing announcement with TOCTOU NotFound guard and client injection."""
+    clean_id = (announcement_id or "").strip()
+    if not clean_id:
+        return None
+    client = firestore_client or db
+    doc_ref = client.collection("announcements").document(clean_id)
     doc = doc_ref.get()
     if not getattr(doc, "exists", False):
         return None
 
-    doc_ref.update(updates)
-    return get_announcement_by_id(announcement_id)
+    try:
+        doc_ref.update(updates)
+        return get_announcement_by_id(clean_id)
+    except Exception as exc:
+        logger.warning("Failed to update announcement %s: %s", clean_id, exc)
+        return None
 
 
-def delete_announcement(announcement_id: str) -> bool:
-    """Delete an announcement."""
-    doc_ref = db.collection("announcements").document(announcement_id)
+def delete_announcement(announcement_id: str, *, firestore_client: Any = None) -> bool:
+    """Delete an announcement with TOCTOU NotFound guard and client injection."""
+    clean_id = (announcement_id or "").strip()
+    if not clean_id:
+        return False
+    client = firestore_client or db
+    doc_ref = client.collection("announcements").document(clean_id)
     doc = doc_ref.get()
     if not getattr(doc, "exists", False):
         return False
 
-    doc_ref.delete()
-    return True
+    try:
+        doc_ref.delete()
+        return True
+    except Exception as exc:
+        logger.warning("Failed to delete announcement %s: %s", clean_id, exc)
+        return False
 
 
-def deactivate_announcement(announcement_id: str) -> bool:
-    """Soft delete - set active to False."""
-    doc_ref = db.collection("announcements").document(announcement_id)
+def deactivate_announcement(announcement_id: str, *, firestore_client: Any = None) -> bool:
+    """Soft delete - set active to False with TOCTOU race guard and client injection."""
+    clean_id = (announcement_id or "").strip()
+    if not clean_id:
+        return False
+    client = firestore_client or db
+    doc_ref = client.collection("announcements").document(clean_id)
     doc = doc_ref.get()
     if not getattr(doc, "exists", False):
         return False
 
-    doc_ref.update({"active": False})
-    return True
+    try:
+        doc_ref.update({"active": False})
+        return True
+    except Exception as exc:
+        logger.warning("Failed to deactivate announcement %s: %s", clean_id, exc)
+        return False
 
 
 # Helper functions for version comparison
@@ -357,33 +386,71 @@ def compare_versions(v1: str, v2: str) -> int:
 # ============================================================================
 
 
-def get_dismissed_announcement_ids(uid: str) -> set[str]:
-    """Get the set of announcement IDs that a user has dismissed."""
-    dismissed_ref = db.collection("users").document(uid).collection("dismissed_announcements")
-    docs = dismissed_ref.stream()
-    return {str(doc.id) for doc in docs}
+def get_dismissed_announcement_ids(uid: str, *, firestore_client: Any = None) -> set[str]:
+    """Get the set of announcement IDs that a user has dismissed with client injection and error resilience."""
+    clean_uid = (uid or "").strip()
+    if not clean_uid:
+        return set()
+    client = firestore_client or db
+    try:
+        dismissed_ref = client.collection("users").document(clean_uid).collection("dismissed_announcements")
+        docs = dismissed_ref.stream()
+        return {str(doc.id) for doc in docs}
+    except Exception as exc:
+        logger.warning("Failed to get dismissed announcement ids for user %s: %s", clean_uid, exc)
+        return set()
 
 
-def dismiss_announcement(uid: str, announcement_id: str, cta_clicked: bool = False) -> bool:
+def dismiss_announcement(
+    uid: str, announcement_id: str, cta_clicked: bool = False, *, firestore_client: Any = None
+) -> bool:
     """
-    Mark an announcement as dismissed for a user.
-    Returns True if successful.
+    Mark an announcement as dismissed for a user with client injection and input validation.
+    Returns True if successful, False otherwise.
     """
-    dismissed_ref = db.collection("users").document(uid).collection("dismissed_announcements").document(announcement_id)
-    dismissed_ref.set(
-        {
-            "dismissed_at": datetime.now(timezone.utc),
-            "cta_clicked": cta_clicked,
-        }
-    )
-    return True
+    clean_uid = (uid or "").strip()
+    clean_announcement_id = (announcement_id or "").strip()
+    if not clean_uid or not clean_announcement_id:
+        return False
+    client = firestore_client or db
+    try:
+        dismissed_ref = (
+            client.collection("users")
+            .document(clean_uid)
+            .collection("dismissed_announcements")
+            .document(clean_announcement_id)
+        )
+        dismissed_ref.set(
+            {
+                "dismissed_at": datetime.now(timezone.utc),
+                "cta_clicked": cta_clicked,
+            }
+        )
+        return True
+    except Exception as exc:
+        logger.warning("Failed to dismiss announcement %s for user %s: %s", clean_announcement_id, clean_uid, exc)
+        return False
 
 
-def is_announcement_dismissed(uid: str, announcement_id: str) -> bool:
-    """Check if a user has dismissed a specific announcement."""
-    dismissed_ref = db.collection("users").document(uid).collection("dismissed_announcements").document(announcement_id)
-    doc = dismissed_ref.get()
-    return bool(getattr(doc, "exists", False))
+def is_announcement_dismissed(uid: str, announcement_id: str, *, firestore_client: Any = None) -> bool:
+    """Check if a user has dismissed a specific announcement with client injection."""
+    clean_uid = (uid or "").strip()
+    clean_announcement_id = (announcement_id or "").strip()
+    if not clean_uid or not clean_announcement_id:
+        return False
+    client = firestore_client or db
+    try:
+        dismissed_ref = (
+            client.collection("users")
+            .document(clean_uid)
+            .collection("dismissed_announcements")
+            .document(clean_announcement_id)
+        )
+        doc = dismissed_ref.get()
+        return bool(getattr(doc, "exists", False))
+    except Exception as exc:
+        logger.warning("Failed to check announcement dismissal for %s: %s", clean_announcement_id, exc)
+        return False
 
 
 # ============================================================================
