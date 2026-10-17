@@ -78,6 +78,19 @@ class AppLocalizationsFi extends AppLocalizations {
   String get reprocessConversation => 'Käsittele keskustelu uudelleen';
 
   @override
+  String get reprocessTranscription => 'Käsittele litterointi uudelleen';
+
+  @override
+  String get retranscribingConversation =>
+      'Transkroi keskustelua uudelleen...\nTämä voi kestää hetken pidempien keskustelujen kohdalla';
+
+  @override
+  String get errorReprocessingTranscription => 'Virhe litteroinnin uudelleenkäsittelyssä. Yritä myöhemmin uudelleen.';
+
+  @override
+  String get errorNoStoredAudio => 'Tälle keskustelulle ei ole tallennettua ääntä.';
+
+  @override
   String get deleteConversation => 'Poista keskustelu';
 
   @override

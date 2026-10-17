@@ -78,6 +78,20 @@ class AppLocalizationsPl extends AppLocalizations {
   String get reprocessConversation => 'Przetwórz ponownie rozmowę';
 
   @override
+  String get reprocessTranscription => 'Przetwórz transkrypcję ponownie';
+
+  @override
+  String get retranscribingConversation =>
+      'Ponowna transkrypcja rozmowy...\nMoże to chwilę potrwać w przypadku dłuższych rozmów';
+
+  @override
+  String get errorReprocessingTranscription =>
+      'Błąd podczas ponownego przetwarzania transkrypcji. Spróbuj ponownie później.';
+
+  @override
+  String get errorNoStoredAudio => 'Brak zapisanego dźwięku dla tej rozmowy.';
+
+  @override
   String get deleteConversation => 'Usuń rozmowę';
 
   @override

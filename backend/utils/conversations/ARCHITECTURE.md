@@ -197,6 +197,18 @@ and background processing.
   purge), never from routers. Dual-writes on top of the still-installed
   Firebase extension `firestore-typesense-conversations`; the extension is
   removed only after this writer has baked (see the module runbook note).
+- `reprocess_transcription.py` is the user-initiated audio→transcript path for
+  one conversation (`POST /v1/conversations/{id}/reprocess-transcription`).
+  Missing/empty audio returns HTTP 400 with `detail.code=no_audio`; empty STT
+  uses `no_speech`. Storage/list/merge outages and STT failures return HTTP 502
+  with `detail.code=failed`, preserving the previous transcript. The app reads
+  these codes independently of the human-readable `detail.message`. Retranscription
+  opts into strict chunk-download errors so an outage cannot publish a partial
+  replacement transcript; other merger callers keep best-effort behavior.
+  It merges stored chunks and runs the same prerecorded STT helper the sync
+  pipeline uses, then the route hands the new segments to
+  `process_conversation(..., trigger=ProcessingTrigger.USER_REPROCESS)`. It is not a processing-queue
+  UI and does not revive the removed orphaned-WAV post-processing router.
 - The old orphaned WAV retranscription util (`postprocess_conversation.py`) was
   removed: the historical Flutter upload (`memoryPostProcessing`) and
   `POST /v1/memories/{id}/post-processing` router were removed and nothing

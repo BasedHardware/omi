@@ -186,6 +186,8 @@ SCHEMA_GROUPS = {
             'ClientProcessing',
             'ConversationSearchItem',
             'ConversationTestPromptResponse',
+            'TranscriptionReprocessErrorDetail',
+            'TranscriptionReprocessErrorResponse',
             'MergeConversationsResponse',
             'SearchConversationsResponse',
             'SyncLocalFilesResultResponse',
