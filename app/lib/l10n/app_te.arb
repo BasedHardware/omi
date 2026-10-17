@@ -11613,5 +11613,7 @@
     "askSuggestDoc": "ఈ సంభాషణను ఒక చిన్న డాక్యుమెంట్‌గా మార్చు.",
     "askInChatGpt": "ChatGPTని అడగండి",
     "copyForAnyApp": "ఏ యాప్ కోసమైనా కాపీ చేయండి",
-    "askConnectChatGptFirst": "మీ సంభాషణల గురించి అడగడానికి ChatGPTని ఒకసారి కనెక్ట్ చేయండి."
+    "askConnectChatGptFirst": "మీ సంభాషణల గురించి అడగడానికి ChatGPTని ఒకసారి కనెక్ట్ చేయండి.",
+    "reconnect": "మళ్లీ కనెక్ట్ చేయండి",
+    "chatGptNeedsReconnect": "మరిన్ని యాక్సెస్ అవసరం. సరిచేయడానికి మళ్లీ కనెక్ట్ చేయండి."
 }

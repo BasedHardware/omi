@@ -21,6 +21,10 @@ Uri chatGptPromptUrl(String prompt) => Uri.https('chatgpt.com', '/', {'q': promp
 /// the prod id, even on a dev backend; mirrors backend `PUBLIC_CHATGPT_CLIENT_IDS`.
 const chatGptClientIds = {'omi-chatgpt-prod', 'omi-chatgpt-dev'};
 
+/// What the ChatGPT screens ask ChatGPT to read (backend `config/mcp_scopes.py`). The backend
+/// enforces each scope separately, so a grant missing one gets refused for that kind of question.
+const chatGptRequiredScopes = {'memories.read', 'conversations.read', 'action_items.read', 'goals.read'};
+
 /// Agents that run on their own computer. They cannot approve Omi in the phone's browser, so each
 /// gets its own MCP key, handed over through a one-time zkr link inside a copy-paste prompt.
 enum ComputerAgent {
@@ -44,25 +48,56 @@ bool isLiveGrant(Map<String, dynamic> grant) => grant['revoked_at'] == null && g
 /// What is connected right now: live ChatGPT grants and the MCP key each computer agent holds.
 @immutable
 class AgentConnections {
-  const AgentConnections({required this.chatGptGrantIds, required this.agentKeys});
+  const AgentConnections({
+    required this.chatGptGrantIds,
+    required this.agentKeys,
+    this.chatGptMissingScopes = const {},
+  });
 
   final List<String> chatGptGrantIds;
   final Map<ComputerAgent, McpApiKey> agentKeys;
 
+  /// Required scopes no live ChatGPT grant carries. Empty when the grants do not list scopes, so
+  /// an older grant record is never mistaken for a partial one.
+  final Set<String> chatGptMissingScopes;
+
   bool get chatGptConnected => chatGptGrantIds.isNotEmpty;
 
+  /// ChatGPT is connected but was approved without access the screens rely on; connecting again
+  /// asks for it.
+  bool get chatGptNeedsReconnect => chatGptConnected && chatGptMissingScopes.isNotEmpty;
+
+  /// ChatGPT can look up a conversation for "Ask About This Conversation".
+  bool get chatGptCanReadConversations => chatGptConnected && !chatGptMissingScopes.contains('conversations.read');
+
+  AgentConnections withoutChatGpt() => AgentConnections(chatGptGrantIds: const [], agentKeys: agentKeys);
+
+  AgentConnections withoutAgentKey(ComputerAgent agent) => AgentConnections(
+        chatGptGrantIds: chatGptGrantIds,
+        agentKeys: {...agentKeys}..remove(agent),
+        chatGptMissingScopes: chatGptMissingScopes,
+      );
+
   static AgentConnections from({required List<Map<String, dynamic>> grants, required List<McpApiKey> keys}) {
-    final chatGpt = [
+    final live = [
       for (final grant in grants)
-        if (chatGptClientIds.contains(grant['client_id']) && isLiveGrant(grant) && grant['id'] is String)
-          grant['id'] as String,
+        if (chatGptClientIds.contains(grant['client_id']) && isLiveGrant(grant) && grant['id'] is String) grant,
     ];
+    final chatGpt = [for (final grant in live) grant['id'] as String];
+    final scopes = <String>{
+      for (final grant in live)
+        if (grant['scopes'] is List) ...(grant['scopes'] as List).whereType<String>(),
+    };
     final agentKeys = <ComputerAgent, McpApiKey>{};
     for (final agent in ComputerAgent.values) {
       final matches = keys.where((key) => key.name == agent.keyName).toList();
       if (matches.isNotEmpty) agentKeys[agent] = matches.first;
     }
-    return AgentConnections(chatGptGrantIds: chatGpt, agentKeys: agentKeys);
+    return AgentConnections(
+      chatGptGrantIds: chatGpt,
+      agentKeys: agentKeys,
+      chatGptMissingScopes: scopes.isEmpty ? const {} : chatGptRequiredScopes.difference(scopes),
+    );
   }
 }
 
@@ -100,9 +135,9 @@ class AgentConnectService {
     );
   }
 
-  /// Whether ChatGPT holds a live grant; grants only, for surfaces that do not show keys.
-  Future<bool> chatGptConnected() async =>
-      AgentConnections.from(grants: await _loadGrants(), keys: const []).chatGptConnected;
+  /// Whether ChatGPT can look up a conversation; grants only, for surfaces that do not show keys.
+  Future<bool> chatGptCanReadConversations() async =>
+      AgentConnections.from(grants: await _loadGrants(), keys: const []).chatGptCanReadConversations;
 
   Future<void> disconnectChatGpt(AgentConnections connections) =>
       Future.wait(connections.chatGptGrantIds.map(_revokeGrant));

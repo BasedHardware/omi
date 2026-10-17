@@ -4225,5 +4225,7 @@
     "askSuggestDoc": "Zamień tę rozmowę w krótki dokument.",
     "askInChatGpt": "Zapytaj ChatGPT",
     "copyForAnyApp": "Kopiuj do dowolnej aplikacji",
-    "askConnectChatGptFirst": "Połącz ChatGPT raz, aby pytać go o swoje rozmowy."
+    "askConnectChatGptFirst": "Połącz ChatGPT raz, aby pytać go o swoje rozmowy.",
+    "reconnect": "Połącz ponownie",
+    "chatGptNeedsReconnect": "Wymaga większego dostępu. Połącz ponownie, aby to naprawić."
 }

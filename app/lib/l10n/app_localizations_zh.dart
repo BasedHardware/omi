@@ -13461,4 +13461,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get askConnectChatGptFirst => '只需连接一次 ChatGPT，即可询问你的对话。';
+
+  @override
+  String get reconnect => '重新连接';
+
+  @override
+  String get chatGptNeedsReconnect => '需要更多权限。重新连接以修复。';
 }

@@ -4190,5 +4190,7 @@
     "askSuggestDoc": "Pārvērt šo sarunu īsā dokumentā.",
     "askInChatGpt": "Jautāt ChatGPT",
     "copyForAnyApp": "Kopēt jebkurai lietotnei",
-    "askConnectChatGptFirst": "Vienreiz savienojiet ChatGPT, lai varētu jautāt par savām sarunām."
+    "askConnectChatGptFirst": "Vienreiz savienojiet ChatGPT, lai varētu jautāt par savām sarunām.",
+    "reconnect": "Savienot vēlreiz",
+    "chatGptNeedsReconnect": "Nepieciešama plašāka piekļuve. Savienojiet vēlreiz, lai labotu."
 }

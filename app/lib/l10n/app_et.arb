@@ -4190,5 +4190,7 @@
     "askSuggestDoc": "Tee sellest vestlusest lühike dokument.",
     "askInChatGpt": "Küsi ChatGPT-lt",
     "copyForAnyApp": "Kopeeri mis tahes rakenduse jaoks",
-    "askConnectChatGptFirst": "Ühenda ChatGPT üks kord, et küsida temalt oma vestluste kohta."
+    "askConnectChatGptFirst": "Ühenda ChatGPT üks kord, et küsida temalt oma vestluste kohta.",
+    "reconnect": "Ühenda uuesti",
+    "chatGptNeedsReconnect": "Vajab rohkem juurdepääsu. Paranda uuesti ühendamisega."
 }

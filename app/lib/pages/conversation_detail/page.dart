@@ -23,7 +23,6 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/pages/settings/integrations_page.dart' show IntegrationApp, IntegrationsPage;
-import 'package:omi/services/experiments/connect_agent_gate.dart';
 import 'package:omi/services/audio_download_service.dart';
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/ui/ui.dart';
@@ -130,9 +129,6 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
   final focusTitleField = FocusNode();
   final focusOverviewField = FocusNode();
   final GlobalKey _shareButtonKey = GlobalKey();
-
-  /// `mobile-connect-agent-hub`: the overflow menu offers Ask About This Conversation.
-  bool _askAgentEnabled = false;
   TabController? _controller;
   ConversationTab selectedTab = ConversationTab.summary;
 
@@ -261,9 +257,6 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     super.initState();
     _detailProvider = context.read<ConversationDetailProvider>();
     WidgetsBinding.instance.addObserver(this);
-    ConnectAgentGate.isEnabled().then((enabled) {
-      if (enabled && mounted) setState(() => _askAgentEnabled = true);
-    });
     unawaited(
       SiriIntegration.instance.setCurrentScreen("/conversation/${widget.conversation.id}", widget.conversation.id),
     );
@@ -905,7 +898,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     ];
     // Search covers both tabs (summary and transcript), so it stays in the page menu.
     final wordsGroup = <PullDownMenuEntry>[
-      if (_askAgentEnabled && !conversation.discarded)
+      // A locked conversation is refused to connectors until it is unlocked, so it is not offered.
+      if (!conversation.discarded && !conversation.isLocked)
         PullDownMenuItem(
           title: l10n.askAboutConversation,
           iconWidget: const FaIcon(FontAwesomeIcons.message, size: 16),

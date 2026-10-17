@@ -13685,4 +13685,10 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get askConnectChatGptFirst => 'Hubungkan ChatGPT sekali untuk bertanya tentang percakapan Anda.';
+
+  @override
+  String get reconnect => 'Hubungkan ulang';
+
+  @override
+  String get chatGptNeedsReconnect => 'Perlu akses tambahan. Hubungkan ulang untuk memperbaiki.';
 }

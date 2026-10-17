@@ -4190,5 +4190,7 @@
     "askSuggestDoc": "把这段对话整理成一份简短文档。",
     "askInChatGpt": "问 ChatGPT",
     "copyForAnyApp": "复制到任意应用",
-    "askConnectChatGptFirst": "只需连接一次 ChatGPT，即可询问你的对话。"
+    "askConnectChatGptFirst": "只需连接一次 ChatGPT，即可询问你的对话。",
+    "reconnect": "重新连接",
+    "chatGptNeedsReconnect": "需要更多权限。重新连接以修复。"
 }

@@ -4232,5 +4232,7 @@
     "askSuggestDoc": "Lav denne samtale om til et kort dokument.",
     "askInChatGpt": "Spørg ChatGPT",
     "copyForAnyApp": "Kopiér til enhver app",
-    "askConnectChatGptFirst": "Forbind ChatGPT én gang for at spørge den om dine samtaler."
+    "askConnectChatGptFirst": "Forbind ChatGPT én gang for at spørge den om dine samtaler.",
+    "reconnect": "Forbind igen",
+    "chatGptNeedsReconnect": "Kræver mere adgang. Forbind igen for at rette det."
 }

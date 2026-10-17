@@ -11,18 +11,22 @@ Future<void> showAgentKeySheet(
   BuildContext context, {
   required ComputerAgent agent,
   required AgentConnectService service,
+  VoidCallback? onDiscarded,
 }) {
   return showOmiSheet<void>(
     context: context,
-    builder: (context) => AgentKeySheet(agent: agent, service: service),
+    builder: (context) => AgentKeySheet(agent: agent, service: service, onDiscarded: onDiscarded),
   );
 }
 
 class AgentKeySheet extends StatefulWidget {
-  const AgentKeySheet({super.key, required this.agent, required this.service});
+  const AgentKeySheet({super.key, required this.agent, required this.service, this.onDiscarded});
 
   final ComputerAgent agent;
   final AgentConnectService service;
+
+  /// Called after a key made for a sheet that has since closed is revoked, so the list catches up.
+  final VoidCallback? onDiscarded;
 
   @override
   State<AgentKeySheet> createState() => _AgentKeySheetState();
@@ -51,7 +55,12 @@ class _AgentKeySheetState extends State<AgentKeySheet> {
     setState(() => _working = true);
     try {
       final prepared = await widget.service.preparePrompt(widget.agent);
-      if (!mounted) return;
+      if (!mounted) {
+        // Closed while the link was being made: nobody received it, so its key must not linger.
+        final onDiscarded = widget.onDiscarded;
+        widget.service.revokeKey(prepared.keyId).then((_) => onDiscarded?.call(), onError: (_) {});
+        return;
+      }
       setState(() {
         _prepared = prepared;
         _working = false;

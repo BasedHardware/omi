@@ -13674,4 +13674,10 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get askConnectChatGptFirst => 'Jednou připojte ChatGPT a ptejte se ho na své konverzace.';
+
+  @override
+  String get reconnect => 'Znovu připojit';
+
+  @override
+  String get chatGptNeedsReconnect => 'Potřebuje větší přístup. Připojte znovu a opravte to.';
 }

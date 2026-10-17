@@ -13676,4 +13676,10 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get askConnectChatGptFirst => 'Koble til ChatGPT én gang for å spørre den om samtalene dine.';
+
+  @override
+  String get reconnect => 'Koble til på nytt';
+
+  @override
+  String get chatGptNeedsReconnect => 'Trenger mer tilgang. Koble til på nytt for å fikse det.';
 }

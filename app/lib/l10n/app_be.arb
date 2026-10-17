@@ -11613,5 +11613,7 @@
     "askSuggestDoc": "Ператвары гэту размову ў кароткі дакумент.",
     "askInChatGpt": "Спытаць у ChatGPT",
     "copyForAnyApp": "Скапіраваць для любой праграмы",
-    "askConnectChatGptFirst": "Падключыце ChatGPT адзін раз, каб пытацца ў яго пра свае размовы."
+    "askConnectChatGptFirst": "Падключыце ChatGPT адзін раз, каб пытацца ў яго пра свае размовы.",
+    "reconnect": "Падключыць зноў",
+    "chatGptNeedsReconnect": "Патрабуецца больш доступу. Падключыце зноў, каб выправіць."
 }

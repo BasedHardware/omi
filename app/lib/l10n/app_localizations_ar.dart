@@ -13598,4 +13598,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get askConnectChatGptFirst => 'اربط ChatGPT مرة واحدة لتسأله عن محادثاتك.';
+
+  @override
+  String get reconnect => 'إعادة الاتصال';
+
+  @override
+  String get chatGptNeedsReconnect => 'يحتاج إلى صلاحيات أكثر. أعد الاتصال للإصلاح.';
 }

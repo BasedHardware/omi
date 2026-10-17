@@ -4225,5 +4225,7 @@
     "askSuggestDoc": "Преврати эту беседу в короткий документ.",
     "askInChatGpt": "Спросить ChatGPT",
     "copyForAnyApp": "Скопировать для любого приложения",
-    "askConnectChatGptFirst": "Подключите ChatGPT один раз, чтобы спрашивать его о своих беседах."
+    "askConnectChatGptFirst": "Подключите ChatGPT один раз, чтобы спрашивать его о своих беседах.",
+    "reconnect": "Подключить снова",
+    "chatGptNeedsReconnect": "Нужен дополнительный доступ. Подключите снова, чтобы исправить."
 }

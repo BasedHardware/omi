@@ -4190,5 +4190,7 @@
     "askSuggestDoc": "この会話を短いドキュメントにまとめて。",
     "askInChatGpt": "ChatGPTに質問",
     "copyForAnyApp": "どのアプリでも使えるようにコピー",
-    "askConnectChatGptFirst": "ChatGPTを一度接続すると、会話について質問できます。"
+    "askConnectChatGptFirst": "ChatGPTを一度接続すると、会話について質問できます。",
+    "reconnect": "再接続",
+    "chatGptNeedsReconnect": "追加のアクセス権が必要です。再接続して修正してください。"
 }

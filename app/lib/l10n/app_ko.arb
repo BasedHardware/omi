@@ -4190,5 +4190,7 @@
     "askSuggestDoc": "이 대화를 짧은 문서로 정리해 줘.",
     "askInChatGpt": "ChatGPT에 묻기",
     "copyForAnyApp": "다른 앱용으로 복사",
-    "askConnectChatGptFirst": "ChatGPT를 한 번 연결하면 대화에 대해 물어볼 수 있습니다."
+    "askConnectChatGptFirst": "ChatGPT를 한 번 연결하면 대화에 대해 물어볼 수 있습니다.",
+    "reconnect": "다시 연결",
+    "chatGptNeedsReconnect": "더 많은 액세스 권한이 필요합니다. 다시 연결하여 해결하세요."
 }

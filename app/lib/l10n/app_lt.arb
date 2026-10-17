@@ -4190,5 +4190,7 @@
     "askSuggestDoc": "Paversk šį pokalbį trumpu dokumentu.",
     "askInChatGpt": "Klausti ChatGPT",
     "copyForAnyApp": "Kopijuoti bet kuriai programai",
-    "askConnectChatGptFirst": "Vieną kartą prijunkite ChatGPT, kad galėtumėte jo klausti apie savo pokalbius."
+    "askConnectChatGptFirst": "Vieną kartą prijunkite ChatGPT, kad galėtumėte jo klausti apie savo pokalbius.",
+    "reconnect": "Prisijungti iš naujo",
+    "chatGptNeedsReconnect": "Reikia daugiau prieigos. Prisijunkite iš naujo, kad ištaisytumėte."
 }

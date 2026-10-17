@@ -48,6 +48,8 @@ class _ConnectAgentPageState extends State<ConnectAgentPage> with WidgetsBinding
     if (state == AppLifecycleState.resumed) _load();
   }
 
+  /// Reloads from the server. A failed reload after the first load keeps the list but says so,
+  /// so a stale row is never shown as current without a word.
   Future<void> _load() async {
     try {
       final connections = await _service.load();
@@ -57,16 +59,26 @@ class _ConnectAgentPageState extends State<ConnectAgentPage> with WidgetsBinding
         _failed = false;
       });
     } catch (_) {
-      if (mounted) setState(() => _failed = _connections == null);
+      if (!mounted) return;
+      if (_connections == null) {
+        setState(() => _failed = true);
+      } else {
+        final l10n = context.l10n;
+        OmiFeedback.error(context, l10n.connectAgentLoadFailed, actionLabel: l10n.tryAgain, onAction: _load);
+      }
     }
   }
 
   Future<void> _openChatGpt() async {
     final connections = _connections;
     if (connections == null) return;
-    if (connections.chatGptConnected) {
+    if (connections.chatGptConnected && !connections.chatGptNeedsReconnect) {
       final disconnected = await routeToPage(context, ChatGptPage(service: _service, connections: connections));
-      if (disconnected == true) await _load();
+      if (disconnected == true) {
+        // The grants are gone whatever the reload says.
+        if (mounted) setState(() => _connections = _connections?.withoutChatGpt());
+        await _load();
+      }
     } else {
       await showChatGptConnectSheet(context);
     }
@@ -75,9 +87,24 @@ class _ConnectAgentPageState extends State<ConnectAgentPage> with WidgetsBinding
   Future<void> _openAgent(ComputerAgent agent) async {
     final key = _connections?.agentKeys[agent];
     if (key == null) {
-      await showAgentKeySheet(context, agent: agent, service: _service);
+      await showAgentKeySheet(
+        context,
+        agent: agent,
+        service: _service,
+        onDiscarded: () {
+          if (mounted) _load();
+        },
+      );
     } else {
-      await showActiveAgentSheet(context, agent: agent, keyId: key.id, lastUsedAt: key.lastUsedAt, service: _service);
+      final revoked = await showActiveAgentSheet(
+        context,
+        agent: agent,
+        keyId: key.id,
+        lastUsedAt: key.lastUsedAt,
+        service: _service,
+      );
+      // The key is gone whatever the reload says.
+      if (revoked == true && mounted) setState(() => _connections = _connections?.withoutAgentKey(agent));
     }
     // A sheet may have made or revoked a key, whichever way it closed.
     await _load();
@@ -109,8 +136,12 @@ class _ConnectAgentPageState extends State<ConnectAgentPage> with WidgetsBinding
                         key: const ValueKey('connect_agent_chatgpt'),
                         leading: const AgentMonogram('GPT'),
                         title: chatGptBrandName,
-                        subtitle: connections.chatGptConnected ? l10n.connected : null,
-                        trailing: connections.chatGptConnected ? null : _connectButton(_openChatGpt),
+                        subtitle: connections.chatGptNeedsReconnect
+                            ? l10n.chatGptNeedsReconnect
+                            : (connections.chatGptConnected ? l10n.connected : null),
+                        trailing: connections.chatGptNeedsReconnect
+                            ? _connectButton(_openChatGpt, label: l10n.reconnect)
+                            : (connections.chatGptConnected ? null : _connectButton(_openChatGpt)),
                         onTap: _openChatGpt,
                       ),
                     ],
@@ -161,6 +192,6 @@ class _ConnectAgentPageState extends State<ConnectAgentPage> with WidgetsBinding
     );
   }
 
-  Widget _connectButton(VoidCallback onPressed) =>
-      OmiButton(label: context.l10n.connect, size: OmiButtonSize.compact, onPressed: onPressed);
+  Widget _connectButton(VoidCallback onPressed, {String? label}) =>
+      OmiButton(label: label ?? context.l10n.connect, size: OmiButtonSize.compact, onPressed: onPressed);
 }

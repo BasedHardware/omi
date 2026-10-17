@@ -13707,4 +13707,10 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get askConnectChatGptFirst => 'Povežite ChatGPT jednom kako biste ga pitali o svojim razgovorima.';
+
+  @override
+  String get reconnect => 'Ponovno poveži';
+
+  @override
+  String get chatGptNeedsReconnect => 'Potreban je dodatni pristup. Ponovno poveži za ispravak.';
 }

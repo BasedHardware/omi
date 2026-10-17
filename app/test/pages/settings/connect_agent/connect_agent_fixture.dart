@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,8 +15,12 @@ const fakeAgentLink = 'https://zkr.scalingforever.com/a/AbCdEfGhIjKlMnOpQrStUv#v
 /// An in-memory backend for the Connect an Agent screens: grants, keys, and a zkr link that never
 /// leaves the process.
 class FakeAgentBackend {
-  FakeAgentBackend({this.chatGptConnected = false, Map<String, DateTime?> keys = const {}, this.failLoad = false})
-      : keys = {
+  FakeAgentBackend({
+    this.chatGptConnected = false,
+    Map<String, DateTime?> keys = const {},
+    this.failLoad = false,
+    this.chatGptScopes,
+  }) : keys = {
           for (final entry in keys.entries)
             'key-${entry.key}': McpApiKey.fromJson({
               'id': 'key-${entry.key}',
@@ -27,6 +33,12 @@ class FakeAgentBackend {
 
   bool chatGptConnected;
   bool failLoad;
+
+  /// Scopes on the ChatGPT grant; null leaves them off the record.
+  List<String>? chatGptScopes;
+
+  /// When set, the zkr link is held until it completes.
+  Completer<void>? holdShare;
   final Map<String, McpApiKey> keys;
   final created = <String>[];
   final revokedKeys = <String>[];
@@ -37,7 +49,12 @@ class FakeAgentBackend {
         loadGrants: () async {
           if (failLoad) throw Exception('offline');
           return [
-            if (chatGptConnected) {'id': 'grant-chatgpt', 'client_id': 'omi-chatgpt-prod'},
+            if (chatGptConnected)
+              {
+                'id': 'grant-chatgpt',
+                'client_id': 'omi-chatgpt-prod',
+                if (chatGptScopes != null) 'scopes': chatGptScopes
+              },
           ];
         },
         revokeGrant: (id) async {
@@ -66,7 +83,10 @@ class FakeAgentBackend {
           revokedKeys.add(id);
           keys.remove(id);
         },
-        share: (_) async => const ZkrShare(id: 'AbCdEfGhIjKlMnOpQrStUv', agentLink: fakeAgentLink),
+        share: (_) async {
+          await holdShare?.future;
+          return const ZkrShare(id: 'AbCdEfGhIjKlMnOpQrStUv', agentLink: fakeAgentLink);
+        },
       );
 }
 

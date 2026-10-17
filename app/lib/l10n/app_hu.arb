@@ -4286,5 +4286,7 @@
     "askSuggestDoc": "Készíts ebből a beszélgetésből egy rövid dokumentumot.",
     "askInChatGpt": "Kérdezd a ChatGPT-t",
     "copyForAnyApp": "Másolás bármely alkalmazáshoz",
-    "askConnectChatGptFirst": "Csatlakoztasd egyszer a ChatGPT-t, hogy a beszélgetéseidről kérdezhesd."
+    "askConnectChatGptFirst": "Csatlakoztasd egyszer a ChatGPT-t, hogy a beszélgetéseidről kérdezhesd.",
+    "reconnect": "Újracsatlakozás",
+    "chatGptNeedsReconnect": "Több hozzáférésre van szükség. Csatlakoztasd újra a javításhoz."
 }

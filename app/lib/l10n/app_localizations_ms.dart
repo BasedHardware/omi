@@ -13704,4 +13704,10 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get askConnectChatGptFirst => 'Sambungkan ChatGPT sekali untuk bertanya tentang perbualan anda.';
+
+  @override
+  String get reconnect => 'Sambung semula';
+
+  @override
+  String get chatGptNeedsReconnect => 'Perlukan akses tambahan. Sambung semula untuk membetulkan.';
 }

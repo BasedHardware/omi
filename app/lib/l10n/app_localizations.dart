@@ -24332,6 +24332,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Connect ChatGPT once to ask it about your conversations.'**
   String get askConnectChatGptFirst;
+
+  /// Button that connects an app (ChatGPT) again so it gets the access it is missing
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnect'**
+  String get reconnect;
+
+  /// Status under ChatGPT when it is connected but was approved without access to some Omi data
+  ///
+  /// In en, this message translates to:
+  /// **'Needs more access. Reconnect to fix.'**
+  String get chatGptNeedsReconnect;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

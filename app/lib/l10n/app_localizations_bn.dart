@@ -13670,4 +13670,10 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get askConnectChatGptFirst => 'আপনার কথোপকথন সম্পর্কে জিজ্ঞাসা করতে একবার ChatGPT সংযুক্ত করুন।';
+
+  @override
+  String get reconnect => 'আবার সংযুক্ত করুন';
+
+  @override
+  String get chatGptNeedsReconnect => 'আরও অ্যাক্সেস প্রয়োজন। ঠিক করতে আবার সংযুক্ত করুন।';
 }

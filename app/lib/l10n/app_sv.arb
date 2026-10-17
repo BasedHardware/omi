@@ -4190,5 +4190,7 @@
     "askSuggestDoc": "Gör om den här konversationen till ett kort dokument.",
     "askInChatGpt": "Fråga ChatGPT",
     "copyForAnyApp": "Kopiera för valfri app",
-    "askConnectChatGptFirst": "Anslut ChatGPT en gång för att fråga den om dina konversationer."
+    "askConnectChatGptFirst": "Anslut ChatGPT en gång för att fråga den om dina konversationer.",
+    "reconnect": "Anslut igen",
+    "chatGptNeedsReconnect": "Behöver mer åtkomst. Anslut igen för att åtgärda."
 }

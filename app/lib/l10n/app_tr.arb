@@ -4225,5 +4225,7 @@
     "askSuggestDoc": "Bu konuşmayı kısa bir belgeye dönüştür.",
     "askInChatGpt": "ChatGPT'ye Sor",
     "copyForAnyApp": "Herhangi Bir Uygulama İçin Kopyala",
-    "askConnectChatGptFirst": "Konuşmaların hakkında sormak için ChatGPT'yi bir kez bağla."
+    "askConnectChatGptFirst": "Konuşmaların hakkında sormak için ChatGPT'yi bir kez bağla.",
+    "reconnect": "Yeniden bağlan",
+    "chatGptNeedsReconnect": "Daha fazla erişim gerekiyor. Düzeltmek için yeniden bağlan."
 }

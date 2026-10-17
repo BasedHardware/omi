@@ -4190,5 +4190,7 @@
     "askSuggestDoc": "Sprav z tejto konverzácie krátky dokument.",
     "askInChatGpt": "Opýtať sa ChatGPT",
     "copyForAnyApp": "Kopírovať pre ľubovoľnú aplikáciu",
-    "askConnectChatGptFirst": "Raz pripojte ChatGPT a pýtajte sa ho na svoje konverzácie."
+    "askConnectChatGptFirst": "Raz pripojte ChatGPT a pýtajte sa ho na svoje konverzácie.",
+    "reconnect": "Znova pripojiť",
+    "chatGptNeedsReconnect": "Potrebuje viac prístupu. Pripojte znova a opravte."
 }

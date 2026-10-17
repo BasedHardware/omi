@@ -11613,5 +11613,7 @@
     "askSuggestDoc": "Pretvori ovaj razgovor u kratak dokument.",
     "askInChatGpt": "Pitaj ChatGPT",
     "copyForAnyApp": "Kopiraj za bilo koju aplikaciju",
-    "askConnectChatGptFirst": "Povežite ChatGPT jednom da biste ga pitali o svojim razgovorima."
+    "askConnectChatGptFirst": "Povežite ChatGPT jednom da biste ga pitali o svojim razgovorima.",
+    "reconnect": "Ponovo poveži",
+    "chatGptNeedsReconnect": "Potreban je dodatni pristup. Ponovo poveži da popraviš."
 }

@@ -13660,4 +13660,10 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get askConnectChatGptFirst => 'Forbind ChatGPT én gang for at spørge den om dine samtaler.';
+
+  @override
+  String get reconnect => 'Forbind igen';
+
+  @override
+  String get chatGptNeedsReconnect => 'Kræver mere adgang. Forbind igen for at rette det.';
 }

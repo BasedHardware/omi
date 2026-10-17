@@ -35,7 +35,6 @@ import 'package:omi/pages/settings/sign_out.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/settings/voice_settings_page.dart';
-import 'package:omi/services/experiments/connect_agent_gate.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -130,25 +129,16 @@ Future<void> openSettingsDestination(BuildContext context, SettingsDestination d
   }
 }
 
-/// Connect an Agent: the in-app screen when `mobile-connect-agent-hub` is on, otherwise the web
-/// developer home.
+/// Connect an Agent: ChatGPT in one tap, and agents with their own computer through a prompt that
+/// carries a one-time key link.
 Future<void> openConnectAgent(BuildContext context) async {
-  if (await ConnectAgentGate.isEnabled()) {
-    PlatformManager.instance.analytics.settingsPageOpened(pageName: 'connect_agent');
-    if (context.mounted) await routeToPage(context, const ConnectAgentPage());
-    return;
-  }
-  await openDeveloperHome();
-}
-
-/// The web developer home: copy-paste agent setup prompts plus MCP and Developer API keys. With the
-/// in-app screen off, every client sends people here for agent setup.
-final developerHomeUrl = Uri.parse('https://app.omi.me/developers');
-
-Future<void> openDeveloperHome() async {
   PlatformManager.instance.analytics.settingsPageOpened(pageName: 'connect_agent');
-  await launchUrl(developerHomeUrl, mode: LaunchMode.externalApplication);
+  await routeToPage(context, const ConnectAgentPage());
 }
+
+/// The web developer home: MCP and Developer API keys and their setup prompts, linked from the
+/// bottom of Connect an Agent.
+final developerHomeUrl = Uri.parse('https://app.omi.me/developers');
 
 /// The one voice-profile flow: the guided introduction (#14514), where sentence starters become
 /// the voice sample, memories and a goal. Every entry point opens it, with or without an existing

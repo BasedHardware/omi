@@ -4190,5 +4190,7 @@
     "askSuggestDoc": "Maak van dit gesprek een kort document.",
     "askInChatGpt": "Vraag het ChatGPT",
     "copyForAnyApp": "Kopiëren voor elke app",
-    "askConnectChatGptFirst": "Verbind ChatGPT één keer om het vragen te stellen over je gesprekken."
+    "askConnectChatGptFirst": "Verbind ChatGPT één keer om het vragen te stellen over je gesprekken.",
+    "reconnect": "Opnieuw verbinden",
+    "chatGptNeedsReconnect": "Meer toegang nodig. Opnieuw verbinden om dit op te lossen."
 }

@@ -4190,5 +4190,7 @@
     "askSuggestDoc": "Превърни този разговор в кратък документ.",
     "askInChatGpt": "Попитай ChatGPT",
     "copyForAnyApp": "Копирай за всяко приложение",
-    "askConnectChatGptFirst": "Свържете ChatGPT веднъж, за да го питате за разговорите си."
+    "askConnectChatGptFirst": "Свържете ChatGPT веднъж, за да го питате за разговорите си.",
+    "reconnect": "Свържи отново",
+    "chatGptNeedsReconnect": "Нужен е по-голям достъп. Свържи отново, за да поправиш."
 }

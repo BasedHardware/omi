@@ -13780,4 +13780,10 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get askConnectChatGptFirst =>
       'Ikonekta ang ChatGPT nang isang beses para matanong ito tungkol sa iyong mga usapan.';
+
+  @override
+  String get reconnect => 'Muling ikonekta';
+
+  @override
+  String get chatGptNeedsReconnect => 'Kailangan ng mas maraming access. Muling ikonekta para ayusin.';
 }

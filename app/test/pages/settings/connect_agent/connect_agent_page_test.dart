@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -104,5 +106,43 @@ void main() {
     expect(backend.revokedGrants, ['grant-chatgpt']);
     expect(find.byType(ChatGptPage), findsNothing);
     expect(find.text('Connected'), findsNothing);
+  });
+
+  testWidgets('closing the sheet while the link is made revokes the key nobody received', (tester) async {
+    final backend = FakeAgentBackend()..holdShare = Completer<void>();
+    await pumpPage(tester, backend);
+    await tester.tap(find.byKey(const ValueKey('connect_agent_instinct')));
+    await settle(tester);
+    await tester.tap(find.byKey(const ValueKey('agent_key_copy_prompt')));
+    await tester.pump();
+    await tester.tapAt(const Offset(195, 20)); // the scrim
+    await settle(tester);
+    backend.holdShare!.complete();
+    await settle(tester);
+    expect(backend.created, ['Instinct (Omi app)']);
+    expect(backend.revokedKeys, ['key-new-1']);
+    expect(find.text('Key active'), findsNothing);
+  });
+
+  testWidgets('a revoke shows at once even when the refresh after it fails, and the failure is said', (tester) async {
+    final backend = await pumpPage(tester, FakeAgentBackend(keys: {'Muse': null}));
+    await tester.tap(find.byKey(const ValueKey('connect_agent_muse')));
+    await settle(tester);
+    backend.failLoad = true;
+    await tester.tap(find.byKey(const ValueKey('agent_key_revoke')));
+    await settle(tester);
+    await tester.tap(find.text('Revoke').last);
+    await settle(tester);
+    expect(backend.revokedKeys, ['key-Muse']);
+    expect(find.text('Key active'), findsNothing);
+    expect(find.text("Couldn't load your connections."), findsOneWidget);
+  });
+
+  testWidgets('ChatGPT approved without the access the screens need offers Reconnect', (tester) async {
+    await pumpPage(tester, FakeAgentBackend(chatGptConnected: true, chatGptScopes: ['memories.read']));
+    expect(find.text('Needs more access. Reconnect to fix.'), findsOneWidget);
+    await tester.tap(find.text('Reconnect'));
+    await settle(tester);
+    expect(find.byKey(const ValueKey('connect_chatgpt_open')), findsOneWidget);
   });
 }

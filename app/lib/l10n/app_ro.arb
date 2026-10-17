@@ -4190,5 +4190,7 @@
     "askSuggestDoc": "Transformă această conversație într-un document scurt.",
     "askInChatGpt": "Întreabă ChatGPT",
     "copyForAnyApp": "Copiază pentru orice aplicație",
-    "askConnectChatGptFirst": "Conectează ChatGPT o singură dată ca să-l întrebi despre conversațiile tale."
+    "askConnectChatGptFirst": "Conectează ChatGPT o singură dată ca să-l întrebi despre conversațiile tale.",
+    "reconnect": "Reconectează",
+    "chatGptNeedsReconnect": "Are nevoie de mai mult acces. Reconectează pentru a remedia."
 }

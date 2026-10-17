@@ -13728,4 +13728,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get askConnectChatGptFirst => 'Csatlakoztasd egyszer a ChatGPT-t, hogy a beszélgetéseidről kérdezhesd.';
+
+  @override
+  String get reconnect => 'Újracsatlakozás';
+
+  @override
+  String get chatGptNeedsReconnect => 'Több hozzáférésre van szükség. Csatlakoztasd újra a javításhoz.';
 }

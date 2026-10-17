@@ -13673,4 +13673,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get askConnectChatGptFirst => 'Kết nối ChatGPT một lần để hỏi về các cuộc trò chuyện của bạn.';
+
+  @override
+  String get reconnect => 'Kết nối lại';
+
+  @override
+  String get chatGptNeedsReconnect => 'Cần thêm quyền truy cập. Kết nối lại để khắc phục.';
 }

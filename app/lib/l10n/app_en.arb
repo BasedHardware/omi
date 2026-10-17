@@ -16521,5 +16521,13 @@
     "askConnectChatGptFirst": "Connect ChatGPT once to ask it about your conversations.",
     "@askConnectChatGptFirst": {
         "description": "Shown in the ask sheet when ChatGPT is not connected yet"
+    },
+    "reconnect": "Reconnect",
+    "@reconnect": {
+        "description": "Button that connects an app (ChatGPT) again so it gets the access it is missing"
+    },
+    "chatGptNeedsReconnect": "Needs more access. Reconnect to fix.",
+    "@chatGptNeedsReconnect": {
+        "description": "Status under ChatGPT when it is connected but was approved without access to some Omi data"
     }
 }

@@ -13702,4 +13702,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get askConnectChatGptFirst => 'Vienreiz savienojiet ChatGPT, lai varētu jautāt par savām sarunām.';
+
+  @override
+  String get reconnect => 'Savienot vēlreiz';
+
+  @override
+  String get chatGptNeedsReconnect => 'Nepieciešama plašāka piekļuve. Savienojiet vēlreiz, lai labotu.';
 }

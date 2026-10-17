@@ -4,7 +4,6 @@ import 'package:omi/backend/schema/mcp_api_key.dart';
 import 'package:omi/services/agent_connect/agent_connections.dart';
 import 'package:omi/services/agent_connect/agent_prompts.dart';
 import 'package:omi/services/agent_connect/zkr_share.dart';
-import 'package:omi/services/experiments/connect_agent_gate.dart';
 
 McpApiKey key(String id, String name) => McpApiKey.fromJson({
       'id': id,
@@ -165,11 +164,30 @@ void main() {
     });
   });
 
-  group('ConnectAgentGate', () {
-    test('reads the PostHog flag and fails closed', () async {
-      expect(await ConnectAgentGate.isEnabled(readFlag: (key) async => key == 'mobile-connect-agent-hub'), isTrue);
-      expect(await ConnectAgentGate.isEnabled(readFlag: (_) async => false), isFalse);
-      expect(await ConnectAgentGate.isEnabled(readFlag: (_) async => throw StateError('no identity')), isFalse);
+  group('ChatGPT scopes', () {
+    test('a grant missing a scope the screens need asks for a reconnect', () {
+      final partial = AgentConnections.from(grants: [
+        {
+          'id': 'g1',
+          'client_id': 'omi-chatgpt-prod',
+          'scopes': ['memories.read']
+        },
+      ], keys: const []);
+      expect(partial.chatGptConnected, isTrue);
+      expect(partial.chatGptNeedsReconnect, isTrue);
+      expect(partial.chatGptCanReadConversations, isFalse);
+      expect(partial.chatGptMissingScopes, {'conversations.read', 'action_items.read', 'goals.read'});
+    });
+
+    test('a full grant, or one that lists no scopes, is simply connected', () {
+      for (final grant in [
+        {'id': 'g1', 'client_id': 'omi-chatgpt-prod', 'scopes': chatGptRequiredScopes.toList()},
+        {'id': 'g2', 'client_id': 'omi-chatgpt-prod'},
+      ]) {
+        final connections = AgentConnections.from(grants: [grant], keys: const []);
+        expect(connections.chatGptNeedsReconnect, isFalse);
+        expect(connections.chatGptCanReadConversations, isTrue);
+      }
     });
   });
 }

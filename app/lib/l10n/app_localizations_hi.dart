@@ -13654,4 +13654,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get askConnectChatGptFirst => 'अपनी बातचीत के बारे में पूछने के लिए एक बार ChatGPT कनेक्ट करें।';
+
+  @override
+  String get reconnect => 'फिर से कनेक्ट करें';
+
+  @override
+  String get chatGptNeedsReconnect => 'अधिक एक्सेस की ज़रूरत है। ठीक करने के लिए फिर से कनेक्ट करें।';
 }

@@ -11613,5 +11613,7 @@
     "askSuggestDoc": "এই কথোপকথনটিকে একটি ছোট ডকুমেন্টে পরিণত করো।",
     "askInChatGpt": "ChatGPT-কে জিজ্ঞাসা করুন",
     "copyForAnyApp": "যেকোনো অ্যাপের জন্য কপি করুন",
-    "askConnectChatGptFirst": "আপনার কথোপকথন সম্পর্কে জিজ্ঞাসা করতে একবার ChatGPT সংযুক্ত করুন।"
+    "askConnectChatGptFirst": "আপনার কথোপকথন সম্পর্কে জিজ্ঞাসা করতে একবার ChatGPT সংযুক্ত করুন।",
+    "reconnect": "আবার সংযুক্ত করুন",
+    "chatGptNeedsReconnect": "আরও অ্যাক্সেস প্রয়োজন। ঠিক করতে আবার সংযুক্ত করুন।"
 }

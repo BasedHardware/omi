@@ -13707,4 +13707,10 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get askConnectChatGptFirst => 'Падключыце ChatGPT адзін раз, каб пытацца ў яго пра свае размовы.';
+
+  @override
+  String get reconnect => 'Падключыць зноў';
+
+  @override
+  String get chatGptNeedsReconnect => 'Патрабуецца больш доступу. Падключыце зноў, каб выправіць.';
 }

@@ -11613,5 +11613,7 @@
     "askSuggestDoc": "या संभाषणाचा एक छोटा दस्तऐवज बनव.",
     "askInChatGpt": "ChatGPT ला विचारा",
     "copyForAnyApp": "कोणत्याही अ‍ॅपसाठी कॉपी करा",
-    "askConnectChatGptFirst": "तुमच्या संभाषणांबद्दल विचारण्यासाठी एकदा ChatGPT कनेक्ट करा."
+    "askConnectChatGptFirst": "तुमच्या संभाषणांबद्दल विचारण्यासाठी एकदा ChatGPT कनेक्ट करा.",
+    "reconnect": "पुन्हा कनेक्ट करा",
+    "chatGptNeedsReconnect": "अधिक प्रवेश आवश्यक आहे. निराकरणासाठी पुन्हा कनेक्ट करा."
 }

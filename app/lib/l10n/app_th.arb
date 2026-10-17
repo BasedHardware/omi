@@ -4190,5 +4190,7 @@
     "askSuggestDoc": "ช่วยเปลี่ยนการสนทนานี้ให้เป็นเอกสารสั้นๆ",
     "askInChatGpt": "ถาม ChatGPT",
     "copyForAnyApp": "คัดลอกไปใช้กับแอปใดก็ได้",
-    "askConnectChatGptFirst": "เชื่อมต่อ ChatGPT ครั้งเดียวเพื่อถามเกี่ยวกับการสนทนาของคุณ"
+    "askConnectChatGptFirst": "เชื่อมต่อ ChatGPT ครั้งเดียวเพื่อถามเกี่ยวกับการสนทนาของคุณ",
+    "reconnect": "เชื่อมต่อใหม่",
+    "chatGptNeedsReconnect": "ต้องการสิทธิ์เข้าถึงเพิ่มเติม เชื่อมต่อใหม่เพื่อแก้ไข"
 }

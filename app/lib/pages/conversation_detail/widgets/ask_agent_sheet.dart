@@ -33,14 +33,19 @@ class AskAgentSheet extends StatefulWidget {
   State<AskAgentSheet> createState() => _AskAgentSheetState();
 }
 
+/// Questions typed but not yet asked, by conversation id, so connecting ChatGPT first (or closing
+/// the sheet) does not lose them. Kept for the app session only.
+final _drafts = <String, String>{};
+
 class _AskAgentSheetState extends State<AskAgentSheet> {
-  final _question = TextEditingController();
+  late final _question = TextEditingController(text: _drafts[widget.conversation.id]);
   bool? _chatGptConnected;
 
   @override
   void initState() {
     super.initState();
-    widget.service.chatGptConnected().then(
+    _question.addListener(() => _drafts[widget.conversation.id] = _question.text);
+    widget.service.chatGptCanReadConversations().then(
       (connected) {
         if (mounted) setState(() => _chatGptConnected = connected);
       },
@@ -77,6 +82,7 @@ class _AskAgentSheetState extends State<AskAgentSheet> {
     final opened = await launchUrl(chatGptPromptUrl(_prompt()), mode: LaunchMode.externalApplication);
     if (!mounted) return;
     if (opened) {
+      _drafts.remove(widget.conversation.id);
       Navigator.of(context).pop();
     } else {
       OmiFeedback.error(context, context.l10n.chatAppsCouldNotOpen(chatGptBrandName));

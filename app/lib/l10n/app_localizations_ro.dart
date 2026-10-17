@@ -13730,4 +13730,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get askConnectChatGptFirst => 'Conectează ChatGPT o singură dată ca să-l întrebi despre conversațiile tale.';
+
+  @override
+  String get reconnect => 'Reconectează';
+
+  @override
+  String get chatGptNeedsReconnect => 'Are nevoie de mai mult acces. Reconectează pentru a remedia.';
 }

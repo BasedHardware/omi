@@ -4190,5 +4190,7 @@
     "askSuggestDoc": "Jadikan perbualan ini sebagai dokumen ringkas.",
     "askInChatGpt": "Tanya ChatGPT",
     "copyForAnyApp": "Salin untuk Mana-mana Aplikasi",
-    "askConnectChatGptFirst": "Sambungkan ChatGPT sekali untuk bertanya tentang perbualan anda."
+    "askConnectChatGptFirst": "Sambungkan ChatGPT sekali untuk bertanya tentang perbualan anda.",
+    "reconnect": "Sambung semula",
+    "chatGptNeedsReconnect": "Perlukan akses tambahan. Sambung semula untuk membetulkan."
 }
