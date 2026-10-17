@@ -4139,5 +4139,13 @@
     "activityNewItem": "Νέο",
     "activityNeedsAttention": "Χρειάζεται προσοχή",
     "activityRetryAll": "Επανάληψη όλων",
-    "attentionSummaryFailed": "Δεν ήταν δυνατή η σύνοψη αυτής της συνομιλίας"
+    "attentionSummaryFailed": "Δεν ήταν δυνατή η σύνοψη αυτής της συνομιλίας",
+"singlePress": "Μονό Πάτημα",
+    "singlePressAction": "Ενέργεια Μονού Πατήματος",
+    "triplePress": "Τριπλό Πάτημα",
+    "triplePressAction": "Ενέργεια Τριπλού Πατήματος",
+    "longPress": "Παρατεταμένο Πάτημα",
+    "turnOnOff": "Ενεργοποίηση / Απενεργοποίηση",
+    "askQuestion": "Υποβολή Ερώτησης",
+    "longPressPowerWarning": "Το παρατεταμένο πάτημα ενεργοποιεί/απενεργοποιεί τη συσκευή και δεν προσαρμόζεται."
 }

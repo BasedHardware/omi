@@ -4181,5 +4181,13 @@
     "activityNewItem": "Ny",
     "activityNeedsAttention": "Kræver opmærksomhed",
     "activityRetryAll": "Prøv alle igen",
-    "attentionSummaryFailed": "Samtalen kunne ikke opsummeres"
+    "attentionSummaryFailed": "Samtalen kunne ikke opsummeres",
+"singlePress": "Enkelt tryk",
+    "singlePressAction": "Handling for enkelt tryk",
+    "triplePress": "Tredobbelt tryk",
+    "triplePressAction": "Handling for tredobbelt tryk",
+    "longPress": "Langt tryk",
+    "turnOnOff": "Tænd/sluk",
+    "askQuestion": "Stil spørgsmål",
+    "longPressPowerWarning": "Langt tryk tænder/slukker for enheden og kan ikke tilpasses."
 }

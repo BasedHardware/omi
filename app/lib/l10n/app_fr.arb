@@ -4174,5 +4174,13 @@
     "activityNewItem": "Nouveau",
     "activityNeedsAttention": "Nécessite votre attention",
     "activityRetryAll": "Tout réessayer",
-    "attentionSummaryFailed": "Impossible de résumer cette conversation"
+    "attentionSummaryFailed": "Impossible de résumer cette conversation",
+"singlePress": "Simple appui",
+    "singlePressAction": "Action simple appui",
+    "triplePress": "Triple appui",
+    "triplePressAction": "Action triple appui",
+    "longPress": "Appui long",
+    "turnOnOff": "Allumer / Éteindre",
+    "askQuestion": "Poser une question",
+    "longPressPowerWarning": "L'appui long allume/éteint l'appareil et ne peut pas être personnalisé."
 }

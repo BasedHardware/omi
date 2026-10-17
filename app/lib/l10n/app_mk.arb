@@ -11562,5 +11562,13 @@
     "activityNewItem": "Ново",
     "activityNeedsAttention": "Потребно е внимание",
     "activityRetryAll": "Обиди ги сите повторно",
-    "attentionSummaryFailed": "Овој разговор не можеше да се сумира"
+    "attentionSummaryFailed": "Овој разговор не можеше да се сумира",
+"singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "turnOnOff": "Turn On/Off",
+    "askQuestion": "Ask Question",
+    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized."
 }

@@ -4174,5 +4174,13 @@
     "activityNewItem": "Nowe",
     "activityNeedsAttention": "Wymaga uwagi",
     "activityRetryAll": "Ponów wszystkie",
-    "attentionSummaryFailed": "Nie udało się podsumować tej rozmowy"
+    "attentionSummaryFailed": "Nie udało się podsumować tej rozmowy",
+"singlePress": "Pojedyncze naciśnięcie",
+    "singlePressAction": "Akcja pojedynczego naciśnięcia",
+    "triplePress": "Potrójne naciśnięcie",
+    "triplePressAction": "Akcja potrójnego naciśnięcia",
+    "longPress": "Długie naciśnięcie",
+    "turnOnOff": "Włącz / Wyłącz",
+    "askQuestion": "Zadaj pytanie",
+    "longPressPowerWarning": "Długie naciśnięcie włącza/wyłącza urządzenie i nie można go dostosować."
 }

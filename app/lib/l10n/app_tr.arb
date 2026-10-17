@@ -4174,5 +4174,13 @@
     "activityNewItem": "Yeni",
     "activityNeedsAttention": "İlgi gerekiyor",
     "activityRetryAll": "Tümünü yeniden dene",
-    "attentionSummaryFailed": "Bu konuşma özetlenemedi"
+    "attentionSummaryFailed": "Bu konuşma özetlenemedi",
+"singlePress": "Tek Basma",
+    "singlePressAction": "Tek Basma Eylemi",
+    "triplePress": "Üç Kez Basma",
+    "triplePressAction": "Üç Kez Basma Eylemi",
+    "longPress": "Uzun Basma",
+    "turnOnOff": "Aç / Kapat",
+    "askQuestion": "Soru Sor",
+    "longPressPowerWarning": "Uzun basma cihazı açar/kapatır ve özelleştirilemez."
 }

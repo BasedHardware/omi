@@ -4139,5 +4139,13 @@
     "activityNewItem": "Ny",
     "activityNeedsAttention": "Trenger oppmerksomhet",
     "activityRetryAll": "Prøv alle på nytt",
-    "attentionSummaryFailed": "Kunne ikke oppsummere denne samtalen"
+    "attentionSummaryFailed": "Kunne ikke oppsummere denne samtalen",
+"singlePress": "Enkelttrykk",
+    "singlePressAction": "Handling for enkelttrykk",
+    "triplePress": "Trippeltrykk",
+    "triplePressAction": "Handling for trippeltrykk",
+    "longPress": "Langt trykk",
+    "turnOnOff": "Slå på/av",
+    "askQuestion": "Still spørsmål",
+    "longPressPowerWarning": "Langt trykk slår enheten på/av og kan ikke tilpasses."
 }

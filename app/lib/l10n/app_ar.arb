@@ -4139,5 +4139,13 @@
     "activityNewItem": "جديد",
     "activityNeedsAttention": "يحتاج إلى انتباه",
     "activityRetryAll": "إعادة محاولة الكل",
-    "attentionSummaryFailed": "تعذّر تلخيص هذه المحادثة"
+    "attentionSummaryFailed": "تعذّر تلخيص هذه المحادثة",
+"singlePress": "ضغطة واحدة",
+    "singlePressAction": "إجراء الضغطة الواحدة",
+    "triplePress": "ثلاث ضغطات",
+    "triplePressAction": "إجراء الثلاث ضغطات",
+    "longPress": "ضغط مطول",
+    "turnOnOff": "تشغيل / إيقاف",
+    "askQuestion": "طرح سؤال",
+    "longPressPowerWarning": "الضغط المطول يقوم بتشغيل/إيقاف الجهاز ولا يمكن تخصيصه."
 }

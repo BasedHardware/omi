@@ -4139,5 +4139,13 @@
     "activityNewItem": "ใหม่",
     "activityNeedsAttention": "ต้องดำเนินการ",
     "activityRetryAll": "ลองใหม่ทั้งหมด",
-    "attentionSummaryFailed": "ไม่สามารถสรุปบทสนทนานี้ได้"
+    "attentionSummaryFailed": "ไม่สามารถสรุปบทสนทนานี้ได้",
+"singlePress": "กดครั้งเดียว",
+    "singlePressAction": "การทำงานเมื่อกดครั้งเดียว",
+    "triplePress": "กดสามครั้ง",
+    "triplePressAction": "การทำงานเมื่อกดสามครั้ง",
+    "longPress": "กดค้าง",
+    "turnOnOff": "เปิด / ปิด",
+    "askQuestion": "ถามคำถาม",
+    "longPressPowerWarning": "การกดค้างใช้เปิด/ปิดอุปกรณ์และไม่สามารถปรับแต่งได้"
 }

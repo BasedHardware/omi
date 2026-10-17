@@ -4139,5 +4139,13 @@
     "activityNewItem": "新着",
     "activityNeedsAttention": "要対応",
     "activityRetryAll": "すべて再試行",
-    "attentionSummaryFailed": "この会話を要約できませんでした"
+    "attentionSummaryFailed": "この会話を要約できませんでした",
+"singlePress": "シングルタップ",
+    "singlePressAction": "シングルタップ操作",
+    "triplePress": "トリプルタップ",
+    "triplePressAction": "トリプルタップ操作",
+    "longPress": "長押し",
+    "turnOnOff": "電源オン/オフ",
+    "askQuestion": "質問する",
+    "longPressPowerWarning": "長押しは電源のオン/オフ専用で、カスタマイズできません。"
 }

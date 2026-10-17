@@ -11562,5 +11562,13 @@
     "activityNewItem": "جدید",
     "activityNeedsAttention": "نیاز به توجه",
     "activityRetryAll": "تلاش دوباره برای همه",
-    "attentionSummaryFailed": "خلاصه‌سازی این گفتگو ممکن نشد"
+    "attentionSummaryFailed": "خلاصه‌سازی این گفتگو ممکن نشد",
+"singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "turnOnOff": "Turn On/Off",
+    "askQuestion": "Ask Question",
+    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized."
 }

@@ -4139,5 +4139,13 @@
     "activityNewItem": "Nieuw",
     "activityNeedsAttention": "Vraagt aandacht",
     "activityRetryAll": "Alles opnieuw proberen",
-    "attentionSummaryFailed": "Dit gesprek kon niet worden samengevat"
+    "attentionSummaryFailed": "Dit gesprek kon niet worden samengevat",
+"singlePress": "Enkele tik",
+    "singlePressAction": "Enkele tik actie",
+    "triplePress": "Drievoudige tik",
+    "triplePressAction": "Drievoudige tik actie",
+    "longPress": "Lang indrukken",
+    "turnOnOff": "In-/uitschakelen",
+    "askQuestion": "Vraag stellen",
+    "longPressPowerWarning": "Lang indrukken schakelt het apparaat in/uit en kan niet worden aangepast."
 }

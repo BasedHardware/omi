@@ -11562,5 +11562,13 @@
     "activityNewItem": "חדש",
     "activityNeedsAttention": "דורש תשומת לב",
     "activityRetryAll": "נסה הכול שוב",
-    "attentionSummaryFailed": "לא ניתן היה לסכם את השיחה הזו"
+    "attentionSummaryFailed": "לא ניתן היה לסכם את השיחה הזו",
+"singlePress": "לחיצה בודדת",
+    "singlePressAction": "פעולת לחיצה בודדת",
+    "triplePress": "לחיצה משולשת",
+    "triplePressAction": "פעולת לחיצה משולשת",
+    "longPress": "לחיצה ארוכה",
+    "turnOnOff": "הפעלה / כיבוי",
+    "askQuestion": "שאל שאלה",
+    "longPressPowerWarning": "לחיצה ארוכה מפעילה/מכבה את המכשיר ואינה ניתנת להתאמה אישית."
 }

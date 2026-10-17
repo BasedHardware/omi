@@ -4174,5 +4174,13 @@
     "activityNewItem": "Baru",
     "activityNeedsAttention": "Perlu perhatian",
     "activityRetryAll": "Coba lagi semua",
-    "attentionSummaryFailed": "Percakapan ini tidak dapat diringkas"
+    "attentionSummaryFailed": "Percakapan ini tidak dapat diringkas",
+"singlePress": "Tekan Sekali",
+    "singlePressAction": "Aksi Tekan Sekali",
+    "triplePress": "Tekan Tiga Kali",
+    "triplePressAction": "Aksi Tekan Tiga Kali",
+    "longPress": "Tekan Lama",
+    "turnOnOff": "Nyalakan / Matikan",
+    "askQuestion": "Ajukan Pertanyaan",
+    "longPressPowerWarning": "Tekan lama menyalakan/mematikan perangkat dan tidak dapat disesuaikan."
 }

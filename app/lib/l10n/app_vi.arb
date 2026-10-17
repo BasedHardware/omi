@@ -4139,5 +4139,13 @@
     "activityNewItem": "Mới",
     "activityNeedsAttention": "Cần chú ý",
     "activityRetryAll": "Thử lại tất cả",
-    "attentionSummaryFailed": "Không thể tóm tắt cuộc trò chuyện này"
+    "attentionSummaryFailed": "Không thể tóm tắt cuộc trò chuyện này",
+"singlePress": "Nhấn một lần",
+    "singlePressAction": "Hành động nhấn một lần",
+    "triplePress": "Nhấn ba lần",
+    "triplePressAction": "Hành động nhấn ba lần",
+    "longPress": "Nhấn giữ",
+    "turnOnOff": "Bật / Tắt",
+    "askQuestion": "Đặt câu hỏi",
+    "longPressPowerWarning": "Nhấn giữ để bật/tắt thiết bị và không thể tùy chỉnh."
 }

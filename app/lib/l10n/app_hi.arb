@@ -4139,5 +4139,13 @@
     "activityNewItem": "नया",
     "activityNeedsAttention": "ध्यान देने की ज़रूरत",
     "activityRetryAll": "सभी को फिर से आज़माएँ",
-    "attentionSummaryFailed": "इस बातचीत का सारांश नहीं बन सका"
+    "attentionSummaryFailed": "इस बातचीत का सारांश नहीं बन सका",
+"singlePress": "एक बार दबाएं",
+    "singlePressAction": "एक बार दबाने की क्रिया",
+    "triplePress": "तीन बार दबाएं",
+    "triplePressAction": "तीन बार दबाने की क्रिया",
+    "longPress": "देर तक दबाएं",
+    "turnOnOff": "चालू / बंद करें",
+    "askQuestion": "प्रश्न पूछें",
+    "longPressPowerWarning": "देर तक दबाने से डिवाइस चालू/बंद होता है और इसे कस्टमाइज़ नहीं किया जा सकता है।"
 }

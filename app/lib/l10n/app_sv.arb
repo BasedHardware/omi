@@ -4139,5 +4139,13 @@
     "activityNewItem": "Ny",
     "activityNeedsAttention": "Behöver uppmärksamhet",
     "activityRetryAll": "Försök igen med alla",
-    "attentionSummaryFailed": "Det gick inte att sammanfatta samtalet"
+    "attentionSummaryFailed": "Det gick inte att sammanfatta samtalet",
+"singlePress": "Enkeltryck",
+    "singlePressAction": "Åtgärd för enkeltryck",
+    "triplePress": "Tretryck",
+    "triplePressAction": "Åtgärd för tretryck",
+    "longPress": "Långt tryck",
+    "turnOnOff": "Slå på/av",
+    "askQuestion": "Ställ fråga",
+    "longPressPowerWarning": "Långt tryck slår på/stänger av enheten och kan inte anpassas."
 }

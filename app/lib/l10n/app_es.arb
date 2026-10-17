@@ -4139,5 +4139,13 @@
     "activityNewItem": "Nuevo",
     "activityNeedsAttention": "Requiere atención",
     "activityRetryAll": "Reintentar todo",
-    "attentionSummaryFailed": "No se pudo resumir esta conversación"
+    "attentionSummaryFailed": "No se pudo resumir esta conversación",
+"singlePress": "Pulsación simple",
+    "singlePressAction": "Acción de pulsación simple",
+    "triplePress": "Triple pulsación",
+    "triplePressAction": "Acción de triple pulsación",
+    "longPress": "Pulsación larga",
+    "turnOnOff": "Encender / Apagar",
+    "askQuestion": "Hacer pregunta",
+    "longPressPowerWarning": "La pulsación larga enciende/apaga el dispositivo y no se puede personalizar."
 }

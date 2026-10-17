@@ -4139,5 +4139,13 @@
     "activityNewItem": "Neu",
     "activityNeedsAttention": "Braucht Aufmerksamkeit",
     "activityRetryAll": "Alle erneut versuchen",
-    "attentionSummaryFailed": "Diese Unterhaltung konnte nicht zusammengefasst werden"
+    "attentionSummaryFailed": "Diese Unterhaltung konnte nicht zusammengefasst werden",
+"singlePress": "Einfaches Drücken",
+    "singlePressAction": "Einfaches Drücken Aktion",
+    "triplePress": "Dreifaches Drücken",
+    "triplePressAction": "Dreifaches Drücken Aktion",
+    "longPress": "Langes Drücken",
+    "turnOnOff": "Ein- / Ausschalten",
+    "askQuestion": "Frage stellen",
+    "longPressPowerWarning": "Langes Drücken schaltet das Gerät ein/aus und kann nicht angepasst werden."
 }

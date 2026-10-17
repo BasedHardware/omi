@@ -4139,5 +4139,13 @@
     "activityNewItem": "Nauja",
     "activityNeedsAttention": "Reikia dėmesio",
     "activityRetryAll": "Bandyti visus iš naujo",
-    "attentionSummaryFailed": "Nepavyko apibendrinti šio pokalbio"
+    "attentionSummaryFailed": "Nepavyko apibendrinti šio pokalbio",
+"singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "turnOnOff": "Turn On/Off",
+    "askQuestion": "Ask Question",
+    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized."
 }

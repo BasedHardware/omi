@@ -13406,4 +13406,28 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'לא ניתן היה לסכם את השיחה הזו';
+
+  @override
+  String get singlePress => 'לחיצה בודדת';
+
+  @override
+  String get singlePressAction => 'פעולת לחיצה בודדת';
+
+  @override
+  String get triplePress => 'לחיצה משולשת';
+
+  @override
+  String get triplePressAction => 'פעולת לחיצה משולשת';
+
+  @override
+  String get longPress => 'לחיצה ארוכה';
+
+  @override
+  String get turnOnOff => 'הפעלה / כיבוי';
+
+  @override
+  String get askQuestion => 'שאל שאלה';
+
+  @override
+  String get longPressPowerWarning => 'לחיצה ארוכה מפעילה/מכבה את המכשיר ואינה ניתנת להתאמה אישית.';
 }
