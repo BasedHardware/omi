@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A2047914A2047914A2047914 /* SafeFoundationSinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5F00001A5F00001A5F00001 /* SafeFoundationSinks.swift */; };
+		A2047913A2047913A2047913 /* WatchRecordingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2047910A2047910A2047910 /* WatchRecordingStore.swift */; };
+		A2047912A2047912A2047912 /* WatchRecordingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2047910A2047910A2047910 /* WatchRecordingStore.swift */; };
+		A2047911A2047911A2047911 /* WatchRecordingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2047910A2047910A2047910 /* WatchRecordingStore.swift */; };
 		A5F00002A5F00002A5F00002 /* SafeFoundationSinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5F00001A5F00001A5F00001 /* SafeFoundationSinks.swift */; };
 		A5F00003A5F00003A5F00003 /* SafeFoundationSinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5F00001A5F00001A5F00001 /* SafeFoundationSinks.swift */; };
 		A5F00004A5F00004A5F00004 /* SafeFoundationSinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5F00001A5F00001A5F00001 /* SafeFoundationSinks.swift */; };
@@ -245,6 +249,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A2047910A2047910A2047910 /* WatchRecordingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchRecordingStore.swift; sourceTree = "<group>"; };
 		A5F00001A5F00001A5F00001 /* SafeFoundationSinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeFoundationSinks.swift; sourceTree = "<group>"; };
 		03BA73541F37D6361DCF18DC /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
 		08E3947A4217EF205E22BD44 /* prodDebug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = prodDebug.xcconfig; path = Flutter/prodDebug.xcconfig; sourceTree = "<group>"; };
@@ -603,6 +608,7 @@
 				7AA100000000000000000008 /* TtsPcmPlayer.swift */,
 				E1293503E1293503E1293503 /* SpeechDeadline.swift */,
 				A2047903A2047903A2047903 /* WatchAudioChunkRelay.swift */,
+				A2047910A2047910A2047910 /* WatchRecordingStore.swift */,
 				D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */,
 				CD12345678901234567890CD /* AppleRemindersService.swift */,
 				CD12345678901234567890CE /* AppleHealthService.swift */,
@@ -1079,6 +1085,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A2047914A2047914A2047914 /* SafeFoundationSinks.swift in Sources */,
+				A2047913A2047913A2047913 /* WatchRecordingStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1086,6 +1094,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A2047911A2047911A2047911 /* WatchRecordingStore.swift in Sources */,
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				A5F00002A5F00002A5F00002 /* SafeFoundationSinks.swift in Sources */,
 				51794E0351794E0351794E03 /* SyncTransferBackgroundLease.swift in Sources */,
@@ -1157,6 +1166,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A2047912A2047912A2047912 /* WatchRecordingStore.swift in Sources */,
 				873C99F3D85C142369688A1D /* AppDelegate.swift in Sources */,
 				A5F00004A5F00004A5F00004 /* SafeFoundationSinks.swift in Sources */,
 				51794E0451794E0451794E04 /* SyncTransferBackgroundLease.swift in Sources */,
