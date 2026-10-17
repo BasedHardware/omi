@@ -13,9 +13,12 @@ from utils.batch_pipeline.scheduler import owner_key
 PAID_EPOCH = 2
 
 
-class SpeechRedriveStore(RecoveryStore):
-    def checked(self, tx, segment_id, **kwargs):
-        return super().checked(tx, segment_id, allow_completed_speech_redrive=True)
+class SpeechRedriveStore:
+    def __init__(self, store):
+        self.store = store
+
+    def checked(self, tx, segment_id):
+        return RecoveryStore(self.store).checked(tx, segment_id, allow_completed_speech_redrive=True)
 
     @staticmethod
     def terminal(job, existing, now):
@@ -116,7 +119,9 @@ class SpeechRedriveStore(RecoveryStore):
             ):
                 return False
             if marker.get('state') == 'completed':
-                return job.get('result') == asdict(WorkResult(segment_id, result_uri, 'success'))
+                return isinstance(result_uri, str) and job.get('result') == asdict(
+                    WorkResult(segment_id, result_uri, 'success')
+                )
             if marker.get('state') != 'running' or not self.terminal(job, existing, now):
                 return False
             if result_uri:

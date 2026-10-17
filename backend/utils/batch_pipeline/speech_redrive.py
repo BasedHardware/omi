@@ -57,6 +57,7 @@ def redrive_one(store, artifacts, sid, uid, plan_digest, expected_recovery, *, c
     record_fallback(
         component='stt_selection', from_mode='batch', to_mode='modulate', reason='other', outcome='degraded'
     )
+    payload = None
     try:
         payload = stt(item, normalized_binding(job['projection_binding']), audio, multilingual=True)
         if result_outcome(payload) != 'success' or not payload.get('words'):
@@ -75,6 +76,8 @@ def redrive_one(store, artifacts, sid, uid, plan_digest, expected_recovery, *, c
         if protocol.settle(sid, token, plan_digest, clock(), failure=failure):
             log_failure(failure)
         return 'failed_held'
+    if payload is None:
+        raise RecoveryFailure('payload_validation', 'invalid_payload')
     from config.stt_cap_dispatch import enabled as cap_enabled
     from utils.stt_cap_dispatch import funded_allowance
     from utils.observability.stt_cap_dispatch import record_audio
