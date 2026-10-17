@@ -35,7 +35,10 @@ def log_failure(failure):
 def transcribe(item, binding, audio, *, multilingual=None):
     """Use the sync client directly, with no whole-upload coordinator or retries."""
     from diarizer.batch_pipeline import validate_words
-    from utils.stt.pre_recorded import prerecorded_from_bytes
+
+    # Preserve the existing deferred STT boundary: its transitive encryption
+    # module requires runtime secrets and cannot join credential-free imports.
+    from utils.stt.pre_recorded import prerecorded_from_bytes, modulate_prerecorded_from_bytes
 
     from utils.batch_pipeline.recovery_disposition import inspect_audio, silence_payload, at_stage, RecoveryFailure
 
@@ -58,8 +61,6 @@ def transcribe(item, binding, audio, *, multilingual=None):
         # language model cannot recover unsupported-language speech by repadding.
         # Use an independent multilingual provider within the SAME paid intent;
         # attempts=2 disables Modulate's recursive retry branches too.
-        from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
-
         dispatch = lambda: modulate_prerecorded_from_bytes(
             output.getvalue(), language=binding.language, return_language=True, attempts=2
         )
@@ -182,7 +183,7 @@ class QuarantineRecovery:
                     record_audio(
                         'sync',
                         'accepted',
-                        'unknown',
+                        'modulate' if speech_empty_multilingual_enabled() else 'unknown',
                         item.duration_seconds,
                         funded_allowance(owner_id).reason == 'plan_allowance_exhausted',
                     )

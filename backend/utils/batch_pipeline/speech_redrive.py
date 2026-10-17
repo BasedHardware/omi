@@ -4,13 +4,17 @@ from dataclasses import fields
 import time
 
 from config.batch_pipeline import recovery_enabled_for, speech_empty_multilingual_enabled
+from config.prerecorded_stt import require_provider_environment, PrerecordedSTTService
+from config.stt_cap_dispatch import enabled as cap_enabled
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_speech_redrive import SpeechRedriveStore
 from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline.quarantine_recovery import transcribe, log_failure
 from utils.batch_pipeline.recovery_disposition import inspect_audio, result_outcome, RecoveryFailure
-from utils.stt_cap_dispatch import sync_allowed
+from utils.stt_cap_dispatch import sync_allowed, funded_allowance
+from utils.observability.fallback import record_fallback
+from utils.observability.stt_cap_dispatch import record_audio
 
 
 def redrive_one(store, artifacts, sid, uid, plan_digest, expected_recovery, *, clock=time.time, stt=transcribe):
@@ -43,17 +47,13 @@ def redrive_one(store, artifacts, sid, uid, plan_digest, expected_recovery, *, c
     _, _, spans = inspect_audio(item, audio)
     if not spans:
         raise RecoveryFailure('strict_vad', 'no_speech')
-    if not sync_allowed(uid, item.duration_seconds):
+    if not sync_allowed(uid, item.duration_seconds, 'modulate'):
         return 'allowance_held'
     # Check deployment dependencies before spending the sole intent. No fallback
     # to Parakeet is permitted if the alternate provider is unconfigured.
-    from config.prerecorded_stt import require_provider_environment, PrerecordedSTTService
-
     require_provider_environment(PrerecordedSTTService.MODULATE)
     if not protocol.start(sid, token, plan_digest, clock()):
         return 'fenced'
-    from utils.observability.fallback import record_fallback
-
     record_fallback(
         component='stt_selection', from_mode='batch', to_mode='modulate', reason='other', outcome='degraded'
     )
@@ -78,15 +78,11 @@ def redrive_one(store, artifacts, sid, uid, plan_digest, expected_recovery, *, c
         return 'failed_held'
     if payload is None:
         raise RecoveryFailure('payload_validation', 'invalid_payload')
-    from config.stt_cap_dispatch import enabled as cap_enabled
-    from utils.stt_cap_dispatch import funded_allowance
-    from utils.observability.stt_cap_dispatch import record_audio
-
     if cap_enabled():
         record_audio(
             'sync',
             'accepted',
-            'unknown',
+            'modulate',
             item.duration_seconds,
             funded_allowance(uid).reason == 'plan_allowance_exhausted',
         )

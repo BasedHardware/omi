@@ -8,6 +8,7 @@ from config.batch_pipeline import recovery_enabled_for, speech_empty_multilingua
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
 from utils.batch_pipeline.contracts import WorkResult
+from utils.batch_pipeline.recovery_disposition import STAGES, REASONS
 from utils.batch_pipeline.scheduler import owner_key
 
 PAID_EPOCH = 2
@@ -136,8 +137,6 @@ class SpeechRedriveStore:
                 )
                 tx.put('owners', owner_key(job['owner_id']), owner)
             else:
-                from utils.batch_pipeline.recovery_disposition import STAGES, REASONS
-
                 if not failure or failure.get('stage') not in STAGES or failure.get('reason') not in REASONS:
                     raise ValueError('closed redrive failure required')
                 marker.update(state='failed_held', settled_at=now, failure=dict(failure))
