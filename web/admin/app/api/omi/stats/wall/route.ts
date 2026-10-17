@@ -1,6 +1,6 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
-import { wallPayload } from "@/lib/wall-cache";
+import { wallPayload, wallSnapshotStore } from "@/lib/wall-cache";
 import { wallPresentation } from "@/lib/wall-presentation";
 
 import { localWallFixture } from "@/lib/wall-local-fixture";
@@ -13,10 +13,14 @@ export async function GET(request: NextRequest) {
   try {
     const payload =
       (await localWallFixture()) ||
-      (await wallPayload(undefined, undefined, (work) =>
-        after(async () => {
-          await work;
-        })
+      (await wallPayload(
+        undefined,
+        undefined,
+        (work) =>
+          after(async () => {
+            await work;
+          }),
+        wallSnapshotStore()
       ));
     return NextResponse.json(wallPresentation(payload), {
       status:

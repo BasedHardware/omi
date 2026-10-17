@@ -558,6 +558,9 @@ environment_shared:
         BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED:
           value: 'false'
           category: rollout
+        BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
+          value: 'false'
+          category: rollout
         BATCH_PIPELINE_RECOVERY_MODE:
           value: 'off'
           category: rollout
@@ -1367,6 +1370,9 @@ environment_shared:
           BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
+            value: 'false'
+            category: rollout
           BATCH_PIPELINE_RECOVERY_MODE:
             value: 'off'
             category: rollout
@@ -1787,6 +1793,9 @@ environment_shared:
           BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
+            value: 'false'
+            category: rollout
           BATCH_PIPELINE_RECOVERY_MODE:
             value: 'off'
             category: rollout
@@ -2172,6 +2181,9 @@ environment_shared:
           BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
+            value: 'false'
+            category: rollout
           BATCH_PIPELINE_RECOVERY_MODE:
             value: 'off'
             category: rollout
@@ -2480,6 +2492,9 @@ environment_shared:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_RECOVERY_MODE:

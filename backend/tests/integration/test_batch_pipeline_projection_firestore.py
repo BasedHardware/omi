@@ -1170,3 +1170,132 @@ def test_multipart_anonymous_gaps_are_distinct_while_pyannote_voice_is_shared(la
     assert len(gaps) == 2 and len({s['speaker_id'] for s in gaps}) == 2
     assert len({s['speaker_id'] for s in voices}) == 1
     assert not {s['speaker_id'] for s in voices} & {s['speaker_id'] for s in gaps}
+
+
+def test_three_instance_sweeps_coalesce_owner_and_complete_once(lane, monkeypatch):
+    import fakeredis
+    from database import batch_pipeline_projection_claim as claims
+
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'true')
+    monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(claims, '_redis_client', lambda: redis)
+    batch = lane.seed()
+    lane.finish(batch)
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')
+    entered, release = threading.Event(), threading.Event()
+    load = lane.projector.load_result
+
+    def paused_load(*args):
+        entered.set()
+        assert release.wait(20)
+        return load(*args)
+
+    monkeypatch.setattr(lane.projector, 'load_result', paused_load)
+    # Independent instances sharing only the real emulator and Redis boundary.
+    projectors = [
+        lane.Projector(lane.store, paused_load, publish=lane.projector.publish, clock=lane.clock) for _ in range(3)
+    ]
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        first = pool.submit(projectors[0].sweep)
+        assert entered.wait(20)
+        try:
+            others = [pool.submit(projector.sweep) for projector in projectors[1:]]
+            for future in others:
+                assert future.result(timeout=20) == {'completed': 0, 'waiting': 1, 'blocked': 0, 'error': 0}
+        finally:
+            release.set()
+        assert first.result(timeout=30) == {'completed': 1, 'waiting': 0, 'blocked': 0, 'error': 0}
+    assert batch.ledger.get().to_dict()['status'] == 'completed'
+    assert lane.projector.store.ref('results', batch.ids[0]).get().to_dict()['projection_state'] == 'completed'
+    assert len(lane.loads) == len(lane.tasks) == len(lane.published) == 1
+    assert len(active_rows(lane)) == 1 and active_rows(lane)[0]['sync_content_revision'] == 1
+
+
+def test_concurrent_empty_receipt_replay_resumes_durable_completion(lane, monkeypatch):
+    from database import batch_pipeline_projection_claim as claims
+    from unittest.mock import Mock
+
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'true')
+    # Advisory coalescing can be unavailable/expired. Durable replay must remain
+    # safe without it; all Firestore transaction races below are real.
+    redis = Mock()
+    redis.set.side_effect = ConnectionError('synthetic Redis unavailable')
+    monkeypatch.setattr(claims, '_redis_client', lambda: redis)
+    batch = lane.seed()
+    lane.finish(batch, outcome='silence')
+    barrier = threading.Barrier(3)
+    check = lane.projector.store.check
+    seen = set()
+    lock = threading.Lock()
+
+    def synchronized_check(session):
+        check(session)
+        with lock:
+            first_check = threading.get_ident() not in seen
+            seen.add(threading.get_ident())
+        if first_check:
+            barrier.wait(timeout=20)
+
+    monkeypatch.setattr(lane.projector.store, 'check', synchronized_check)
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        results = list(pool.map(lane.projector.project, [batch.ids[0]] * 3))
+    assert all(result['outcome'] == 'expected_silence' for result in results)
+    assert batch.ledger.get().to_dict()['status'] == 'completed'
+    assert lane.projector.store.ref('results', batch.ids[0]).get().to_dict()['projection_state'] == 'completed'
+    assert not active_rows(lane) and not lane.loads and not lane.tasks
+
+
+@pytest.mark.parametrize('boundary', ['projection', 'assignment'])
+@pytest.mark.parametrize('failure', ['contention', 'expired'])
+def test_batch_flag_recovers_real_sdk_read_abort_with_fresh_transaction(lane, monkeypatch, boundary, failure):
+    from google.api_core.exceptions import Aborted, InvalidArgument
+
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'true')
+    monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
+    # The emulator does not deterministically emit read-time contention. Inject
+    # its explicit envelope at the real BatchGet transport boundary, as in the
+    # shared contention qualification script; begin/rollback/retry/commit and
+    # every stored receipt/index/conversation remain real emulator operations.
+    import fakeredis
+    from database import batch_pipeline_projection_claim as claims
+
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(claims, '_redis_client', lambda: redis)
+    batch = lane.seed()
+    lane.finish(batch)
+    transport = lane.client._firestore_api._transport
+    original = transport._wrapped_methods[transport.batch_get_documents]
+    assign = lane.conversations.assign_sync_conversation
+    inside_assignment = False
+    injected = False
+    transactions = []
+
+    def assignment(*args, **kwargs):
+        nonlocal inside_assignment
+        inside_assignment = True
+        try:
+            return assign(*args, **kwargs)
+        finally:
+            inside_assignment = False
+
+    def read(request, **kwargs):
+        nonlocal injected
+        selected = inside_assignment if boundary == 'assignment' else not inside_assignment
+        if request.transaction and selected:
+            transactions.append(bytes(request.transaction))
+            if not injected:
+                injected = True
+                if failure == 'expired':
+                    raise InvalidArgument('The referenced transaction has expired or is no longer valid')
+                raise Aborted('synthetic read-time contention')
+        return original(request, **kwargs)
+
+    monkeypatch.setattr(lane.conversations, 'assign_sync_conversation', assignment)
+    monkeypatch.setitem(transport._wrapped_methods, transport.batch_get_documents, read)
+    result = lane.projector.project(batch.ids[0])
+    assert result['outcome'] == 'success' and injected
+    assert transactions[0] != transactions[1]
+    assert batch.ledger.get().to_dict()['status'] == 'completed'
+    assert len(active_rows(lane)) == 1 and active_rows(lane)[0]['sync_content_revision'] == 1
+    assert len(lane.tasks) == len(lane.published) == len(lane.loads) == 1

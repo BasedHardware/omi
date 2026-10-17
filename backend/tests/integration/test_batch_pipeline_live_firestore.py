@@ -6,7 +6,9 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
+import fakeredis
 
+from database import batch_pipeline_projection_claim as projection_claims
 from tests.integration.test_batch_pipeline_projection_firestore import lane, active_rows, frozen_manifest
 from utils.batch_pipeline.live import register_recording, record_identity
 from utils.batch_pipeline.scheduler import owner_key
@@ -293,7 +295,21 @@ def test_stale_finalizer_and_late_socket_cannot_overwrite_record(lane):
     assert active_rows(lane)[0]['record_projection_revision'] == 1
 
 
-def test_true_vad_silence_replaces_unprotected_provisional_speech(lane):
+@pytest.mark.parametrize('contended', [False, True])
+def test_true_vad_silence_replaces_unprotected_provisional_speech(lane, monkeypatch, contended):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', str(contended).lower())
+    if contended:
+        redis = fakeredis.FakeRedis()
+        monkeypatch.setattr(projection_claims, '_redis_client', lambda: redis)
+        assign = lane.projector.assign_record_silence
+
+        def lost_reply(item, binding, session):
+            assign(item, binding, session)
+            # The receipt committed; surface a competing projector's replay
+            # before completion and verify the remaining obligations resume.
+            lane.projector.store.check(session)
+
+        monkeypatch.setattr(lane.projector, 'assign_record_silence', lost_reply)
     item, binding, live = native(lane)
     register_recording(lane.uid, live, store=lane.store, now=0)
     admit(lane.store, [item], binding, 0, namespace=lane.store.namespace)

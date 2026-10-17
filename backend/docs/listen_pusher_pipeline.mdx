@@ -5210,6 +5210,25 @@ budget checks precede each percentage flip. Close admission everywhere to roll
 back, retaining worker, integration and recovery drain paths. Unsetting producer
 flags does not remove persisted label authority or reset paid recovery intents.
 
+### Batch projection contention and replay
+
+`BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED=false` is the dark default on every serving role.
+Enable it on integration to coalesce concurrent projection per owner using an advisory Redis
+NX/300-second token lease with one-second connect/read timeouts. Token-checked release cannot remove a replacement lease; expiry
+or Redis unavailability can allow overlap, so Firestore privacy, predecessor ordering and
+assignment receipts remain authoritative. No Firestore lookup is added. Both projection and
+batch assignment then use the existing bounded five-attempt fresh-transaction contention
+retry with jitter, retaining the existing expired-transaction restart. Legacy assignment retains its separate `SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED`
+control. No STT or admission path is changed.
+
+With the control enabled, silence persistence can discover another projector's receipt after its initial check. Resume
+all post-persist obligations and durable completion; a replay alone is never client completion.
+With the contention control on, content-free `action=project outcome=completed|waiting` and
+`action=claim outcome=busy|unavailable` logs plus per-sweep completed/waiting/blocked/error summaries distinguish drain progress from contention. Keep
+admission paused until accepted-work completion, visible synthetic canary and at least 30 minutes
+of correctness sentinels pass. Scaling all integration traffic to one instance is a temporary
+capacity tradeoff, not a distributed projection fence (revision overlap remains possible).
+
 ## Durable live and desktop record admission (dark)
 
 `BATCH_PIPELINE_LIVE_ADMISSION_ENABLED=false` is the sole new producer control.
@@ -5287,8 +5306,9 @@ automatic smart merge. Producer flag rollback never grants the old owner anew.
 **Dark only: no enablement in this PR.** Every declaration of
 `BATCH_PIPELINE_LIVE_ADMISSION_ENABLED` remains `false`, including pusher's explicit
 runtime/chart declaration. The production `assign_sync_conversation` Aborted
-incident identified in review is not fixed here. Its separate fix and a real
-canonical mobile/Mac canary are prerequisites to future rollout authorization.
+incident identified in review now has a separate contention fix inherited from
+main. That source merge establishes neither production recovery nor a real
+canonical mobile/Mac canary; both remain prerequisites to rollout authorization.
 The future sequence remains David, then 5%, then 100% jointly with sync, using the
 existing correctness gates and capacity model; this is not permission to start it.
 

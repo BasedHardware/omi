@@ -5,7 +5,11 @@ No admission flag is consulted: already accepted work drains after rollback.
 """
 
 from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
-from config.batch_pipeline import authoritative_labels_enabled, require_live_target_enabled
+from config.batch_pipeline import (
+    authoritative_labels_enabled,
+    require_live_target_enabled,
+    projection_contention_enabled,
+)
 from datetime import datetime, timezone
 import time
 import math
@@ -18,6 +22,8 @@ from database.batch_pipeline_store import FirestoreStore
 from database import conversations as conversations_db
 from utils.batch_pipeline.contracts import WorkItem, projection_speech_spans
 from utils.batch_pipeline.correctness_metrics import record_labels
+from database.batch_pipeline_projection_claim import projection_claim
+from utils.batch_pipeline.scheduler import owner_key
 
 logger = logging.getLogger(__name__)
 
@@ -155,20 +161,38 @@ class Projector:
 
     def project(self, segment_id: str) -> dict | None:
         job, entry, binding = self.store.read(segment_id)
+        if projection_contention_enabled():
+            with projection_claim(self.store.store.namespace, owner_key(binding.owner_id)) as acquired:
+                if not acquired:
+                    logger.info('event=batch_projection action=claim outcome=busy')
+                    return None
+                result = self._project(segment_id, job, entry, binding)
+                logger.info(
+                    'event=batch_projection action=project outcome=%s',
+                    'completed' if result is not None else 'waiting',
+                )
+                return result
+        return self._project(segment_id, job, entry, binding)
+
+    def _project(self, segment_id, job, entry, binding):
         item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
         session = self.store.session(segment_id, binding, self.clock())
         try:
             self.store.check(session)
         except ProjectionReplay:
-            # Every assignment committed already; no transcript/audio download
-            # is needed to resume outstanding post-persist obligations.
             pass
         else:
             if entry['result']['outcome'] == 'silence':
-                if binding.record_origin:
-                    self.assign_record_silence(item, binding, session)
-                else:
-                    session.persist_empty()
+                try:
+                    if binding.record_origin:
+                        self.assign_record_silence(item, binding, session)
+                    else:
+                        session.persist_empty()
+                except ProjectionReplay:
+                    if not projection_contention_enabled():
+                        raise
+                    # A receipt is assignment progress, not completion. Resume
+                    # every post-persist obligation after losing the empty race.
             else:
                 self.assign_parts(item, entry, binding)
         entry = self.store.ref('results', segment_id).get().to_dict() or {}
@@ -223,6 +247,7 @@ class Projector:
             before_assign=session.prepare,
             validate_plan=session.validate_plan,
             after_assign=lambda transaction, planned: session.persist(transaction, planned),
+            retry_contention=projection_contention_enabled(),
         )
 
     def assign_parts(self, item, entry, binding):
@@ -307,11 +332,18 @@ class Projector:
                         before_assign=session.prepare,
                         validate_plan=session.validate_plan,
                         after_assign=persisted,
+                        retry_contention=projection_contention_enabled(),
                     )
                     receipt = receipt_box[0]
                     record_labels(assigned[2])
             except ProjectionReplay as replay:
                 receipt = replay.receipt
+            except Exception as error:
+                if projection_contention_enabled():
+                    logger.error(
+                        'event=batch_projection action=assignment outcome=error exception_type=%s', type(error).__name__
+                    )
+                raise
             self.finish_part(item, binding, receipt, index)
 
     def finish_part(self, item, binding, receipt, index):
@@ -433,4 +465,12 @@ class Projector:
                 logger.error(
                     'event=batch_projection action=sweep outcome=error exception_type=%s', type(error).__name__
                 )
+        if projection_contention_enabled():
+            logger.info(
+                'event=batch_projection action=sweep outcome=summary completed=%d waiting=%d blocked=%d error=%d',
+                counts['completed'],
+                counts['waiting'],
+                counts['blocked'],
+                counts['error'],
+            )
         return counts
