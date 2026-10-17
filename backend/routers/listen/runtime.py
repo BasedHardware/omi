@@ -814,10 +814,12 @@ class ListenSessionRuntime:
             await admission.refresh(force=bool(invalidated))
             if getattr(self.receiver, 'cap_paused', False) and admission.managed:
                 await self.receiver.initialize_stt()
-        funded_credit_state = (
-            admission is not None
+        credit_admission = (
+            admission
+            if admission is not None
             and getattr(admission, 'reason', None) != 'legacy_dispatch_disabled'
             and (admission.omi_selected or not customer_funded(self.stt_service))
+            else None
         )
         needs_refresh = (
             not self.state.remaining_seconds_cache_initialized
@@ -829,10 +831,10 @@ class ListenSessionRuntime:
                 and now - self.state.remaining_seconds_cache_ts >= 60
             )
         )
-        if ladder_session and funded_credit_state:
+        if ladder_session and credit_admission is not None:
             # The funded admission above already read this flush's shared budget.
             # Reuse it rather than scanning the same monthly rollups twice.
-            self.state.remaining_seconds_cache = admission.remaining
+            self.state.remaining_seconds_cache = credit_admission.remaining
             self.state.remaining_seconds_cache_ts = now
             self.state.remaining_seconds_cache_initialized = True
         elif needs_refresh:
@@ -844,8 +846,8 @@ class ListenSessionRuntime:
         elif self.state.remaining_seconds_cache is not None and transcription_seconds > 0:
             self.state.remaining_seconds_cache = max(0, self.state.remaining_seconds_cache - transcription_seconds)
         remaining = self.state.remaining_seconds_cache
-        if funded_credit_state:
-            remaining = admission.remaining
+        if credit_admission is not None:
+            remaining = credit_admission.remaining
         if remaining is not None and remaining <= FREEMIUM_THRESHOLD_SECONDS and not self.state.freemium_threshold_sent:
             if should_emit_plus_meter_warning(subscription):
                 await self.asend_event(
