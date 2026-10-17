@@ -30,8 +30,10 @@ install_database_client_stub()
 try:
     from google.api_core.exceptions import NotFound as _NotFound
 except (ImportError, ModuleNotFoundError):
+
     class _NotFound(Exception):
         """Stand-in for google.api_core.exceptions.NotFound."""
+
 
 from database import announcements
 
@@ -57,12 +59,15 @@ def _wire(get_results, update_exc=None):
 
 
 def test_deleted_before_update_returns_none():
-    db_mock, _ = _wire([], update_exc=_NotFound("Document deleted concurrently"))
+    db_mock, _ = _wire(
+        [_snap(True, {"id": "ann-1"})],
+        update_exc=_NotFound("Document deleted concurrently"),
+    )
     with patch.object(announcements, "db", db_mock):
         assert announcements.update_announcement("ann-1", {"active": False}) is None
 
 
 def test_deleted_after_update_returns_none():
-    db_mock, _ = _wire([_snap(False, None)])
+    db_mock, _ = _wire([_snap(True, {"id": "ann-1"}), _snap(False, None)])
     with patch.object(announcements, "db", db_mock):
         assert announcements.update_announcement("ann-1", {"active": False}) is None
