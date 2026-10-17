@@ -8,9 +8,12 @@ patches the import-cheap db helper with monkeypatch.setattr, and calls the handl
 """
 
 import os
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -297,3 +300,39 @@ def test_batch_delete_preflight_chunks_large_id_lists(monkeypatch):
     assert len(preflight_chunks[1]) == 500
     assert len(preflight_chunks[2]) == 200
     assert result['deleted_count'] == 1200
+
+
+def test_batch_delete_http_reports_and_cleans_up_unique_ids(monkeypatch):
+    """Exercise the production route and DB writer through the HTTP boundary."""
+    writes = []
+    batch = MagicMock()
+    batch.delete.side_effect = lambda ref: writes.append(ref.id)
+    fake_db = MagicMock()
+    fake_db.collection.return_value.document.return_value.collection.return_value.document.side_effect = (
+        lambda item_id: SimpleNamespace(id=item_id)
+    )
+    fake_db.batch.return_value = batch
+    monkeypatch.setattr(action_items_db, 'db', fake_db)
+    preflight = MagicMock(return_value=[])
+    monkeypatch.setattr(action_items_db, 'get_action_items_by_ids', preflight)
+    monkeypatch.setattr(action_items_db, '_purge_proactivity_source', MagicMock())
+    monkeypatch.setattr(action_items_db, 'bump_action_items_list_version', MagicMock())
+    vectors = MagicMock()
+    notifications = MagicMock()
+    monkeypatch.setattr(ai_mod, 'delete_action_item_vectors_batch', vectors)
+    monkeypatch.setattr(ai_mod, 'send_action_items_batch_deletion_message', notifications)
+    monkeypatch.setattr(ai_mod, 'record_product_event', MagicMock())
+    app = FastAPI()
+    app.include_router(ai_mod.router)
+    app.dependency_overrides[ai_mod.auth.get_current_user_uid] = lambda: 'user-9'
+
+    with TestClient(app) as client:
+        response = client.post('/v1/action-items/batch-delete', json={'ids': ['a2', 'a1', 'a2', 'a1']})
+
+    assert response.status_code == 200
+    assert response.json() == {'status': 'Ok', 'deleted_count': 2, 'deleted_ids': ['a2', 'a1']}
+    assert writes == ['a2', 'a1']
+    preflight.assert_called_once_with('user-9', ['a2', 'a1'])
+    batch.commit.assert_called_once_with()
+    vectors.assert_called_once_with('user-9', ['a2', 'a1'])
+    notifications.assert_called_once_with(user_id='user-9', action_item_ids=['a2', 'a1'])

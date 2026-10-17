@@ -31,7 +31,7 @@ def main() -> int:
         if missing:
             raise ValueError(f'missing guard tests: {missing}')
         test_list = state / 'tests.txt'
-        test_list.write_text('\n'.join(FIRESTORE_INDEX_GUARD_TESTS) + '\n', encoding='utf-8')
+        test_list.write_text('\n'.join(FIRESTORE_INDEX_GUARD_TESTS) + '\n', encoding='utf-8', newline='\n')
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         print(
             f'FAIL: Firestore index guard environment setup failed: {exc}. '
