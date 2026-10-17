@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:omi/services/experiments/home_redesign.dart';
+
 import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/pages/action_items/widgets/task_row_parts.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -33,6 +36,10 @@ Future<ActionItemsResponse?> _items({
 
 /// Swipes mean the same thing on every task row (hub #4) and deletes offer Undo (hub #3, D5).
 void main() {
+  // These cover the redesigned Home (home-redesign test arm).
+  setUp(() => HomeRedesign.setForTesting(true));
+  tearDown(HomeRedesign.resetForTesting);
+
   setUp(() {
     PlatformManager.initializeForLocalHarness();
     // Indent/sort persistence is not injectable; point it at a dead loopback port (the test
@@ -68,9 +75,26 @@ void main() {
 
     await tester.drag(find.text('Book the venue'), const Offset(400, 0));
     await tester.pumpAndSettle();
+    // The row shows done, folds away, then the task is completed.
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
 
     expect(completions, [true]);
     expect(provider.actionItems.firstWhere((i) => i.id == 'child').indentLevel, 1);
+  });
+
+  testWidgets('ticking a task shows it done at once, folds it away, then completes it', (tester) async {
+    final (_, _, completions) = await pumpPage(tester);
+
+    await tester.tap(find.byType(TaskCompletionMark).last);
+    await tester.pump(const Duration(milliseconds: 100));
+    final title = tester.widget<Text>(find.text('Book the venue'));
+    expect(title.style?.decoration, TextDecoration.lineThrough, reason: 'looks done right away');
+    expect(completions, isEmpty, reason: 'the save waits for the fold');
+
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(completions, [true]);
   });
 
   testWidgets('swiping left on an indented task deletes it with Undo, no dialog', (tester) async {

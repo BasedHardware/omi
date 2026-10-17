@@ -6,8 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:in_app_review/in_app_review.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/home/widgets/home_tab_switcher.dart' show NewTasksDot;
 import 'package:omi/pages/onboarding/variants/yinka/activation/activation_capture.dart';
 import 'package:omi/pages/onboarding/variants/yinka/activation/activation_motion.dart';
 import 'package:omi/pages/onboarding/variants/yinka/activation/activation_visuals.dart';
@@ -98,6 +100,8 @@ class _ActivationFlowState extends State<ActivationFlow> {
     _track(next.name);
     // Each visit to the dictation listens afresh.
     if (next == ActivationStage.dictate) _capture = null;
+    // The to-dos are saved: Home marks Tasks with a dot until the person opens it.
+    if (next == ActivationStage.taskList && HomeRedesign.on) NewTasksDot.show();
     setState(() => _stage = next);
   }
 

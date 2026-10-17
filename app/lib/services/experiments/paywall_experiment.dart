@@ -42,8 +42,9 @@ class PaywallExperimentConfig {
   /// Only for [PaywallVariant.web]: the https page to render.
   final Uri? webUrl;
 
-  /// Whether this arm also shows its paywall once at the end of first-run onboarding (a placement
-  /// the control arm does not have).
+  /// Whether the end-of-first-run-onboarding placement is on for this arm. A variant shows its
+  /// paywall there; control shows nothing but is exposed at the same moment, so both arms enter the
+  /// experiment at the same point. Set it to the same value on every arm.
   final bool onboardingPaywall;
 
   bool get isControl => variant == PaywallVariant.control;
@@ -71,7 +72,7 @@ class PaywallExperimentConfig {
 ///
 /// Payload per variant (JSON object):
 /// `{"url": "https://…", "onboarding_paywall": true}` — `url` is required for `web` and must be
-/// https; `onboarding_paywall` is optional and defaults to false.
+/// https; `onboarding_paywall` is optional, defaults to false, and is read for control too.
 abstract final class PaywallExperiment {
   /// PostHog flag key. Registered in `config/feature-flags.yaml`.
   static const enabledFlag = 'paywall-variant';
@@ -92,7 +93,7 @@ abstract final class PaywallExperiment {
   /// Parses one flag read into a config. Anything unexpected collapses to control.
   static PaywallExperimentConfig parse({String? variant, Object? payload}) {
     final arm = PaywallVariant.fromWire(variant);
-    if (arm == null || arm == PaywallVariant.control) return PaywallExperimentConfig.control;
+    if (arm == null) return PaywallExperimentConfig.control;
 
     Object? value = payload;
     if (value is String) {
@@ -106,6 +107,10 @@ abstract final class PaywallExperiment {
     final onboardingPaywall = map['onboarding_paywall'] == true;
 
     switch (arm) {
+      case PaywallVariant.control:
+        return onboardingPaywall
+            ? const PaywallExperimentConfig(variant: PaywallVariant.control, onboardingPaywall: true)
+            : PaywallExperimentConfig.control;
       case PaywallVariant.outline:
         return PaywallExperimentConfig(variant: arm, onboardingPaywall: onboardingPaywall);
       case PaywallVariant.web:
@@ -113,8 +118,6 @@ abstract final class PaywallExperiment {
         final url = raw is String ? Uri.tryParse(raw.trim()) : null;
         if (url == null || url.scheme != 'https' || url.host.isEmpty) return PaywallExperimentConfig.control;
         return PaywallExperimentConfig(variant: arm, webUrl: url, onboardingPaywall: onboardingPaywall);
-      case PaywallVariant.control:
-        return PaywallExperimentConfig.control;
     }
   }
 
@@ -142,9 +145,7 @@ abstract final class PaywallExperiment {
     try {
       final variant = await (readVariant ?? AnalyticsManager().getFeatureFlagVariant)(enabledFlag);
       if (variant == null) return PaywallExperimentConfig.control; // unresolved: try again next time
-      final payload = variant == PaywallVariant.control.wireName
-          ? null
-          : await (readPayload ?? AnalyticsManager().getFeatureFlagPayload)(enabledFlag);
+      final payload = await (readPayload ?? AnalyticsManager().getFeatureFlagPayload)(enabledFlag);
       if (whoAmI() != who) return PaywallExperimentConfig.control; // account switched mid-read
       final config = parse(variant: variant, payload: payload);
       _cached = config;

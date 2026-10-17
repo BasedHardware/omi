@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:provider/provider.dart';
 
-import 'package:omi/pages/paywall/paywall_router.dart';
-import 'package:omi/pages/settings/widgets/plans_sheet.dart';
+import 'package:omi/pages/settings/widgets/upgrade_paywall.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
@@ -52,20 +50,10 @@ class FreemiumSwitchHandler {
       PromptPriority.low,
       // Still relevant when it is finally shown (the plan may have changed meanwhile).
       canShowNow: () => _eligible(context, captureProvider),
-      show: (promptContext) async {
-        if (await PaywallRouter.openVariant(promptContext, source: 'freemium_switch')) return;
-        if (!promptContext.mounted) return;
-        final plan = promptContext.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
-        PlatformManager.instance.analytics.paywallOpened('freemium_switch', currentPlan: plan);
-        final title = await plansSheetTitle(promptContext);
-        if (!promptContext.mounted) return;
-        return showOmiSheet<void>(
-          context: promptContext,
-          title: title,
-          padding: EdgeInsets.zero,
-          builder: (_) => const _PlansSheetWrapper(),
-        );
-      },
+      show: (promptContext) => openUpgradePaywall(
+        promptContext,
+        source: 'freemium_switch',
+      ),
     );
   }
 
@@ -89,51 +77,5 @@ class FreemiumSwitchHandler {
   /// Reset just the dialog shown flag
   void resetDialogFlag() {
     _freemiumService.resetDialogShownFlag();
-  }
-}
-
-/// Wrapper widget to create animation controllers for PlansSheet
-class _PlansSheetWrapper extends StatefulWidget {
-  const _PlansSheetWrapper();
-
-  @override
-  State<_PlansSheetWrapper> createState() => _PlansSheetWrapperState();
-}
-
-class _PlansSheetWrapperState extends State<_PlansSheetWrapper> with TickerProviderStateMixin {
-  late AnimationController _waveController;
-  late AnimationController _arrowController;
-  late Animation<double> _arrowAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _waveController = AnimationController(duration: const Duration(milliseconds: 18000), vsync: this)..repeat();
-
-    _arrowController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this)
-      ..repeat(reverse: true);
-
-    _arrowAnimation = Tween<double>(
-      begin: 0,
-      end: 3,
-    ).animate(CurvedAnimation(parent: _arrowController, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() {
-    _waveController.dispose();
-    _arrowController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return PlansSheet(
-      waveController: _waveController,
-      notesController: _waveController,
-      arrowController: _arrowController,
-      arrowAnimation: _arrowAnimation,
-      analyticsSource: 'freemium_switch',
-    );
   }
 }

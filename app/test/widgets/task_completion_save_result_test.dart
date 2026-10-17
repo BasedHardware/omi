@@ -5,6 +5,8 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -58,6 +60,10 @@ ActionItemsProvider _provider({required bool accept}) {
 }
 
 void main() {
+  // These cover the redesigned Home (home-redesign test arm).
+  setUp(() => HomeRedesign.setForTesting(true));
+  tearDown(HomeRedesign.resetForTesting);
+
   late _RecordingAdapter adapter;
 
   setUp(() async {
@@ -101,6 +107,10 @@ void main() {
       final provider = await pumpTasks(tester, accept: false);
 
       await tester.tap(find.byType(TaskCompletionMark));
+      // The row shows its new state and folds away before the save.
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 2));
       await tester.pumpAndSettle();
 
       expectStillOpen(tester, provider);
@@ -112,6 +122,10 @@ void main() {
       final provider = await pumpTasks(tester, accept: false);
 
       await tester.drag(find.text('Buy milk'), const Offset(400, 0));
+      // The row shows its new state and folds away before the save.
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 2));
       await tester.pumpAndSettle();
 
       expectStillOpen(tester, provider);
@@ -123,6 +137,10 @@ void main() {
       final provider = await pumpTasks(tester, accept: true);
 
       await tester.tap(find.byType(TaskCompletionMark));
+      // The row shows its new state and folds away before the save.
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 2));
       await tester.pumpAndSettle();
 
       expect(provider.actionItems.single.completed, isTrue);

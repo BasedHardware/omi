@@ -30,6 +30,7 @@ import 'package:omi/pages/conversations/widgets/date_list_item.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart';
 import 'package:omi/pages/conversations/widgets/home_pending_row.dart';
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/ui/ui.dart';
@@ -321,9 +322,14 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     if (mounted) setState(() {});
   }
 
+  void _onHomeRedesign() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
+    HomeRedesign.listenable.addListener(_onHomeRedesign);
     _scheduleDayRollover();
     _pendingWork.addListener(_onPendingWorkChanged);
     unawaited(_pendingWork.refresh());
@@ -427,6 +433,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
   @override
   void dispose() {
+    HomeRedesign.listenable.removeListener(_onHomeRedesign);
     _pendingWork.removeListener(_onPendingWorkChanged);
     _dayTimer?.cancel();
     for (final timer in _deferred) {
@@ -522,6 +529,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     // Placing the pending row reads the clock and reshapes the top of the list: redo it whenever the
     // row appears or goes away, not only when the conversation list changes.
     final syncPendingVisible = context.select<SyncProvider, bool>(SyncPendingWork.shouldShow);
+    // home-redesign experiment: the redesigned Home, or today's (control).
+    final redesign = HomeRedesign.on;
     return Selector2<ConversationProvider, LocalRecordingsProvider, _ConversationPageSnapshot>(
       selector: (_, conversationProvider, recordingsProvider) =>
           _conversationPageSnapshot(conversationProvider, recordingsProvider),
@@ -581,21 +590,26 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         // No list yet (loading, empty, a status): the row opens Today itself, where the list's Today lands.
         final pendingOpensToday = showPending && listRows.isEmpty;
 
+        Future<void> refresh() async {
+          _lastLoadMoreRequestKey = null;
+          unawaited(_pendingWork.refresh());
+          Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
+          await Future.wait([
+            convoProvider.getInitialConversations(),
+            Provider.of<LocalRecordingsProvider>(context, listen: false).refresh(),
+            if (_recapsKey.currentState != null) _recapsKey.currentState!.refresh(),
+            // Review's entry hides when caught up; a pull is how a hidden one comes back.
+            if (Provider.of<ReviewProvider?>(context, listen: false) case final review?
+                when review.availability != ReviewAvailability.off)
+              review.load(),
+          ]);
+        }
+
         return RefreshIndicator(
+          notificationPredicate: redesign ? OmiRefreshControl.materialPredicate : defaultScrollNotificationPredicate,
           onRefresh: () async {
             HapticFeedback.mediumImpact();
-            _lastLoadMoreRequestKey = null;
-            unawaited(_pendingWork.refresh());
-            Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
-            await Future.wait([
-              convoProvider.getInitialConversations(),
-              Provider.of<LocalRecordingsProvider>(context, listen: false).refresh(),
-              if (_recapsKey.currentState != null) _recapsKey.currentState!.refresh(),
-              // Review's entry hides when caught up; a pull is how a hidden one comes back.
-              if (Provider.of<ReviewProvider?>(context, listen: false) case final review?
-                  when review.availability != ReviewAvailability.off)
-                review.load(),
-            ]);
+            await refresh();
           },
           color: OmiColors.onAccent,
           backgroundColor: OmiColors.accent,
@@ -603,8 +617,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
+              if (redesign && OmiRefreshControl.supported) OmiRefreshControl(onRefresh: refresh),
               // The live capture row: recording, a call, or a conversation being captured.
-              const SliverToBoxAdapter(child: ConversationCaptureWidget(showsCall: true)),
+              SliverToBoxAdapter(child: ConversationCaptureWidget(showsCall: true, deviceStatusInBottomBar: redesign)),
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
               // Review absorbs the voice prompts; the old card shows only while Review is off.

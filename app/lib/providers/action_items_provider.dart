@@ -90,6 +90,9 @@ class ActionItemsProvider extends ChangeNotifier {
   // UI filter: show completed tasks view
   bool _showCompletedView = false;
 
+  // UI layout: group the list by project instead of by due date (offered once projects exist)
+  bool _groupByProject = false;
+
   // Date range filter
   DateTime? _startDate;
   DateTime? _endDate;
@@ -136,6 +139,7 @@ class ActionItemsProvider extends ChangeNotifier {
   bool get hasMore => _hasMore;
   bool get includeCompleted => _includeCompleted;
   bool get showCompletedView => _showCompletedView;
+  bool get groupByProject => _groupByProject;
   DateTime? get startDate => _startDate;
   DateTime? get endDate => _endDate;
   bool get hasActiveFilter => _startDate != null || _endDate != null;
@@ -1040,6 +1044,11 @@ class ActionItemsProvider extends ChangeNotifier {
 
   void toggleShowCompletedView() {
     _showCompletedView = !_showCompletedView;
+    notifyListeners();
+  }
+
+  void toggleGroupByProject() {
+    _groupByProject = !_groupByProject;
     notifyListeners();
   }
 

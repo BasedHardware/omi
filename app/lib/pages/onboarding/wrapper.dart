@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'onboarding_step_telemetry.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -24,6 +26,7 @@ import 'package:omi/pages/onboarding/variants/yinka/yinka_onboarding_flow.dart';
 import 'package:omi/pages/onboarding/web_onboarding_page.dart';
 import 'package:omi/pages/paywall/paywall_router.dart';
 import 'package:omi/services/experiments/onboarding_variant_gate.dart';
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:omi/services/experiments/paywall_experiment.dart';
 import 'package:omi/pages/onboarding/setup_page.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
@@ -39,6 +42,11 @@ import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/home/widgets/home_tab_switcher.dart' show NewTasksDot;
+import 'package:omi/backend/http/api/action_items.dart' show createActionItem, tryGetActionItems;
+import 'package:omi/utils/logger.dart';
+import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/core/app_shell.dart';
@@ -265,6 +273,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     SharedPreferencesUtil().remove(_resumeKey);
     _stepTelemetry.exit();
     _completeOnboardingTelemetry();
+    unawaited(_addStarterTasks(context.l10n, onAdded: context.read<ActionItemsProvider>().forceRefreshActionItems));
     PlatformManager.instance.analytics.onboardingCompleted();
     PaintingBinding.instance.imageCache.clear();
     if (!paywallShown) await _maybeShowOnboardingPaywall();
@@ -273,11 +282,49 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     return true;
   }
 
-  /// The experiment's end-of-onboarding placement: only arms whose payload asks for it, never
-  /// control, and never when subscription UI is hidden (the router checks that).
+  /// An empty Tasks tab teaches nothing: when onboarding produced no to-dos, add three starter tasks
+  /// that walk the person through Omi (once per account; never on a failed read, so nobody gets
+  /// them on top of real tasks). Every onboarding arm gets them, so the experiment stays fair.
+  static Future<void> _addStarterTasks(AppLocalizations l10n, {Future<void> Function()? onAdded}) async {
+    // Part of the redesigned Home (home-redesign experiment).
+    if (!HomeRedesign.on) return;
+    final key = 'onboarding/starterTasks/${SharedPreferencesUtil().uid}';
+    if (SharedPreferencesUtil().getBool(key)) return;
+    // The activation already showed real to-dos (they may still be saving): no starter tasks.
+    if (NewTasksDot.showing) {
+      SharedPreferencesUtil().saveBool(key, true);
+      return;
+    }
+    try {
+      final existing = await tryGetActionItems(limit: 1);
+      if (existing == null) return;
+      SharedPreferencesUtil().saveBool(key, true);
+      if (existing.actionItems.isNotEmpty) return;
+      for (final description in [
+        l10n.onboardingStarterTaskAsk,
+        l10n.onboardingStarterTaskRecord,
+        l10n.onboardingStarterTaskCheck,
+      ]) {
+        await createActionItem(description: description);
+      }
+      NewTasksDot.show();
+      // Home's Tasks list may have loaded before these landed.
+      await onAdded?.call();
+    } catch (e) {
+      Logger.debug('Starter tasks not added: $e');
+    }
+  }
+
+  /// The experiment's end-of-onboarding placement, when the payload turns it on: a variant shows its
+  /// paywall; control shows nothing but is exposed at the same moment, so both arms enter the
+  /// experiment at the same point. Never when subscription UI is hidden (the router checks that).
   Future<void> _maybeShowOnboardingPaywall() async {
     final config = await PaywallExperiment.resolve();
-    if (!mounted || config.isControl || !config.onboardingPaywall) return;
+    if (!mounted || !config.onboardingPaywall) return;
+    if (config.isControl) {
+      PaywallRouter.exposeControl(context, config: config);
+      return;
+    }
     await PaywallRouter.openVariant(context, source: 'onboarding', config: config);
   }
 
@@ -285,6 +332,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   /// (Reid's web page, Yinka's flow) or the native step the reader left off at. A web page that
   /// falls back lands on that same native step.
   Future<void> _enterSteps() async {
+    // Decide this account's Home (home-redesign experiment) while onboarding runs, before Home shows.
+    HomeRedesign.start();
     final arm = await OnboardingVariantGate.resolve();
     if (!mounted) return;
     PlatformManager.instance.analytics.track('Onboarding Variant Shown', properties: {

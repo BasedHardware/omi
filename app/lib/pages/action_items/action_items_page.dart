@@ -1,8 +1,8 @@
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
-import 'package:pull_down_button/pull_down_button.dart';
 
 import 'package:omi/backend/http/action_items_api_contract.dart';
 import 'package:omi/backend/http/api_presentation.dart';
@@ -59,8 +59,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   bool _noDeadlineExpanded = true;
 
-  /// Group the list by project instead of by due date (offered once projects exist).
-  bool _groupByProject = false;
+  /// Tasks just ticked (or reopened) that are about to leave this view: shown in their new state
+  /// at once ([_completing] maps id → new completed value), then folded away ([_folding]) before the
+  /// provider moves them, so the change reads as an action instead of a row vanishing.
+  final Map<String, bool> _completing = {};
+  final Set<String> _folding = {};
+  static const _showDone = Duration(milliseconds: 450);
+  static const _fold = Duration(milliseconds: 320);
 
   // Search header lifecycle objects.
   final TextEditingController _searchController = TextEditingController();
@@ -199,7 +204,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   Widget _buildPageHeader(ActionItemsProvider provider) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 12, 4),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Row(
         children: [
           Expanded(
@@ -219,72 +224,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               },
             ),
           ),
-          const SizedBox(width: 4),
-          _buildOverflowMenu(provider),
         ],
-      ),
-    );
-  }
-
-  Widget _buildOverflowMenu(ActionItemsProvider provider) {
-    final showingCompleted = provider.showCompletedView;
-    final hasItems = provider.actionItems.isNotEmpty;
-    final allSelected = hasItems && provider.selectedCount == provider.actionItems.length;
-
-    return PullDownButton(
-      itemBuilder: (context) => [
-        PullDownMenuItem(
-          title: context.l10n.selectActionItems,
-          iconWidget: const Icon(Icons.check_box_outlined, size: 18),
-          onTap: () {
-            OmiHaptics.light();
-            _searchFocusNode.unfocus();
-            provider.startSelection();
-          },
-        ),
-        PullDownMenuItem(
-          title: allSelected ? context.l10n.deselectAllTasksMenu : context.l10n.selectAllTasksMenu,
-          iconWidget: Icon(allSelected ? Icons.deselect_rounded : Icons.select_all_rounded, size: 18),
-          onTap: () {
-            OmiHaptics.light();
-            _searchFocusNode.unfocus();
-            if (allSelected) {
-              provider.clearSelection();
-            } else {
-              if (!provider.isSelectionMode) provider.startSelection();
-              provider.selectAllItems();
-            }
-          },
-        ),
-        if (context.read<ReviewProvider?>()?.isOn ?? false)
-          PullDownMenuItem(
-            title: _groupByProject ? context.l10n.tasksGroupByDate : context.l10n.tasksGroupByProject,
-            iconWidget: Icon(_groupByProject ? Icons.event_outlined : Icons.folder_outlined, size: 18),
-            onTap: () {
-              OmiHaptics.light();
-              final review = context.read<ReviewProvider?>();
-              if (!_groupByProject && review != null && review.projects.isEmpty) review.loadProjects();
-              setState(() => _groupByProject = !_groupByProject);
-            },
-          ),
-        PullDownMenuItem(
-          title: showingCompleted ? context.l10n.hideCompletedTasks : context.l10n.showCompletedTasks,
-          iconWidget: Icon(showingCompleted ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18),
-          onTap: () {
-            OmiHaptics.light();
-            provider.toggleShowCompletedView();
-          },
-        ),
-      ],
-      buttonBuilder: (context, showMenu) => OmiIconButton.filled(
-        icon: const Icon(Icons.more_horiz_rounded),
-        label: context.l10n.moreOptions,
-        color: OmiColors.textSecondary,
-        diameter: 40,
-        onPressed: () {
-          OmiHaptics.selection();
-          showMenu();
-        },
       ),
     );
   }
@@ -467,6 +407,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 excludeFromSemantics: true,
                 onTap: () {},
                 child: RefreshIndicator(
+                  notificationPredicate: OmiRefreshControl.materialPredicate,
                   onRefresh: () async {
                     OmiHaptics.medium();
                     return provider.forceRefreshActionItems();
@@ -478,6 +419,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                               controller: _scrollController,
                               physics: const AlwaysScrollableScrollPhysics(),
                               slivers: [
+                                if (OmiRefreshControl.supported) OmiRefreshControl(onRefresh: _pullRefresh),
                                 SliverFillRemaining(
                                   hasScrollBody: false,
                                   child: Center(child: ActionItemsApiStatus(provider: provider)),
@@ -501,6 +443,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
+  /// The iOS pull-to-refresh ([OmiRefreshControl]); Android keeps the Material indicator.
+  Future<void> _pullRefresh() => context.read<ActionItemsProvider>().forceRefreshActionItems();
+
   Widget _buildLoadingState() {
     return CustomScrollView(
       controller: _scrollController,
@@ -517,7 +462,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     return CustomScrollView(
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
-      slivers: [SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent()))],
+      slivers: [
+        if (OmiRefreshControl.supported) OmiRefreshControl(onRefresh: _pullRefresh),
+        SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent())),
+      ],
     );
   }
 
@@ -527,7 +475,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       child: KeyedSubtree(
         key: const ValueKey('omi.action_items.empty'),
         child: OmiEmptyState(
-          icon: Icons.task_alt_rounded,
+          // home-redesign: text only; today's Home keeps the icon.
+          icon: HomeRedesign.on ? null : Icons.task_alt_rounded,
           title: context.l10n.noTasksYet,
           titleLayoutReference: context.l10n.noConversationsYet,
           message: context.l10n.tasksEmptyStateMessage,
@@ -547,6 +496,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
+        if (OmiRefreshControl.supported) OmiRefreshControl(onRefresh: _pullRefresh),
         const SliverPadding(padding: EdgeInsets.only(top: 8)),
         SliverToBoxAdapter(child: _buildPageHeader(provider)),
 
@@ -568,7 +518,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 );
               }, childCount: filteredItems.length),
             ),
-        ] else if (_groupByProject) ...[
+        ] else if (provider.groupByProject) ...[
           const SliverPadding(padding: EdgeInsets.only(top: 6)),
           ...projectTaskSections(
             context: context,
@@ -1047,46 +997,86 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
     // One meaning on every row, at every indent level: swipe right completes (or reopens), swipe
     // left deletes with Undo. Indenting lives in the long-press menu and in drag.
-    return Dismissible(
-      key: Key('dismiss_${item.id}'),
-      direction: DismissDirection.horizontal,
-      dismissThresholds: const {DismissDirection.startToEnd: 0.3, DismissDirection.endToStart: 0.3},
-      confirmDismiss: (direction) async {
-        if (direction == DismissDirection.startToEnd) {
-          await _toggleCompleted(provider, item);
-          return false;
-        }
-        return true;
-      },
-      background: Container(
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.only(left: 20.0),
-        decoration: BoxDecoration(
-          color: item.completed ? OmiColors.surface3 : OmiColors.success,
-          borderRadius: OmiRadius.smAll,
-        ),
-        child: Icon(item.completed ? Icons.undo : Icons.check, color: OmiColors.textPrimary),
-      ),
-      secondaryBackground: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20.0),
-        decoration: BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.smAll),
-        child: Icon(Icons.delete_outline, color: OmiColors.textPrimary),
-      ),
-      onDismissed: (direction) {
-        if (direction == DismissDirection.endToStart) {
-          _deleteTask(item);
-        }
-      },
-      child: draggable,
-    );
+    return _foldable(
+        item,
+        Dismissible(
+          key: Key('dismiss_${item.id}'),
+          direction: DismissDirection.horizontal,
+          dismissThresholds: const {DismissDirection.startToEnd: 0.3, DismissDirection.endToStart: 0.3},
+          confirmDismiss: (direction) async {
+            if (direction == DismissDirection.startToEnd) {
+              await _toggleCompleted(provider, item);
+              return false;
+            }
+            return true;
+          },
+          background: Container(
+            alignment: Alignment.centerLeft,
+            padding: const EdgeInsets.only(left: 20.0),
+            decoration: BoxDecoration(
+              color: item.completed ? OmiColors.surface3 : OmiColors.success,
+              borderRadius: OmiRadius.smAll,
+            ),
+            child: Icon(item.completed ? Icons.undo : Icons.check, color: OmiColors.textPrimary),
+          ),
+          secondaryBackground: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 20.0),
+            decoration: BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.smAll),
+            child: Icon(Icons.delete_outline, color: OmiColors.textPrimary),
+          ),
+          onDismissed: (direction) {
+            if (direction == DismissDirection.endToStart) {
+              _deleteTask(item);
+            }
+          },
+          child: draggable,
+        ));
   }
 
   Future<void> _toggleCompleted(ActionItemsProvider provider, ActionItemWithMetadata item) async {
     OmiHaptics.light();
-    final saved = await provider.updateActionItemState(item, !item.completed);
+    final completing = !item.completed;
+    // The open view drops completed tasks and the completed view drops reopened ones: either way
+    // the row is about to leave, so it shows its new state and folds away first.
+    final leaves = completing != provider.showCompletedView;
+    // home-redesign: the row shows its new state and folds away; today's Home just moves it.
+    final animate = HomeRedesign.on && leaves && OmiMotion.of(context).emphasized != Duration.zero;
+    if (animate) {
+      if (_completing.containsKey(item.id)) return;
+      setState(() => _completing[item.id] = completing);
+      await Future<void>.delayed(_showDone);
+      if (!mounted) return;
+      setState(() => _folding.add(item.id));
+      await Future<void>.delayed(_fold);
+      if (!mounted) return;
+    }
+    final saved = await provider.updateActionItemState(item, completing);
     if (!saved && mounted) OmiFeedback.error(context, context.l10n.failedToUpdateActionItem);
-    if (saved && !item.completed) _onActionItemCompleted();
+    if (mounted && animate) {
+      setState(() {
+        _completing.remove(item.id);
+        _folding.remove(item.id);
+      });
+    }
+    if (saved && completing) _onActionItemCompleted();
+  }
+
+  /// Folds a just-completed row closed (height and opacity) before it leaves the list.
+  Widget _foldable(ActionItemWithMetadata item, Widget row) {
+    final folding = _folding.contains(item.id);
+    return AnimatedSize(
+      // Per task, so the next row never inherits a folded slot and grows back in.
+      key: ValueKey('fold_${item.id}'),
+      duration: _fold,
+      curve: Curves.easeInOutCubic,
+      alignment: Alignment.topCenter,
+      child: AnimatedOpacity(
+        duration: _fold,
+        opacity: folding ? 0 : 1,
+        child: folding ? const SizedBox(width: double.infinity, height: 0) : row,
+      ),
+    );
   }
 
   /// Long-press menu: the same shape as memories and conversations, with Select for multi-select
@@ -1148,6 +1138,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     final indentLevel = _getIndentLevel(item);
     final goalTitle = _getGoalTitleForTask(item);
     final isSelected = provider.isSelectionMode && provider.isItemSelected(item.id);
+    // Ticked and about to fold away: already looks done.
+    final done = _completing[item.id] ?? item.completed;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -1193,7 +1185,17 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: SizedBox(
                     width: 44,
                     height: 44,
-                    child: Center(child: TaskCompletionMark(completed: item.completed)),
+                    child: Center(
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 220),
+                        transitionBuilder: (child, a) => ScaleTransition(
+                          scale: Tween(begin: 0.6, end: 1.0)
+                              .animate(CurvedAnimation(parent: a, curve: Curves.easeOutBack)),
+                          child: FadeTransition(opacity: a, child: child),
+                        ),
+                        child: TaskCompletionMark(key: ValueKey(done), completed: done),
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1208,10 +1210,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                       Text(
                         item.description,
                         style: OmiType.callout.copyWith(
-                          color: item.completed ? OmiColors.textTertiary : OmiColors.textPrimary,
+                          color: done ? OmiColors.textTertiary : OmiColors.textPrimary,
                           fontWeight: FontWeight.w500,
                           letterSpacing: -0.2,
-                          decoration: item.completed ? TextDecoration.lineThrough : null,
+                          decoration: done ? TextDecoration.lineThrough : null,
                           decorationColor: OmiColors.textTertiary,
                         ),
                       ),
