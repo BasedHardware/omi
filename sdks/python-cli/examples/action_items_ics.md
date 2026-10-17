@@ -26,6 +26,16 @@ from pathlib import Path
 EVENT_LENGTH = timedelta(minutes=30)
 
 
+def strip_surrogates(value: str) -> str:
+    """Drop unpaired surrogate code points that cannot be encoded as UTF-8.
+
+    json.loads accepts lone surrogates (e.g. "\\ud800") from a malformed export, but
+    RFC 5545 line folding and file writes raise UnicodeEncodeError on them. Dropping
+    them keeps the remaining text and lets the calendar event export cleanly.
+    """
+    return value.encode("utf-8", "ignore").decode("utf-8")
+
+
 def ics_text(value):
     """Escape text for an iCalendar property value (RFC 5545 §3.3.11).
 
@@ -36,6 +46,7 @@ def ics_text(value):
         return ""
     if not isinstance(value, str):
         value = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
+    value = strip_surrogates(value)
     return (value.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,")
             .replace("\r\n", "\\n").replace("\n", "\\n"))
 
