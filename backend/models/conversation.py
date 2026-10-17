@@ -467,6 +467,8 @@ class Conversation(BaseModel):
     # the isolated fair-use lane and the conversation-processing credit gate:
     # custom-STT still hits LLM/post-processing metering (#7690).
     uses_custom_stt: bool = False
+    # Server route arbitration; canonical writers preserve the durable value.
+    record_lane_owner: SkipJsonSchema[str | None] = Field(default=None, exclude=True)
 
     structured: Structured
 

@@ -228,7 +228,11 @@ class Pump:
                         )
                         continue
                     if result is None or isinstance(result, RecoveryWork):
-                        failure_kwargs = {'quarantine': True} if isinstance(result, RecoveryWork) else {}
+                        failure_kwargs = (
+                            {'quarantine': True, 'padded_retry_empty': result.padded_retry_empty}
+                            if isinstance(result, RecoveryWork)
+                            else {}
+                        )
                         if await run_blocking(
                             db_executor, self.scheduler.fail, segment, lease.token, time.time(), **failure_kwargs
                         ):

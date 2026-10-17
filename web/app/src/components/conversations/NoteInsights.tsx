@@ -1,6 +1,6 @@
 'use client';
 
-import { repairNoteCitations } from '../../../../shared/note-citations.mjs';
+import { repairNoteCitations } from '../../../../frontend/shared/note-citations.mjs';
 import { Brain, History, Sparkles, Target, User } from 'lucide-react';
 import type { NoteInsight, NoteInsightKind } from '@/types/conversation';
 

@@ -9,6 +9,7 @@ lifecycle fields directly.
 from __future__ import annotations
 
 from utils.observability.sync_phases import sync_phase
+from config.batch_pipeline import record_capture_eligible
 
 import logging
 import os
@@ -100,6 +101,8 @@ def _require_status(data: Mapping[str, Any], *allowed: ConversationStatus) -> No
 def create_in_progress_conversation(uid: str, conversation_data: dict[str, Any], *, idempotent: bool = False) -> bool:
     """Create the one durable in-progress resource for a recording generation."""
     _require_status(conversation_data, ConversationStatus.in_progress)
+    if record_capture_eligible(uid, conversation_data):
+        conversation_data['record_lane_owner'] = 'batch_live_v1'
     if idempotent:
         return conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
     conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data)

@@ -62,6 +62,25 @@ def test_terminal_receipt_after_fenced_commit_and_expired_transaction_retry(writ
     assert receipts[0]['reason'] == 'summary' and receipts[0]['present']
 
 
+@pytest.mark.parametrize('record_owner', ['batch_live_v1', 'batch_sync_v1'])
+def test_summary_commit_preserves_record_lane_owner(writer, record_owner):
+    writer.document['record_lane_owner'] = record_owner
+    assert db.persist_processing_result_with_lifecycle('u', {**payload(), 'record_lane_owner': 'legacy_final_pass_v1'})
+    assert writer.commits[0]['record_lane_owner'] == record_owner
+    assert writer.commits[0]['summary_completed_at']
+
+
+def test_record_owner_does_not_bypass_summary_processing_fence(writer):
+    writer.document.update(record_lane_owner='batch_live_v1', summary_processing_owner='winner')
+    token = delivery.PROCESS_CONTEXT.set({'owner': 'loser', 'claimed': True})
+    try:
+        assert not db.persist_processing_result_with_lifecycle('u', payload())
+        assert all(value is None for value in writer.commits)
+        assert writer.document['record_lane_owner'] == 'batch_live_v1'
+    finally:
+        delivery.PROCESS_CONTEXT.reset(token)
+
+
 def test_empty_model_result_cannot_commit_or_emit(writer, monkeypatch):
     emit = Mock()
     monkeypatch.setattr(delivery, 'emit', emit)
@@ -82,8 +101,9 @@ def test_stale_generation_and_failed_commit_emit_nothing(writer, monkeypatch):
     emit.assert_not_called()
 
 
-def test_manual_edit_after_repair_admission_fences_write(writer, monkeypatch):
-    writer.document['user_title'] = 'Manually authored title'
+@pytest.mark.parametrize('record_owner', ['batch_live_v1', 'batch_sync_v1'])
+def test_manual_edit_after_repair_admission_fences_write(writer, monkeypatch, record_owner):
+    writer.document.update(user_title='Manually authored title', record_lane_owner=record_owner)
     token = delivery.REPAIR_CONTEXT.set({'summary_expected_revision': 3})
     try:
         assert not db.persist_processing_result_with_lifecycle('u', payload())

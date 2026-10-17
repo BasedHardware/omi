@@ -320,9 +320,11 @@ environments:
           MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
           REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
           BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
@@ -356,6 +358,7 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
+          BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
@@ -936,9 +939,11 @@ environments:
             MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
@@ -1229,9 +1234,11 @@ environments:
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
@@ -1503,9 +1510,11 @@ environments:
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
@@ -1721,9 +1730,11 @@ environments:
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
@@ -2550,9 +2561,11 @@ environments:
           MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
           REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
           BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
@@ -2665,6 +2678,7 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
         env:
+          BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
@@ -3200,9 +3214,11 @@ environments:
             MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
@@ -3243,7 +3259,7 @@ environments:
             DREAM_AGENT_PASSES_PER_DAY: {value: '48', category: rollout}
             DREAM_AGENT_HUNT_INTERVAL_HOURS: {value: '2', category: rollout}
             DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
-            DREAM_AGENT_DAILY_USD: {value: '10', category: rollout}
+            DREAM_AGENT_DAILY_USD: {value: '20', category: rollout}
             DREAM_AGENT_TOKENS_PER_MINUTE: {value: '2000000', category: rollout}
             POSTHOG_BILLING_API_KEY:
               value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
@@ -3576,9 +3592,11 @@ environments:
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
@@ -3609,7 +3627,7 @@ environments:
             DREAM_AGENT_PASSES_PER_DAY: {value: '48', category: rollout}
             DREAM_AGENT_HUNT_INTERVAL_HOURS: {value: '2', category: rollout}
             DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
-            DREAM_AGENT_DAILY_USD: {value: '10', category: rollout}
+            DREAM_AGENT_DAILY_USD: {value: '20', category: rollout}
             DREAM_AGENT_TOKENS_PER_MINUTE: {value: '2000000', category: rollout}
             DREAM_AGENT_CANARY_UID: {value: dream-canary-prod-01, category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}
@@ -3898,9 +3916,11 @@ environments:
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
@@ -4164,9 +4184,11 @@ environments:
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}

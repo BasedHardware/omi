@@ -161,8 +161,8 @@ def test_lost_start_reply_does_not_repeat_stt(setup, monkeypatch):
     client, _, binding, _, stt, recovery = setup
     start = recovery.protocol.start
 
-    def lost(*args):
-        assert start(*args)
+    def lost(*args, **kwargs):
+        assert start(*args, **kwargs)
         raise TimeoutError('synthetic')
 
     monkeypatch.setattr(recovery.protocol, 'start', lost)

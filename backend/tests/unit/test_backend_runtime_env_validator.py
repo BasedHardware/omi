@@ -73,9 +73,11 @@ def with_memory_env(payload: str) -> str:
         {"name": "BATCH_PIPELINE_PERCENT", "value": "0"},
         {"name": "BATCH_PIPELINE_SERVING_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_LIVE_ADMISSION_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_RECOVERY_ALL_ADMITTED", "value": "false"},
         {"name": "BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED", "value": "false"},
@@ -1362,7 +1364,7 @@ def test_firestore_readiness_contract_rejects_backend_deployment_credentials(wor
         ('DREAM_AGENT_FEEDBACK_SALT', '1'),
         ('DREAM_AGENT_PASSES_PER_DAY', '4'),
         ('DREAM_AGENT_MANUAL_RUNS_PER_DAY', '4'),
-        ('DREAM_AGENT_DAILY_USD', '20'),
+        ('DREAM_AGENT_DAILY_USD', '10'),
     ],
 )
 def test_repo_prod_rendered_cloud_run_state_matches_manifest(monkeypatch, service, setting, stale):

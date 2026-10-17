@@ -17,7 +17,9 @@ FROM base AS builder
 WORKDIR /app/web/app
 COPY --from=deps /app/web/app/node_modules ./node_modules
 COPY web/app .
-COPY web/shared /app/web/shared
+# Note-citation shared modules are tracked under web/frontend/shared; the app's
+# relative imports reach into that tree, so the builder needs the files present.
+COPY web/frontend/shared /app/web/frontend/shared
 
 ARG NEXT_PUBLIC_API_BASE_URL
 ARG NEXT_PUBLIC_FIREBASE_API_KEY

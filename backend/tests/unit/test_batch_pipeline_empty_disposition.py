@@ -234,7 +234,7 @@ def test_no_owned_words_without_silence_evidence_is_not_silence(monkeypatch):
     )
     worker, _, saved, *_ = setup_worker(words_providers={'parakeet': OutsideCore()}, recover_words=lambda *_: [])
     result = worker.process_batch([item()])
-    assert result == [RecoveryWork('a')] and not saved
+    assert result == [RecoveryWork('a', padded_retry_empty=True)] and not saved
 
 
 def test_operator_replay_after_durable_upload_completion_does_not_need_live_run(

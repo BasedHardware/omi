@@ -287,6 +287,10 @@ async def run_listen_finalization_job(
                 return JSONResponse(status_code=200, content={'status': 'dead_letter'})
             return JSONResponse(status_code=500, content={'status': 'retry'})
 
+        if disposition == ConversationFinalizationDisposition.deferred:
+            # Acknowledge this delivery: the queued durable job is re-dispatched
+            # by reconciliation with a new generation, not a retry-header budget.
+            return JSONResponse(status_code=200, content={'status': 'deferred'})
         if disposition == ConversationFinalizationDisposition.fenced:
             completed = await run_blocking(
                 db_executor,

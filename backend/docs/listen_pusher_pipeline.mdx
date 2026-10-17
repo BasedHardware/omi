@@ -5242,7 +5242,6 @@ budget checks precede each percentage flip. Close admission everywhere to roll
 back, retaining worker, integration and recovery drain paths. Unsetting producer
 flags does not remove persisted label authority or reset paid recovery intents.
 
-
 ### Batch projection contention and replay
 
 `BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED=false` is the dark default on every serving role.
@@ -5261,3 +5260,162 @@ With the contention control on, content-free `action=project outcome=completed|w
 admission paused until accepted-work completion, visible synthetic canary and at least 30 minutes
 of correctness sentinels pass. Scaling all integration traffic to one instance is a temporary
 capacity tradeoff, not a distributed projection fence (revision overlap remains possible).
+
+## Durable live and desktop record admission (dark)
+
+`BATCH_PIPELINE_LIVE_ADMISSION_ENABLED=false` is the sole new producer control.
+When true, retained server-STT captures use the existing
+`BATCH_PIPELINE_ENABLED/PERCENT/UID_ALLOWLIST` hash cohort. New in-progress rows
+reserve `record_lane_owner=batch_live_v1` in their existing create write. Captures
+already in progress at enablement reserve the same owner from the finalizer's
+already-loaded revision using a conditional write, with zero extra reads on a
+successful first claim. Failed claims reload and retry
+up to three times inside the finalizer attempt. Exhausted contention queues durable
+reconciliation without increasing the processing-failure count. HTTP acknowledges
+the current delivery; pusher reports the existing queued response.
+With admission enabled, the legacy final pass claims its owner from its loaded
+revision before compute. Failed claims reload/retry up to three times, with up to
+three scheduled rounds; only a stored batch owner transfers responsibility to the
+record lane. Persistent contention fails explicitly at that bound. When dark,
+an unowned legacy pass uses its existing read with no claim or refresh.
+Deploy dark and drain pre-protocol legacy work before any future enablement. BYOK,
+E2EE, missing retention consent and unsupported/unspecified multilingual routes
+keep their existing supported processing path. The closed Parakeet language
+vocabulary is shared with the STT policy; this switch never changes the live
+provider wire.
+
+Finalization registers a `record_pending` job before completing its durable job.
+The pusher flushes the final buffered audio on finalize, conversation switch or
+disconnect, then writes a blind `record_audio_closed` receipt only after every
+queued upload succeeds. Queue/buffer drops and exhausted uploads never certify
+completeness. CPU reconciliation waits for both that receipt and the completed,
+retained conversation. This is a durability barrier, not an upload-grace timer.
+
+The coordinator lists the already retained audio, verifies overlaps, and freezes
+one-hour capture units as encrypted **reference manifests**, not copies of the
+recording. Each owner/conversation-scoped raw reference pins its GCS generation,
+PCM digest and exact sample slice. The worker authenticates/decrypts existing raw
+objects and materializes the ordinary WAV contract. The existing artifact eraser
+owns the temporary manifest only; its encrypted reference proof stays through
+the 45-day receipt window for first late WAL uploads (GPU results retain their
+24-hour cleanup), and privacy erasure is immediate; raw capture retention/deletion remains with its
+original owner. `record_pending` uses the existing state/available-at query shape
+and existing privacy erasure machinery; pending obligations have no TTL.
+
+When live admission is enabled, named safety WALs and recording-session WALs
+resolve the registered record before provider dispatch. An eligible in-progress
+capture holds its WAL until finalization reserves the native owner. Another WAL
+freezes its batch-sync or legacy dispatcher with a conditional owner write.
+With the flag off, unowned named uploads perform no ownership reads or writes;
+they use today's sync/BYOK dispatcher. Owners returned by existing provenance or
+privacy snapshots route to their persisted dispatcher without another lookup.
+No flag-off ownership discovery is added. A BYOK WAL targeting a known native
+owner returns terminal HTTP 409 `record_capture_byok_conflict`, without Retry-After.
+An unowned BYOK upload in the batch cohort retains the existing intake hold:
+HTTP 503 `sync_batch_byok_unavailable`, with no sync-job creation or ledger claim.
+Eligible server-STT WALs return the native public job only after exact
+PCM interval/byte coverage is proven against its pinned references. A successful
+proof aliases the existing upload-content ledger to that public job, so retries
+survive artifact expiry and producer rollback. Missing tails, clock/byte conflicts and pending capture uploads return retryable
+503 with local audio retained. Privacy refusals return terminal 409. Neither
+creates a legacy twin. Desktop uploads targeting an existing
+from-segments row use the same projection contract and atomically reserve
+`batch_sync_v1`; sync upload metering remains on the existing sync path. Native
+live record projection does not charge the same live speech a second time.
+
+Record projection is transactional against the original conversation ID. It waits
+for finalize, replaces unannotated provisional segments within the capture unit,
+and increments the existing sync transcript revision. That revision fences a
+stale finalizer. Delayed full-transcript/socket writes yield after record
+projection; field-scoped translation/manual mutations remain supported. Annotated
+segments retain their IDs, edited text, translations and references through the
+shared fail-closed speaker remap. Ambiguous remaps retain the annotated sentence and explicitly abstain from
+acoustic attribution; the user's manual receipt still wins. Genuine VAD silence clears only unprotected
+provisional speech; empty ASR with nonempty VAD retains #21981's recovery contract.
+Persisted record ownership excludes both the old #21424 shadow/final pass and
+automatic smart merge. Producer flag rollback never grants the old owner anew.
+
+### Rollout and read envelope
+
+**Dark only: no enablement in this PR.** Every declaration of
+`BATCH_PIPELINE_LIVE_ADMISSION_ENABLED` remains `false`, including pusher's explicit
+runtime/chart declaration. The production `assign_sync_conversation` Aborted
+incident identified in review now has a separate contention fix inherited from
+main. That source merge establishes neither production recovery nor a real
+canonical mobile/Mac canary; both remain prerequisites to rollout authorization.
+The future sequence remains David, then 5%, then 100% jointly with sync, using the
+existing correctness gates and capacity model; this is not permission to start it.
+
+Future activation requires CPU/listen/pusher/integration to agree on the new flag.
+While enabled, pusher may seal any successfully uploaded retained recording,
+including a capture not yet stamped by the in-flight finalizer. When dark, it seals
+only owners observed through its existing audio-metadata update snapshot. An
+unowned close adds no lookup, close write or early buffer flush. Failed/dropped
+uploads never certify closure. Integration pending-record scans run only while
+the new flag is on; there is no per-tick query to discover whether owners exist.
+Already admitted ready GPU work continues through the existing serving path.
+
+For rollback with pending registrations or first-WAL proofs to drain, close new
+admission with existing `BATCH_PIPELINE_ENABLED/PERCENT/UID_ALLOWLIST` controls
+while retaining the live flag and serving/recovery paths. Set the new flag false
+after those obligations resolve. Flag-off drains already-loaded owners and existing
+content aliases, but does not discover unknown owners. Do not roll back to an image
+lacking the persisted-owner/reference-manifest protocol. Unsetting producer flags
+never removes persisted label authority.
+
+This table counts **additional** operations relative to the existing path.
+Existing provenance/privacy and audio-metadata reads are reused.
+
+| Path | Flag off, unowned: added reads / writes | Enabled or already-owned path |
+| --- | --- | --- |
+| Named sync ownership routing | 0 / 0 | Discovery: one conversation read, plus one session lookup if needed. Loaded owners skip discovery. New owner: one conditional field write. |
+| Pusher close | 0 / 0 | One blind close write per successful owned or explicitly enabled retained close; existing metadata read supplies owner hints. |
+| Legacy final pass | 0 / 0 | One conditional owner write if unowned; each lost CAS adds one refresh read before a bounded retry. |
+| Integration pending scan | 0 / 0 | At 20-second ticks, nominally 4,320 queries/day/process plus returned documents; empty queries bill at least one read. |
+| Record admission | Existing sync protocol only | Patch only `record_lane_owner` once if missing; matching owners add no conversation write. Never set the conversation body. |
+| Finalizer ownership claim | 0 / 0 | Loaded revision reused; each lost CAS adds one refresh read. Persistent contention adds one queued-job transaction without increasing processing attempts. |
+
+There are zero added reads per audio frame, provisional segment or pusher flush.
+For **enabled** daily native registrations `N`, discovery WAL reads `W`, session
+lookups `S`, scan documents `D`, held retries `R`, manifest fetches `F`, integration
+processes `I`, extra CAS snapshot reads `C` (including retried shadow rounds) and
+exhausted finalizer deferrals `J`, the native
+metadata envelope is approximately
+`4320*I + D + 19*N + W + S + 8*R + 5*F + C + J` reads/day, before the existing
+artifact/admission/worker/projection protocol for newly admitted units. The scan
+term is zero when dark; `W` and `S` exclude loaded-owner routing and dark unowned
+uploads. `19*N` includes registration, barrier/source privacy authorization and
+atomic owner verification. `5*F` is the post-source privacy recheck. Each `J` also
+writes the job and, when demand-admitted, its existing blind projection-counter
+delta. Successful first claims add one owner write; matching owners add none.
+CAS and transaction retries multiply these counts.
+
+An exact first WAL proof against `K` native units budgets up to `22+17*K` point
+reads including routing; an aliased replay is `14+K` before scheduler redrive.
+Reusing a loaded owner removes the routing read: `21+17*K` and `13+K` respectively.
+A pending native upload without an intake is eight reads with cold routing, seven
+with a loaded owner. Add session lookup when discovery needs it. These alternative
+paths replace normal processing; do not add both complete paths. Subtract
+`2*sync_admissions` for removed duplicate profile reads. Existing worker/projection
+and recovery redrives retain their own costs.
+
+These are source-derived formulas, not measured daily traffic or a billing
+receipt. The existing caller-attributed Firestore budget must accept actual daily
+volume before any future enablement. There is no new client polling loop.
+
+### Terminal empty recognition in the record lane
+
+The default-off `BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED` permits a
+`no_recoverable_speech` result only after positive strict VAD, a GPU padded retry
+that returned empty, and an empty independent multilingual recovery. The worker
+persists padded-empty evidence under its lease; CPU recovery pins the paid
+provider before dispatch. This terminal empty span is distinct from silence,
+adds no transcript words and no transcription usage, and releases successful
+siblings through normal projection/client completion. The encrypted artifact
+retains VAD and closed exhaustion evidence; correctness metrics count its captured
+duration under `no_recoverable_speech` and shared fallback telemetry is degraded.
+A completed upload may include `no_recoverable_speech_segments`; it does not claim
+that these spans were silent. Uncertain/provider/validation failures remain held,
+and no further paid intent is granted. The one-owner historical operator and old
+GPU-canary VAD/explicit-epoch-2 route are documented in
+[`batch-pipeline-serving.md`](batch-pipeline-serving.md#terminal-empty-recognition-dark).

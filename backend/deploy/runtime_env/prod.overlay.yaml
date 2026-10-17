@@ -604,7 +604,7 @@ overlay:
             value: '3'
             category: rollout
           DREAM_AGENT_DAILY_USD:
-            value: '10'
+            value: '20'
             category: rollout
           DREAM_AGENT_TOKENS_PER_MINUTE:
             value: '2000000'
@@ -852,7 +852,7 @@ overlay:
             value: '3'
             category: rollout
           DREAM_AGENT_DAILY_USD:
-            value: '10'
+            value: '20'
             category: rollout
           DREAM_AGENT_TOKENS_PER_MINUTE:
             value: '2000000'

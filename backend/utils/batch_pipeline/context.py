@@ -44,6 +44,8 @@ def resolve_context(
         from utils.conversations.location import resolve_geolocation
 
         geo = resolve_geolocation(Geolocation.model_validate(geo))
+    if binding.record_origin:
+        return ResolvedContext(binding.target_conversation_id, geolocation=geo)
     projection_item = projection_item or item
     target = binding.target_conversation_id
     origin = context.get('recording_session_id')

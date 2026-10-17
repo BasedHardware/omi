@@ -346,7 +346,7 @@ def pusher_env(monkeypatch):
     monkeypatch.setattr(pusher, 'schedule_person_voice_learning_retry', lambda *args, **kwargs: None)
     monkeypatch.setattr(pusher, 'run_authorized_person_learning', _async_noop)
 
-    def update_conversation(uid, conversation_id, data):
+    def update_conversation(uid, conversation_id, data, *, record_owner_out=None):
         row = audio_files_by_conversation.setdefault(conversation_id, {'audio_files': []})
         if 'audio_files' in data:
             row['audio_files'] = data['audio_files']
