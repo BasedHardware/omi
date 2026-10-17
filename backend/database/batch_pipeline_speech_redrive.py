@@ -89,6 +89,8 @@ class SpeechRedriveStore(RecoveryStore):
                 or marker.get('token') != token
                 or marker.get('plan_digest') != plan_digest
                 or marker.get('paid_epoch') != PAID_EPOCH
+                or marker.get('provider') != 'modulate'
+                or marker.get('privacy_generation') != binding.privacy_generation
                 or marker.get('state') != 'prepared'
                 or marker.get('prior_recovery') != job.get('recovery')
             ):
@@ -101,13 +103,15 @@ class SpeechRedriveStore(RecoveryStore):
 
     def settle(self, segment_id, token, plan_digest, now, result_uri=None, *, failure=None):
         def commit(tx):
-            job, _ = self.checked(tx, segment_id)
+            job, binding = self.checked(tx, segment_id)
             existing = tx.get('results', segment_id)
             marker = job.get('speech_redrive') or {}
             if (
                 marker.get('token') != token
                 or marker.get('plan_digest') != plan_digest
                 or marker.get('paid_epoch') != PAID_EPOCH
+                or marker.get('provider') != 'modulate'
+                or marker.get('privacy_generation') != binding.privacy_generation
                 or marker.get('prior_recovery') != job.get('recovery')
             ):
                 return False
