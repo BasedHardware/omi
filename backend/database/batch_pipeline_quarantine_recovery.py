@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from database.batch_pipeline_projection_protocol import ProjectionBlocked, normalized_binding
 from database.sync_ledger import batch_projection_ledger_owner_matches
+from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import WorkResult
 from utils.batch_pipeline.scheduler import owner_key
 
@@ -100,7 +101,7 @@ class RecoveryStore:
                 or job.get('result')
                 or existing
             ):
-                return False
+                return False, 0
             if result_uri is None:
                 job.update(recovery_state='failed_held')
             else:
@@ -115,23 +116,27 @@ class RecoveryStore:
                 tx.put('owners', owner_key(job['owner_id']), owner)
             job['recovery']['settled_at'] = now
             tx.put('jobs', segment_id, job)
-            return True
+            return True, job['duration_seconds'] if result_uri is not None else 0
 
-        return self.store.run(commit)
+        changed, seconds = self.store.run(commit)
+        if changed and seconds:
+            record_correctness('recovered', seconds=seconds)
+        return changed
 
 
-def recovery_candidates(client, namespace: str, owner_id: str, limit: int = 10):
+def recovery_candidates(client, namespace: str, owner_id: str | None, limit: int = 10, *, after_id: str | None = None):
     """Only unattempted or reconcilable units; failed STT never hot-loops."""
-    return [
-        doc.id
-        for doc in (
-            client.collection(f'{namespace}_jobs')
-            .where('owner_id', '==', owner_id)
-            .where('recovery_state', 'in', ['held', 'prepared', 'running'])
-            .limit(max(1, min(limit, 10)))
-            .stream()
-        )
-    ]
+    collection = client.collection(f'{namespace}_jobs')
+    query = collection
+    if owner_id is not None:
+        query = query.where('owner_id', '==', owner_id)
+    query = query.where('recovery_state', 'in', ['held', 'prepared', 'running'])
+    if owner_id is None:
+        # A document-reference cursor requires no extra document read.
+        query = query.order_by('__name__')
+        if after_id is not None:
+            query = query.start_after({'__name__': collection.document(after_id)})
+    return [(doc.id, (doc.to_dict() or {})['owner_id']) for doc in query.limit(max(1, min(limit, 10))).stream()]
 
 
 def cancel_fenced_recovery(store, segment_id):

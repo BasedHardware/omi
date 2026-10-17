@@ -83,6 +83,8 @@ export const GROWTH_WEEKS = 26;
 export const COHORT_WEEKS = 12;
 export const CURVE_COHORTS = 9;
 export const MONEY_WEEKS = 8;
+/** Invisible cohort-age tag on curve field names (the board's ramp matcher). */
+export const CURVE_MARK = "\u200b";
 /** Mobile allowlisted events (Memory Created, tab/list clicks, mic starts) begin
  * the week of 2026-05-04 in PostHog; earlier periods undercount mobile, so the
  * growth series starts at the first fully instrumented period. */
@@ -473,18 +475,18 @@ export function growthFrames(
   return { weekly, power };
 }
 
-/** Short bar labels: the 5-column panel cannot fit the segment names. */
+/** Bar labels: short enough for the narrow column, readable without a legend. */
 const CAPTURE_LABELS: Record<(typeof CAPTURE_SEGMENTS)[number], string> = {
-  "Omi pendant": "Pendant",
-  "Multiple devices": "Multi-device",
+  "Omi pendant": "Omi pendant",
+  "Multiple devices": "2+ devices",
   Limitless: "Limitless",
-  "Apple Watch": "Watch",
+  "Apple Watch": "Apple Watch",
   "Other device": "Other device",
-  "Omi, model unknown": "Omi (model?)",
+  "Omi, model unknown": "Other Omi",
   "Phone + Mac": "Phone + Mac",
   "Mac only": "Mac only",
   "Phone mic only": "Phone mic",
-  "No capture": "None",
+  "No capture": "No capture",
 };
 
 export function activationFrames(
@@ -498,7 +500,7 @@ export function activationFrames(
   const activation = cohortSeries(legs.activationHistory, rate, stop, 3, 2);
   const captured = cohortSeries(legs.activationHistory, capture, stop, 8, 2);
   // Activation by first-week capture source for the latest matured cohort
-  // (the stat's cohort); people ride in the label, segments in a fixed order.
+  // (the stat's cohort); users ride in the label, largest group first.
   const counts = new Map(
     (legs.captureSource || []).map((r) => [
       String(r[0]),
@@ -515,6 +517,7 @@ export function activationFrames(
       people,
     };
   });
+  sources.sort((a, b) => b.people - a.people);
   return { activation, capture: captured, sources };
 }
 
@@ -542,14 +545,24 @@ export function retentionFrames(
         timeZone: "UTC",
       })
     );
-  // Nine week rows once any cohort has loaded (the x field must exist with
-  // its y fields); no rows before then, so the panel shows its noValue text
-  // instead of "Cannot visualize data".
-  const curve = Array.from({ length: cohorts.length ? 9 : 0 }, (_, k) => {
-    const row: Row = { week: k };
-    cohorts.forEach((p, i) => (row[labels[i]] = byCohort.get(p)?.[k] ?? null));
-    return row;
-  });
+  // One frame per cohort age (`cohort_0` = newest): the board joins them in
+  // date order (Grafana sorts one frame's fields by name, which put "Aug 8"
+  // after "Aug 29"). Each name carries `age` invisible marks so the board can
+  // color the joined fields on a ramp, newest strongest.
+  // Nine week rows per loaded cohort (the x field must exist with its y
+  // field); an unloaded age is an empty frame the panel skips.
+  const curves: Record<string, Row[]> = {};
+  for (let age = 0; age < CURVE_COHORTS; age++) {
+    const i = cohorts.indexOf(age);
+    curves[`cohort_${age}`] =
+      i < 0
+        ? []
+        : Array.from({ length: 9 }, (_, k) => ({
+            week: k,
+            [labels[i] + CURVE_MARK.repeat(age)]:
+              byCohort.get(age)?.[k] ?? null,
+          }));
+  }
   const established = cohortSeries(
     legs.establishedHistory,
     metric(snapshot, "retention.established_week"),
@@ -565,7 +578,7 @@ export function retentionFrames(
     3
   );
   return {
-    curve,
+    ...curves,
     established,
     retained,
     power: growthFrames(legs, snapshot, now).power,
@@ -762,9 +775,10 @@ export function headlineDelta(key: string, rows: Row[]) {
     ? "—"
     : shown == null
     ? "no prior"
-    : `${shown > 0 ? "▲" : shown < 0 ? "▼" : "■"} ${Math.abs(shown).toFixed(
-        1
-      )}${unit === "pp" ? " pp" : "%"}${
+    : // Non-breaking spaces: a narrow stat must not wrap the glyph apart.
+      `${shown > 0 ? "▲" : shown < 0 ? "▼" : "■"}\u00a0${Math.abs(
+        shown
+      ).toFixed(1)}${unit === "pp" ? "\u00a0pp" : "%"}${
         tone === "good" ? GOOD_MARK : tone === "bad" ? BAD_MARK : ""
       }`;
   return { key, prior, current, delta, unit, tone, text };
@@ -1376,6 +1390,9 @@ export async function seriesPayload(
       states.map((s) => s.doc?.entry),
       filling
     );
+    // The TV's one freshness line (no diagnostics table on the wall); the
+    // rollup detail below stays in the API's status and gaps.
+    frames.through = [{ text: `Data through ${status.text}` }];
     const rollup = await sources
       .rollupStatus?.()
       .catch(() => ({ through: null, reason: "unavailable" }));

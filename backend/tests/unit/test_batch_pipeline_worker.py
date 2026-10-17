@@ -840,3 +840,31 @@ def test_oversized_empty_retry_holds_only_when_enforced(monkeypatch, enforce):
     else:
         # Exact main behavior: an empty retry enters ordinary provider failure.
         assert not result and failures == [('a', 'BatchValidationError')]
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_exhausted_padded_empty_asr_hands_off_without_fabricating_silence(monkeypatch, enabled):
+    from utils.batch_pipeline.contracts import RecoveryWork
+
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', str(enabled))
+
+    class EmptyWords:
+        def transcribe_batch(self, samples):
+            return [[] for _ in samples]
+
+    retry = Mock(return_value=[])
+    worker, _, saved, _, diarized, _ = setup_worker(words_providers={'parakeet': EmptyWords()}, recover_words=retry)
+    results = worker.process_batch([item()])
+    assert results == ([RecoveryWork('a')] if enabled else [])
+    retry.assert_called_once()
+    assert not saved and not diarized
+    assert worker.counts['silence'] == 0
+
+
+def test_empty_vad_is_the_only_silence_even_with_recovery_enabled(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'true')
+    retry = Mock(return_value=[])
+    worker, _, saved, _, _, _ = setup_worker(vad=lambda _: [], recover_words=retry)
+    assert worker.process_batch([item()])[0].outcome == 'silence'
+    retry.assert_not_called()
+    assert saved['a']['speech_spans'] == []

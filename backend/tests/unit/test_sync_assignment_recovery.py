@@ -327,3 +327,26 @@ async def test_paused_persistence_upload_keeps_the_retaining_contract_before_dis
     event = next(r.message for r in caplog.records if 'event=sync_repeat_failure_cap' in r.message)
     assert 'outcome=paused' in event and 'failure_key=persistent_persistence' in event
     assert 'quarantined' not in event and 'test-uid' not in event
+
+
+def test_batch_explicit_live_target_missing_holds_and_replays_after_live_create():
+    store = StrictFirestore()
+    incoming = dict(chunk('batch-anchor', 1000), _batch_require_live_target=True)
+    incoming['transcript_segments'][0].update(
+        id='synthetic-wal-segment', speaker='SPEAKER_00', speaker_id_scope='final:batch:unit'
+    )
+    with pytest.raises(SyncAssignmentConflict, match='not persisted'):
+        intake(store, incoming, target_id='live')
+    assert not conversations(store)
+    target = chunk('live', 1000)
+    target['transcript_segments'] = []
+    store.rows[('users', 'u', 'conversations', 'live')] = target
+    result, created, _ = intake(store, incoming, target_id='live')
+    assert result['id'] == 'live' and not created
+    assert len(conversations(store)) == 1
+
+
+def test_missing_live_target_keeps_legacy_fallback_without_batch_marker():
+    store = StrictFirestore()
+    result, created, _ = intake(store, chunk('wal', 1000), target_id='live')
+    assert result['id'] == 'wal' and created
