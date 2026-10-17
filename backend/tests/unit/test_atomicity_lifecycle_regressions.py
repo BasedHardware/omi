@@ -583,3 +583,69 @@ def test_ensure_canonical_apply_control_still_provisions_live_accounts():
     control = ensure_canonical_apply_control_state("uid-live", db_client=db)
     assert isinstance(control, MemoryControlState)
     assert control.account_generation == 1
+
+
+def test_ensure_canonical_apply_control_retries_transient_read_blip(monkeypatch):
+    from database.memory_collections import MemoryCollections
+    from google.api_core.exceptions import ServiceUnavailable
+
+    uid = "uid-transient"
+    db = _Db()
+    original_get = _Ref.get
+    failures = {"count": 0}
+    control_path = MemoryCollections(uid=uid).memory_apply_control_state
+
+    def flaky_get(self):
+        if self.path == control_path and failures["count"] < 1:
+            failures["count"] += 1
+            raise ServiceUnavailable("synthetic transient blip")
+        return original_get(self)
+
+    monkeypatch.setattr(_Ref, "get", flaky_get)
+    control = ensure_canonical_apply_control_state(uid, db_client=db)
+    assert control.uid == uid
+    assert failures["count"] == 1
+
+
+def test_ensure_canonical_apply_control_bounds_transient_retries(monkeypatch):
+    from database.memory_collections import MemoryCollections
+    from google.api_core.exceptions import ServiceUnavailable
+
+    uid = "uid-outage"
+    db = _Db()
+    original_get = _Ref.get
+    attempts = {"count": 0}
+    control_path = MemoryCollections(uid=uid).memory_apply_control_state
+
+    def unavailable_get(self):
+        if self.path == control_path:
+            attempts["count"] += 1
+            raise ServiceUnavailable("synthetic sustained outage")
+        return original_get(self)
+
+    monkeypatch.setattr(_Ref, "get", unavailable_get)
+    with pytest.raises(CanonicalApplyStateUnavailable, match="unreadable"):
+        ensure_canonical_apply_control_state(uid, db_client=db)
+    assert attempts["count"] == 3
+
+
+def test_ensure_canonical_apply_control_fails_closed_on_permanent_read_fault(monkeypatch):
+    from database.memory_collections import MemoryCollections
+    from google.api_core.exceptions import PermissionDenied
+
+    uid = "uid-denied"
+    db = _Db()
+    original_get = _Ref.get
+    attempts = {"count": 0}
+    control_path = MemoryCollections(uid=uid).memory_apply_control_state
+
+    def denied_get(self):
+        if self.path == control_path:
+            attempts["count"] += 1
+            raise PermissionDenied("synthetic permanent fault")
+        return original_get(self)
+
+    monkeypatch.setattr(_Ref, "get", denied_get)
+    with pytest.raises(CanonicalApplyStateUnavailable, match="unreadable"):
+        ensure_canonical_apply_control_state(uid, db_client=db)
+    assert attempts["count"] == 1

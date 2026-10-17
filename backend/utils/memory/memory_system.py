@@ -9,6 +9,7 @@ entitled or legacy account.
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from google.api_core.exceptions import AlreadyExists, Conflict
@@ -23,6 +24,7 @@ from utils.memory.memory_authority import (
     resolve_memory_system,
     validate_uid_for_memory_path,
 )
+from utils.memory.read_resilience import transient_store_error
 
 MEMORY_SYSTEM_FIELD = "memory_system"
 
@@ -58,10 +60,18 @@ def ensure_canonical_apply_control_state(uid: str, *, db_client: Any) -> MemoryC
     ref = db_client.document(MemoryCollections(uid=uid).memory_apply_control_state)
 
     def _read_snapshot(target_ref: Any, *, unavailable_message: str) -> Any:
-        try:
-            return target_ref.get()
-        except Exception as exc:
-            raise CanonicalApplyStateUnavailable(unavailable_message) from exc
+        # A transient store fault on this read must not fail the apply gate:
+        # Firestore's own retry can be exhausted by a brief regional blip.
+        # Classified transient faults get the same three-attempt budget as the
+        # MCP OAuth refresh rotation; permanent faults fail closed immediately.
+        for attempt in range(3):
+            try:
+                return target_ref.get()
+            except Exception as exc:
+                if attempt < 2 and transient_store_error(exc):
+                    time.sleep((0.1, 0.3)[attempt])
+                    continue
+                raise CanonicalApplyStateUnavailable(unavailable_message) from exc
 
     def _read_existing() -> MemoryControlState:
         snapshot = _read_snapshot(
