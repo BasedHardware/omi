@@ -14,6 +14,7 @@ from config.batch_pipeline import (
     recovery_enabled_for,
     recover_all_admitted,
     empty_asr_disposition_enabled,
+    speech_empty_multilingual_enabled,
 )
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
@@ -31,10 +32,13 @@ def log_failure(failure):
         pass
 
 
-def transcribe(item, binding, audio):
+def transcribe(item, binding, audio, *, multilingual=None):
     """Use the sync client directly, with no whole-upload coordinator or retries."""
     from diarizer.batch_pipeline import validate_words
-    from utils.stt.pre_recorded import prerecorded_from_bytes
+
+    # Preserve the existing deferred STT boundary: its transitive encryption
+    # module requires runtime secrets and cannot join credential-free imports.
+    from utils.stt.pre_recorded import prerecorded_from_bytes, modulate_prerecorded_from_bytes
 
     from utils.batch_pipeline.recovery_disposition import inspect_audio, silence_payload, at_stage, RecoveryFailure
 
@@ -51,11 +55,20 @@ def transcribe(item, binding, audio):
         clean.writeframes(pcm)
     # attempts=2 disables all existing client retry branches. An uncertain call
     # must remain held, never be silently reissued by the recovery dispatcher.
-    response = at_stage(
-        'provider',
-        'provider_failed',
-        lambda: prerecorded_from_bytes(output.getvalue(), language=binding.language, return_language=True, attempts=2),
-    )
+    use_multilingual = speech_empty_multilingual_enabled() if multilingual is None else multilingual
+    if use_multilingual:
+        # Unknown intake language currently selects Parakeet again. Its European
+        # language model cannot recover unsupported-language speech by repadding.
+        # Use an independent multilingual provider within the SAME paid intent;
+        # attempts=2 disables Modulate's recursive retry branches too.
+        dispatch = lambda: modulate_prerecorded_from_bytes(
+            output.getvalue(), language=binding.language, return_language=True, attempts=2
+        )
+    else:
+        dispatch = lambda: prerecorded_from_bytes(
+            output.getvalue(), language=binding.language, return_language=True, attempts=2
+        )
+    response = at_stage('provider', 'provider_failed', dispatch)
 
     def validate_response():
         if not isinstance(response, tuple) or len(response) != 2:
@@ -150,7 +163,7 @@ class QuarantineRecovery:
                 record_fallback(
                     component='stt_selection',
                     from_mode='batch',
-                    to_mode='legacy_sync',
+                    to_mode='modulate' if speech_empty_multilingual_enabled() else 'legacy_sync',
                     reason='other',
                     outcome='degraded',
                 )
@@ -170,7 +183,7 @@ class QuarantineRecovery:
                     record_audio(
                         'sync',
                         'accepted',
-                        'unknown',
+                        'modulate' if speech_empty_multilingual_enabled() else 'unknown',
                         item.duration_seconds,
                         funded_allowance(owner_id).reason == 'plan_allowance_exhausted',
                     )

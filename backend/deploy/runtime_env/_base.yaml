@@ -544,6 +544,7 @@ environment_shared:
           value: 'false'
           category: rollout
         BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+        BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
         BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
           value: 'false'
           category: rollout
@@ -1339,6 +1340,7 @@ environment_shared:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
             value: 'false'
             category: rollout
@@ -1754,6 +1756,7 @@ environment_shared:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
             value: 'false'
             category: rollout
@@ -2134,6 +2137,7 @@ environment_shared:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
             value: 'false'
             category: rollout
@@ -2448,6 +2452,7 @@ environment_shared:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
             value: 'false'
             category: rollout

@@ -329,3 +329,51 @@ artifacts retain their silence outcome during reconciliation even after flag
 rollback. Keep ordinary serving/merge/projection draining; never clear paid
 intents, claims or receipts. Stop an operator command to stop further units;
 already committed completion is not reversed.
+
+### Independent multilingual recovery for speech-empty units (dark)
+
+`BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED=false` keeps the existing
+recovery route. With it enabled on the CPU recovery host, a strict-VAD-positive
+unit uses the existing Modulate prerecorded client directly, once, with
+`attempts=2` (no recursive client retries). It does not return to the failed
+Parakeet model when the intake language is unset. Silence still requires the
+strict local VAD evidence introduced by `EMPTY_ASR_DISPOSITION`; an empty
+alternate response remains `failed_held`. The existing recovery paid-intent,
+privacy, allowance, result, merge and projection fences remain authoritative.
+This change needs a backend/integration image release; no GPU model or decoder
+change is required. Keep the new flag off until an owner-scoped canary succeeds.
+
+`backend/scripts/batch_pipeline_speech_redrive.py` is the historical operator.
+It requires one owner, a UTC cutoff, the **full original strict-VAD census
+SHA256**, exact total/speech counts and explicit `--paid-epoch 2`. It caps the
+approved set at 67 speech-positive units and scans at most 1000 owner jobs. The
+new plan digest binds the original census (including immutable audio/run/privacy
+bindings), alternate provider, operation and paid epoch. Dry-run uses only
+read-only Firestore transactions and encrypted audio reads, with at most four
+concurrent read operations. It never calls STT or registers/writes artifacts.
+
+Apply also requires `--approve-plan-sha256`, the new flag and the existing
+recovery owner gate. Its default `--apply-limit 1` always selects the same sorted
+speech prefix. A separate `speech_redrive` intent preserves the original
+`recovery` map verbatim, records paid epoch 2, and uses CAS to spend the one new
+provider call. Prepared intents can resume; running intents only reconcile their
+create-only encrypted result. An uncertain/lost provider response stays held;
+after 900 seconds it becomes terminal without another call. A lost storage reply
+can reconcile the deterministic artifact. Increasing the limit to 67 includes
+already-attempted canary receipts rather than selecting 67 additional units.
+Successful results use the ordinary merge/projection/client completion path.
+The silence operator refuses a job that already has a speech-redrive intent.
+
+Supply secrets using the existing secure runtime injection; scripts never fetch
+or print keys. Tier names do not grant permissions: the current `ro-prod` cannot
+read the batch bucket, and `prod-operator` cannot write Firestore. The lead's
+existing human-tier secure runner can supply both the encryption secret and,
+for apply only, the configured Modulate key. The operator accepts that tier and
+still enforces all owner/digest/privacy/CAS fences. Do not substitute a user's
+public API token or call `api.omi.me`.
+
+Rollback disables `BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED` and stops the
+operator. Do not erase or reset either paid epoch, content claims or result
+receipts. Disabling the flag prevents new dispatches; an already-running provider
+may finish. Completed transcripts are real historical writes and are not undone
+by a flag rollback; correct them only through the normal reviewed content path.
