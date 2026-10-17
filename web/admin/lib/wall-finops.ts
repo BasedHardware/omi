@@ -57,9 +57,10 @@ export async function fetchFinopsHistory(
  *
  * Measured STT is a hook: Sol lane `lane/finops-soniox-pull` is adding a
  * Soniox usage pull to the FinOps job as a company-total component (proposed
- * `stt_soniox_measured`, segment_type `total`). TODO(finops-soniox-pull):
- * confirm the final component name once that lane merges. Until a row exists
- * the TV keeps the dated Soniox-console constant (`wall-cost.ts`).
+ * `stt_soniox_measured`, segment_type `total`); the reader matches any
+ * `stt_<vendor>_measured` total component, so re-check it when that lane
+ * merges. Until a row exists the TV keeps the dated Soniox-console constant
+ * (`wall-cost.ts`).
  */
 export const FINOPS_PLAN_COST_QUERY = `
 WITH runs AS (
