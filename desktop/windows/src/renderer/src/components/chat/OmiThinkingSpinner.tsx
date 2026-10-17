@@ -1,9 +1,9 @@
-// The bar chat's "waiting for Omi's reply" loader: the Omi dot-ring mark, spun
-// fast (see .omi-thinking-spin in globals.css). It stands ALONE — deliberately
-// NOT wrapped in a message bubble — left-aligned where the assistant reply will
-// land, so when the reply arrives the bubble simply pops in (bubble-in) and this
-// loader is unmounted. Replaces the old bubble-of-dots ("…") pending indicator in
-// the floating bar's inline conversation (overlay variant only).
+// The chat's "waiting for Omi's reply" loader (both the main window and the
+// floating bar): the Omi dot-ring mark, spun fast (see .omi-thinking-spin in
+// globals.css). It stands ALONE — deliberately NOT wrapped in a message bubble
+// — left-aligned where the assistant reply will land, so when the reply
+// arrives the bubble simply pops in (bubble-in) and this loader is unmounted.
+// Replaces the old bubble-of-dots ("…") pending indicator on both surfaces.
 //
 // The eight-dot ring mirrors the shipped omi-mark.png glyph (the same mark
 // ConnectorBrandMark's OmiMark / macOS HomeOmiMarkIcon draw), rendered inline so
