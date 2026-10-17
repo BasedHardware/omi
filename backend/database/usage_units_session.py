@@ -5,7 +5,7 @@ from datetime import timezone
 import hashlib
 import time
 
-from database.usage_units import _read_usage_month, _summarize_usage
+from database.usage_units import read_usage_month, summarize_usage
 
 
 def _add(left, right):
@@ -44,8 +44,8 @@ class UsageUnitsSession:
             or self.entitlements != entitlements
             or time.monotonic() - self.full_at >= 900
         ):
-            hourly, days = _read_usage_month(uid, now, client, entitlements)
-            closed = _summarize_usage(
+            hourly, days = read_usage_month(uid, now, client, entitlements)
+            closed = summarize_usage(
                 [data for name, data in hourly if name != hour],
                 [(data, api) for name, data, api in days if name != day],
                 entitlements,
@@ -80,7 +80,7 @@ class UsageUnitsSession:
             if self.hour != hour or self.day != day:
                 closed = _add(
                     closed,
-                    _summarize_usage(
+                    summarize_usage(
                         [documents.get(self.hour, {})] if self.hour != hour else [],
                         (
                             [(documents.get(f'{self.day}_{hashed}', {}), documents.get(self.day, {}))]
@@ -94,7 +94,7 @@ class UsageUnitsSession:
             open_hour = documents.get(hour, {})
             open_day = (documents.get(f'{day}_{hashed}', {}), documents.get(day, {}))
             full_at = self.full_at
-        current = _summarize_usage([open_hour], [open_day], entitlements, True)
+        current = summarize_usage([open_hour], [open_day], entitlements, True)
         summary = _add(closed, current)
         self.key, self.entitlements, self.full_at = key, deepcopy(entitlements), full_at
         self.hour, self.day, self.closed = hour, day, closed

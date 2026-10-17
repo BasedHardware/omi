@@ -257,7 +257,7 @@ def _covered_quantity(leaf, funding, quantity, unpriced, enforcing):
     return int(covered) if quantity == 'events' else covered
 
 
-def _summarize_usage(hourly, days, entitlements, enforcing):
+def summarize_usage(hourly, days, entitlements, enforcing):
     totals: dict[str, int] = {}
     statuses: dict[str, dict[str, int]] = {}
     funding_totals: dict[str, int] = {}
@@ -434,7 +434,7 @@ def _render_usage(summary, entitlements, enforcing):
     }
 
 
-def _read_usage_month(uid, period, client, entitlements):
+def read_usage_month(uid, period, client, entitlements):
     start = period.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     end = (start.replace(day=28) + timedelta(days=4)).replace(day=1)
     user = client.collection('users').document(uid)
@@ -501,8 +501,8 @@ def get_usage_units(
     if session_cache is not None and enforcing:
         summary = session_cache.read(uid, period, client, entitlements)
     else:
-        hourly, days = _read_usage_month(uid, period, client, entitlements)
-        summary = _summarize_usage(
+        hourly, days = read_usage_month(uid, period, client, entitlements)
+        summary = summarize_usage(
             [data for _, data in hourly], [(data, api) for _, data, api in days], entitlements, enforcing
         )
     return _render_usage(summary, entitlements, enforcing)

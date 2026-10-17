@@ -2462,7 +2462,7 @@ _add(DriverEntry('database.user_usage.get_today_usage_stats', base={'uid': UID, 
 _add(USAGE_UNITS_DRIVER)
 _add(
     CoveredByEntry(
-        'database.usage_units._read_usage_month',
+        'database.usage_units.read_usage_month',
         covered_by=('database.usage_units.get_usage_units',),
         reason='shared month builder called by the public reader and cold/900-second session refresh; current-bucket refresh uses document get_all only',
     )
