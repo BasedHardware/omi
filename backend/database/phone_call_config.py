@@ -75,16 +75,21 @@ _DEFAULT_FREE_PLAN = _profile_default('free')
 _DEFAULT_PAID_PLAN = _profile_default('paid')
 
 
-def _fetch_config() -> Dict[str, Any]:
-    doc = db.collection("phone_call_config").document("default").get()
-    if not getattr(doc, "exists", False):
+def _fetch_config(client: Any = None) -> Dict[str, Any]:
+    target_db = client if client is not None else db
+    try:
+        doc = target_db.collection("phone_call_config").document("default").get()
+        if not getattr(doc, "exists", False):
+            return {}
+        raw: object = doc.to_dict()
+        return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+    except Exception as e:
+        _LOGGER.warning("Failed to fetch phone call config from Firestore: %s", e)
         return {}
-    raw: object = doc.to_dict()
-    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
 
 
-def _get_config() -> Dict[str, Any]:
-    fetched = get_memory_cache().get_or_fetch(_CACHE_KEY, _fetch_config, ttl=_CACHE_TTL_SECONDS)
+def _get_config(client: Any = None) -> Dict[str, Any]:
+    fetched = get_memory_cache().get_or_fetch(_CACHE_KEY, lambda: _fetch_config(client=client), ttl=_CACHE_TTL_SECONDS)
     return cast(Dict[str, Any], fetched) if isinstance(fetched, dict) else {}
 
 
@@ -234,14 +239,14 @@ def _effective_config(profile: str, raw_config: Dict[str, Any]) -> Dict[str, Any
     return effective
 
 
-def get_free_plan_config() -> Dict[str, Any]:
-    return _effective_config('free', _get_config())
+def get_free_plan_config(client: Any = None) -> Dict[str, Any]:
+    return _effective_config('free', _get_config(client=client))
 
 
-def get_paid_plan_config() -> Dict[str, Any]:
-    return _effective_config('paid', _get_config())
+def get_paid_plan_config(client: Any = None) -> Dict[str, Any]:
+    return _effective_config('paid', _get_config(client=client))
 
 
-def get_config_for_plan(plan: PlanType | str | None) -> Dict[str, Any]:
+def get_config_for_plan(plan: PlanType | str | None, client: Any = None) -> Dict[str, Any]:
     """Resolve config using the catalog's phone-call profile for ``plan``."""
-    return _effective_config(_phone_call_profile_for_plan(plan), _get_config())
+    return _effective_config(_phone_call_profile_for_plan(plan), _get_config(client=client))
