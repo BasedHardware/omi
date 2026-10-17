@@ -9,6 +9,7 @@ entitled or legacy account.
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any
 
@@ -27,6 +28,14 @@ from utils.memory.memory_authority import (
 from utils.memory.read_resilience import transient_store_error
 
 MEMORY_SYSTEM_FIELD = "memory_system"
+
+# Each attempt on the apply-control read is bounded to seconds, not the SDK's
+# default 300-second document-read retry deadline (see
+# database/mcp_auth_read.py): this boundary owns the three-attempt budget, so
+# the SDK's own retry is disabled per attempt and a sustained outage surfaces
+# here as a typed exception within seconds instead of blocking a worker for
+# minutes per outer attempt.
+CANONICAL_APPLY_READ_TIMEOUT_SECONDS = float(os.getenv("CANONICAL_APPLY_READ_TIMEOUT_SECONDS", "5"))
 
 CANONICAL_MEMORY_MAINTENANCE_REGISTRY_COLLECTION = "canonical_memory_maintenance_registry"
 CANONICAL_MEMORY_MAINTENANCE_CURSOR_PATH = "canonical_memory_maintenance_control/cursor"
@@ -64,9 +73,14 @@ def ensure_canonical_apply_control_state(uid: str, *, db_client: Any) -> MemoryC
         # Firestore's own retry can be exhausted by a brief regional blip.
         # Classified transient faults get the same three-attempt budget as the
         # MCP OAuth refresh rotation; permanent faults fail closed immediately.
+        # Each attempt disables the SDK's own (default 300 s deadline) retry and
+        # passes an explicit per-attempt timeout: this boundary owns the budget,
+        # so a typed transient error must surface here directly — an exhausted
+        # SDK Retry policy would instead raise RetryError, which the transient
+        # classifier (and therefore this loop) does not treat as retryable.
         for attempt in range(3):
             try:
-                return target_ref.get()
+                return target_ref.get(retry=None, timeout=CANONICAL_APPLY_READ_TIMEOUT_SECONDS)
             except Exception as exc:
                 if attempt < 2 and transient_store_error(exc):
                     time.sleep((0.1, 0.3)[attempt])
@@ -99,6 +113,18 @@ def ensure_canonical_apply_control_state(uid: str, *, db_client: Any) -> MemoryC
         control = _read_existing()
         _ensure_maintenance_registry_entry(uid, db_client=db_client)
         return control
+
+    # The transient retries above widened the window since the initial fence
+    # read; account deletion may have started (and wiped the control document)
+    # in that gap. Re-read the deletion fence before the first-write path so a
+    # durable running/completed wipe cannot be re-enrolled as a fresh
+    # generation-1 account.
+    try:
+        deletion_fence = read_account_deletion_projection_fence(uid, db_client=db_client)
+    except Exception as exc:
+        raise CanonicalApplyStateUnavailable("canonical apply control state is unreadable") from exc
+    if deletion_fence.blocks_projection_writes:
+        raise CanonicalApplyStateUnavailable("canonical apply control refused during account deletion")
 
     control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
     payload = control.model_dump(mode="json")

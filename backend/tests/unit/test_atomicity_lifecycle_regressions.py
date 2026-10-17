@@ -536,7 +536,7 @@ class _Ref:
         self.db = db
         self.path = path
 
-    def get(self):
+    def get(self, **_kwargs):
         if self.path not in self.db.docs:
             return _Snapshot(None, exists=False)
         return _Snapshot(self.db.docs[self.path])
@@ -595,11 +595,11 @@ def test_ensure_canonical_apply_control_retries_transient_read_blip(monkeypatch)
     failures = {"count": 0}
     control_path = MemoryCollections(uid=uid).memory_apply_control_state
 
-    def flaky_get(self):
+    def flaky_get(self, **kwargs):
         if self.path == control_path and failures["count"] < 1:
             failures["count"] += 1
             raise ServiceUnavailable("synthetic transient blip")
-        return original_get(self)
+        return original_get(self, **kwargs)
 
     monkeypatch.setattr(_Ref, "get", flaky_get)
     control = ensure_canonical_apply_control_state(uid, db_client=db)
@@ -617,11 +617,11 @@ def test_ensure_canonical_apply_control_bounds_transient_retries(monkeypatch):
     attempts = {"count": 0}
     control_path = MemoryCollections(uid=uid).memory_apply_control_state
 
-    def unavailable_get(self):
+    def unavailable_get(self, **kwargs):
         if self.path == control_path:
             attempts["count"] += 1
             raise ServiceUnavailable("synthetic sustained outage")
-        return original_get(self)
+        return original_get(self, **kwargs)
 
     monkeypatch.setattr(_Ref, "get", unavailable_get)
     with pytest.raises(CanonicalApplyStateUnavailable, match="unreadable"):
@@ -639,11 +639,11 @@ def test_ensure_canonical_apply_control_fails_closed_on_permanent_read_fault(mon
     attempts = {"count": 0}
     control_path = MemoryCollections(uid=uid).memory_apply_control_state
 
-    def denied_get(self):
+    def denied_get(self, **kwargs):
         if self.path == control_path:
             attempts["count"] += 1
             raise PermissionDenied("synthetic permanent fault")
-        return original_get(self)
+        return original_get(self, **kwargs)
 
     monkeypatch.setattr(_Ref, "get", denied_get)
     with pytest.raises(CanonicalApplyStateUnavailable, match="unreadable"):
