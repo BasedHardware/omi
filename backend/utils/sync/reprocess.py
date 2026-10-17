@@ -338,13 +338,18 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             summary_delivery.ACCEPT_CONTEXT.reset(accept_token)
             summary_delivery.PROCESS_CONTEXT.reset(process_token)
 
-        summary_seen = output is not None and (
-            summary_delivery.field(output, 'discarded', False)
-            or summary_delivery.present(summary_delivery.field(output, 'structured'))
-        )
-        blocked = bool(process_context and process_context.get('blocked_reason'))
-        if summary_enabled(row['uid']) and output is not None and not summary_seen and not blocked:
-            raise summary_delivery.SummaryOutputUnavailable('first-summary output is empty')
+        if summary_enabled(row['uid']):
+            summary_seen = output is not None and summary_delivery.present(summary_delivery.field(output, 'structured'))
+            discarded = output is not None and summary_delivery.field(output, 'discarded', False)
+            blocked = bool(process_context and process_context.get('blocked_reason'))
+            if (
+                summary_enabled(row['uid'])
+                and output is not None
+                and not summary_seen
+                and not discarded
+                and not blocked
+            ):
+                raise summary_delivery.SummaryOutputUnavailable('first-summary output is empty')
 
     def finish(old: Row | None) -> tuple[Row | None, Row | None]:
         if old is None or old.get('owner') != owner:
@@ -372,6 +377,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         pending = dict(old)
         if summary_seen and summary_enabled(row['uid']):
             pending['summary_seen'] = True
+            pending['first_pending_at'] = current
             pending['summary_repair'] = False
             pending['summary_expected_revision'] = None
             pending['due_at'] = max(current, pending['first_pending_at']) + settle_seconds()

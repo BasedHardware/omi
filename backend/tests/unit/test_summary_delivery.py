@@ -131,3 +131,18 @@ def test_local_only_minimum_is_explicitly_blocked_not_retried_as_empty(enabled):
         assert write['summary_due_at'] is None and context['blocked_reason'] == 'local_only'
     finally:
         delivery.PROCESS_CONTEXT.reset(token)
+
+
+def test_discard_receipt_does_not_hide_a_later_first_summary(enabled):
+    row = debt()
+    write = {'status': 'completed', 'discarded': True, 'summary_output_present': False}
+    receipt = delivery.merge_result(row, write, 'u', now=150)
+    assert not receipt['present'] and 'summary_completed_at' not in write
+    assert write['summary_discard_receipted']
+    assert delivery.merge_result({**row, **write}, dict(write), 'u', now=151) is None
+    restored = {**row, **write, 'discarded': False}
+    delivery.prepare(restored, 'u', now=200)
+    assert restored['summary_due_at'] == 320 and restored['summary_first_pending_at'] == 200
+    output = {'status': 'completed', 'summary_output_present': True}
+    receipt = delivery.merge_result(restored, output, 'u', now=250)
+    assert receipt['present'] and receipt['latency'] == 50

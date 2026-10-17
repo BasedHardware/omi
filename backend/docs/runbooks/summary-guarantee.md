@@ -29,7 +29,9 @@ actions, events, or empty headings do not. Empty kept model output raises before
 persistence and retains debt; previously good output survives. With the gate on,
 notes dedupe treats an empty checkpoint as a cache miss so retries can actually
 generate a summary instead of replaying the same empty cached output. Discard is an
-explicit separate outcome. Local-only, deferred, locked, E2EE, manual title/overview,
+explicit separate outcome: its receipt never marks first-summary delivery, and
+a later kept revision gets a first-summary deadline. Once a real summary lands,
+a dirty later revision starts its own coalescing window. Local-only, deferred, locked, E2EE, manual title/overview,
 client projection, terminal-no-derived and existing finalization generations are
 not background repair admissions. BYOK-enrolled accounts remain blocked, with
 no credential storage or platform-key substitution. Changing account funding

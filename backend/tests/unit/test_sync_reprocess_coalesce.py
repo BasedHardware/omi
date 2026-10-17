@@ -754,3 +754,32 @@ def test_only_scheduled_owner_runs_bounded_summary_scan(sync_router, monkeypatch
     else:
         scan.assert_not_called()
         assert 'summary_debt_scanned' not in outcomes
+
+
+def test_discard_is_terminal_but_does_not_count_as_a_first_summary(state, monkeypatch):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    rows, tasks = state
+    key = reprocess.key('u', 'c')
+    reprocess.mark('u', 'c', 'en', now=0)
+    result = SimpleNamespace(discarded=True, structured={'overview': ''})
+    assert reprocess.run(key, tasks[-1]['task_token'], lambda *_: result, now=120) == 'processed'
+    assert not rows
+    reprocess.mark('u', 'c', 'en', now=10000)
+    assert rows[key]['due_at'] == 10120 and not rows[key].get('summary_seen')
+
+
+def test_first_summary_fulfilled_during_append_starts_a_later_revision_window(state, monkeypatch):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
+    rows, tasks = state
+    key = reprocess.key('u', 'c')
+    reprocess.mark('u', 'c', 'en', now=0)
+
+    def persist_then_append(*args):
+        reprocess.mark(*args, now=10001)
+        return SimpleNamespace(discarded=False, structured={'overview': 'Real summary'})
+
+    reprocess.run(key, tasks[-1]['task_token'], persist_then_append, now=10000)
+    reprocess.mark('u', 'c', 'en', now=10002)
+    assert rows[key]['first_pending_at'] == 10000
+    assert rows[key]['due_at'] == 10602

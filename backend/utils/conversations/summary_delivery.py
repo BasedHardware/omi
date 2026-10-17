@@ -92,6 +92,11 @@ def prepare(data: Row, uid: str, *, now: float | None = None) -> None:
     structured = data['structured']
     data['summary_output_present'] = present(structured)
     if field(structured, 'title_provenance') == 'server_minimum' and not present(structured):
+        if data.get('summary_discard_receipted') and not data.get('discarded'):
+            # A later explicit keep/append starts a new obligation after discard.
+            data['summary_first_pending_at'] = current
+            data['summary_due_at'] = current + deadline_seconds()
+            data['summary_discard_receipted'] = False
         data.setdefault('summary_first_pending_at', current)
         data.setdefault('summary_due_at', data['summary_first_pending_at'] + deadline_seconds())
         data['summary_title_provenance'] = 'server_minimum'
@@ -155,6 +160,8 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
             return dict(lane=lane(existing), reason='local_only', present=False, latency=None)
         return None
     accepted = existing.get('summary_first_pending_at', ACCEPT_CONTEXT.get())
+    if existing.get('summary_discard_receipted') and ACCEPT_CONTEXT.get() is not None:
+        accepted = ACCEPT_CONTEXT.get()
     if accepted is None and isinstance(existing.get('processing_admitted_at'), datetime):
         accepted = existing['processing_admitted_at'].timestamp()
     if accepted is not None:
@@ -165,9 +172,13 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
         raise SummaryOutputUnavailable('kept first-summary output is empty')
     if existing.get('summary_completed_at'):
         return None
+    if discarded and existing.get('summary_discard_receipted'):
+        return None
     if rich or discarded:
         write['summary_due_at'] = None
-        write['summary_completed_at'] = current
+        if rich:
+            write['summary_completed_at'] = current
+        write['summary_discard_receipted'] = discarded and not rich
         write['summary_processing_lease_until'] = 0
         write['summary_blocked_reason'] = None
         if rich:
