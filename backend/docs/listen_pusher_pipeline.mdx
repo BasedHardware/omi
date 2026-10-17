@@ -49,7 +49,9 @@ custody response contract in [provider dispatch](stt-cap-dispatch.md#ladder-v1-a
 Unprojected seconds receive the pinned provisional speech rate without a silence
 ratio; unpriced gateway attempts receive the standard-chat estimate. Atomic
 unpriced-quantity counters ensure each priced second/event is excluded from the
-residual even when its status is missing. Historical mixed leaves already carrying
+residual even when its status is missing. Newly attributed units and missing-event
+counts keep historical zero-unit gaps visible after later priced writes.
+Historical mixed leaves already carrying
 units cannot reconstruct exact quantities and are never charged a second time.
 Residual and historical ambiguity histograms (`omi_ladder_unprojected_*` and
 `omi_ladder_ambiguous_priced_*`) expose both limitations, without user labels or

@@ -92,6 +92,8 @@ def _leaf(priced: Mapping[str, Any], *, provider: str = 'unknown', source: str =
     status = str(priced['status'])
     leaf = {
         'micro_units': firestore.Increment(int(priced['micro_units'])),
+        'quantity_attributed_micro_units': firestore.Increment(int(priced['micro_units'])),
+        'quantity_attributed_missing_events': firestore.Increment(1 if status == 'missing' else 0),
         'events': firestore.Increment(1),
         'status_counts': {status: firestore.Increment(1)},
         'providers': firestore.ArrayUnion([provider]),
@@ -224,20 +226,35 @@ def normalize_plan_usage(data: Mapping[str, Any]) -> dict[str, Any]:
     return plans
 
 
+def _historical_quantity(leaf, quantity):
+    attributed = 'quantity_attributed_seconds' if quantity == 'legacy_counter_seconds' else 'quantity_attributed_events'
+    amount = max(0, float(leaf.get(quantity, 0)) - float(leaf.get(attributed, 0)))
+    units = max(0, int(leaf.get('micro_units', 0)) - int(leaf.get('quantity_attributed_micro_units', 0)))
+    missing = max(
+        0, int(leaf.get('status_counts', {}).get('missing', 0)) - int(leaf.get('quantity_attributed_missing_events', 0))
+    )
+    return amount, units, missing
+
+
+def _ambiguous_quantity(leaf, quantity):
+    amount, units, missing = _historical_quantity(leaf, quantity)
+    if not units or not missing:
+        return 0
+    return min(amount, missing) if quantity == 'events' else amount
+
+
 def _covered_quantity(leaf, funding, quantity, unpriced, enforcing):
     total = float(leaf.get(quantity, 0))
     if not enforcing or funding in EXCLUDED_FUNDING:
         return total
-    if unpriced in leaf:
-        return max(0, total - float(leaf[unpriced]))
-    # Old aggregates cannot split mixed statuses. Never re-price quantities
-    # whose leaf already contains units: that would double-bill historical
-    # priced events. Missing zero-unit legacy leaves remain fully uncovered.
-    if leaf.get('micro_units', 0):
-        return total
-    if funding == 'omi' and not leaf.get('status_counts', {}).get('missing', 0):
-        return total
-    return 0
+    historical, units, missing = _historical_quantity(leaf, quantity)
+    covered = max(0, total - historical - float(leaf.get(unpriced, 0)))
+    # Only historical units may establish historical coverage. A new priced
+    # write must not hide an old zero-unit gap in the same aggregated leaf.
+    # Mixed historical priced statuses remain ambiguous, never double-billed.
+    if units or funding == 'omi' and not missing:
+        covered += historical
+    return covered
 
 
 def get_usage_units(
@@ -308,11 +325,9 @@ def get_usage_units(
                 for funding, leaf in features.get('transcription', {}).get('funding', {}).items()
             )
             ambiguous_seconds += sum(
-                max(0, float(leaf.get('legacy_counter_seconds', 0)) - float(leaf.get('quantity_attributed_seconds', 0)))
+                _ambiguous_quantity(leaf, 'legacy_counter_seconds')
                 for funding, leaf in features.get('transcription', {}).get('funding', {}).items()
                 if funding not in EXCLUDED_FUNDING
-                and leaf.get('micro_units', 0)
-                and leaf.get('status_counts', {}).get('missing', 0)
             )
             residual = max(float(data.get('transcription_seconds', 0)) - covered, 0)
             missing_seconds += residual
@@ -352,14 +367,11 @@ def get_usage_units(
                 features = hour.get('features', {})
                 consume(features)
                 ambiguous_attempts += sum(
-                    min(
-                        int(leaf.get('status_counts', {}).get('missing', 0)),
-                        max(0, int(leaf.get('events', 0)) - int(leaf.get('quantity_attributed_events', 0))),
-                    )
+                    _ambiguous_quantity(leaf, 'events')
                     for feature, row in features.items()
                     if feature != 'web_search_tool'
                     for funding, leaf in row.get('funding', {}).items()
-                    if funding not in EXCLUDED_FUNDING and leaf.get('micro_units', 0)
+                    if funding not in EXCLUDED_FUNDING
                 )
                 projected += sum(
                     _covered_quantity(leaf, funding, 'events', 'unpriced_events', enforcing)

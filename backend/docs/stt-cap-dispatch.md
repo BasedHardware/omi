@@ -212,7 +212,9 @@ No month aggregate cache hides late-arriving usage or corrections.
 
 Hourly/day writers atomically record unpriced counter seconds/events separately
 from status counts. Only zero-unit missing quantities receive a residual proxy;
-missing annotations with nonzero units are already charged. Historical mixed
+missing annotations with nonzero units are already charged. Newly attributed
+units and missing events are separated from historical totals, so later priced
+writes cannot hide a historical zero-unit gap. Historical mixed
 leaves without quantity attribution cannot be reconstructed exactly: quantities
 in leaves containing priced units are never priced a second time. Coverage
 metrics report residual quantities and ambiguous historical mixed leaves separately.

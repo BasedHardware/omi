@@ -605,3 +605,75 @@ def test_historical_mixed_priced_leaf_reports_ambiguity_without_repricing(units,
     assert result['used_units'] == 0.123456
     assert result['completeness']['unprojected_transcription_seconds'] == 0
     assert result['completeness']['ambiguous_priced_transcription_seconds'] == 600
+
+
+@pytest.mark.parametrize('old_priced', [False, True])
+@pytest.mark.parametrize('new_status,new_units', [('missing', 0), ('complete', 0), ('complete', 2000000)])
+def test_historical_and_new_seconds_remain_disjoint(units, monkeypatch, old_priced, new_status, new_units):
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    old = {
+        'micro_units': 1000000 if old_priced else 0,
+        'legacy_counter_seconds': 100,
+        'status_counts': {'complete' if old_priced else 'missing': 1},
+    }
+    hourly = {
+        'year': 2026,
+        'month': 10,
+        'transcription_seconds': 200,
+        'shadow_v1': {'features': {'transcription': {'funding': {'omi': old}}}},
+    }
+    original = units.price_transcription
+    monkeypatch.setattr(
+        units,
+        'price_transcription',
+        lambda *a, **k: {'micro_units': new_units, 'status': new_status, 'reasons': []},
+    )
+    merge(hourly, units.hourly_shadow({'transcription_seconds': 100}, {'funding': 'omi', 'source': 'test'}))
+    monkeypatch.setattr(units, 'price_transcription', original)
+    store = Store({'users/u/hourly_usage/2026-10-01-08': hourly})
+    result = units.get_usage_units(
+        'u',
+        datetime(2026, 10, 1, tzinfo=timezone.utc),
+        firestore_client=store,
+        entitlements={'entitlement_version': 'ladder_v1', 'budget': {'kind': 'units', 'value': 100}},
+    )
+    residual = 100 * ((not old_priced) + (new_status == 'missing'))
+    expected = (1000000 if old_priced else 0) + new_units + original(residual, accepted=True)['micro_units']
+    assert result['completeness']['unprojected_transcription_seconds'] == residual
+    assert result['completeness']['ambiguous_priced_transcription_seconds'] == 0
+    assert result['used_units'] == expected / 1_000_000
+
+
+@pytest.mark.parametrize('old_priced', [False, True])
+@pytest.mark.parametrize('new_status,new_units', [('missing', 0), ('complete', 0), ('complete', 2000000)])
+def test_historical_and_new_gateway_attempts_remain_disjoint(units, monkeypatch, old_priced, new_status, new_units):
+    from config.rate_card import standard_chat_units
+
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    old = {
+        'micro_units': 1000000 if old_priced else 0,
+        'events': 1,
+        'status_counts': {'complete' if old_priced else 'missing': 1},
+    }
+    day = {'attempts': 2, 'shadow_v1': {'hours': {'08': {'features': {'chat': {'funding': {'omi': old}}}}}}}
+    monkeypatch.setattr(
+        units,
+        'price_llm_attempt',
+        lambda *a, **k: {'micro_units': new_units, 'status': new_status, 'reasons': []},
+    )
+    _, patch = units.gateway_shadow(
+        {'payer': 'omi', 'feature': 'chat_agent', 'occurred_at': '2026-10-01T08:00:00Z', 'date': '2026-10-01'}
+    )
+    merge(day, patch)
+    store = Store({'llm_gateway_user_days/2026-10-01_' + hashlib.sha256(b'u').hexdigest()[:16]: day})
+    result = units.get_usage_units(
+        'u',
+        datetime(2026, 10, 1, tzinfo=timezone.utc),
+        firestore_client=store,
+        entitlements={'entitlement_version': 'ladder_v1', 'budget': {'kind': 'units', 'value': 100}},
+    )
+    residual = (not old_priced) + (new_status == 'missing')
+    expected = (1000000 if old_priced else 0) + new_units + int(residual * standard_chat_units() * 1_000_000)
+    assert result['completeness']['unprojected_gateway_attempts'] == residual
+    assert result['completeness']['ambiguous_priced_gateway_attempts'] == 0
+    assert result['used_units'] == expected / 1_000_000
