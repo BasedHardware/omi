@@ -5,6 +5,7 @@ Provides chat tools for searching Wikipedia, reading concise article summaries,
 and finding a random article for exploration.
 """
 
+from contextlib import asynccontextmanager
 from html import unescape
 import re
 from typing import Any, Optional
@@ -21,11 +22,37 @@ MAX_LIMIT = 10
 DEFAULT_LANGUAGE = "en"
 USER_AGENT = "omi-wikipedia-app/1.0 (https://omi.me)"
 
+_wikipedia_client: Optional[httpx.AsyncClient] = None
+
+
+def _new_wikipedia_client() -> httpx.AsyncClient:
+    headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+    return httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, headers=headers)
+
+
+async def _get_wikipedia_client() -> httpx.AsyncClient:
+    global _wikipedia_client
+    if _wikipedia_client is None or _wikipedia_client.is_closed:
+        _wikipedia_client = _new_wikipedia_client()
+    return _wikipedia_client
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    global _wikipedia_client
+    _wikipedia_client = _new_wikipedia_client()
+    try:
+        yield
+    finally:
+        if _wikipedia_client is not None:
+            await _wikipedia_client.aclose()
+
 
 app = FastAPI(
     title="Omi Wikipedia Integration",
     description="Search and read Wikipedia from Omi chat tools",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 
@@ -105,9 +132,8 @@ def _encode_title(title: str) -> str:
 
 
 async def _request_json(url: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
-    headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, headers=headers) as client:
-        response = await client.get(url, params=params)
+    client = await _get_wikipedia_client()
+    response = await client.get(url, params=params)
     response.raise_for_status()
     return response.json()
 
@@ -130,7 +156,12 @@ def _format_summary(data: dict[str, Any], language: str) -> str:
     title = data.get("title") or "Untitled"
     extract = data.get("extract") or "No summary was returned for this article."
     description = data.get("description")
-    page_url = data.get("content_urls", {}).get("desktop", {}).get("page") or _article_url(language, title)
+
+    content_urls = data.get("content_urls")
+    desktop_urls = content_urls.get("desktop") if isinstance(content_urls, dict) else None
+    page_url = desktop_urls.get("page") if isinstance(desktop_urls, dict) else None
+    if not isinstance(page_url, str) or not page_url:
+        page_url = _article_url(language, title)
 
     lines = [title]
     if description:
@@ -256,7 +287,9 @@ async def search_articles(payload: dict[str, Any]):
                 "utf8": "1",
             },
         )
-        results = data.get("query", {}).get("search", [])[:limit]
+        query_obj = data.get("query")
+        raw_results = query_obj.get("search") if isinstance(query_obj, dict) else None
+        results = [item for item in raw_results if isinstance(item, dict)][:limit] if isinstance(raw_results, list) else []
         if not results:
             return ChatToolResponse(result=f"No Wikipedia articles found for '{query}'.")
 
@@ -320,12 +353,17 @@ async def get_random_article(payload: dict[str, Any]):
                 "utf8": "1",
             },
         )
-        random_items = data.get("query", {}).get("random", [])
-        if not random_items:
+        query_obj = data.get("query")
+        random_items = query_obj.get("random") if isinstance(query_obj, dict) else None
+        if not isinstance(random_items, list) or not random_items:
             return ChatToolResponse(result="No random Wikipedia article was returned.")
 
-        title = random_items[0].get("title")
-        if not title:
+        first_item = random_items[0]
+        if not isinstance(first_item, dict):
+            return ChatToolResponse(result="No random Wikipedia article was returned.")
+
+        title = first_item.get("title")
+        if not title or not isinstance(title, str):
             return ChatToolResponse(result="Wikipedia returned a random article without a title.")
 
         summary_url = f"https://{language}.wikipedia.org/api/rest_v1/page/summary/{_encode_title(title)}"
