@@ -222,7 +222,7 @@ void main() {
 
   testWidgets('inactive surfaces do not require a subscription provider', (tester) async {
     final controller = OnDeviceTranscriptionController(
-      model: FakeOnDeviceModel(OnDeviceModelStatus(phase: OnDeviceModelPhase.installed)),
+      model: FakeOnDeviceModel(const OnDeviceModelStatus(phase: OnDeviceModelPhase.installed)),
       power: FakePhonePowerSource(),
       manageNativeCustody: false,
     );
