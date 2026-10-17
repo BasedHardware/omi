@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from models.focus_session import FocusSession, FocusStats
@@ -66,7 +66,9 @@ def delete_focus_session(
     session_id: str,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    focus_sessions_db.delete_focus_session(uid, session_id)
+    deleted = focus_sessions_db.delete_focus_session(uid, session_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail='Focus session not found')
     return {'status': 'ok'}
 
 
