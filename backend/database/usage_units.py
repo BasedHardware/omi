@@ -428,8 +428,14 @@ def get_usage_units(
             'unprojected_gateway_days': missing_days,
             'unprojected_gateway_attempts': missing_attempts,
             'unprojected_transcription_seconds': missing_seconds,
-            'ambiguous_priced_transcription_seconds': ambiguous_seconds,
-            'ambiguous_priced_gateway_attempts': ambiguous_attempts,
+            **(
+                {
+                    'ambiguous_priced_transcription_seconds': ambiguous_seconds,
+                    'ambiguous_priced_gateway_attempts': ambiguous_attempts,
+                }
+                if enforcing
+                else {}
+            ),
             'coverage_gaps': list(COVERAGE_GAPS),
         },
         'entitlement_version': entitlements['entitlement_version'],

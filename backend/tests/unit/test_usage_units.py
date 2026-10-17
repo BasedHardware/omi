@@ -480,11 +480,15 @@ def test_ladder_residuals_are_charged_conservatively_only_when_enforcing(units, 
     assert result['by_funding']['omi'] == result['used_units']
     assert result['completeness']['unprojected_transcription_seconds'] == 170
     assert result['completeness']['unprojected_gateway_attempts'] == 2
+    assert ('ambiguous_priced_transcription_seconds' in result['completeness']) is enforce
+    assert ('ambiguous_priced_gateway_attempts' in result['completeness']) is enforce
     assert repr(store.docs) == before and store.writes == 0
     # Legacy reads remain shadow-only with either switch setting.
     entitlement['entitlement_version'] = 'legacy'
     legacy = units.get_usage_units('u', month, firestore_client=store, entitlements=entitlement)
     assert legacy['used_units'] == float(Decimal(projected) / 1_000_000)
+    assert 'ambiguous_priced_transcription_seconds' not in legacy['completeness']
+    assert 'ambiguous_priced_gateway_attempts' not in legacy['completeness']
 
 
 def test_ladder_missing_price_and_unknown_funding_do_not_claim_coverage(units, monkeypatch):
