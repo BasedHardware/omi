@@ -18,7 +18,7 @@ within a few hours. The fix:
 These tests cover the contract of both pieces.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 from unittest.mock import MagicMock
 
 from database import action_items as action_items_db
@@ -375,3 +375,43 @@ def test_promote_returns_none_when_no_staged(monkeypatch):
     monkeypatch.setattr(staged_tasks_db, '_user_col', lambda uid, name: fake_col)
 
     assert staged_tasks_db.promote_staged_task('uid') is None
+
+
+def test_create_staged_task_ignores_completed_staged_task_in_dedup(monkeypatch):
+    """A completed/promoted staged task with matching description must not be returned;
+    a fresh active staged task should be created instead."""
+    completed_doc = _make_doc(
+        'staged-completed',
+        {'description': 'Email John', 'completed': True, 'relevance_score': 10},
+    )
+
+    fake_doc_ref = MagicMock()
+    fake_col = MagicMock()
+    fake_col.stream.return_value = iter([completed_doc])
+    fake_col.document.return_value = fake_doc_ref
+
+    monkeypatch.setattr(staged_tasks_db, '_user_col', lambda uid, name: fake_col)
+
+    result = staged_tasks_db.create_staged_task('uid', '[screen] Email John')
+    assert result['id'] != 'staged-completed'
+    assert result['completed'] is False
+    assert result['description'] == '[screen] Email John'
+    fake_col.document.assert_called_once_with(result['id'])
+    fake_doc_ref.set.assert_called_once_with(result)
+
+
+def test_create_staged_task_defaults_relevance_score_when_omitted(monkeypatch):
+    """When relevance_score is not passed in kwargs, it defaults to 0 so the document
+    is always sortable and returned by get_staged_tasks."""
+    fake_doc_ref = MagicMock()
+    fake_col = MagicMock()
+    fake_col.stream.return_value = iter([])
+    fake_col.document.return_value = fake_doc_ref
+
+    monkeypatch.setattr(staged_tasks_db, '_user_col', lambda uid, name: fake_col)
+
+    result = staged_tasks_db.create_staged_task('uid', 'Unique Task Without Score')
+    assert result['relevance_score'] == 0
+    fake_doc_ref.set.assert_called_once()
+    saved_doc = fake_doc_ref.set.call_args[0][0]
+    assert saved_doc['relevance_score'] == 0
