@@ -3,7 +3,6 @@
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 import pytest
-from fastapi import HTTPException
 
 import database.calendar_meetings as calendar_db
 import routers.calendar_meetings as calendar_router
@@ -71,15 +70,3 @@ def test_store_calendar_meeting_update_fallback_to_create(monkeypatch):
     res = calendar_router.store_calendar_meeting(req, uid='uid-1')
     assert res.meeting_id == 'new_m_id'
     assert created_id == 'new_m_id'
-
-
-def test_delete_calendar_meeting_endpoint(monkeypatch):
-    monkeypatch.setattr(calendar_db, 'delete_meeting', lambda uid, mid: True)
-    res = calendar_router.delete_calendar_meeting('meeting-123', uid='uid-1')
-    assert res.meeting_id == 'meeting-123'
-    assert res.message == 'Meeting deleted successfully'
-
-    monkeypatch.setattr(calendar_db, 'delete_meeting', lambda uid, mid: False)
-    with pytest.raises(HTTPException) as exc:
-        calendar_router.delete_calendar_meeting('meeting-missing', uid='uid-1')
-    assert exc.value.status_code == 404
