@@ -337,8 +337,6 @@ def test_assignment_read_contention_uses_bounded_retry_without_duplicate_receipt
             guard(transaction)
             attempts.append(1)
             if len(attempts) == 1:
-                if failure == 'expired':
-                    raise InvalidArgument('The referenced transaction has expired or is no longer valid')
                 raise Aborted('synthetic read-time contention')
 
         return original(*args, **{**kwargs, 'before_assign': flaky})
