@@ -4936,10 +4936,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'S\'ha eliminat la mostra de veu addicional';
 
   @override
-  String get consentDataMessage =>
-      'Continuant, les vostres converses, enregistraments i informació personal s\'emmagatzemaran de manera segura als nostres servidors. Els vostres enregistraments d\'àudio i transcripcions són processats per serveis d\'IA de tercers (incloent Deepgram per a la transcripció i OpenAI per a l\'anàlisi) per proporcionar-vos informació impulsada per IA i habilitar totes les funcions de l\'aplicació.';
-
-  @override
   String get tasksEmptyStateMessage => 'Inicia una conversa per crear una tasca.';
 
   @override

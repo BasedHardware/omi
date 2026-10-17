@@ -36,5 +36,9 @@ void main() {
     await tester.pump();
     expect(switched, 1);
     expect(agreed, 0);
+
+    await tester.tap(find.byKey(const Key('ai_consent_agree')));
+    await tester.pump();
+    expect(agreed, 1);
   });
 }

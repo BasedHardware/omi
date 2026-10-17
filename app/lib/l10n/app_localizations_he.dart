@@ -4868,10 +4868,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'דוגמה דיבור נוספת הוסרה';
 
   @override
-  String get consentDataMessage =>
-      'בהמשך, השיחות, ההקלטות והמידע האישי שלך יאוחסנו בצורה מאובטחת בשרתים שלנו. הקלטות האודיו והתמלולים שלך מעובדים על ידי שירותי AI של צד שלישי (כולל Deepgram לתמלול ו-OpenAI לניתוח) כדי לספק לך תובנות מבוססות AI ולאפשר את כל תכונות האפליקציה.';
-
-  @override
   String get tasksEmptyStateMessage => 'התחילו שיחה כדי ליצור משימה.';
 
   @override

@@ -4916,10 +4916,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'Dodatni govori vzorec je bil odstranjen';
 
   @override
-  String get consentDataMessage =>
-      'Z nadaljevanjem bodo vaši pogovori, posnetki in osebni podatki varno shranjeni na naših strežnikih. Vaši zvočni posnetki in prepisi se obdelujejo s storitvami umetne inteligence tretjih oseb (vključno z Deepgram za prepis in OpenAI za analizo), da vam zagotovimo vpoglede, ki jih poganja umetna inteligenca, in omogočimo vse funkcije aplikacije.';
-
-  @override
   String get tasksEmptyStateMessage => 'Začnite pogovor, da ustvarite nalogo.';
 
   @override

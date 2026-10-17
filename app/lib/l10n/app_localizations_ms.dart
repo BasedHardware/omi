@@ -4922,10 +4922,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'Sampel suara tambahan dibuang';
 
   @override
-  String get consentDataMessage =>
-      'Dengan meneruskan, perbualan, rakaman dan maklumat peribadi anda akan disimpan dengan selamat di pelayan kami. Rakaman audio dan transkrip anda diproses oleh perkhidmatan AI pihak ketiga (termasuk Deepgram untuk transkripsi dan OpenAI untuk analisis) untuk memberikan anda pandangan dikuasakan AI dan membolehkan semua ciri aplikasi.';
-
-  @override
   String get tasksEmptyStateMessage => 'Mulakan perbualan untuk mencipta tugasan.';
 
   @override

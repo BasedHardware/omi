@@ -4909,10 +4909,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'Ytterligare röstprov borttaget';
 
   @override
-  String get consentDataMessage =>
-      'Genom att fortsätta kommer dina konversationer, inspelningar och personlig information att lagras säkert på våra servrar. Dina ljudinspelningar och transkriptioner behandlas av AI-tjänster från tredje part (inklusive Deepgram för transkription och OpenAI för analys) för att ge dig AI-drivna insikter och aktivera alla appfunktioner.';
-
-  @override
   String get tasksEmptyStateMessage => 'Starta ett samtal för att skapa en uppgift.';
 
   @override

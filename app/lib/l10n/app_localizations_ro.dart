@@ -4931,10 +4931,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'Mostră vocală suplimentară eliminată';
 
   @override
-  String get consentDataMessage =>
-      'Continuând, conversațiile, înregistrările și informațiile dvs. personale vor fi stocate în siguranță pe serverele noastre. Înregistrările audio și transcrierile dvs. sunt procesate de servicii AI terțe (inclusiv Deepgram pentru transcriere și OpenAI pentru analiză) pentru a vă oferi informații bazate pe AI și a activa toate funcțiile aplicației.';
-
-  @override
   String get tasksEmptyStateMessage => 'Începe o conversație pentru a crea o sarcină.';
 
   @override

@@ -4907,10 +4907,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'Papildomas balso pavyzdys pašalintas';
 
   @override
-  String get consentDataMessage =>
-      'Tęsdami, jūsų pokalbiai, įrašai ir asmeninė informacija bus saugiai saugomi mūsų serveriuose. Jūsų garso įrašai ir transkripcijos apdorojami trečiųjų šalių AI paslaugų (įskaitant Deepgram transkripcijai ir OpenAI analizei), kad suteiktų jums AI paremtas įžvalgas ir įgalintų visas programėlės funkcijas.';
-
-  @override
   String get tasksEmptyStateMessage => 'Pradėkite pokalbį, kad sukurtumėte užduotį.';
 
   @override

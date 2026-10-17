@@ -4924,10 +4924,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'Dodatni uzorak govora je uklonjen';
 
   @override
-  String get consentDataMessage =>
-      'Nastavljanjem, vaši razgovori, snimke i osobni podaci bit će sigurno pohranjeni na našim poslužiteljima. Vaši audio zapisi i transkripti obrađuju se od strane AI usluga trećih strana (uključujući Deepgram za transkripciju i OpenAI za analizu) kako bi vam pružili uvide pokretane umjetnom inteligencijom i omogućili sve značajke aplikacije.';
-
-  @override
   String get tasksEmptyStateMessage => 'Započnite razgovor da biste stvorili zadatak.';
 
   @override

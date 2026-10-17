@@ -4903,10 +4903,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'Amostra de voz adicional removida';
 
   @override
-  String get consentDataMessage =>
-      'Ao continuar, suas conversas, gravações e informações pessoais serão armazenadas com segurança em nossos servidores. Suas gravações de áudio e transcrições são processadas por serviços de IA de terceiros (incluindo Deepgram para transcrição e OpenAI para análise) para fornecer insights baseados em IA e habilitar todos os recursos do aplicativo.';
-
-  @override
   String get tasksEmptyStateMessage => 'Inicie uma conversa para criar uma tarefa.';
 
   @override

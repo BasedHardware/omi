@@ -4908,10 +4908,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'Ekstra taleprøve fjernet';
 
   @override
-  String get consentDataMessage =>
-      'Ved å fortsette vil samtalene, opptakene og den personlige informasjonen din bli lagret sikkert på våre servere. Lydopptakene og transkripsjonene dine behandles av tredjeparts AI-tjenester (inkludert Deepgram for transkripsjon og OpenAI for analyse) for å gi deg AI-drevne innsikter og aktivere alle appfunksjoner.';
-
-  @override
   String get tasksEmptyStateMessage => 'Start en samtale for å opprette en oppgave.';
 
   @override
