@@ -11,9 +11,16 @@ class WhisperTranscriber:
     Feature gate: only importable/usable when a runner is provided or whisper is installed.
     """
 
-    def __init__(self, *, model_name: str = "tiny.en", runner: Optional[Callable[[bytes], str]] = None) -> None:
+    def __init__(
+        self,
+        *,
+        model_name: str = "tiny.en",
+        runner: Optional[Callable[[bytes], str]] = None,
+        drain_timeout: float = 5.0,
+    ) -> None:
         self.model_name = model_name
         self.runner = runner
+        self.drain_timeout = drain_timeout
         self._model = None
         if runner is None:
             try:
@@ -33,19 +40,61 @@ class WhisperTranscriber:
         # Batch PCM for a simple offline-style loop (parity surface, not ultra-low-latency).
         buffer = bytearray()
         target = 16000 * 2 * 5  # ~5s mono s16le
-        while True:
-            chunk = await audio_queue.get()
-            buffer.extend(chunk)
-            if len(buffer) < target:
-                continue
-            pcm = bytes(buffer)
-            buffer.clear()
-            text = await asyncio.to_thread(self._transcribe_pcm, pcm)
+
+        def _emit(text: str) -> None:
             if text:
                 if on_transcript:
                     on_transcript(text)
                 else:
                     print(text)
+
+        async def _transcribe_and_emit(pcm: bytes) -> None:
+            if not pcm:
+                return
+            text = await asyncio.to_thread(self._transcribe_pcm, pcm)
+            _emit(text)
+
+        current_task: Optional[asyncio.Task] = None
+        try:
+            while True:
+                chunk = await audio_queue.get()
+                buffer.extend(chunk)
+                if len(buffer) < target:
+                    continue
+                pcm = bytes(buffer)
+                buffer.clear()
+                current_task = asyncio.create_task(_transcribe_and_emit(pcm))
+                await asyncio.shield(current_task)
+                current_task = None
+        except asyncio.CancelledError:
+            async def _drain() -> None:
+                if current_task is not None and not current_task.done():
+                    try:
+                        await current_task
+                    except Exception:
+                        pass
+                while not audio_queue.empty():
+                    try:
+                        buffer.extend(audio_queue.get_nowait())
+                    except asyncio.QueueEmpty:
+                        break
+                if buffer:
+                    tail = bytes(buffer)
+                    buffer.clear()
+                    try:
+                        await _transcribe_and_emit(tail)
+                    except Exception:
+                        pass
+
+            try:
+                timeout = self.drain_timeout if self.drain_timeout is not None else 5.0
+                if timeout > 0:
+                    await asyncio.wait_for(_drain(), timeout=timeout)
+                else:
+                    await _drain()
+            except Exception:
+                pass
+            raise
 
     def _transcribe_pcm(self, pcm: bytes) -> str:
         if self.runner is not None:
