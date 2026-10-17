@@ -11,11 +11,11 @@ import database.tasks as tasks_db
 
 
 def test_update_task_success(monkeypatch):
+    mock_client = MagicMock()
     mock_doc = MagicMock()
     mock_doc.get.return_value.exists = True
-    mock_col = MagicMock()
-    mock_col.document.return_value = mock_doc
-    monkeypatch.setattr(tasks_db.db, "collection", lambda name: mock_col)
+    mock_client.collection.return_value.document.return_value = mock_doc
+    monkeypatch.setattr(tasks_db, "db", mock_client)
 
     res = tasks_db.update("task-123", {"status": "completed"})
     assert res is True
@@ -23,23 +23,23 @@ def test_update_task_success(monkeypatch):
 
 
 def test_update_task_not_found(monkeypatch):
+    mock_client = MagicMock()
     mock_doc = MagicMock()
     mock_doc.get.return_value.exists = False
-    mock_col = MagicMock()
-    mock_col.document.return_value = mock_doc
-    monkeypatch.setattr(tasks_db.db, "collection", lambda name: mock_col)
+    mock_client.collection.return_value.document.return_value = mock_doc
+    monkeypatch.setattr(tasks_db, "db", mock_client)
 
     res = tasks_db.update("task-missing", {"status": "completed"})
     assert res is False
 
 
 def test_update_task_toctou_race_guard(monkeypatch):
+    mock_client = MagicMock()
     mock_doc = MagicMock()
     mock_doc.get.return_value.exists = True
     mock_doc.update.side_effect = Exception("NotFound: Concurrent deletion")
-    mock_col = MagicMock()
-    mock_col.document.return_value = mock_doc
-    monkeypatch.setattr(tasks_db.db, "collection", lambda name: mock_col)
+    mock_client.collection.return_value.document.return_value = mock_doc
+    monkeypatch.setattr(tasks_db, "db", mock_client)
 
     res = tasks_db.update("task-raced", {"status": "failed"})
     assert res is False
@@ -51,13 +51,13 @@ def test_update_task_empty_id():
 
 
 def test_create_task_success(monkeypatch):
+    mock_client = MagicMock()
     mock_doc = MagicMock()
-    mock_col = MagicMock()
-    mock_col.document.return_value = mock_doc
-    monkeypatch.setattr(tasks_db.db, "collection", lambda name: mock_col)
+    mock_client.collection.return_value.document.return_value = mock_doc
+    monkeypatch.setattr(tasks_db, "db", mock_client)
 
     tasks_db.create({"id": "task-abc", "action": "test"})
-    mock_col.document.assert_called_once_with("task-abc")
+    mock_client.collection.return_value.document.assert_called_once_with("task-abc")
     mock_doc.set.assert_called_once_with({"id": "task-abc", "action": "test"})
 
 
