@@ -51,12 +51,12 @@ void main() {
     expect(connectedCallbackCount, 1);
   });
 
-  testWidgets('shows the localized empty state when iOS reports no Bluetooth microphones', (tester) async {
+  testWidgets('shows the localized empty state when the platform reports no Bluetooth microphones', (tester) async {
     await tester.pumpWidget(buildPicker(inputLoader: () async => [], connector: (_) async {}, onConnected: () {}));
     await tester.pumpAndSettle();
 
     expect(
-      find.text('No Bluetooth microphones found. Connect your glasses in iPhone Settings, then try again.'),
+      find.text('No Bluetooth microphones found. Connect your glasses in your phone\'s Bluetooth settings, then try again.'),
       findsOneWidget,
     );
     expect(find.byKey(const Key('rayban_meta_input_retry')), findsOneWidget);
@@ -77,7 +77,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('Could not connect to that microphone. Make sure it is connected in iPhone Settings.'),
+      find.text('Could not connect to that microphone. Make sure it is connected in your phone\'s Bluetooth settings.'),
       findsOneWidget,
     );
     expect(find.text('Renamed Glasses'), findsOneWidget);

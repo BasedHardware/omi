@@ -334,7 +334,18 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
             }
         }
 
-        func startCamera() throws {
+        // The iOS start is synchronous (the HFP engine start already waited for
+        // its route to settle), so the async Pigeon completion reports it directly.
+        func startCamera(completion: @escaping (Result<Void, Error>) -> Void) {
+            do {
+                try startCameraNow()
+                completion(.success(()))
+            } catch {
+                completion(.failure(error))
+            }
+        }
+
+        private func startCameraNow() throws {
             try initialize()
             guard let session = session else {
                 throw PigeonError(code: "not_connected", message: "Connect to the glasses first", details: nil)
@@ -460,12 +471,12 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
             completion(.success("unavailable"))
         }
 
-        func startCamera() throws {
-            throw PigeonError(
+        func startCamera(completion: @escaping (Result<Void, Error>) -> Void) {
+            completion(.failure(PigeonError(
                 code: "camera_unavailable",
                 message: "Image capture requires the Meta Wearables toolkit build",
                 details: nil
-            )
+            )))
         }
 
         func stopCamera() throws {}

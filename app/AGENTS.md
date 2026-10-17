@@ -8,7 +8,7 @@ UI rules: [docs/ux-contract.md](docs/ux-contract.md).
 ### Flavors
 - **dev**: Android `com.friend.ios.dev`, iOS `com.friend-app-with-wearable.ios12.development` — uses `.dev.env`, Firebase project `based-hardware-dev`
 - **prod**: Android `com.friend.ios`, iOS `com.friend-app-with-wearable.ios12` — uses `.env`, Firebase project `based-hardware-prod`
-- **raybanDat**: camera-capable iOS target with the same iOS development identity; `scripts/rayban_dat.sh` excludes mcumgr only for that transaction, then restores the default graph.
+- **raybanDat**: Ray-Ban Meta camera (DAT) build, dev identity. iOS target via `scripts/rayban_dat.sh` (drops mcumgr per run); Android flavor, the only variant linking `mwdat-*`.
 
 ### Version string
 `pubspec.yaml` (`1.0.543+992`) is the local placeholder. Store binaries ignore it: Codemagic sets `BUILD_NAME` from the latest store version and `BUILD_NUMBER` to max(store)+1 (pubspec seeds only with no store history). Analytics/Crashlytics `build_number` is `OMI_BUILD_NUMBER`. Authoritative: stores = Codemagic; local/dev = pubspec; analytics = `OMI_BUILD_NUMBER`.

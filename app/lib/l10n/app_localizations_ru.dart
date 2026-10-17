@@ -9635,7 +9635,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerEmpty =>
-      'Bluetooth-микрофоны не найдены. Подключите очки в настройках iPhone и повторите попытку.';
+      'Bluetooth-микрофоны не найдены. Подключите очки в настройках Bluetooth на телефоне и повторите попытку.';
 
   @override
   String get rayBanMetaMicPickerLoadError =>
@@ -9643,7 +9643,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError =>
-      'Не удалось подключиться к этому микрофону. Убедитесь, что он подключён в настройках iPhone.';
+      'Не удалось подключиться к этому микрофону. Убедитесь, что он подключён в настройках Bluetooth на телефоне.';
 
   @override
   String get syncStatusTooOld => 'Слишком старая для синхронизации — Omi не может её принять';

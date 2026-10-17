@@ -9624,7 +9624,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerEmpty =>
-      'Ni bilo mogoče najti mikrofonov Bluetooth. Povežite očala v nastavitvah iPhona in poskusite znova.';
+      'Ni bilo mogoče najti mikrofonov Bluetooth. Povežite očala v nastavitvah Bluetooth v telefonu in poskusite znova.';
 
   @override
   String get rayBanMetaMicPickerLoadError =>
@@ -9632,7 +9632,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError =>
-      'S tem mikrofonom se ni bilo mogoče povezati. Prepričajte se, da je povezan v nastavitvah iPhona.';
+      'S tem mikrofonom se ni bilo mogoče povezati. Prepričajte se, da je povezan v nastavitvah Bluetooth v telefonu.';
 
   @override
   String get syncStatusTooOld => 'Prestaro za sinhronizacijo — Omi ga ne more sprejeti';
