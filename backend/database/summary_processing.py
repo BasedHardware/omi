@@ -62,9 +62,10 @@ def record_empty_failure(client: Any, collection: str, document_id: str, owner: 
                 .document(old['conversation_id'])
             )
             conversation = reference.get(transaction=transaction).to_dict() or {}
-            if conversation.get('summary_processing_owner') != owner:
+            enriched = bool(conversation.get('summary_output_present') or conversation.get('summary_completed_at'))
+            if not enriched and conversation.get('summary_processing_owner') != owner:
                 return False
-            if not conversation.get('summary_output_present') and not conversation.get('summary_completed_at'):
+            if not enriched:
                 transaction.update(
                     reference,
                     {
@@ -73,7 +74,13 @@ def record_empty_failure(client: Any, collection: str, document_id: str, owner: 
                         'summary_due_at': None,
                     },
                 )
-            updates.update(dormant=True, due_at=None, lease_until=0, summary_blocked_reason=EMPTY_BLOCKED_REASON)
+            updates.update(
+                dormant=True,
+                due_at=None,
+                lease_until=0,
+                summary_seen=enriched,
+                summary_blocked_reason=None if enriched else EMPTY_BLOCKED_REASON,
+            )
         transaction.update(outbox, updates)
         return blocked
 

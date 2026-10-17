@@ -32,6 +32,9 @@ failures exhaust the durable budget: one transaction marks the outbox dormant an
 sets `summary_blocked_reason=empty_output_exhausted`, `summary_due_at=null` on the
 still-owned conversation. No structured content is cleared. Ordinary appends do
 not reset this block; resumption requires an explicit reviewed retry. The failure
+cap instead settles the outbox as summary-seen when a prior good summary already
+exists, without changing that conversation; its later revisions still coalesce.
+The failure
 path adds one outbox read per failed attempt and one conversation read on terminal
 failure, plus their metadata writes. With the gate on,
 notes dedupe treats an empty checkpoint as a cache miss so retries can actually

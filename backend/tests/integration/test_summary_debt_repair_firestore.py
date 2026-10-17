@@ -252,7 +252,7 @@ def test_empty_failure_never_clears_a_previously_committed_good_overview(debt_st
     outbox.update({'owner': 'worker', 'summary_empty_failures': 2})
     ref.update(
         {
-            'summary_processing_owner': 'worker',
+            'summary_processing_owner': 'previous-successful-worker',
             'structured': {'title': 'Synthetic title', 'overview': 'Previously committed good overview'},
             'summary_output_present': True,
             'summary_completed_at': 150,
@@ -262,6 +262,9 @@ def test_empty_failure_never_clears_a_previously_committed_good_overview(debt_st
     before = ref.get().to_dict()
     assert record_empty_failure(client, reprocess.COLLECTION, key, 'worker', token)
     assert ref.get().to_dict() == before
+    assert outbox.get().to_dict()['summary_seen']
+    reprocess.mark(uid, 'c', 'en', now=300)
+    assert outbox.get().to_dict()['due_at'] == 900  # Later revisions retain ordinary coalescing.
 
 
 def test_empty_failure_from_replaced_owner_or_token_does_not_record_or_block(debt_store):
