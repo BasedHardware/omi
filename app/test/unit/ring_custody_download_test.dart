@@ -97,9 +97,11 @@ class _FakeRingDevice implements DeviceConnection {
     return ringInfo;
   }
 
+  int rtcValidValue = 1;
+
   @override
   Future<RingStatus?> getRingStatus() async =>
-      RingStatus(usedBytes: 0, unreadPackets: ringInfo.unreadPackets, freeBytes: 0, rtcValid: 1);
+      RingStatus(usedBytes: 0, unreadPackets: ringInfo.unreadPackets, freeBytes: 0, rtcValid: rtcValidValue);
 
   @override
   Future<bool> readRingFromSeq(int startSeq, {int? packetCount}) async {
@@ -441,6 +443,50 @@ void main() {
 
     expect(card.advances, isEmpty);
     expect(wal.status, isNot(WalStatus.synced));
+    await card.controller.close();
+    await sync.stop();
+  });
+
+  test('offline sync preserves record epoch timestamp even when rtcValid is 0 in RingStatus (#20358)', () async {
+    final card = _FakeRingDevice(ringInfo: _info());
+    card.rtcValidValue = 0; // Simulate un-refreshed status read
+    final local = _FakeLocalSync();
+    final wal = ringWal();
+    final sync = syncWith(local, card, wal);
+
+    const recordTimestamp = 1727883480; // 2024-10-02 15:38:00 UTC
+    final future = sync.syncWal(wal: wal);
+    await Future.delayed(const Duration(milliseconds: 50));
+    card.emit(_readBegin(5, 1));
+    card.emit(_record(timestamp: recordTimestamp));
+    card.emit(_done(0, 6));
+    await future;
+
+    expect(local.added, isNotEmpty);
+    expect(local.added.first.timerStart, equals(recordTimestamp));
+    expect(wal.status, WalStatus.synced);
+    await card.controller.close();
+    await sync.stop();
+  });
+
+  test('offline sync anchors on first usable timestamp when leading record has timestamp 0 (#20358)', () async {
+    final card = _FakeRingDevice(ringInfo: _info(writeSeq: 7));
+    card.rtcValidValue = 0;
+    final local = _FakeLocalSync();
+    final wal = ringWal()..storageTotalBytes = 2 * 444;
+    final sync = syncWith(local, card, wal);
+
+    const recordTimestamp = 1727883480;
+    final future = sync.syncWal(wal: wal);
+    await Future.delayed(const Duration(milliseconds: 50));
+    card.emit(_readBegin(5, 2));
+    card.emit(_record(timestamp: 0));
+    card.emit(_record(timestamp: recordTimestamp));
+    card.emit(_done(0, 7));
+    await future;
+
+    expect(local.added, isNotEmpty);
+    expect(local.added.first.timerStart, greaterThan(1700000000));
     await card.controller.close();
     await sync.stop();
   });
