@@ -32,6 +32,12 @@ stops on storage failure, and shows an error. Interruption and missing-frame
 checks retire the recording indicator instead of leaving a timer running after
 capture has stopped.
 
+The writer copies only its sub-frame tail after consumption: advancing a Data
+slice must not retain the whole session's backing allocation. Capture writes,
+validation, recovery and digest reads drain their Foundation temporary buffers
+within bounded autorelease pools. The native CI guard exercises 90 minutes of
+unaligned callbacks plus validation/receipt cleanup with peak RSS below 128 MB.
+
 Interrupted segments recover independently: a corrupt or oversized partial
 cannot disable capture or access to healthy recordings. Originals remain on
 disk and the Watch reports saved audio needing recovery. If a sealed copy

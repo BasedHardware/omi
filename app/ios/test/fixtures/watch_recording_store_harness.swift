@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 @main
 struct WatchRecordingStoreHarness {
@@ -21,7 +22,26 @@ struct WatchRecordingStoreHarness {
         let phone = root.appendingPathComponent("phone")
         let store = try WatchRecordingStore(directory: watch, hasSpace: { true })
         let scenario = CommandLine.arguments[1]
-        if scenario == "transfer_queue" {
+        if scenario == "bounded_writer" {
+            try store.begin(ownerUID: "user-a", startedAt: 1720000000)
+            let chunk = Data(repeating: 37, count: 47998)
+            // 90 minutes of audio callbacks; no caller-owned autorelease pool.
+            // Foundation bridging must not retain the ~175 MB of written data.
+            for _ in 0..<3600 { try store.append(chunk) }
+            try store.finish()
+            var usage = rusage()
+            check(getrusage(RUSAGE_SELF, &usage) == 0)
+            precondition(usage.ru_maxrss < 128 * 1024 * 1024, "writer retained buffers: \(usage.ru_maxrss) bytes")
+            check(try store.pending().count == 90)
+            for (url, metadata) in try store.pending() {
+                check(try WatchRecordingStore.validatedFrameCount(url) > 0)
+                try store.acknowledge(fileName: metadata.fileName, digest: WatchRecordingStore.digest(url))
+            }
+            try store.pruneAcknowledged(excluding: [])
+            check(try store.pending().isEmpty)
+            check(getrusage(RUSAGE_SELF, &usage) == 0)
+            precondition(usage.ru_maxrss < 128 * 1024 * 1024, "receipt cleanup retained buffers: \(usage.ru_maxrss) bytes")
+        } else if scenario == "transfer_queue" {
             let files = (0..<12).map { index -> (URL, WatchRecordingMetadata) in
                 let metadata = WatchRecordingMetadata(version: 1, sessionID: String(repeating: "a", count: 32),
                     segment: index, startedAt: 1720000000 + Int64(index), ownerUID: index < 6 ? "old-user" : "user-a")

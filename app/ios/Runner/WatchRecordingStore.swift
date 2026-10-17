@@ -83,31 +83,38 @@ final class WatchRecordingStore: @unchecked Sendable {
     /// finalize always syncs before a file becomes transferable.
     func append(_ pcm: Data, sessionID expectedSession: String? = nil) throws {
         lock.lock(); defer { lock.unlock() }
-        guard !ownerUID.isEmpty, pcm.count % 2 == 0 else { throw WatchRecordingError.invalidAudio }
-        if let expectedSession, expectedSession != sessionID { throw WatchRecordingError.invalidMetadata }
-        let uptime = ProcessInfo.processInfo.systemUptime
-        if uptime - lastSync >= 1.5, !hasSpace() { throw WatchRecordingError.storageFull }
-        remainder.append(pcm)
-        while remainder.count >= Self.frameBytes {
-            if writer == nil { try open() }
-            var length = UInt32(Self.frameBytes).littleEndian
-            var encoded = withUnsafeBytes(of: &length) { Data($0) }
-            encoded.append(remainder.prefix(Self.frameBytes))
-            guard let writer else { throw WatchRecordingError.storageFull }
-            try writer.write(contentsOf: encoded)
-            remainder.removeFirst(Self.frameBytes)
-            frames += 1
-            totalFrames += 1
-            if frames == Self.maxFrames { try seal() }
-        }
-        // Persist the sub-frame tail too: process death must not lose up to 10 ms.
-        if !remainder.isEmpty, writer == nil { try open() }
-        if uptime - lastSync >= 1.5 {
-            try writer?.synchronize()
-            if let metadata, let writer {
-                try Self.writeDurably(JSONEncoder().encode(Tail(offset: try writer.offset(), bytes: remainder)), to: tailURL(metadata))
+        // FileHandle/Data bridging can autorelease buffers on the audio thread.
+        // Drain each callback rather than retaining a session worth of writes.
+        try autoreleasepool {
+            guard !ownerUID.isEmpty, pcm.count % 2 == 0 else { throw WatchRecordingError.invalidAudio }
+            if let expectedSession, expectedSession != sessionID { throw WatchRecordingError.invalidMetadata }
+            let uptime = ProcessInfo.processInfo.systemUptime
+            if uptime - lastSync >= 1.5, !hasSpace() { throw WatchRecordingError.storageFull }
+            remainder.append(pcm)
+            while remainder.count >= Self.frameBytes {
+                if writer == nil { try open() }
+                var length = UInt32(Self.frameBytes).littleEndian
+                var encoded = withUnsafeBytes(of: &length) { Data($0) }
+                encoded.append(remainder.prefix(Self.frameBytes))
+                guard let writer else { throw WatchRecordingError.storageFull }
+                try writer.write(contentsOf: encoded)
+                remainder.removeFirst(Self.frameBytes)
+                frames += 1
+                totalFrames += 1
+                if frames == Self.maxFrames { try seal() }
             }
-            lastSync = uptime
+            // Data.removeFirst advances a slice; it can retain every consumed
+            // byte in its backing allocation. Copy only the <320-byte tail.
+            remainder = remainder.withUnsafeBytes { Data($0) }
+            // Persist the sub-frame tail too: process death must not lose up to 10 ms.
+            if !remainder.isEmpty, writer == nil { try open() }
+            if uptime - lastSync >= 1.5 {
+                try writer?.synchronize()
+                if let metadata, let writer {
+                    try Self.writeDurably(JSONEncoder().encode(Tail(offset: try writer.offset(), bytes: remainder)), to: tailURL(metadata))
+                }
+                lastSync = uptime
+            }
         }
     }
 
@@ -168,21 +175,30 @@ final class WatchRecordingStore: @unchecked Sendable {
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
         var hash = SHA256()
-        while let bytes = try handle.read(upToCount: 64 * 1024), !bytes.isEmpty { hash.update(data: bytes) }
+        while true {
+            let more = try autoreleasepool {
+                guard let bytes = try handle.read(upToCount: 64 * 1024), !bytes.isEmpty else { return false }
+                hash.update(data: bytes)
+                return true
+            }
+            if !more { break }
+        }
         return hash.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     /// Reject truncation and unexpected framing before accepting custody or publishing a file.
     static func validatedFrameCount(_ url: URL) throws -> Int {
-        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-        guard size > 0, size <= Self.maxFrames * (Self.frameBytes + 4) else { throw WatchRecordingError.invalidAudio }
-        let data = try Data(contentsOf: url, options: .mappedIfSafe)
-        guard !data.isEmpty, data.count <= Self.maxFrames * (Self.frameBytes + 4),
-              data.count % (Self.frameBytes + 4) == 0 else { throw WatchRecordingError.invalidAudio }
-        for offset in stride(from: 0, to: data.count, by: Self.frameBytes + 4) {
-            guard Array(data[offset..<(offset + 4)]) == [0x40, 0x01, 0, 0] else { throw WatchRecordingError.invalidAudio }
+        try autoreleasepool {
+            let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+            guard size > 0, size <= Self.maxFrames * (Self.frameBytes + 4) else { throw WatchRecordingError.invalidAudio }
+            let data = try Data(contentsOf: url, options: .mappedIfSafe)
+            guard !data.isEmpty, data.count <= Self.maxFrames * (Self.frameBytes + 4),
+                  data.count % (Self.frameBytes + 4) == 0 else { throw WatchRecordingError.invalidAudio }
+            for offset in stride(from: 0, to: data.count, by: Self.frameBytes + 4) {
+                guard Array(data[offset..<(offset + 4)]) == [0x40, 0x01, 0, 0] else { throw WatchRecordingError.invalidAudio }
+            }
+            return data.count / (Self.frameBytes + 4)
         }
-        return data.count / (Self.frameBytes + 4)
     }
 
     private func open() throws {
@@ -219,7 +235,7 @@ final class WatchRecordingStore: @unchecked Sendable {
     private func recoverInterruptedSegments() throws {
         for part in try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
             where part.lastPathComponent.hasSuffix(".bin.part") {
-            do { try recoverInterruptedSegment(part) }
+            do { try autoreleasepool { try recoverInterruptedSegment(part) } }
             catch { recoveryFailures += 1 } // Preserve the original; other recordings must remain usable.
         }
     }
