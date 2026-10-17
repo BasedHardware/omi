@@ -397,6 +397,7 @@ async def get_google_calendar_events(
     time_max: Optional[datetime] = None,
     max_results: int = 10,
     search_query: Optional[str] = None,
+    newest_first: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     Fetch events from Google Calendar API.
@@ -407,6 +408,8 @@ async def get_google_calendar_events(
         time_max: Maximum time for events (defaults to 7 days from now)
         max_results: Maximum number of events to return
         search_query: Optional search query to filter events by title, description, attendees, etc.
+        newest_first: If True, collects matching events across the window and returns the
+            max_results matches nearest time_max. Defaults to False (earliest-first).
 
     Returns:
         List of calendar events
@@ -444,12 +447,18 @@ async def get_google_calendar_events(
         )
         events.extend(data.get('items', []))
 
-        if len(events) >= max_results:
+        # For normal earliest-first queries (default), return immediately once max_results reached
+        if not newest_first and len(events) >= max_results:
             return events[:max_results]
 
         page = data.get('nextPageToken')
-        if not page:
+        if not page or len(events) >= 2500:
             break
+
+    # When newest_first is requested (e.g. chat retrieval where the search window was padded backwards),
+    # return the max_results events nearest time_max.
+    if newest_first:
+        return events[-max_results:]
 
     return events[:max_results]
 
@@ -598,6 +607,7 @@ async def get_calendar_events_tool(
                     time_max=time_max,
                     max_results=max_results,
                     search_query=search_query,
+                    newest_first=True,
                 )
             elif days_range > 30 and time_max is not None and time_max <= datetime.now(timezone.utc):
                 # Most-recent-first only suits a range that has already ended. A range reaching into the
@@ -694,6 +704,7 @@ async def get_calendar_events_tool(
                             time_max=time_max,
                             max_results=max_results,
                             search_query=search_query,
+                            newest_first=bool(search_query),
                         )
                         order = "soonest first"  # the retry reads the whole range in start-time order
                     except Exception as retry_error:
