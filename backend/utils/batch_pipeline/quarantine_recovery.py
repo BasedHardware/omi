@@ -9,7 +9,12 @@ import wave
 from utils.stt_cap_dispatch import sync_allowed, funded_allowance
 from config.stt_cap_dispatch import enabled as cap_enabled
 from utils.observability.stt_cap_dispatch import record_audio
-from config.batch_pipeline import recovery_owners, recovery_enabled_for, recover_all_admitted
+from config.batch_pipeline import (
+    recovery_owners,
+    recovery_enabled_for,
+    recover_all_admitted,
+    empty_asr_disposition_enabled,
+)
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore, recovery_candidates, cancel_fenced_recovery
@@ -18,39 +23,52 @@ from utils.batch_pipeline.contracts import WorkItem, projection_speech_spans
 logger = logging.getLogger(__name__)
 
 
+def log_failure(failure):
+    # Called only outside a provider exception handler; never chain its context.
+    try:
+        logger.warning('event=batch_recovery_failure stage=%s reason=%s', failure['stage'], failure['reason'])
+    except Exception:
+        pass
+
+
 def transcribe(item, binding, audio):
     """Use the sync client directly, with no whole-upload coordinator or retries."""
     from diarizer.batch_pipeline import validate_words
     from utils.stt.pre_recorded import prerecorded_from_bytes
-    from utils.stt.vad import offline_pcm_speech_segments
 
-    with wave.open(io.BytesIO(audio), 'rb') as wav:
-        if (wav.getnchannels(), wav.getsampwidth(), wav.getframerate()) != (1, 2, 16000):
-            raise ValueError('canonical recovery audio required')
-        duration = wav.getnframes() / 16000
-        if abs(duration - item.duration_seconds) > 0.1:
-            raise ValueError('recovery audio duration mismatch')
-        pcm = wav.readframes(wav.getnframes())
-        if len(pcm) != wav.getnframes() * 2:
-            raise ValueError('truncated recovery audio')
+    from utils.batch_pipeline.recovery_disposition import inspect_audio, silence_payload, at_stage, RecoveryFailure
+
+    pcm, duration, spans = inspect_audio(item, audio)
+    if not spans:
+        if empty_asr_disposition_enabled():
+            return silence_payload(duration)
+        raise RecoveryFailure('strict_vad', 'no_speech')
     # Keep the authenticated intake manifest in the original artifact only;
     # third-party STT receives canonical audio without ancillary provenance.
     output = io.BytesIO()
     with wave.open(output, 'wb') as clean:
         clean.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
         clean.writeframes(pcm)
-    spans = [{'start': s['start'], 'end': s['end']} for s in offline_pcm_speech_segments(pcm)]
-    if not spans:
-        raise ValueError('quarantined recovery requires speech evidence')
     # attempts=2 disables all existing client retry branches. An uncertain call
     # must remain held, never be silently reissued by the recovery dispatcher.
-    response = prerecorded_from_bytes(output.getvalue(), language=binding.language, return_language=True, attempts=2)
-    if not isinstance(response, tuple):
-        raise ValueError('legacy recovery requires language response')
-    raw, language = response
-    words = validate_words([{**word, 'word': word['text']} for word in raw], duration)
-    if not words:
-        raise ValueError('empty recovery STT remains held')
+    response = at_stage(
+        'provider',
+        'provider_failed',
+        lambda: prerecorded_from_bytes(output.getvalue(), language=binding.language, return_language=True, attempts=2),
+    )
+
+    def validate_response():
+        if not isinstance(response, tuple) or len(response) != 2:
+            raise ValueError('response shape')
+        raw, language = response
+        if not isinstance(language, str) or not language:
+            raise ValueError('response language')
+        words = validate_words([{**word, 'word': word['text']} for word in raw], duration)
+        if not words:
+            raise RecoveryFailure('response_validation', 'empty_asr')
+        return words, language
+
+    words, language = at_stage('response_validation', 'invalid_response', validate_response)
     # Preserve legacy speaker labels directly in build_incoming. Exclusive batch
     # diarization turns cannot represent overlapping legacy utterances.
     payload = {
@@ -63,7 +81,7 @@ def transcribe(item, binding, audio):
         'language': language,
         'recovery_version': 1,
     }
-    projection_speech_spans(payload, duration)
+    at_stage('payload_validation', 'invalid_payload', lambda: projection_speech_spans(payload, duration))
     return payload
 
 
@@ -85,30 +103,70 @@ class QuarantineRecovery:
             if job['recovery_state'] == 'running':
                 uri = self.artifacts.find_recovery_result(item, token)
                 if uri:
-                    return 'reconciled' if self.protocol.settle(segment_id, token, self.clock(), uri) else 'held'
+                    from utils.batch_pipeline.recovery_disposition import result_outcome
+
+                    outcome = result_outcome(self.artifacts.load_result(item, uri))
+                    return (
+                        'reconciled'
+                        if self.protocol.settle(segment_id, token, self.clock(), uri, outcome=outcome)
+                        else 'held'
+                    )
                 # Bound the scan dwell without allowing takeover. A very late
                 # provider reply is rejected after this terminal transition.
                 if self.clock() - job['recovery']['started_at'] > 900:
-                    self.protocol.settle(segment_id, token, self.clock())
+                    failure = {'stage': 'provider', 'reason': 'abandoned_running'}
+                    if self.protocol.settle(segment_id, token, self.clock(), failure=failure):
+                        log_failure(failure)
                 return 'held'
-            if not sync_allowed(owner_id, item.duration_seconds):
+            disposition = empty_asr_disposition_enabled()
+            if not disposition and not sync_allowed(owner_id, item.duration_seconds):
                 return 'held'
             audio = self.artifacts.fetch_audio(item)
+            local_payload, inspection_failure = None, None
+            if disposition:
+                from utils.batch_pipeline.recovery_disposition import inspect_audio, silence_payload, RecoveryFailure
+
+                try:
+                    _, duration, spans = inspect_audio(item, audio)
+                    if not spans:
+                        local_payload = silence_payload(duration)
+                except RecoveryFailure as error:
+                    inspection_failure = error
+
             # Privacy and the intent token are rechecked after download and
             # immediately before issuing the sole application-level STT call.
-            if not sync_allowed(owner_id, item.duration_seconds):
+            if (
+                local_payload is None
+                and inspection_failure is None
+                and not sync_allowed(owner_id, item.duration_seconds)
+            ):
                 return 'held'
             if not recovery_enabled_for(owner_id) or not self.protocol.start(segment_id, token, self.clock()):
                 return 'held'
             from database.batch_pipeline_projection_protocol import normalized_binding
             from utils.observability.fallback import record_fallback
 
-            record_fallback(
-                component='stt_selection', from_mode='batch', to_mode='legacy_sync', reason='other', outcome='degraded'
-            )
+            if local_payload is None and inspection_failure is None:
+                record_fallback(
+                    component='stt_selection',
+                    from_mode='batch',
+                    to_mode='legacy_sync',
+                    reason='other',
+                    outcome='degraded',
+                )
+            payload = None
             try:
-                payload = self.stt(item, normalized_binding(job['projection_binding']), audio)
-                if cap_enabled():
+                if inspection_failure is not None:
+                    raise inspection_failure
+                payload = (
+                    local_payload
+                    if local_payload is not None
+                    else self.stt(item, normalized_binding(job['projection_binding']), audio)
+                )
+                from utils.batch_pipeline.recovery_disposition import result_outcome
+
+                result_outcome(payload)
+                if cap_enabled() and payload.get('outcome') != 'silence':
                     record_audio(
                         'sync',
                         'accepted',
@@ -116,14 +174,43 @@ class QuarantineRecovery:
                         item.duration_seconds,
                         funded_allowance(owner_id).reason == 'plan_allowance_exhausted',
                     )
-            except Exception:
-                self.protocol.settle(segment_id, token, self.clock())
+            except BatchPrivacyBlocked:
+                raise
+            except Exception as error:
+                from utils.batch_pipeline.recovery_disposition import RecoveryFailure
+
+                failure = (
+                    {'stage': error.stage, 'reason': error.reason}
+                    if isinstance(error, RecoveryFailure)
+                    else {'stage': 'provider', 'reason': 'operation_failed'}
+                )
+            else:
+                failure = None
+            # Log outside the exception handler: logger failures must not chain a private exception.
+            if failure:
+                if not self.protocol.settle(segment_id, token, self.clock(), failure=failure):
+                    return 'held'
+                log_failure(failure)
                 return 'failed_held'
+            if payload is None:
+                return 'held'
             # Storage/commit failures leave running intact: the deterministic
             # encrypted object can be reconciled without repeating STT.
             try:
+                from utils.batch_pipeline.recovery_disposition import result_outcome
+
+                outcome = result_outcome(payload)
                 uri = self.artifacts.persist_recovery_result(item, payload, token)
-                return 'recovered' if self.protocol.settle(segment_id, token, self.clock(), uri) else 'result_held'
+                changed = self.protocol.settle(segment_id, token, self.clock(), uri, outcome=outcome)
+                if changed and outcome == 'silence':
+                    record_fallback(
+                        component='stt_selection',
+                        from_mode='batch',
+                        to_mode='none',
+                        reason='other',
+                        outcome='recovered',
+                    )
+                return 'recovered' if changed else 'result_held'
             except BatchPrivacyBlocked:
                 raise
             except Exception:

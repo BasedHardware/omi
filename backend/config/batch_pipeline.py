@@ -107,3 +107,8 @@ def recover_all_admitted() -> bool:
 
 def recovery_enabled_for(owner_id: str) -> bool:
     return recover_all_admitted() or owner_id in recovery_owners()
+
+
+def empty_asr_disposition_enabled() -> bool:
+    """Dark strict-VAD disposition; accepted paid intents are never reset."""
+    return os.getenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'

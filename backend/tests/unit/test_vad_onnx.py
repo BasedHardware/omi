@@ -664,3 +664,10 @@ class TestRunVadWindow:
         assert feed_dict['input'].shape == (1, VAD_CONTEXT_SAMPLES + VAD_WINDOW_SAMPLES)
         assert feed_dict['state'].shape == _STATE_SHAPE
         assert feed_dict['sr'].dtype == np.int64
+
+
+@pytest.mark.parametrize('probability', [float('nan'), float('inf'), -0.1, 1.1])
+def test_strict_pcm_vad_invalid_probability_is_failure_not_silence(monkeypatch, probability):
+    monkeypatch.setattr(vad, 'run_vad_window', lambda audio, state, context: (probability, state, context))
+    with pytest.raises(VADProcessingError):
+        vad.offline_pcm_speech_segments(b'\0' * 1024)

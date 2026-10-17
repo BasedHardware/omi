@@ -275,3 +275,57 @@ any held failures. Leave recovery on for that owner for future quarantines after
 verification. Roll back to off to stop new dispatches; accepted normal
 projection still drains. Failed/ambiguous intents require a separately reviewed
 operator decision, never a blind reset to prepared.
+
+### Dark empty-ASR disposition
+
+`BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED=false` is the default on all roles.
+Enable on the GPU worker and the CPU recovery host together after releasing the
+same reviewed source. With the flag on, exhausted padded `empty_asr` and
+`no_owned_words` both use the existing per-unit recovery handoff. The worker's
+pyannote speech prediction and words outside a window core do not authorize
+silence. CPU recovery checks the canonical unit with strict local Silero VAD:
+
+- Affirmative no-speech emits the ordinary encrypted silence result. There is no
+  provider dispatch or paid allowance requirement. Ordinary ordered merge,
+  assignment receipts, all-sibling accounting and client publication still own
+  completion; no completion fields are fabricated.
+- Speech uses the existing legacy prerecorded client once, with client retries
+  disabled. Failed/empty/invalid output remains held. The existing intent token,
+  privacy checks, run owner and ambiguous-call fence remain authoritative.
+- Decode/VAD failures remain failures. Nonfinite/out-of-range model probabilities
+  are rejected. No empty ASR or out-of-core word clocks alone become silence.
+
+Recovery failures persist `recovery.failure={stage,reason}`. Stages are
+`audio_validation|strict_vad|provider|response_validation|payload_validation`;
+reasons are closed codes defined in `recovery_disposition.py`. The content-free
+`event=batch_recovery_failure` carries those two codes only. Original exception
+bodies, words, identifiers, artifact references and tokens are never emitted.
+A running intent abandoned after 900 seconds records `provider/abandoned_running`.
+
+For historical `failed_held`, use
+`scripts/batch_pipeline_held_disposition.py --stage prod --owner-env DAVID_UID
+--quarantined-before <UTC-cutoff> --expect-count <count>` in an existing secure
+runtime with `ENCRYPTION_SECRET` and `BUCKET_BATCH_PIPELINE`. Dry-run requires the
+`ro-prod` tier and uses read-only transactions/GCS reads; audio is decrypted and
+evaluated only in memory. It prints aggregate silent/speech counts, fraction and
+a digest binding owner, cohort, immutable audio generation/run/privacy metadata
+and classification. No secret retrieval, STT call, user API call or temporary
+media file is involved. Missing secure material fails before cloud data reads.
+
+Apply requires `prod-operator`, the flag on, the same recovery owner allowlist,
+`--approve-plan-sha256 <reviewed-digest> --apply`. The default fixed prefix is one
+silent unit; repeated commands target the same prefix. `--apply-limit <count>`
+expands that prefix only after explicit approval. All units are checked again
+before apply, and each silent unit is reclassified immediately before its CAS.
+The operator creates a separate no-provider `silence_disposition` intent; it
+never resets or modifies the original spent paid-STT intent. Its create-only
+artifact token reconciles lost upload replies. A token/privacy/run-fenced CAS
+restores `result_ready/merge_pending` with a silence result; the existing serving
+sweep then drains it. Speech units stay held: their permitted fallback has
+already been spent, so replaying paid STT would violate the no-double-call rule.
+
+Rollback disables new dispositions on both hosts. Already persisted silence
+artifacts retain their silence outcome during reconciliation even after flag
+rollback. Keep ordinary serving/merge/projection draining; never clear paid
+intents, claims or receipts. Stop an operator command to stop further units;
+already committed completion is not reversed.
