@@ -132,7 +132,7 @@
     ],
     "updated": "2026-06-20T02:27:44Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {

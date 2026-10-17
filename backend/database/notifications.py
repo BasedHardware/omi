@@ -13,7 +13,7 @@ once a time_zone or preference write has run (and after the one-time backfill).
 Those two fields are the write-time form of the Python defaults True / 22.
 """
 
-from zoneinfo import ZoneInfo
+from models.time_zone_admission import is_schedulable_time_zone
 
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
@@ -116,24 +116,20 @@ def set_user_time_zone(uid: str, time_zone: str, *, firestore_client: Any = None
 
 
 def resolve_user_timezone(uid: str) -> str:
-    """Return a validated IANA timezone for ``uid``, or ``UTC`` when missing/invalid."""
+    """Return a schedulable IANA timezone for ``uid``, or ``UTC`` when missing/unusable."""
     tz = get_user_time_zone(uid)
     if tz is None:
         return "UTC"
-    try:
-        ZoneInfo(tz)
+    if is_schedulable_time_zone(tz):
         return tz
-    except Exception:
-        return "UTC"
+    return "UTC"
 
 
 def sync_user_time_zone_from_client(uid: str, request_tz: Optional[str]) -> str:
     """Persist a client-reported IANA timezone when it changes and return the resolved zone."""
     if not request_tz:
         return resolve_user_timezone(uid)
-    try:
-        ZoneInfo(request_tz)
-    except Exception:
+    if not is_schedulable_time_zone(request_tz):
         logger.warning("sync_user_time_zone_from_client - invalid request_tz, ignoring")
         return resolve_user_timezone(uid)
     stored = get_user_time_zone(uid)

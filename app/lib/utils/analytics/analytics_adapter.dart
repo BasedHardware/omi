@@ -60,4 +60,11 @@ abstract interface class AnalyticsIdentityAdapter {
 abstract interface class AnalyticsFeatureFlagAdapter {
   Future<bool> isFeatureEnabled(String key);
   Future<Object?> getFeatureFlagPayload(String key);
+
+  /// The multivariate arm for [key], or null when the flag is off, boolean or unresolved.
+  Future<String?> getFeatureFlagVariant(String key);
+
+  /// Re-fetches flags for the current identity. True only when fresh values for that identity are now
+  /// cached; false on failure, timeout, or an identity change while the request was in flight.
+  Future<bool> reloadFeatureFlags();
 }

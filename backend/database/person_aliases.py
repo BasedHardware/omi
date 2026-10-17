@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 from database import chat_edits
-from typing import Any
+from typing import Any, Optional
 
 from google.api_core.exceptions import NotFound
 from google.cloud.firestore_v1 import FieldFilter, transactional
@@ -49,7 +49,12 @@ def update_person_name_transaction(
     prior_name = normalized_person_alias(data.get('name'))
     if prior_name is not None and prior_name.casefold() not in seen:
         aliases.append(prior_name)
-    patch = {'name': normalized_name, 'aliases': aliases[-24:], 'updated_at': datetime.now(timezone.utc)}
+    patch = {
+        'name': normalized_name,
+        'aliases': aliases[-24:],
+        'updated_at': datetime.now(timezone.utc),
+        'is_user_created': True,
+    }
     transaction.update(person_ref, patch)
     if expected_chat_state is not None:
         expected_chat_state['after'] = chat_edits.encode(patch)
@@ -103,10 +108,14 @@ def dismiss_person_soft(db_client: Any, uid: str, person_id: str) -> bool:
         return False
 
 
-def list_people(db_client: Any, uid: str, *, include_dismissed: bool = False) -> list[dict[str, Any]]:
+def list_people(
+    db_client: Any, uid: str, *, include_dismissed: bool = False, limit: Optional[int] = None
+) -> list[dict[str, Any]]:
     """List owner-scoped people, hiding soft-dismissed records by default."""
 
     people_ref = db_client.collection('users').document(uid).collection('people')
+    if limit is not None:
+        people_ref = people_ref.limit(limit)
     result = []
     for person in people_ref.stream():
         data = person.to_dict()

@@ -1016,7 +1016,7 @@ class TestRealCheckRateLimit(unittest.TestCase):
         self.assertTrue(allowed)
         self.assertEqual((remaining, retry), (7, 3600))
         self.real_module._RATE_LIMIT_RESERVE_LUA.assert_called_once_with(
-            keys=["rl:desktop_reasoning:uid1"], args=[3600, 10]
+            keys=["rl:desktop_reasoning:uid1"], args=[3600, 10], client=None
         )
 
         self.real_module._RATE_LIMIT_RESERVE_LUA.return_value = [0, 10, 1200]

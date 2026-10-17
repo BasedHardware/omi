@@ -43,6 +43,15 @@ managed_gke_exclusions:
   - kubeControllerManager
 
 scrape_jobs:
+  # Opt-in batch release. No target exists until installed; HPA/flag gates
+  # require a fresh per-pod queue sample rather than treating absence as zero.
+  - name: diarizer-batch-metrics
+    mechanism: additionalScrapeConfigs
+    auth: null
+    namespace: prod-omi-backend
+    coverage_alert: null
+    coverage_status: declared
+
   - name: backend-listen-metrics
     mechanism: additionalScrapeConfigs
     auth: metrics-scrape-token

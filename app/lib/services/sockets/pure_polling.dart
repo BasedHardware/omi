@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:omi/models/stt_result.dart';
+import 'package:omi/services/sockets/local_stt_failure.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/utils/audio/audio_transcoder.dart';
@@ -69,6 +70,8 @@ class PurePollingSocket implements IPureSocket {
 
   final List<Uint8List> _audioFrames = [];
   bool _isProcessing = false;
+  LocalSttFailure? localFailure;
+  DateTime? _nextRecoveryProbe;
   int _connectionGeneration = 0;
   double _audioOffsetSeconds = 0;
 
@@ -140,6 +143,23 @@ class PurePollingSocket implements IPureSocket {
       return;
     }
 
+    if (localFailure != null) {
+      if (!localFailure!.canProbeRecovery || sttProvider is! RecoverableLocalSttProvider) return;
+      if (_nextRecoveryProbe != null && DateTime.now().isBefore(_nextRecoveryProbe!)) return;
+      _isProcessing = true;
+      final recoveryGeneration = _connectionGeneration;
+      try {
+        _nextRecoveryProbe = DateTime.now().add(const Duration(seconds: 30));
+        if (!await (sttProvider as RecoverableLocalSttProvider).isReadyToRetry()) return;
+        if (recoveryGeneration != _connectionGeneration || _status != PurePollingStatus.connected) return;
+        localFailure = null;
+        onConnected();
+      } catch (_) {
+        return;
+      } finally {
+        _isProcessing = false;
+      }
+    }
     _isProcessing = true;
     final generation = _connectionGeneration;
 
@@ -176,9 +196,10 @@ class PurePollingSocket implements IPureSocket {
       if (generation != _connectionGeneration) return;
       _bufferingSince = null;
       _consecutiveFailures = 0;
+      if (result?.audioEndSeconds != null) _audioOffsetSeconds = result!.audioEndSeconds!;
       if (result != null && result.isNotEmpty) {
         if (result.segments.isNotEmpty) {
-          _audioOffsetSeconds = result.segments.last.end;
+          _audioOffsetSeconds = result.audioEndSeconds ?? result.segments.last.end;
         }
         final segmentsJson =
             result.segments.where((s) => s.text.trim().isNotEmpty).map((s) => s.toTranscriptSegmentJson()).toList();
@@ -193,6 +214,11 @@ class PurePollingSocket implements IPureSocket {
       _consecutiveFailures++;
       _bufferingSince ??= DateTime.now();
       _requeueFrames(frames);
+      if (e is LocalSttFailure) {
+        localFailure = e;
+        _nextRecoveryProbe = DateTime.now().add(const Duration(seconds: 30));
+        onError(e, trace); // Local setup is actionable, not a disconnect.
+      }
       // Do NOT call onError()/propagate this as a fatal
       // socket error here. sttProvider.transcribe() already retries
       // transient failures internally; a failure this far up means the STT
@@ -217,7 +243,9 @@ class PurePollingSocket implements IPureSocket {
 
     var droppedBytes = 0;
     while (_totalBufferBytes > config.maxBufferBytes && _audioFrames.isNotEmpty) {
-      droppedBytes += _audioFrames.removeAt(0).length;
+      final dropped = _audioFrames.removeAt(0);
+      droppedBytes += dropped.length;
+      _audioOffsetSeconds += (config.transcoder ?? PassThroughTranscoder()).sourceSeconds(dropped);
     }
     if (droppedBytes > 0) {
       final serviceId = config.serviceId ?? 'Polling';
@@ -288,11 +316,19 @@ class PurePollingSocket implements IPureSocket {
   void send(dynamic message) {
     if (message is Uint8List) {
       _audioFrames.add(message);
+      if (localFailure != null) _requeueFrames([]);
     } else if (message is List<int>) {
       _audioFrames.add(Uint8List.fromList(message));
+      if (localFailure != null) _requeueFrames([]);
     } else {
       Logger.debug("[Polling] Unsupported message type: ${message.runtimeType}");
     }
+  }
+
+  Future<void> retryLocalTranscription() async {
+    _nextRecoveryProbe = null;
+    if (localFailure?.canProbeRecovery == false) localFailure = null;
+    await _flushBuffer();
   }
 
   Future<void> flushNow() async {

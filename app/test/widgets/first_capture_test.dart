@@ -234,7 +234,7 @@ void main() {
     expect(props['has_omi_device'], isTrue);
   });
 
-  testWidgets('pair failure stays on Connect with How to Pair; explicit Back returns to choices', (tester) async {
+  testWidgets('pair failure stays on Connect with How to pair; explicit Back returns to choices', (tester) async {
     final pairing = _RenderPairingProvider();
     var completed = 0;
     await tester.pumpWidget(MultiProvider(providers: [
@@ -245,14 +245,15 @@ void main() {
     await tester.tap(find.byKey(const Key('first_capture_omi')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
+    pairing.pairingFailureReason = DeviceConnectFailureShownFailureReason.unknown;
     pairing.notifyError('DEVICE_CONNECT_FAILED');
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.byType(ConnectDevicePage), findsOneWidget);
     expect(find.text('An error occurred. Please try again.'), findsOneWidget);
-    expect(find.text('How to Pair'), findsOneWidget);
+    expect(find.text('How to pair'), findsOneWidget);
     expect(completed, 0);
-    await tester.tap(find.text('How to Pair'));
+    await tester.tap(find.text('How to pair'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.byType(ConnectionGuideSheet), findsOneWidget);
@@ -628,7 +629,7 @@ void main() {
             // MessageListener publishes feedback after its notification frame.
             await tester.pump(const Duration(milliseconds: 350));
             expect(find.byType(ConnectDevicePage), findsOneWidget);
-            expect(find.text('How to Pair'), findsOneWidget);
+            expect(find.text('How to pair'), findsOneWidget);
           } else {
             expect(find.byType(OmiAlertDialog), findsOneWidget, reason: name);
             expect(
@@ -715,6 +716,7 @@ void main() {
             ChangeNotifierProvider<DeviceProvider>(create: (_) => AuditDeviceProvider()),
             ChangeNotifierProvider<HomeProvider>(create: (_) => _RenderHomeProvider()),
           ], child: ConnectDevicePage(onConnected: () {})), interact: () async {
+        pairing.pairingFailureReason = DeviceConnectFailureShownFailureReason.unknown;
         pairing.notifyError('DEVICE_CONNECT_FAILED');
       });
       await tester.pumpWidget(const SizedBox());

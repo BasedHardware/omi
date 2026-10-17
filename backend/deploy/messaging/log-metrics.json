@@ -1,0 +1,88 @@
+[
+  {
+    "name": "omi_messaging_worker_failures",
+    "description": "Content-free messaging log count: worker failures by reason.",
+    "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend\" AND textPayload:\"Messaging job failed\"",
+    "disabled": false,
+    "metricDescriptor": {
+      "metricKind": "DELTA",
+      "valueType": "INT64",
+      "unit": "1",
+      "labels": [
+        {
+          "key": "reason",
+          "valueType": "STRING",
+          "description": "Bounded operational failure reason; never customer identifiers."
+        }
+      ]
+    },
+    "labelExtractors": {
+      "reason": "REGEXP_EXTRACT(textPayload, \"reason=([a-z_]+)\")"
+    }
+  },
+  {
+    "name": "omi_messaging_webhook_5xx",
+    "description": "Content-free messaging log count: webhook 5xx.",
+    "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend\" AND httpRequest.requestUrl:\"/v1/messaging/webhooks/\" AND httpRequest.status>=500",
+    "disabled": false,
+    "metricDescriptor": {
+      "metricKind": "DELTA",
+      "valueType": "INT64",
+      "unit": "1"
+    }
+  },
+  {
+    "name": "omi_messaging_outbound_failures",
+    "description": "Content-free messaging log count: outbound delivery failures.",
+    "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend\" AND (textPayload:\"Messaging failure reply failed\" OR textPayload:\"reason=delivery_uncertain\" OR (textPayload:\"Messaging job failed\" AND textPayload:\"error_type=ProviderError\"))",
+    "disabled": false,
+    "metricDescriptor": {
+      "metricKind": "DELTA",
+      "valueType": "INT64",
+      "unit": "1"
+    }
+  },
+  {
+    "name": "omi_messaging_maintenance_failures",
+    "description": "Content-free messaging log count: maintenance failure by reason.",
+    "filter": "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"messaging-maintenance-job\" AND textPayload:\"Messaging maintenance outcome=failed\"",
+    "disabled": false,
+    "metricDescriptor": {
+      "metricKind": "DELTA",
+      "valueType": "INT64",
+      "unit": "1",
+      "labels": [
+        {
+          "key": "reason",
+          "valueType": "STRING",
+          "description": "Bounded operational failure reason; never customer identifiers."
+        }
+      ]
+    },
+    "labelExtractors": {
+      "reason": "REGEXP_EXTRACT(textPayload, \"reason=([a-z_]+)\")"
+    }
+  },
+  {
+    "name": "omi_messaging_stale_heads",
+    "description": "Content-free messaging log count: stale queue head.",
+    "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend\" AND textPayload:\"Messaging queue\" AND (textPayload:\"reason=stale_pending\" OR textPayload:\"reason=stale_running\")",
+    "disabled": false,
+    "metricDescriptor": {
+      "metricKind": "DELTA",
+      "valueType": "INT64",
+      "unit": "1"
+    }
+  },
+  {
+    "name": "omi_messaging_recovery_unavailable",
+    "description": "Content-free messaging log count: Pending recovery failing.",
+    "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend\" AND textPayload:\"Messaging recovery paused\"",
+    "disabled": false,
+    "metricDescriptor": {
+      "metricKind": "DELTA",
+      "valueType": "INT64",
+      "unit": "1"
+    }
+  }
+]

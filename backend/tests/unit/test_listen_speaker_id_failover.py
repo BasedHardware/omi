@@ -809,6 +809,16 @@ async def test_introduction_recognition_runs_with_capture_windows_present(monkey
 @pytest.mark.parametrize('v2', [False, True])
 async def test_diarization_completed_emitted_for_both_persistence_modes(monkeypatch, telemetry, v2):
     """P2-13 regression: the v2 batch path records Diarization Completed too."""
+    import routers.listen.transcripts as transcripts_module
+
+    source_events = []
+    emit_product_event = transcripts_module.emit_product_event
+
+    def capture_source_event(**event):
+        source_events.append(event)
+        return emit_product_event(**event)
+
+    monkeypatch.setattr(transcripts_module, 'emit_product_event', capture_source_event)
     stack = FailoverStack(monkeypatch, v2=v2)
     loop_task = asyncio.create_task(stack.processor.process_loop())
     stack.tasks.append(loop_task)
@@ -830,7 +840,9 @@ async def test_diarization_completed_emitted_for_both_persistence_modes(monkeypa
 
     events = [e for e in telemetry.events if e.get('event') == 'Diarization Completed']
     assert events, 'Diarization Completed must be emitted from the v2 batch path as from the legacy loop'
-    assert events[-1]['properties']['conversation_id'] == CONV
+    source_events = [e for e in source_events if e.get('event') == 'Diarization Completed']
+    assert source_events[-1]['properties']['conversation_id'] == CONV
+    assert not {'recording_id', 'conversation_id'} & events[-1]['properties'].keys()
     assert events[-1]['properties']['speaker_count'] >= 1
 
 

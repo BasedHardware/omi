@@ -15,7 +15,7 @@ import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/sync/sync_card_progress_line.dart';
+import 'package:omi/utils/sync/offline_sync_amounts.dart';
 import 'package:omi/utils/sync_confirmation.dart';
 import 'widgets/sync_error_card.dart';
 import 'widgets/offline_sync_storage_sheet.dart';
@@ -63,7 +63,7 @@ class WalListItem extends StatelessWidget {
     if (hasError) return (Colors.redAccent, l.failedStatus);
     switch (state) {
       case WalSyncDisplayState.synced:
-        return (Colors.grey.shade500, l.syncStatusConversationCreated);
+        return (Colors.grey.shade500, l.statusProcessed);
       case WalSyncDisplayState.uploaded:
         return (Colors.grey.shade400, l.syncStatusUploaded);
       case WalSyncDisplayState.retrying:
@@ -249,6 +249,7 @@ class SyncPage extends StatefulWidget {
 }
 
 class _SyncPageState extends State<SyncPage> {
+  final SyncRunTracker _runTracker = SyncRunTracker();
   @override
   void initState() {
     super.initState();
@@ -478,6 +479,8 @@ class _SyncPageState extends State<SyncPage> {
     final isActive = syncProvider.isSyncing;
     final uploaded = syncProvider.uploadedWals.length;
     final readyToSync = syncProvider.missingWals.length;
+    final step = _runTracker.update(s, syncProvider.allWals);
+    String dur(int seconds) => OmiDuration.compact(seconds, l);
     final bool showSpinner = (isActive || uploaded > 0) && !syncProvider.isRateLimited;
 
     String title;
@@ -491,12 +494,12 @@ class _SyncPageState extends State<SyncPage> {
       switch (s.phase) {
         case SyncPhase.downloadingFromDevice:
           title = l.syncCardDownloadingTitle;
-          subtitle = _progressLine(s, speedStr);
+          subtitle = _progressLine(step, speedStr);
           action = statusActionPill(l.cancel, Colors.redAccent, () => _showCancelSyncDialog(context, syncProvider));
           break;
         case SyncPhase.uploadingToCloud:
           title = l.syncCardUploadingTitle;
-          subtitle = _progressLine(s, null);
+          subtitle = _progressLine(step, null);
           action = statusActionPill(l.cancel, Colors.redAccent, () => _showCancelSyncDialog(context, syncProvider));
           break;
         case SyncPhase.processingOnServer:
@@ -509,7 +512,7 @@ class _SyncPageState extends State<SyncPage> {
           break;
         case SyncPhase.idle:
           title = l.syncCardUploadingTitle;
-          subtitle = _progressLine(s, speedStr);
+          subtitle = _progressLine(step, speedStr);
           if (syncProvider.isSdCardSyncing) {
             action = statusActionPill(l.cancel, Colors.redAccent, () => _showCancelSyncDialog(context, syncProvider));
           }
@@ -519,16 +522,18 @@ class _SyncPageState extends State<SyncPage> {
       title = syncCooldownTitle(syncProvider.rateLimitReason, l);
       titleColor = Colors.orangeAccent;
     } else if (uploaded > 0) {
-      title = l.syncCardProcessing;
-      final counts = syncProvider.offlineServerProcessingCounts;
-      subtitle = SyncCardProgressLine.serverProcessingSubtitle(
-            processed: counts.processed,
-            total: counts.total,
-            counterLabel: (p, t) => l.processingProgress(p, t),
-          ) ??
-          l.syncProcessingBackgroundHint;
+      // Audio length, never server jobs: "Processing 0/5914" was one job per 75 s file.
+      final job = syncProvider.offlineServerProcessingSeconds;
+      title = job.totalSeconds > 0 ? l.syncCardTranscribingAmount(dur(job.totalSeconds)) : l.syncCardProcessing;
+      subtitle = job.tracked && job.totalSeconds > 0
+          ? l.syncCardTranscribedOf(dur(job.doneSeconds), dur(job.totalSeconds))
+          : l.syncProcessingBackgroundHint;
+    } else if (syncProvider.needsAttentionWalsCount > 0) {
+      title = l.syncCardNeedsAttention(syncProvider.needsAttentionWalsCount);
+      titleColor = Colors.orangeAccent;
     } else if (readyToSync > 0) {
-      title = l.syncCardReadyCount(readyToSync);
+      final seconds = syncProvider.missingWalsInSeconds;
+      title = seconds > 0 ? l.syncCardReadyAmount(dur(seconds)) : l.syncCardReadyCount(readyToSync);
       action = statusActionPill(l.sync, OmiColors.accent, () {
         if (context.read<ConnectivityProvider>().isConnected) {
           _handleSyncWals(context, syncProvider);
@@ -574,14 +579,18 @@ class _SyncPageState extends State<SyncPage> {
     );
   }
 
-  String? _progressLine(SyncState s, String? speedStr) {
-    return SyncCardProgressLine.subtitle(
-      phase: s.phase,
-      currentFile: s.currentFile,
-      totalFiles: s.totalFiles,
-      counterLabel: (processed, total) => context.l10n.syncCardProgressOf(processed, total),
-      speedSuffix: speedStr,
-    );
+  /// Audio moved so far in this step, plus [speedStr] while the device drains.
+  String? _progressLine(SyncStepProgress? step, String? speedStr) {
+    final l = context.l10n;
+    String dur(int seconds) => OmiDuration.compact(seconds, l);
+    String? amount;
+    if (step != null && step.totalSeconds > 0) {
+      amount = step.step == SyncStep.download
+          ? l.syncStepDownloadingAmount(dur(step.doneSeconds), dur(step.totalSeconds))
+          : l.syncStepUploadingAmount(dur(step.doneSeconds), dur(step.totalSeconds));
+    }
+    final parts = [if (amount != null) amount, if (speedStr != null) speedStr];
+    return parts.isEmpty ? null : parts.join(' \u00b7 ');
   }
 
   Widget _buildSyncErrorCard(SyncProvider syncProvider) {
@@ -635,9 +644,10 @@ class _SyncPageState extends State<SyncPage> {
   Widget _buildEmptyFilterState(BuildContext context, WalStatusFilter filter) {
     final isPending = filter == WalStatusFilter.pending;
     final isCorrupted = filter == WalStatusFilter.corrupted;
+    final needsAttention = isPending && context.read<SyncProvider>().needsAttentionWalsCount > 0;
     return OmiEmptyState(
       glyph: FaIcon(
-        isPending
+        isPending && !needsAttention
             ? FontAwesomeIcons.circleCheck
             : isCorrupted
                 ? FontAwesomeIcons.triangleExclamation
@@ -648,7 +658,7 @@ class _SyncPageState extends State<SyncPage> {
           : isCorrupted
               ? context.l10n.syncStatusFileUnavailable
               : context.l10n.noProcessedRecordings,
-      message: isPending ? context.l10n.allCaughtUp : null,
+      message: isPending && !needsAttention ? context.l10n.allCaughtUp : null,
     );
   }
 

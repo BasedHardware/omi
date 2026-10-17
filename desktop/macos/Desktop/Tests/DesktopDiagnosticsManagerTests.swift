@@ -14,6 +14,7 @@ import XCTest
 
     override func tearDown() {
       DesktopDiagnosticsManager.shared.resetForTests()
+      ClientTelemetryFlags.resetForTests()
       super.tearDown()
     }
 

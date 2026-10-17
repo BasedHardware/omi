@@ -2,7 +2,7 @@
 
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from models.dream_refs import base_ref
+from models.agent_refs import base_ref
 
 
 class Strict(BaseModel):
@@ -70,3 +70,55 @@ class Term(Strict):
     spelling: str = Field(min_length=1, max_length=50)
     aliases: list[str] = Field(default_factory=list, max_length=5)
     evidence: list[str] = Field(min_length=1, max_length=10)
+
+
+QUESTION_VALUE_DESCRIPTION = (
+    "how much the answer changes what future agents should believe about this person's people, projects or vocabulary; "
+    'trivial acronym casing is 1'
+)
+
+
+MEMORY_HYGIENE_KINDS = frozenset({'merge_memories', 'retire_memory', 'supersede_memory'})
+
+
+class MemoryHygieneEdit(Strict):
+    kind: Literal['retire_memory', 'supersede_memory'] = Field(
+        description='Retire garbage (not merely low-importance facts), facts misattributed from another speaker, or facts contradicted by evidence. Supersede an old fact only with a newer time-scoped fact about the same attribute; age alone is not staleness.'
+    )
+    target: str = Field(description=Edit.model_fields['target'].description)
+    before: str = Field(default='', description=Edit.model_fields['before'].description)
+    other: str = Field(
+        default='',
+        description='For supersede_memory, the supplied newer memory ref. Otherwise empty. Choose exactly one of other or after.',
+    )
+    after: str = Field(
+        default='',
+        max_length=2000,
+        description='For supersede_memory without other, the newer time-scoped fact text supported by conversations. Empty for retire_memory.',
+    )
+    effective_from: str = Field(
+        default='',
+        max_length=40,
+        description='For supersede_memory: optional timezone-aware ISO 8601 time when the cited evidence says the new fact became true. Never invent a time; omit to use apply time.',
+    )
+    reason: str = Field(
+        min_length=1,
+        max_length=1000,
+        description='Required explanation of garbage, another speaker attribution, contradiction, or the newer fact about the same attribute.',
+    )
+    evidence: list[str] = Field(
+        min_length=1,
+        max_length=10,
+        description='Supplied conversation refs or other memory refs supporting retirement or replacement. The target alone is not evidence.',
+    )
+
+    @model_validator(mode='after')
+    def hygiene_semantics(self):
+        if self.kind == 'retire_memory' and (self.other or self.after):
+            raise ValueError('Retirement changes status only')
+        self.after = self.after.strip()
+        if self.kind == 'supersede_memory' and bool(self.other) == bool(self.after):
+            raise ValueError('Supersede requires exactly one of other or after')
+        if not self.reason.strip():
+            raise ValueError('Memory hygiene requires a reason')
+        return self

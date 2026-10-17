@@ -128,6 +128,7 @@ def auto_mergeable(row: dict) -> bool:
         or row.get('starred')
         or row.get('folder_user_set')
         or row.get('sync_relevance_user_kept')
+        or row.get('has_transcript_corrections')
         or row.get('visibility', 'private') not in (None, 'private')
     )
 

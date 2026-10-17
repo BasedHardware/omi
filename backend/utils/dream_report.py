@@ -8,8 +8,8 @@ from config.dream_agent import Caps, eligible, mode, self_report_enabled
 from database import dream_store, review_store
 from database._client import get_firestore_client
 from models.dream_report import DreamRun, DreamRunsResponse
-from models.dream_refs import base_ref
-from utils import dream_reads
+from models.agent_refs import base_ref
+from utils.agent_capabilities import reads as dream_reads
 
 
 def require_owner(uid):
@@ -65,9 +65,14 @@ def project_run(uid, run_id, doc):
                 raise
             records[ref] = None
     edit_outcomes = [row for row in outcomes if 'key' in row]
+    by_key = {row['key']: row['status'] for row in edit_outcomes}
     edits = []
     for index, edit in enumerate(proposed.get('edits', [])):
-        outcome = edit_outcomes[index]['status'] if index < len(edit_outcomes) else 'invalid_evidence'
+        outcome = (
+            by_key.get(edit['key'], 'invalid_evidence')
+            if 'key' in edit
+            else edit_outcomes[index]['status'] if index < len(edit_outcomes) else 'invalid_evidence'
+        )
         outcome = {'suggested': 'suggest_only', 'already_suggested': 'suggest_only', 'suggestion_cap': 'edit_cap'}.get(
             outcome, outcome
         )

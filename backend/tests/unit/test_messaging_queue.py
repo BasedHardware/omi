@@ -58,7 +58,7 @@ def test_claim_settles_legacy_running_and_retires_pending_without_replay(queue, 
     )
     assert store.claim_next(path, now=now) == (path, {'text': path})
     patches = [call.args[1] for call in tx.update.call_args_list]
-    assert patches[0]['status'] == 'done' and patches[0]['payload'] is messaging.firestore.DELETE_FIELD
+    assert patches[0]['status'] == 'expired' and 'payload' not in patches[0]
     assert patches[1]['retired_reason'] == 'stale_running' and 'status' not in patches[1]
     assert patches[2] == {'status': 'running', 'started_at': now}
     assert 'reason=stale_running' in caplog.text

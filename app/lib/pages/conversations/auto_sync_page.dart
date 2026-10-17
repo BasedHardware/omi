@@ -10,6 +10,8 @@ import 'package:omi/pages/conversations/private_cloud_sync_page.dart';
 import 'package:omi/pages/conversations/recording_blocks.dart';
 import 'package:omi/pages/conversations/widgets/device_download_meter.dart';
 import 'package:omi/pages/conversations/widgets/device_storage_card.dart';
+import 'package:omi/pages/conversations/widgets/sync_details_sheet.dart';
+import 'package:omi/pages/conversations/widgets/sync_step_bar.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
@@ -17,7 +19,7 @@ import 'package:omi/services/wals.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/sync/sync_card_progress_line.dart';
+import 'package:omi/utils/sync/offline_sync_amounts.dart';
 import 'package:omi/utils/sync_confirmation.dart';
 import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
@@ -66,12 +68,12 @@ class AutoSyncPage extends StatefulWidget {
 }
 
 class _AutoSyncPageState extends State<AutoSyncPage> {
-  // Default to Pending instead of All. With thousands of synced recordings,
-  // landing on All would force the whole list to mount up-front; landing on
-  // Pending shows the small actionable set (or a calm empty state when the
-  // user is up to date). All is still one tap away — and the list below is
-  // sliver-lazy, so visiting it is safe even with thousands of items.
+  // Two tabs: what still has to sync (including recordings that need the
+  // user), and what already has. Landing on To sync shows the small actionable
+  // set; the list below is sliver-lazy, so Synced is safe with thousands.
   WalDisplayFilter _filter = WalDisplayFilter.pending;
+
+  final SyncRunTracker _runTracker = SyncRunTracker();
 
   @override
   void initState() {
@@ -96,32 +98,24 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       builder: (context, syncProvider, userProvider, deviceProvider, _) {
         final syncState = syncProvider.syncState;
         final hasAnyRecording = syncProvider.allWals.isNotEmpty;
-        // Compute the filtered list once per build and pass it down — the
-        // SliverList.builder uses it via index, so calling it again inside
+        // Compute the lists once per build and pass them down — the
+        // SliverList.builder uses them via index, so filtering again inside
         // itemBuilder would re-sort+re-filter on every visible row.
-        final filteredWals = hasAnyRecording ? syncProvider.walsForDisplayFilter(_filter) : const <Wal>[];
+        final toSync = hasAnyRecording
+            ? syncProvider.displaySortedWals.where((w) => w.syncDisplayState != WalSyncDisplayState.synced).toList()
+            : const <Wal>[];
+        final filteredWals = !hasAnyRecording
+            ? const <Wal>[]
+            : _filter == WalDisplayFilter.synced
+                ? syncProvider.walsForDisplayFilter(WalDisplayFilter.synced)
+                : toSync;
 
         return Scaffold(
           // One name for the device-storage sync screen everywhere: "Offline Sync", as Settings calls it.
+          // No app bar actions: "How syncing works" lives in Sync details, Manage Storage in the Storage group.
           appBar: AppBar(
             leading: const OmiBackButton(),
             title: Text(context.l10n.offlineSync),
-            actions: [
-              OmiIconButton(
-                icon: const FaIcon(FontAwesomeIcons.circleInfo, size: 18),
-                label: context.l10n.howSyncingWorks,
-                color: OmiColors.textSecondary,
-                onPressed: () => _showInfoSheet(context),
-              ),
-              if (syncProvider.clearableWalsCount > 0)
-                OmiIconButton(
-                  icon: const FaIcon(FontAwesomeIcons.ellipsisVertical, size: 18),
-                  label: context.l10n.manageStorage,
-                  color: OmiColors.textSecondary,
-                  onPressed: () => _showManageStorageSheet(context, syncProvider),
-                ),
-              const SizedBox(width: OmiSpacing.xxs),
-            ],
           ),
           body: CustomScrollView(
             slivers: [
@@ -131,24 +125,18 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                   delegate: SliverChildListDelegate.fixed([
                     const SizedBox(height: 8),
                     _buildOverallStatusCard(syncProvider, syncState),
-                    if (syncProvider.syncCompleted && syncProvider.syncedConversationsPointers.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      _buildConversationsCard(syncProvider),
-                    ],
                     if (syncState.hasError) ...[const SizedBox(height: 16), _buildErrorCard(syncState, syncProvider)],
                     if (WalSyncs.isRingBufferFirmware(deviceProvider.currentFirmwareVersion) &&
                         deviceProvider.ringStatus != null) ...[
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 16),
                       DeviceStorageCard(status: deviceProvider.ringStatus!),
                     ],
                     const SizedBox(height: 32),
-                    _buildStorageSettings(userProvider),
+                    _buildStorageSettings(userProvider, syncProvider),
                     if (hasAnyRecording) ...[
                       const SizedBox(height: 32),
-                      _buildRecordingsHeader(),
-                      const SizedBox(height: 10),
-                      _buildFilterChips(),
-                      const SizedBox(height: 12),
+                      _buildFilterChips(walSeconds(toSync.where(walIsSyncable))),
+                      const SizedBox(height: 4),
                     ],
                   ]),
                 ),
@@ -166,93 +154,103 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   // Overall status card
   // ─────────────────────────────────────────
 
+  /// Every amount on this card is audio length. File, upload-part and server-job
+  /// counts used to leak through ("Processing 0/5914"); they are in Sync details now.
   Widget _buildOverallStatusCard(SyncProvider p, SyncState s) {
     final l = context.l10n;
-    final attention = p.needsAttentionWalsCount;
+    String dur(int seconds) => OmiDuration.compact(seconds, l);
+    final step = _runTracker.update(s, p.allWals);
     final uploaded = p.uploadedWals.length;
-    final readyToBackUp = p.displaySortedWals
+    final sorted = p.displaySortedWals;
+    final attentionWals = sorted.where((w) => _needsAttention(w.syncDisplayState)).toList();
+    final readyWals = sorted
         .where(
           (w) =>
               w.syncDisplayState == WalSyncDisplayState.waiting || w.syncDisplayState == WalSyncDisplayState.retrying,
         )
-        .length;
-    final hasAnyRecording = p.allWals.isNotEmpty;
+        .toList();
 
     final isActive = s.isSyncing || s.isFetchingConversations;
     final bool showSpinner = (isActive || uploaded > 0) && !p.isRateLimited;
 
     String title;
-    String? progressText;
+    String? subtitle;
     Color titleColor = OmiColors.textPrimary;
     Widget? action;
+    SyncStep? barStep;
+    double? barFraction;
 
-    if (isActive) {
-      switch (s.phase) {
-        case SyncPhase.downloadingFromDevice:
-          title = l.syncCardDownloadingTitle;
-          // Percent and speed live on [DeviceDownloadMeter], not the file-count line.
-          // A ring download has no file index, so the old subtitle stayed blank.
-          break;
-        case SyncPhase.waitingForInternet:
-          title = l.syncCardWaitingInternet;
-          titleColor = Colors.orangeAccent;
-          break;
-        case SyncPhase.uploadingToCloud:
-          title = l.syncCardUploadingTitle;
-          progressText = SyncCardProgressLine.subtitle(
-            phase: s.phase,
-            currentFile: s.currentFile,
-            totalFiles: s.totalFiles,
-            counterLabel: (processed, total) => l.syncCardProgressOf(processed, total),
-          );
-          break;
-        case SyncPhase.processingOnServer:
-          title = l.syncCardProcessing;
-          break;
-        default:
-          title = s.isFetchingConversations ? l.syncCardProcessing : l.syncCardUploadingTitle;
+    Future<void> startSync() async {
+      if (await confirmSyncForCustomStt(context) && context.mounted) p.syncWals();
+    }
+
+    if (isActive && step != null && step.step != SyncStep.transcribe) {
+      final run = _runTracker.runSeconds ?? 0;
+      title = run > 0 ? l.syncCardSyncingAmount(dur(run)) : l.syncCardSyncingTitle;
+      barStep = step.barStep;
+      final known = step.totalSeconds > 0;
+      if (step.step == SyncStep.download) {
+        subtitle = known ? l.syncStepDownloadingAmount(dur(step.doneSeconds), dur(step.totalSeconds)) : null;
+        // The device reports a byte fraction before any audio is countable.
+        barFraction = s.progress > 0 ? s.progress : null;
+      } else if (s.phase == SyncPhase.waitingForInternet) {
+        title = l.syncCardWaitingInternet;
+        titleColor = Colors.orangeAccent;
+        barFraction = known ? step.fraction : 0;
+      } else {
+        subtitle = known ? l.syncStepUploadingAmount(dur(step.doneSeconds), dur(step.totalSeconds)) : null;
+        barFraction = known && step.doneSeconds > 0 ? step.fraction : null;
       }
+      // Live-capture uploads run before the device drain: the bar stays on the device step, unfilled.
+      if (barStep != step.step) barFraction = 0;
       action = statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
     } else if (p.isRateLimited) {
       title = syncCooldownTitle(p.rateLimitReason, l);
       titleColor = Colors.orangeAccent;
-    } else if (uploaded > 0) {
-      // Uploads finished, reconciler is resolving jobs in the background.
-      title = l.syncCardProcessing;
-      final counts = p.offlineServerProcessingCounts;
-      progressText = SyncCardProgressLine.serverProcessingSubtitle(
-            processed: counts.processed,
-            total: counts.total,
-            counterLabel: (processed, total) => l.processingProgress(processed, total),
-          ) ??
-          l.syncProcessingBackgroundHint;
-    } else if (attention > 0) {
-      title = l.syncCardNeedsAttention(attention);
+    } else if (isActive || uploaded > 0) {
+      // Uploads finished; the server is turning them into conversations.
+      final job = p.offlineServerProcessingSeconds;
+      title = job.totalSeconds > 0 ? l.syncCardTranscribingAmount(dur(job.totalSeconds)) : l.syncCardProcessing;
+      subtitle = job.tracked && job.totalSeconds > 0
+          ? l.syncCardTranscribedOf(dur(job.doneSeconds), dur(job.totalSeconds))
+          : l.syncProcessingBackgroundHint;
+      barStep = SyncStep.transcribe;
+      barFraction = job.tracked && job.doneSeconds > 0 ? job.doneSeconds / job.totalSeconds : null;
+      if (isActive) action = statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
+    } else if (attentionWals.isNotEmpty) {
+      title = l.syncCardNeedsAttention(groupRecordingBlocks(attentionWals).length);
       titleColor = Colors.orangeAccent;
-      action = statusActionPill(l.sync, OmiColors.accent, () async {
-        if (await confirmSyncForCustomStt(context) && context.mounted) p.syncWals();
-      });
-    } else if (readyToBackUp > 0) {
-      title = l.syncCardReadyCount(readyToBackUp);
-      action = statusActionPill(l.sync, OmiColors.accent, () async {
-        if (await confirmSyncForCustomStt(context) && context.mounted) p.syncWals();
-      });
-    } else if (hasAnyRecording) {
-      title = l.syncCardAllBackedUp;
-      titleColor = OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.grey.shade400;
+      // Only a recording whose retry budget is spent can still upload; the
+      // others are terminal, and a plain Sync skipped both kinds. Offer the
+      // button only when it can do something.
+      if (p.retryableAttentionWals.isNotEmpty) {
+        action = KeyedSubtree(
+          key: const Key('offline_sync_card_retry_attention'),
+          child: statusActionPill(l.retry, OmiColors.accent, () async {
+            if (await confirmSyncForCustomStt(context) && context.mounted) p.retryNeedsAttentionWals();
+          }),
+        );
+      }
+    } else if (readyWals.isNotEmpty) {
+      final seconds = walSeconds(readyWals);
+      title = seconds > 0
+          ? l.syncCardReadyAmount(dur(seconds))
+          : l.syncCardReadyCount(groupRecordingBlocks(readyWals).length);
+      action = statusActionPill(l.sync, OmiColors.accent, startSync);
     } else {
-      // No recordings — same calm baseline; the card never pops in/out.
+      // All synced, or nothing recorded yet: the same calm baseline, so the card never pops in/out.
       title = l.syncCardAllBackedUp;
       titleColor = OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.grey.shade400;
     }
-
-    final downloading = isActive && s.phase == SyncPhase.downloadingFromDevice;
+    // Independent of the branch above: a sync that created conversations can
+    // still leave jobs processing or a recording that needs the user.
+    final created = p.syncCompleted ? p.syncedConversationsPointers.length : 0;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+      padding: const EdgeInsets.fromLTRB(16, 15, 16, 4),
       decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
           Row(
@@ -266,14 +264,14 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                   children: [
                     Text(
                       title,
-                      style: TextStyle(color: titleColor, fontSize: 15, fontWeight: FontWeight.w500, height: 1.25),
+                      style: TextStyle(color: titleColor, fontSize: 16, fontWeight: FontWeight.w600, height: 1.25),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    if (progressText != null) ...[
+                    if (subtitle != null) ...[
                       const SizedBox(height: 3),
                       Text(
-                        progressText,
+                        subtitle,
                         style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w400),
                       ),
                     ],
@@ -283,47 +281,46 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               if (action != null) ...[const SizedBox(width: 10), action],
             ],
           ),
-          if (downloading) ...[
-            const SizedBox(height: 10),
-            DeviceDownloadMeter(fraction: s.progress, speedKBps: s.speedKBps),
+          if (barStep != null) ...[
+            const SizedBox(height: 14),
+            SyncStepBar(step: barStep, fraction: barFraction),
           ],
+          const SizedBox(height: 6),
+          if (created > 0) ...[
+            Divider(height: 1, color: OmiColors.border),
+            _cardLink(l.nConversationsCreated(created), () => routeToPage(context, const SyncedConversationsPage())),
+          ],
+          Divider(height: 1, color: OmiColors.border),
+          _cardLink(
+            l.syncDetailsTitle,
+            () => showSyncDetailsSheet(context, onHowSyncingWorks: () => _showInfoSheet(context)),
+          ),
         ],
       ),
     );
   }
 
-  // ─────────────────────────────────────────
-  // Conversations created
-  // ─────────────────────────────────────────
-
-  Widget _buildConversationsCard(SyncProvider syncProvider) {
-    final count = syncProvider.syncedConversationsPointers.length;
-    return GestureDetector(
-      onTap: () => routeToPage(context, const SyncedConversationsPage()),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(20)),
+  Widget _cardLink(String label, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
         child: Row(
           children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.15), shape: BoxShape.circle),
-              child: const Center(child: FaIcon(FontAwesomeIcons.check, color: Colors.green, size: 14)),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                context.l10n.nConversationsCreated(count),
-                style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
-              ),
-            ),
+            Expanded(child: Text(label, style: TextStyle(color: Colors.grey.shade400, fontSize: 14))),
             FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12),
           ],
         ),
       ),
     );
   }
+
+  static bool _needsAttention(WalSyncDisplayState s) =>
+      s == WalSyncDisplayState.failed ||
+      s == WalSyncDisplayState.corrupted ||
+      s == WalSyncDisplayState.outsideRecoveryWindow ||
+      s == WalSyncDisplayState.unsupportedAudio ||
+      s == WalSyncDisplayState.uploadRejected;
 
   // ─────────────────────────────────────────
   //  Error card
@@ -373,53 +370,51 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   // Storage settings
   // ─────────────────────────────────────────
 
-  Widget _buildStorageSettings(UserProvider userProvider) {
+  Widget _buildStorageSettings(UserProvider userProvider, SyncProvider syncProvider) {
     final isPhoneOn = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
     final isCloudOn = userProvider.privateCloudSyncEnabled;
     final autoRemoveOn = SharedPreferencesUtil().autoRemoveSyncedCopies;
     final autoRemoveDays = SharedPreferencesUtil().autoRemoveSyncedCopiesDays;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    // One group for every storage choice. Auto-remove used to be its own
+    // "Local Copies" section, and Manage Storage hid behind an app bar menu
+    // that only appeared when something could be cleared.
+    return OmiSettingsGroup(
+      header: context.l10n.storageSection,
       children: [
-        OmiSettingsGroup(
-          header: context.l10n.storageSection,
-          children: [
-            OmiSettingsRow(
-              leading: const FaIcon(FontAwesomeIcons.mobile),
-              title: context.l10n.storeAudioOnPhone,
-              value: isPhoneOn ? context.l10n.on : context.l10n.off,
-              onTap: () => routeToPage(context, const LocalStoragePage()).then((_) => setState(() {})),
-            ),
-            OmiSettingsRow(
-              leading: const FaIcon(FontAwesomeIcons.cloud),
-              title: context.l10n.storeAudioOnCloud,
-              value: isCloudOn ? context.l10n.on : context.l10n.off,
-              onTap: () => routeToPage(context, const PrivateCloudSyncPage()),
-            ),
-          ],
+        OmiSettingsRow(
+          leading: const FaIcon(FontAwesomeIcons.mobile),
+          title: context.l10n.storeAudioOnPhone,
+          value: isPhoneOn ? context.l10n.on : context.l10n.off,
+          onTap: () => routeToPage(context, const LocalStoragePage()).then((_) => setState(() {})),
         ),
-        const SizedBox(height: OmiSpacing.xxl),
-        OmiSettingsGroup(
-          header: context.l10n.localCopiesSection,
-          children: [
-            OmiSettingsRow.toggle(
-              leading: const Icon(Icons.auto_delete),
-              title: context.l10n.autoRemoveSyncedCopiesTitle,
-              subtitle: context.l10n.autoRemoveSyncedCopiesDescription(autoRemoveDays),
-              value: autoRemoveOn,
-              onChanged: (value) async {
-                SharedPreferencesUtil().autoRemoveSyncedCopies = value;
-                if (value) {
-                  // Apply immediately: expired copies should not wait for the
-                  // next sync pass or app restart.
-                  await context.read<SyncProvider>().applySyncedCopyRetention();
-                }
-                if (context.mounted) setState(() {});
-              },
-            ),
-          ],
+        OmiSettingsRow(
+          leading: const FaIcon(FontAwesomeIcons.cloud),
+          title: context.l10n.storeAudioOnCloud,
+          value: isCloudOn ? context.l10n.on : context.l10n.off,
+          onTap: () => routeToPage(context, const PrivateCloudSyncPage()),
         ),
+        OmiSettingsRow.toggle(
+          leading: const Icon(Icons.auto_delete),
+          title: context.l10n.autoRemoveSyncedCopiesTitle,
+          subtitle: context.l10n.autoRemoveSyncedCopiesDays(autoRemoveDays),
+          value: autoRemoveOn,
+          onChanged: (value) async {
+            SharedPreferencesUtil().autoRemoveSyncedCopies = value;
+            if (value) {
+              // Apply immediately: expired copies should not wait for the
+              // next sync pass or app restart.
+              await context.read<SyncProvider>().applySyncedCopyRetention();
+            }
+            if (context.mounted) setState(() {});
+          },
+        ),
+        if (syncProvider.clearableWalsCount > 0)
+          OmiSettingsRow(
+            leading: const FaIcon(FontAwesomeIcons.trashCan),
+            title: context.l10n.manageStorage,
+            onTap: () => _showManageStorageSheet(context, syncProvider),
+          ),
       ],
     );
   }
@@ -428,14 +423,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   // Filter chips + WAL list
   // ─────────────────────────────────────────
 
-  Widget _buildRecordingsHeader() {
-    return OmiSectionHeader(
-      context.l10n.recordings,
-      trailing: Text(context.l10n.newestFirst, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
-    );
-  }
-
-  Widget _buildFilterChips() {
+  Widget _buildFilterChips(int toSyncSeconds) {
     Widget chip(WalDisplayFilter f, String label) {
       final selected = _filter == f;
       return Expanded(
@@ -452,6 +440,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             ),
             child: Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: selected ? OmiColors.textPrimary : Colors.grey.shade500,
                 fontSize: 13,
@@ -463,35 +453,33 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       );
     }
 
+    final pendingLabel = toSyncSeconds > 0
+        ? '${context.l10n.pending} · ${OmiDuration.compact(toSyncSeconds, context.l10n)}'
+        : context.l10n.pending;
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(10)),
       child: Row(
         children: [
-          chip(WalDisplayFilter.all, context.l10n.all),
-          chip(WalDisplayFilter.pending, context.l10n.pending),
+          chip(WalDisplayFilter.pending, pendingLabel),
           chip(WalDisplayFilter.synced, context.l10n.synced),
         ],
       ),
     );
   }
 
-  /// Sliver-based wal list. SliverList.builder mounts only the rows currently
-  /// near the viewport, so navigating to a filter with thousands of items no
-  /// longer instantiates thousands of Dismissibles in one frame.
+  /// Sliver-based list, one card per day under a day label. SliverList.builder
+  /// mounts only the rows near the viewport, so a filter with thousands of
+  /// items never instantiates thousands of Dismissibles in one frame.
   ///
-  /// The visual "rounded card" wrapper is achieved per-row: the first item gets
-  /// rounded top corners, the last gets rounded bottom corners. Dividers are
-  /// drawn between rows. This preserves the design while staying lazy.
+  /// The card look is drawn per row: a day's first row gets rounded top
+  /// corners, its last rounded bottom corners, with dividers between.
   Widget _buildWalListSliver(SyncProvider syncProvider, List<RecordingBlock> blocks) {
     if (blocks.isEmpty) {
-      final emptyMsg = switch (_filter) {
-        WalDisplayFilter.synced => context.l10n.noSyncedRecordingsYet,
-        WalDisplayFilter.pending => context.l10n.noPendingRecordings,
-        _ => context.l10n.noRecordingsYet,
-      };
+      final emptyMsg =
+          _filter == WalDisplayFilter.synced ? context.l10n.noSyncedRecordingsYet : context.l10n.noPendingRecordings;
       return SliverPadding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
         sliver: SliverToBoxAdapter(
           child: Container(
             padding: const EdgeInsets.all(32),
@@ -504,22 +492,59 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       );
     }
 
+    final items = _dayItems(blocks);
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       sliver: SliverList.builder(
-        itemCount: blocks.length,
-        itemBuilder: (context, i) => _buildBlockListItem(syncProvider, blocks[i], i, blocks.length),
+        itemCount: items.length,
+        itemBuilder: (context, i) => switch (items[i]) {
+          _DayLabel(:final label) => Padding(
+              padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
+              child: Text(
+                label,
+                style: OmiType.footnote.copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w600),
+              ),
+            ),
+          _DayRow(:final block, :final isFirst, :final isLast) =>
+            _buildBlockListItem(syncProvider, block, i, isFirst: isFirst, isLast: isLast),
+        },
       ),
     );
   }
 
+  /// Flattens newest-first recordings into day labels and rows.
+  List<_DayItem> _dayItems(List<RecordingBlock> blocks) {
+    final dates = OmiDateFormat.of(context);
+    final items = <_DayItem>[];
+    DateTime? currentDay;
+    for (var i = 0; i < blocks.length; i++) {
+      final start = DateTime.fromMillisecondsSinceEpoch(blocks[i].startSeconds * 1000).toLocal();
+      final day = DateTime(start.year, start.month, start.day);
+      final isFirst = day != currentDay;
+      if (isFirst) {
+        currentDay = day;
+        items.add(_DayLabel(dates.dayHeader(start)));
+      }
+      final next = i + 1 < blocks.length
+          ? DateTime.fromMillisecondsSinceEpoch(blocks[i + 1].startSeconds * 1000).toLocal()
+          : null;
+      final isLast = next == null || DateTime(next.year, next.month, next.day) != day;
+      items.add(_DayRow(blocks[i], isFirst: isFirst, isLast: isLast));
+    }
+    return items;
+  }
+
   /// A one-file recording keeps the swipe-to-delete row; a longer one is a single row that opens
   /// its files, so a continuous recording no longer reads as a column of 75 s and 3 min rows.
-  Widget _buildBlockListItem(SyncProvider syncProvider, RecordingBlock block, int i, int count) {
+  Widget _buildBlockListItem(
+    SyncProvider syncProvider,
+    RecordingBlock block,
+    int i, {
+    required bool isFirst,
+    required bool isLast,
+  }) {
     final wal = block.wals.first;
     final state = wal.syncDisplayState;
-    final isFirst = i == 0;
-    final isLast = i == count - 1;
     return Container(
       decoration: BoxDecoration(
         color: OmiColors.surface1,
@@ -536,9 +561,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             _blockRow(block)
           else
             Dismissible(
-              // Index suffix because `wal.id` (device_timerStart) is not unique
-              // across SD-card + on-phone copies of the same recording.
-              key: ValueKey('${wal.id}#$i'),
+              // Storage suffix because `wal.id` (device_timerStart) is shared by the
+              // SD-card and on-phone copies of one recording. Not the row index: rows
+              // shift after a dismiss, and a reused key asserts.
+              key: ValueKey('${wal.id}#${wal.storage.name}'),
               direction: state == WalSyncDisplayState.syncing ? DismissDirection.none : DismissDirection.endToStart,
               confirmDismiss: (direction) {
                 final uploading = wal.syncDisplayState == WalSyncDisplayState.uploaded;
@@ -559,7 +585,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               onDismissed: (direction) {
                 syncProvider.deleteWal(wal);
               },
-              child: _walRow(wal),
+              child: _walRow(wal, showDay: false),
             ),
           if (!isLast) _rowDivider,
         ],
@@ -582,7 +608,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _blockTitle(block),
+                    _blockTitle(block, showDay: false),
                     style: _rowTitleStyle(synced: state == WalSyncDisplayState.synced),
                   ),
                   const SizedBox(height: 3),
@@ -641,10 +667,14 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
 
   static TextStyle _rowSubtitleStyle(Color color) => TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w400);
 
-  String _blockTitle(RecordingBlock block) {
+  /// The list sits under day labels, so its rows drop the day; the files sheet keeps it.
+  String _blockTitle(RecordingBlock block, {bool showDay = true}) {
     final date = DateTime.fromMillisecondsSinceEpoch(block.startSeconds * 1000).toLocal();
     final dates = OmiDateFormat.of(context);
-    return '${dates.dayHeader(date)} \u00b7 ${dates.time(date)} \u00b7 ${OmiDuration.compact(block.seconds, context.l10n)}';
+    final duration = OmiDuration.compact(block.seconds, context.l10n);
+    return showDay
+        ? '${dates.dayHeader(date)} \u00b7 ${dates.time(date)} \u00b7 $duration'
+        : '${dates.time(date)} \u00b7 $duration';
   }
 
   /// The files behind one recording, each with its own row, detail page and actions.
@@ -692,7 +722,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     return null;
   }
 
-  Widget _walRow(Wal wal) {
+  Widget _walRow(Wal wal, {bool showDay = true}) {
     final date = DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000).toLocal();
     final dates = OmiDateFormat.of(context);
     final timeStr = dates.time(date);
@@ -722,7 +752,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '$dateStr \u00b7 $timeStr${duration != null ? ' \u00b7 $duration' : ''}',
+                    '${showDay ? '$dateStr \u00b7 ' : ''}$timeStr${duration != null ? ' \u00b7 $duration' : ''}',
                     style: _rowTitleStyle(synced: isSynced),
                   ),
                   const SizedBox(height: 3),
@@ -831,7 +861,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   (Color, FaIconData, String) _rowVisual(WalSyncDisplayState state) {
     switch (state) {
       case WalSyncDisplayState.synced:
-        return (Colors.grey.shade500, FontAwesomeIcons.cloudArrowUp, context.l10n.syncStatusConversationCreated);
+        return (Colors.grey.shade500, FontAwesomeIcons.cloudArrowUp, context.l10n.statusProcessed);
       case WalSyncDisplayState.syncing:
         return (Colors.grey.shade300, FontAwesomeIcons.arrowsRotate, context.l10n.syncStatusBackingUp);
       case WalSyncDisplayState.uploaded:
@@ -1184,4 +1214,18 @@ class _StorageRow extends StatelessWidget {
       ),
     );
   }
+}
+
+sealed class _DayItem {}
+
+class _DayLabel extends _DayItem {
+  _DayLabel(this.label);
+  final String label;
+}
+
+class _DayRow extends _DayItem {
+  _DayRow(this.block, {required this.isFirst, required this.isLast});
+  final RecordingBlock block;
+  final bool isFirst;
+  final bool isLast;
 }

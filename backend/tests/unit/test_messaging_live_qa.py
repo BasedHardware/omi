@@ -37,21 +37,22 @@ def terminal(text='Synthetic answer'):
     return 'done: ' + base64.b64encode(json.dumps({'text': text}).encode()).decode() + '\n\n'
 
 
-def test_typing_precedes_cold_session_and_digest(monkeypatch, capsys):
+def test_typing_precedes_cold_session_completion(monkeypatch):
+    from threading import Event
+
     adapter, store, message = setup_turn()
-    started = time.monotonic()
-    first_typing = []
+    feedback = Event()
+    order = []
     original = store.session
 
     def cold_session(*args):
-        time.sleep(0.08)  # deliberate DB latency; never production code
+        assert feedback.wait(timeout=2), 'Feedback must arrive while context preparation is blocked'
+        order.append('context_ready')
         return original(*args)
 
-    async def cold_digest(*args):
-        await asyncio.sleep(0.08)
-
     async def typing(*args):
-        first_typing.append(time.monotonic() - started)
+        order.append('typing')
+        feedback.set()
 
     def turn(*args, **kwargs):
         async def stream():
@@ -60,13 +61,10 @@ def test_typing_precedes_cold_session_and_digest(monkeypatch, capsys):
         return stream()
 
     monkeypatch.setattr(store, 'session', cold_session)
-    monkeypatch.setattr(gateway_module, 'append_digest', cold_digest)
     monkeypatch.setattr(adapter, 'typing', typing)
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
-    asyncio.run(gateway.process(store.enqueue(message)))
-    with capsys.disabled():
-        print(f'QA timing first_typing_ms={first_typing[0]*1000:.1f} total_ms={(time.monotonic()-started)*1000:.1f}')
-    assert first_typing[0] < 0.08, first_typing
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
+    assert asyncio.run(gateway.process(store.enqueue(message)))
+    assert order.index('typing') < order.index('context_ready')
 
 
 def test_no_write_callback_then_messages_and_provider_failure_release(monkeypatch):
@@ -89,8 +87,7 @@ def test_no_write_callback_then_messages_and_provider_failure_release(monkeypatc
 
         return stream()
 
-    monkeypatch.setattr(gateway_module, 'append_digest', digest)
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
 
     async def run():
         for index, text in enumerate(['message', 'undo', 'after undo', 'fail', 'after failure', 'reminder request']):
@@ -139,7 +136,6 @@ def test_slow_memory_undo_does_not_block_next_turn_and_second_tap_noop(monkeypat
 
         return stream()
 
-    monkeypatch.setattr(gateway_module, 'append_digest', digest)
     monkeypatch.setattr(undo.UndoStore, 'undo', inverse)
     monkeypatch.setattr(undo.UndoStore, 'mark_edited', lambda *args: None)
     monkeypatch.setattr(
@@ -148,7 +144,7 @@ def test_slow_memory_undo_does_not_block_next_turn_and_second_tap_noop(monkeypat
         lambda *args: undo.action_receipt(receipt_id, 'memory', 'memory-id', None, 'Synthetic fact'),
     )
     monkeypatch.setattr(undo.UndoStore, 'bind_bubble', lambda *args: None)
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
 
     async def run():
         # Write turn, then action callback, then another message while inverse runs.
@@ -211,17 +207,25 @@ def test_action_bubbles_only_have_scoped_undo_and_shared_block_data():
 def test_first_digest_reads_at_most_twenty_rows(monkeypatch):
     from utils.messaging import history
 
-    reads = []
+    from unittest.mock import MagicMock
+    from types import SimpleNamespace
 
-    def rows(uid, batch_size):
-        assert batch_size == 20
-        for i in range(10000):
-            reads.append(i)
-            yield {'id': str(i), 'created_at': datetime.now(timezone.utc)}
-
-    monkeypatch.setattr(history.chat_db, 'iter_all_messages', rows)
+    client = MagicMock()
+    query = client.collection.return_value.document.return_value.collection.return_value.order_by.return_value
+    query.limit.return_value.stream.return_value = [
+        SimpleNamespace(
+            to_dict=lambda i=i: {
+                'id': str(i),
+                'created_at': datetime.now(timezone.utc),
+                'sender': 'human',
+                'text': 'recent',
+            }
+        )
+        for i in range(20)
+    ]
+    monkeypatch.setattr(history.chat_db, 'db', client)
     assert len(history.recent_activity('test')) == 20
-    assert len(reads) == 20
+    query.limit.assert_called_once_with(20)
 
 
 def test_reminder_tool_runs_from_channel_projection_and_emits_task_receipt(monkeypatch):
@@ -257,8 +261,6 @@ def test_reminder_tool_runs_from_channel_projection_and_emits_task_receipt(monke
     async def digest(*args):
         pass
 
-    monkeypatch.setattr(gateway_module, 'append_digest', digest)
-
     def turn(*args, **kwargs):
         async def stream():
             runtime = surface_runtime.get()
@@ -274,7 +276,11 @@ def test_reminder_tool_runs_from_channel_projection_and_emits_task_receipt(monke
 
         return stream()
 
-    asyncio.run(Gateway(adapter, store=store, turn=turn, admission=lambda uid: None).process(store.enqueue(message)))
+    asyncio.run(
+        Gateway(
+            adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None
+        ).process(store.enqueue(message))
+    )
     assert tasks['task-id']['due_at'] == due
     assert notifications[0]['due_at'] == due.isoformat()
     assert not store.leases
@@ -298,15 +304,13 @@ def test_undo_failure_sends_error_and_next_message_runs(monkeypatch):
     async def digest(*args):
         pass
 
-    monkeypatch.setattr(gateway_module, 'append_digest', digest)
-
     def turn(*args, **kwargs):
         async def stream():
             yield terminal()
 
         return stream()
 
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
 
     async def run():
         callback = replace(
@@ -434,8 +438,7 @@ def test_typing_outage_and_stream_without_terminal_do_not_silence_chat(monkeypat
         return stream()
 
     monkeypatch.setattr(adapter, 'typing', typing)
-    monkeypatch.setattr(gateway_module, 'append_digest', digest)
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
 
     async def run():
         for index in range(2):
@@ -457,7 +460,7 @@ def test_authenticated_receipt_callback_recovers_interrupted_bubble_binding(monk
         undo.UndoStore, 'undo', lambda *args: UndoResult('undone', 'Undone.', bubble_text='Synthetic fact — Undone')
     )
     monkeypatch.setattr(undo.UndoStore, 'mark_edited', lambda *args: None)
-    gateway = Gateway(adapter, store=store, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
 
     async def run():
         item = replace(message, command='undo', callback_id='callback', undo_receipt_id='e' * 32, reply_to='71')
@@ -492,8 +495,7 @@ def test_verified_http_message_callback_message_sequence(monkeypatch):
 
         return stream()
 
-    monkeypatch.setattr(gateway_module, 'append_digest', digest)
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
 
     completed = asyncio.Event()
 
@@ -554,7 +556,9 @@ def test_revocation_detected_by_early_typing_never_loads_session_or_model(monkey
 
     monkeypatch.setattr(adapter, 'typing', revoked)
     monkeypatch.setattr(store, 'session', forbidden)
-    gateway = Gateway(adapter, store=store, turn=forbidden, admission=lambda uid: None)
+    gateway = Gateway(
+        adapter, store=store, turn=forbidden, admission=lambda uid, channel: None, rate_limit=lambda uid: None
+    )
     asyncio.run(gateway.process(store.enqueue(message)))
 
 
@@ -571,26 +575,24 @@ def test_repeated_linq_text_undo_gets_acknowledgement(monkeypatch):
         async def finish(self, text):
             replies.append(text)
 
-    gateway = Gateway(adapter, store=store, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
     asyncio.run(gateway._undo_action('test', {'id': 'session'}, replace(message, command='undo'), Sink()))
     assert replies == ['Already undone.']
 
 
-def test_bootstrap_cap_counts_only_other_surface_rows(monkeypatch):
+def test_digest_does_not_scan_past_twenty_current_session_candidates(monkeypatch):
     from utils.messaging import history
+    from unittest.mock import MagicMock
+    from types import SimpleNamespace
 
-    def rows(uid, batch_size):
-        for i in range(40):
-            yield {
-                'id': str(i),
-                'created_at': datetime.now(timezone.utc),
-                'chat_session_id': 'current' if i < 20 else 'app',
-            }
-
-    monkeypatch.setattr(history.chat_db, 'iter_all_messages', rows)
-    result = history.recent_activity('test', exclude_session='current')
-    assert len(result) == 20
-    assert all(row['chat_session_id'] == 'app' for row in result)
+    client = MagicMock()
+    query = client.collection.return_value.document.return_value.collection.return_value.order_by.return_value
+    query.limit.return_value.stream.return_value = [
+        SimpleNamespace(to_dict=lambda: {'chat_session_id': 'current'}) for _ in range(20)
+    ]
+    monkeypatch.setattr(history.chat_db, 'db', client)
+    assert history.recent_activity('test', exclude_session='current') == []
+    query.limit.assert_called_once_with(20)
 
 
 def test_backlog_release_preserves_fifo_and_original_message_clock(monkeypatch):
@@ -614,8 +616,7 @@ def test_backlog_release_preserves_fifo_and_original_message_clock(monkeypatch):
 
         return stream()
 
-    monkeypatch.setattr(gateway_module, 'append_digest', digest)
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
     paths = [
         store.enqueue(replace(message, provider_message_id=str(i), text=str(i), received_at=at))
         for i, at in enumerate(times)
@@ -636,8 +637,9 @@ def test_backlog_release_preserves_fifo_and_original_message_clock(monkeypatch):
 
     asyncio.run(run())
     assert seen == list(zip(['0', '1', '2'], times))
-    assert 'Confirmed 0' in str(contexts[1])
-    assert 'Confirmed 1' in str(contexts[2])
+    assert contexts[1] == ({'role': 'user', 'content': '1'},)
+    assert contexts[2] == ({'role': 'user', 'content': '2'},)
+    assert 'Confirmed 0' in str(store.logs) and 'Confirmed 1' in str(store.logs)
     replies = [call[2]['json']['text'] for call in adapter.transport.calls if call[1].endswith('/sendMessage')]
     assert replies == ['Confirmed 0', 'Confirmed 1', 'Confirmed 2']
 
@@ -773,8 +775,9 @@ def test_busy_lease_does_not_wake_its_own_head(monkeypatch):
 
         return stream()
 
-    monkeypatch.setattr(gateway_module, 'append_digest', digest)
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None, wake=wake)
+    gateway = Gateway(
+        adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None, wake=wake
+    )
     session = store.session('test', message, store.lookup(message))
     held = store.acquire('test', session['surface'])
     path = store.enqueue(message)
@@ -814,13 +817,12 @@ def test_channel_memory_search_empty_does_not_claim_no_facts(monkeypatch):
 
     monkeypatch.setattr(memory_tools, 'MemoryService', Service)
     monkeypatch.setattr(memory_tools, 'belief_model_enabled', lambda: False)
-    monkeypatch.setattr(memory_tools.notification_db, 'get_user_time_zone', lambda uid: 'UTC')
     token = surface_runtime.set(
         SurfaceRuntime('channel:fixture', '', Principal('test'), withhold_private_memories=True)
     )
     try:
         result = memory_tools.search_memories_tool.func(
-            query='synthetic query', config={'configurable': {'user_id': 'test'}}
+            query='synthetic query', config={'configurable': {'user_id': 'test', 'user_timezone': 'UTC'}}
         )
     finally:
         surface_runtime.reset(token)
@@ -838,7 +840,7 @@ def test_stale_unscoped_callback_cannot_reverse_latest_write(monkeypatch):
 
     monkeypatch.setattr(UndoStore, 'undo', forbidden)
     monkeypatch.setattr(UndoStore, 'select_receipt', forbidden)
-    gateway = Gateway(adapter, store=store, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
     incoming = replace(message, command='undo', callback_id='stale', reply_to='17')
     asyncio.run(gateway.process(store.enqueue(incoming)))
     assert sum(call[1].endswith('/answerCallbackQuery') for call in adapter.transport.calls) == 1
@@ -853,7 +855,7 @@ def test_prelease_admission_failure_does_not_poison_fifo_head(monkeypatch):
     adapter, store, message = setup_turn()
     denied = [True]
 
-    def admission(uid):
+    def admission(uid, channel):
         if denied[0]:
             raise PermissionError('Synthetic entitlement revoked')
 
@@ -866,16 +868,15 @@ def test_prelease_admission_failure_does_not_poison_fifo_head(monkeypatch):
 
         return stream()
 
-    monkeypatch.setattr(gateway_module, 'append_digest', digest)
-    gateway = Gateway(adapter, store=store, turn=turn, admission=admission)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=admission, rate_limit=lambda uid: None)
     first = store.enqueue(message)
     second = store.enqueue(replace(message, provider_message_id='second'))
 
     async def run():
-        assert not await gateway.process(first)
-        assert store.jobs[first]['status'] == 'running'
-        assert store.jobs[first]['fifo_settled_at']
-        assert store.jobs[second]['fifo_settled_at']
+        assert await gateway.process(first)
+        assert store.jobs[first]['status'] == 'done'
+        assert store.jobs[second]['status'] == 'done'
+        assert sum(url.endswith('/sendMessage') for method, url, kwargs in adapter.transport.calls) == 1
         denied[0] = False
         third = store.enqueue(replace(message, provider_message_id='third'))
         assert await gateway.process(third)
@@ -937,8 +938,7 @@ def test_merged_failed_send_then_undo_callback_then_next_message(monkeypatch):
     monkeypatch.setattr(adapter, 'send', send)
     monkeypatch.setattr(adapter, 'typing', typing)
     monkeypatch.setattr(store, 'release', release)
-    monkeypatch.setattr(gateway_module, 'append_digest', digest)
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
     failed = store.enqueue(message)
     callback = store.enqueue(replace(message, provider_message_id='undo', command='undo', callback_id='callback'))
     following = store.enqueue(replace(message, provider_message_id='next'))

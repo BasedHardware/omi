@@ -13,6 +13,7 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | onboardingPermissionResult | Onboarding Permission Result | permission, granted, permanently_denied, services_disabled | active | onboarding-activation-funnel |
 | devicePairingBlocked | Device Pairing Blocked | reason, android_sdk, ios_version | active | onboarding-activation-funnel |
 | deviceScanEmpty | Device Scan Empty | after_seconds | active | onboarding-activation-funnel |
+| deviceConnectFailureShown | Device Connect Failure Shown | failure_reason, platform | active | onboarding-activation-funnel |
 | deviceConnectFailed | Device Connect Failed | error_class | active | onboarding-activation-funnel |
 | phoneMicRecordingStarted | Phone Mic Recording Started | none | active | mobile-instrumentation-presence |
 | phoneMicRecordingStopped | Phone Mic Recording Stopped | none | active | mobile-instrumentation-presence |
@@ -56,8 +57,8 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | phoneCallDialpadOpened | Phone Call Dialpad Opened | none | active | mobile-instrumentation-presence |
 | phoneCallUpsellUpgradeTapped | Phone Call Upsell Upgrade Tapped | none | active | mobile-instrumentation-presence |
 | phoneCallUpsellDismissed | Phone Call Upsell Dismissed | none | active | mobile-instrumentation-presence |
-| deviceDisconnected | Device Disconnected | none | deprecated | mobile-instrumentation-presence |
-| deviceDisconnectedDetailed | Device Disconnected Detailed | reason, reason_code, app_state | active | mobile-instrumentation-presence |
+| deviceDisconnected | Device Disconnected | none | deprecated | mobile-instrumentation-presence, connection-balance |
+| deviceDisconnectedDetailed | Device Disconnected Detailed | reason, reason_code, app_state | active | mobile-instrumentation-presence, connection-balance |
 | diagnosticsSent | Diagnostics Sent | bundle_bytes, disconnect_count, schema_version | active | mobile-instrumentation-presence |
 | diagnosticsSendFailed | Diagnostics Send Failed | bundle_bytes, disconnect_count, schema_version, failure_stage, status_code | active | mobile-instrumentation-presence |
 | speechProfileCapturePageClicked | Speech Profile Capture Page Clicked | none | active | mobile-instrumentation-presence |
@@ -186,6 +187,11 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | onboardingFirstCaptureEmptyResult | Onboarding First Capture Empty Result | none | active | mobile-instrumentation-presence |
 | onboardingFirstCaptureSkipped | Onboarding First Capture Skipped | none | active | mobile-instrumentation-presence |
 | onboardingStepCompleted | Onboarding Step Completed | step, index, elapsed_ms, skipped, platform, exit_reason | active | mobile-instrumentation-presence |
+| paywallVariantShown | Paywall Variant Shown | variant, source | active | mobile-instrumentation-presence |
+| paywallVariantFallback | Paywall Variant Fallback | variant, reason | active | mobile-instrumentation-presence |
+| onboardingWebviewShown | Onboarding Webview Shown | none | active | mobile-instrumentation-presence |
+| onboardingWebviewCompleted | Onboarding Webview Completed | none | active | mobile-instrumentation-presence |
+| onboardingWebviewFallback | Onboarding Webview Fallback | reason | active | mobile-instrumentation-presence |
 
 ## App Review Opportunity decisions
 

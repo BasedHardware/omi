@@ -111,6 +111,24 @@ prometheus-adapter:
   rules:
     default: false
     custom:
+      # Queue ages are refreshed by the GPU owner, independent of pressure polls.
+      - seriesQuery: 'parakeet_batch_lane_oldest_pending_seconds{namespace!="",pod!="",lane="live"}'
+        resources:
+          overrides:
+            namespace: {resource: namespace}
+            pod: {resource: pod}
+        name:
+          as: parakeet_live_queue_age_seconds
+        metricsQuery: 'max(parakeet_batch_lane_oldest_pending_seconds{<<.LabelMatchers>>,lane="live"}) by (<<.GroupBy>>)'
+      # Queue ages are refreshed by the GPU owner, independent of pressure polls.
+      - seriesQuery: 'parakeet_batch_lane_oldest_pending_seconds{namespace!="",pod!="",lane="backfill"}'
+        resources:
+          overrides:
+            namespace: {resource: namespace}
+            pod: {resource: pod}
+        name:
+          as: parakeet_backfill_queue_age_seconds
+        metricsQuery: 'max(parakeet_batch_lane_oldest_pending_seconds{<<.LabelMatchers>>,lane="backfill"}) by (<<.GroupBy>>)'
       - seriesQuery: 'parakeet_active_streams{namespace!="",pod!=""}'
         resources:
           overrides:
@@ -143,16 +161,21 @@ prometheus-adapter:
         name:
           as: "parakeet_request_latency_p99"
         metricsQuery: 'histogram_quantile(0.99, sum(rate(parakeet_request_duration_seconds_bucket{<<.LabelMatchers>>}[2m])) by (le))'
-      - seriesQuery: 'DCGM_FI_DEV_GPU_UTIL{namespace!=""}'
+      - seriesQuery: 'DCGM_FI_DEV_GPU_UTIL{container="parakeet",namespace!=""}'
         resources:
           overrides:
             namespace: {resource: "namespace"}
         name:
           as: "parakeet_gpu_utilization"
-        metricsQuery: 'avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{<<.LabelMatchers>>}[1m]))'
+        metricsQuery: 'avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{container="parakeet",<<.LabelMatchers>>}[1m]))'
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
+  # Dark until bounded-work image and adapter discovery qualify together.
+  demand:
+    enabled: false
+    liveQueueAgeSeconds: 0.75
+    backfillQueueAgeSeconds: 30
   enabled: false
   minReplicas: 1
   maxReplicas: 100
@@ -182,3 +205,13 @@ tolerations: []
 affinity: {}
 
 topologySpreadConstraints: []
+
+# Shared internal Gateway is opt-in; old Service/Ingress remain rollback paths.
+gateway:
+  enabled: false
+  name: ""
+  listenerName: http
+  pathPrefix: /parakeet
+  healthCheckPath: /health
+  timeoutSeconds: 120
+  connectionDrainingSeconds: 130

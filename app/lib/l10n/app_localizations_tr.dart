@@ -4395,6 +4395,16 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return '$plan planınız $date tarihinde sona erer.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Avantajlarınızı korumak için şimdi yeniden abone olun - $date tarihine kadar ücret yok.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Planınız $date tarihinde iptal edilecek şekilde ayarlandı.\nAvantajlarınızı korumak için şimdi yeniden abone olun - $date tarihine kadar ücret yok.';
   }
@@ -4402,6 +4412,11 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Aylık planınız sona erdiğinde yıllık planınız otomatik olarak başlayacak.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return '$plan planınız $date tarihinde yenilenecek.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4434,6 +4449,9 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get continueText => 'Devam Et';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Plan değiştirmek için önce yeniden abone olun.';
 
   @override
   String get resubscribe => 'Yeniden Abone Ol';
@@ -5046,9 +5064,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get content => 'İçerik';
-
-  @override
-  String get noContentToDisplay => 'Gösterilecek içerik yok';
 
   @override
   String get noSummary => 'Özet yok';
@@ -5667,11 +5682,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get downloadingFromSdCard => 'SD Karttan İndiriliyor';
-
-  @override
-  String processingProgress(int current, int total) {
-    return 'İşleniyor $current/$total';
-  }
 
   @override
   String conversationsCreated(int count) {
@@ -9115,18 +9125,10 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$total / $current';
-  }
-
-  @override
   String get syncStatusOnDevice => 'Cihazınızda';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Cihazınızdan indiriliyor';
-
-  @override
-  String get newestFirst => 'Önce en yeniler';
 
   @override
   String get noSyncedRecordingsYet => 'Henüz senkronize edilmiş kayıt yok';
@@ -9845,9 +9847,6 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Konuşmayı metne dönüştürme şu anda kullanılamıyor. İnternet bağlantınızı ve cihazınızın konuşma tanıma ayarlarını kontrol edip tekrar deneyin.';
-
-  @override
-  String get processingTakingLonger => 'Hâlâ devam ediyor — bu her zamankinden daha uzun sürüyor.';
 
   @override
   String get speechProfileEnrollmentPrompt =>
@@ -12022,9 +12021,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Yerel Kopyalar';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -12344,6 +12340,9 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Konuşma bağlamı';
+
+  @override
   String get reviewQuestionSpelling => 'Bu nasıl yazılır?';
 
   @override
@@ -12440,6 +12439,15 @@ class AppLocalizationsTr extends AppLocalizations {
   String get reviewRecentChanges => 'Son değişiklikler';
 
   @override
+  String get reviewChangeAfter => 'Sonra';
+
+  @override
+  String get reviewChangeBefore => 'Önce';
+
+  @override
+  String get reviewChangeRemoved => 'Etkin listeden kaldırıldı';
+
+  @override
   String get reviewChangesIntro =>
       'Omi’nin son 30 günde kendi kendine yaptığı değişiklikler. Yanlış görünen her şeyi geri alın.';
 
@@ -12457,6 +12465,59 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get reviewNoChangesBody => 'Omi notlarınızı düzenlediğinde değişiklikler burada görünür.';
+
+  @override
+  String get reviewChangesSectionTerms => 'Adlar ve terimler';
+
+  @override
+  String get reviewChangesSectionTitles => 'Başlıklar ve özetler';
+
+  @override
+  String get reviewChangesSectionOther => 'Diğer değişiklikler';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count konuşma',
+      one: '1 konuşma',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count yer',
+      one: '1 yer',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return '$count öğenin tümünü göster';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Tümünü geri al';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Kanıtı gör';
+
+  @override
+  String get reviewChangeViewConversation => 'Konuşmayı görüntüle';
+
+  @override
+  String get reviewChangeViewTask => 'Görevi görüntüle';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Geri alınamadı: $failed/$total. Tekrar deneyin.';
+  }
 
   @override
   String get reviewShowMore => 'Daha fazla göster';
@@ -13080,6 +13141,36 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String get paywallRecommended => 'Recommended';
+
+  @override
+  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
+
+  @override
+  String get paywallOtherPlans => 'See all plans';
+
+  @override
+  String get paywallComparePlans => 'See plans';
+
+  @override
+  String get paywallYourPlan => 'Your plan';
+
+  @override
+  String get paywallNotNow => 'Not now';
+
+  @override
+  String get paywallTryAgain => 'Try again';
+
+  @override
+  String get paywallManageBilling => 'Manage billing';
+
+  @override
+  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
+
+  @override
+  String get paywallPlans => 'Plans';
+
+  @override
   String get firstCaptureTitle => 'How will you capture?';
 
   @override
@@ -13126,6 +13217,41 @@ class AppLocalizationsTr extends AppLocalizations {
   String get firstCaptureEmpty => 'I didn\'t catch enough speech, try again with a few sentences';
 
   @override
+  String get watchCaptureTitle => 'Record from your Apple Watch';
+
+  @override
+  String get watchCaptureOpen => 'Open Omi on your Apple Watch.';
+
+  @override
+  String get watchCaptureRecord => 'Tap Record. Allow microphone access if asked.';
+
+  @override
+  String get watchCaptureSync => 'Your recording syncs to Omi on this phone.';
+
+  @override
+  String get pairingBluetoothOff => 'Turn on Bluetooth on your phone, then try again.';
+
+  @override
+  String get pairingBluetoothPermission => 'Allow Bluetooth access for Omi in Settings, then try again.';
+
+  @override
+  String get pairingNearbyPermission => 'Allow Nearby devices access for Omi in Settings, then try again.';
+
+  @override
+  String get pairingLocationPermission =>
+      'Allow location access for Omi in Settings so this phone can find your device, then try again.';
+
+  @override
+  String get pairingNotFoundOrDropped =>
+      'Couldn\'t reach your Omi. Make sure it\'s charged, close to your phone, and its light is blinking, then try again.';
+
+  @override
+  String get pairingBondRecovery => 'Forget Omi in your phone’s Bluetooth settings, then try pairing again.';
+
+  @override
+  String get pairingHowTo => 'How to pair';
+
+  @override
   String get firstCaptureWatchInstructions =>
       'Open Omi on your Apple Watch and tap Record. Allow microphone access if asked. Your capture will sync to Omi on this phone.';
 
@@ -13163,4 +13289,241 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get firstCaptureSiriTip => 'Tip: Enable Omi in Shortcuts → Siri.';
+
+  @override
+  String get paywallOutlineHeadline => 'Bir daha tek kelimeyi bile kaçırma.';
+
+  @override
+  String get paywallCancelAnytime => 'İstediğin zaman iptal et.';
+
+  @override
+  String get connectAnAgent => 'Bir Ajan Bağla';
+
+  @override
+  String get connectAnAgentSubtitle => 'Claude, ChatGPT, Codex veya herhangi bir ajan için kurulum istemi alın';
+
+  @override
+  String syncCardSyncingAmount(String amount) {
+    return '$amount ses senkronize ediliyor';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Kayıtlarınız senkronize ediliyor';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Omi\'den indiriliyor · $done / $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Yükleniyor · $done / $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return '$amount konuşmalara dönüştürülüyor';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done / $total tamamlandı · bu ekrandan çıkabilirsiniz';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount senkronize edilmeye hazır';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → telefon';
+
+  @override
+  String get syncStepLabelUpload => 'Yükleme';
+
+  @override
+  String get syncStepLabelTranscribe => 'Yazıya dök';
+
+  @override
+  String get syncDetailsTitle => 'Senkronizasyon ayrıntıları';
+
+  @override
+  String get syncDetailsRightNow => 'Şu anda';
+
+  @override
+  String get syncDetailsYourOmi => 'Omi\'niz';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Aktarım hızı';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Omi\'de bekliyor';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Bu telefonda bekliyor';
+
+  @override
+  String get syncDetailsTranscribing => 'Omi\'de yazıya dökülüyor';
+
+  @override
+  String get syncDetailsForSupport => 'Destek için';
+
+  @override
+  String get syncDetailsAudioFiles => 'Ses dosyaları';
+
+  @override
+  String get syncDetailsServerJobs => 'Sunucu işleri (biten / toplam)';
+
+  @override
+  String get syncDetailsCopy => 'Destek için ayrıntıları kopyala';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Operator ve Architect planlarında kullanılabilir';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app kapasitesi dolu';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Bekleme listesine katıl';
+
+  @override
+  String get chatAppsOnWaitlist => 'Bekleme listesindesin';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Bekleme listesindesin. Yer açıldığında haber vereceğiz.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Her şey hazır, $name';
+  }
+
+  @override
+  String get onboardingActDemoSummary =>
+      'Haziranda Lizbon\'a taşınan Sam\'le öğle yemeği. Cumaya kadar sunumu ekibine göndermek ve eve dönerken süt almak istiyorsun.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Cumaya kadar sunumu ekibe gönder';
+
+  @override
+  String get onboardingActDemoTask2 => 'Eve dönerken süt al';
+
+  @override
+  String get onboardingActDemoTitle => 'Sam\'le öğle yemeği';
+
+  @override
+  String get onboardingActDictateBody => 'Kendi tarzınla söyle. Gerisini Omi halleder.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Sadece konuş. Omi\'n dinliyor.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Az önce Sam\'le öğle yemeği yedim, haziranda Lizbon\'a taşınıyor! Cumaya kadar sunumu ekibe göndermemi ve eve dönerken süt almamı hatırlat.';
+
+  @override
+  String get onboardingActDictateHint => 'Bitince onay işaretine dokun';
+
+  @override
+  String get onboardingActDictateTitle => 'Omi\'ye gününü anlat';
+
+  @override
+  String get onboardingActIntro => 'Hadi Omi\'yi deneyelim.';
+
+  @override
+  String get onboardingActJustNow => 'Az önce';
+
+  @override
+  String get onboardingActMicAllow => 'Mikrofona İzin Ver';
+
+  @override
+  String get onboardingActMicBody => 'Omi\'yle konuştuğunda seni duyabilmesi için.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi\'n henüz ses göndermiyor. Şimdilik telefonunu kullan.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi\'nin mikrofonuna ihtiyacı var';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Omi\'n duyulmuyor. Açık ve yakında olduğundan emin ol.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Henüz seni duyamıyoruz. Biraz daha yüksek sesle konuşmayı dene.';
+
+  @override
+  String get onboardingActNotesLabel => 'Günün, özetle';
+
+  @override
+  String get onboardingActPhoneMic => 'Telefon mikrofonu';
+
+  @override
+  String get onboardingActRateTitle => 'Omi\'yi beğendin mi?';
+
+  @override
+  String get onboardingActRemembers => 'Omi hatırlar, senin hatırlamana gerek kalmaz';
+
+  @override
+  String get onboardingActSavedToTasks => 'Görevlerine kaydedildi';
+
+  @override
+  String get onboardingActTasksLabel => 'Omi yapılacaklarını yakaladı';
+
+  @override
+  String get onboardingActWriting => 'Özetleniyor…';
+
+  @override
+  String get onboardingActYourWords => 'Söylediklerin';
+
+  @override
+  String get onboardingConnectOmi => 'Omi\'yi bağla';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Bağlamak için Omi\'ne dokun.';
+
+  @override
+  String get onboardingNoOmiYet => 'Omi\'n henüz yok mu?';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Henüz sipariş vermedim';
+
+  @override
+  String get onboardingOmiOrdered => 'Sipariş verdim';
+
+  @override
+  String get onboardingPermissionTapToFix => 'Düzeltmek için dokunun';
+
+  @override
+  String get homePendingTitle => 'Konuşmalar yolda';
+
+  @override
+  String get homePendingCatchingUp => 'Önceki ses işleniyor';
+
+  @override
+  String get onTheWayTitle => 'Yolda';
+
+  @override
+  String get onTheWayAlmostReady => 'Neredeyse hazır';
+
+  @override
+  String get activityEmpty => 'Henüz etkinlik yok';
+
+  @override
+  String get activityNewSemantics => 'Etkinlik, yeni öğeler';
+
+  @override
+  String get activityLoadFailed => 'Etkinliğinizin tamamı yüklenemedi';
+
+  @override
+  String get activityNewItem => 'Yeni';
+
+  @override
+  String get activityNeedsAttention => 'İlgi gerekiyor';
+
+  @override
+  String get activityRetryAll => 'Tümünü yeniden dene';
+
+  @override
+  String get attentionSummaryFailed => 'Bu konuşma özetlenemedi';
 }

@@ -1,0 +1,3 @@
+{
+  "change": "The Offline Sync \"needs attention\" card's button now retries the recordings that can still upload, instead of doing nothing, and it is hidden when none of them can."
+}

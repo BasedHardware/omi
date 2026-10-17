@@ -593,11 +593,9 @@ def validate_target(
     names = all_names(target)
     unclassified = sorted(names - classified_public)
     errors.extend(f"{target.name}: input {name} is not classified public_build" for name in unclassified)
-    runtime_config_names = set(target.deployment.runtime_env_vars)
-    runtime_config_classification = classified_runtime_config or set()
     errors.extend(
         f"{target.name}: runtime env {name} is not classified config"
-        for name in sorted(runtime_config_names - runtime_config_classification)
+        for name in sorted(set(target.deployment.runtime_env_vars) - (classified_runtime_config or set()))
     )
     for item in target.inputs:
         if item.source != "repository_config":
@@ -629,8 +627,7 @@ def validate_target(
     if guard_names and 'test -n "$value"' not in dockerfile:
         errors.append(f"{target.dockerfile}: public-build guard must reject empty values")
     if "{sha}" in target.candidate_acceptance.command:
-        dockerfile_args = set(ARG.findall(dockerfile))
-        if "NEXT_PUBLIC_OMI_BUILD_SHA" not in dockerfile_args:
+        if "NEXT_PUBLIC_OMI_BUILD_SHA" not in set(ARG.findall(dockerfile)):
             errors.append(f"{target.dockerfile}: missing revision-identity ARG NEXT_PUBLIC_OMI_BUILD_SHA")
 
     workflow_path = root / target.workflow
@@ -641,7 +638,9 @@ def validate_target(
     if DEPLOY_ACTION not in workflow:
         errors.append(f"{target.workflow}: missing centralized public-build deployment {DEPLOY_ACTION!r}")
     if target.gateway_required:
-        if "runtime_env_vars: OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}" not in workflow:
+        gateway = re.escape("OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}")
+        pattern = r"(?m)^([ \t]*)runtime_env_vars: (?:{0}$|\|[-+]?\n(?:\1[ \t]+[^\n]*\n)*?\1[ \t]+{0}$)"
+        if not re.search(pattern.format(gateway), workflow):
             errors.append(
                 f"{target.workflow}: gateway-required target must source OMI_LLM_GATEWAY_URL from GitHub environment vars"
             )

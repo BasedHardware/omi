@@ -1,0 +1,30 @@
+"""Explicit production adapter composition, also usable with loopback emulators."""
+
+from typing import Any
+from functools import partial
+
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from utils.batch_pipeline.artifacts import ArtifactStore
+from utils.batch_pipeline.retention import batch_artifact_authorize, batch_artifact_register
+
+
+def create_artifact_store(store: Any, storage_client: Any, bucket: str, master_secret: bytes) -> ArtifactStore:
+    if len(master_secret) < 32:
+        raise ValueError('batch artifact encryption secret must contain at least 32 bytes')
+
+    def key_for_owner(owner_id: str) -> bytes:
+        # Same derivation as utils.encryption; no import-time secret requirement,
+        # plaintext files, shared key cache, or permissive decrypt fallback.
+        return HKDF(algorithm=hashes.SHA256(), length=32, salt=owner_id.encode(), info=b'user-data-encryption').derive(
+            master_secret
+        )
+
+    return ArtifactStore(
+        storage_client,
+        bucket=bucket,
+        namespace=store.namespace,
+        authorize=partial(batch_artifact_authorize, store),
+        key_for_owner=key_for_owner,
+        register_artifact=partial(batch_artifact_register, store),
+    )

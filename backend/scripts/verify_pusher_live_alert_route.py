@@ -10,7 +10,9 @@ changing that gate. Fleet drift is report-only unless ``--fail-on`` is raised.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
+import math
 import stat
 import time
 import urllib.error
@@ -61,6 +63,7 @@ LIVE_STT_IMPORT_UIDS = (
     "omi-stt-stage-disagreement",
     "omi-stt-enabled-state-unknown",
 )
+DATASOURCE_CANARY_UIDS = ("omi-datasource-prometheus", "omi-datasource-cloud-monitoring")
 REDIS_CACHE_IMPORT_UIDS = ("omi-redis-cache-conn-warn", "omi-redis-cache-conn-page")
 LIVE_STT_PENDING_UIDS = ("omi-soniox-runway-70", "omi-soniox-runway-90")
 TELEGRAM_RECEIVER = "Omi - Services Alerting (Telegram)"
@@ -70,8 +73,26 @@ REQUIRED_METRICS = {
     "omi_journey_terminal_total",
 }
 REQUIRED_JOBS = {"pusher-metrics", "backend-listen-metrics"}
+# Per-target `up` series. Pusher and backend-listen additionalScrapeConfigs both
+# relabel namespace and pod. min(up) is applied in process to the series that
+# remain after confirmed deletions are removed. Do not replace this with max(up).
+SERVING_UP_QUERY = 'up{job=~"pusher-metrics|backend-listen-metrics"}'
+# kube-state-metrics v2.16 emits this gauge only when metadata.deletionTimestamp
+# is set. Labels are namespace, pod, and uid — the same namespace/pod keys as the
+# scrape targets. Both Deployments use terminationGracePeriodSeconds 120 plus a
+# 15s preStop, which outlasts the post-rollout retry budget, so a draining old
+# pod must not fail the serving set. Phase Running is not a deletion signal.
+POD_DELETION_TIMESTAMP_QUERY = "kube_pod_deletion_timestamp"
+# Distinguishes "nothing is deleting" from "kube-state-metrics is not scraped".
+# An empty deletion result is authoritative only when this count is positive.
+KSM_POD_INFO_COUNT_QUERY = "count(kube_pod_info)"
 ALLOWED_HOSTS = {"monitor.omiapi.com", "monitor.omi.me"}
 DEFINITION_KEYS = ("uid", "title", "condition", "data", "noDataState", "execErrState", "for", "labels")
+# Grafana stores these on a query node when the committed rule omits them.
+# They are assigned storage defaults, not authored alert behavior. A committed
+# value is compared exactly, including when it equals one of these defaults.
+GRAFANA_ASSIGNED_QUERY_DEFAULTS = {"queryType": ""}
+GRAFANA_ASSIGNED_MODEL_DEFAULTS = {"intervalMs": 1000, "maxDataPoints": 43200}
 SINGLE_RULE_SIZE_LIMIT = 1_000_000
 FLEET_LIST_SIZE_LIMIT = 4_000_000
 ALERT_RULE_LIST_PATH = "/api/v1/provisioning/alert-rules"
@@ -151,7 +172,7 @@ def _write_rule(base_url: str, uid: str, rule: dict[str, Any], token: str, *, ex
         raise AlertRouteError(f"Grafana API request failed for {path}: {type(exc).__name__}") from exc
 
 
-def load_live_stt_import_rules() -> dict[str, dict[str, Any]]:
+def load_live_stt_import_rules(*, production: bool = True) -> dict[str, dict[str, Any]]:
     loaded: object = json.loads((ALERT_SOURCES / "live-stt.json").read_text(encoding="utf-8"))
     if not isinstance(loaded, list):
         raise AlertRouteError("committed live-STT alert file is not a list")
@@ -167,10 +188,26 @@ def load_live_stt_import_rules() -> dict[str, dict[str, Any]]:
         raise AlertRouteError("committed live-STT rules do not match the import allowlist and pending set")
     rules = {uid: by_uid[uid] for uid in LIVE_STT_IMPORT_UIDS}
     committed = load_all_committed_rules()
-    for uid in REDIS_CACHE_IMPORT_UIDS:
+    canary_uids = DATASOURCE_CANARY_UIDS if production else ()
+    for uid in (*canary_uids, *REDIS_CACHE_IMPORT_UIDS):
         if uid not in committed:
-            raise AlertRouteError(f"committed Redis cache alert {uid} is missing")
+            raise AlertRouteError(f"committed import alert {uid} is missing")
         rules[uid] = committed[uid]
+    # Gate-file UIDs, including the resilience finalization set, share this
+    # import. Canaries stay first so their read-back still precedes KeepLast.
+    for uid in load_gated_uids(committed):
+        if uid not in rules:
+            rules[uid] = committed[uid]
+    if not production:
+        rules = _development_rules(rules)
+    for uid in canary_uids:
+        canary = rules[uid]
+        if (
+            canary.get("execErrState") != "Alerting"
+            or canary.get("noDataState") != "Alerting"
+            or canary.get("isPaused") is not False
+        ):
+            raise AlertRouteError(f"datasource canary {uid} must be active and page on errors and no data")
     for uid, rule in rules.items():
         labels = rule.get("labels")
         if not isinstance(labels, dict) or labels.get("alert_identity") != uid:
@@ -191,7 +228,8 @@ def _has_telegram_receiver(contact_points: Any, receiver: str) -> bool:
 
 
 def _run_live_stt_import(grafana_url: str, token: str) -> list[str]:
-    rules = load_live_stt_import_rules()
+    rules = load_live_stt_import_rules(production=grafana_url == "https://monitor.omi.me")
+    canary_uids = tuple(uid for uid in DATASOURCE_CANARY_UIDS if uid in rules)
     live = index_live_rules(
         _request_json(grafana_url, ALERT_RULE_LIST_PATH, token, size_limit=FLEET_LIST_SIZE_LIMIT),
         path=ALERT_RULE_LIST_PATH,
@@ -199,10 +237,36 @@ def _run_live_stt_import(grafana_url: str, token: str) -> list[str]:
     contacts = _request_json(grafana_url, "/api/v1/provisioning/contact-points", token)
     if not _has_telegram_receiver(contacts, TELEGRAM_RECEIVER):
         return ["verified Telegram alert receiver is missing or resolve notifications are disabled"]
+    # Establish and read back the replacement pages before KeepLast reaches any
+    # business rule. The GMP canary belongs to its separately deployed datasource.
+    for uid in canary_uids:
+        _write_rule(grafana_url, uid, rules[uid], token, exists=uid in live)
+        print(f"UPSERTED datasource canary {uid}")
+    failures = []
+    for uid in canary_uids:
+        canary = _request_json(grafana_url, f"{ALERT_RULE_LIST_PATH}/{uid}", token)
+        if not isinstance(canary, dict):
+            failures.append(f"datasource canary {uid} read-back is not an object")
+        else:
+            failures.extend(rule_definition_errors(uid, canary, rules[uid]))
+    if failures:
+        return failures
     for uid, rule in rules.items():
+        if uid in DATASOURCE_CANARY_UIDS:
+            continue
         _write_rule(grafana_url, uid, rule, token, exists=uid in live)
         print(f"UPSERTED live-STT alert {uid}")
     return []
+
+
+def _development_rules(rules: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    # No verified development sentinel exists. Development keeps error pages
+    # instead of KeepLast, on a detached copy so canonical rules never change.
+    rules = copy.deepcopy(rules)
+    for rule in rules.values():
+        if rule.get("execErrState") == "KeepLast":
+            rule["execErrState"] = "Error"
+    return rules
 
 
 def _committed_rules() -> dict[str, dict[str, Any]]:
@@ -278,8 +342,47 @@ def _receiver(rule: dict[str, Any]) -> Any:
     return settings.get("receiver")
 
 
+def _strip_grafana_assigned_query_defaults(live_node: dict[str, Any], expected_node: dict[str, Any]) -> dict[str, Any]:
+    """Drop exact Grafana storage defaults that the committed node does not set."""
+    node = dict(live_node)
+    for key, default in GRAFANA_ASSIGNED_QUERY_DEFAULTS.items():
+        if key not in expected_node and node.get(key) == default:
+            del node[key]
+    expected_model = expected_node.get("model")
+    live_model = node.get("model")
+    if isinstance(live_model, dict) and isinstance(expected_model, dict):
+        model = dict(live_model)
+        for key, default in GRAFANA_ASSIGNED_MODEL_DEFAULTS.items():
+            if key not in expected_model and model.get(key) == default:
+                del model[key]
+        node["model"] = model
+    return node
+
+
+def _data_matches_committed(live: Any, expected: Any) -> bool:
+    if live == expected:
+        return True
+    if not isinstance(live, list) or not isinstance(expected, list) or len(live) != len(expected):
+        return False
+    for live_node, expected_node in zip(live, expected):
+        if live_node == expected_node:
+            continue
+        if not isinstance(live_node, dict) or not isinstance(expected_node, dict):
+            return False
+        if _strip_grafana_assigned_query_defaults(live_node, expected_node) != expected_node:
+            return False
+    return True
+
+
 def mismatched_definition_keys(live: dict[str, Any], expected: dict[str, Any]) -> list[str]:
-    keys = [key for key in DEFINITION_KEYS if live.get(key) != expected.get(key)]
+    keys: list[str] = []
+    for key in DEFINITION_KEYS:
+        if key == "data":
+            if not _data_matches_committed(live.get(key), expected.get(key)):
+                keys.append(key)
+            continue
+        if live.get(key) != expected.get(key):
+            keys.append(key)
     receiver = _receiver(expected)
     if not isinstance(receiver, str) or _receiver(live) != receiver:
         keys.append("receiver")
@@ -387,6 +490,121 @@ def fleet_gate_failures(coverage: FleetCoverage, gated_uids: tuple[str, ...], fa
     return failures
 
 
+@dataclass(frozen=True)
+class ServingUp:
+    by_job: dict[str, str]
+    deletion_timestamps_confirmed: bool
+    excluded_targets: int
+
+
+def _query_samples(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict) or payload.get("status") != "success":
+        return []
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        return []
+    result = data.get("result")
+    if not isinstance(result, list):
+        return []
+    return [item for item in result if isinstance(item, dict)]
+
+
+def _sample_number(item: dict[str, Any]) -> float | None:
+    value = item.get("value")
+    if not isinstance(value, list) or len(value) != 2:
+        return None
+    raw = value[1]
+    if isinstance(raw, bool) or not isinstance(raw, (int, float, str)):
+        return None
+    try:
+        number = float(raw)
+    except ValueError:
+        return None
+    if not math.isfinite(number):
+        return None
+    return number
+
+
+def _metric_label(item: dict[str, Any], key: str) -> str | None:
+    metric = item.get("metric")
+    if not isinstance(metric, dict):
+        return None
+    value = metric.get(key)
+    if not isinstance(value, str) or not value:
+        return None
+    return value
+
+
+def confirmed_deleting_pods(
+    deletion_query: dict[str, Any] | None,
+    ksm_presence_query: dict[str, Any] | None,
+) -> tuple[set[tuple[str, str]], bool]:
+    """Return namespace/pod pairs with a confirmed deletion timestamp.
+
+    The boolean is false when those pairs cannot be trusted. An empty deletion
+    result means "nothing is deleting" only when kube_pod_info is being scraped.
+    Without that, kube-state-metrics may be absent, and no down target is excused.
+    Samples of kube_pod_deletion_timestamp are themselves confirmation.
+    """
+    deletion_ok = isinstance(deletion_query, dict) and deletion_query.get("status") == "success"
+    pairs: set[tuple[str, str]] = set()
+    if deletion_ok:
+        for item in _query_samples(deletion_query):
+            namespace = _metric_label(item, "namespace")
+            pod = _metric_label(item, "pod")
+            stamp = _sample_number(item)
+            if namespace is None or pod is None or stamp is None or stamp <= 0:
+                continue
+            pairs.add((namespace, pod))
+    if pairs:
+        return pairs, True
+    ksm_present = False
+    for item in _query_samples(ksm_presence_query):
+        sample = _sample_number(item)
+        if sample is not None and sample > 0:
+            ksm_present = True
+            break
+    if deletion_ok and ksm_present:
+        return set(), True
+    return set(), False
+
+
+def serving_up_by_job(
+    up_query: dict[str, Any] | None,
+    deletion_query: dict[str, Any] | None = None,
+    ksm_presence_query: dict[str, Any] | None = None,
+) -> ServingUp:
+    """min(up) by job over targets whose pod has no confirmed deletion timestamp.
+
+    A job with no remaining series is absent. That keeps a rollout from passing
+    when every scraped target for it is terminating. Targets that lack namespace
+    and pod labels cannot be matched and stay in the min.
+    """
+    deleting, confirmed = confirmed_deleting_pods(deletion_query, ksm_presence_query)
+    samples: dict[str, list[float]] = {job: [] for job in REQUIRED_JOBS}
+    excluded = 0
+    for item in _query_samples(up_query):
+        job = _metric_label(item, "job")
+        if job not in samples:
+            continue
+        namespace = _metric_label(item, "namespace")
+        pod = _metric_label(item, "pod")
+        if confirmed and namespace is not None and pod is not None and (namespace, pod) in deleting:
+            excluded += 1
+            continue
+        number = _sample_number(item)
+        samples[job].append(0.0 if number is None else number)
+    by_job: dict[str, str] = {}
+    for job, values in samples.items():
+        if not values:
+            by_job[job] = "absent"
+        elif min(values) >= 1.0:
+            by_job[job] = "1"
+        else:
+            by_job[job] = "0"
+    return ServingUp(by_job=by_job, deletion_timestamps_confirmed=confirmed, excluded_targets=excluded)
+
+
 def validate_live_route(
     live_rules: dict[str, dict[str, Any]],
     datasource: dict[str, Any],
@@ -395,8 +613,13 @@ def validate_live_route(
     contact_points: Any,
     *,
     phase: str,
+    deletion_query: dict[str, Any] | None = None,
+    ksm_presence_query: dict[str, Any] | None = None,
+    production: bool = True,
 ) -> list[str]:
     expected_rules = _committed_rules()
+    if not production:
+        expected_rules = _development_rules(expected_rules)
     errors: list[str] = []
     receivers: set[str] = set()
     for uid, expected in expected_rules.items():
@@ -409,24 +632,21 @@ def validate_live_route(
                 receivers.add(receiver)
     if str(datasource.get("status", "")).upper() != "OK":
         errors.append("live Prometheus datasource health is not OK")
-    up_results = up_query.get("data", {}).get("result", []) if up_query.get("status") == "success" else []
-    observed_up: dict[str, str] = {}
-    for item in up_results:
-        if (
-            isinstance(item, dict)
-            and isinstance(item.get("metric"), dict)
-            and isinstance(item.get("value"), list)
-            and len(item["value"]) == 2
-        ):
-            job = item["metric"].get("job")
-            if isinstance(job, str):
-                observed_up.setdefault(job, str(item["value"][1]))
-    healthy_jobs = {job for job, value in observed_up.items() if value == "1"}
-    if healthy_jobs != REQUIRED_JOBS:
-        observed = ", ".join(f"{job}={observed_up.get(job, 'absent')}" for job in sorted(REQUIRED_JOBS))
+    serving = serving_up_by_job(up_query, deletion_query, ksm_presence_query)
+    # Every required target already up does not need a deletion timestamp.
+    # kube-state-metrics darkness fails this gate only when a down target would
+    # otherwise be excused; that down target stays in min(up) and is reported.
+    if any(serving.by_job.get(job) != "1" for job in REQUIRED_JOBS):
+        observed = ", ".join(f"{job}={serving.by_job.get(job, 'absent')}" for job in sorted(REQUIRED_JOBS))
+        detail = ""
+        if not serving.deletion_timestamps_confirmed and any(serving.by_job.get(job) == "0" for job in REQUIRED_JOBS):
+            detail = (
+                "; kube-state-metrics deletion timestamps were not confirmed, "
+                "so down targets were not treated as terminating"
+            )
         errors.append(
             "current Pusher and backend-listen Prometheus scrape targets are not both healthy"
-            f" (observed min(up) by job: {observed})"
+            f" (observed min(up) by job: {observed}{detail})"
         )
     results = metric_query.get("data", {}).get("result", []) if metric_query.get("status") == "success" else []
     observed_metrics = {
@@ -462,10 +682,22 @@ def _approved_grafana_url(raw: str) -> bool:
     )
 
 
+def _prometheus_instant_query(base_url: str, token: str, query: str) -> dict[str, Any]:
+    path = "/api/datasources/proxy/uid/prometheus/api/v1/query?" + urllib.parse.urlencode({"query": query})
+    payload = _request_json(base_url, path, token)
+    if not isinstance(payload, dict):
+        raise AlertRouteError(f"Grafana API returned a non-object Prometheus payload for {query}")
+    return payload
+
+
+def _prometheus_instant_query_or_error(base_url: str, token: str, query: str) -> dict[str, Any]:
+    try:
+        return _prometheus_instant_query(base_url, token, query)
+    except AlertRouteError:
+        return {"status": "error"}
+
+
 def _run_pusher_gate(grafana_url: str, token: str, phase: str, attempts: int) -> list[str]:
-    up_query_path = "/api/datasources/proxy/uid/prometheus/api/v1/query?" + urllib.parse.urlencode(
-        {"query": 'min(up{job=~"pusher-metrics|backend-listen-metrics"}) by (job)'}
-    )
     metric_query_path = "/api/datasources/proxy/uid/prometheus/api/v1/query?" + urllib.parse.urlencode(
         {
             "query": 'count({__name__=~"omi_capture_finalization_failures_total|omi_journey_accepted_total|omi_journey_terminal_total",job=~"pusher-metrics|backend-listen-metrics"}) by (__name__,job)'
@@ -476,10 +708,13 @@ def _run_pusher_gate(grafana_url: str, token: str, phase: str, attempts: int) ->
         failures = validate_live_route(
             {uid: _request_json(grafana_url, f"/api/v1/provisioning/alert-rules/{uid}", token) for uid in RULE_UIDS},
             _request_json(grafana_url, "/api/datasources/uid/prometheus/health", token),
-            _request_json(grafana_url, up_query_path, token),
+            _prometheus_instant_query(grafana_url, token, SERVING_UP_QUERY),
             _request_json(grafana_url, metric_query_path, token),
             _request_json(grafana_url, "/api/v1/provisioning/contact-points", token),
             phase=phase,
+            deletion_query=_prometheus_instant_query_or_error(grafana_url, token, POD_DELETION_TIMESTAMP_QUERY),
+            ksm_presence_query=_prometheus_instant_query_or_error(grafana_url, token, KSM_POD_INFO_COUNT_QUERY),
+            production=grafana_url == "https://monitor.omi.me",
         )
         if not failures or attempt + 1 == attempts:
             break
@@ -493,8 +728,9 @@ def _run_fleet_coverage(
     committed = load_all_committed_rules()
     gated_uids = load_gated_uids(committed)
     if alert_set == "live-stt":
-        committed = {uid: committed[uid] for uid in (*LIVE_STT_IMPORT_UIDS, *REDIS_CACHE_IMPORT_UIDS)}
-        gated_uids = tuple(uid for uid in gated_uids if uid in committed)
+        committed = load_live_stt_import_rules(production=grafana_url == "https://monitor.omi.me")
+        canary_uids = tuple(uid for uid in DATASOURCE_CANARY_UIDS if uid in committed)
+        gated_uids = tuple(dict.fromkeys((*canary_uids, *(uid for uid in gated_uids if uid in committed))))
     coverage: FleetCoverage | None = None
     last_error: str | None = None
     for attempt in range(attempts):

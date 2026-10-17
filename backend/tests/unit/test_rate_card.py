@@ -232,14 +232,29 @@ def realtime_metadata_types():
 @pytest.mark.parametrize('include_flag', [False, None])
 def test_realtime_metadata_separate_reasoning_is_priced_at_text_output_rate(include_flag, realtime_metadata_types):
     RealtimeTurnUsage, realtime_turn_metadata = realtime_metadata_types
-    turn = RealtimeTurnUsage(provider='openai', reasoning_tokens=100, usage_reported=True)
+    turn = RealtimeTurnUsage(
+        provider='openai',
+        input_audio_tokens=100,
+        output_text_tokens=50,
+        reasoning_tokens=25,
+        usage_reported=True,
+        modality_split_reported=True,
+        cached_split_reported=True,
+    )
     usage = asdict(realtime_turn_metadata(turn).usage)
     if include_flag is None:
         usage.pop('output_tokens_include_reasoning')
-    priced = price_llm_attempt(event(**usage, configured_model='gpt-realtime-2', modality_tokens={}))
-    expected = price_llm_attempt(event(configured_model='gpt-realtime-2', modality_tokens={'output_text': 100}))
-    assert priced == expected
-    assert priced['status'] == 'complete' and priced['micro_units'] > 0
+    assert usage['reasoning_tokens'] == 25
+    assert usage['output_tokens'] == 50
+    assert usage.get('output_tokens_include_reasoning', False) is False
+    modality_tokens = {'input_audio': 100, 'output_text': 50}
+    priced = price_llm_attempt(event(**usage, configured_model='gpt-realtime-2', modality_tokens=modality_tokens))
+    # 100 audio-in at $32/M + (50 text-out + 25 reasoning) at $24/M, times L, in micro-units.
+    assert priced == {'micro_units': 10349603, 'status': 'complete', 'reasons': []}
+    collapsed = price_llm_attempt(
+        event(configured_model='gpt-realtime-2', modality_tokens={'input_audio': 100, 'output_text': 75})
+    )
+    assert priced['micro_units'] == collapsed['micro_units']
 
 
 def test_realtime_reasoning_already_in_text_output_is_not_duplicated():
@@ -283,4 +298,11 @@ def test_cloud_deepgram_runtime_ids_use_pinned_provider_card(provider):
 
 
 def test_self_hosted_deepgram_retains_unknown_compute_proxy():
-    assert 'provider_unknown' in price_transcription(3600, provider='deepgram_self_hosted', accepted=True)['reasons']
+    priced = price_transcription(3600, provider='deepgram_self_hosted', accepted=True)
+    unknown = price_transcription(3600, provider='unknown', accepted=True)
+    nova3 = price_transcription(3600, provider='deepgram', accepted=True)
+    assert priced['micro_units'] == unknown['micro_units']
+    assert priced['micro_units'] != nova3['micro_units']
+    assert 'provider_unknown' in priced['reasons']
+    assert get_rate_card()['transcription']['unknown']['micro_usd_per_hour'] == 258000
+    assert get_rate_card()['transcription']['deepgram']['micro_usd_per_hour'] == 468000

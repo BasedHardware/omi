@@ -91,6 +91,7 @@ def _build_fakes() -> dict:
         'conversations',
         'daily_summaries',
         'dev_api_key',
+        'dream_store',
         'fair_use',
         'folders',
         'goals',
@@ -188,6 +189,7 @@ def _build_fakes() -> dict:
 
     cloud_tasks = ModuleType('utils.cloud_tasks')
     cloud_tasks.enqueue_audio_merge_job = MagicMock()
+    cloud_tasks.enqueue_audio_merge_job_deferred = MagicMock()
     cloud_tasks.enqueue_sync_job = MagicMock()
     cloud_tasks.get_sync_tasks_max_attempts = MagicMock(return_value=5)
     cloud_tasks.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)

@@ -116,7 +116,7 @@
     ],
     "updated": "2026-06-20T02:27:45Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -260,7 +260,7 @@
     ],
     "updated": "2026-06-20T02:27:45Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "3m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -404,7 +404,7 @@
     ],
     "updated": "2026-06-20T02:27:45Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -527,7 +527,7 @@
     ],
     "updated": "2026-06-20T02:27:46Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -671,7 +671,7 @@
     ],
     "updated": "2026-06-20T04:06:09Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -793,7 +793,7 @@
     ],
     "updated": "2026-07-08T21:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {

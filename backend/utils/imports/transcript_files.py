@@ -291,15 +291,24 @@ def _paragraph_cues(block: Sequence[str]) -> List[TranscriptCue]:
     stands as its own cue before the first label (a title).
     """
     labeled = [_LABEL_RE.match(line) is not None for line in block]
-    if sum(labeled) < 2:
+    # A non-label line before the first label stands as its own cue (a title)
+    # regardless of how many labels follow — joining it into the first turn
+    # glues the title onto the first speaker's name ("Meeting notes Alice").
+    first_label = labeled.index(True) if any(labeled) else len(block)
+    cues = [TranscriptCue(text=' '.join(block[:first_label]))] if first_label else []
+    rest = block[first_label:]
+    if sum(labeled[first_label:]) < 1:
+        # No labels at all — the whole block is free text.
         return [TranscriptCue(text=' '.join(block))]
     turns: List[List[str]] = []
-    for line, is_label in zip(block, labeled):
+    for line in rest:
+        is_label = _LABEL_RE.match(line) is not None
         if is_label or not turns:
             turns.append([line])
         else:
             turns[-1].append(line)
-    return [TranscriptCue(text=' '.join(turn)) for turn in turns]
+    cues.extend(TranscriptCue(text=' '.join(turn)) for turn in turns)
+    return cues
 
 
 def parse_srt(text: str) -> List[TranscriptCue]:

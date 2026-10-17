@@ -38,23 +38,21 @@ def bound_provider_clock(stamp, *, now=None):
     return stamp
 
 
-def channel_evidence(runtime, tz):
-    if runtime.request_at is None:
-        return list(runtime.evidence)
+def request_clock(runtime, tz):
     local = runtime.request_at.astimezone(ZoneInfo(tz or 'UTC'))
-    return [
-        {
-            'role': 'user',
-            'content': (
-                'Server-verified request clock: '
-                + local.isoformat()
-                + '. Resolve relative dates and reminder intervals from this original message time, '
-                'not the worker processing time. For "in N minutes", use create_action_item_tool '
-                'with due_in_minutes=N. If the original due time has passed, report the delay; never shift it forward.'
-            ),
-        },
-        *runtime.evidence,
-    ]
+    return (
+        'Server-verified request clock: '
+        + local.isoformat()
+        + '. Resolve relative dates and reminder intervals from this original message time, '
+        'not the worker processing time. For "in N minutes", use create_action_item_tool '
+        'with due_in_minutes=N. If the original due time has passed, report the delay; never shift it forward.'
+    )
+
+
+def channel_evidence(runtime, tz):
+    from utils.messaging.context import assemble
+
+    return assemble(list(runtime.evidence), runtime=runtime, timezone_name=tz)
 
 
 def phone_reminder_confirmation(due, tz, state):

@@ -777,7 +777,7 @@ async def test_off_chain_429_walks_to_capable_provider_without_backoff(monkeypat
 
 
 def test_terminal_after_text_gated_by_pin(monkeypatch):
-    counter = live_metrics.LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider='soniox')
+    counter = live_metrics.LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider='soniox', demand_cohort='ineligible')
     before = counter._value.get()
     monkeypatch.delenv(ENV, raising=False)
     runtime_off = _runtime(delivered=True, terminal=True)
