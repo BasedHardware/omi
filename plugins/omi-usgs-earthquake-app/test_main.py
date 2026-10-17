@@ -63,7 +63,26 @@ def install_dependency_stubs():
     sys.modules.setdefault("pydantic", pydantic)
 
     httpx = types.ModuleType("httpx")
-    httpx.HTTPError = Exception
+
+    class HTTPError(Exception):
+        pass
+
+    class HTTPStatusError(HTTPError):
+        def __init__(self, message=None, *, request=None, response=None):
+            super().__init__(message)
+            self.request = request
+            self.response = response
+
+    class RequestError(HTTPError):
+        pass
+
+    class TimeoutException(RequestError):
+        pass
+
+    httpx.HTTPError = HTTPError
+    httpx.HTTPStatusError = HTTPStatusError
+    httpx.RequestError = RequestError
+    httpx.TimeoutException = TimeoutException
 
     class DummyAsyncClient:
         def __init__(self, *args, **kwargs):
@@ -168,10 +187,12 @@ class UsgsEarthquakeAppTest(unittest.TestCase):
         self.assertIsNone(res2["coordinates"]["longitude"])
 
         # Feature with non-list coordinates
-        res3 = main._summarize_feature({
-            "properties": {"place": "Alaska", "mag": 5.1},
-            "geometry": {"coordinates": "not-a-list"},
-        })
+        res3 = main._summarize_feature(
+            {
+                "properties": {"place": "Alaska", "mag": 5.1},
+                "geometry": {"coordinates": "not-a-list"},
+            }
+        )
         self.assertEqual(res3["place"], "Alaska")
         self.assertEqual(res3["magnitude"], 5.1)
         self.assertIsNone(res3["coordinates"]["depth_km"])
@@ -209,9 +230,7 @@ class UsgsEarthquakeAppTest(unittest.TestCase):
         main._usgs_get = fake_usgs_get
         try:
             result = asyncio.run(
-                main.tool_recent_earthquakes(
-                    DummyRequest({"hours": 12, "min_magnitude": 4.0, "limit": 3})
-                )
+                main.tool_recent_earthquakes(DummyRequest({"hours": 12, "min_magnitude": 4.0, "limit": 3}))
             )
         finally:
             main._usgs_get = original_usgs_get
@@ -255,11 +274,11 @@ class UsgsEarthquakeAppTest(unittest.TestCase):
                     async def fake_usgs_get(params):
                         captured.update(params)
                         return {
-                            "features": [
-                                {"id": "negative-event", "properties": {"mag": -0.4}}
-                            ]
-                            if params["minmagnitude"] <= -0.4
-                            else []
+                            "features": (
+                                [{"id": "negative-event", "properties": {"mag": -0.4}}]
+                                if params["minmagnitude"] <= -0.4
+                                else []
+                            )
                         }
 
                     original = main._usgs_get
@@ -276,9 +295,7 @@ class UsgsEarthquakeAppTest(unittest.TestCase):
                     self.assertEqual(captured["minmagnitude"], expected)
                     self.assertEqual(result.data["count"], int(expected <= -0.4))
                     if expected <= -0.4:
-                        self.assertEqual(
-                            result.data["earthquakes"][0]["magnitude"], -0.4
-                        )
+                        self.assertEqual(result.data["earthquakes"][0]["magnitude"], -0.4)
                     if handler is main.tool_nearby_earthquakes:
                         self.assertEqual(captured["latitude"], 37.7)
                         self.assertEqual(captured["maxradiuskm"], 250.0)
@@ -289,9 +306,7 @@ class UsgsEarthquakeAppTest(unittest.TestCase):
         try:
             result = asyncio.run(main.tool_recent_earthquakes(DummyRequest({})))
             self.assertTrue(result.success)
-            self.assertEqual(
-                result.message, "No USGS earthquake events found for the requested filters."
-            )
+            self.assertEqual(result.message, "No USGS earthquake events found for the requested filters.")
             self.assertEqual(result.data["count"], 0)
         finally:
             main._usgs_get = original
@@ -308,9 +323,7 @@ class UsgsEarthquakeAppTest(unittest.TestCase):
 
     def test_recent_earthquakes_http_error_handled(self):
         original = main._usgs_get
-        main._usgs_get = lambda params: asyncio.sleep(
-            0, result={"error": "USGS request failed: connection timeout"}
-        )
+        main._usgs_get = lambda params: asyncio.sleep(0, result={"error": "USGS request failed: connection timeout"})
         try:
             result = asyncio.run(main.tool_recent_earthquakes(DummyRequest({})))
             self.assertFalse(result.success)
@@ -319,15 +332,11 @@ class UsgsEarthquakeAppTest(unittest.TestCase):
             main._usgs_get = original
 
     def test_nearby_earthquakes_requires_latitude_and_longitude(self):
-        result = asyncio.run(
-            main.tool_nearby_earthquakes(DummyRequest({"latitude": 37.7}))
-        )
+        result = asyncio.run(main.tool_nearby_earthquakes(DummyRequest({"latitude": 37.7})))
         self.assertFalse(result.success)
         self.assertEqual(result.message, "latitude and longitude are required")
 
-        result2 = asyncio.run(
-            main.tool_nearby_earthquakes(DummyRequest({"longitude": -122.4}))
-        )
+        result2 = asyncio.run(main.tool_nearby_earthquakes(DummyRequest({"longitude": -122.4})))
         self.assertFalse(result2.success)
         self.assertEqual(result2.message, "latitude and longitude are required")
 
@@ -340,22 +349,14 @@ class UsgsEarthquakeAppTest(unittest.TestCase):
         ]
         for lat, lon in cases:
             with self.subTest(lat=lat, lon=lon):
-                result = asyncio.run(
-                    main.tool_nearby_earthquakes(
-                        DummyRequest({"latitude": lat, "longitude": lon})
-                    )
-                )
+                result = asyncio.run(main.tool_nearby_earthquakes(DummyRequest({"latitude": lat, "longitude": lon})))
                 self.assertFalse(result.success)
                 self.assertIn("coordinates are out of range", result.data["error"])
 
     def test_nearby_earthquakes_rejects_nan_and_inf_coordinates(self):
         for val in ["nan", "inf", "-inf"]:
             with self.subTest(val=val):
-                result = asyncio.run(
-                    main.tool_nearby_earthquakes(
-                        DummyRequest({"latitude": val, "longitude": 0})
-                    )
-                )
+                result = asyncio.run(main.tool_nearby_earthquakes(DummyRequest({"latitude": val, "longitude": 0})))
                 self.assertFalse(result.success)
                 self.assertEqual(result.message, "latitude and longitude are required")
 
@@ -401,15 +402,9 @@ class UsgsEarthquakeAppTest(unittest.TestCase):
         original = main._usgs_get
         main._usgs_get = lambda params: asyncio.sleep(0, result={"features": []})
         try:
-            result = asyncio.run(
-                main.tool_nearby_earthquakes(
-                    DummyRequest({"latitude": 37.0, "longitude": -122.0})
-                )
-            )
+            result = asyncio.run(main.tool_nearby_earthquakes(DummyRequest({"latitude": 37.0, "longitude": -122.0})))
             self.assertTrue(result.success)
-            self.assertEqual(
-                result.message, "No nearby USGS earthquake events found for the requested filters."
-            )
+            self.assertEqual(result.message, "No nearby USGS earthquake events found for the requested filters.")
         finally:
             main._usgs_get = original
 
@@ -430,11 +425,7 @@ class UsgsEarthquakeAppTest(unittest.TestCase):
         original = main._usgs_get
         main._usgs_get = fake_get
         try:
-            result = asyncio.run(
-                main.tool_earthquake_details(
-                    DummyRequest({"event_id": "us7000test"})
-                )
-            )
+            result = asyncio.run(main.tool_earthquake_details(DummyRequest({"event_id": "us7000test"})))
             self.assertTrue(result.success)
             self.assertIn("Earthquake event us7000test found", result.message)
             self.assertEqual(result.data["earthquake"]["magnitude"], 5.5)
@@ -454,11 +445,7 @@ class UsgsEarthquakeAppTest(unittest.TestCase):
         original = main._usgs_get
         main._usgs_get = fake_get
         try:
-            result = asyncio.run(
-                main.tool_earthquake_details(
-                    DummyRequest({"event_id": "nonexistent"})
-                )
-            )
+            result = asyncio.run(main.tool_earthquake_details(DummyRequest({"event_id": "nonexistent"})))
             self.assertFalse(result.success)
             self.assertIn("No USGS earthquake event found for nonexistent", result.message)
             self.assertEqual(result.data["error"], "event not found")
@@ -469,11 +456,7 @@ class UsgsEarthquakeAppTest(unittest.TestCase):
         original = main._usgs_get
         main._usgs_get = lambda params: asyncio.sleep(0, result="unexpected string")
         try:
-            result = asyncio.run(
-                main.tool_earthquake_details(
-                    DummyRequest({"event_id": "us123"})
-                )
-            )
+            result = asyncio.run(main.tool_earthquake_details(DummyRequest({"event_id": "us123"})))
             self.assertFalse(result.success)
             self.assertIn("No USGS earthquake event found", result.message)
         finally:
@@ -481,15 +464,9 @@ class UsgsEarthquakeAppTest(unittest.TestCase):
 
     def test_earthquake_details_http_error(self):
         original = main._usgs_get
-        main._usgs_get = lambda params: asyncio.sleep(
-            0, result={"error": "USGS request failed: 404 Not Found"}
-        )
+        main._usgs_get = lambda params: asyncio.sleep(0, result={"error": "USGS request failed: 404 Not Found"})
         try:
-            result = asyncio.run(
-                main.tool_earthquake_details(
-                    DummyRequest({"event_id": "us404"})
-                )
-            )
+            result = asyncio.run(main.tool_earthquake_details(DummyRequest({"event_id": "us404"})))
             self.assertFalse(result.success)
             self.assertIn("404 Not Found", result.message)
         finally:
@@ -504,9 +481,7 @@ class UsgsEarthquakeAppTest(unittest.TestCase):
 
         for handler in handlers:
             with self.subTest(handler=handler.__name__):
-                result = asyncio.run(
-                    handler(DummyRequest(json_error=ValueError("bad json")))
-                )
+                result = asyncio.run(handler(DummyRequest(json_error=ValueError("bad json"))))
 
                 self.assertFalse(result.success)
                 self.assertEqual(result.message, "Invalid or missing JSON body")
@@ -521,9 +496,7 @@ class UsgsEarthquakeAppTest(unittest.TestCase):
 
         for handler in handlers:
             with self.subTest(handler=handler.__name__):
-                result = asyncio.run(
-                    handler(DummyRequest(payload=["list", "body"]))
-                )
+                result = asyncio.run(handler(DummyRequest(payload=["list", "body"])))
 
                 self.assertFalse(result.success)
                 self.assertEqual(result.message, "Invalid or missing JSON body")
