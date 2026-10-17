@@ -773,7 +773,7 @@ def test_desktop_cohort_output_reuses_escaped_state_value(monkeypatch, tmp_path,
     assert _MODULE['main']() == 0
     output = capsys.readouterr().out
     assert output.startswith(
-        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":5\\,"candidates_page":100\\,"deletion_marker_cache":100\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":5\\,"subscription_cache":100\\,"usage_month_cache":100}\n'
+        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":5\\,"candidates_page":100\\,"deletion_marker_cache":100\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":100\\,"subscription_cache":100\\,"usage_month_cache":100}\n'
     )
     assert output.endswith(
         '__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n'
@@ -838,7 +838,7 @@ def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_
         text=True,
     )
     assert result.stdout.startswith(
-        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":5\\,"candidates_page":100\\,"deletion_marker_cache":100\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":5\\,"subscription_cache":100\\,"usage_month_cache":100}\n'
+        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":5\\,"candidates_page":100\\,"deletion_marker_cache":100\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":100\\,"subscription_cache":100\\,"usage_month_cache":100}\n'
     )
     assert result.stdout.endswith(
         '__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n' 'free_tier_local_processing_cohort=\n'
