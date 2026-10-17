@@ -53,7 +53,13 @@ def test_stt_fractional_funding_and_estimation_are_distinct(units):
     assert byok['shadow_v1']['features']['transcription']['funding']['byok']['micro_units'] == 0
 
 
-def test_read_joins_hourly_and_gateway_rollups_without_attempt_scan(units):
+def test_read_joins_hourly_and_gateway_rollups_without_attempt_scan(units, monkeypatch):
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 10, 17, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(units, 'datetime', Clock)
     uid = 'u'
     month = datetime(2026, 10, 15, tzinfo=timezone.utc)
     e = {
@@ -91,7 +97,7 @@ def test_read_joins_hourly_and_gateway_rollups_without_attempt_scan(units):
     assert result['budget_units'] is None
     assert result['by_feature']['chat'] > 0 and result['by_feature']['transcription'] > 0
     assert result['completeness']['status'] == 'partial'
-    assert store.writes == 0 and store.reads == 2 + min(31, datetime.now(timezone.utc).day)
+    assert store.writes == 0 and store.reads == 19
     planned = units.get_usage_units(
         uid,
         month,
@@ -560,11 +566,12 @@ def test_missing_gateway_annotation_with_priced_units_is_never_charged_twice(uni
     assert result['completeness']['unprojected_gateway_attempts'] == 0
 
 
-def test_month_reader_batches_only_elapsed_days(units, monkeypatch):
+@pytest.mark.parametrize('month,day,elapsed', [(10, 1, 1), (10, 17, 17), (11, 1, 31)])
+def test_month_reader_batches_only_elapsed_days(units, monkeypatch, month, day, elapsed):
     class Clock(datetime):
         @classmethod
         def now(cls, tz=None):
-            return cls(2026, 10, 17, tzinfo=timezone.utc)
+            return cls(2026, month, day, tzinfo=timezone.utc)
 
     monkeypatch.setattr(units, 'datetime', Clock)
     store = Store()
@@ -574,7 +581,7 @@ def test_month_reader_batches_only_elapsed_days(units, monkeypatch):
         firestore_client=store,
         entitlements={'entitlement_version': 'ladder_v1', 'budget': {'kind': 'units', 'value': 100}},
     )
-    assert store.reads == 34
+    assert store.reads == 2 * elapsed
     assert store.batch_reads == 1
     assert result['used_units'] == 0
 
