@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-normalizer-expands-delimiter-runs",
+  "violated_contract": "A text normalizer that canonicalizes delimiter variants must map every delimiter run to exactly one canonical delimiter. backend/utils/imports/transcript_files.py's _normalize ran two ordered replaces — '\\r\\n' -> '\\n' then '\\r' -> '\\n' — so a CRCRLF sequence ('\\r\\r\\n') became '\\n\\n': the run expanded into two paragraph breaks, split every SRT cue into single-line blocks, and parse_srt yielded zero cues, skipping the file as unreadable. Any file written by an editor or exporter that emits repeated carriage returns was silently dropped from transcript import.",
+  "canonical_prevention": "Normalize delimiters in one pass over the run, never as an ordered chain of single-delimiter replacements. Collapse the whole run at once — e.g. re.sub(r'\\r+\\n|\\r', '\\n', text) — so '\\r\\r\\n', '\\r\\n', and '\\r' all map to a single '\\n'. A regression test must feed the repeated-delimiter variants through the same parser path as the plain variants and assert identical cue counts, not merely that the file loads.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_transcript_files_line_endings.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/imports/transcript_files.py"
+  ],
+  "status": "open"
+}
