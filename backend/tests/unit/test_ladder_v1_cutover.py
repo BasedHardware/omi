@@ -563,3 +563,28 @@ def test_coverage_metrics_survive_isolated_auth_reimports():
         reloaded = load_module_fresh('utils.observability.ladder_v1', path)
         assert reloaded.UNPROJECTED_SECONDS is metrics.UNPROJECTED_SECONDS
         assert reloaded.UNPROJECTED_ATTEMPTS is metrics.UNPROJECTED_ATTEMPTS
+
+
+@pytest.mark.parametrize('key', ['ambiguous_priced_transcription_seconds', 'ambiguous_priced_gateway_attempts'])
+@pytest.mark.parametrize('dispatch', [False, True])
+def test_historical_mixed_coverage_cannot_authorize_funded_work(monkeypatch, key, dispatch):
+    from types import SimpleNamespace
+    from utils import stt_cap_dispatch, subscription
+
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(dispatch).lower())
+    snapshot = {'budget_percent': 0, 'used_units': 0, 'budget_units': 100, 'completeness': {key: 1}}
+    monkeypatch.setattr(ladder, 'usage_snapshot', lambda *a, **k: snapshot)
+    monkeypatch.setattr(subscription, 'is_marketplace_reviewer', lambda _: False)
+    monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda *a, **k: False)
+    monkeypatch.setattr(
+        subscription.users_db, 'get_user_valid_subscription', lambda *a, **k: SimpleNamespace(plan='plus')
+    )
+    with pytest.raises(HTTPException) as error:
+        ladder.budget_snapshot('u')
+    assert error.value.status_code == 503
+    assert error.value.detail == {'error': 'usage_budget_coverage_unavailable'}
+    assert not stt_cap_dispatch.sync_allowed('u')
+    assert stt_cap_dispatch.funded_allowance('u').reason == 'allowance_unavailable'
+    snapshot['completeness'][key] = 0
+    assert stt_cap_dispatch.sync_allowed('u')  # Clean reset/repaired attribution resumes work.

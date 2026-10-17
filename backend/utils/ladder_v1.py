@@ -47,7 +47,18 @@ def usage_snapshot(uid: str, subscription: Any = _UNRESOLVED, *, firestore_clien
 def budget_snapshot(uid: str, subscription: Any = _UNRESOLVED, *, firestore_client: Any = None):
     if not policy.budget_enforcement_enabled():
         return None
-    return usage_snapshot(uid, subscription, firestore_client=firestore_client)
+    snapshot = usage_snapshot(uid, subscription, firestore_client=firestore_client)
+    coverage = (snapshot or {}).get('completeness', {})
+    if any(
+        coverage.get(key, 0) > 0
+        for key in ('ambiguous_priced_transcription_seconds', 'ambiguous_priced_gateway_attempts')
+    ):
+        # Original mixed-status quantities cannot be reconstructed without
+        # double pricing. Funded STT catches this transient denial and retains
+        # audio; other paid work retries instead of treating an unknown cap as
+        # available. A new UTC month or repaired attribution clears the guard.
+        raise HTTPException(status_code=503, detail={'error': 'usage_budget_coverage_unavailable'})
+    return snapshot
 
 
 def limit_detail(snapshot: dict) -> dict:

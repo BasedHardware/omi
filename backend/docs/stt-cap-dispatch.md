@@ -218,4 +218,6 @@ writes cannot hide a historical zero-unit gap. Historical mixed
 leaves without quantity attribution cannot be reconstructed exactly: quantities
 in leaves containing priced units are never priced a second time. Coverage
 metrics report residual quantities and ambiguous historical mixed leaves separately.
-Unknown historical attribution remains a coverage limitation, not a reason to double-bill.
+Unresolved historical attribution blocks enforced budget admission with
+`usage_budget_coverage_unavailable` (503); funded STT holds audio as an unavailable
+allowance. A clean new UTC month or corrected attribution clears the guard.
