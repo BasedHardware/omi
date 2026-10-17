@@ -1,0 +1,13 @@
+{{- if and .Values.enabled .Values.podMonitoring.enabled }}
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: {{ .Release.Name }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: batch-pipeline-worker
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  endpoints:
+    - {port: http, path: /metrics, interval: 15s}
+{{- end }}

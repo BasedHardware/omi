@@ -1,17 +1,20 @@
-"""Missing evidence is advisory; confirmed cooldown and slot occupancy still wait."""
+"""Dream fails closed on absent evidence, while allowlisted on-demand keeps slots."""
 
 import asyncio
 import json
+import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import fakeredis.aioredis
 import pytest
 
-from config.vertex_reservations import RESERVATIONS, State
-from utils import dream_agent, dream_capacity
-from utils.llm.vertex_pt_routing import PT_MODEL_CURRENT
+from config.vertex_reservations import PROBE_SECONDS, State
+from llm_gateway.gateway.dream_lanes import DREAM_MODEL
+from utils import dream_capacity
 from utils.llm.vertex_reservation_state import ReservationState
+
+OLD = 'gemini-2.5-flash'
 
 
 @pytest.fixture(autouse=True)
@@ -19,26 +22,54 @@ def capacity_scope(monkeypatch):
     dream_capacity._local_state.cache_clear()
     monkeypatch.delenv('OMI_VERTEX_PT_MODEL', raising=False)
     monkeypatch.delenv('OMI_VERTEX_RESERVATION_STATES', raising=False)
+    monkeypatch.delenv('DREAM_ON_DEMAND_ENABLED', raising=False)
     yield
     dream_capacity._local_state.cache_clear()
 
 
-def decisions(caplog):
-    return [json.loads(record.message) for record in caplog.records if record.message.startswith('{')]
+@pytest.fixture
+async def capacity(monkeypatch):
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    state = ReservationState(redis)
+    monkeypatch.setattr(dream_capacity, 'reservation_state', state)
+    monkeypatch.setattr(state, 'refresh', AsyncMock(return_value={DREAM_MODEL: State.ACTIVE}))
+    yield state, redis
+    await state.aclose()
+    await redis.aclose()
+
+
+async def evidence(state, redis, successes):
+    seconds, micros = await redis.time()
+    now = seconds + micros / 1_000_000
+    await redis.set(
+        state.key(), json.dumps({'evidence': {m: {'success_at': now - age} for m, age in successes.items()}})
+    )
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    'failure', ['client', 'refresh', 'key', 'lookup', 'no_client', 'empty', 'unknown', 'inactive', 'conflict']
+    'failure',
+    [
+        'client',
+        'refresh',
+        'refresh_empty',
+        'refresh_unknown',
+        'key',
+        'lookup',
+        'no_client',
+        'empty',
+        'unknown',
+        'stale',
+        'old_model',
+        'conflict',
+        'malformed',
+        'probe',
+    ],
 )
-async def test_unavailable_evidence_admits_and_logs_only_safe_fields(monkeypatch, caplog, failure):
-    secret = 'invented password and account text'
-    client = SimpleNamespace(get=AsyncMock(return_value=None), set=AsyncMock(return_value=True), eval=AsyncMock())
-    state = ReservationState(client)
-    states = {model: State.ACTIVE if model == PT_MODEL_CURRENT else State.INACTIVE for model in RESERVATIONS}
-    refresh = AsyncMock(return_value=states)
-    monkeypatch.setattr(state, 'refresh', refresh)
-    expected = 'probe_failed'
+async def test_unavailable_evidence_waits_without_secret_logging(monkeypatch, caplog, capacity, failure):
+    state, redis = capacity
+    secret = 'invented private content'
+    await evidence(state, redis, {DREAM_MODEL: 0})
     if failure in {'client', 'key'}:
 
         def broken():
@@ -46,148 +77,144 @@ async def test_unavailable_evidence_admits_and_logs_only_safe_fields(monkeypatch
 
         monkeypatch.setattr(state, failure, broken)
     elif failure == 'refresh':
-        refresh.side_effect = ValueError(secret)
+        state.refresh.side_effect = RuntimeError(secret)
+    elif failure in {'refresh_empty', 'refresh_unknown'}:
+        state.refresh.return_value = {} if failure == 'refresh_empty' else {DREAM_MODEL: State.UNKNOWN}
     elif failure == 'lookup':
-        client.get.side_effect = ConnectionError(secret)
+        monkeypatch.setattr(redis, 'get', AsyncMock(side_effect=ConnectionError(secret)))
     elif failure == 'no_client':
         monkeypatch.setattr(state, 'client', lambda: None)
-        expected = 'no_client'
     elif failure in {'empty', 'unknown'}:
-        refresh.return_value = {} if failure == 'empty' else {model: State.UNKNOWN for model in RESERVATIONS}
-        expected = 'no_states'
+        await redis.delete(state.key())
+    elif failure == 'stale':
+        await evidence(state, redis, {DREAM_MODEL: 901})
+    elif failure == 'old_model':
+        await evidence(state, redis, {OLD: 0})
+    elif failure == 'conflict':
+        await evidence(state, redis, {DREAM_MODEL: 0, OLD: 0})
+    elif failure == 'malformed':
+        await redis.set(state.key(), secret)
     else:
-        refresh.return_value = {
-            model: State.INACTIVE if failure == 'inactive' else State.ACTIVE for model in RESERVATIONS
-        }
-        expected = 'no_active_model'
-    monkeypatch.setattr(dream_capacity, 'reservation_state', state)
-    assert await dream_capacity.available_model() == PT_MODEL_CURRENT
-    assert decisions(caplog) == [
-        {
-            'event': 'dream_capacity_decision',
-            'decision': 'admit',
-            'reason': expected,
-            'source': 'evidence',
-            'model': PT_MODEL_CURRENT,
-        }
-    ]
+        dream_capacity._local().probe_failed_until = time.monotonic() + PROBE_SECONDS
+    assert await dream_capacity.available_model() is None
+    assert await dream_capacity.claim(2) is None
+    assert not dream_capacity._local().slots
     assert secret not in caplog.text
-    slot = await dream_capacity.claim(2)
-    assert slot is not None
-    await dream_capacity.release(slot)
+    rows = [json.loads(record.message) for record in caplog.records if record.message.startswith('{')]
+    assert rows and all(row['decision'] == 'waiting' and row['model'] == DREAM_MODEL for row in rows)
 
 
 @pytest.mark.asyncio
-async def test_missing_store_does_not_stop_real_or_canary_admission(monkeypatch):
-    state = ReservationState()
-    monkeypatch.setattr(state, 'client', lambda: None)
-    monkeypatch.setattr(state, 'refresh', AsyncMock(return_value={}))
-    monkeypatch.setattr(dream_capacity, 'reservation_state', state)
-    admitted = AsyncMock(return_value={'status': 'complete'})
-    monkeypatch.setattr(dream_agent, '_run_admitted_pass', admitted)
-    for canary in (False, True):
-        assert await dream_agent.run_pass('synthetic', canary=canary) == {'status': 'complete'}
-    assert admitted.await_count == 2
+async def test_fresh_38_evidence_admits_but_overrides_cannot_fabricate_it(monkeypatch, capacity):
+    state, redis = capacity
+    monkeypatch.setenv('OMI_VERTEX_PT_MODEL', DREAM_MODEL)
+    monkeypatch.setenv('OMI_VERTEX_RESERVATION_STATES', json.dumps({DREAM_MODEL: 'active'}))
+    assert await dream_capacity.available_model() is None
+    await evidence(state, redis, {DREAM_MODEL: 0})
+    assert await dream_capacity.available_model() == DREAM_MODEL
+    slot = await dream_capacity.claim(2)
+    assert slot and not slot[0].startswith('dream-local:')
+    await dream_capacity.release(slot)
     assert not dream_capacity._local().slots
 
 
 @pytest.mark.asyncio
-async def test_existing_probe_lease_does_not_hold_cold_store_admission(monkeypatch):
-    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
-    state = ReservationState(redis)
-    monkeypatch.setattr(dream_capacity, 'reservation_state', state)
-    seconds, _ = await redis.time()
-    await redis.set(state.key(), json.dumps({'leases': {model: seconds + 600 for model in RESERVATIONS}}))
-    probe = AsyncMock(side_effect=AssertionError('unexpired lease re-probed'))
-    monkeypatch.setattr(dream_capacity, '_probe', probe)
-    try:
-        assert await dream_capacity.available_model() == PT_MODEL_CURRENT
-        probe.assert_not_awaited()
-        assert not state._probe_tasks
-    finally:
-        await state.aclose()
-        await redis.aclose()
+@pytest.mark.parametrize('shared', [True, False])
+async def test_recent_429_waits_even_with_fresh_success(monkeypatch, capacity, shared):
+    state, redis = capacity
+    await evidence(state, redis, {DREAM_MODEL: 0})
+    if shared:
+        await redis.set(state.key() + ':saturated:' + DREAM_MODEL, '1', ex=120)
+    else:
+        await dream_capacity.mark_saturated(DREAM_MODEL)
+    assert await dream_capacity.available_model() is None
+    if shared:
+        await redis.delete(state.key() + ':saturated:' + DREAM_MODEL)
+    else:
+        dream_capacity._local().cooldowns[DREAM_MODEL] = 0
+        await redis.delete(state.key() + ':saturated:' + DREAM_MODEL)
+    assert await dream_capacity.available_model() == DREAM_MODEL
 
 
 @pytest.mark.asyncio
-async def test_probe_exception_is_visible_and_does_not_stop_admission(monkeypatch, caplog):
-    state = ReservationState()
-    monkeypatch.setattr(state, 'client', lambda: SimpleNamespace(get=AsyncMock(return_value=None)))
-    monkeypatch.setattr(state, 'refresh', AsyncMock(return_value={}))
-    monkeypatch.setattr(dream_capacity, 'reservation_state', state)
+@pytest.mark.parametrize(
+    'utilization,age,admitted',
+    [
+        (0.69, 0, True),
+        (0.7, 0, False),
+        (0.9, 0, False),
+        (0.1, 901, False),
+        (-1, 0, False),
+        (True, 0, False),
+        ('0.2', 0, False),
+    ],
+)
+async def test_optional_measured_utilization_has_conservative_threshold(capacity, utilization, age, admitted):
+    state, redis = capacity
+    await evidence(state, redis, {DREAM_MODEL: 0})
+    seconds, _ = await redis.time()
+    await redis.set(
+        state.key() + ':dedicated-utilization:' + DREAM_MODEL,
+        json.dumps({'utilization': utilization, 'observed_at': seconds - age}),
+    )
+    assert (await dream_capacity.available_model() == DREAM_MODEL) is admitted
+
+
+@pytest.mark.asyncio
+async def test_redis_slot_failure_does_not_become_local_reserved_admission(monkeypatch, capacity):
+    state, redis = capacity
+    await evidence(state, redis, {DREAM_MODEL: 0})
+    monkeypatch.setattr(redis, 'set', AsyncMock(side_effect=ConnectionError('synthetic')))
+    assert await dream_capacity.claim(2) is None
+    assert not dream_capacity._local().slots
+
+
+@pytest.mark.asyncio
+async def test_on_demand_requires_allowlist_and_flag_and_preserves_slot_bound(monkeypatch, capacity):
+    state, redis = capacity
+    monkeypatch.setattr(state, 'client', lambda: None)
+    assert await dream_capacity.available_model(mode='on_demand', owner_allowlisted=True) is None
+    monkeypatch.setenv('DREAM_ON_DEMAND_ENABLED', 'true')
+    assert await dream_capacity.available_model(mode='on_demand') is None
+    assert await dream_capacity.available_model(mode='on_demand', owner_allowlisted='true') is None
+    opts = {'mode': 'on_demand', 'owner_allowlisted': True}
+    first, second = await dream_capacity.claim(2, **opts), await dream_capacity.claim(2, **opts)
+    assert first and second
+    assert await dream_capacity.claim(2, **opts) is None
+    dream_capacity._local().slots[0] = first[1], 0
+    replacement = await dream_capacity.claim(2, **opts)
+    assert replacement
+    await dream_capacity.release(first)
+    assert dream_capacity._local().slots[0][0] == replacement[1]
+    await dream_capacity.release(second)
+    await dream_capacity.release(replacement)
+    assert not dream_capacity._local().slots
+    state.refresh.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_probe_exception_closes_admission_and_does_not_log_content(monkeypatch, caplog, capacity):
+    state, redis = capacity
+    await evidence(state, redis, {DREAM_MODEL: 0})
     monkeypatch.setattr(dream_capacity, 'get_desktop_gemini_client', lambda: object())
     monkeypatch.setattr(dream_capacity, '_vertex_tokens', lambda: SimpleNamespace(get_access_token=AsyncMock()))
     monkeypatch.setattr(dream_capacity, 'probe_reservation', AsyncMock(side_effect=RuntimeError('invented secret')))
-    assert await dream_capacity._probe(PT_MODEL_CURRENT, 'us') == 'inconclusive'
-    assert await dream_capacity.available_model() == PT_MODEL_CURRENT
-    assert decisions(caplog)[0]['reason'] == 'probe_failed'
+    assert await dream_capacity._probe(DREAM_MODEL, 'us') == 'inconclusive'
+    assert await dream_capacity.available_model() is None
     assert 'invented secret' not in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_probe_capacity_observation_is_not_itself_a_waiting_decision(monkeypatch, caplog):
-    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
-    state = ReservationState(redis)
-    monkeypatch.setattr(state, 'refresh', AsyncMock(return_value={}))
-    monkeypatch.setattr(dream_capacity, 'reservation_state', state)
+async def test_probe_failure_is_shared_until_strict_dedicated_success(monkeypatch, capacity):
+    state, redis = capacity
+    await evidence(state, redis, {DREAM_MODEL: 0})
     monkeypatch.setattr(dream_capacity, 'get_desktop_gemini_client', lambda: object())
     monkeypatch.setattr(dream_capacity, '_vertex_tokens', lambda: SimpleNamespace(get_access_token=AsyncMock()))
-    monkeypatch.setattr(dream_capacity, 'probe_reservation', AsyncMock(return_value='capacity_error'))
-    try:
-        assert await dream_capacity._probe(PT_MODEL_CURRENT, 'us') == 'capacity_error'
-        assert not decisions(caplog)
-        assert await dream_capacity.available_model() is None
-        assert len(decisions(caplog)) == 1 and decisions(caplog)[0]['reason'] == 'saturated'
-    finally:
-        await redis.aclose()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('shared', [False, True])
-async def test_429_cooldown_blocks_during_outage_and_expires(monkeypatch, caplog, shared):
-    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
-    state = ReservationState(redis)
-    monkeypatch.setattr(state, 'refresh', AsyncMock(return_value={}))
-    monkeypatch.setattr(dream_capacity, 'reservation_state', state)
-    try:
-        if shared:
-            await redis.set(state.key() + ':saturated:' + PT_MODEL_CURRENT, '1', ex=120)
-        else:
-            monkeypatch.setattr(state, 'client', lambda: None)
-            await dream_capacity.mark_saturated(PT_MODEL_CURRENT)
-        caplog.clear()
-        assert await dream_capacity.available_model() is None
-        assert len(decisions(caplog)) == 1
-        assert decisions(caplog)[0]['reason'] == 'saturated'
-        assert decisions(caplog)[0]['decision'] == 'waiting'
-        if shared:
-            assert 119 <= await redis.ttl(state.key() + ':saturated:' + PT_MODEL_CURRENT) <= 120
-            await redis.delete(state.key() + ':saturated:' + PT_MODEL_CURRENT)
-        else:
-            dream_capacity._local().cooldowns[PT_MODEL_CURRENT] = 0
-        assert await dream_capacity.available_model() == PT_MODEL_CURRENT
-    finally:
-        await redis.aclose()
-
-
-@pytest.mark.asyncio
-async def test_outage_slots_stay_bounded_and_old_release_cannot_erase_replacement(monkeypatch, caplog):
-    state = ReservationState()
-    monkeypatch.setattr(state, 'client', lambda: None)
-    monkeypatch.setattr(state, 'refresh', AsyncMock(return_value={}))
-    monkeypatch.setattr(dream_capacity, 'reservation_state', state)
-    first, second = await dream_capacity.claim(2), await dream_capacity.claim(2)
-    assert first and second and first[1] != second[1]
-    caplog.clear()
-    assert await dream_capacity.claim(2) is None
-    waiting = [row for row in decisions(caplog) if row['decision'] == 'waiting']
-    assert len(waiting) == 1 and waiting[0]['source'] == 'local_slots'
-    local = dream_capacity._local()
-    local.slots[0] = first[1], 0  # The ambiguous/cancelled slot's 240s TTL expired.
-    replacement = await dream_capacity.claim(2)
-    assert replacement and replacement[1] != first[1]
-    await dream_capacity.release(first)
-    assert local.slots[0][0] == replacement[1]
-    await dream_capacity.release(second)
-    await dream_capacity.release(replacement)
-    assert not local.slots
+    probe = AsyncMock(return_value='inconclusive')
+    monkeypatch.setattr(dream_capacity, 'probe_reservation', probe)
+    await dream_capacity._probe(DREAM_MODEL, 'us')
+    dream_capacity._local_state.cache_clear()  # A different process lacks the local failure latch.
+    assert await dream_capacity.available_model() is None
+    probe.return_value = 'dedicated_success'
+    await dream_capacity._probe(DREAM_MODEL, 'us')
+    assert await dream_capacity.available_model() == DREAM_MODEL

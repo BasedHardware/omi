@@ -111,6 +111,8 @@ Future<void> openSettingsDestination(BuildContext context, SettingsDestination d
       await routeToPage(context, const PaymentsPage());
     case SettingsDestination.developer:
       await routeToPage(context, const DeveloperSettingsPage());
+    case SettingsDestination.connectAgent:
+      await openDeveloperHome();
     case SettingsDestination.feedback:
       final url = Uri.parse('https://feedback.omi.me/');
       if (await canLaunchUrl(url)) await launchUrl(url, mode: LaunchMode.inAppBrowserView);
@@ -124,6 +126,15 @@ Future<void> openSettingsDestination(BuildContext context, SettingsDestination d
     case SettingsDestination.signOut:
       await confirmAndSignOut(context);
   }
+}
+
+/// The web developer home: copy-paste agent setup prompts plus MCP and Developer API keys. Every
+/// client sends people here rather than keeping its own copy of agent setup.
+final developerHomeUrl = Uri.parse('https://app.omi.me/developers');
+
+Future<void> openDeveloperHome() async {
+  PlatformManager.instance.analytics.settingsPageOpened(pageName: 'connect_agent');
+  await launchUrl(developerHomeUrl, mode: LaunchMode.externalApplication);
 }
 
 /// The one voice-profile flow: the guided introduction (#14514), where sentence starters become

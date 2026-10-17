@@ -8,8 +8,8 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
-/// The Home entry to Review. Shown only while there is something to answer; it disappears once
-/// the user is caught up.
+/// Home entry to the questions only the user can answer. With none waiting it draws nothing: the
+/// applied-change history lives in Activity, behind Home's bell.
 ///
 /// Review absorbs the older single-purpose prompt cards, so while Review is off for the account
 /// (or not yet known) [fallback] is shown in its place instead.
@@ -22,10 +22,32 @@ class ReviewEntryCard extends StatefulWidget {
   State<ReviewEntryCard> createState() => _ReviewEntryCardState();
 }
 
-class _ReviewEntryCardState extends State<ReviewEntryCard> {
+class _ReviewEntryCardState extends State<ReviewEntryCard> with WidgetsBindingObserver {
+  /// The card hides when nothing is waiting, so it cannot be the only way new questions arrive:
+  /// coming back to the app looks again, at most this often.
+  static const _resumeRefreshInterval = Duration(minutes: 5);
+  DateTime _lastLoad = DateTime.now();
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    if (DateTime.now().difference(_lastLoad) < _resumeRefreshInterval) return;
+    final provider = context.read<ReviewProvider?>();
+    if (provider == null || provider.availability == ReviewAvailability.off) return;
+    _lastLoad = DateTime.now();
+    provider.load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final provider = context.read<ReviewProvider?>();
@@ -38,8 +60,8 @@ class _ReviewEntryCardState extends State<ReviewEntryCard> {
   Widget build(BuildContext context) {
     final provider = context.watch<ReviewProvider?>();
     if (provider == null || !provider.isOn) return widget.fallback ?? const SizedBox.shrink();
-    if (provider.items.isEmpty) return const SizedBox.shrink();
     final count = provider.items.length;
+    if (count == 0) return const SizedBox.shrink();
     final title = context.l10n.reviewEntryTitle;
     return Padding(
       padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 15, OmiSpacing.md, 0),

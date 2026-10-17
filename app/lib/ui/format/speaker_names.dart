@@ -62,6 +62,13 @@ class SpeakerNames {
     return anonymousName(segment.speakerId);
   }
 
+  /// Server-projected Review excerpts have resolved names, but no complete diarization map.
+  /// Localize the owner and unnamed speaker through the same speaker naming authority.
+  static String excerptLabel({required bool isUser, String? speakerLabel, required AppLocalizations l10n}) {
+    if (isUser) return l10n.you;
+    return speakerLabel == null || speakerLabel.trim().isEmpty ? l10n.unnamedSpeakerLabel : speakerLabel;
+  }
+
   /// "Speaker N" for a diarized [speakerId], with N from [ordinalFor].
   String anonymousName(int speakerId) {
     if (speakerId == omiSpeakerId) return _l10n.omiAppName;

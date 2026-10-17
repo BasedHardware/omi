@@ -1,0 +1,28 @@
+{
+  "version": "1.0.564",
+  "date": "2026-10-16",
+  "changes": [
+    "Chat can use your attached conversation as the target for requested title or summary corrections and explain when an edit cannot be made.",
+    "Omi can repair repeated mistakes and organize duplicate memories, people, tasks and captures, with Before/After context and Undo in Recent Changes",
+    {
+      "change": "On-device fallback transcription uses Apple’s newer speech engine on supported iPhones.",
+      "platforms": [
+        "ios"
+      ]
+    },
+    {
+      "change": "On-device fallback transcription decodes recordings in bounded chunks for better reliability.",
+      "platforms": [
+        "android"
+      ]
+    },
+    "Less stutter when scrolling or switching pages while recordings sync, during long recordings, and after reopening the app",
+    "Saved conversations and memories waiting on your allowance link to usage without an upgrade prompt",
+    "Chat answers no longer show dead, unopenable source cards under responses — sources appear only as tappable conversation links again",
+    "A conversation that fails to delete now comes back in your list instead of staying hidden until the next refresh",
+    "A calmer Home: recordings still on their way show as one row in Today, and a new Activity bell collects your recaps and the changes Omi made for you",
+    "If Bluetooth is off or not allowed while connecting your Omi, Scan Again, How to Pair and Contact Support now still appear after a few seconds.",
+    "Recent changes now shows what actually changed, with the old and new text side by side, grouped by name, memory, task and title, and lets you undo every occurrence of a correction at once.",
+    "If checking off a task fails to save, the app now says so and keeps the task as it was instead of failing silently."
+  ]
+}

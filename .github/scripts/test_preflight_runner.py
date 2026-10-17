@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import collections
 import ctypes
 import importlib.util
 import json
@@ -701,6 +702,69 @@ class LaunchContractTests(unittest.TestCase):
         self.assertIn("SELECTED unicode-fixture", completed.stdout)
         self.assertIn("PR preflight:", completed.stdout)
         self.assertIn(f"head={unicode_branch}", completed.stdout)
+
+
+class PythonFloorTests(unittest.TestCase):
+    """The runner must explain a below-floor interpreter instead of crashing later.
+
+    The check scripts import `git_bash`, whose module-scope PEP 604 unions need
+    Python >= 3.10; on hosts where PATH resolves `python3` to Xcode CLT 3.9 the
+    child would otherwise die with a bare TypeError.
+    """
+
+    def test_floor_ok_tracks_the_running_interpreter(self) -> None:
+        self.assertEqual(runner.python_floor_ok(), sys.version_info >= (3, 10))
+
+    def test_main_rejects_a_below_floor_runner_without_spawning_children(self) -> None:
+        env = os.environ.copy()
+        env["OMI_PREFLIGHT_STATE_DIR"] = tempfile.mkdtemp(prefix="omi-floor-test-")
+        fake_version = collections.namedtuple("version_info", "major minor micro releaselevel serial")(3, 9, 6, "final", 0)
+        with (
+            mock.patch.object(runner.sys, "version_info", fake_version),
+            mock.patch.object(
+                runner.subprocess, "Popen", side_effect=AssertionError("children must not spawn below the floor")
+            ),
+        ):
+            with mock.patch.object(runner.sys, "argv", ["preflight_runner.py", "--", "scripts/pre-push"]):
+                exit_code = runner.main()
+        self.assertEqual(exit_code, 2)
+
+    def test_main_floor_gate_accepts_a_modern_interpreter(self) -> None:
+        if sys.version_info < (3, 10):
+            self.skipTest("the running interpreter itself is below the floor")
+        env = os.environ.copy()
+        env["OMI_PREFLIGHT_STATE_DIR"] = tempfile.mkdtemp(prefix="omi-floor-test-")
+        with mock.patch.object(runner.sys, "argv", ["preflight_runner.py"]):
+            exit_code = runner.main()
+        # No command after `--` is its own guard, reached only past the floor gate.
+        self.assertEqual(exit_code, 2)
+
+    def test_module_imports_on_python_3_9_so_the_floor_gate_is_reachable(self) -> None:
+        """The runner must load on bare 3.9 or the resolver's diagnostic is dead.
+
+        When only Python 3.9 exists the resolver deliberately returns bare
+        `python3` so pre-push-singleflight can start the runner, which then
+        prints the actionable floor diagnostic. That path exists only if the
+        module itself imports on 3.9 — e.g. `WindowsJob | None` annotations
+        must stay covered by postponed annotations.
+        """
+        source = Path(str(runner.__file__)).resolve().read_text(encoding="utf-8")
+        self.assertIn("from __future__ import annotations", source)
+        # PEP 563 is load-bearing at import time; re-executing the module on
+        # this host's interpreter (3.9 wherever the floor gate matters) proves
+        # no annotation or default evaluates a `X | Y` union eagerly.
+        import importlib.util
+
+        runner_path = Path(str(runner.__file__)).resolve()
+        spec = importlib.util.spec_from_file_location("preflight_runner_39_probe", runner_path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(module)
+        except TypeError as exc:  # pragma: no cover - the regression this pins
+            self.fail(f"preflight_runner must import on {sys.version.split()[0]}: {exc}")
+        finally:
+            sys.modules.pop("preflight_runner_39_probe", None)
 
 
 if __name__ == "__main__":

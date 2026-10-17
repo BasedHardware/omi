@@ -1,4 +1,4 @@
-"""Transactional preservation of automatic-refresh tasks; never updates user fields.
+"""Preserve automatic-refresh tasks and atomically carry exact donor completion.
 
 Bounded IDs-only query plus full document reads includes soft deletions, unlike
 list APIs. The conversation receipt serializes refreshes and retains identities

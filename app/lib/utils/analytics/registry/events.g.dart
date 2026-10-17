@@ -152,6 +152,36 @@ final class DeviceScanEmpty extends RegisteredEvent {
   Map<String, Object> get properties => {"after_seconds": afterSeconds};
 }
 
+enum DeviceConnectFailureShownFailureReason {
+  bluetoothOff("bluetooth_off"),
+  bluetoothPermissionDenied("bluetooth_permission_denied"),
+  nearbyDevicesDenied("nearby_devices_denied"),
+  locationPermissionMissing("location_permission_missing"),
+  notFoundOrDropped("not_found_or_dropped"),
+  staleBond("stale_bond"),
+  unknown("unknown");
+  const DeviceConnectFailureShownFailureReason(this.wireName);
+  final String wireName;
+}
+
+enum DeviceConnectFailureShownPlatform {
+  ios("ios"),
+  android("android"),
+  other("other");
+  const DeviceConnectFailureShownPlatform(this.wireName);
+  final String wireName;
+}
+
+final class DeviceConnectFailureShown extends RegisteredEvent {
+  const DeviceConnectFailureShown({required this.failureReason, required this.platform});
+  final DeviceConnectFailureShownFailureReason failureReason;
+  final DeviceConnectFailureShownPlatform platform;
+  @override
+  String get wireName => "Device Connect Failure Shown";
+  @override
+  Map<String, Object> get properties => {"failure_reason": failureReason.wireName, "platform": platform.wireName};
+}
+
 enum DeviceConnectFailedErrorClass {
   timeout("timeout"),
   bluetoothOff("bluetooth_off"),
@@ -2353,7 +2383,13 @@ enum PaywallOpenedSource {
   webPlans("web_plans"),
   macosSettingsView("macos_settings_view"),
   windowsSettingsView("windows_settings_view"),
-  unknown("unknown");
+  unknown("unknown"),
+  budget100Percent("budget_100_percent"),
+  proactiveAgentGate("proactive_agent_gate"),
+  screenContextGate("screen_context_gate"),
+  mcpDailyCap("mcp_daily_cap"),
+  budget80("budget_80"),
+  onboarding("onboarding");
   const PaywallOpenedSource(this.wireName);
   final String wireName;
 }
@@ -2417,7 +2453,13 @@ enum UpgradePlanSelectedSource {
   webPlans("web_plans"),
   macosSettingsView("macos_settings_view"),
   windowsSettingsView("windows_settings_view"),
-  unknown("unknown");
+  unknown("unknown"),
+  budget100Percent("budget_100_percent"),
+  proactiveAgentGate("proactive_agent_gate"),
+  screenContextGate("screen_context_gate"),
+  mcpDailyCap("mcp_daily_cap"),
+  budget80("budget_80"),
+  onboarding("onboarding");
   const UpgradePlanSelectedSource(this.wireName);
   final String wireName;
 }
@@ -2749,4 +2791,109 @@ final class OnboardingStepCompleted extends RegisteredEvent {
   String get wireName => "Onboarding Step Completed";
   @override
   Map<String, Object> get properties => {"step": step.wireName, "index": index, "elapsed_ms": elapsedMs, "skipped": skipped, "platform": platform.wireName, "exit_reason": exitReason.wireName};
+}
+
+enum PaywallVariantShownVariant {
+  control("control"),
+  outline("outline"),
+  web("web");
+  const PaywallVariantShownVariant(this.wireName);
+  final String wireName;
+}
+
+enum PaywallVariantShownSource {
+  chatQuotaExceeded("chat_quota_exceeded"),
+  freemiumSwitch("freemium_switch"),
+  lockedConversation("locked_conversation"),
+  lockedMemory("locked_memory"),
+  chatApps("chat_apps"),
+  usagePage("usage_page"),
+  transcriptionSettings("transcription_settings"),
+  unlimitedDeeplink("unlimited_deeplink"),
+  macosBilling("macos_billing"),
+  macosUsageLimit("macos_usage_limit"),
+  macosChatQuotaBanner("macos_chat_quota_banner"),
+  windowsBilling("windows_billing"),
+  windowsUsageLimit("windows_usage_limit"),
+  webPlans("web_plans"),
+  macosSettingsView("macos_settings_view"),
+  windowsSettingsView("windows_settings_view"),
+  unknown("unknown"),
+  budget100Percent("budget_100_percent"),
+  proactiveAgentGate("proactive_agent_gate"),
+  screenContextGate("screen_context_gate"),
+  mcpDailyCap("mcp_daily_cap"),
+  budget80("budget_80"),
+  onboarding("onboarding");
+  const PaywallVariantShownSource(this.wireName);
+  final String wireName;
+}
+
+final class PaywallVariantShown extends RegisteredEvent {
+  const PaywallVariantShown({required this.variant, required this.source});
+  final PaywallVariantShownVariant variant;
+  final PaywallVariantShownSource source;
+  @override
+  String get wireName => "Paywall Variant Shown";
+  @override
+  Map<String, Object> get properties => {"variant": variant.wireName, "source": source.wireName};
+}
+
+enum PaywallVariantFallbackVariant {
+  control("control"),
+  outline("outline"),
+  web("web");
+  const PaywallVariantFallbackVariant(this.wireName);
+  final String wireName;
+}
+
+enum PaywallVariantFallbackReason {
+  loadError("load_error"),
+  timeout("timeout"),
+  pageRequested("page_requested");
+  const PaywallVariantFallbackReason(this.wireName);
+  final String wireName;
+}
+
+final class PaywallVariantFallback extends RegisteredEvent {
+  const PaywallVariantFallback({required this.variant, required this.reason});
+  final PaywallVariantFallbackVariant variant;
+  final PaywallVariantFallbackReason reason;
+  @override
+  String get wireName => "Paywall Variant Fallback";
+  @override
+  Map<String, Object> get properties => {"variant": variant.wireName, "reason": reason.wireName};
+}
+
+final class OnboardingWebviewShown extends RegisteredEvent {
+  const OnboardingWebviewShown();
+  @override
+  String get wireName => "Onboarding Webview Shown";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class OnboardingWebviewCompleted extends RegisteredEvent {
+  const OnboardingWebviewCompleted();
+  @override
+  String get wireName => "Onboarding Webview Completed";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+enum OnboardingWebviewFallbackReason {
+  loadError("load_error"),
+  timeout("timeout"),
+  pageRequested("page_requested");
+  const OnboardingWebviewFallbackReason(this.wireName);
+  final String wireName;
+}
+
+final class OnboardingWebviewFallback extends RegisteredEvent {
+  const OnboardingWebviewFallback({required this.reason});
+  final OnboardingWebviewFallbackReason reason;
+  @override
+  String get wireName => "Onboarding Webview Fallback";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName};
 }

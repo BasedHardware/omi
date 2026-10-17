@@ -190,3 +190,8 @@ strategy:
   rollingUpdate:
     maxUnavailable: 1
     maxSurge: 0
+
+# Route activation does not switch callers. Install the shared Gateway first.
+gateway:
+  enabled: true
+  name: prod-omi-internal-gateway

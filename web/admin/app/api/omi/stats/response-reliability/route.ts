@@ -4,12 +4,13 @@ import { verifyAdmin } from "@/lib/auth";
 import admin, { getDb } from "@/lib/firebase/admin";
 import { posthogResults } from "@/lib/posthog";
 import {
-  buildChannelReliabilityPayloads,
-  buildResponseReliabilityPayload,
   RELIABILITY_ROW_LIMIT,
   type ReliabilityChannel,
   responseReliabilityQueries,
 } from "@/lib/response-reliability";
+import { fetchTelemetryAggregates } from "@/lib/telemetry/client";
+import { reliabilityReaderConfig } from "@/lib/telemetry/flags";
+import { assembleResponseReliability } from "@/lib/telemetry/replacement-reliability";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ function chunk<T>(items: T[], size: number): T[][] {
 }
 
 async function getReliabilityChannels(
-  actorIds: string[],
+  actorIds: string[]
 ): Promise<Map<string, ReliabilityChannel>> {
   const channelByActor = new Map<string, ReliabilityChannel>();
   const db = getDb();
@@ -33,8 +34,8 @@ async function getReliabilityChannels(
         .collection("users")
         .where(admin.firestore.FieldPath.documentId(), "in", actorIdChunk)
         .select("update_channel")
-        .get(),
-    ),
+        .get()
+    )
   );
   for (const snapshot of snapshots) {
     for (const doc of snapshot.docs) {
@@ -43,7 +44,7 @@ async function getReliabilityChannels(
         doc.id,
         updateChannel === "beta" || updateChannel === "staging"
           ? "beta"
-          : "production",
+          : "production"
       );
     }
   }
@@ -62,51 +63,66 @@ export async function GET(request: NextRequest) {
   const projectId = process.env.POSTHOG_PROJECT_ID;
   const host = (process.env.POSTHOG_HOST || "https://us.posthog.com").replace(
     /\/$/,
-    "",
+    ""
   );
   if (!apiKey || !projectId) {
     return NextResponse.json(
       { error: "PostHog credentials not configured" },
-      { status: 500 },
+      { status: 500 }
     );
   }
 
   const requestedDays = Number.parseInt(
     request.nextUrl.searchParams.get("days") || "30",
-    10,
+    10
   );
   const days = Math.min(
     Math.max(Number.isFinite(requestedDays) ? requestedDays : 30, 7),
-    90,
+    90
   );
+  const reader = reliabilityReaderConfig();
   const queries = responseReliabilityQueries(days);
-  const [chatResult, voiceResult] = await Promise.allSettled([
-    posthogResults(host, projectId, apiKey, queries.chat),
-    posthogResults(host, projectId, apiKey, queries.voice),
+  const [chatResult, voiceResult, aggregateResult] = await Promise.all([
+    posthogResults(host, projectId, apiKey, queries.chat).then(
+      (value) => ({ status: "fulfilled" as const, value }),
+      (reason) => ({ status: "rejected" as const, reason })
+    ),
+    posthogResults(host, projectId, apiKey, queries.voice).then(
+      (value) => ({ status: "fulfilled" as const, value }),
+      (reason) => ({ status: "rejected" as const, reason })
+    ),
+    reader.enabled
+      ? fetchTelemetryAggregates({
+          adminUid: authResult.uid,
+          days,
+          channel: "all",
+        })
+      : Promise.resolve(null),
   ]);
 
   const chatAvailable = chatResult.status === "fulfilled";
-  const voiceAvailable = voiceResult.status === "fulfilled";
-  if (!chatAvailable && !voiceAvailable) {
+  const posthogVoiceAvailable = voiceResult.status === "fulfilled";
+  if (!chatAvailable && !posthogVoiceAvailable && !reader.enabled) {
     console.error("Response reliability queries failed", {
       chat: chatResult.status === "rejected" ? chatResult.reason : null,
       voice: voiceResult.status === "rejected" ? voiceResult.reason : null,
     });
     return NextResponse.json(
       { error: "Response reliability data is temporarily unavailable" },
-      { status: 502 },
+      { status: 502 }
     );
   }
 
-  if (!chatAvailable || !voiceAvailable) {
+  if (!chatAvailable || !posthogVoiceAvailable) {
     console.warn("Response reliability data is partial", {
       chatAvailable,
-      voiceAvailable,
+      posthogVoiceAvailable,
+      replacementReader: reader.enabled,
     });
   }
 
   const chatRows = chatAvailable ? chatResult.value : [];
-  const voiceRows = voiceAvailable ? voiceResult.value : [];
+  const voiceRows = posthogVoiceAvailable ? voiceResult.value : [];
   const truncated =
     chatRows.length >= RELIABILITY_ROW_LIMIT ||
     voiceRows.length >= RELIABILITY_ROW_LIMIT;
@@ -117,38 +133,39 @@ export async function GET(request: NextRequest) {
       limit: RELIABILITY_ROW_LIMIT,
     });
   }
+  const replacementActorIds =
+    aggregateResult?.body?.voice_rows.map((row) => row.actor_id) ?? [];
   const actorIds = Array.from(
     new Set(
       [
         ...chatRows.map((row) =>
-          Array.isArray(row) ? String(row[6] ?? "") : "",
+          Array.isArray(row) ? String(row[6] ?? "") : ""
         ),
         ...voiceRows.map((row) =>
-          Array.isArray(row) ? String(row[9] ?? "") : "",
+          Array.isArray(row) ? String(row[9] ?? "") : ""
         ),
-      ].filter(Boolean),
-    ),
+        ...replacementActorIds,
+      ].filter(Boolean)
+    )
   );
   const channelByActor = await getReliabilityChannels(actorIds);
-  const aggregate = buildResponseReliabilityPayload({
+  const payload = assembleResponseReliability({
     days,
     chatRows,
-    voiceRows,
+    posthogVoiceRows: voiceRows,
     chatAvailable,
-    voiceAvailable,
-    truncated,
+    posthogVoiceAvailable,
+    posthogTruncated: truncated,
+    channelByActor,
+    reader,
+    aggregate: aggregateResult,
   });
+  if (!payload.availability.chat && !payload.availability.voice) {
+    return NextResponse.json(
+      { error: "Response reliability data is temporarily unavailable" },
+      { status: 502 }
+    );
+  }
 
-  return NextResponse.json({
-    ...aggregate,
-    channels: buildChannelReliabilityPayloads({
-      days,
-      chatRows,
-      voiceRows,
-      chatAvailable,
-      voiceAvailable,
-      channelByActor,
-      truncated,
-    }),
-  });
+  return NextResponse.json(payload);
 }

@@ -302,7 +302,9 @@ def test_all_valid_records_returned(monkeypatch):
 
 def test_pagination_is_clamped_before_firestore(monkeypatch):
     # Clamp before MemoryService so neither canonical nor historical storage
-    # can receive an unbounded or negative page request.
+    # can receive an unbounded or negative page request. The extra row is a
+    # bounded lookahead used to report whether the additive page contract has
+    # another result.
     client, memory_service = _build([], monkeypatch)
     assert client.get('/v1/dev/user/memories?limit=99999&offset=-1').status_code == 200
     assert client.get('/v1/dev/user/memories?limit=0&offset=5').status_code == 200
@@ -312,11 +314,11 @@ def test_pagination_is_clamped_before_firestore(monkeypatch):
     assert isinstance(first_kwargs.pop('budget'), ListReadBudget)
     assert isinstance(second_kwargs.pop('budget'), ListReadBudget)
     assert first_kwargs == {
-        'limit': 1000,
+        'limit': 1001,
         'offset': 0,
         'include_pending_processing': True,
     }
-    assert second_kwargs == {'limit': 1, 'offset': 5, 'include_pending_processing': True}
+    assert second_kwargs == {'limit': 2, 'offset': 5, 'include_pending_processing': True}
 
 
 def test_unfiltered_read_attaches_the_request_budget(monkeypatch):

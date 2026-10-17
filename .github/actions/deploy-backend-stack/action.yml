@@ -4,6 +4,10 @@ description: >-
   surfaces, and shared release-vector evidence for manual and auto-dev deploys.
 
 inputs:
+  backend_sync_memory:
+    description: 'C023 memory trial: 8Gi baseline or 6Gi, independently reversible'
+    required: false
+    default: '8Gi'
   firebase_probe_signer_service_account:
     description: >-
       Optional service account for signing release-probe custom tokens when the
@@ -617,7 +621,7 @@ runs:
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
           ${{ inputs.transcription_candidate_tag != '' && format('--tag={0}', inputs.transcription_candidate_tag) || '' }}
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST
+          --remove-env-vars=MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ steps.runtime-env.outputs.backend_remove_env_extra }}
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
           ${{ steps.runtime-env.outputs.backend_identity_flags }}
         env_vars: |-
@@ -690,9 +694,18 @@ runs:
         revision_suffix: ${{ steps.image-tag.outputs.revision_suffix }}
         cloud_run_flags: ${{ steps.runtime-env.outputs.cloud_run_flags }}
         identity_flags: ${{ steps.runtime-env.outputs.backend_sync_backfill_identity_flags }}
+        forbidden_env_names: ${{ steps.runtime-env.outputs.backend_sync_backfill_forbidden_env_names }}
+        remove_env_extra: ${{ steps.runtime-env.outputs.backend_sync_backfill_remove_env_extra }}
         backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
         backfill_secrets: ${{ steps.runtime-env.outputs.backend_sync_backfill_secrets }}
         candidate_tag: ${{ inputs.deploy_profile == 'auto-dev' && inputs.candidate_tag || '' }}
+
+    - name: Validate backend-sync memory trial
+      shell: bash
+      env:
+        SYNC_MEMORY: ${{ inputs.backend_sync_memory }}
+      run: |
+        case "$SYNC_MEMORY" in 6Gi|8Gi) ;; *) echo 'backend-sync memory must be 6Gi or 8Gi' >&2; exit 1 ;; esac
 
     - name: Deploy ${{ inputs.service }}-sync to Cloud Run
       id: deploy-backend-sync
@@ -704,12 +717,14 @@ runs:
         image: gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:${{ steps.image-tag.outputs.short_sha }}
         no_traffic: true
         flags: >-
-          --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
+          --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ steps.runtime-env.outputs.backend_sync_remove_env_extra }}
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
           ${{ steps.runtime-env.outputs.backend_sync_identity_flags }}
+          --cpu=2
           --max-instances=50
+          --memory=${{ inputs.backend_sync_memory }}
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
           ${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}
@@ -779,9 +794,9 @@ runs:
         image: gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:${{ steps.image-tag.outputs.short_sha }}
         no_traffic: true
         flags: >-
-          --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
+          --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ steps.runtime-env.outputs.backend_integration_remove_env_extra }}
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
           ${{ steps.runtime-env.outputs.backend_integration_identity_flags }}
           --cpu=2
@@ -798,6 +813,29 @@ runs:
       shell: bash
       run: |
         echo "revision=backend-integration-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
+
+    - name: Attach Managed Prometheus to sync and integration candidates
+      shell: bash
+      env:
+        GMP_CANDIDATE_TAG: ${{ inputs.deploy_profile == 'auto-dev' && inputs.candidate_tag || '' }}
+      run: |
+        set -euo pipefail
+        for service in backend-sync backend-sync-backfill backend-integration; do
+          ingress=backend-1
+          if [[ "$service" == backend-integration ]]; then ingress=backend-integration; fi
+          args=(
+            --project="${{ inputs.project_id }}"
+            --region="${{ inputs.region }}"
+            --service="$service"
+            --base-revision="$service-${{ steps.image-tag.outputs.revision_suffix }}-base"
+            --final-revision="$service-${{ steps.image-tag.outputs.revision_suffix }}"
+            --ingress-container="$ingress"
+            --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sidecar.yaml"
+            --expected-env-state="$RUNNER_TEMP/backend-runtime-env-state.json"
+          )
+          if [[ -n "$GMP_CANDIDATE_TAG" ]]; then args+=(--tag="$GMP_CANDIDATE_TAG"); fi
+          python3 "$DEPLOY_CONTROL_SCRIPTS/attach_cloud_run_gmp_sidecar.py" "${args[@]}"
+        done
 
     - name: Wait for Cloud Run revisions to become ready
       shell: bash
@@ -911,6 +949,7 @@ runs:
       if: ${{ inputs.deploy_profile == 'manual' && inputs.environment == 'development' }}
       uses: ./.deploy-workflow-source/.github/actions/transcription-release-candidate-probe
       with:
+        probe_fleet: 'true'
         candidate_api_url: ${{ steps.transcription-candidate.outputs.url }}
         project_id: ${{ inputs.project_id }}
         firebase_auth_project_id: based-hardware

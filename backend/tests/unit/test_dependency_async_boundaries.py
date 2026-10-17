@@ -162,9 +162,9 @@ def test_all_verified_owner_dependencies_reject_non_qa_uid_before_side_effects(m
 
         awaitable_factories = (
             lambda: dependencies.get_current_user_id(SimpleNamespace(credentials="firebase-token")),
-            lambda: dependencies.get_uid_from_mcp_api_key("Bearer omi_mcp_secret"),
-            lambda: dependencies.get_mcp_api_key_auth("Bearer omi_mcp_secret"),
-            lambda: dependencies.get_api_key_auth("Bearer omi_dev_secret"),
+            lambda: dependencies.get_uid_from_mcp_api_key("Bearer omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            lambda: dependencies.get_mcp_api_key_auth("Bearer omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            lambda: dependencies.get_api_key_auth("Bearer omi_dev_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
         )
         for make_awaitable in awaitable_factories:
             with pytest.raises(HTTPException) as error:
@@ -178,14 +178,14 @@ def test_mcp_and_developer_key_lookups_use_the_critical_executor() -> None:
         rate_limit_calls: list[dict[str, Any]] = []
 
         def lookup_mcp(token: str) -> SimpleNamespace:
-            assert token == 'omi_mcp_secret'
+            assert token == 'omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
             return SimpleNamespace(
                 context={'user_id': 'mcp-user', 'scopes': [], 'app_id': 'mcp-app', 'key_id': 'mcp-key'},
                 repairs=frozenset(),
             )
 
         def lookup_dev(token: str) -> SimpleNamespace:
-            assert token == 'omi_dev_secret'
+            assert token == 'omi_dev_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
             return SimpleNamespace(
                 context={'user_id': 'dev-user', 'scopes': [], 'app_id': 'dev-app', 'key_id': 'dev-key'},
                 repairs=frozenset(),
@@ -203,8 +203,8 @@ def test_mcp_and_developer_key_lookups_use_the_critical_executor() -> None:
         dependencies.check_api_key_rate_limit = check_rate_limit
         dependencies.run_blocking = tracking_run_blocking
 
-        mcp_uid = asyncio.run(dependencies.get_uid_from_mcp_api_key('Bearer omi_mcp_secret'))
-        dev_auth = asyncio.run(dependencies.get_api_key_auth('Bearer omi_dev_secret'))
+        mcp_uid = asyncio.run(dependencies.get_uid_from_mcp_api_key('Bearer omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'))
+        dev_auth = asyncio.run(dependencies.get_api_key_auth('Bearer omi_dev_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'))
 
         assert mcp_uid == 'mcp-user'
         assert dev_auth.uid == 'dev-user'
@@ -237,7 +237,7 @@ def test_auth_repair_metadata_is_emitted_from_the_dependency_layer() -> None:
         events: list[dict[str, Any]] = []
         dependencies.record_api_key_repairs = lambda **kwargs: events.append(kwargs)
 
-        auth = asyncio.run(dependencies.get_mcp_api_key_auth('Bearer omi_mcp_secret'))
+        auth = asyncio.run(dependencies.get_mcp_api_key_auth('Bearer omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'))
 
         assert auth.uid == 'mcp-user'
         assert events == [
@@ -431,7 +431,7 @@ def test_persisted_api_key_lookup_keeps_the_event_loop_responsive() -> None:
             safety_release.start()
             try:
                 result = await _assert_loop_responsive_while_worker_waits(
-                    dependencies.get_uid_from_mcp_api_key('Bearer omi_mcp_secret'),
+                    dependencies.get_uid_from_mcp_api_key('Bearer omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
                     entered,
                     release,
                 )

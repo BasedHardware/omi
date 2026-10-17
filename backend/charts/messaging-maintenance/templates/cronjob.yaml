@@ -1,0 +1,33 @@
+{{- if .Values.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}
+spec:
+  schedule: {{ .Values.schedule | quote }}
+  timeZone: UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 600
+      backoffLimit: 1
+      template:
+        spec:
+          serviceAccountName: {{ required "serviceAccountName required" .Values.serviceAccountName }}
+          restartPolicy: Never
+          containers:
+            - name: cleanup
+              image: {{ required "admitted backend image required" .Values.image | quote }}
+              command: ["python", "-m", "utils.messaging.maintenance"]
+              envFrom:
+                - secretRef:
+                    name: {{ required "backend secretName required" .Values.secretName }}
+              env:
+                - name: OMI_MESSAGING_RETENTION_DAYS
+                  value: {{ .Values.retentionDays | quote }}
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {cpu: "1", memory: 512Mi}
+{{- end }}

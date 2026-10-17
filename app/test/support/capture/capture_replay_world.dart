@@ -17,6 +17,7 @@ import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/capture/capture_controller.dart';
+import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
@@ -313,6 +314,7 @@ class CaptureReplayWorld {
   CalendarCaptureGapMonitor? calendarGapMonitor;
   Future<void> Function(String, bool)? deviceMuteWriter;
   Future<bool?> Function(String)? deviceMuteReader;
+  CaptureWedgeMonitor? captureWedgeMonitor;
 
   bool _disposed = false;
   bool _controllerDisposed = false;
@@ -328,6 +330,7 @@ class CaptureReplayWorld {
     CalendarCaptureGapMonitor? calendarGapMonitor,
     Future<void> Function(String, bool)? deviceMuteWriter,
     Future<bool?> Function(String)? deviceMuteReader,
+    CaptureWedgeMonitor? captureWedgeMonitor,
   }) async {
     TestWidgetsFlutterBinding.ensureInitialized();
     final start = startTime ?? defaultStart;
@@ -340,6 +343,7 @@ class CaptureReplayWorld {
     world.calendarGapMonitor = calendarGapMonitor;
     world.deviceMuteWriter = deviceMuteWriter;
     world.deviceMuteReader = deviceMuteReader;
+    world.captureWedgeMonitor = captureWedgeMonitor;
     world.connected = initiallyConnected;
     await world._bootGeneration(supportsBatch: supportsBatch, initialPrefs: initialPrefs, firstBoot: true);
     return world;
@@ -403,6 +407,7 @@ class CaptureReplayWorld {
     _controller = _ReplayCaptureController(
       world: this,
       calendarGapMonitor: calendarGapMonitor,
+      captureWedgeMonitor: captureWedgeMonitor,
       walService: wal,
       phoneMicRecorder: mic,
       phoneMicBatchSupported: supportsBatch,
@@ -627,6 +632,7 @@ class _ReplayCaptureController extends CaptureController {
     super.calendarGapMonitor,
     super.deviceMuteWriter,
     super.deviceMuteReader,
+    super.captureWedgeMonitor,
   });
 
   @override

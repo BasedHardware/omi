@@ -1,0 +1,40 @@
+{{- if and .Values.enabled .Values.autoscaling.enabled }}
+{{- if lt (int .Values.autoscaling.minReplicas) 1 }}
+{{- fail "queue sampling runs in workers: minReplicas must be >=1; scale-to-zero needs an independent sampler" }}
+{{- end }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Release.Name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Release.Name }}
+  minReplicas: {{ .Values.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - {type: Pods, value: 2, periodSeconds: 60}
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - {type: Pods, value: 1, periodSeconds: 120}
+  metrics:
+    {{- range $priority, $target := .Values.autoscaling.targets }}
+    - type: External
+      external:
+        metric:
+          name: omi_batch_pipeline_ready_age_seconds
+          selector:
+            matchLabels:
+              priority: {{ $priority }}
+              worker_release: {{ $.Release.Name }}
+              namespace: {{ $.Release.Namespace }}
+        target:
+          type: Value
+          value: {{ $target | quote }}
+    {{- end }}
+{{- end }}

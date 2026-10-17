@@ -80,8 +80,10 @@ bool captureEvidenceWalClaimable(Wal wal) =>
 
 final _syncTimestampTokenPattern = RegExp(r'_([0-9]+(?:\.[0-9]+)?)\.bin$');
 
+bool isMobileStandardBatchWal(Wal wal) => _walUploadFileName(wal).startsWith('audio_omimobilebatch');
+
 double _syncWalAudioStart(Wal wal) {
-  if (captureEvidenceWalClaimable(wal)) {
+  if (captureEvidenceWalClaimable(wal) || isMobileStandardBatchWal(wal)) {
     final match = _syncTimestampTokenPattern.firstMatch(_walUploadFileName(wal));
     final parsed = match == null ? null : double.tryParse(match.group(1)!);
     if (parsed != null && parsed.isFinite) return parsed;
@@ -95,7 +97,7 @@ double _syncWalAudioStart(Wal wal) {
   var end = double.negativeInfinity;
   for (final wal in wals) {
     final walStart = _syncWalAudioStart(wal);
-    final walEnd = captureEvidenceWalClaimable(wal)
+    final walEnd = captureEvidenceWalClaimable(wal) || isMobileStandardBatchWal(wal)
         ? walStart + wal.totalFrames / wal.codec.getFramesPerSecond()
         : (wal.timerStart + wal.seconds).toDouble();
     if (walStart < start) start = walStart;
@@ -143,6 +145,7 @@ List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
         (wal) =>
             wal.conversationId == conversationId &&
             wal.recordingSessionId == recordingSessionId &&
+            isMobileStandardBatchWal(wal) == isMobileStandardBatchWal(ordered.first) &&
             _walLocationBatchKey(wal) == locationKey,
       ),
     );
@@ -161,6 +164,7 @@ List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
         (wal) =>
             wal.conversationId == conversationId &&
             wal.recordingSessionId == recordingSessionId &&
+            isMobileStandardBatchWal(wal) == isMobileStandardBatchWal(ordered.first) &&
             _walLocationBatchKey(wal) == locationKey,
       )
       .toList();
