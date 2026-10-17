@@ -7,6 +7,7 @@ public-memory filtering, and not-found tolerant mutations.
 """
 
 import contextlib
+import hashlib
 
 import database.memories as mem_db
 import pytest
@@ -189,6 +190,74 @@ def test_refine_memory_encrypts_content_on_enhanced(monkeypatch):
     monkeypatch.setattr(mem_db.memory_ledger, 'append_commit', fake_append)
     mem_db.refine_memory('u', 'm1', {'content': {'to': 'plaintext'}})
     assert written['content'] == 'ENC[plaintext]'
+
+
+def test_refine_memory_ledger_trail_carries_ciphertext_on_enhanced(monkeypatch):
+    """The commit-history ledger doc must not persist plaintext content.to."""
+    snap = _snap('m1', {'data_protection_level': 'enhanced', 'arguments': {}, 'content': 'ENCOLD'})
+
+    memory_ref = MagicMock()
+    memory_ref.get.return_value = snap
+    fake = MagicMock()
+    fake.collection.return_value = MagicMock(
+        document=lambda u: MagicMock(collection=lambda c: MagicMock(document=lambda i: memory_ref))
+    )
+    monkeypatch.setattr(mem_db, '_get_db', lambda c=None: fake)
+    monkeypatch.setattr(mem_db, '_typed_doc', lambda s: s.to_dict())
+    monkeypatch.setattr(
+        mem_db, 'projection_update_for_refine', lambda ex, ch, t: {'content': ch['content']['to'], 'arguments': {}}
+    )
+    monkeypatch.setattr(mem_db.encryption, 'encrypt', lambda v, u: f'ENC[{v}]')
+    captured_ops = []
+
+    def fake_append(uid, none, ops, commit_time=None, projection_writer=None, use_current_head=None):
+        captured_ops.extend(ops)
+        return {}
+
+    monkeypatch.setattr(mem_db.memory_ledger, 'append_commit', fake_append)
+    monkeypatch.setattr(
+        mem_db.memory_ledger, 'refine_fact', lambda mid, changes: {'memory_id': mid, 'changes': changes}
+    )
+
+    mem_db.refine_memory('u', 'm1', {'content': {'to': 'plaintext'}})
+
+    changes = captured_ops[0]['changes']
+    assert changes['content']['to'] == 'ENC[plaintext]'
+    assert changes['content']['to_sha256'] == hashlib.sha256(b'plaintext').hexdigest()
+
+
+def test_refine_memory_ledger_trail_keeps_plaintext_on_standard(monkeypatch):
+    """Standard docs keep the verbatim ledger trail — only enhanced gets
+    ciphertext + digest."""
+    snap = _snap('m1', {'data_protection_level': 'standard', 'arguments': {}, 'content': 'old'})
+
+    memory_ref = MagicMock()
+    memory_ref.get.return_value = snap
+    fake = MagicMock()
+    fake.collection.return_value = MagicMock(
+        document=lambda u: MagicMock(collection=lambda c: MagicMock(document=lambda i: memory_ref))
+    )
+    monkeypatch.setattr(mem_db, '_get_db', lambda c=None: fake)
+    monkeypatch.setattr(mem_db, '_typed_doc', lambda s: s.to_dict())
+    monkeypatch.setattr(
+        mem_db, 'projection_update_for_refine', lambda ex, ch, t: {'content': ch['content']['to'], 'arguments': {}}
+    )
+    captured_ops = []
+
+    def fake_append(uid, none, ops, commit_time=None, projection_writer=None, use_current_head=None):
+        captured_ops.extend(ops)
+        return {}
+
+    monkeypatch.setattr(mem_db.memory_ledger, 'append_commit', fake_append)
+    monkeypatch.setattr(
+        mem_db.memory_ledger, 'refine_fact', lambda mid, changes: {'memory_id': mid, 'changes': changes}
+    )
+
+    mem_db.refine_memory('u', 'm1', {'content': {'to': 'plaintext'}})
+
+    changes = captured_ops[0]['changes']
+    assert changes['content']['to'] == 'plaintext'
+    assert 'to_sha256' not in changes['content']
 
 
 # ---------- public memory filtering ----------
