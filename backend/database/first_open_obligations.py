@@ -38,6 +38,16 @@ def _is_valid_id(value: Any) -> bool:
     return bool(stripped) and '/' not in stripped and '\x00' not in stripped
 
 
+def _safe_lease_seconds(lease_seconds: Any) -> int:
+    try:
+        val = float(lease_seconds)
+        if math.isfinite(val):
+            return max(30, int(val))
+    except (TypeError, ValueError, OverflowError):
+        pass
+    return 300
+
+
 def _refs(client: Any, uid: str) -> tuple[Any, Any, Any]:
     user = client.collection('users').document(uid)
     return (
@@ -161,8 +171,7 @@ def first_open_effect_is_authorized(
     if (
         not _is_valid_id(uid)
         or not _is_valid_id(conversation_id)
-        or not isinstance(token, str)
-        or not token
+        or not _is_valid_id(token)
         or effect not in FIRST_OPEN_EFFECTS
     ):
         return False
@@ -196,8 +205,7 @@ def commit_first_open_conversation_patch(
         not patch
         or not _is_valid_id(uid)
         or not _is_valid_id(conversation_id)
-        or not isinstance(token, str)
-        or not token
+        or not _is_valid_id(token)
         or effect not in FIRST_OPEN_EFFECTS
     ):
         return False
@@ -236,8 +244,7 @@ def commit_first_open_app_result(
         or not patch
         or not _is_valid_id(uid)
         or not _is_valid_id(conversation_id)
-        or not isinstance(token, str)
-        or not token
+        or not _is_valid_id(token)
     ):
         return False
     client = firestore_client or get_firestore_client()
@@ -288,7 +295,7 @@ def complete_first_open_effect(
 ) -> bool:
     if effect not in FIRST_OPEN_EFFECTS:
         raise ValueError(f'unknown first-open effect: {effect}')
-    if not _is_valid_id(uid) or not _is_valid_id(conversation_id) or not isinstance(token, str) or not token:
+    if not _is_valid_id(uid) or not _is_valid_id(conversation_id) or not _is_valid_id(token):
         return False
     client = firestore_client or get_firestore_client()
     ref = _conversation_ref(client, uid, conversation_id)
@@ -345,8 +352,7 @@ def commit_first_open_folder_count(
         not _is_valid_id(uid)
         or not _is_valid_id(conversation_id)
         or not _is_valid_id(folder_id)
-        or not isinstance(token, str)
-        or not token
+        or not _is_valid_id(token)
     ):
         return False
     client = firestore_client or get_firestore_client()
@@ -400,8 +406,7 @@ def commit_first_open_app_usage(
         not _is_valid_id(uid)
         or not _is_valid_id(conversation_id)
         or not _is_valid_id(app_id)
-        or not isinstance(token, str)
-        or not token
+        or not _is_valid_id(token)
     ):
         return False
     client = firestore_client or get_firestore_client()
@@ -466,8 +471,7 @@ def claim_first_open_work(
 ) -> Optional[str]:
     if not _is_valid_id(uid) or not _is_valid_id(conversation_id):
         return None
-    valid_lease = lease_seconds if isinstance(lease_seconds, (int, float)) and math.isfinite(lease_seconds) else 300
-    effective_lease_seconds = max(30, int(valid_lease))
+    effective_lease_seconds = _safe_lease_seconds(lease_seconds)
     client = firestore_client or get_firestore_client()
     ref = _conversation_ref(client, uid, conversation_id)
     if ref is None:
@@ -532,7 +536,7 @@ def finish_first_open_work(
     firestore_client: Any = None,
 ) -> bool:
     del succeeded
-    if not _is_valid_id(uid) or not _is_valid_id(conversation_id) or not isinstance(token, str) or not token:
+    if not _is_valid_id(uid) or not _is_valid_id(conversation_id) or not _is_valid_id(token):
         return False
     client = firestore_client or get_firestore_client()
     ref = _conversation_ref(client, uid, conversation_id)
