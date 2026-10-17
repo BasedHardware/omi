@@ -43,7 +43,15 @@ enum ComputerAgent {
   String get keyName => '${brandName ?? 'Agent'} (Omi app)';
 }
 
-bool isLiveGrant(Map<String, dynamic> grant) => grant['revoked_at'] == null && grant['status'] != 'revoked';
+/// Mirrors the backend token check (`database/mcp_oauth.py`): only an `active`, unrevoked grant
+/// whose optional expiry is still ahead lets ChatGPT call Omi.
+bool isLiveGrant(Map<String, dynamic> grant, {DateTime? now}) {
+  if (grant['status'] != 'active' || grant['revoked_at'] != null) return false;
+  final expiresAt = grant['expires_at'];
+  if (expiresAt == null) return true;
+  final expiry = expiresAt is String ? DateTime.tryParse(expiresAt) : null;
+  return expiry != null && expiry.isAfter(now ?? DateTime.now());
+}
 
 /// What is connected right now: live ChatGPT grants and the MCP key each computer agent holds.
 @immutable

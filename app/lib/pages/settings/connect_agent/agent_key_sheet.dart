@@ -62,14 +62,13 @@ class _AgentKeySheetState extends State<AgentKeySheet> {
         widget.service.revokeKey(prepared.keyId).then((_) => onDiscarded?.call(), onError: (_) {});
         return;
       }
-      setState(() {
-        _prepared = prepared;
-        _working = false;
-      });
+      setState(() => _prepared = prepared);
       await OmiClipboard.copy(context, prepared.prompt, what: l10n.prompt);
       // The new prompt is in hand, so the key it replaces (an earlier link, or one a stale list
-      // missed) can go now, and only now.
+      // missed) can go now, and only now. The buttons stay busy until it is done, so a second
+      // "new link" cannot race this one and revoke each other's keys.
       await widget.service.retireOlderKeys(widget.agent, prepared.keyId);
+      if (mounted) setState(() => _working = false);
     } catch (_) {
       if (!mounted) return;
       setState(() => _working = false);

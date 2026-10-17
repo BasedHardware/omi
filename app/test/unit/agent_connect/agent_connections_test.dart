@@ -24,16 +24,16 @@ void main() {
   group('AgentConnections.from', () {
     test('ChatGPT is connected only by a live grant from a ChatGPT client', () {
       final connections = AgentConnections.from(grants: [
-        {'id': 'g1', 'client_id': 'omi-chatgpt-prod'},
-        {'id': 'g2', 'client_id': 'omi-chatgpt-dev', 'revoked_at': '2026-10-01T00:00:00Z'},
+        {'id': 'g1', 'status': 'active', 'client_id': 'omi-chatgpt-prod'},
+        {'id': 'g2', 'status': 'active', 'client_id': 'omi-chatgpt-dev', 'revoked_at': '2026-10-01T00:00:00Z'},
         {'id': 'g3', 'client_id': 'omi-chatgpt-dev', 'status': 'revoked'},
-        {'id': 'g4', 'client_id': 'omi-claude-prod'},
+        {'id': 'g4', 'status': 'active', 'client_id': 'omi-claude-prod'},
       ], keys: const []);
       expect(connections.chatGptConnected, isTrue);
       expect(connections.chatGptGrantIds, ['g1']);
 
       final none = AgentConnections.from(grants: [
-        {'id': 'g4', 'client_id': 'omi-claude-prod'},
+        {'id': 'g4', 'status': 'active', 'client_id': 'omi-claude-prod'},
       ], keys: const []);
       expect(none.chatGptConnected, isFalse);
     });
@@ -162,11 +162,24 @@ void main() {
     });
   });
 
+  group('grant liveness mirrors the backend token check', () {
+    final now = DateTime.utc(2026, 10, 17, 12);
+    test('only an active, unrevoked, unexpired grant is live', () {
+      expect(isLiveGrant({'status': 'active'}, now: now), isTrue);
+      expect(isLiveGrant({'status': 'active', 'expires_at': '2026-10-18T00:00:00Z'}, now: now), isTrue);
+      expect(isLiveGrant({'status': 'active', 'expires_at': '2026-10-17T00:00:00Z'}, now: now), isFalse);
+      expect(isLiveGrant({'status': 'active', 'revoked_at': '2026-10-01T00:00:00Z'}, now: now), isFalse);
+      expect(isLiveGrant({}, now: now), isFalse);
+      expect(isLiveGrant({'status': 'pending'}, now: now), isFalse);
+    });
+  });
+
   group('ChatGPT scopes', () {
     test('a grant missing a scope the screens need asks for a reconnect', () {
       final partial = AgentConnections.from(grants: [
         {
           'id': 'g1',
+          'status': 'active',
           'client_id': 'omi-chatgpt-prod',
           'scopes': ['memories.read']
         },
@@ -179,8 +192,8 @@ void main() {
 
     test('a full grant, or one that lists no scopes, is simply connected', () {
       for (final grant in [
-        {'id': 'g1', 'client_id': 'omi-chatgpt-prod', 'scopes': chatGptRequiredScopes.toList()},
-        {'id': 'g2', 'client_id': 'omi-chatgpt-prod'},
+        {'id': 'g1', 'status': 'active', 'client_id': 'omi-chatgpt-prod', 'scopes': chatGptRequiredScopes.toList()},
+        {'id': 'g2', 'status': 'active', 'client_id': 'omi-chatgpt-prod'},
       ]) {
         final connections = AgentConnections.from(grants: [grant], keys: const []);
         expect(connections.chatGptNeedsReconnect, isFalse);

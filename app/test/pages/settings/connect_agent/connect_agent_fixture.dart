@@ -52,6 +52,7 @@ class FakeAgentBackend {
             if (chatGptConnected)
               {
                 'id': 'grant-chatgpt',
+                'status': 'active',
                 'client_id': 'omi-chatgpt-prod',
                 if (chatGptScopes != null) 'scopes': chatGptScopes
               },
