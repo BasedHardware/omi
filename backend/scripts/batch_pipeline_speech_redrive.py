@@ -22,6 +22,18 @@ from dataclasses import fields
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import batch_pipeline_held_disposition as held
+from google.cloud import firestore, storage
+from google.cloud.firestore_v1.base_query import FieldFilter
+from config.batch_pipeline import speech_empty_multilingual_enabled, recovery_enabled_for
+from database.batch_pipeline_quarantine_recovery import RecoveryStore
+from database.batch_pipeline_speech_redrive import SpeechRedriveStore
+from database.batch_pipeline_store import FirestoreStore
+from utils.batch_pipeline.artifact_policy import create_artifact_store
+from utils.batch_pipeline.artifacts import ProtectionContext
+from utils.batch_pipeline.contracts import WorkItem
+from utils.batch_pipeline.recovery_disposition import inspect_audio
+from utils.batch_pipeline.speech_redrive import redrive_one
+from utils.executors import storage_executor
 
 OPERATION = 'speech-empty-multilingual-paid-epoch-2-v1'
 require = held.require
@@ -44,8 +56,6 @@ def paid_digest(census_digest, speech_count, paid_epoch):
 
 
 def checked_job(store, sid, uid, key):
-    from database.batch_pipeline_quarantine_recovery import RecoveryStore
-    from database.batch_pipeline_speech_redrive import SpeechRedriveStore
 
     def check(tx):
         job, binding = RecoveryStore(store).checked(
@@ -76,8 +86,6 @@ def checked_job(store, sid, uid, key):
 
 
 def inspect_unit(store, artifacts, sid, uid, key):
-    from utils.batch_pipeline.contracts import WorkItem
-    from utils.batch_pipeline.recovery_disposition import inspect_audio
 
     job = checked_job(store, sid, uid, key)
     # Immutable intent attestations retain the original census on replay, even
@@ -126,10 +134,6 @@ def main():
     bucket = os.getenv('BUCKET_BATCH_PIPELINE', '')
     require(len(secret) >= 32 and bool(bucket), 'secure_runtime_material_required')
     os.environ['OMI_ENV_STAGE'] = args.stage
-    from google.cloud import firestore, storage
-    from google.cloud.firestore_v1.base_query import FieldFilter
-    from database.batch_pipeline_store import FirestoreStore
-    from utils.batch_pipeline.artifact_policy import create_artifact_store
 
     client = firestore.Client(project='based-hardware')
     store = FirestoreStore('batch_pipeline_prod', firestore_client=client)
@@ -147,7 +151,6 @@ def main():
     )
 
     def authorize(item):
-        from utils.batch_pipeline.artifacts import ProtectionContext
 
         def check(tx):
             generation = tx.check_privacy(
@@ -177,7 +180,6 @@ def main():
         ):
             selected.append((doc.id, held.fingerprint(job)))
     require(len(selected) == args.expect_count, 'cohort_count_changed')
-    from utils.executors import storage_executor
 
     units = []
     ordered = sorted(selected)
@@ -207,8 +209,6 @@ def main():
         'firestore_writes': 0,
     }
     if args.apply:
-        from utils.batch_pipeline.speech_redrive import redrive_one
-        from config.batch_pipeline import speech_empty_multilingual_enabled, recovery_enabled_for
 
         require(speech_empty_multilingual_enabled() and recovery_enabled_for(uid), 'redrive_or_owner_disabled')
         require(args.approve_plan_sha256 == digest, 'approval_digest_changed')

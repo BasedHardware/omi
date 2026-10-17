@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 
+from config.batch_pipeline import speech_empty_multilingual_enabled
 from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed, privacy_owner_key
 
@@ -117,8 +118,6 @@ def register_batch_artifact(
             and uri.endswith(f"/{disposition['token']}.enc")
         )
         redrive = job.get('speech_redrive') or {}
-        from config.batch_pipeline import speech_empty_multilingual_enabled
-
         redrive_write = (
             speech_empty_multilingual_enabled()
             and job.get('state') == 'quarantined'
