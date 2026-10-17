@@ -50,16 +50,25 @@ def test_batch_pipeline_admission_is_configured_without_uid_allowlists(manifest,
         for env in hosts(config).values():
             assert env['BATCH_PIPELINE_ENABLED']['value'] in ('true', 'false')
             assert env['BATCH_PIPELINE_PERCENT']['value'] == '0'
-            allowlist = env.get('BATCH_PIPELINE_UID_ALLOWLIST')
-            assert allowlist is None or allowlist.get('value', '') == ''
+            if stage == 'prod':
+                assert 'BATCH_PIPELINE_UID_ALLOWLIST' not in env
+                assert env['BATCH_PIPELINE_ENABLED']['value'] == 'true'
+            else:
+                allowlist = env.get('BATCH_PIPELINE_UID_ALLOWLIST')
+                assert allowlist is None or allowlist.get('value', '') == ''
             assert env['BATCH_PIPELINE_WORKER_ENABLED']['value'] == 'false'
             assert env['BATCH_PIPELINE_SHARED_LIVE_ENABLED']['value'] == 'false'
             if stage == 'dev':
                 assert env['BATCH_PIPELINE_SERVING_ENABLED']['value'] == 'false'
-                assert env['BATCH_PIPELINE_UID_ALLOWLIST']['value'] == ''
+                assert env.get('BATCH_PIPELINE_UID_ALLOWLIST', {}).get('value', '') == ''
                 assert env['BATCH_PIPELINE_API_URL']['value'] == ''
-    for chart_env in listen_chart_envs:
-        assert chart_env.get('BATCH_PIPELINE_UID_ALLOWLIST', '') == ''
+    assert listen_chart_envs[0].get('BATCH_PIPELINE_UID_ALLOWLIST', '') == ''
+    assert 'BATCH_PIPELINE_UID_ALLOWLIST' not in listen_chart_envs[1]
+    assert listen_chart_envs[1]['BATCH_PIPELINE_ENABLED'] == 'true'
+    prod_hosts = hosts(manifest['prod'])
+    assert prod_hosts['backend-sync']['SYNC_BACKFILL_ORDER_PERCENT']['value'] == '100'
+    assert prod_hosts['backend-sync-backfill']['SYNC_BACKFILL_ORDER_PERCENT']['value'] == '0'
+    assert prod_hosts['backend-integration']['BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED']['value'] == 'true'
 
 
 def test_quarantine_recovery_is_david_only_on_prod_integration(

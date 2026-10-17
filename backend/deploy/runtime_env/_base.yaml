@@ -62,8 +62,6 @@ environment_shared:
         BATCH_PIPELINE_ENABLED:
           value: 'false'
           category: rollout
-        BATCH_PIPELINE_UID_ALLOWLIST:
-          category: rollout
         BATCH_PIPELINE_PERCENT:
           value: '0'
           category: rollout
@@ -962,8 +960,6 @@ environment_shared:
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
-          BATCH_PIPELINE_UID_ALLOWLIST:
-            category: rollout
           BATCH_PIPELINE_PERCENT:
             value: '0'
             category: rollout
@@ -1396,8 +1392,6 @@ environment_shared:
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
-          BATCH_PIPELINE_UID_ALLOWLIST:
-            category: rollout
           BATCH_PIPELINE_PERCENT:
             value: '0'
             category: rollout
@@ -1801,8 +1795,6 @@ environment_shared:
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
-          BATCH_PIPELINE_UID_ALLOWLIST:
-            category: rollout
           BATCH_PIPELINE_PERCENT:
             value: '0'
             category: rollout
@@ -2185,8 +2177,6 @@ environment_shared:
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
-            category: rollout
-          BATCH_PIPELINE_UID_ALLOWLIST:
             category: rollout
           BATCH_PIPELINE_PERCENT:
             value: '0'

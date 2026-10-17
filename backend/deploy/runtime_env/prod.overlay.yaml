@@ -35,8 +35,6 @@ overlay:
         BATCH_PIPELINE_ENABLED:
           value: "true"
           category: rollout
-        BATCH_PIPELINE_UID_ALLOWLIST:
-          value: ''
         BATCH_PIPELINE_API_URL:
           value: https://backend-sync-hhibjajaja-uc.a.run.app
         BUCKET_BATCH_PIPELINE:
@@ -482,10 +480,8 @@ overlay:
             value: '0'
             category: rollout
           BATCH_PIPELINE_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
-          BATCH_PIPELINE_UID_ALLOWLIST:
-            value: ''
           BATCH_PIPELINE_API_URL:
             value: 'https://backend-sync-hhibjajaja-uc.a.run.app'
             category: service_discovery
@@ -811,8 +807,6 @@ overlay:
           BATCH_PIPELINE_ENABLED:
             value: 'true'
             category: rollout
-          BATCH_PIPELINE_UID_ALLOWLIST:
-            value: ''
           BATCH_PIPELINE_API_URL:
             value: 'https://backend-sync-hhibjajaja-uc.a.run.app'
             category: service_discovery
@@ -1114,7 +1108,7 @@ overlay:
             value: 'newest'
             category: rollout
           SYNC_BACKFILL_ORDER_PERCENT:
-            value: '0'
+            value: '100'
             category: rollout
           SYNC_BACKFILL_ROUTING_ENABLED:
             value: 'true'
@@ -1178,8 +1172,6 @@ overlay:
           BATCH_PIPELINE_ENABLED:
             value: 'true'
             category: rollout
-          BATCH_PIPELINE_UID_ALLOWLIST:
-            value: ''
           BATCH_PIPELINE_API_URL:
             value: 'https://backend-sync-hhibjajaja-uc.a.run.app'
             category: service_discovery
@@ -1514,8 +1506,6 @@ overlay:
           BATCH_PIPELINE_ENABLED:
             value: 'true'
             category: rollout
-          BATCH_PIPELINE_UID_ALLOWLIST:
-            value: ''
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'true'
             category: rollout
@@ -1677,6 +1667,9 @@ overlay:
             value: 'true'
             category: rollout
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED:
             value: 'true'
             category: rollout
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
