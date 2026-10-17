@@ -2232,6 +2232,24 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "mobile_rollout_watch.yml/dispatch": {
+      "budget_p50_minutes": 5,
+      "display_name": "dispatch",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 6,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "4-hourly intraday rollout advance (cron 0 1,5,9,13,17,21 UTC = 6 dispatches/day, seconds each): python POST to the Codemagic builds API for the mobile-rollout-advance workflow. Advances only already-released rollouts; never builds or submits.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "onboarding_figma_sync.yml/publish": {
       "budget_p50_minutes": 5,
       "display_name": "publish",
@@ -4453,14 +4471,14 @@
               "required": "true",
               "type": "choice"
             },
-            "rollback_digest": {
-              "default": "",
-              "description": "Replay the recorded prior serving sha256 digest without rebuilding historical source",
-              "required": "false"
-            },
             "release_version": {
               "default": "",
               "description": "Release version (optional)",
+              "required": "false"
+            },
+            "rollback_digest": {
+              "default": "",
+              "description": "Replay the recorded prior serving sha256 digest without rebuilding historical source",
               "required": "false"
             }
           }
@@ -4964,6 +4982,18 @@
           }
         ],
         "workflow_dispatch": ""
+      }
+    },
+    "mobile_rollout_watch.yml": {
+      "name": "Mobile rollout watch",
+      "owner": "CI maintainers",
+      "rationale": "Intraday half of the self-driving mobile release lane (see .github/agent-docs/mobile-release-process.md): every 4h dispatches the Codemagic mobile-rollout-advance workflow, which moves only ALREADY-RELEASED rollouts along the agreed 12h exposure profile (iOS phased jump to 100% after its 12h observation window, Android staged ladder hop 1->10->50->100% per 4h window). Dispatch-only ubuntu runner (~seconds), no build; 2026-10-17, operator-approved posture.",
+      "triggers": {
+        "schedule": [
+          {
+            "cron": "0 1,5,9,13,17,21 * * *"
+          }
+        ]
       }
     },
     "onboarding_figma_sync.yml": {
