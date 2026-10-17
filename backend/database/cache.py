@@ -61,7 +61,10 @@ def _shutdown() -> None:
     """Cleanup on process exit."""
     global _pubsub_manager
     if _pubsub_manager:
-        _pubsub_manager.stop()
+        try:
+            _pubsub_manager.stop(timeout=0.2)
+        except Exception:
+            pass
 
 
 # Register cleanup handler
