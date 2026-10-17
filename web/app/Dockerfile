@@ -17,6 +17,7 @@ FROM base AS builder
 WORKDIR /app/web/app
 COPY --from=deps /app/web/app/node_modules ./node_modules
 COPY web/app .
+COPY web/shared /app/web/shared
 
 ARG NEXT_PUBLIC_API_BASE_URL
 ARG NEXT_PUBLIC_FIREBASE_API_KEY

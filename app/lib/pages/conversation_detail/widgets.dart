@@ -13,6 +13,7 @@ import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_markdown_widget.dart';
+import 'package:omi/pages/conversation_detail/widgets/note_sections_sliver.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -205,6 +206,7 @@ class AppResultDetailWidget extends StatefulWidget {
   final void Function(ConversationSummarySelection selection)? onEditStarted;
   final void Function(ConversationSummarySelection selection)? onEditCancelled;
   final bool Function()? canStartEditing;
+  final ValueChanged<String>? onOpenSource;
   final bool asSliver;
 
   const AppResultDetailWidget({
@@ -218,6 +220,7 @@ class AppResultDetailWidget extends StatefulWidget {
     this.onEditStarted,
     this.onEditCancelled,
     this.canStartEditing,
+    this.onOpenSource,
     this.asSliver = false,
   });
 
@@ -377,6 +380,7 @@ class GetAppsWidgets extends StatelessWidget {
   final void Function(ConversationSummarySelection selection)? onEditStarted;
   final void Function(ConversationSummarySelection selection)? onEditCancelled;
   final bool Function()? canStartEditing;
+  final ValueChanged<String>? onOpenSource;
   const GetAppsWidgets({
     super.key,
     this.searchQuery = '',
@@ -385,6 +389,7 @@ class GetAppsWidgets extends StatelessWidget {
     this.onEditStarted,
     this.onEditCancelled,
     this.canStartEditing,
+    this.onOpenSource,
   });
 
   @override
@@ -429,6 +434,7 @@ class GetAppsWidgets extends StatelessWidget {
                 searchQuery: searchQuery,
                 currentResultIndex: currentResultIndex,
                 canStartEditing: canStartEditing,
+                onOpenSource: onOpenSource,
                 onEditStarted: onEditStarted == null ? null : (_) => onEditStarted!(selection),
                 onEditCancelled: onEditCancelled == null ? null : (_) => onEditCancelled!(selection),
                 onSaveSummarySelection: onSaveSummarySelection,
@@ -559,6 +565,16 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
           ),
           const SliverToBoxAdapter(child: SizedBox(height: OmiSpacing.lg)),
         ],
+      );
+    }
+
+    if (selection.sections.isNotEmpty && widget.searchQuery.isEmpty) {
+      return NoteSectionsSliver(
+        sections: selection.sections,
+        onOpenSource: widget.onOpenSource,
+        onDoubleTap: widget.onSaveSummarySelection == null || !selection.canEdit(widget.conversation)
+            ? null
+            : () => _startEditing(content),
       );
     }
 
