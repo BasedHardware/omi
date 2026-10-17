@@ -85,6 +85,13 @@ def test_mcp_oauth_template_still_renders_permissions_and_social_sign_in():
     assert "firebaseui-auth-container" in html
 
 
+def test_mcp_oauth_template_offers_apple_sign_in_on_every_platform():
+    html = _render_mcp_template()
+
+    assert "'apple.com'" in html
+    assert "navigator.platform" not in html
+
+
 def test_mcp_oauth_template_places_email_sign_in_below_social_options():
     html = _render_mcp_template()
 
@@ -117,6 +124,13 @@ def test_app_oauth_template_uses_deterministic_email_password_sign_in():
     assert "signInWithEmailAndPassword" in html
     assert "firebase.auth.EmailAuthProvider.PROVIDER_ID" not in html
     assert "Create account" not in html
+
+
+def test_app_oauth_template_offers_apple_sign_in_on_every_platform():
+    html = _render_oauth_authenticate_template()
+
+    assert "'apple.com'" in html
+    assert "navigator.platform" not in html
 
 
 def test_app_oauth_template_terms_and_privacy_links_are_distinct():
