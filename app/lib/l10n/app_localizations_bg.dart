@@ -13735,4 +13735,91 @@ class AppLocalizationsBg extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name все още не е свързан';
   }
+
+  @override
+  String get summaryNotSummarizedYet => 'Все още няма обобщение';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi може да превърне този разговор в общ преглед, ключови моменти и задачи.';
+
+  @override
+  String get summaryWithOmi => 'Обобщи с Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Обобщи с $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Използвай друг шаблон';
+
+  @override
+  String get summaryFromTheTranscript => 'От транскрипцията';
+
+  @override
+  String get summaryReadFullTranscript => 'Прочети цялата транскрипция';
+
+  @override
+  String get summarySheetTitle => 'Обобщи с';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Общ преглед, ключови моменти и задачи';
+
+  @override
+  String get summaryYourTemplates => 'Вашите шаблони';
+
+  @override
+  String get summarySuggestedTemplates => 'Предложени за този разговор';
+
+  @override
+  String get summaryBrowseTemplates => 'Разгледай шаблоните';
+
+  @override
+  String get summaryCreateYourOwn => 'Създай свой';
+
+  @override
+  String get summaryUseForNewConversations => 'Задай като основен';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Шаблоните ви не можаха да се заредят. Omi продължава да работи.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Все още не сте добавили шаблони. Разгледайте някои или създайте свой.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Обобщаване с $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name не успя да завърши';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Шаблонът не върна обобщение за този разговор.';
+
+  @override
+  String get summaryWithOmiInstead => 'Обобщи с Omi вместо това';
+
+  @override
+  String get summaryBusyTitle => 'Все още се обработва';
+
+  @override
+  String get summaryBusyBody => 'Omi вече работи по този разговор. Обобщението ще се появи тук, когато приключи.';
+
+  @override
+  String get summaryCheckAgain => 'Провери отново';
+
+  @override
+  String get summaryLimitTitle => 'Достигнат е лимитът за обобщения';
+
+  @override
+  String get summaryLimitBody => 'Генерирахте отново няколко обобщения през последния час. Опитайте отново по-късно.';
+
+  @override
+  String get summaryFailedTitle => 'Неуспешно обобщаване';
+
+  @override
+  String get summaryFailedBody => 'Нещо се обърка при обобщаването на този разговор.';
 }

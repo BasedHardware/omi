@@ -13794,4 +13794,92 @@ class AppLocalizationsTl extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return 'Hindi pa nakakonekta ang $name';
   }
+
+  @override
+  String get summaryNotSummarizedYet => 'Hindi pa naibubuod';
+
+  @override
+  String get summaryEmptyStateBody =>
+      'Kayang gawing overview, mga pangunahing punto at action item ng Omi ang usapang ito.';
+
+  @override
+  String get summaryWithOmi => 'I-summarize gamit ang Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'I-summarize gamit ang $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Gumamit ng ibang template';
+
+  @override
+  String get summaryFromTheTranscript => 'Mula sa transcript';
+
+  @override
+  String get summaryReadFullTranscript => 'Basahin ang buong transcript';
+
+  @override
+  String get summarySheetTitle => 'I-summarize gamit ang';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Overview, mga pangunahing punto at action item';
+
+  @override
+  String get summaryYourTemplates => 'Iyong mga template';
+
+  @override
+  String get summarySuggestedTemplates => 'Iminumungkahi para sa usapang ito';
+
+  @override
+  String get summaryBrowseTemplates => 'Mag-browse ng mga template';
+
+  @override
+  String get summaryCreateYourOwn => 'Gumawa ng sarili mo';
+
+  @override
+  String get summaryUseForNewConversations => 'Gawin itong default ko';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Hindi ma-load ang iyong mga template. Gumagana pa rin ang Omi.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Wala ka pang naidadagdag na template. Mag-browse ng ilan o gumawa ng sarili mo.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Ini-summarize gamit ang $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return 'Hindi natapos ng $name';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Hindi nagbalik ng buod ang template para sa usapang ito.';
+
+  @override
+  String get summaryWithOmiInstead => 'I-summarize na lang gamit ang Omi';
+
+  @override
+  String get summaryBusyTitle => 'Pinoproseso pa';
+
+  @override
+  String get summaryBusyBody => 'Ginagawa na ng Omi ang usapang ito. Lalabas dito ang buod kapag tapos na.';
+
+  @override
+  String get summaryCheckAgain => 'Suriin muli';
+
+  @override
+  String get summaryLimitTitle => 'Naabot na ang limitasyon ng buod';
+
+  @override
+  String get summaryLimitBody => 'Ilang beses ka nang gumawa muli ng buod sa nakaraang oras. Subukan muli mamaya.';
+
+  @override
+  String get summaryFailedTitle => 'Hindi ma-summarize';
+
+  @override
+  String get summaryFailedBody => 'Nagkaproblema habang ini-summarize ang usapang ito.';
 }

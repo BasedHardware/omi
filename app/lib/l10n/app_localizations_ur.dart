@@ -13701,4 +13701,91 @@ class AppLocalizationsUr extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name ابھی تک منسلک نہیں ہوا';
   }
+
+  @override
+  String get summaryNotSummarizedYet => 'ابھی تک خلاصہ نہیں کیا گیا';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi اس گفتگو کو جائزے، اہم نکات اور کرنے کے کاموں میں بدل سکتا ہے۔';
+
+  @override
+  String get summaryWithOmi => 'Omi سے خلاصہ کریں';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return '$name سے خلاصہ کریں';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'دوسرا ٹیمپلیٹ استعمال کریں';
+
+  @override
+  String get summaryFromTheTranscript => 'ٹرانسکرپٹ سے';
+
+  @override
+  String get summaryReadFullTranscript => 'مکمل ٹرانسکرپٹ پڑھیں';
+
+  @override
+  String get summarySheetTitle => 'اس سے خلاصہ کریں';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'جائزہ، اہم نکات اور کرنے کے کام';
+
+  @override
+  String get summaryYourTemplates => 'آپ کے ٹیمپلیٹس';
+
+  @override
+  String get summarySuggestedTemplates => 'اس گفتگو کے لیے تجویز کردہ';
+
+  @override
+  String get summaryBrowseTemplates => 'ٹیمپلیٹس براؤز کریں';
+
+  @override
+  String get summaryCreateYourOwn => 'اپنا بنائیں';
+
+  @override
+  String get summaryUseForNewConversations => 'اسے میرا ڈیفالٹ بنائیں';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'آپ کے ٹیمپلیٹس لوڈ نہیں ہو سکے۔ Omi اب بھی کام کر رہا ہے۔';
+
+  @override
+  String get summaryNoTemplatesYet => 'آپ نے ابھی تک کوئی ٹیمپلیٹ شامل نہیں کیا۔ کچھ براؤز کریں یا اپنا بنائیں۔';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return '$name سے خلاصہ کیا جا رہا ہے…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name مکمل نہیں کر سکا';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'ٹیمپلیٹ نے اس گفتگو کا کوئی خلاصہ نہیں دیا۔';
+
+  @override
+  String get summaryWithOmiInstead => 'اس کے بجائے Omi سے خلاصہ کریں';
+
+  @override
+  String get summaryBusyTitle => 'ابھی کارروائی جاری ہے';
+
+  @override
+  String get summaryBusyBody => 'Omi پہلے ہی اس گفتگو پر کام کر رہا ہے۔ مکمل ہونے پر خلاصہ یہاں ظاہر ہوگا۔';
+
+  @override
+  String get summaryCheckAgain => 'دوبارہ چیک کریں';
+
+  @override
+  String get summaryLimitTitle => 'خلاصے کی حد پوری ہو گئی';
+
+  @override
+  String get summaryLimitBody => 'آپ نے پچھلے ایک گھنٹے میں کئی خلاصے دوبارہ بنائے ہیں۔ بعد میں دوبارہ کوشش کریں۔';
+
+  @override
+  String get summaryFailedTitle => 'خلاصہ نہیں ہو سکا';
+
+  @override
+  String get summaryFailedBody => 'اس گفتگو کا خلاصہ کرتے وقت کچھ غلط ہو گیا۔';
 }

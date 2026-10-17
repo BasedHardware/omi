@@ -13620,4 +13620,91 @@ class AppLocalizationsTh extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name ยังไม่ได้เชื่อมต่อ';
   }
+
+  @override
+  String get summaryNotSummarizedYet => 'ยังไม่ได้สรุป';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi สามารถเปลี่ยนบทสนทนานี้ให้เป็นภาพรวม ประเด็นสำคัญ และสิ่งที่ต้องทำได้';
+
+  @override
+  String get summaryWithOmi => 'สรุปด้วย Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'สรุปด้วย $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'ใช้เทมเพลตอื่น';
+
+  @override
+  String get summaryFromTheTranscript => 'จากบทถอดเสียง';
+
+  @override
+  String get summaryReadFullTranscript => 'อ่านบทถอดเสียงทั้งหมด';
+
+  @override
+  String get summarySheetTitle => 'สรุปด้วย';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'ภาพรวม ประเด็นสำคัญ และสิ่งที่ต้องทำ';
+
+  @override
+  String get summaryYourTemplates => 'เทมเพลตของคุณ';
+
+  @override
+  String get summarySuggestedTemplates => 'แนะนำสำหรับบทสนทนานี้';
+
+  @override
+  String get summaryBrowseTemplates => 'เรียกดูเทมเพลต';
+
+  @override
+  String get summaryCreateYourOwn => 'สร้างของคุณเอง';
+
+  @override
+  String get summaryUseForNewConversations => 'ตั้งเป็นค่าเริ่มต้นของฉัน';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'โหลดเทมเพลตของคุณไม่ได้ Omi ยังใช้งานได้ตามปกติ';
+
+  @override
+  String get summaryNoTemplatesYet => 'คุณยังไม่ได้เพิ่มเทมเพลตใดเลย ลองเรียกดูหรือสร้างของคุณเอง';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'กำลังสรุปด้วย $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name ทำงานไม่สำเร็จ';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'เทมเพลตไม่ได้ส่งคืนสรุปสำหรับบทสนทนานี้';
+
+  @override
+  String get summaryWithOmiInstead => 'สรุปด้วย Omi แทน';
+
+  @override
+  String get summaryBusyTitle => 'ยังคงประมวลผลอยู่';
+
+  @override
+  String get summaryBusyBody => 'Omi กำลังประมวลผลบทสนทนานี้อยู่แล้ว สรุปจะปรากฏที่นี่เมื่อเสร็จสิ้น';
+
+  @override
+  String get summaryCheckAgain => 'ตรวจสอบอีกครั้ง';
+
+  @override
+  String get summaryLimitTitle => 'ถึงขีดจำกัดการสรุปแล้ว';
+
+  @override
+  String get summaryLimitBody => 'คุณสร้างสรุปใหม่หลายครั้งในชั่วโมงที่ผ่านมา โปรดลองอีกครั้งในภายหลัง';
+
+  @override
+  String get summaryFailedTitle => 'สรุปไม่ได้';
+
+  @override
+  String get summaryFailedBody => 'เกิดข้อผิดพลาดขณะสรุปบทสนทนานี้';
 }

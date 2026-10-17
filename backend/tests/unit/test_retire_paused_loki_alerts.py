@@ -109,6 +109,17 @@ def test_unknown_or_changed_live_rule_blocks_entire_plan(helper, change, tmp_pat
     assert all(method == 'GET' for method, _ in api.calls)
 
 
+def test_grafana13_readback_defaults_still_match_reviewed_rules(helper):
+    api = FakeGrafana(helper)
+    for rule in api.live.values():
+        rule['notification_settings']['repeat_interval'] = '1d'
+        for node in rule['data']:
+            node.setdefault('queryType', '')
+            node['model'].setdefault('intervalMs', 1000)
+            node['model'].setdefault('maxDataPoints', 43200)
+    assert helper.retire(api, {}, helper.retired_rules()) == ['READY ' + uid for uid in sorted(helper.UIDS)]
+
+
 def test_apply_backup_precedes_deletes_and_all_four_read_back_absent(helper, tmp_path):
     backup = tmp_path / 'snapshot'
     api = FakeGrafana(helper, backup)

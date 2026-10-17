@@ -27,6 +27,18 @@ PARTITION_LOOKAHEAD_DAYS = 3
 
 # Grains of the tables ``load_bigquery.py`` already loads. No partition expiry.
 AGGREGATE_CATALOG = {
+    "mercury_vendor_spend_daily": {
+        "partition": "date",
+        "partition_expiry": None,
+        "cluster": ["category", "vendor"],
+        "grain": ["date", "vendor", "category"],
+    },
+    "mercury_saas_daily": {
+        "partition": "date",
+        "partition_expiry": None,
+        "cluster": ["category", "vendor"],
+        "grain": ["date"],
+    },
     "unit_cost_daily": {
         "partition": "date",
         "partition_expiry": None,
@@ -134,3 +146,55 @@ def recompute_settlement_window(
 
 def window_net(totals: dict[date, dict[str, Decimal]], today: date) -> Decimal:
     return sum((totals[day]["net"] for day in settlement_window(today) if day in totals), Decimal("0"))
+
+
+def company_stt_rows(raw, dates: Iterable[str], settled_through: str | None) -> tuple[list[dict], list[dict]]:
+    """Measured non-GCP invoices at total/all only; never allocate to plans/users.
+
+    These components are additive to GCP/LLM invoices, NOT to gross_total (which
+    already contains a modelled STT allowance). Missing provider means unknown,
+    not zero. The existing loader replaces these rows with the rest of each date.
+    """
+    import json
+
+    path = raw / "stt_vendor_cost_daily.json"
+    if not path.exists():
+        return [], []
+    providers = json.loads(path.read_text())["providers"]
+    longs, recon = [], []
+    for provider in ("soniox", "deepgram"):
+        if provider not in providers:
+            continue
+        for day in dates:
+            if day not in providers[provider]:
+                raise ValueError("measured STT invoice missing requested date")
+            amount = money(providers[provider][day])
+            if not amount.is_finite() or amount < 0:
+                raise ValueError("invalid measured STT invoice amount")
+            component = "stt_%s_measured" % provider
+            longs.append(
+                {
+                    "date": day,
+                    "segment_type": "total",
+                    "segment": "all",
+                    "component": component,
+                    "method": "measured",
+                    "usd": float(amount),
+                    "users": 0,
+                    "usd_per_user_day": None,
+                }
+            )
+            recon.append(
+                {
+                    "date": day,
+                    "pool": component,
+                    "pool_usd": float(amount),
+                    "allocated_usd": float(amount),
+                    "delta_pct": 0.0,
+                    "invoice_source": provider + "_usage_api",
+                    "note": "company total only; allocated_usd is published total, not user allocation; "
+                    "do not add to modelled gross_total/stt_vendor_low",
+                    "inputs_settled": settled_through is None or day <= settled_through,
+                }
+            )
+    return longs, recon

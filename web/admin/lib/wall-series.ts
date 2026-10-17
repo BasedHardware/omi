@@ -38,10 +38,15 @@ import {
 } from "./wall-posthog";
 import { aggregatePeriod, Metric, MetricId, WallPayload } from "./wall-metrics";
 import { fetchShopifyWeek } from "./wall-shopify";
-import { fetchFinopsHistory, FinopsHistory } from "./wall-finops";
+import {
+  fetchFinopsHistory,
+  fetchPlanCostHistory,
+  FinopsHistory,
+  PlanCostHistory,
+} from "./wall-finops";
 import { wallFailure } from "./wall-source-error";
 import { COLD_STORE_WAIT, wallRefreshSettled } from "./wall-cache";
-import { allInCost } from "./wall-cost";
+import { allInCost, CostDay, estimateStatus } from "./wall-cost";
 import { createHash } from "crypto";
 import {
   firestoreSeriesStore,
@@ -131,6 +136,7 @@ export interface SeriesSources {
   shopify: typeof fetchShopifyWeek;
   billing: () => Promise<Billing>;
   finops: (today: string) => Promise<FinopsHistory>;
+  planCost: (today: string) => Promise<PlanCostHistory>;
   /** Shared cross-instance state; process memory when absent (tests). */
   store?: SeriesStore;
   /** Lease holder id; one per process by default. */
@@ -148,6 +154,7 @@ export const defaultSeriesSources: SeriesSources = {
     return computeBillingInfraCosts(90, 0, true);
   },
   finops: fetchFinopsHistory,
+  planCost: fetchPlanCostHistory,
   // Writes only on Cloud Run, like the snapshot (`wallSnapshotStore`).
   store: process.env.K_REVISION
     ? firestoreSeriesStore
@@ -168,6 +175,8 @@ export interface Legs {
    * history read never holds back the headline. */
   mauDaily?: Record<number, number>;
   finops?: FinopsHistory;
+  /** FinOps plan cost (margin by plan); settled about D−3. */
+  planCost?: PlanCostHistory;
   billing?: Billing;
   shopify?: {
     date: string;
@@ -183,7 +192,7 @@ const LEGS_FOR: Record<SeriesName, LegName[]> = {
   activation: ["activationHistory", "captureSource"],
   retention: ["curve", "retainedHistory", "establishedHistory", "growth"],
   revenue: ["finops", "mauPrior", "mauDaily", "shopify"],
-  health: ["billing", "finops", "mauPrior", "mauDaily"],
+  health: ["billing", "finops", "mauPrior", "mauDaily", "planCost"],
 };
 
 /** Shift period numbers of a chunk read at an older end date. */
@@ -319,6 +328,7 @@ export function legJobs(
         Array.from({ length: MAU_WEEKS }, (_, w) => w).filter((w) => w !== 1)
       ),
     finops: () => sources.finops(isoDay(now)),
+    planCost: () => sources.planCost(isoDay(now)),
     billing: async () => {
       const bill = await sources.billing();
       if (!bill || bill.summary.costSource !== "billing")
@@ -694,8 +704,12 @@ export function healthFrames(
   // Same all-in model as the snapshot's cost stats (every cost line counted).
   const allIn = allInCost(
     (legs.billing?.daily || []).filter((d) => d.date <= cutoff),
-    legs.billing?.summary.coverage
+    legs.billing?.summary.coverage,
+    legs.planCost?.sttMeasured
   );
+  const estimates = estimateStatus(now);
+  // 1 when a manual estimate is older than ESTIMATE_STALE_DAYS.
+  const estimateStale = estimates.some((e) => e.stale) ? 1 : 0;
   const days = allIn.daily;
   const net = metric(snapshot, "cost.net_day");
   const snapshotTotals = new Map(
@@ -710,9 +724,12 @@ export function healthFrames(
       openai: d.openai,
       anthropic: d.anthropic,
       stt: d.stt,
+      sttSource: d.sttMeasured ? "measured" : "estimate",
       saas: d.saas,
+      estimateStale,
       oneTimeExcluded: d.oneTime || null,
-      total: snapshotTotals.get(d.date) ?? d.total,
+      // The snapshot prices STT from the constant; a measured day is our own.
+      total: d.sttMeasured ? d.total : snapshotTotals.get(d.date) ?? d.total,
       revenuePerDay: book == null ? null : book / DAYS_PER_MONTH,
     };
   });
@@ -747,7 +764,110 @@ export function healthFrames(
       goal: arpmau == null ? null : round(arpmau * (1 - MARGIN_GOAL)),
     });
   }
-  return { cost, costPerMau };
+  const marginByPlan = marginFrames(legs, days, now);
+  return {
+    cost,
+    costPerMau,
+    marginByPlan,
+    marginStatus: [{ text: marginStatus(marginByPlan, days, estimates) }],
+    estimates: estimates.map((e) => ({ ...e, stale: e.stale ? 1 : 0 })),
+  };
+}
+
+/** Plans on the margin chart, as FinOps plan ids: Neo (legacy), Unlimited,
+ * Pro, Plus, Architect, Free. Every other FinOps segment (`unattributed`,
+ * `none`, a retired id) is the unattributed row. */
+export const MARGIN_PLANS = [
+  "unlimited",
+  "unlimited_v2",
+  "operator",
+  "plus",
+  "architect",
+  "basic",
+] as const;
+export const MARGIN_DAYS = 35;
+
+/** Allocated-estimate margin by plan (David 2026-10-17), one row per day that
+ * has both a settled FinOps plan cost and that day's book snapshot; FinOps
+ * plan cost settles about D−3, and a missing day is absent, never zero.
+ * Plan cost = FinOps fully-loaded plan cost + a share of the shared remainder
+ * (TV all-in total − FinOps fully loaded: BigQuery, STT, SaaS) in proportion
+ * to the plan's cost-active user-days that day, so the plans and the
+ * unattributed row sum to the all-in total. Revenue = that day's book ÷ 30.4.
+ * Paid plans carry margin %; Free has no revenue, so only its −$/day. */
+export function marginFrames(legs: Legs, allInDays: CostDay[], now: Date) {
+  const allIn = new Map(allInDays.map((d) => [d.date, d.total]));
+  const known = new Set<string>(MARGIN_PLANS);
+  const rows: Row[] = [];
+  for (let k = MARGIN_DAYS; k >= 1; k--) {
+    const day = isoDay(shiftDay(utcDay(now), -k));
+    const plans = legs.planCost?.plans[day];
+    const book = legs.finops?.mrr[day];
+    const total = allIn.get(day);
+    if (!plans || !book || total == null) continue;
+    const segments = Object.entries(plans);
+    const finops = segments.reduce((s, [, p]) => s + p.usd, 0);
+    const users = segments.reduce((s, [, p]) => s + p.users, 0);
+    if (!users) continue;
+    const shared = total - finops;
+    const allocated = (p: { usd: number; users: number }) =>
+      p.usd + (shared * p.users) / users;
+    const row: Row = {
+      date: ts(day),
+      allInTotal: round(total),
+      finopsTotal: round(finops),
+      shared: round(shared),
+    };
+    for (const plan of MARGIN_PLANS) {
+      const cost = allocated(plans[plan] ?? { usd: 0, users: 0 });
+      const revenue = (book[plan] ?? 0) / DAYS_PER_MONTH;
+      row[`${plan}Revenue`] = round(revenue);
+      row[`${plan}Cost`] = round(cost);
+      row[`${plan}Margin`] = round(revenue - cost);
+      row[`${plan}Pct`] =
+        revenue > 0 ? round((100 * (revenue - cost)) / revenue, 1) : null;
+    }
+    row.unattributedCost = round(
+      segments
+        .filter(([plan]) => !known.has(plan))
+        .reduce((s, [, p]) => s + allocated(p), 0)
+    );
+    row.unattributedRevenue = round(
+      Object.entries(book)
+        .filter(([plan]) => !known.has(plan))
+        .reduce((s, [, v]) => s + v / DAYS_PER_MONTH, 0)
+    );
+    rows.push(row);
+  }
+  return rows;
+}
+
+const shortDay = (day: string) =>
+  new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+
+/** The margin chart's freshness line: its own data-through day (it lags the
+ * rest of the wall) and how its STT and SaaS lines were priced. */
+function marginStatus(
+  rows: Row[],
+  days: CostDay[],
+  estimates: ReturnType<typeof estimateStatus>
+) {
+  const through = rows.length ? String(rows.at(-1)!.date).slice(0, 10) : null;
+  const measured =
+    through != null && days.find((d) => d.date === through)?.sttMeasured;
+  const shown = estimates.filter((e) => !(measured && e.line === "STT"));
+  const asOf = shown.map((e) => e.asOf).sort()[0];
+  const stale = shown.some((e) => e.stale);
+  return [
+    `Margin through ${through ? shortDay(through) : "—"}`,
+    `${measured ? "STT measured · SaaS" : "STT & SaaS"} est. as of ${shortDay(
+      asOf
+    )}${stale ? " (stale)" : ""}`,
+  ].join(" · ");
 }
 
 const HEADLINE: [string, MetricId][] = [

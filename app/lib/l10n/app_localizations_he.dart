@@ -13592,4 +13592,91 @@ class AppLocalizationsHe extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name עדיין לא מחובר';
   }
+
+  @override
+  String get summaryNotSummarizedYet => 'עדיין לא סוכם';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi יכול להפוך את השיחה הזו לסקירה כללית, נקודות עיקריות ומשימות.';
+
+  @override
+  String get summaryWithOmi => 'סיכום עם Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'סיכום עם $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'שימוש בתבנית אחרת';
+
+  @override
+  String get summaryFromTheTranscript => 'מתוך התמלול';
+
+  @override
+  String get summaryReadFullTranscript => 'קריאת התמלול המלא';
+
+  @override
+  String get summarySheetTitle => 'סיכום עם';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'סקירה כללית, נקודות עיקריות ומשימות';
+
+  @override
+  String get summaryYourTemplates => 'התבניות שלך';
+
+  @override
+  String get summarySuggestedTemplates => 'מוצעות לשיחה הזו';
+
+  @override
+  String get summaryBrowseTemplates => 'עיון בתבניות';
+
+  @override
+  String get summaryCreateYourOwn => 'יצירת תבנית משלך';
+
+  @override
+  String get summaryUseForNewConversations => 'הגדר כברירת המחדל שלי';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'לא ניתן היה לטעון את התבניות שלך. Omi עדיין עובד.';
+
+  @override
+  String get summaryNoTemplatesYet => 'עדיין לא הוספת תבניות. אפשר לעיין בכמה או ליצור תבנית משלך.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'מסכם עם $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name לא הצליח לסיים';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'התבנית לא החזירה סיכום לשיחה הזו.';
+
+  @override
+  String get summaryWithOmiInstead => 'סיכום עם Omi במקום';
+
+  @override
+  String get summaryBusyTitle => 'העיבוד עדיין מתבצע';
+
+  @override
+  String get summaryBusyBody => 'Omi כבר עובד על השיחה הזו. הסיכום יופיע כאן כשהוא יסתיים.';
+
+  @override
+  String get summaryCheckAgain => 'בדיקה חוזרת';
+
+  @override
+  String get summaryLimitTitle => 'הגעת למגבלת הסיכומים';
+
+  @override
+  String get summaryLimitBody => 'יצרת מחדש כמה סיכומים בשעה האחרונה. אפשר לנסות שוב מאוחר יותר.';
+
+  @override
+  String get summaryFailedTitle => 'לא ניתן היה לסכם';
+
+  @override
+  String get summaryFailedBody => 'משהו השתבש בעת סיכום השיחה הזו.';
 }

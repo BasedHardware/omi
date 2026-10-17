@@ -13727,4 +13727,93 @@ class AppLocalizationsKn extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name ಇನ್ನೂ ಸಂಪರ್ಕಗೊಂಡಿಲ್ಲ';
   }
+
+  @override
+  String get summaryNotSummarizedYet => 'ಇನ್ನೂ ಸಾರಾಂಶ ಮಾಡಿಲ್ಲ';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi ಈ ಸಂಭಾಷಣೆಯನ್ನು ಅವಲೋಕನ, ಪ್ರಮುಖ ಅಂಶಗಳು ಮತ್ತು ಕ್ರಿಯಾ ಐಟಂಗಳಾಗಿ ಪರಿವರ್ತಿಸಬಹುದು.';
+
+  @override
+  String get summaryWithOmi => 'Omi ಮೂಲಕ ಸಾರಾಂಶ ಮಾಡಿ';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return '$name ಮೂಲಕ ಸಾರಾಂಶ ಮಾಡಿ';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'ಬೇರೆ ಟೆಂಪ್ಲೇಟ್ ಬಳಸಿ';
+
+  @override
+  String get summaryFromTheTranscript => 'ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಟ್‌ನಿಂದ';
+
+  @override
+  String get summaryReadFullTranscript => 'ಪೂರ್ಣ ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಟ್ ಓದಿ';
+
+  @override
+  String get summarySheetTitle => 'ಇದರ ಮೂಲಕ ಸಾರಾಂಶ ಮಾಡಿ';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'ಅವಲೋಕನ, ಪ್ರಮುಖ ಅಂಶಗಳು ಮತ್ತು ಕ್ರಿಯಾ ಐಟಂಗಳು';
+
+  @override
+  String get summaryYourTemplates => 'ನಿಮ್ಮ ಟೆಂಪ್ಲೇಟ್‌ಗಳು';
+
+  @override
+  String get summarySuggestedTemplates => 'ಈ ಸಂಭಾಷಣೆಗೆ ಸೂಚಿಸಲಾದವು';
+
+  @override
+  String get summaryBrowseTemplates => 'ಟೆಂಪ್ಲೇಟ್‌ಗಳನ್ನು ಬ್ರೌಸ್ ಮಾಡಿ';
+
+  @override
+  String get summaryCreateYourOwn => 'ನಿಮ್ಮದೇ ರಚಿಸಿ';
+
+  @override
+  String get summaryUseForNewConversations => 'ಇದನ್ನು ನನ್ನ ಡೀಫಾಲ್ಟ್ ಮಾಡಿ';
+
+  @override
+  String get summaryTemplatesLoadFailed =>
+      'ನಿಮ್ಮ ಟೆಂಪ್ಲೇಟ್‌ಗಳನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. Omi ಇನ್ನೂ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತದೆ.';
+
+  @override
+  String get summaryNoTemplatesYet =>
+      'ನೀವು ಇನ್ನೂ ಯಾವುದೇ ಟೆಂಪ್ಲೇಟ್‌ಗಳನ್ನು ಸೇರಿಸಿಲ್ಲ. ಕೆಲವನ್ನು ಬ್ರೌಸ್ ಮಾಡಿ ಅಥವಾ ನಿಮ್ಮದೇ ರಚಿಸಿ.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return '$name ಮೂಲಕ ಸಾರಾಂಶ ಮಾಡಲಾಗುತ್ತಿದೆ…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name ಪೂರ್ಣಗೊಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'ಟೆಂಪ್ಲೇಟ್ ಈ ಸಂಭಾಷಣೆಗೆ ಸಾರಾಂಶವನ್ನು ನೀಡಲಿಲ್ಲ.';
+
+  @override
+  String get summaryWithOmiInstead => 'ಬದಲಿಗೆ Omi ಮೂಲಕ ಸಾರಾಂಶ ಮಾಡಿ';
+
+  @override
+  String get summaryBusyTitle => 'ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತಿದೆ';
+
+  @override
+  String get summaryBusyBody => 'Omi ಈಗಾಗಲೇ ಈ ಸಂಭಾಷಣೆಯ ಮೇಲೆ ಕೆಲಸ ಮಾಡುತ್ತಿದೆ. ಮುಗಿದಾಗ ಸಾರಾಂಶ ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ.';
+
+  @override
+  String get summaryCheckAgain => 'ಮತ್ತೆ ಪರಿಶೀಲಿಸಿ';
+
+  @override
+  String get summaryLimitTitle => 'ಸಾರಾಂಶ ಮಿತಿ ತಲುಪಿದೆ';
+
+  @override
+  String get summaryLimitBody => 'ಕಳೆದ ಒಂದು ಗಂಟೆಯಲ್ಲಿ ನೀವು ಹಲವು ಸಾರಾಂಶಗಳನ್ನು ಮರುರಚಿಸಿದ್ದೀರಿ. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get summaryFailedTitle => 'ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ';
+
+  @override
+  String get summaryFailedBody => 'ಈ ಸಂಭಾಷಣೆಯ ಸಾರಾಂಶ ಮಾಡುವಾಗ ಏನೋ ತಪ್ಪಾಗಿದೆ.';
 }

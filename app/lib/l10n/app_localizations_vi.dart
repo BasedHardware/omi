@@ -13687,4 +13687,92 @@ class AppLocalizationsVi extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name chưa kết nối';
   }
+
+  @override
+  String get summaryNotSummarizedYet => 'Chưa được tóm tắt';
+
+  @override
+  String get summaryEmptyStateBody =>
+      'Omi có thể biến cuộc trò chuyện này thành phần tổng quan, các ý chính và việc cần làm.';
+
+  @override
+  String get summaryWithOmi => 'Tóm tắt bằng Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Tóm tắt bằng $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Dùng mẫu khác';
+
+  @override
+  String get summaryFromTheTranscript => 'Trích từ bản ghi lời';
+
+  @override
+  String get summaryReadFullTranscript => 'Đọc toàn bộ bản ghi lời';
+
+  @override
+  String get summarySheetTitle => 'Tóm tắt bằng';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Tổng quan, ý chính và việc cần làm';
+
+  @override
+  String get summaryYourTemplates => 'Mẫu của bạn';
+
+  @override
+  String get summarySuggestedTemplates => 'Gợi ý cho cuộc trò chuyện này';
+
+  @override
+  String get summaryBrowseTemplates => 'Duyệt mẫu';
+
+  @override
+  String get summaryCreateYourOwn => 'Tự tạo mẫu';
+
+  @override
+  String get summaryUseForNewConversations => 'Đặt làm mặc định của tôi';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Không thể tải mẫu của bạn. Omi vẫn hoạt động.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Bạn chưa thêm mẫu nào. Hãy duyệt vài mẫu hoặc tự tạo mẫu riêng.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Đang tóm tắt bằng $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name không thể hoàn tất';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Mẫu không trả về bản tóm tắt cho cuộc trò chuyện này.';
+
+  @override
+  String get summaryWithOmiInstead => 'Chuyển sang tóm tắt bằng Omi';
+
+  @override
+  String get summaryBusyTitle => 'Vẫn đang xử lý';
+
+  @override
+  String get summaryBusyBody => 'Omi đang xử lý cuộc trò chuyện này. Bản tóm tắt sẽ xuất hiện ở đây khi hoàn tất.';
+
+  @override
+  String get summaryCheckAgain => 'Kiểm tra lại';
+
+  @override
+  String get summaryLimitTitle => 'Đã đạt giới hạn tóm tắt';
+
+  @override
+  String get summaryLimitBody => 'Bạn đã tạo lại nhiều bản tóm tắt trong giờ qua. Hãy thử lại sau.';
+
+  @override
+  String get summaryFailedTitle => 'Không thể tóm tắt';
+
+  @override
+  String get summaryFailedBody => 'Đã xảy ra lỗi khi tóm tắt cuộc trò chuyện này.';
 }

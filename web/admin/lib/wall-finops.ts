@@ -49,3 +49,87 @@ export async function fetchFinopsHistory(
     (history.mrr[r.day] ||= {})[r.plan] = Number(r.mrr_usd);
   return history;
 }
+
+/** FinOps plan cost by day: the latest run's `fully_loaded` plan rows (USD and
+ * cost-active user-days) from `unit_cost_daily`, plus any measured STT vendor
+ * line. Each (date, segment_type) keeps its own latest run, so a vendor line
+ * loaded by a separate run never hides the plan rows.
+ *
+ * Measured STT is a hook: Sol lane `lane/finops-soniox-pull` is adding a
+ * Soniox usage pull to the FinOps job as a company-total component (proposed
+ * `stt_soniox_measured`, segment_type `total`); the reader matches any
+ * `stt_<vendor>_measured` total component, so re-check it when that lane
+ * merges. Until a row exists the TV keeps the dated Soniox-console constant
+ * (`wall-cost.ts`).
+ */
+export const FINOPS_PLAN_COST_QUERY = `
+WITH runs AS (
+  SELECT date, segment_type, segment, usd, users, inputs_settled,
+    DENSE_RANK() OVER (PARTITION BY date, segment_type ORDER BY computed_at DESC, run_id DESC) AS rk
+  FROM \`based-hardware.omi_finops.unit_cost_daily\`
+  WHERE date >= DATE_SUB(@today, INTERVAL @days DAY) AND date <= @today
+    AND ((segment_type = 'plan' AND component = 'fully_loaded')
+      OR (segment_type = 'total' AND REGEXP_CONTAINS(component, r'^stt_[a-z]+_measured$')))
+)
+SELECT TO_JSON_STRING(STRUCT(
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%F', date) AS day, segment AS plan, usd, users,
+          inputs_settled AS settled
+        FROM runs WHERE rk = 1 AND segment_type = 'plan' ORDER BY day, plan) AS plans,
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%F', date) AS day, SUM(usd) AS usd
+        FROM runs WHERE rk = 1 AND segment_type = 'total' GROUP BY day ORDER BY day) AS stt
+)) AS history`;
+
+export interface PlanCostHistory {
+  /** date → FinOps plan segment → fully-loaded USD and cost-active user-days.
+   * Only days whose inputs are settled; an unsettled day is absent. */
+  plans: Record<string, Record<string, { usd: number; users: number }>>;
+  /** date → measured STT vendor USD (empty until the FinOps line exists). */
+  sttMeasured: Record<string, number>;
+}
+
+export async function fetchPlanCostHistory(
+  today: string,
+  days = 40
+): Promise<PlanCostHistory> {
+  const bq = getGcpBillingClient();
+  if (!bq) throw new WallSourceError("FinOps BigQuery client unavailable");
+  let rows: { history: string }[];
+  try {
+    [rows] = await bq.query({
+      query: FINOPS_PLAN_COST_QUERY,
+      params: { today: new BigQueryDate(today), days },
+      maximumBytesBilled: String(100 * 1024 * 1024),
+      jobTimeoutMs: 30_000,
+    });
+  } catch {
+    throw new WallSourceError("FinOps plan cost query failed", true);
+  }
+  return parsePlanCost(rows[0]?.history || "{}");
+}
+
+export function parsePlanCost(json: string): PlanCostHistory {
+  const parsed = JSON.parse(json) as {
+    plans?: {
+      day: string;
+      plan: string;
+      usd: number;
+      users: number;
+      settled: boolean | null;
+    }[];
+    stt?: { day: string; usd: number }[];
+  };
+  const unsettled = new Set(
+    (parsed.plans || []).filter((r) => r.settled === false).map((r) => r.day)
+  );
+  const history: PlanCostHistory = { plans: {}, sttMeasured: {} };
+  for (const r of parsed.plans || []) {
+    if (unsettled.has(r.day)) continue;
+    history.plans[r.day] ||= {};
+    history.plans[r.day][r.plan] = {
+      usd: Number(r.usd),
+      users: Number(r.users),
+    };
+  }
+  for (const r of parsed.stt || []) history.sttMeasured[r.day] = Number(r.usd);
+  return history;
+}

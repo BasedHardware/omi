@@ -13699,4 +13699,93 @@ class AppLocalizationsId extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name Belum Terhubung';
   }
+
+  @override
+  String get summaryNotSummarizedYet => 'Belum diringkas';
+
+  @override
+  String get summaryEmptyStateBody =>
+      'Omi dapat mengubah percakapan ini menjadi ringkasan umum, poin penting, dan tindakan.';
+
+  @override
+  String get summaryWithOmi => 'Ringkas dengan Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Ringkas dengan $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Gunakan template lain';
+
+  @override
+  String get summaryFromTheTranscript => 'Dari transkrip';
+
+  @override
+  String get summaryReadFullTranscript => 'Baca transkrip lengkap';
+
+  @override
+  String get summarySheetTitle => 'Ringkas dengan';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Ringkasan umum, poin penting, dan tindakan';
+
+  @override
+  String get summaryYourTemplates => 'Template Anda';
+
+  @override
+  String get summarySuggestedTemplates => 'Disarankan untuk percakapan ini';
+
+  @override
+  String get summaryBrowseTemplates => 'Jelajahi template';
+
+  @override
+  String get summaryCreateYourOwn => 'Buat sendiri';
+
+  @override
+  String get summaryUseForNewConversations => 'Jadikan default saya';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Tidak dapat memuat template Anda. Omi tetap berfungsi.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Anda belum menambahkan template. Jelajahi beberapa atau buat sendiri.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Meringkas dengan $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name tidak dapat menyelesaikan';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Template tidak menghasilkan ringkasan untuk percakapan ini.';
+
+  @override
+  String get summaryWithOmiInstead => 'Ringkas dengan Omi saja';
+
+  @override
+  String get summaryBusyTitle => 'Masih diproses';
+
+  @override
+  String get summaryBusyBody => 'Omi sedang memproses percakapan ini. Ringkasan akan muncul di sini setelah selesai.';
+
+  @override
+  String get summaryCheckAgain => 'Periksa lagi';
+
+  @override
+  String get summaryLimitTitle => 'Batas ringkasan tercapai';
+
+  @override
+  String get summaryLimitBody =>
+      'Anda telah membuat ulang beberapa ringkasan dalam satu jam terakhir. Coba lagi nanti.';
+
+  @override
+  String get summaryFailedTitle => 'Tidak dapat meringkas';
+
+  @override
+  String get summaryFailedBody => 'Terjadi kesalahan saat meringkas percakapan ini.';
 }

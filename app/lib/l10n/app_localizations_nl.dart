@@ -13722,4 +13722,92 @@ class AppLocalizationsNl extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name is nog niet verbonden';
   }
+
+  @override
+  String get summaryNotSummarizedYet => 'Nog niet samengevat';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi kan dit gesprek omzetten in een overzicht, kernpunten en actiepunten.';
+
+  @override
+  String get summaryWithOmi => 'Samenvatten met Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Samenvatten met $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Andere sjabloon gebruiken';
+
+  @override
+  String get summaryFromTheTranscript => 'Uit het transcript';
+
+  @override
+  String get summaryReadFullTranscript => 'Volledig transcript lezen';
+
+  @override
+  String get summarySheetTitle => 'Samenvatten met';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Overzicht, kernpunten en actiepunten';
+
+  @override
+  String get summaryYourTemplates => 'Jouw sjablonen';
+
+  @override
+  String get summarySuggestedTemplates => 'Voorgesteld voor dit gesprek';
+
+  @override
+  String get summaryBrowseTemplates => 'Sjablonen bekijken';
+
+  @override
+  String get summaryCreateYourOwn => 'Zelf maken';
+
+  @override
+  String get summaryUseForNewConversations => 'Als standaard instellen';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Je sjablonen konden niet worden geladen. Omi werkt nog steeds.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Je hebt nog geen sjablonen toegevoegd. Bekijk er een paar of maak er zelf een.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Samenvatten met $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name kon niet worden voltooid';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'De sjabloon heeft geen samenvatting voor dit gesprek opgeleverd.';
+
+  @override
+  String get summaryWithOmiInstead => 'In plaats daarvan samenvatten met Omi';
+
+  @override
+  String get summaryBusyTitle => 'Wordt nog verwerkt';
+
+  @override
+  String get summaryBusyBody => 'Omi is al met dit gesprek bezig. De samenvatting verschijnt hier zodra deze klaar is.';
+
+  @override
+  String get summaryCheckAgain => 'Opnieuw controleren';
+
+  @override
+  String get summaryLimitTitle => 'Limiet voor samenvattingen bereikt';
+
+  @override
+  String get summaryLimitBody =>
+      'Je hebt het afgelopen uur meerdere samenvattingen opnieuw gegenereerd. Probeer het later opnieuw.';
+
+  @override
+  String get summaryFailedTitle => 'Samenvatten mislukt';
+
+  @override
+  String get summaryFailedBody => 'Er ging iets mis bij het samenvatten van dit gesprek.';
 }
