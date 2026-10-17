@@ -79,6 +79,18 @@ void main() {
       expect(AppEnvironmentProfile.localProd.authCallbackScheme, 'omi');
     });
 
+    test('authCallbackSchemeForProfile honors OMI_AUTH_CALLBACK_SCHEME for preview bundle ids', () {
+      expect(Env.authCallbackSchemeForProfile(AppEnvironmentProfile.production), 'omi');
+      expect(
+        Env.authCallbackSchemeForProfile(AppEnvironmentProfile.production, definedScheme: 'omi-preview'),
+        'omi-preview',
+      );
+      expect(
+        Env.authCallbackSchemeForProfile(AppEnvironmentProfile.mobileBeta, definedScheme: ''),
+        'omi-beta',
+      );
+    });
+
     test('local profile rejects a production Firebase project', () {
       expect(
         () =>

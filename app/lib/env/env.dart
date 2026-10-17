@@ -138,7 +138,18 @@ abstract class Env {
 
   static int get firebaseAuthEmulatorPort => int.tryParse(_firebaseAuthEmulatorPort) ?? 9099;
 
-  static String get authCallbackScheme => profile.authCallbackScheme;
+  /// A preview build (its own bundle id) on the production servers returns from sign-in through
+  /// its own scheme: the App Store app also registers `omi://`, and iOS gave it the redirect.
+  static const _authCallbackSchemeFromDefine = String.fromEnvironment('OMI_AUTH_CALLBACK_SCHEME');
+
+  static String get authCallbackScheme =>
+      authCallbackSchemeForProfile(profile, definedScheme: _authCallbackSchemeFromDefine);
+
+  static String authCallbackSchemeForProfile(
+    AppEnvironmentProfile configuredProfile, {
+    String definedScheme = _authCallbackSchemeFromDefine,
+  }) =>
+      definedScheme.isNotEmpty ? definedScheme : configuredProfile.authCallbackScheme;
 
   static String get authRedirectUri => '$authCallbackScheme://auth/callback';
 
