@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import List, Optional
 
 import av
@@ -111,10 +112,17 @@ def get_speech_profile_status(uid: str = Depends(auth.get_current_user_uid)):
 @max_part_size(SPEECH_PROFILE_MAX_PART_SIZE)
 def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_uid)):
     os.makedirs(f'_temp/{uid}', exist_ok=True)
-    file_path = f"_temp/{uid}/{file.filename}"
-    with open(file_path, 'wb') as f:
-        f.write(file.file.read())
+    file_path = f"_temp/{uid}/{Path(file.filename).name if file.filename else 'upload'}"
+    try:
+        with open(file_path, 'wb') as f:
+            f.write(file.file.read())
+        return _upload_profile_inner(file_path, uid)
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)
 
+
+def _upload_profile_inner(file_path: str, uid: str) -> dict:
     try:
         aseg = AudioSegment.from_wav(file_path)
     except Exception:
@@ -190,6 +198,8 @@ def delete_extra_speech_profile_sample(
 
 @router.get('/v3/speech-profile/expand', tags=['v3'], response_model=List[str])
 def get_extra_speech_profile_samples(person_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
+    if person_id == 'null':
+        person_id = None
     if person_id:
         return get_user_person_speech_samples(uid, person_id)
     return get_additional_profile_recordings(uid)
