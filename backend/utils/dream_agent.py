@@ -18,7 +18,7 @@ from config.dream_agent import (
     PASS_TIMEOUT_SECONDS,
     DRAIN_TIMEOUT_SECONDS,
 )
-from database import dream_scheduler, dream_store, dream_turns, legal_holds
+from database import dream_scheduler, dream_store, dream_turns, legal_holds, review_store
 from database.dream_dirty import dream_writing
 from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive
 from models.agent_tools import HarnessQuestion
