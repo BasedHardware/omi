@@ -13475,4 +13475,91 @@ class AppLocalizationsZh extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name 尚未连接';
   }
+
+  @override
+  String get summaryNotSummarizedYet => '尚未生成摘要';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi 可以将这段对话整理为概览、要点和待办事项。';
+
+  @override
+  String get summaryWithOmi => '用 Omi 总结';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return '用 $name 总结';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => '使用其他模板';
+
+  @override
+  String get summaryFromTheTranscript => '摘自转录';
+
+  @override
+  String get summaryReadFullTranscript => '阅读完整转录';
+
+  @override
+  String get summarySheetTitle => '总结方式';
+
+  @override
+  String get summaryOmiTemplateSubtitle => '概览、要点和待办事项';
+
+  @override
+  String get summaryYourTemplates => '你的模板';
+
+  @override
+  String get summarySuggestedTemplates => '为此对话推荐';
+
+  @override
+  String get summaryBrowseTemplates => '浏览模板';
+
+  @override
+  String get summaryCreateYourOwn => '自己创建';
+
+  @override
+  String get summaryUseForNewConversations => '设为我的默认';
+
+  @override
+  String get summaryTemplatesLoadFailed => '无法加载你的模板。Omi 仍可正常使用。';
+
+  @override
+  String get summaryNoTemplatesYet => '你还没有添加任何模板。浏览一些模板，或自己创建一个。';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return '正在用 $name 总结…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name 未能完成';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => '该模板未为此对话返回摘要。';
+
+  @override
+  String get summaryWithOmiInstead => '改用 Omi 总结';
+
+  @override
+  String get summaryBusyTitle => '仍在处理中';
+
+  @override
+  String get summaryBusyBody => 'Omi 已在处理此对话。完成后，摘要将显示在这里。';
+
+  @override
+  String get summaryCheckAgain => '再次检查';
+
+  @override
+  String get summaryLimitTitle => '已达到摘要次数上限';
+
+  @override
+  String get summaryLimitBody => '你在过去一小时内多次重新生成了摘要。请稍后再试。';
+
+  @override
+  String get summaryFailedTitle => '无法生成摘要';
+
+  @override
+  String get summaryFailedBody => '总结此对话时出了点问题。';
 }

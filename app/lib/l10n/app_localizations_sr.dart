@@ -13695,4 +13695,92 @@ class AppLocalizationsSr extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name још није повезан';
   }
+
+  @override
+  String get summaryNotSummarizedYet => 'Још није сажето';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi може да претвори овај разговор у преглед, кључне тачке и задатке.';
+
+  @override
+  String get summaryWithOmi => 'Сажми помоћу Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Сажми помоћу $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Користи други шаблон';
+
+  @override
+  String get summaryFromTheTranscript => 'Из транскрипта';
+
+  @override
+  String get summaryReadFullTranscript => 'Прочитај цео транскрипт';
+
+  @override
+  String get summarySheetTitle => 'Сажми помоћу';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Преглед, кључне тачке и задаци';
+
+  @override
+  String get summaryYourTemplates => 'Ваши шаблони';
+
+  @override
+  String get summarySuggestedTemplates => 'Предложено за овај разговор';
+
+  @override
+  String get summaryBrowseTemplates => 'Прегледај шаблоне';
+
+  @override
+  String get summaryCreateYourOwn => 'Направи сопствени';
+
+  @override
+  String get summaryUseForNewConversations => 'Постави као подразумевано';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Није могуће учитати ваше шаблоне. Omi и даље ради.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Још нисте додали ниједан шаблон. Прегледајте неке или направите сопствени.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Сажимање помоћу $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name није успео да заврши';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Шаблон није вратио сажетак за овај разговор.';
+
+  @override
+  String get summaryWithOmiInstead => 'Ипак сажми помоћу Omi';
+
+  @override
+  String get summaryBusyTitle => 'Обрада је још у току';
+
+  @override
+  String get summaryBusyBody => 'Omi већ ради на овом разговору. Сажетак ће се појавити овде када буде готов.';
+
+  @override
+  String get summaryCheckAgain => 'Провери поново';
+
+  @override
+  String get summaryLimitTitle => 'Достигнуто је ограничење сажетака';
+
+  @override
+  String get summaryLimitBody =>
+      'У последњих сат времена сте више пута поново генерисали сажетке. Покушајте поново касније.';
+
+  @override
+  String get summaryFailedTitle => 'Сажимање није успело';
+
+  @override
+  String get summaryFailedBody => 'Дошло је до грешке приликом сажимања овог разговора.';
 }

@@ -13757,4 +13757,92 @@ class AppLocalizationsCa extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name encara no s\'ha connectat';
   }
+
+  @override
+  String get summaryNotSummarizedYet => 'Encara no s\'ha resumit';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi pot convertir aquesta conversa en una visió general, punts clau i tasques.';
+
+  @override
+  String get summaryWithOmi => 'Resumeix amb Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Resumeix amb $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Fes servir una altra plantilla';
+
+  @override
+  String get summaryFromTheTranscript => 'De la transcripció';
+
+  @override
+  String get summaryReadFullTranscript => 'Llegeix la transcripció completa';
+
+  @override
+  String get summarySheetTitle => 'Resumeix amb';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Visió general, punts clau i tasques';
+
+  @override
+  String get summaryYourTemplates => 'Les teves plantilles';
+
+  @override
+  String get summarySuggestedTemplates => 'Suggerides per a aquesta conversa';
+
+  @override
+  String get summaryBrowseTemplates => 'Explora plantilles';
+
+  @override
+  String get summaryCreateYourOwn => 'Crea la teva';
+
+  @override
+  String get summaryUseForNewConversations => 'Fes-ho el meu predeterminat';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'No s\'han pogut carregar les teves plantilles. Omi continua funcionant.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Encara no has afegit cap plantilla. Explora\'n algunes o crea la teva.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'S\'està resumint amb $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name no ha pogut acabar';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'La plantilla no ha retornat cap resum per a aquesta conversa.';
+
+  @override
+  String get summaryWithOmiInstead => 'Resumeix amb Omi en lloc d\'això';
+
+  @override
+  String get summaryBusyTitle => 'Encara s\'està processant';
+
+  @override
+  String get summaryBusyBody => 'Omi ja està treballant en aquesta conversa. El resum apareixerà aquí quan acabi.';
+
+  @override
+  String get summaryCheckAgain => 'Torna-ho a comprovar';
+
+  @override
+  String get summaryLimitTitle => 'S\'ha arribat al límit de resums';
+
+  @override
+  String get summaryLimitBody =>
+      'Has tornat a generar diversos resums durant l\'última hora. Torna-ho a provar més tard.';
+
+  @override
+  String get summaryFailedTitle => 'No s\'ha pogut resumir';
+
+  @override
+  String get summaryFailedBody => 'Alguna cosa ha anat malament en resumir aquesta conversa.';
 }

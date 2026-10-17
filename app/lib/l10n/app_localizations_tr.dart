@@ -13699,4 +13699,91 @@ class AppLocalizationsTr extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name Henüz Bağlanmadı';
   }
+
+  @override
+  String get summaryNotSummarizedYet => 'Henüz özetlenmedi';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi bu konuşmayı genel bakış, önemli noktalar ve yapılacaklara dönüştürebilir.';
+
+  @override
+  String get summaryWithOmi => 'Omi ile özetle';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return '$name ile özetle';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Başka şablon kullan';
+
+  @override
+  String get summaryFromTheTranscript => 'Transkriptten';
+
+  @override
+  String get summaryReadFullTranscript => 'Tüm transkripti oku';
+
+  @override
+  String get summarySheetTitle => 'Şununla özetle';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Genel bakış, önemli noktalar ve yapılacaklar';
+
+  @override
+  String get summaryYourTemplates => 'Şablonlarınız';
+
+  @override
+  String get summarySuggestedTemplates => 'Bu konuşma için önerilenler';
+
+  @override
+  String get summaryBrowseTemplates => 'Şablonlara göz at';
+
+  @override
+  String get summaryCreateYourOwn => 'Kendin oluştur';
+
+  @override
+  String get summaryUseForNewConversations => 'Bunu varsayılanım yap';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Şablonlarınız yüklenemedi. Omi çalışmaya devam ediyor.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Henüz hiç şablon eklemediniz. Birkaçına göz atın veya kendinizinkini oluşturun.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return '$name ile özetleniyor…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name tamamlanamadı';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Şablon bu konuşma için bir özet döndürmedi.';
+
+  @override
+  String get summaryWithOmiInstead => 'Bunun yerine Omi ile özetle';
+
+  @override
+  String get summaryBusyTitle => 'Hâlâ işleniyor';
+
+  @override
+  String get summaryBusyBody => 'Omi bu konuşma üzerinde zaten çalışıyor. Özet tamamlandığında burada görünecek.';
+
+  @override
+  String get summaryCheckAgain => 'Tekrar kontrol et';
+
+  @override
+  String get summaryLimitTitle => 'Özet sınırına ulaşıldı';
+
+  @override
+  String get summaryLimitBody => 'Son bir saat içinde birkaç özeti yeniden oluşturdunuz. Daha sonra tekrar deneyin.';
+
+  @override
+  String get summaryFailedTitle => 'Özetlenemedi';
+
+  @override
+  String get summaryFailedBody => 'Bu konuşma özetlenirken bir sorun oluştu.';
 }

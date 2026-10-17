@@ -13501,4 +13501,91 @@ class AppLocalizationsKo extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name 아직 연결되지 않음';
   }
+
+  @override
+  String get summaryNotSummarizedYet => '아직 요약되지 않음';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi가 이 대화를 개요, 핵심 내용, 할 일로 정리해 드릴 수 있습니다.';
+
+  @override
+  String get summaryWithOmi => 'Omi로 요약';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return '$name(으)로 요약';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => '다른 템플릿 사용';
+
+  @override
+  String get summaryFromTheTranscript => '대화 기록에서';
+
+  @override
+  String get summaryReadFullTranscript => '전체 대화 기록 보기';
+
+  @override
+  String get summarySheetTitle => '요약 방법';
+
+  @override
+  String get summaryOmiTemplateSubtitle => '개요, 핵심 내용 및 할 일';
+
+  @override
+  String get summaryYourTemplates => '내 템플릿';
+
+  @override
+  String get summarySuggestedTemplates => '이 대화에 추천';
+
+  @override
+  String get summaryBrowseTemplates => '템플릿 둘러보기';
+
+  @override
+  String get summaryCreateYourOwn => '직접 만들기';
+
+  @override
+  String get summaryUseForNewConversations => '기본값으로 설정';
+
+  @override
+  String get summaryTemplatesLoadFailed => '템플릿을 불러오지 못했습니다. Omi는 계속 사용할 수 있습니다.';
+
+  @override
+  String get summaryNoTemplatesYet => '아직 추가한 템플릿이 없습니다. 몇 가지 둘러보거나 직접 만들어 보세요.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return '$name(으)로 요약 중…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name에서 요약을 완료하지 못했습니다';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => '템플릿이 이 대화의 요약을 반환하지 않았습니다.';
+
+  @override
+  String get summaryWithOmiInstead => '대신 Omi로 요약';
+
+  @override
+  String get summaryBusyTitle => '아직 처리 중';
+
+  @override
+  String get summaryBusyBody => 'Omi가 이미 이 대화를 처리하고 있습니다. 완료되면 여기에 요약이 표시됩니다.';
+
+  @override
+  String get summaryCheckAgain => '다시 확인';
+
+  @override
+  String get summaryLimitTitle => '요약 한도 도달';
+
+  @override
+  String get summaryLimitBody => '지난 1시간 동안 요약을 여러 번 다시 생성했습니다. 나중에 다시 시도해 주세요.';
+
+  @override
+  String get summaryFailedTitle => '요약하지 못함';
+
+  @override
+  String get summaryFailedBody => '이 대화를 요약하는 중 문제가 발생했습니다.';
 }
