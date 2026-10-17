@@ -56,18 +56,25 @@ class ConversationSummarySelection {
   /// same Markdown twice.
   static ConversationSummarySelection select(ServerConversation conversation) {
     for (var index = 0; index < conversation.appResults.length; index++) {
-      final result = conversation.appResults[index];
-      final content = result.content.trim();
-      if (content.isNotEmpty) {
-        return ConversationSummarySelection(
-          content: content,
-          kind: ConversationSummaryKind.app,
-          appId: result.appId,
-          resultIndex: index,
-        );
-      }
+      final selection = _appResult(conversation, index);
+      if (selection != null) return selection;
     }
+    return firstParty(conversation);
+  }
 
+  /// Every summary [conversation] holds: Omi's own first (when it has one), then each non-empty
+  /// app result in server order.
+  static List<ConversationSummarySelection> available(ServerConversation conversation) {
+    final omi = firstParty(conversation);
+    return [
+      if (omi.kind != ConversationSummaryKind.empty) omi,
+      for (var index = 0; index < conversation.appResults.length; index++)
+        if (_appResult(conversation, index) case final selection?) selection,
+    ];
+  }
+
+  /// Omi's own summary: the compatibility overview or the section projection, else empty.
+  static ConversationSummarySelection firstParty(ServerConversation conversation) {
     final knownIDs = conversation.transcriptSegments.map((segment) => segment.id);
     String presentable(String text) => repairNoteCitations(text, knownIDs).text;
     final overview = conversation.structured.overview.trim();
@@ -95,6 +102,22 @@ class ConversationSummarySelection {
     }
     return const ConversationSummarySelection(content: '', kind: ConversationSummaryKind.empty);
   }
+
+  static ConversationSummarySelection? _appResult(ServerConversation conversation, int index) {
+    final result = conversation.appResults[index];
+    final content = result.content.trim();
+    if (content.isEmpty) return null;
+    return ConversationSummarySelection(
+      content: content,
+      kind: ConversationSummaryKind.app,
+      appId: result.appId,
+      resultIndex: index,
+    );
+  }
+
+  /// Identifies a source across refreshes: "omi", or the app id (the result index for legacy
+  /// output without one).
+  String get sourceKey => isApp ? 'app:${appId ?? '#$resultIndex'}' : 'omi';
 
   /// The canonical Markdown projection of structured sections.
   ///

@@ -24,6 +24,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/pages/settings/integrations_page.dart' show IntegrationApp, IntegrationsPage;
 import 'package:omi/services/audio_download_service.dart';
+import 'package:omi/services/experiments/summary_generation_gate.dart';
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/audio/conversation_playback_controller.dart';
@@ -234,6 +235,12 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
         ConversationTab.summary => _summaryTabIndex,
       };
 
+  void _openTranscriptTab() {
+    _hasExplicitTabSelection = true;
+    setState(() => selectedTab = ConversationTab.transcript);
+    _controller?.animateTo(_transcriptTabIndex);
+  }
+
   void _createTabController({required int initialIndex}) {
     _controller = TabController(length: 2, vsync: this, initialIndex: initialIndex);
     _controller!.addListener(_onTabChanged);
@@ -261,6 +268,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
       SiriIntegration.instance.setCurrentScreen("/conversation/${widget.conversation.id}", widget.conversation.id),
     );
     unawaited(SiriIntegration.instance.donateUiAction('conversation', widget.conversation.id));
+    unawaited(SummaryGenerationV2Gate.refresh());
 
     // The supplied conversation can be a list projection whose app results
     // are hydrated after the first frame. Start on Summary, then select the
@@ -1094,6 +1102,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
       showError: (error) {
         switch (error) {
           case 'REPROCESS_FAILED':
+            // The redesigned Summary tab explains the failure in place, with its own actions.
+            if (SummaryGenerationV2Gate.isEnabled) break;
             // The provider is shared: a reprocess started on another conversation can fail after
             // the reader opened this one. Report only this page's own failure, and retry only it.
             final failedId = detailProvider.lastFailedReprocessConversationId;
@@ -1116,8 +1126,6 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
       },
       showInfo: (info) {
         switch (info) {
-          case 'REPROCESS_STARTED':
-            OmiFeedback.progress(context, context.l10n.reprocessingConversationProgress);
           case 'REPROCESS_SUCCESS':
             if (detailProvider.reprocessedConversationId == detailProvider.conversationOrNull?.id) {
               OmiFeedback.confirm(context, context.l10n.conversationReprocessed);
@@ -1182,6 +1190,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                             searchQuery: _searchQuery,
                             currentResultIndex: getCurrentResultIndexForHighlighting(),
                             onTapWhenSearchEmpty: _closeSearchIfEmpty,
+                            onOpenTranscript: _openTranscriptTab,
                           ),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),

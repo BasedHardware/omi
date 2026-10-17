@@ -9,9 +9,9 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// Work on the open conversation that the reader is waiting for, under the tab row: a hairline
-/// progress bar and one line saying what is happening ("Reprocessing conversation…"), for a
-/// reprocess started from this page or a server-side processing pass. Nothing is drawn otherwise.
+/// A server-side processing pass on the open conversation, under the tab row: a hairline progress
+/// bar and one line saying so. A reprocess the reader started has one progress surface, the
+/// Summary tab's own "Summarizing with …" state, so it draws nothing here.
 ///
 /// While the server reports the conversation as processing, the strip re-reads it every
 /// [pollInterval] (at most [maxPolls] times) so the result replaces the strip without the reader
@@ -72,9 +72,7 @@ class _ConversationActivityStripState extends State<ConversationActivityStrip> {
 
     final l10n = context.l10n;
     final String? label;
-    if (provider.isReprocessingOpenConversation) {
-      label = l10n.reprocessingConversationProgress;
-    } else if (conversation?.status == ConversationStatus.processing) {
+    if (!provider.isReprocessingOpenConversation && conversation?.status == ConversationStatus.processing) {
       label = l10n.processingConversationProgress;
     } else {
       label = null;

@@ -1129,6 +1129,12 @@ class SharedPreferencesUtil {
 
   set preferredSummarizationAppId(String value) => saveString('preferredSummarizationAppId', value);
 
+  /// The summary template "Make this my default" saved on this device; empty means
+  /// Omi's own summary. Local only: it picks what the summary tab offers first.
+  String get defaultSummaryTemplateAppId => getString('defaultSummaryTemplateAppId');
+
+  set defaultSummaryTemplateAppId(String value) => saveString('defaultSummaryTemplateAppId', value);
+
   List<ServerConversation> get cachedConversations {
     if (getBool('migratedMemories')) {
       final cachedMemories = getStringList('cachedMemories');
@@ -1394,6 +1400,7 @@ class SharedPreferencesUtil {
     selectedChatAppId = 'no_selected';
     lastUsedSummarizationAppId = '';
     preferredSummarizationAppId = '';
+    defaultSummaryTemplateAppId = '';
     calendarEnabled = false;
     _preferences?.remove('cachedMemories');
     if (ownerUid.isNotEmpty) _preferences?.remove(_userScopedKey('cachedMemories', ownerUid));

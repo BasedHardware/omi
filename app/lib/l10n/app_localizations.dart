@@ -109,7 +109,8 @@ import 'app_localizations_zh.dart';
 /// be consistent with the languages listed in the AppLocalizations.supportedLocales
 /// property.
 abstract class AppLocalizations {
-  AppLocalizations(String locale) : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+  AppLocalizations(String locale)
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -117,7 +118,8 @@ abstract class AppLocalizations {
     return Localizations.of<AppLocalizations>(context, AppLocalizations)!;
   }
 
-  static const LocalizationsDelegate<AppLocalizations> delegate = _AppLocalizationsDelegate();
+  static const LocalizationsDelegate<AppLocalizations> delegate =
+      _AppLocalizationsDelegate();
 
   /// A list of this localizations delegate along with the default localizations
   /// delegates.
@@ -129,12 +131,13 @@ abstract class AppLocalizations {
   /// Additional delegates can be added by appending to this list in
   /// MaterialApp. This list does not have to be used at all if a custom list
   /// of delegates is preferred or required.
-  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates = <LocalizationsDelegate<dynamic>>[
-    delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ];
+  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
+      <LocalizationsDelegate<dynamic>>[
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
@@ -186,7 +189,7 @@ abstract class AppLocalizations {
     Locale('uk'),
     Locale('ur'),
     Locale('vi'),
-    Locale('zh')
+    Locale('zh'),
   ];
 
   /// Message shown after an expired authenticated session returns the user to sign-in
@@ -8641,7 +8644,10 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'{accessDescription} and is {triggerDescription}.'**
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription);
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  );
 
   /// Sentence starting with 'Is' for trigger description
   ///
@@ -20323,13 +20329,20 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'You can change this anytime in {settings} › {voiceResponse}'**
-  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse);
+  String deviceOnboardingVoiceReplySettingsHint(
+    String settings,
+    String voiceResponse,
+  );
 
   /// Footer explaining the complete Settings menu path for replaying the device tutorial
   ///
   /// In en, this message translates to:
   /// **'Replay this tour anytime in {settings} › {deviceSettings} › {deviceTutorial}'**
-  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial);
+  String deviceOnboardingAllSetReplayHint(
+    String settings,
+    String deviceSettings,
+    String deviceTutorial,
+  );
 
   /// Generic fallback name for connected headphones when the system does not provide a device name
   ///
@@ -24356,9 +24369,172 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{name} Hasn\'t Connected Yet'**
   String connectAgentWaitingTitle(String name);
+
+  /// Title of the card shown on a conversation that has no summary yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Not summarized yet'**
+  String get summaryNotSummarizedYet;
+
+  /// Body of the card shown on a conversation that has no summary yet. Omi is the product name; keep it untranslated.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi can turn this conversation into an overview, key points and action items.'**
+  String get summaryEmptyStateBody;
+
+  /// Button that summarizes the conversation with Omi's built-in summary. Omi is the product name.
+  ///
+  /// In en, this message translates to:
+  /// **'Summarize with Omi'**
+  String get summaryWithOmi;
+
+  /// Button that summarizes the conversation with the named summary template.
+  ///
+  /// In en, this message translates to:
+  /// **'Summarize with {name}'**
+  String summaryWithTemplate(String name);
+
+  /// Button that opens the list of summary templates to pick another one.
+  ///
+  /// In en, this message translates to:
+  /// **'Use a Different Template'**
+  String get summaryUseDifferentTemplate;
+
+  /// Small section header above a quoted excerpt of the conversation transcript.
+  ///
+  /// In en, this message translates to:
+  /// **'From the transcript'**
+  String get summaryFromTheTranscript;
+
+  /// Link that switches to the full transcript tab.
+  ///
+  /// In en, this message translates to:
+  /// **'Read Full Transcript'**
+  String get summaryReadFullTranscript;
+
+  /// Title of the sheet that lists the ways (Omi, templates) to summarize a conversation; the rows below complete the phrase.
+  ///
+  /// In en, this message translates to:
+  /// **'Summarize with'**
+  String get summarySheetTitle;
+
+  /// Subtitle of the built-in Omi summary row, describing what it produces.
+  ///
+  /// In en, this message translates to:
+  /// **'Overview, key points and action items'**
+  String get summaryOmiTemplateSubtitle;
+
+  /// Section header for the summary templates the user has added.
+  ///
+  /// In en, this message translates to:
+  /// **'Your templates'**
+  String get summaryYourTemplates;
+
+  /// Section header for summary templates suggested for this conversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Suggested for this conversation'**
+  String get summarySuggestedTemplates;
+
+  /// Row that opens the catalog of summary templates.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse Templates'**
+  String get summaryBrowseTemplates;
+
+  /// Row that opens the editor to create a custom summary template.
+  ///
+  /// In en, this message translates to:
+  /// **'Create Your Own'**
+  String get summaryCreateYourOwn;
+
+  /// Checkbox label in the summary template sheet: remember the chosen template (or Omi) as the default this device offers first.
+  ///
+  /// In en, this message translates to:
+  /// **'Make this my default'**
+  String get summaryUseForNewConversations;
+
+  /// Inline message when the user's summary templates could not be loaded; the built-in Omi summary still works.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load your templates. Omi still works.'**
+  String get summaryTemplatesLoadFailed;
+
+  /// Inline message when the user has no summary templates.
+  ///
+  /// In en, this message translates to:
+  /// **'You haven\'t added any templates yet. Browse a few or make your own.'**
+  String get summaryNoTemplatesYet;
+
+  /// Progress label while the conversation is being summarized with Omi or the named template. Keep the single ellipsis character.
+  ///
+  /// In en, this message translates to:
+  /// **'Summarizing with {name}…'**
+  String summarySummarizingWith(String name);
+
+  /// Heading when the named summary template failed to produce a summary.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} couldn\'t finish'**
+  String summaryTemplateFailedTitle(String name);
+
+  /// Body when a summary template failed to produce a summary.
+  ///
+  /// In en, this message translates to:
+  /// **'The template didn\'t return a summary for this conversation.'**
+  String get summaryTemplateFailedBody;
+
+  /// Button that falls back to Omi's built-in summary after a template failed. Omi is the product name.
+  ///
+  /// In en, this message translates to:
+  /// **'Summarize with Omi Instead'**
+  String get summaryWithOmiInstead;
+
+  /// Heading when the conversation is already being processed and a new summary cannot start.
+  ///
+  /// In en, this message translates to:
+  /// **'Still processing'**
+  String get summaryBusyTitle;
+
+  /// Body when the conversation is already being processed. Omi is the product name.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi is already working on this conversation. The summary will appear here when it finishes.'**
+  String get summaryBusyBody;
+
+  /// Button that re-reads the conversation to see if processing finished.
+  ///
+  /// In en, this message translates to:
+  /// **'Check Again'**
+  String get summaryCheckAgain;
+
+  /// Heading when the user has regenerated too many summaries recently.
+  ///
+  /// In en, this message translates to:
+  /// **'Summary limit reached'**
+  String get summaryLimitTitle;
+
+  /// Body when the user hit the hourly limit on regenerating summaries.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve regenerated several summaries in the last hour. Try again later.'**
+  String get summaryLimitBody;
+
+  /// Heading when summarizing the conversation failed for an unknown reason.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t summarize'**
+  String get summaryFailedTitle;
+
+  /// Body when summarizing the conversation failed for an unknown reason.
+  ///
+  /// In en, this message translates to:
+  /// **'Something went wrong while summarizing this conversation.'**
+  String get summaryFailedBody;
 }
 
-class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
+class _AppLocalizationsDelegate
+    extends LocalizationsDelegate<AppLocalizations> {
   const _AppLocalizationsDelegate();
 
   @override
@@ -24368,56 +24544,56 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
 
   @override
   bool isSupported(Locale locale) => <String>[
-        'ar',
-        'be',
-        'bg',
-        'bn',
-        'bs',
-        'ca',
-        'cs',
-        'da',
-        'de',
-        'el',
-        'en',
-        'es',
-        'et',
-        'fa',
-        'fi',
-        'fr',
-        'he',
-        'hi',
-        'hr',
-        'hu',
-        'id',
-        'it',
-        'ja',
-        'kn',
-        'ko',
-        'lt',
-        'lv',
-        'mk',
-        'mr',
-        'ms',
-        'nl',
-        'no',
-        'pl',
-        'pt',
-        'ro',
-        'ru',
-        'sk',
-        'sl',
-        'sr',
-        'sv',
-        'ta',
-        'te',
-        'th',
-        'tl',
-        'tr',
-        'uk',
-        'ur',
-        'vi',
-        'zh'
-      ].contains(locale.languageCode);
+    'ar',
+    'be',
+    'bg',
+    'bn',
+    'bs',
+    'ca',
+    'cs',
+    'da',
+    'de',
+    'el',
+    'en',
+    'es',
+    'et',
+    'fa',
+    'fi',
+    'fr',
+    'he',
+    'hi',
+    'hr',
+    'hu',
+    'id',
+    'it',
+    'ja',
+    'kn',
+    'ko',
+    'lt',
+    'lv',
+    'mk',
+    'mr',
+    'ms',
+    'nl',
+    'no',
+    'pl',
+    'pt',
+    'ro',
+    'ru',
+    'sk',
+    'sl',
+    'sr',
+    'sv',
+    'ta',
+    'te',
+    'th',
+    'tl',
+    'tr',
+    'uk',
+    'ur',
+    'vi',
+    'zh',
+  ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -24526,8 +24702,10 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsZh();
   }
 
-  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-      'an issue with the localizations generation tool. Please file an issue '
-      'on GitHub with a reproducible sample app and the gen-l10n configuration '
-      'that was used.');
+  throw FlutterError(
+    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+    'an issue with the localizations generation tool. Please file an issue '
+    'on GitHub with a reproducible sample app and the gen-l10n configuration '
+    'that was used.',
+  );
 }

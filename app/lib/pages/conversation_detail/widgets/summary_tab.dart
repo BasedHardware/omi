@@ -29,13 +29,17 @@ class SummaryTab extends StatefulWidget {
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
 
+  /// Switches the page to the Transcript tab.
+  final VoidCallback? onOpenTranscript;
+
   const SummaryTab(
       {super.key,
       this.reviewEnabled = false,
       this.onOpenSource,
       this.searchQuery = '',
       this.currentResultIndex = -1,
-      this.onTapWhenSearchEmpty});
+      this.onTapWhenSearchEmpty,
+      this.onOpenTranscript});
 
   @override
   State<SummaryTab> createState() => _SummaryTabState();
@@ -110,6 +114,7 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                                 onOpenSource: widget.onOpenSource,
                                 searchQuery: widget.searchQuery,
                                 currentResultIndex: widget.currentResultIndex,
+                                onOpenTranscript: widget.onOpenTranscript,
                                 canStartEditing: () {
                                   final connectivityProvider =
                                       Provider.of<ConnectivityProvider>(context, listen: false);
