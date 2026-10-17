@@ -367,17 +367,16 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     # back it off, which previously stranded recordings for hours. A warm
     # instance keeps a scale-from-zero poke from being rejected outright.
     assert '--min-instances=3' in action
-    assert '--max-instances=40' in action
-    assert '--max=40' in action
+    assert '--max-instances=${{ steps.live-max-scale.outputs.max_scale }}' in action
+    assert '--max=${{ steps.live-max-scale.outputs.max_scale }}' in action
     assert '--concurrency=6' in action
     assert '--cpu=2' in action
     assert '--memory=8Gi' in action
     assert 'gcloud run services add-iam-policy-binding backend-sync-backfill' in action
-    # backend-sync is instance-billed and ran pinned at its old max of 25 in the
-    # evening peak; the cap is owned by code so a deploy cannot drift it back.
+    # Runtime ops owns the cap; both deploy paths preserve it rather than reset it.
     stack = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
     sync_step = stack.split('id: deploy-backend-sync\n', 1)[1].split('- name:', 1)[0]
-    assert '--max-instances=50' in sync_step
+    assert '--max-instances=${{ steps.live-max-scale.outputs.max_scale }}' in sync_step
     assert 'gcloud tasks queues create sync-backfill' in action
     assert '--max-concurrent-dispatches=90' in action
     assert '--max-dispatches-per-second=15' in action
