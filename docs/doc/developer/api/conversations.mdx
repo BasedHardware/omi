@@ -961,3 +961,36 @@ name: those turns use `Speaker N` when a speaker id exists, otherwise
 `Speaker unknown`. The account holder without a verified name stays `Owner`.
 Event times on the page and in Markdown use the same UTC labels. Unknown action
 owners and due times appear as Unknown. An email-shaped `owner_name` is omitted.
+
+## Pagination, search, and evidence
+
+Lists keep their JSON array shape. `limit` is clamped to **1–200**. Read
+`X-Omi-Effective-Limit` and `X-Omi-Has-More`. Offset-only modes (transcripts,
+folder or starred filters) return `X-Omi-Next-Offset` when more rows exist.
+Default lists return `X-Omi-Next-Cursor`: send it as
+`cursor` with the same filters instead of `offset`. Cursors require
+`include_transcript=false` and no `folder_id` or `starred` filter. Prefer cursors
+for a changing account. Offset sweeps are not snapshots and can overlap when new
+conversations arrive. These headers are exposed to browser clients.
+
+Date filters compare **created_at**, not recording start time. Both bounds are
+inclusive ISO 8601 instants; missing timezone offsets mean UTC. A date-only end
+on this API means midnight, whereas MCP tools include the whole UTC end day.
+For non-overlapping daily API windows use `00:00:00Z` through
+`23:59:59.999999Z`, then start the next day at `00:00:00Z`. Reversed bounds return
+400. Other unknown list query parameters are ignored and counted in `X-Omi-Ignored-Query-Params`. `query` is not a list parameter and returns 400; use the search route below.
+
+Use `GET /v1/dev/user/conversations/search?query=budget&limit=10` with
+`conversations:read`. Optional `start_date` and `end_date` use the instant rules
+above; limit is 1–100. This returns `{conversations, search_coverage, message}`,
+using the same semantic search and keyword recovery as MCP. Unindexed content
+can still match even when results are empty. If semantic retrieval finds no
+hydrated matches and keyword retrieval is unavailable, the response is 503 with
+an explanation; use a date-window list to inspect the account.
+
+List and detail responses include `transcript_included`. A false value means
+transcript text was not requested. Where transcript evidence was loaded, responses
+also expose `participants_included: true`, `participants` (stored `speaker_id`,
+`person_id`, `is_user` mappings), and unique `person_ids`. Transcript-free cards
+report `participants_included: false`; an empty mapping does not prove nobody
+participated. Names are not inferred from summary prose.

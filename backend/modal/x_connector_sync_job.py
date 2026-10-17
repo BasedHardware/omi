@@ -7,12 +7,11 @@ runs ``run_x_sync_job()`` — do not reintroduce hour-modulo gating here.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-import os
 
 import firebase_admin
 
+from database.firestore_read_origin import read_origin
 from utils.env_loader import firebase_admin_options
 from utils.x_connector import is_oauth_configured, raise_if_x_sync_job_failed, run_x_sync_job
 
@@ -22,15 +21,11 @@ logger = logging.getLogger(__name__)
 
 
 def _init_firebase() -> None:
-    service_account_json = os.getenv("SERVICE_ACCOUNT_JSON")
-    if service_account_json:
-        service_account_info = json.loads(service_account_json)
-        credentials = firebase_admin.credentials.Certificate(service_account_info)
-        firebase_admin.initialize_app(credentials, options=firebase_admin_options())  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
-    else:
-        firebase_admin.initialize_app(options=firebase_admin_options())  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
+    # ADC selects the attached runtime SA; the customer project stays explicit.
+    firebase_admin.initialize_app(options=firebase_admin_options())  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 
 
+@read_origin('job:x_connector_sync')
 def main() -> None:
     _init_firebase()
     # Credential gate: without an X OAuth app configured every per-user token

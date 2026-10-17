@@ -9,18 +9,19 @@ import contextvars
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
-import database.notifications as notification_db
 from database._client import db as firestore_db
 from models.memories import MemoryDB
 from utils.memory.memory_service import MemoryService
 from utils.memory.belief_model import belief_model_enabled, memory_use_suppressed, normalize_temporal_read_view
-from utils.conversations.render import format_local_date, resolve_display_tz
+from utils.model_text import format_date, format_instant, lookup_failed, truncation_note
+from utils.user_clock import clock_for_config
 from utils.messaging.memory_privacy import (
     channel_private_filter_active,
     is_channel_private_memory,
     omit_channel_private,
 )
 from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
+from utils.retrieval.turn_refs import register_record_ref
 from utils.retrieval.memory_evidence import MAX_MEMORY_EVIDENCE_CHARS, format_memory_evidence, render_memory_evidence
 from utils.retrieval.tools.result_bounds import cap_items_for_llm
 from utils.messaging.projection import surface_runtime
@@ -33,6 +34,26 @@ logger = logging.getLogger(__name__)
 # all of them floods the chat model's context, so it freezes or refuses (#4927). Bound how many
 # are handed to the model at once; the most recent are kept.
 MAX_MEMORIES_FOR_LLM = 300
+_MEMORY_TRUNCATION_RESERVE = 256
+
+
+def _memory_truncation_suffix(shown: int) -> str:
+    return "\n\n" + truncation_note(
+        shown=shown,
+        total=None,
+        unit="memories",
+        how_to_get_more="request another page or narrow the topic or date range",
+        cut=True,
+    )
+
+
+def _publish_memory_refs(configurable, memories):
+    channel_items = configurable.get('channel_items')
+    for memory in memories:
+        memory_id = getattr(memory, 'id', None)
+        register_record_ref(configurable, 'memories', memory_id)
+        if memory_id and isinstance(channel_items, list):
+            channel_items.append({'kind': 'memory', 'id': memory_id, 'title': memory.content[:100]})
 
 
 def _channel_empty_memories(date_info=''):
@@ -186,6 +207,7 @@ def get_memories_tool(
     if not uid:
         logger.info(f"❌ get_memories_tool - no user_id in config")
         return "Error: User ID not found in configuration"
+    clock = clock_for_config(config or _agent_config(), uid)
     logger.info(f"✅ get_memories_tool - uid: {uid}, limit: {limit}")
 
     try:
@@ -218,7 +240,7 @@ def get_memories_tool(
             start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
             if start_dt.tzinfo is None:
                 return f"Error: start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {start_date}"
-            logger.info(f"📅 Parsed start_date '{start_date}' as {start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            logger.info("Parsed start_date")
         except ValueError as e:
             return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
 
@@ -228,7 +250,7 @@ def get_memories_tool(
             end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
             if end_dt.tzinfo is None:
                 return f"Error: end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {end_date}"
-            logger.info(f"📅 Parsed end_date '{end_date}' as {end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            logger.info("Parsed end_date")
         except ValueError as e:
             return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
 
@@ -304,7 +326,8 @@ def get_memories_tool(
                     break
         memories = omit_channel_private(visible[max(offset, 0) : target_end], configurable)
     except Exception as e:
-        logger.error(e)
+        logger.error("get_memories_tool retrieval failed error_type=%s", type(e).__name__)
+        return lookup_failed('memories')
 
     # Bound how many memories are formatted for the chat model so a broad question cannot flood
     # its context and freeze it (#4927). The DB returns newest-first, so this keeps the most recent.
@@ -321,11 +344,11 @@ def get_memories_tool(
     if not memories:
         date_info = ""
         if start_dt and end_dt:
-            date_info = f" between {start_dt.strftime('%Y-%m-%d')} and {end_dt.strftime('%Y-%m-%d')}"
+            date_info = f" between {format_date(start_dt, clock)} and {format_date(end_dt, clock)}"
         elif start_dt:
-            date_info = f" after {start_dt.strftime('%Y-%m-%d')}"
+            date_info = f" after {format_date(start_dt, clock)}"
         elif end_dt:
-            date_info = f" before {end_dt.strftime('%Y-%m-%d')}"
+            date_info = f" before {format_date(end_dt, clock)}"
 
         msg = _channel_empty_memories(date_info)
         if msg is None:
@@ -344,11 +367,8 @@ def get_memories_tool(
         stamp = _memory_read_date(memory, temporal=True)
         if stamp and stamp.tzinfo is not None:
             stamp = stamp.astimezone(timezone.utc)
-        date_str = stamp.strftime('%Y-%m-%d %H:%M:%S UTC') if stamp else 'Unknown'
+        date_str = format_instant(stamp, clock) if stamp else 'Unknown'
         memory_id = getattr(memory, 'id', None)
-        channel_items = configurable.get('channel_items')
-        if memory_id and isinstance(channel_items, list):
-            channel_items.append({'kind': 'memory', 'id': memory_id, 'title': memory.content[:100]})
         records.append(
             format_memory_evidence(
                 memory.content,
@@ -356,13 +376,19 @@ def get_memories_tool(
                 subject_attribution=getattr(memory, 'subject_attribution', 'unknown'),
             )
         )
-    return render_memory_evidence(
+    included_indices: list[int] = []
+    result = render_memory_evidence(
         records,
         title=title,
-        max_chars=MAX_MEMORY_EVIDENCE_CHARS,
+        max_chars=MAX_MEMORY_EVIDENCE_CHARS - _MEMORY_TRUNCATION_RESERVE,
         more_available=results_truncated,
         offset=None if scan_truncated else max(offset, 0),
+        included_indices=included_indices,
     )
+    _publish_memory_refs(configurable, [memories[index] for index in included_indices])
+    if results_truncated or len(included_indices) < len(records):
+        result += _memory_truncation_suffix(len(included_indices))
+    return result
 
 
 @tool
@@ -426,6 +452,7 @@ def search_memories_tool(
     if not uid:
         logger.info(f"❌ search_memories_tool - no user_id in config")
         return "Error: User ID not found in configuration"
+    clock = clock_for_config(config or _agent_config(), uid)
     logger.info('search_memories_tool uid=%s limit=%s', uid, limit)
 
     try:
@@ -451,14 +478,6 @@ def search_memories_tool(
 
     # Cap limit at 20
     limit = min(limit, 20)
-
-    # Memory dates go to the chat model; the UTC date rolls over at a different instant than
-    # the user's, so a raw UTC date is a day late for them in the evening (issue #6214).
-    try:
-        display_tz, _ = resolve_display_tz(notification_db.get_user_time_zone(uid))
-    except Exception as tz_error:
-        logger.warning(f"search_memories_tool - timezone lookup failed, formatting dates in UTC: {tz_error}")
-        display_tz = timezone.utc
 
     try:
         if effective_view == 'released' and not (scope_start_dt or scope_end_dt):
@@ -522,18 +541,15 @@ def search_memories_tool(
             memory = match.memory
             score = match.score
             display_date = _memory_read_date(memory, temporal=effective_view != 'released')
-            date_str = format_local_date(display_date, display_tz) if display_date else 'Unknown'
+            date_str = format_date(display_date, clock) if display_date else 'Unknown'
             memory_id = getattr(memory, 'id', None)
-            channel_items = configurable.get('channel_items')
-            if memory_id and isinstance(channel_items, list):
-                channel_items.append({'kind': 'memory', 'id': memory_id, 'title': memory.content[:100]})
             memory_id_prefix = f'memory_id: {memory_id}, ' if memory_id else ''
             suffix = f"{memory_id_prefix}relevance: {score:.2f}, category: {memory.category.value}, date: {date_str}"
             if effective_view != 'released':
                 band = getattr(memory, 'currency_band', None)
                 evidence_date = getattr(memory, 'as_of', None)
                 evidence_date_str = (
-                    format_local_date(evidence_date, display_tz) if isinstance(evidence_date, datetime) else date_str
+                    format_date(evidence_date, clock) if isinstance(evidence_date, datetime) else date_str
                 )
                 if band:
                     suffix += f", band: {band}"
@@ -548,9 +564,17 @@ def search_memories_tool(
                 )
             )
 
+        included_indices: list[int] = []
         result = render_memory_evidence(
-            records, title=f"Memories matching '{query}'", max_chars=MAX_MEMORY_EVIDENCE_CHARS
+            records,
+            title=f"Memories matching '{query}'",
+            max_chars=MAX_MEMORY_EVIDENCE_CHARS - _MEMORY_TRUNCATION_RESERVE,
+            included_indices=included_indices,
         )
+        _publish_memory_refs(configurable, [matches[index].memory for index in included_indices])
+
+        if len(included_indices) < len(records):
+            result += _memory_truncation_suffix(len(included_indices))
 
         logger.info(f"🔍 search_memories_tool - Generated result string, length: {len(result)}")
 

@@ -230,14 +230,6 @@ def _promote_decision(
     )
 
 
-@pytest.fixture(autouse=True)
-def _canonical_runtime(monkeypatch):
-    monkeypatch.setattr(
-        "utils.memory.canonical_consolidation.resolve_memory_system",
-        lambda uid, db_client=None: MemorySystem.CANONICAL,
-    )
-
-
 def _apply(source: MemoryItem, decision, db: _FakeDb, *, quarantine: bool = False):
     control = MemoryControlState(**db.docs[f"users/{UID}/memory_state/apply_control"])
     return apply_consolidation_decision(
@@ -386,7 +378,7 @@ def test_expired_review_is_not_requeued_by_consolidation_replay():
     db.docs[review_path].update({'status': 'expired', 'permitted_uses': []})
     before = {path: dict(row) for path, row in db.docs.items()}
 
-    assert canonical_consolidation._is_promotable_for_consolidation(stored, now=NOW) is False
+    assert stored.tier == MemoryTier.archive
     _apply(source, decision, db)
 
     assert db.docs == before

@@ -140,6 +140,11 @@ WHERE app_namespace = :app_namespace AND build_number = :build_number
     'Apple Reminders Sync Completed',
     'Wrapped Generation Completed',
     'Voice Reply Playback',
-    'Pendant Voice Question Dropped'
+    'Pendant Voice Question Dropped',
+    'Paywall Variant Shown',
+    'Paywall Variant Fallback',
+    'Onboarding Webview Shown',
+    'Onboarding Webview Completed',
+    'Onboarding Webview Fallback'
   )
 GROUP BY event ORDER BY event;

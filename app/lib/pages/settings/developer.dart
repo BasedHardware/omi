@@ -369,6 +369,21 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
               body: ListView(
                 padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.xs, OmiSpacing.lg, OmiSpacing.xxl),
                 children: [
+                  // Agent setup leads: most people open this page to connect Claude, ChatGPT or
+                  // Codex, and the web developer home is where prompts and keys live.
+                  OmiSettingsGroup(
+                    children: [
+                      OmiSettingsRow(
+                        key: const ValueKey('developer_connect_agent'),
+                        leading: const FaIcon(FontAwesomeIcons.terminal),
+                        title: l10n.connectAnAgent,
+                        subtitle: l10n.connectAnAgentSubtitle,
+                        showChevron: true,
+                        onTap: () => openSettingsDestination(context, SettingsDestination.connectAgent),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: OmiSpacing.xxl),
                   OmiSettingsGroup(
                     header: l10n.appCreators,
                     children: [

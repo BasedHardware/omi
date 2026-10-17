@@ -90,7 +90,13 @@ jobs:
           service_account: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod') == 'prod' && 'omi-admin-dashboard-runtime@based-hardware.iam.gserviceaccount.com' || '' }}
           network: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
           subnet: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
-          runtime_env_vars: OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}
+          runtime_env_vars: |
+            OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}
+            ADMIN_STATS_READER_SAS=${{ vars.ADMIN_STATS_READER_SAS }}
+            ADMIN_STATS_READER_AUDIENCE=${{ vars.ADMIN_STATS_READER_AUDIENCE }}
+            GRAFANA_EMBED_ENABLED=${{ vars.GRAFANA_EMBED_ENABLED }}
+            GRAFANA_EMBED_SIGNING_SECRET=${{ vars.GRAFANA_EMBED_SIGNING_SECRET }}
+            GRAFANA_BUSINESS_TOKEN_SECRET=${{ vars.GRAFANA_BUSINESS_TOKEN_SECRET }}
           require_gateway_url: true
 
       # The live boards are edited in the Grafana UI (drag/resize persists in

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from database.fsr_read_cache import cached_read, memo, plane_id, ttl
+
 from database._client import get_data_plane_firestore_client
 from database.account_deletion_policy import normalize_account_deletion_status
 from database.firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
@@ -37,12 +39,23 @@ def account_deletion_document(uid: str, *, firestore_client: Any | None = None) 
 
 
 def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = None) -> str | None:
-    """Return the authoritative deletion lifecycle state for an authenticated UID.
+    """Negative-only cache, generation-fenced by every marker writer."""
+    client = account_deletion_firestore_client(firestore_client=firestore_client)
+    return memo(
+        uid,
+        ('deletion', plane_id(client)),
+        lambda: cached_read(
+            'deletion_marker_cache',
+            uid,
+            'absent:' + plane_id(client),
+            lambda: _s4_read_deletion_status(uid, firestore_client=client),
+            seconds=ttl('FSR_DELETION_NEGATIVE_TTL_SECONDS', 30),
+            cacheable=lambda status: status is None,
+        ),
+    )
 
-    This intentionally bypasses caches: an accepted deletion must become an
-    access barrier on the very next request, and a cached pre-delete miss would
-    reopen the exact half-deleted-account window this marker closes.
-    """
+
+def _s4_read_deletion_status(uid: str, *, firestore_client: Any | None = None) -> str | None:
     client = account_deletion_firestore_client(firestore_client=firestore_client)
     snapshot = account_deletion_document(uid, firestore_client=client).get()
     record_document_read(

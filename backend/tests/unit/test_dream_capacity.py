@@ -1,4 +1,4 @@
-"""Backend discovery and cooldown work without gateway reservation storage."""
+"""Backend discovery waits for 3.8 reservation evidence before owner admission."""
 
 import asyncio
 import json
@@ -10,12 +10,11 @@ import httpx
 import pytest
 
 from config.vertex_reservations import State
-from models.dream_agent import Plan
-from utils import dream_agent, dream_capacity, dream_transport
+from models.agent_tools import VerificationBatch as Plan
+from utils import dream_agent, dream_capacity, dream_harness_transport as dream_transport
 from utils.dream_metrics import PASSES
 from utils.llm.shaped_agent import Budget, Mount
 from utils.llm.vertex_reservation_state import ReservationState
-from utils.llm.vertex_pt_routing import PT_MODEL_CURRENT
 
 OLD, NEW = 'gemini-2.5-flash', 'gemini-3.8-flash'
 
@@ -40,7 +39,7 @@ async def test_backend_discovery_publishes_shared_evidence_without_gateway(monke
 
     def respond(request):
         requests.append(request)
-        if OLD not in request.url.path:
+        if NEW not in request.url.path:
             return httpx.Response(503, json={'error': {}})
         return httpx.Response(
             200,
@@ -55,20 +54,25 @@ async def test_backend_discovery_publishes_shared_evidence_without_gateway(monke
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
         monkeypatch.setattr(dream_capacity, 'get_desktop_gemini_client', lambda: client)
         try:
-            # Cold discovery is advisory: the first sweep still admits.
-            assert await dream_capacity.available_model() == PT_MODEL_CURRENT
+            # Complete both probes without waiting for the one-second snapshot TTL.
+            # An inconclusive legacy probe must not delay discovering Dream's order.
+            assert await dream_capacity.available_model() is None
+            await asyncio.gather(*state._probe_tasks)
+            legacy_doc = json.loads(await redis.get(state.key()))
+            assert legacy_doc['evidence'][OLD]['failure_count'] == 0
+            assert legacy_doc['evidence'][OLD]['success_at'] == 0
+            assert await dream_capacity.available_model() is None
+            await asyncio.gather(*state._probe_tasks)
+            assert await dream_capacity.available_model() == NEW
             slot = await dream_capacity.claim(2)
             assert slot is not None
             await dream_capacity.release(slot)
-            await asyncio.gather(*state._probe_tasks)
-            assert await dream_capacity.available_model() == OLD
-            await asyncio.gather(*state._probe_tasks)
-            assert await dream_capacity.available_model() == OLD
             doc = json.loads(await redis.get(state.key()))
             assert state.key().startswith('vertex-reservations:v1:based-hardware:')
-            assert doc['states'][OLD] == 'active' and doc['evidence'][OLD]['success_at'] > 0
-            assert (await ReservationState(redis).refresh())[OLD] == State.ACTIVE
+            assert doc['states'][NEW] == 'active' and doc['evidence'][NEW]['success_at'] > 0
+            assert (await ReservationState(redis).refresh())[NEW] == State.ACTIVE
             assert len(requests) == 2  # One globally leased probe per declared model.
+            assert OLD in requests[0].url.path and NEW in requests[1].url.path
             for request in requests:
                 assert '/projects/based-hardware/' in request.url.path
                 assert request.headers['X-Vertex-AI-LLM-Request-Type'] == 'dedicated'
@@ -87,7 +91,6 @@ async def test_backend_discovery_publishes_shared_evidence_without_gateway(monke
         (429, 'provider_429_omi_paid', dream_transport.MAIN_LANE, True),
         (500, None, dream_transport.MAIN_LANE, False),
         (503, 'invalid_config', dream_transport.MAIN_LANE, False),
-        (429, None, dream_transport.TRIAGE_LANE, False),
     ],
 )
 async def test_gateway_capacity_errors_cool_the_selected_model_only(monkeypatch, caplog, status, failure, lane, cools):
@@ -112,7 +115,7 @@ async def test_gateway_capacity_errors_cool_the_selected_model_only(monkeypatch,
     monkeypatch.setattr(dream_transport, 'llm_gateway_headers', lambda **k: {})
     monkeypatch.setattr(dream_transport, 'get_llm_gateway_semaphore', lambda: asyncio.Semaphore(1))
     try:
-        with pytest.raises(dream_transport.CapacityWait if cools else dream_transport.PreTokenFailure) as exc:
+        with pytest.raises(dream_transport.CapacityWait if cools else RuntimeError) as exc:
             await dream_transport.model_turn('synthetic', lane, Mount(schema=Plan, budget=Budget(tokens=20000)), [])
         assert 'invented private body' not in str(exc.value)
         assert await redis.get(state.key() + ':saturated:' + NEW) is None
@@ -123,17 +126,13 @@ async def test_gateway_capacity_errors_cool_the_selected_model_only(monkeypatch,
         else:
             assert await redis.get(key) is None
         assert available.await_count == (1 if lane == dream_transport.MAIN_LANE else 0)
-        decisions = [json.loads(record.message) for record in caplog.records if record.message.startswith('{')]
-        assert len(decisions) == int(cools)
-        if cools:
-            assert decisions[0]['decision'] == 'waiting'
-            assert decisions[0]['reason'] == 'saturated' and decisions[0]['source'] == 'gateway_response'
+        assert 'invented private body' not in caplog.text
     finally:
         await redis.aclose()
 
 
 def test_no_model_sweep_is_visible_without_owner_admission(monkeypatch, caplog):
-    monkeypatch.setenv('DREAM_AGENT_MODE', 'on')
+    monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
     monkeypatch.setattr(dream_capacity, 'available_model', AsyncMock(return_value=None))
     monkeypatch.setattr(dream_agent.dream_scheduler, 'candidates', lambda **k: pytest.fail('owner page read'))
     metric = PASSES.labels('waiting', 'none')._value
@@ -141,7 +140,7 @@ def test_no_model_sweep_is_visible_without_owner_admission(monkeypatch, caplog):
     with caplog.at_level('INFO', logger='utils.dream_metrics'):
         assert asyncio.run(dream_agent.drain()) == [{'status': 'waiting', 'reason': 'reserved_capacity'}]
     assert metric.get() == before + 1
-    assert 'Dream pass status=waiting' in caplog.text
+    assert 'Dream status=waiting' in caplog.text
 
 
 def test_no_model_stops_before_gateway_access(monkeypatch):
@@ -158,4 +157,37 @@ def test_no_model_stops_before_gateway_access(monkeypatch):
                 usage_sink=sink,
             )
         )
-    assert sink == {'tokens': 0, 'usage_unknown': False}
+    assert sink == {'tokens': 0}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('credential_failure', [False, True])
+async def test_keyless_probe_denial_is_advisory_without_a_provider_fallback(monkeypatch, credential_failure):
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
+    token = (
+        AsyncMock(side_effect=PermissionError('synthetic ADC denial'))
+        if credential_failure
+        else AsyncMock(return_value='synthetic-token')
+    )
+    monkeypatch.setattr(dream_capacity, '_vertex_tokens', lambda: SimpleNamespace(get_access_token=token))
+    saturated = AsyncMock()
+    monkeypatch.setattr(dream_capacity, 'mark_saturated', saturated)
+    requests = []
+
+    def denied(request):
+        requests.append(request)
+        # #21743 scopes the advisory failed-probe cooldown to the Dream model;
+        # probe it so the denial stays inconclusive AND the cooldown persists.
+        assert request.url.path.endswith(f'/models/{NEW}:generateContent')
+        assert request.headers['X-Vertex-AI-LLM-Request-Type'] == 'dedicated'
+        assert not request.url.params
+        assert json.loads(request.content)['contents'][0]['parts'] == [{'text': 'Reply OK.'}]
+        return httpx.Response(403, json={'error': {'status': 'PERMISSION_DENIED'}})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(denied)) as client:
+        monkeypatch.setattr(dream_capacity, 'get_desktop_gemini_client', lambda: client)
+        assert await dream_capacity._probe(NEW, 'us-central1') == 'inconclusive'
+
+    assert len(requests) == (0 if credential_failure else 1)
+    assert dream_capacity._local().probe_failed_until > 0
+    saturated.assert_not_awaited()

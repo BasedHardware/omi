@@ -143,7 +143,6 @@ surfaces:
   - utils/llm/working_observations.py::feature:memory_l1
   - utils/memory/belief_backfill.py::feature:<dynamic>
   - utils/memory/belief_evidence.py::feature:memory_conflict
-  - utils/memory/canonical_consolidation.py::feature:memory_conflict
   - utils/retrieval/graph.py::feature:chat_graph
   - utils/screen_frames/judge.py::feature:<dynamic>
   - utils/translation_core/providers.py::feature:translation
@@ -168,6 +167,7 @@ surfaces:
   fallback_on_deny: n/a_allowed
   call_sites:
   - utils/retrieval/agentic.py::feature:chat_agent
+  - utils/retrieval/shaped_chat.py::feature:chat_agent
   - utils/messaging/history.py::feature:chat_graph
   current_provider_model: gateway lane omi:auto:chat-agent (openai/gpt-x-luna); direct OpenAI only when OMI_LLM_CHAT_AGENT_ROUTE=direct
   request_shape: streaming OpenAI chat-completions with function tools; independent tool_use blocks run concurrently
@@ -262,6 +262,23 @@ surfaces:
     validated against vertex_pt_routing.COMPANY_PAID_VERTEX_TEXT_MODELS and Pro/image-output shapes fail closed
     at both the BFF and the gateway provider (SCA-481)
   test_guardrail_coverage: backend/tests/unit/test_desktop_proxy.py and backend/tests/unit/test_vertex_pt_routing.py
+- surface: dream_vertex_generation
+  code_path: backend/llm_gateway/gateway/vertex_pt_policy.py:VertexPTPolicyMixin._endpoint
+  entrypoint: internal gateway omi:auto:dream-reasoning and omi:auto:dream-verify
+  feature: dream
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: none_unwired
+  call_sites:
+  - llm_gateway/gateway/vertex_pt_policy.py::host:aiplatform.googleapis.com
+  current_provider_model: gemini-3.8-flash in us; reserved capacity by default, with an explicitly enabled
+    backend-asserted owner-allowlisted on-demand exception
+  request_shape: nonstreaming Gemini generateContent translated from OpenAI chat-completions;
+    reasoning tools or verifier JSON schema; this endpoint performs generation, not reservation observation
+  gateway_lane_capability_needed: pinned Dream reasoning and verify lanes with no provider fallback
+  migration_status: gateway_routed_dream; backend DREAM_AGENT_ENABLED and DREAM_AGENT_ELIGIBILITY own
+    admission (currently allowlist); S1 authorize_managed_compute is not wired at this internal entrypoint
+  test_guardrail_coverage: backend/tests/unit/test_dream_provider_isolation.py and backend/tests/unit/test_dream_routing.py
 - surface: openai_embeddings
   code_path: backend/utils/llm/clients.py:_OpenAIEmbeddingsProxy
   entrypoint: OpenAI embeddings proxy

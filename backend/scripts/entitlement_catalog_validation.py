@@ -77,7 +77,6 @@ def validate_entitlement_compatibility(previous: Mapping[str, Any], current: Map
         ):
             errors.append(f"compatibility: {price['price_id']} cannot change entitlement version")
     # Default runtime APIs still consume these rows, so existing legacy policy cannot drift.
-    current_plans = {p['id']: p for p in current.get('plans', [])}
     policy_keys = (
         'allocations',
         'desktop_profile',
@@ -85,10 +84,32 @@ def validate_entitlement_compatibility(previous: Mapping[str, Any], current: Map
         'fair_use_profile',
         'phone_calls_profile',
     )
+
+    def indexed_plans(catalog: Mapping[str, Any]) -> dict[str, Any]:
+        plans = {}
+        for plan in catalog.get('plans', []):
+            plan_id = plan.get('id') if isinstance(plan, dict) else None
+            if not isinstance(plan_id, str) or not plan_id:
+                errors.append('compatibility: plan requires an id')
+                continue
+            plans[plan_id] = plan
+        return plans
+
+    current_plans = indexed_plans(current)
     for plan in previous.get('plans', []):
-        replacement = current_plans.get(plan['id'])
-        if replacement and any(plan[k] != replacement[k] for k in policy_keys):
-            errors.append(f"compatibility: {plan['id']} legacy entitlements cannot change")
+        plan_id = plan.get('id') if isinstance(plan, dict) else None
+        if not isinstance(plan_id, str) or not plan_id:
+            errors.append('compatibility: plan requires an id')
+            continue
+        replacement = current_plans.get(plan_id)
+        if not replacement:
+            continue
+        missing = [key for key in policy_keys if key not in plan or key not in replacement]
+        if missing:
+            errors.append(f"compatibility: {plan_id} missing legacy entitlement key {missing[0]}")
+            continue
+        if any(plan[key] != replacement[key] for key in policy_keys):
+            errors.append(f"compatibility: {plan_id} legacy entitlements cannot change")
     if previous.get('allocation_profiles') != current.get('allocation_profiles'):
         errors.append('compatibility: legacy allocation profiles cannot change')
     return errors

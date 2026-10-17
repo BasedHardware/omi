@@ -336,6 +336,11 @@ struct SettingsContentView: View {
     nonmutating set { viewModel.subscriptionError = newValue }
   }
 
+  var subscriptionConfirmation: String? {
+    get { viewModel.subscriptionConfirmation }
+    nonmutating set { viewModel.subscriptionConfirmation = newValue }
+  }
+
   let cooldownOptions = [1, 2, 5, 10, 15, 30, 60]
   let analysisDelayOptions = [0, 10, 20, 30, 60, 300]  // seconds: instant, 10s, 20s, 30s, 1 min, 5 min
   // 10s, 1min, 5min, 10min, 30min, 1hr. Three rungs — 10s, 10min, 1hr — was not a ladder: the gap
@@ -501,7 +506,7 @@ struct SettingsContentView: View {
     case troubleshooting = "Troubleshooting"
     case gmailReader = "Gmail Reader"
     case calendarSync = "Calendar Sync"
-    case developerKeys = "Developer API Keys"
+    case developerKeys = "Model Provider Keys"
 
     var icon: String {
       switch self {

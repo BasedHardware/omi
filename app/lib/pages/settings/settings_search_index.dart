@@ -37,6 +37,9 @@ enum SettingsDestination {
   importData,
   creatorPayouts,
   developer,
+
+  /// Opens the web developer home (agent setup prompts, MCP and Developer API keys).
+  connectAgent,
   feedback,
   helpCenter,
   whatsNew,
@@ -220,6 +223,15 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
 
   // Developer Settings (opens the page directly)
   SettingsSearchEntry('developerSettings', (l) => l.developerSettings, SettingsDestination.developer, _drawer),
+
+  // Connect an Agent (opens the web developer home)
+  SettingsSearchEntry(
+    'connectAnAgent',
+    (l) => l.connectAnAgent,
+    SettingsDestination.connectAgent,
+    _drawer,
+    aliases: (l) => [l.mcp, l.mcpServer, l.developerApi, l.claudeCode],
+  ),
 
   // Notifications
   SettingsSearchEntry(

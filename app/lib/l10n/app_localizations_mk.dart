@@ -4418,12 +4418,27 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Вашиот план $plan завршува на $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Претплатете се сега за да ги задржите вашите бенефиции - без наплата до $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Вашиот план е поставен да се откаже на $date.\nПретплатете се сега за да ги задржите вашите бенефиции - без наплата до $date.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'Вашиот годишен план ќе почне автоматски кога ќе заврши месечниот план.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Вашиот план $plan ќе се обнови на $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4456,6 +4471,9 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get continueText => 'Продолжи';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Прво претплатете се повторно за да го смените планот.';
 
   @override
   String get resubscribe => 'Претплати се повторно';
@@ -5072,9 +5090,6 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get content => 'Содржина';
-
-  @override
-  String get noContentToDisplay => 'Нема содржина за приказ';
 
   @override
   String get noSummary => 'Нема резиме';
@@ -5694,11 +5709,6 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get downloadingFromSdCard => 'Преземање од SD картичка';
-
-  @override
-  String processingProgress(int current, int total) {
-    return 'Обработка $current/$total';
-  }
 
   @override
   String conversationsCreated(int count) {
@@ -9160,18 +9170,10 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current од $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'На вашиот уред';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Се презема од вашиот уред';
-
-  @override
-  String get newestFirst => 'Прво најнови';
 
   @override
   String get noSyncedRecordingsYet => 'Сè уште нема синхронизирани записи';
@@ -9894,9 +9896,6 @@ class AppLocalizationsMk extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Претворањето говор во текст моментално не е достапно. Проверете ги интернет-врската и поставките за препознавање говор на уредот, па обидете се повторно.';
-
-  @override
-  String get processingTakingLonger => 'Сè уште се обработува — ова трае подолго од вообичаеното.';
 
   @override
   String get speechProfileEnrollmentPrompt =>
@@ -12082,9 +12081,6 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Локални копии';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -12404,6 +12400,9 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Контекст на разговорот';
+
+  @override
   String get reviewQuestionSpelling => 'Како се пишува ова?';
 
   @override
@@ -12500,6 +12499,15 @@ class AppLocalizationsMk extends AppLocalizations {
   String get reviewRecentChanges => 'Неодамнешни промени';
 
   @override
+  String get reviewChangeAfter => 'По';
+
+  @override
+  String get reviewChangeBefore => 'Пред';
+
+  @override
+  String get reviewChangeRemoved => 'Отстрането од активната листа';
+
+  @override
   String get reviewChangesIntro => 'Што Omi сам го промени во последните 30 дена. Вратете сè што изгледа погрешно.';
 
   @override
@@ -12516,6 +12524,59 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get reviewNoChangesBody => 'Кога Omi ќе ги среди вашите белешки, промените ќе се појават овде.';
+
+  @override
+  String get reviewChangesSectionTerms => 'Имиња и поими';
+
+  @override
+  String get reviewChangesSectionTitles => 'Наслови и резимеа';
+
+  @override
+  String get reviewChangesSectionOther => 'Други промени';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count разговори',
+      one: '1 разговор',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count места',
+      one: '1 место',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Прикажи ги сите ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Поништи ги сите';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Види докази';
+
+  @override
+  String get reviewChangeViewConversation => 'Види разговор';
+
+  @override
+  String get reviewChangeViewTask => 'Види задача';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Не успеа поништувањето на $failed од $total. Обидете се повторно.';
+  }
 
   @override
   String get reviewShowMore => 'Прикажи повеќе';
@@ -13139,6 +13200,36 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
+  String get paywallRecommended => 'Recommended';
+
+  @override
+  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
+
+  @override
+  String get paywallOtherPlans => 'See all plans';
+
+  @override
+  String get paywallComparePlans => 'See plans';
+
+  @override
+  String get paywallYourPlan => 'Your plan';
+
+  @override
+  String get paywallNotNow => 'Not now';
+
+  @override
+  String get paywallTryAgain => 'Try again';
+
+  @override
+  String get paywallManageBilling => 'Manage billing';
+
+  @override
+  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
+
+  @override
+  String get paywallPlans => 'Plans';
+
+  @override
   String get firstCaptureTitle => 'How will you capture?';
 
   @override
@@ -13185,6 +13276,41 @@ class AppLocalizationsMk extends AppLocalizations {
   String get firstCaptureEmpty => 'I didn\'t catch enough speech, try again with a few sentences';
 
   @override
+  String get watchCaptureTitle => 'Record from your Apple Watch';
+
+  @override
+  String get watchCaptureOpen => 'Open Omi on your Apple Watch.';
+
+  @override
+  String get watchCaptureRecord => 'Tap Record. Allow microphone access if asked.';
+
+  @override
+  String get watchCaptureSync => 'Your recording syncs to Omi on this phone.';
+
+  @override
+  String get pairingBluetoothOff => 'Turn on Bluetooth on your phone, then try again.';
+
+  @override
+  String get pairingBluetoothPermission => 'Allow Bluetooth access for Omi in Settings, then try again.';
+
+  @override
+  String get pairingNearbyPermission => 'Allow Nearby devices access for Omi in Settings, then try again.';
+
+  @override
+  String get pairingLocationPermission =>
+      'Allow location access for Omi in Settings so this phone can find your device, then try again.';
+
+  @override
+  String get pairingNotFoundOrDropped =>
+      'Couldn\'t reach your Omi. Make sure it\'s charged, close to your phone, and its light is blinking, then try again.';
+
+  @override
+  String get pairingBondRecovery => 'Forget Omi in your phone’s Bluetooth settings, then try pairing again.';
+
+  @override
+  String get pairingHowTo => 'How to pair';
+
+  @override
   String get firstCaptureWatchInstructions =>
       'Open Omi on your Apple Watch and tap Record. Allow microphone access if asked. Your capture will sync to Omi on this phone.';
 
@@ -13222,4 +13348,241 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get firstCaptureSiriTip => 'Tip: Enable Omi in Shortcuts → Siri.';
+
+  @override
+  String get paywallOutlineHeadline => 'Никогаш повеќе не пропуштајте ниту збор.';
+
+  @override
+  String get paywallCancelAnytime => 'Откажете во секое време.';
+
+  @override
+  String get connectAnAgent => 'Поврзете агент';
+
+  @override
+  String get connectAnAgentSubtitle => 'Добијте упатство за поставување за Claude, ChatGPT, Codex или кој било агент';
+
+  @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Синхронизирање на $amount аудио';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Синхронизирање на снимките';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Преземање од Omi · $done од $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Подигање · $done од $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'Претворање на $amount во разговори';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return 'Завршено $done од $total · можете да го напуштите екранот';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount подготвени за синхронизација';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → телефон';
+
+  @override
+  String get syncStepLabelUpload => 'Подигање';
+
+  @override
+  String get syncStepLabelTranscribe => 'Транскрипција';
+
+  @override
+  String get syncDetailsTitle => 'Детали за синхронизацијата';
+
+  @override
+  String get syncDetailsRightNow => 'Моментално';
+
+  @override
+  String get syncDetailsYourOmi => 'Вашиот Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Брзина на пренос';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Чека на Omi';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Чека на овој телефон';
+
+  @override
+  String get syncDetailsTranscribing => 'Се транскрибира на Omi';
+
+  @override
+  String get syncDetailsForSupport => 'За поддршка';
+
+  @override
+  String get syncDetailsAudioFiles => 'Аудио датотеки';
+
+  @override
+  String get syncDetailsServerJobs => 'Задачи на серверот (завршени / вкупно)';
+
+  @override
+  String get syncDetailsCopy => 'Копирај ги деталите за поддршка';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Достапно со Operator и Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app е пополнет';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Приклучи се на листата на чекање';
+
+  @override
+  String get chatAppsOnWaitlist => 'Вие сте на листата на чекање';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Вие сте на листата на чекање. Ќе ве известиме кога ќе има место.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Сè е подготвено, $name';
+  }
+
+  @override
+  String get onboardingActDemoSummary =>
+      'Ручек со Сем, која во јуни се сели во Лисабон. Сакате да ја испратите презентацијата до тимот до петок и да купите млеко на пат кон дома.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Да ја пратам презентацијата на тимот до петок';
+
+  @override
+  String get onboardingActDemoTask2 => 'Да купам млеко на пат кон дома';
+
+  @override
+  String get onboardingActDemoTitle => 'Ручек со Сем';
+
+  @override
+  String get onboardingActDictateBody => 'Кажете го на свој начин. Omi ќе се погрижи за останатото.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Само зборувајте. Вашиот Omi слуша.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Штотуку ручав со Сем, се сели во Лисабон во јуни! Потсети ме да ја пратам презентацијата на тимот до петок и да купам млеко на пат кон дома.';
+
+  @override
+  String get onboardingActDictateHint => 'Допрете ја штиклата кога ќе завршите';
+
+  @override
+  String get onboardingActDictateTitle => 'Кажете му на Omi за вашиот ден';
+
+  @override
+  String get onboardingActIntro => 'Да го пробаме Omi.';
+
+  @override
+  String get onboardingActJustNow => 'Токму сега';
+
+  @override
+  String get onboardingActMicAllow => 'Дозволи микрофон';
+
+  @override
+  String get onboardingActMicBody => 'За Omi да ве слуша кога зборувате со него.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi сè уште не испраќа звук. Засега користете го телефонот.';
+
+  @override
+  String get onboardingActMicTitle => 'На Omi му треба микрофонот';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Не се слуша Omi. Проверете дали е вклучен и блиску.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Сè уште не ве слушаме. Обидете се да зборувате малку погласно.';
+
+  @override
+  String get onboardingActNotesLabel => 'Вашиот ден, накратко';
+
+  @override
+  String get onboardingActPhoneMic => 'Микрофон на телефонот';
+
+  @override
+  String get onboardingActRateTitle => 'Ви се допаѓа Omi досега?';
+
+  @override
+  String get onboardingActRemembers => 'Omi памети наместо вас';
+
+  @override
+  String get onboardingActSavedToTasks => 'Зачувано во вашите задачи';
+
+  @override
+  String get onboardingActTasksLabel => 'Omi ги фати вашите задачи';
+
+  @override
+  String get onboardingActWriting => 'Сумираме…';
+
+  @override
+  String get onboardingActYourWords => 'Еве што рековте';
+
+  @override
+  String get onboardingConnectOmi => 'Поврзете Omi';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Допрете го вашиот Omi за да се поврзете.';
+
+  @override
+  String get onboardingNoOmiYet => 'Сè уште немате Omi?';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Сè уште не сум нарачал';
+
+  @override
+  String get onboardingOmiOrdered => 'Го нарачав';
+
+  @override
+  String get onboardingPermissionTapToFix => 'Допрете за да поправите';
+
+  @override
+  String get homePendingTitle => 'Разговори на пат';
+
+  @override
+  String get homePendingCatchingUp => 'Ги обработуваме претходните аудиозаписи';
+
+  @override
+  String get onTheWayTitle => 'На пат';
+
+  @override
+  String get onTheWayAlmostReady => 'Речиси готово';
+
+  @override
+  String get activityEmpty => 'Сè уште нема активност';
+
+  @override
+  String get activityNewSemantics => 'Активност, нови ставки';
+
+  @override
+  String get activityLoadFailed => 'Не можевме да ја вчитаме целата ваша активност';
+
+  @override
+  String get activityNewItem => 'Ново';
+
+  @override
+  String get activityNeedsAttention => 'Потребно е внимание';
+
+  @override
+  String get activityRetryAll => 'Обиди ги сите повторно';
+
+  @override
+  String get attentionSummaryFailed => 'Овој разговор не можеше да се сумира';
 }

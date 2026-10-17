@@ -1,5 +1,6 @@
 """Account-wide hot-loop ceiling, independent of generic rate-limit settings."""
 
+from config.repeat_work import poll_backoff
 from database import redis_db
 from utils.observability.fallback import record_fallback
 from utils.sync import stage
@@ -26,3 +27,23 @@ def admit_sync_job_poll(uid: str) -> bool:
             outcome='degraded',
         )
         return True
+
+
+def with_poll_hint(status: dict, *, surface_open: bool = False) -> dict:
+    """Use already loaded state only; never query all of an owner's work.
+
+    Unknown/active jobs remain quick. A terminal job has no remaining work;
+    queued work may wait 60s. A new/active job immediately selects the short
+    interval, independent of previous hints. Surface-open callers can explicitly
+    request foreground cadence on this read-only endpoint.
+    """
+    if not poll_backoff():
+        return status
+    result = dict(status)
+    state = status.get('status')
+    result['poll_after_ms'] = (
+        0
+        if state in {'completed', 'failed', 'partial_failure'}
+        else 60000 if state == 'queued' and not surface_open else 20000
+    )
+    return result

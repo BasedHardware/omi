@@ -304,6 +304,9 @@ async def terminate_live_stt_backoff(
 
     if reason not in {'provider_unavailable', 'reconnect_budget'}:
         raise ValueError('unsupported live STT backoff reason')
+    admission = getattr(session, 'stt_cap_admission', None)
+    if admission is not None and admission.funded_paused is True:
+        return False
     if session.stt_terminal_failure:
         return False
     session.stt_terminal_failure = True
@@ -464,6 +467,9 @@ async def terminate_live_stt_session(
     fields are deliberately bounded and never include provider exception text.
     """
 
+    admission = getattr(session, 'stt_cap_admission', None)
+    if admission is not None and admission.funded_paused is True:
+        return False
     if session.stt_terminal_failure:
         return False
 

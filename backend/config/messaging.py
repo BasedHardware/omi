@@ -5,10 +5,51 @@ import os
 from urllib.parse import quote
 
 
-def cohort_enabled(uid):
-    return os.getenv('OMI_MESSAGING_CHANNELS', 'off').lower() == 'on' and uid in {
-        value.strip() for value in os.getenv('OMI_MESSAGING_CHANNELS_UIDS', '').split(',') if value.strip()
-    }
+def channel_policy(channel):
+    """New config is authoritative; malformed policies fail closed. Legacy is unchanged."""
+    raw = os.getenv('OMI_MESSAGING_CHANNEL_POLICY')
+    if raw is None:
+        return {
+            'enabled': os.getenv('OMI_MESSAGING_CHANNELS', 'off').lower() == 'on',
+            'cohort': [v.strip() for v in os.getenv('OMI_MESSAGING_CHANNELS_UIDS', '').split(',') if v.strip()],
+        }
+    try:
+        policies = json.loads(raw)
+        row = policies.get(channel, {})
+        cohort = row.get('cohort', [])
+        plans = row.get(
+            'plans',
+            None if row.get('seat_cap') == 'off' else ['operator', 'architect'] if channel == 'imessage' else None,
+        )
+        cap = row.get('seat_cap', 180 if channel == 'imessage' else None)
+        if cap == 'off':
+            cap = None
+        if channel == 'imessage' and (row.get('seat_cap') != 'off' and (plans is None or cap is None)):
+            raise ValueError('iMessage requires a plan set and seat cap')
+        if not isinstance(row.get('enabled'), bool) or not (
+            cohort == '*' or isinstance(cohort, list) and all(isinstance(v, str) for v in cohort)
+        ):
+            raise ValueError('Invalid policy')
+        if channel == 'imessage' and 'plans' in row and plans is None:
+            raise ValueError('Invalid plans')
+        if plans is not None and (not isinstance(plans, list) or not all(isinstance(v, str) for v in plans)):
+            raise ValueError('Invalid plans')
+        if cap is not None and (type(cap) is not int or cap < 0):
+            raise ValueError('Invalid cap')
+        return dict(row, cohort=cohort, plans=plans, seat_cap=cap)
+    except (ValueError, TypeError, AttributeError):
+        return {'enabled': False, 'cohort': []}
+
+
+def cohort_enabled(uid, channel=None):
+    if channel is None:
+        return any(cohort_enabled(uid, name) for name in ('telegram', 'imessage'))
+    policy = channel_policy(channel)
+    return policy['enabled'] and (policy['cohort'] == '*' or uid in policy['cohort'])
+
+
+def channel_enabled(channel):
+    return channel_policy(channel)['enabled']
 
 
 def public_link_fields(channel, proof):

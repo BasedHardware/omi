@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/pages/settings/chat_apps/channel_settings_page.dart';
 import 'package:omi/pages/settings/chat_apps/chat_app_widgets.dart';
+import 'package:omi/pages/settings/chat_apps/chat_apps_problem.dart';
 import 'package:omi/pages/settings/chat_apps/imessage_connect_sheet.dart';
 import 'package:omi/pages/settings/chat_apps/telegram_connect_sheet.dart';
 import 'package:omi/pages/settings/chat_apps/whatsapp_waitlist_sheet.dart';
@@ -108,10 +110,32 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
     if (link != null && mounted) setState(() => _justConnected = channel);
   }
 
+  /// Channels whose waitlist request is in flight.
+  final Set<ChatChannel> _joining = {};
+
+  Future<void> _joinWaitlist(ChatChannel channel) async {
+    setState(() => _joining.add(channel));
+    final result = await context.read<MessagingChannelsProvider>().joinWaitlist(channel);
+    if (!mounted) return;
+    setState(() => _joining.remove(channel));
+    final l10n = context.l10n;
+    switch (result) {
+      case ApiSuccess(data: true):
+        OmiFeedback.confirm(context, l10n.chatAppsWaitlistJoined);
+      case ApiSuccess():
+        break; // A seat was free after all; the row now offers Connect.
+      case ApiFailure(:final problem):
+        OmiFeedback.error(context, ChatAppsProblem.fromApi(problem).message(context));
+    }
+  }
+
   Future<void> _openWaitlist(MessagingChannelsProvider provider) async {
+    final telegramAccess = provider.availabilityFor(ChatChannel.telegram)?.access;
     final offerTelegram = provider.linkFor(ChatChannel.telegram) == null &&
         provider.config.endpoint(ChatChannel.telegram) != null &&
-        _proStatus(context.read<UsageProvider>()) != _ProStatus.free;
+        (telegramAccess == null
+            ? _proStatus(context.read<UsageProvider>()) != _ProStatus.free
+            : telegramAccess == ChannelAccess.open);
     final action = await showWhatsAppWaitlistSheet(context, offerTelegram: offerTelegram);
     if (action == WhatsAppWaitlistAction.useTelegram && mounted) await _connect(ChatChannel.telegram);
   }
@@ -234,7 +258,10 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
     }
     final endpoint = provider.config.endpoint(channel);
     final subtitle = channel == ChatChannel.telegram ? l10n.chatAppsTelegramSubtitle : l10n.chatAppsIMessageSubtitle;
-    if (endpoint == null) {
+    // The flag payload decides first; then the backend's availability; without one (older
+    // backends) the plan decides as before.
+    final access = provider.availabilityFor(channel)?.access;
+    if (endpoint == null || access == ChannelAccess.unavailable) {
       return OmiSettingsRow(
         key: key,
         leading: logo,
@@ -243,7 +270,38 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
         trailing: IntegrationStatusChip(l10n.comingSoon, tone: IntegrationChipTone.muted),
       );
     }
-    if (pro == _ProStatus.free) {
+    if (access == ChannelAccess.channelPlan) {
+      return OmiSettingsRow(
+        key: key,
+        leading: logo,
+        title: channel.displayName,
+        subtitle: l10n.chatAppsChannelPlanRequired,
+        trailing: IntegrationStatusChip(l10n.upgrade),
+        onTap: _openPlans,
+      );
+    }
+    if (access == ChannelAccess.seatCap) {
+      return OmiSettingsRow(
+        key: key,
+        leading: logo,
+        title: channel.displayName,
+        subtitle: l10n.chatAppsAtCapacity(channel.displayName),
+        trailing: _joining.contains(channel)
+            ? const OmiSpinner(size: OmiSpinnerSize.small)
+            : IntegrationStatusChip(l10n.chatAppsJoinWaitlist),
+        onTap: _joining.contains(channel) ? null : () => _joinWaitlist(channel),
+      );
+    }
+    if (access == ChannelAccess.waitlisted) {
+      return OmiSettingsRow(
+        key: key,
+        leading: logo,
+        title: channel.displayName,
+        subtitle: l10n.chatAppsOnWaitlist,
+        trailing: IntegrationStatusChip(l10n.chatAppsOnTheList, tone: IntegrationChipTone.muted),
+      );
+    }
+    if (access == ChannelAccess.paidPlan || (access == null && pro == _ProStatus.free)) {
       return Opacity(
         opacity: 0.55,
         child: OmiSettingsRow(

@@ -6,9 +6,9 @@ Used by both LangChain tools (mobile chat) and REST router (desktop/web).
 from datetime import datetime, timezone
 from typing import Any, List, Optional
 
-import database.notifications as notification_db
 from database._client import db as firestore_db
-from utils.conversations.render import format_local_date, resolve_display_tz
+from utils.model_text import format_date, format_instant, truncation_note
+from utils.user_clock import clock_for_uid
 from utils.memory.belief_model import belief_model_enabled, memory_use_suppressed, normalize_temporal_read_view
 from utils.memory.memory_service import MemoryService
 from utils.retrieval.tool_services.conversations import parse_iso_date
@@ -17,6 +17,17 @@ from utils.retrieval.memory_evidence import MAX_MEMORY_EVIDENCE_CHARS, format_me
 import logging
 
 logger = logging.getLogger(__name__)
+_MEMORY_TRUNCATION_RESERVE = 256
+
+
+def _memory_truncation_suffix(shown: int) -> str:
+    return "\n\n" + truncation_note(
+        shown=shown,
+        total=None,
+        unit="memories",
+        how_to_get_more="request another page or narrow the topic or date range",
+        cut=True,
+    )
 
 
 def _memory_read_date(memory: object, *, temporal: bool) -> Optional[datetime]:
@@ -42,6 +53,7 @@ def get_memories_text(
 ) -> str:
     """Fetch user memories/facts and format as LLM-ready text."""
     logger.info(f"get_memories_text - uid: {uid}, limit: {limit}, offset: {offset}")
+    clock = clock_for_uid(uid)
 
     # Cap request bounds before either memory or legacy reads.
     limit = max(1, min(limit, 5000))
@@ -145,11 +157,11 @@ def get_memories_text(
     if not memories:
         date_info = ""
         if start_dt and end_dt:
-            date_info = f" between {start_dt.strftime('%Y-%m-%d')} and {end_dt.strftime('%Y-%m-%d')}"
+            date_info = f" between {format_date(start_dt, clock)} and {format_date(end_dt, clock)}"
         elif start_dt:
-            date_info = f" after {start_dt.strftime('%Y-%m-%d')}"
+            date_info = f" after {format_date(start_dt, clock)}"
         elif end_dt:
-            date_info = f" before {end_dt.strftime('%Y-%m-%d')}"
+            date_info = f" before {format_date(end_dt, clock)}"
         suffix = " The bounded scan reached its safety limit; more memories may exist." if scan_truncated else ""
         return f"No memories found{date_info}.{suffix}"
 
@@ -164,7 +176,7 @@ def get_memories_text(
         stamp = _memory_read_date(memory, temporal=True)
         if stamp and stamp.tzinfo is not None:
             stamp = stamp.astimezone(timezone.utc)
-        date_str = stamp.strftime('%Y-%m-%d %H:%M:%S UTC') if stamp else 'Unknown'
+        date_str = format_instant(stamp, clock) if stamp else 'Unknown'
         records.append(
             format_memory_evidence(
                 memory.content,
@@ -173,16 +185,18 @@ def get_memories_text(
             )
         )
     included_indices: list[int] = []
+    more_available = scan_truncated or len(memories) >= limit
     result = render_memory_evidence(
         records,
         title=title,
-        max_chars=MAX_MEMORY_EVIDENCE_CHARS,
-        more_available=scan_truncated or len(memories) >= limit,
+        max_chars=MAX_MEMORY_EVIDENCE_CHARS - _MEMORY_TRUNCATION_RESERVE,
+        more_available=more_available,
         offset=None if scan_truncated else offset,
         included_indices=included_indices,
     )
 
     if source_sink is not None:
+        # Structured client source metadata; not model-facing prose.
         for index in included_indices[:128]:
             memory = memories[index]
             source_sink.append(
@@ -197,6 +211,8 @@ def get_memories_text(
                 }
             )
 
+    if more_available or len(included_indices) < len(records):
+        result += _memory_truncation_suffix(len(included_indices))
     return result
 
 
@@ -215,11 +231,7 @@ def search_memories_text(
 
     # Memory dates go to the chat model; the UTC date rolls over at a different instant than
     # the user's, so a raw UTC date is a day late for them in the evening (issue #6214).
-    try:
-        display_tz, _ = resolve_display_tz(notification_db.get_user_time_zone(uid))
-    except Exception as tz_error:
-        logger.warning(f"search_memories_text - timezone lookup failed, formatting dates in UTC: {tz_error}")
-        display_tz = timezone.utc
+    clock = clock_for_uid(uid)
 
     try:
         requested_view = normalize_temporal_read_view(view)
@@ -245,13 +257,13 @@ def search_memories_text(
         for match in matches:
             memory = match.memory
             display_date = _memory_read_date(memory, temporal=effective_view != 'released')
-            date_str = format_local_date(display_date, display_tz) if display_date else 'Unknown'
+            date_str = format_date(display_date, clock) if display_date else 'Unknown'
             suffix = f"relevance: {match.score:.2f}, category: {memory.category.value}, date: {date_str}"
             if effective_view != 'released':
                 band = getattr(memory, 'currency_band', None)
                 evidence_date = getattr(memory, 'as_of', None)
                 evidence_date_str = (
-                    format_local_date(evidence_date, display_tz) if isinstance(evidence_date, datetime) else date_str
+                    format_date(evidence_date, clock) if isinstance(evidence_date, datetime) else date_str
                 )
                 if band:
                     suffix += f", band: {band}"
@@ -270,11 +282,12 @@ def search_memories_text(
         result = render_memory_evidence(
             records,
             title=f"Memories matching '{query}'",
-            max_chars=MAX_MEMORY_EVIDENCE_CHARS,
+            max_chars=MAX_MEMORY_EVIDENCE_CHARS - _MEMORY_TRUNCATION_RESERVE,
             included_indices=included_indices,
         )
 
         if source_sink is not None:
+            # Structured client source metadata; not model-facing prose.
             for index in included_indices[:128]:
                 memory = matches[index].memory
                 source_sink.append(
@@ -289,6 +302,8 @@ def search_memories_text(
                     }
                 )
 
+        if len(included_indices) < len(records):
+            result += _memory_truncation_suffix(len(included_indices))
         return result
 
     except Exception as e:

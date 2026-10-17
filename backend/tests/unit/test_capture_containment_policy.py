@@ -636,10 +636,12 @@ REPO = Path(__file__).resolve().parents[3]
 MODE_KEY = 'CAPTURE_GROUP_CONTAINMENT_MODE'
 GKE_HOSTS = ('backend-listen', 'pusher')
 CLOUD_RUN_HOSTS = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
+# Keep the same safe constructors without spending the test's CPU budget in the Python scanner.
+SAFE_YAML_LOADER = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
 
 
 def test_composed_manifest_declares_shadow_on_all_six_hosts_per_environment():
-    manifest = yaml.safe_load((REPO / 'backend/deploy/runtime_env.yaml').read_text())
+    manifest = yaml.load((REPO / 'backend/deploy/runtime_env.yaml').read_text(), Loader=SAFE_YAML_LOADER)
     for env_name in ('dev', 'prod'):
         env = manifest['environments'][env_name]
         for host in GKE_HOSTS:
@@ -657,13 +659,13 @@ def test_gke_chart_values_match_the_composed_manifest():
         'pusher/dev_omi_pusher_values.yaml',
         'pusher/prod_omi_pusher_values.yaml',
     ):
-        values = yaml.safe_load((REPO / 'backend/charts' / chart).read_text())
+        values = yaml.load((REPO / 'backend/charts' / chart).read_text(), Loader=SAFE_YAML_LOADER)
         entries = {item['name']: item.get('value') for item in values['env']}
         assert entries[MODE_KEY] == 'shadow', chart
 
 
 def test_registry_and_classification_declare_the_mode():
-    registry = yaml.safe_load((REPO / 'config/feature-flags.yaml').read_text())
+    registry = yaml.load((REPO / 'config/feature-flags.yaml').read_text(), Loader=SAFE_YAML_LOADER)
     rows = [row for row in registry['flags'] if row.get('key') == MODE_KEY]
     assert len(rows) == 1
     assert rows[0]['lifecycle'] == 'rollout' and rows[0]['fail'] == 'closed'

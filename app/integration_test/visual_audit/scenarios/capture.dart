@@ -12,6 +12,8 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/pages/activity/activity_bell_button.dart';
+import 'package:omi/pages/activity/activity_seen.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/home/home_content.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
@@ -19,6 +21,7 @@ import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/sockets/local_stt_failure.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -38,6 +41,8 @@ enum AuditLive { idle, pendant, pendantPaused, phone, phonePaused, phoneAfterPen
 class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   AuditCaptureProvider(this.live);
   final AuditLive live;
+  @override
+  LocalSttFailure? get localSttFailure => null;
 
   @override
   bool get pendantCaptureVerified => true;
@@ -170,9 +175,12 @@ final auditPendant = BtDevice(id: 'd1', name: 'Omi Device', type: DeviceType.omi
 /// Mirrors HomePage's layout: the header, the Home | Tasks switcher, Home, and the floating
 /// Ask Omi row. [recaps] feeds the Daily Recaps row (none by default).
 class HomeFrame extends StatelessWidget {
-  const HomeFrame({super.key, this.recaps = _noRecaps, this.tasks});
+  const HomeFrame({super.key, this.recaps = _noRecaps, this.tasks, this.activitySeen});
 
   final RecentRecapsLoader recaps;
+
+  /// The bell's state; null uses the app's.
+  final ActivitySeen? activitySeen;
 
   /// The Tasks page to show instead of Home (Tasks selected in the switcher; no chat bar there).
   final Widget? tasks;
@@ -186,16 +194,24 @@ class HomeFrame extends StatelessWidget {
         backgroundColor: Theme.of(context).colorScheme.surface,
         titleSpacing: NavigationToolbar.kMiddleSpacing - (kMinTapTarget - kHeaderCircleDiameter) / 2,
         title: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          const Padding(
-            padding: EdgeInsets.only(left: (kMinTapTarget - kHeaderCircleDiameter) / 2),
-            child: BatteryInfoWidget(),
+          const Flexible(
+            child: Padding(
+              padding: EdgeInsets.only(left: (kMinTapTarget - kHeaderCircleDiameter) / 2),
+              child: BatteryInfoWidget(),
+            ),
           ),
           Row(children: [
+            HeaderCircleButton(
+              semanticLabel: 'Filter by date',
+              onTap: () {},
+              icon: FaIcon(FontAwesomeIcons.calendar, size: 16, color: OmiColors.textSecondary),
+            ),
             HeaderCircleButton(
               semanticLabel: 'Search',
               onTap: () {},
               icon: Icon(Icons.search, size: 20, color: OmiColors.textSecondary),
             ),
+            ActivityBellButton(seen: activitySeen),
             HeaderCircleButton(
               semanticLabel: 'Settings',
               onTap: () {},

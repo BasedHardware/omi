@@ -2,10 +2,10 @@
 # Tests: daily summary settings, detail view
 
 name: daily-summary
-description: Settings → Daily Summary — view and configure daily summary preferences, view summary detail
+description: Settings → Notifications — configure Daily Summary and reach the missing-day recovery picker
 covers:
   - app/lib/pages/settings/notifications_settings_page.dart
-  - app/lib/pages/settings/daily_summary_detail_page.dart
+  - app/lib/pages/conversations/widgets/daily_recap_recovery_action.dart
 prerequisites:
   - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.
 setup: normal
@@ -22,9 +22,16 @@ steps:
     press: { type: gesture, hint: "Notifications row in settings" }
     screenshot: notifications-page
 
-  - name: Toggle daily summary on
+  - name: Toggle daily summary
     press: { type: switch, index: 0, hint: "Daily Summary toggle switch" }
     screenshot: daily-summary-enabled
+
+  - name: Open missing-day recovery
+    press: { type: gesture, hint: "Generate Summary row" }
+    screenshot: daily-summary-recovery-picker
+
+  - name: Cancel recovery without generating data
+    press: { type: button, hint: "Cancel in date picker" }
 
   - name: Back to settings
     back: true

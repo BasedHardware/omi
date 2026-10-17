@@ -115,6 +115,12 @@ def rendered_chart_documents(
             [
                 "--set-string",
                 f"fullnameOverride={release}",
+                # Workload Identity binds only the shared release's KSA; a
+                # release-named canary KSA has no binding and cannot mint tokens.
+                "--set",
+                "serviceAccount.create=false",
+                "--set-string",
+                f"serviceAccount.name={environment}-omi-pusher",
                 "--set",
                 "autoscaling.enabled=false",
                 "--set",

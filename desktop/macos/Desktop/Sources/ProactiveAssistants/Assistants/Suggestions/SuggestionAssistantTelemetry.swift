@@ -39,6 +39,17 @@ enum SuggestionAssistantTelemetry {
       case .skippedNoGrounding: self = .noGrounding
       }
     }
+
+    /// Dwell and cooldown fire on every capture tick while a context is still pending.
+    /// Those repeated analytics frames are suppressed. The gate decision, screenshot
+    /// cadence, and evaluation pacing are unchanged, and eligible plus consumed-context
+    /// outcomes still emit.
+    var emitsAnalytics: Bool {
+      switch self {
+      case .dwell, .cooldown: return false
+      case .eligible, .disabled, .excludedApp, .dailyBudget, .noGrounding: return true
+      }
+    }
   }
 
   enum Model: String, CaseIterable, Sendable {

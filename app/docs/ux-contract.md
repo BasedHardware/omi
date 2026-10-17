@@ -9,6 +9,9 @@ Primitives live in `lib/ui/` (`omi_tokens.dart`, `components/`, `feedback/`, `fo
 `prompts/`). This is the mobile twin of the macOS contract (`desktop/macos/.../ux-contract.md`,
 INV-UI-2): same rules where the platforms agree, platform-correct where they do not.
 
+Frame cost (UI-isolate work, rebuild cascades, blur, image decode) has its own rules and guard:
+[performance.md](performance.md), `INV-PERF-1`.
+
 Guard: `INV-UI-3` ([`product/invariants/mobile-ux-contract.md`](../../product/invariants/mobile-ux-contract.md))
 runs `.github/scripts/check_mobile_ux_contract.py`, a per-file no-increase ratchet over the
 hand-rolled patterns named below (rule ids in `code`). A deliberate exception ends its line with
@@ -205,6 +208,7 @@ only way to name a transcript speaker — bubbles, the edit-segment and tag-spea
 participant lists, the speaker filter and every copied, shared or exported transcript
 (`TranscriptSegment.segmentsAsString` uses it).
 
+- Server-projected Review excerpts use `SpeakerNames.excerptLabel` for stored names and localized owner/unnamed labels.
 - The owner is **You** in the app; exports use the owner's given name, else "You".
 - A speaker assigned to a person shows the person's name (live people list first).
 - Omi's own speaker is **Omi**, never "Speaker 100".

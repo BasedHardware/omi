@@ -1,0 +1,31 @@
+enabled: true
+image:
+  repository: gcr.io/based-hardware/batch-pipeline-worker
+  # gcp_diarizer.yml builds the prod image and supplies its immutable digest.
+  digest: ""
+serviceAccountName: batch-pipeline-worker
+gcpServiceAccount: batch-pipeline-worker@based-hardware.iam.gserviceaccount.com
+bucket: based-hardware-batch-pipeline-staging
+dataPlaneProject: based-hardware
+stage: prod
+namespace: batch_pipeline_prod
+secretName: prod-omi-backend-secrets
+replicaCount: 1
+autoscaling:
+  enabled: false
+nodeSelector:
+  cloud.google.com/gke-nodepool: batch-pipeline-pool
+  service: batch-pipeline
+  env: prod
+tolerations:
+  - key: omi.ai/batch-pipeline
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+  - key: nvidia.com/gpu
+    operator: Equal
+    value: present
+    effect: NoSchedule
+worker:
+  apiUrl: https://backend-sync-hhibjajaja-uc.a.run.app
+  audience: https://backend-sync-hhibjajaja-uc.a.run.app

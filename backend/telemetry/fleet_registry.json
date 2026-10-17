@@ -1,0 +1,356 @@
+{
+  "schema_version": 1,
+  "source": {
+    "repository": "omi-knowledge-base",
+    "path": "projects/admin-omi-tv-dashboard/evidence/2026-10-15-posthog-cleanup-inventory.md",
+    "cutoff": "2026-10-15T11:49:35Z"
+  },
+  "platforms": [
+    "ios",
+    "android",
+    "macos",
+    "windows",
+    "linux"
+  ],
+  "build_channels": [
+    "stable",
+    "beta",
+    "dev"
+  ],
+  "events": {
+    "Suggestion Assistant Gate Outcome": [
+      "observed",
+      "success",
+      "failure",
+      "skipped"
+    ],
+    "Mobile Render Observation": [
+      "observed"
+    ],
+    "Conversation Processing Completed": [
+      "observed"
+    ],
+    "desktop_health_event": [
+      "observed",
+      "success",
+      "failure",
+      "skipped"
+    ],
+    "Capture Ingress Health": [
+      "observed"
+    ],
+    "Device Connected": [
+      "observed"
+    ],
+    "Device Session Ended": [
+      "observed"
+    ],
+    "Device Disconnected Detailed": [
+      "observed"
+    ],
+    "Screen Task Frame Terminal": [
+      "observed"
+    ],
+    "Recording Observation": [
+      "observed"
+    ],
+    "wal_transcript_coverage": [
+      "observed"
+    ],
+    "Capture Wedge Detected": [
+      "observed"
+    ],
+    "Mobile Telemetry Health": [
+      "observed"
+    ],
+    "Capture Recovery Resolved": [
+      "observed"
+    ],
+    "Update Check Started": [
+      "observed"
+    ],
+    "Update Check Completed": [
+      "observed"
+    ],
+    "Suggestion Assistant Evaluation Started": [
+      "observed"
+    ],
+    "Suggestion Assistant Evaluation Failed": [
+      "observed"
+    ],
+    "Device Disconnected": [
+      "observed"
+    ],
+    "auth_token_refresh_failed": [
+      "observed"
+    ],
+    "Siri Index Rebuilt": [
+      "observed"
+    ],
+    "Product Error": [
+      "observed"
+    ],
+    "Suggestion Assistant Evaluation Completed": [
+      "observed"
+    ],
+    "Mobile Background Resource Session": [
+      "observed"
+    ],
+    "Desktop Silent Mic Diagnostic": [
+      "observed"
+    ],
+    "Memory Assistant Analysis Run": [
+      "observed"
+    ],
+    "Desktop Capture Attempt Outcome": [
+      "observed",
+      "success",
+      "failure",
+      "skipped"
+    ],
+    "Desktop Recording Started": [
+      "observed"
+    ],
+    "fallback_triggered": [
+      "observed"
+    ],
+    "Desktop Microphone Armed": [
+      "observed"
+    ],
+    "Task Intelligence Attribution": [
+      "observed"
+    ],
+    "Phone Battery Sample": [
+      "observed"
+    ],
+    "Mobile Background Observation Interrupted": [
+      "observed"
+    ],
+    "Desktop Ambient Dictation Mic Suppressed": [
+      "observed"
+    ],
+    "Capture Recovery Prompt Shown": [
+      "observed"
+    ],
+    "Mobile Device Health Daily": [
+      "observed"
+    ],
+    "Screen Task Delivery Completed": [
+      "observed"
+    ],
+    "Local WAL Stuck": [
+      "observed"
+    ],
+    "Pendant Voice Question Dropped": [
+      "observed"
+    ],
+    "Conversation Processing Stalled": [
+      "observed"
+    ],
+    "Update Available": [
+      "observed"
+    ],
+    "App Startup Timing": [
+      "observed"
+    ],
+    "Capture Recovery Actioned": [
+      "observed"
+    ],
+    "authenticated_request_401": [
+      "observed"
+    ],
+    "Update Check Failed": [
+      "observed"
+    ],
+    "Desktop Conversation Reconciliation Failed": [
+      "observed"
+    ],
+    "Memory Extracted": [
+      "observed"
+    ],
+    "Update Installed": [
+      "observed"
+    ],
+    "Update Install Started": [
+      "observed"
+    ],
+    "Speech Profile Upload Succeeded": [
+      "observed"
+    ],
+    "Speech Profile Embedding Stored": [
+      "observed"
+    ],
+    "Firmware Update Started": [
+      "observed"
+    ],
+    "Firmware Update Completed": [
+      "observed"
+    ],
+    "proactivity_v2_outcome": [
+      "observed",
+      "success",
+      "failure",
+      "skipped"
+    ],
+    "Recording Subscription Failed": [
+      "observed"
+    ],
+    "notification_settings_drift": [
+      "observed"
+    ],
+    "desktop_screen_context_result": [
+      "observed",
+      "success",
+      "failure",
+      "skipped"
+    ],
+    "Firmware Update Failed": [
+      "observed"
+    ],
+    "context_bucket_extraction": [
+      "observed",
+      "success",
+      "failure",
+      "skipped"
+    ],
+    "Desktop Recording Error": [
+      "observed"
+    ],
+    "provider_auth_required": [
+      "observed"
+    ],
+    "Diagnostics Send Failed": [
+      "observed"
+    ],
+    "Update Not Found": [
+      "observed"
+    ],
+    "Capture Gap Detected": [
+      "observed"
+    ],
+    "desktop_screen_context_invariant": [
+      "observed"
+    ],
+    "Notification Repair Triggered": [
+      "observed"
+    ],
+    "Speech Profile Upload Failed": [
+      "observed"
+    ],
+    "FFmpeg Resolved": [
+      "observed"
+    ],
+    "Phone Mic Recording Error": [
+      "observed"
+    ],
+    "App Crash Detected": [
+      "observed"
+    ],
+    "Notification Will Present": [
+      "observed"
+    ],
+    "Brain Map Rebuilt": [
+      "observed"
+    ],
+    "jit_proactivity_admission": [
+      "observed",
+      "success",
+      "failure",
+      "skipped"
+    ],
+    "Notification Delivery Skipped": [
+      "observed"
+    ]
+  },
+  "server_observed_events": [
+    "Recording Upload Completed",
+    "Recording Upload Failed",
+    "Recording Upload Started"
+  ],
+  "histograms": {
+    "mobile_render_duration_seconds": {
+      "event": "Mobile Render Observation",
+      "buckets": [
+        0.05,
+        0.1,
+        0.5,
+        1,
+        5,
+        15,
+        60,
+        300,
+        600,
+        "+Inf"
+      ]
+    },
+    "screen_task_frame_duration_seconds": {
+      "event": "Screen Task Frame Terminal",
+      "buckets": [
+        0.05,
+        0.1,
+        0.5,
+        1,
+        5,
+        15,
+        60,
+        300,
+        600,
+        "+Inf"
+      ]
+    },
+    "wal_transcript_coverage_ratio": {
+      "event": "wal_transcript_coverage",
+      "buckets": [
+        0,
+        0.25,
+        0.5,
+        0.75,
+        0.9,
+        0.95,
+        1,
+        "+Inf"
+      ]
+    },
+    "phone_battery_level_percent": {
+      "event": "Phone Battery Sample",
+      "buckets": [
+        0,
+        10,
+        25,
+        50,
+        75,
+        90,
+        100,
+        "+Inf"
+      ]
+    },
+    "device_battery_drain_percent_per_hour": {
+      "event": "Mobile Device Health Daily",
+      "buckets": [
+        0,
+        10,
+        25,
+        50,
+        75,
+        90,
+        100,
+        "+Inf"
+      ]
+    },
+    "app_startup_duration_seconds": {
+      "event": "App Startup Timing",
+      "buckets": [
+        0.05,
+        0.1,
+        0.5,
+        1,
+        5,
+        15,
+        60,
+        300,
+        600,
+        "+Inf"
+      ]
+    }
+  }
+}

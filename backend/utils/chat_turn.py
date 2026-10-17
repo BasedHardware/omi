@@ -446,6 +446,8 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
                     'kind': 'conversation',
                     'id': memory['id'],
                     'title': memory.get('structured', {}).get('title', 'Conversation'),
+                    # The answer cited these by number, so they link even when prose paraphrases the title.
+                    'cited': True,
                 }
                 for memory in memories
                 if memory.get('id')
@@ -492,7 +494,14 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
                 from utils.messaging.undo import UndoStore
 
                 UndoStore().bind_message(uid, receipt.id, ai_message.id)
-        ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
+        ai_message.memories = MessageConversation.safe_build_many(
+            memories if len(memories) < 5 else memories[:5],
+            on_error=lambda member, exc: logger.warning(
+                'Skipping malformed memory conversation %s: %s',
+                member.get('id') if isinstance(member, dict) else getattr(member, 'id', None),
+                type(exc).__name__,
+            ),
+        )
         usage_app_id = app_id_from_app or compat_app_id
         if usage_app_id and runtime is None:
             try:
