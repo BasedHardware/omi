@@ -908,7 +908,10 @@ export type OmiBridgeApi = {
   /** Write a whitelisted patch of those flags. Anything outside the whitelist is
    *  dropped in main; junk values are sanitized (a bad frequency → 0, never
    *  louder). Returns the fresh, stored projection. */
-  assistantsSetSettings: (patch: Partial<AssistantSettingsView>) => Promise<AssistantSettingsView>
+  assistantsSetSettings: (
+    patch: Partial<AssistantSettingsView>,
+    expectedOwnerUid?: string
+  ) => Promise<AssistantSettingsView>
   /** main → renderer: the assistant settings changed (this window's write, the
    *  tray "Screen Analysis" checkbox, or a background sync). Keeps rows in sync.
    *  Returns an unsubscribe fn. */

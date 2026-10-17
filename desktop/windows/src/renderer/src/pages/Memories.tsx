@@ -224,11 +224,17 @@ export function Memories(): React.JSX.Element {
 
   const onEdit = async (id: string, content: string): Promise<void> => {
     try {
-      await editMemory(id, content)
-      // Reflect the new content in the open sheet without a refetch — otherwise
-      // the sheet keeps rendering the stale detailMemory prop and the edit looks
-      // like it reverted. Mirrors onToggleVisibility below.
-      setDetailMemory((cur) => (cur && cur.id === id ? { ...cur, content } : cur))
+      const replacement = await editMemory(id, content)
+      // Reflect the new content (and canonical replacement memory id/metadata when
+      // a knowledge_ledger.v1 correction mints a replacement record) in the open
+      // sheet without a refetch.
+      setDetailMemory((cur) => {
+        if (!cur) return cur
+        if (cur.id === id || (replacement && cur.id === replacement.id)) {
+          return replacement ?? { ...cur, content }
+        }
+        return cur
+      })
     } catch (e) {
       toast('Could not update memory', { tone: 'error', body: (e as Error).message })
       throw e

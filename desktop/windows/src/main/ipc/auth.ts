@@ -6,6 +6,8 @@ import { app, ipcMain, shell } from 'electron'
 import { appendFileSync } from 'fs'
 import { join } from 'path'
 import { startSignIn } from '../auth/signInFlow'
+import { decodeUidFromIdToken } from '../auth/omiAuth'
+import { setAssistantSettingsOwner } from './assistantSettings'
 import type { SignInProvider, SignInResult } from '../../shared/types'
 
 // Main-process console.log only reaches the dev-server terminal, which is easy
@@ -42,6 +44,10 @@ export function registerAuthHandlers(onSignedIn: () => void): void {
       log: authLog
     })
     if (result.ok) {
+      const uid = decodeUidFromIdToken(result.customToken)
+      if (uid) {
+        setAssistantSettingsOwner(uid)
+      }
       authLog(`${provider} sign-in complete — surfacing window`)
       onSignedIn()
     }

@@ -29,16 +29,25 @@ vi.mock('electron', () => ({
       handlers.set(channel, fn)
     }
   },
-  BrowserWindow: { getAllWindows: (): unknown[] => [] }
+  BrowserWindow: { getAllWindows: (): unknown[] => [] },
+  webContents: { getAllWebContents: (): unknown[] => [] },
+  safeStorage: {
+    isEncryptionAvailable: (): boolean => true,
+    encryptString: (s: string): Buffer => Buffer.from(s, 'utf8'),
+    decryptString: (b: Buffer): string => b.toString('utf8')
+  }
 }))
 // is.dev true so the dev-only assistants:debugNotify hook is registered + covered.
 vi.mock('@electron-toolkit/utils', () => ({ is: { dev: true } }))
 vi.mock('../assistants/core/notify', () => ({ notifyProactive }))
 
+import { registerAuthStoreHandlers, _resetAuthStoreForTests } from './authStore'
 import {
   filterAssistantPatch,
+  getAssistantSettingsOwner,
   projectAssistantSettings,
   registerAssistantSettingsHandlers,
+  setAssistantSettingsOwner,
   _resetAssistantSettingsForTests
 } from './assistantSettings'
 import { getAppSettings, _resetForTests } from '../appSettings'
@@ -73,6 +82,7 @@ describe('assistantSettings IPC', () => {
     handlers.clear()
     notifyProactive.mockClear()
     _resetAssistantSettingsForTests()
+    _resetAuthStoreForTests()
     registerAssistantSettingsHandlers()
   })
 
@@ -129,6 +139,80 @@ describe('assistantSettings IPC', () => {
       expect(view.memoryEnabled).toBe(true)
       expect(view.notificationsEnabled).toBe(false)
       expect(getAppSettings().memoryEnabled).toBe(true)
+    })
+
+    it('fences stale-owner writes across a reauth/account switch while allowing active-owner writes', () => {
+      setAssistantSettingsOwner('user-b')
+      expect(getAssistantSettingsOwner()).toBe('user-b')
+
+      // Stale in-flight write from user-a must be dropped without mutating user-b's settings
+      const afterStale = invoke(
+        'assistants:setSettings',
+        { memoryEnabled: true, notificationFrequency: 4 },
+        'user-a'
+      ) as AssistantSettingsView
+      expect(afterStale.memoryEnabled).toBe(false)
+      expect(afterStale.notificationFrequency).toBe(0)
+
+      // Matching owner write succeeds
+      const afterValid = invoke(
+        'assistants:setSettings',
+        { memoryEnabled: true, notificationFrequency: 4 },
+        'user-b'
+      ) as AssistantSettingsView
+      expect(afterValid.memoryEnabled).toBe(true)
+      expect(afterValid.notificationFrequency).toBe(4)
+    })
+
+    it('fences stale-owner writes across an auth store persistence switch without calling setAssistantSettingsOwner directly', () => {
+      registerAuthStoreHandlers()
+
+      // User A persists auth session via Firebase persistence
+      invoke(
+        'authStore:set',
+        'firebase:authUser:key:[DEFAULT]',
+        JSON.stringify({ uid: 'user-a' })
+      )
+      expect(getAssistantSettingsOwner()).toBe('user-a')
+
+      // User A writes settings
+      const userAWrite = invoke(
+        'assistants:setSettings',
+        { memoryEnabled: true, notificationFrequency: 3 },
+        'user-a'
+      ) as AssistantSettingsView
+      expect(userAWrite.memoryEnabled).toBe(true)
+      expect(userAWrite.notificationFrequency).toBe(3)
+
+      // User switches accounts to User B
+      invoke(
+        'authStore:set',
+        'firebase:authUser:key:[DEFAULT]',
+        JSON.stringify({ uid: 'user-b' })
+      )
+      expect(getAssistantSettingsOwner()).toBe('user-b')
+
+      // In-flight write from user-a is rejected
+      const staleWrite = invoke(
+        'assistants:setSettings',
+        { memoryEnabled: false, notificationFrequency: 0 },
+        'user-a'
+      ) as AssistantSettingsView
+      expect(staleWrite.memoryEnabled).toBe(true)
+      expect(staleWrite.notificationFrequency).toBe(3)
+
+      // Active user-b write succeeds
+      const userBWrite = invoke(
+        'assistants:setSettings',
+        { memoryEnabled: false, notificationFrequency: 2 },
+        'user-b'
+      ) as AssistantSettingsView
+      expect(userBWrite.memoryEnabled).toBe(false)
+      expect(userBWrite.notificationFrequency).toBe(2)
+
+      // Sign out clears the fence
+      invoke('authStore:remove', 'firebase:authUser:key:[DEFAULT]')
+      expect(getAssistantSettingsOwner()).toBeNull()
     })
   })
 

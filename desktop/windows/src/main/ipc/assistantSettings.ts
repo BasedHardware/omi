@@ -65,6 +65,33 @@ export function filterAssistantPatch(
 }
 
 let registered = false
+let currentOwnerUid: string | null = null
+
+/** Bind or clear the active authenticated owner UID for assistant-settings writes.
+ *  When set, an incoming `assistants:setSettings` patch that carries a mismatched
+ *  `ownerUid` / `expectedOwnerUid` from before a reauth/account switch is dropped. */
+export function setAssistantSettingsOwner(uid: string | null): void {
+  const trimmed = typeof uid === 'string' ? uid.trim() : ''
+  currentOwnerUid = trimmed.length > 0 ? trimmed : null
+}
+
+export function getAssistantSettingsOwner(): string | null {
+  return currentOwnerUid
+}
+
+function isStaleOwnerWrite(patch: unknown, expectedOwnerUid?: unknown): boolean {
+  if (currentOwnerUid === null) return false
+  const candidate =
+    typeof expectedOwnerUid === 'string'
+      ? expectedOwnerUid.trim()
+      : patch &&
+          typeof patch === 'object' &&
+          typeof (patch as Record<string, unknown>).ownerUid === 'string'
+        ? ((patch as Record<string, unknown>).ownerUid as string).trim()
+        : null
+  if (!candidate) return false
+  return candidate !== currentOwnerUid
+}
 
 export function registerAssistantSettingsHandlers(): void {
   if (registered) return
@@ -72,10 +99,16 @@ export function registerAssistantSettingsHandlers(): void {
 
   ipcMain.handle('assistants:getSettings', (): AssistantSettingsView => projectAssistantSettings())
 
-  ipcMain.handle('assistants:setSettings', (_e, patch: unknown): AssistantSettingsView => {
-    setAppSettings(filterAssistantPatch(patch))
-    return projectAssistantSettings()
-  })
+  ipcMain.handle(
+    'assistants:setSettings',
+    (_e, patch: unknown, expectedOwnerUid?: unknown): AssistantSettingsView => {
+      if (isStaleOwnerWrite(patch, expectedOwnerUid)) {
+        return projectAssistantSettings()
+      }
+      setAppSettings(filterAssistantPatch(patch))
+      return projectAssistantSettings()
+    }
+  )
 
   // Broadcast every settings write to all windows so a Settings row re-renders when
   // the same flag is written from the tray checkbox or a background sync. Subscribed
@@ -109,4 +142,5 @@ export function registerAssistantSettingsHandlers(): void {
 /** Test-only: drop the registration guard so a suite can re-register handlers. */
 export function _resetAssistantSettingsForTests(): void {
   registered = false
+  currentOwnerUid = null
 }

@@ -1285,13 +1285,20 @@ extension APIClient {
       authorizationSnapshot: authorizationSnapshot)
   }
 
-  /// Edits a memory's content
-  func editMemory(id: String, content: String) async throws {
+  /// Edits a memory's content. Canonical knowledge_ledger.v1 corrections may return
+  /// a replacement `ServerMemory` (potentially with a new replacement `id`).
+  @discardableResult
+  func editMemory(id: String, content: String) async throws -> ServerMemory? {
     struct EditRequest: Encodable {
       let value: String
     }
+    struct MemoryEditResponse: Decodable {
+      let status: String
+      let memory: ServerMemory?
+    }
     let body = EditRequest(value: content)
-    let _: MemoryStatusResponse = try await patch("v3/memories/\(id)", body: body)
+    let response: MemoryEditResponse = try await patch("v3/memories/\(id)", body: body)
+    return response.memory
   }
 
   /// Updates a memory's visibility
