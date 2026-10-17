@@ -15,6 +15,7 @@ from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]
 
 from utils.http_client import get_web_fetch_client
 from utils.log_sanitizer import sanitize
+from utils.model_text import UNTRUSTED_LEGEND, truncation_note, untrusted_block
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,20 @@ _JSON_LD_FIELDS = [
     ('description', 'Description'),
     ('duration', 'Duration'),
 ]
+
+
+def _format_web_page_content(url: str, text: str) -> str:
+    """Keep page text visibly quoted and report any content cap."""
+    shown_text = text[:_MAX_CONTENT_CHARS]
+    result = f'Content from {url}:\n\n{untrusted_block("web page content", shown_text)}'
+    if len(text) > _MAX_CONTENT_CHARS:
+        result += "\n\n" + truncation_note(
+            shown=_MAX_CONTENT_CHARS,
+            total=len(text),
+            unit="web-page characters",
+            how_to_get_more="Ask for a specific section or fetch a narrower page excerpt.",
+        )
+    return f"{result}\n\n{UNTRUSTED_LEGEND}"
 
 
 def _extract_meta_tags(html: str) -> str:
@@ -313,8 +328,5 @@ async def fetch_url_tool(url: str) -> str:
     if not text:
         return 'Error: Page has no readable text content.'
 
-    if len(text) > _MAX_CONTENT_CHARS:
-        text = text[:_MAX_CONTENT_CHARS] + f'\n\n[Content truncated — {len(text)} total characters]'
-
-    logger.info(f"fetch_url_tool - fetched {len(text)} chars from {sanitize(url)}")
-    return f'Content from {url}:\n\n{text}'
+    logger.info(f"fetch_url_tool - fetched {min(len(text), _MAX_CONTENT_CHARS)} chars from {sanitize(url)}")
+    return _format_web_page_content(url, text)

@@ -62,7 +62,7 @@ class _MobileAppState extends State<MobileApp> {
               if (!SharedPreferencesUtil().aiConsentGiven) {
                 return const OnboardingWrapper();
               }
-              if (SharedPreferencesUtil().onboardingCompleted) {
+              if (SharedPreferencesUtil().onboardingCompleted && !OnboardingWrapper.rerunForTesting) {
                 if (!SharedPreferencesUtil().permissionsCompleted) {
                   return const _PermissionsGate();
                 }

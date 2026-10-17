@@ -373,7 +373,7 @@ def get_entity_page(uid: str, entity_id: str) -> EntityPage:
 
 def write_entity_summary(uid: str, entity_id: str, summary: str, *, updated_at: datetime | None = None) -> None:
     """Dream writer: the cache never replaces authoritative facts."""
-    store.require_enabled()
+    store.require_enabled(uid)
     entity_id = resolve_entity(uid, entity_id)['entity_id']
     if len(summary) > 16000:
         raise ValueError('Entity summary is too long')

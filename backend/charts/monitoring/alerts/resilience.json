@@ -94,7 +94,7 @@
     ],
     "updated": "2026-07-08T21:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -118,7 +118,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -235,7 +236,7 @@
     ],
     "updated": "2026-07-15T00:00:00Z",
     "noDataState": "NoData",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -257,7 +258,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -374,7 +376,7 @@
     ],
     "updated": "2026-07-15T00:00:00Z",
     "noDataState": "NoData",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -396,7 +398,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -513,7 +516,7 @@
     ],
     "updated": "2026-07-15T00:00:00Z",
     "noDataState": "NoData",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -535,7 +538,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -652,7 +656,7 @@
     ],
     "updated": "2026-07-20T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -674,7 +678,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -747,7 +752,7 @@
     ],
     "updated": "2026-07-25T00:00:00Z",
     "noDataState": "NoData",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -768,7 +773,8 @@
       "impact": "user-experience"
     },
     "isPaused": false,
-    "notification_settings": {"receiver": "Omi - Services Alerting (Telegram)"},
+    "notification_settings": {"receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"},
     "record": null
   },
   {
@@ -846,7 +852,7 @@
     ],
     "updated": "2026-07-15T00:00:00Z",
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -868,7 +874,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -893,7 +900,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(sum(rate(llm_gateway_chat_extraction_requests_total{mode=\"fallback\"}[15m])) / clamp_min(sum(rate(llm_gateway_chat_extraction_requests_total{mode=~\"serving|fallback\"}[15m])), 1e-9) > bool 0.05) or (max(llm_gateway_circuit_open) > bool 0) or ((sum(increase(llm_gateway_chat_extraction_requests_total{mode=~\"serving|fallback\"}[15m])) >= bool 10) and (sum(increase(llm_gateway_chat_extraction_requests_total{mode=\"serving\",outcome=\"success\"}[15m])) == bool 0)) or (histogram_quantile(0.95, sum(rate(llm_gateway_client_first_byte_seconds_bucket[5m])) by (le)) > bool 5)",
+          "expr": "max(llm_gateway_circuit_open{job=~\"backend-listen-metrics|pusher-metrics\"}) > bool 0",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -946,15 +953,16 @@
     ],
     "updated": "2026-07-17T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
       "runbook": "backend/docs/runbooks/llm-gateway-fallback.md",
-      "summary": "Client fallback, open circuit, zero gateway successes under traffic, or p95 first-byte latency indicates the gateway is unreachable or stalling",
-      "threshold": "fallback >5%, circuit open, no serving success for 10 requests, or p95 first byte >5s",
+      "summary": "A backend process opened its LLM gateway circuit after transport failures and is bypassing the gateway",
+      "threshold": "max(llm_gateway_circuit_open) > 0 for 5m",
       "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
-      "scope": "The Omi AI chat production service path.",
+      "scope": "Gateway clients in backend-listen and pusher pods (llm_gateway_circuit_open is initialized to 0 there). llm-gateway pods are excluded because they import the gauge but never open a client circuit, so their permanent 0 would mask a client series. If both client jobs stop being scraped, the result is NoData (OK); the backend-listen and pusher scrape/up alerts own that case. The former fallback-share, zero-success and first-byte arms were removed on 2026-10-13: llm_gateway_chat_extraction_requests_total and llm_gateway_client_first_byte_seconds had zero series in prod for 10 days because the main gateway path does not record them.",
       "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
       "safe_next_action": "Inspect the linked dashboard and the affected user path; mitigate through the documented service runbook only after verification."
     },
@@ -967,7 +975,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -992,7 +1001,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(kube_endpoint_address_available{namespace=\"prod-omi-backend\",endpoint=\"prod-omi-llm-gateway\"}) < bool 1",
+          "expr": "(sum(kube_endpoint_address{namespace=\"prod-omi-backend\",endpoint=\"prod-omi-llm-gateway\",ready=\"true\"}) or vector(0)) < bool 1",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -1045,10 +1054,11 @@
     ],
     "updated": "2026-07-17T00:00:00Z",
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
       "runbook": "backend/docs/runbooks/llm-gateway-fallback.md",
       "summary": "The production LLM Gateway Service has no ready EndpointSlice address or kube-state-metrics is absent",
       "threshold": "ready endpoint count <1",
@@ -1066,7 +1076,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -1186,7 +1197,7 @@
     ],
     "updated": "2026-08-21T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -1209,7 +1220,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -1326,7 +1338,7 @@
     ],
     "updated": "2026-08-21T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -1349,7 +1361,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -1466,7 +1479,7 @@
     ],
     "updated": "2026-08-21T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -1489,7 +1502,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -1609,7 +1623,7 @@
     ],
     "updated": "2026-08-30T00:00:00Z",
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -1632,7 +1646,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -1711,7 +1726,7 @@
     ],
     "updated": "2026-08-30T00:00:00Z",
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "0s",
     "keep_firing_for": "0s",
     "annotations": {
@@ -1734,7 +1749,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -1851,7 +1867,7 @@
     ],
     "updated": "2026-08-30T00:00:00Z",
     "noDataState": "NoData",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -1874,7 +1890,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -1991,7 +2008,7 @@
     ],
     "updated": "2026-08-30T00:00:00Z",
     "noDataState": "NoData",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -2014,7 +2031,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -2131,7 +2149,7 @@
     ],
     "updated": "2026-08-30T00:00:00Z",
     "noDataState": "NoData",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -2154,7 +2172,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -2271,7 +2290,7 @@
     ],
     "updated": "2026-08-30T00:00:00Z",
     "noDataState": "NoData",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -2294,7 +2313,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -2414,7 +2434,7 @@
     ],
     "updated": "2026-08-30T00:00:00Z",
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -2437,7 +2457,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -2557,7 +2578,7 @@
     ],
     "updated": "2026-08-30T00:00:00Z",
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -2580,46 +2601,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
-  },
-  {
-    "uid": "omi-chat-first-proactive-stalled",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Resilience",
-    "title": "Chat-first proactive delivery - ready queue stalled",
-    "condition": "C",
-    "data": [
-      {"refId": "A", "queryType": "", "relativeTimeRange": {"from": 3600, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(rate(chat_first_proactive_total{event=\"stalled\"}[1h]))", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}},
-      {"refId": "B", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["B"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "A", "intervalMs": 1000, "maxDataPoints": 43200, "reducer": "last", "refId": "B", "type": "reduce"}},
-      {"refId": "C", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [0], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["C"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "B", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "C", "type": "threshold"}}
-    ],
-    "updated": "2026-09-01T00:00:00Z",
-    "noDataState": "OK",
-    "execErrState": "Error",
-    "for": "5m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "summary": "A Chat-first proactive queue with an intent older than 24 hours was fetched during the last hour",
-      "threshold": "non-zero stalled event rate over 1h for 5m",
-      "user_impact": "Meeting notes and daily opener cards may be delayed behind an intent that is not reaching a terminal state.",
-      "scope": "The account-scoped Chat-first proactive fetch and acknowledgement path.",
-      "verification": "Break down chat_first_proactive_total by source and reason, then compare fetch, rejected, reconciled, and dead-letter events.",
-      "safe_next_action": "Inspect recent backend and desktop kernel errors; verify poison intents are reaching reconciled or dead-letter state before changing any retry budget.",
-      "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
-    },
-    "labels": {
-      "severity": "critical",
-      "instatus_component": "ai-chat",
-      "alert_identity": "omi-chat-first-proactive-stalled",
-      "component": "ai-chat",
-      "impact": "user-experience"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -2631,7 +2614,7 @@
     "title": "Durable queue - oldest ready item stalled",
     "condition": "C",
     "data": [
-      {"refId": "A", "queryType": "", "relativeTimeRange": {"from": 3600, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max(omi_queue_oldest_ready_age_seconds) > 21600 or absent(omi_queue_oldest_ready_age_seconds)", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}},
+      {"refId": "A", "queryType": "", "relativeTimeRange": {"from": 3600, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max(omi_queue_oldest_ready_age_seconds) > 21600 or absent(omi_queue_oldest_ready_age_seconds) or max(omi_queue_oldest_ready_sample_unknown) > 0", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}},
       {"refId": "B", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["B"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "A", "intervalMs": 1000, "maxDataPoints": 43200, "reducer": "last", "refId": "B", "type": "reduce"}},
       {"refId": "C", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [0], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["C"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "B", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "C", "type": "threshold"}}
     ],
@@ -2641,11 +2624,12 @@
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
-      "summary": "A durable queue has a ready item older than 6 hours, or the omi_queue_oldest_ready_age_seconds gauge is absent",
-      "threshold": "oldest ready age > 6h or absent() for 5m",
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "A durable queue has a ready item older than 6 hours, or an age sample is absent or unknown",
+      "threshold": "oldest ready age > 6h, absent(), or unknown sample for 5m",
       "user_impact": "Independent items behind a poison head can stall: memories, task integrations, Chat-first cards, or capture finalization may stop advancing.",
       "scope": "Every backend durable queue that publishes omi_queue_oldest_ready_age_seconds.",
-      "verification": "Break down omi_queue_oldest_ready_age_seconds by queue, then inspect that queue's dead-letter rows and last_error_text before changing retry budgets.",
+      "verification": "Break down omi_queue_oldest_ready_age_seconds and omi_queue_oldest_ready_sample_unknown by queue; check the sampler read cap and metadata failures, then inspect that queue's dead-letter rows and last_error_text before changing retry budgets.",
       "safe_next_action": "Confirm poison items reached a dead letter; redrive by identity only after the error is understood. Do not raise the attempt budget.",
       "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
     },
@@ -2656,9 +2640,10 @@
       "component": "api",
       "impact": "user-experience"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -2775,7 +2760,7 @@
     ],
     "updated": "2026-09-20T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -2800,7 +2785,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -2917,7 +2903,7 @@
     ],
     "updated": "2026-09-20T00:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -2942,7 +2928,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -3062,7 +3049,7 @@
     ],
     "updated": "2026-10-09T14:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -3086,7 +3073,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -3203,7 +3191,7 @@
     ],
     "updated": "2026-10-09T14:00:00Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -3227,7 +3215,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   }

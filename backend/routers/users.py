@@ -91,6 +91,7 @@ from models.users import (
 )
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
 from utils.apps import get_available_app_by_id
+from database.fsr_read_cache import fresh_cache_reads
 from utils.subscription import (
     DESKTOP_CHAT_BYOK_PROVIDER,
     resolve_transcription_allowance,
@@ -736,7 +737,7 @@ class FollowupQuestionResponse(BaseModel):
 
 
 @router.delete('/v1/joan/{memory_id}/followup-question', tags=['v1'], response_model=FollowupQuestionResponse)
-def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def delete_followup_question_endpoint(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
     if memory_id == '0':
         memory = get_in_progress_conversation(uid)
         if not memory:
@@ -1211,6 +1212,7 @@ def _byok_unlimited_subscription(
 
 @router.get('/v1/users/me/subscription', tags=['v1'], response_model=UserSubscriptionResponse)
 def get_user_subscription_endpoint(
+    request: Request,
     # Keep reachable even when BYOK fingerprints drift — broken-BYOK users
     # must still see their plan so they can recover.
     uid: str = Depends(auth.get_current_user_uid_no_byok_validation),
@@ -1219,26 +1221,31 @@ def get_user_subscription_endpoint(
 ):
     """Gets the user's subscription plan and usage, plus the one transcription-allowance answer."""
     already_read: dict[str, Any] = {}
-    response = _user_subscription_response(uid, x_app_platform, x_app_version, already_read)
-    # The same resolver the listen socket enforces, so the client's startup
-    # snapshot and the server's gate cannot disagree about which STT mode to
-    # open. `X-App-Platform` plays the listen `source` role for the paywall,
-    # and the subscription/usage the snapshot already read are reused.
+    # Both released mobile and desktop clients use this route to unlock after checkout.
+    # They send no payment-refresh marker, so every entitlement refresh must be fresh.
+    with fresh_cache_reads(uid, 'subscription_cache'):
+        response = _user_subscription_response(
+            uid, x_app_platform, x_app_version, already_read, request.headers.get('X-Omi-Plan-Identity')
+        )
     allowance = resolve_transcription_allowance(uid, source=x_app_platform, **already_read)
     response.transcription_allowance = TranscriptionAllowanceSnapshot(**allowance.as_dict())
+    # A closed result with no resolved total is not an unlimited allowance.
+    # Keep the already-built finite snapshot instead of emitting the wire's
+    # 0 == unlimited sentinel. Known totals (including exhaustion) still win.
+    if allowance.remaining_seconds is None or (allowance.limit_seconds is not None and allowance.limit_seconds > 0):
+        response.transcription_seconds_limit = allowance.limit_seconds or 0
+        response.subscription.limits.transcription_seconds = allowance.limit_seconds
     return response
 
 
 def _user_subscription_response(
-    uid: str, x_app_platform: Optional[str], x_app_version: Optional[str], already_read: dict[str, Any]
+    uid: str,
+    x_app_platform: Optional[str],
+    x_app_version: Optional[str],
+    already_read: dict[str, Any],
+    plan_identity_version: Optional[str],
 ) -> UserSubscriptionResponse:
-    """The subscription/usage snapshot, unchanged; the endpoint decorates it.
-
-    ``already_read`` receives the BYOK enrolment, the valid subscription
-    (``None`` when there is none) and the monthly usage this snapshot reads,
-    so the allowance is resolved from the same reads rather than repeating
-    them.
-    """
+    """Read subscription/usage once, reusing those reads for the allowance."""
     # BYOK free plan: unlimited chat/insights only for a validated LLM-capability
     # key (same predicate as enforce_chat_quota). Deepgram-only does not unlock this.
     # Synthetic paid-tier quota for BYOK / marketplace-reviewer overrides so
@@ -1248,11 +1255,7 @@ def _user_subscription_response(
     byok_active = users_db.is_byok_active(uid)
     already_read['byok_active'] = byok_active
     if byok_active and request_has_llm_byok_key():
-        # Snapshot split: a validated LLM key unlocks unlimited chat/insights, but
-        # backend transcription credits still flow through Omi's Deepgram, so the
-        # transcription/words fields stay metered on the free tier unless this
-        # request also carries a validated Deepgram key (same predicate as
-        # has_transcription_credits).
+        # Preserve synthetic Neo feature access; the outer resolver supplies the STT budget.
         if get_byok_key('deepgram'):
             return UserSubscriptionResponse(
                 subscription=_byok_unlimited_subscription(),
@@ -1465,7 +1468,7 @@ def _user_subscription_response(
     # Grandfather is read from the true plan before the label is remapped for
     # clients whose enum predates `plus`/`unlimited_v2` (see wire_plan_for_client).
     desktop_grandfather_until = neo_grandfather_until(subscription)
-    subscription.plan = wire_plan_for_client(subscription.plan, x_app_platform, x_app_version)
+    subscription.plan = wire_plan_for_client(subscription.plan, x_app_platform, x_app_version, plan_identity_version)
 
     return UserSubscriptionResponse(
         subscription=subscription,
@@ -2571,3 +2574,25 @@ def record_llm_usage_bucket(
 def get_total_llm_cost(uid: str = Depends(auth.get_current_user_uid)):
     total = llm_usage_db.get_total_llm_cost(uid)
     return {'total_cost_usd': total}
+
+
+class SurfaceStateRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    session_id: str = Field(min_length=1, max_length=64, pattern=r'^[a-zA-Z0-9-]+$')
+    surface_open: bool
+    foreground: bool
+    transcript_visible: bool
+
+
+@router.post(
+    '/v1/users/client-state', tags=['users'], response_model=UserStatusResponse, response_model_exclude_none=True
+)
+async def report_surface_state(
+    body: SurfaceStateRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'users:surface_state', fail_closed=True)),
+):
+    """Explicit expiring human-surface intent; no user-document lookup."""
+    from utils.conversations.demand_processing import observe_surface
+
+    await run_blocking(db_executor, observe_surface, uid, body.session_id, body.model_dump())
+    return {'status': 'ok'}

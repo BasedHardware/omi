@@ -14,18 +14,22 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/models/local_recording.dart';
+import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
-import 'package:omi/pages/conversations/widgets/processing_capture.dart';
+import 'package:omi/pages/conversations/on_the_way_page.dart';
 import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
+import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
+import 'package:omi/services/wals/wal.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
+import '../../support/typed_conversation_screen.dart';
 import 'native_test_host.dart';
 
 const _config = MethodChannel('com.omi.native_ui/config');
@@ -37,6 +41,24 @@ class _InertRecordings extends ChangeNotifier implements LocalRecordingsProvider
 
   @override
   Future<void> refresh() async {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// No recording is syncing or transcribing, so the pending row answers only to processing conversations.
+class _InertSync extends ChangeNotifier implements SyncProvider {
+  @override
+  SyncState get syncState => const SyncState();
+
+  @override
+  List<Wal> get allWals => const [];
+
+  @override
+  List<Wal> get displaySortedWals => const [];
+
+  @override
+  bool get isRateLimited => false;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -121,16 +143,19 @@ void main() {
           ChangeNotifierProvider<LocalRecordingsProvider>(create: (_) => _InertRecordings()),
           ChangeNotifierProvider(create: (_) => FolderProvider(foldersFetcher: () async => <Folder>[])),
           ChangeNotifierProvider<ConnectivityProvider>(create: (_) => _Connectivity(connected)),
+          ChangeNotifierProvider<SyncProvider>(create: (_) => _InertSync()),
           ChangeNotifierProvider(
               create: (_) => CaptureProvider(
                   externalActions: const NoopCaptureExternalActions(),
                   inProgressConversationLoader: () async {},
                   localSegmentStore: LocalSegmentStore.disabled())),
         ],
-        child: const MaterialApp(
+        child: MaterialApp(
             localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: [Locale('en')],
-            home: Scaffold(body: ConversationsPage(requestInitialLoad: false, nativeLibrary: true)))));
+            supportedLocales: const [Locale('en')],
+            home: Scaffold(
+                body: ConversationsPage(
+                    requestInitialLoad: false, nativeLibrary: true, pendingWork: inertPendingWorkStore())))));
     await NativeTestHost.settle(tester);
     await tester.pump(const Duration(milliseconds: 300));
   }
@@ -306,7 +331,8 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('the processing row keeps its card with Try again; disposal ends selection', (tester) async {
+  testWidgets('a processing conversation joins the pending row, which opens On the Way; disposal ends selection',
+      (tester) async {
     final processing = ServerConversation(
         id: 'processing',
         createdAt: DateTime(2026, 10, 4, 13),
@@ -314,11 +340,18 @@ void main() {
         structured: Structured('', ''),
         status: ConversationStatus.processing);
     await pumpLibrary(tester, [eligibleA], processing: [processing]);
-    // The sheet's future completes when it closes.
-    unawaited(Future.sync(() => row(tester, 'library_processing_processing').action!(null)));
+    // Home draws no processing card of its own any more: the one pending row stands for the conversation.
+    final rows =
+        IosNativeSurface.debugDispatchRows(tester.state<State<IosNativeSurface>>(find.byType(IosNativeSurface)));
+    expect(rows.where((r) => r.id.startsWith('library_processing')), isEmpty);
+    final pending = row(tester, 'library_pending');
+    expect(pending.title, _l10n.homePendingTitle);
+    expect(pending.subtitle, _l10n.processing);
+    pending.action!(null);
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
-    expect(find.byType(ProcessingConversationWidget), findsOneWidget);
-    Navigator.of(tester.element(find.byType(ProcessingConversationWidget))).pop();
+    expect(find.byType(OnTheWayPage), findsOneWidget);
+    Navigator.of(tester.element(find.byType(OnTheWayPage))).pop();
     await tester.pump(const Duration(milliseconds: 600));
 
     provider.enterSelectionMode();

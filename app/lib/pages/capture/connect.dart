@@ -13,10 +13,14 @@ import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/pages/onboarding/find_device/device_discovery_controller.dart';
 import 'package:omi/pages/onboarding/find_device/page.dart';
+import 'package:omi/pages/onboarding/find_device/pairing_failure_card.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
+import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -33,7 +37,10 @@ Future<void> openOmiStore({Future<bool> Function(Uri)? launcher}) async {
 }
 
 class ConnectDevicePage extends StatefulWidget {
-  const ConnectDevicePage({super.key});
+  const ConnectDevicePage({super.key, this.onConnected});
+
+  /// Onboarding returns to its completion owner before Home can be entered.
+  final VoidCallback? onConnected;
 
   @override
   State<ConnectDevicePage> createState() => _ConnectDevicePageState();
@@ -47,19 +54,29 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
   /// complete classic page then stays, with its own scan owner, instead of flapping back.
   bool _classicOnly = false;
 
+  /// Onboarding hands a connected device to [ConnectDevicePage.onConnected]; opened from Home, the
+  /// page returns there itself. Both presentations route through this one answer.
+  bool get _isFromOnboarding => widget.onConnected != null;
+
   @override
   void initState() {
     super.initState();
     PlatformManager.instance.analytics.connectDevicePageOpened();
     _discovery = DeviceDiscoveryController(
       context: context,
-      isFromOnboarding: false,
+      isFromOnboarding: _isFromOnboarding,
       goNext: _goNext,
       onRescan: _scanAgain,
     );
     _images = NativeAssetUris(() {
       if (mounted) setState(() {});
     });
+  }
+
+  @override
+  void didUpdateWidget(ConnectDevicePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _discovery.isFromOnboarding = _isFromOnboarding;
   }
 
   @override
@@ -70,6 +87,11 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
 
   void _goNext() {
     Logger.debug('onConnected from FindDevicesPage');
+    final onConnected = widget.onConnected;
+    if (onConnected != null) {
+      onConnected();
+      return;
+    }
     // Back to the Home already underneath, not a second Home on top of it.
     HomeNavigation.returnHome(context);
   }
@@ -96,7 +118,7 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
         final l10n = context.l10n;
         return IosNativeSurface(
           title: l10n.connect,
-          loading: !provider.isConnected && provider.visibleDeviceList.isEmpty && !provider.enableInstructions,
+          loading: _discoveryLoading(provider),
           loadingLabel: l10n.searchingForDevices,
           fallback: _classic(context),
           nativeOwner: _DiscoveryLifecycle(discovery: _discovery),
@@ -152,9 +174,11 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
                   if (!onboardingProvider.isConnected)
                     ScanningRippleWidget(
                       isScanning: !onboardingProvider.isConnected,
-                      size: MediaQuery.sizeOf(context).height <= 700 ? 280 : 360,
+                      size: (MediaQuery.sizeOf(context).height <= 700 ? 280.0 : 360.0) *
+                          (onboardingProvider.pairingFailureReason == null ? 1 : 0.5),
                     ),
                   DeviceAnimationWidget(
+                    sizeMultiplier: onboardingProvider.pairingFailureReason == null ? 1 : 0.5,
                     isConnected: onboardingProvider.isConnected,
                     deviceName: onboardingProvider.deviceName,
                     deviceType: onboardingProvider.deviceType,
@@ -163,7 +187,7 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
                 ],
               ),
               FindDevicesPage(
-                isFromOnboarding: false,
+                isFromOnboarding: _isFromOnboarding,
                 goNext: _goNext,
                 includeSkip: false,
               ),
@@ -179,12 +203,18 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                OmiButton.tertiary(
+                OmiButton(
+                  variant: OmiButtonVariant.tertiary,
+                  labelStyle: OmiType.callout.copyWith(
+                      fontWeight: FontWeight.w600, fontFamily: Theme.of(context).textTheme.labelLarge?.fontFamily),
                   key: const Key('get_omi_device_button'),
                   label: context.l10n.getOmiDevice,
                   onPressed: openOmiStore,
                 ),
-                OmiButton.tertiary(
+                OmiButton(
+                  variant: OmiButtonVariant.tertiary,
+                  labelStyle: OmiType.callout.copyWith(
+                      fontWeight: FontWeight.w600, fontFamily: Theme.of(context).textTheme.labelLarge?.fontFamily),
                   key: const Key('connection_guide_button'),
                   label: context.l10n.connectionGuide,
                   icon: Icons.info_outline,
@@ -211,10 +241,19 @@ bool nativeDiscoveryIdsValid(List<BtDevice> devices) {
 /// Longer device names are shortened, so a device's advertised name never invalidates the surface.
 String _rowTitle(String title) => title.characters.length <= 120 ? title : '${title.characters.take(119)}…';
 
-/// The Connect page's native sections, in the classic page's order: the status line, the device
-/// list, the "nothing found" help and the store/guide links. Only display names, short ids, badges
-/// and battery cross; device ids stay here. Each device row captures the id it projected and
-/// [onTap] receives it, so a tap reaches only a device that is still visible.
+/// Whether the surface's own "Searching for devices" row stands in for the status line: nothing
+/// found yet, no "nothing found" help and no pairing failure to recover from.
+bool _discoveryLoading(OnboardingProvider provider) =>
+    !provider.isConnected &&
+    provider.visibleDeviceList.isEmpty &&
+    !provider.enableInstructions &&
+    provider.pairingFailureReason == null;
+
+/// The Connect page's native sections, in the classic page's order: the status line, the inline
+/// pairing failure, the device list, the "nothing found" help and the store/guide links. Only
+/// display names, short ids, badges and battery cross; device ids stay here. Each device row
+/// captures the id it projected and [onTap] receives it, so a tap reaches only a device that is
+/// still visible.
 @visibleForTesting
 List<NativeSection> nativeDiscoverySections(
   BuildContext context,
@@ -231,13 +270,16 @@ List<NativeSection> nativeDiscoverySections(
 }) {
   final l10n = context.l10n;
   final devices = provider.visibleDeviceList;
-  final cantFind = provider.deviceList.isEmpty && provider.enableInstructions;
+  // A pairing failure owns the status line's place until it is dismissed or resolved, as the
+  // classic PairingFailureCard does; it never outlives a connection.
+  final failure = provider.isConnected ? null : provider.pairingFailureReason;
+  final cantFind = provider.deviceList.isEmpty && provider.enableInstructions && provider.pairingFailureReason == null;
   final battery = provider.batteryPercentage.clamp(0, 100);
   // While nothing is found the surface's own loading row already says "Searching for devices".
-  final loading = !provider.isConnected && devices.isEmpty && !provider.enableInstructions;
+  final loading = _discoveryLoading(provider);
   return [
     NativeSection('connect_status', [
-      if (!provider.isConnected && !cantFind && !loading)
+      if (!provider.isConnected && !cantFind && !loading && failure == null)
         NativeRow(
           'connect_searching',
           provider.nearbyDeviceCount == 0
@@ -256,6 +298,17 @@ List<NativeSection> nativeDiscoverySections(
               kind: 'label', symbol: battery <= 25 ? 'battery.25' : 'battery.100', destructive: battery <= 25),
       ],
     ]),
+    if (failure != null)
+      NativeSection('connect_pairing_failure', [
+        NativeRow('connect_pairing_failure_message', pairingFailureCopy(l10n, failure),
+            kind: 'label', symbol: 'exclamationmark.circle', destructive: true),
+        NativeRow('connect_pairing_failure_retry', l10n.tryAgain,
+            symbol: 'arrow.clockwise', action: (_) => onScanAgain()),
+        NativeRow('connect_pairing_failure_guide', l10n.pairingHowTo,
+            symbol: 'questionmark.circle', action: (_) => onHowToPair()),
+        NativeRow('connect_pairing_failure_dismiss', l10n.close,
+            symbol: 'xmark', action: (_) => provider.dismissPairingFailure()),
+      ]),
     if (!provider.isConnected && devices.isNotEmpty)
       NativeSection('connect_devices', [
         for (final (index, device) in devices.indexed)
@@ -299,8 +352,8 @@ List<NativeSection> nativeDiscoverySections(
 /// The scan and connection owner while the native Connect surface is shown. It is mounted offstage
 /// only when the native renderer is active; on the classic page [FindDevicesPage] and
 /// [FoundDevices] own the same work, so there is only ever one scan owner. It starts the scan and
-/// the device provider's connection on mount, cancels the scan on dispose, and turns the provider's
-/// messages into toasts and the DEVICE_CONNECTED pop.
+/// the device provider's connection on mount, cancels the scan on dispose, turns the provider's
+/// messages into toasts and the DEVICE_CONNECTED pop, and reports each pairing failure shown.
 class _DiscoveryLifecycle extends StatefulWidget {
   const _DiscoveryLifecycle({required this.discovery});
 
@@ -313,6 +366,9 @@ class _DiscoveryLifecycle extends StatefulWidget {
 class _DiscoveryLifecycleState extends State<_DiscoveryLifecycle> {
   OnboardingProvider? _provider;
 
+  /// The pairing failure presentation already reported, by (version, reason).
+  (int, DeviceConnectFailureShownFailureReason)? _reportedFailure;
+
   @override
   void initState() {
     super.initState();
@@ -320,6 +376,7 @@ class _DiscoveryLifecycleState extends State<_DiscoveryLifecycle> {
     // The classic order: FindDevicesPage scans, then FoundDevices starts the device connection.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      if (widget.discovery.isFromOnboarding) context.read<HomeProvider>().setupHasSpeakerProfile();
       unawaited(widget.discovery.scan());
       context.read<DeviceProvider>().initiateConnection('FoundDevices');
     });
@@ -332,10 +389,33 @@ class _DiscoveryLifecycleState extends State<_DiscoveryLifecycle> {
     super.dispose();
   }
 
+  /// Reports a pairing failure after its first displayed frame, once per presentation and reason,
+  /// exactly as the classic [PairingFailureCard] does for the same rows.
+  void _reportPairingFailure(OnboardingProvider provider) {
+    final reason = provider.pairingFailureReason;
+    if (reason == null || provider.isConnected) return;
+    final presentation = (provider.pairingFailureVersion, reason);
+    if (_reportedFailure == presentation) return;
+    _reportedFailure = presentation;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || provider.pairingFailureReason != reason) return;
+      final platform = switch (Theme.of(context).platform) {
+        TargetPlatform.iOS => DeviceConnectFailureShownPlatform.ios,
+        TargetPlatform.android => DeviceConnectFailureShownPlatform.android,
+        _ => DeviceConnectFailureShownPlatform.other,
+      };
+      const TypedEvents().emit(DeviceConnectFailureShown(failureReason: reason, platform: platform));
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    _reportPairingFailure(context.watch<OnboardingProvider>());
     return MessageListener<OnboardingProvider>(
-      showError: (error) => OmiFeedback.error(context, error),
+      showError: (error) {
+        // The pairing failure rows own connect-failure recovery and its shown event.
+        if (error != 'DEVICE_CONNECT_FAILED') OmiFeedback.error(context, error);
+      },
       showInfo: (info) {
         if (info == "DEVICE_CONNECTED") {
           if (mounted) Navigator.pop(context);

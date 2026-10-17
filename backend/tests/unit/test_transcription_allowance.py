@@ -454,3 +454,47 @@ def test_the_answer_serialises_for_the_plan_endpoint(monkeypatch, sub) -> None:
         'remaining_seconds': 10_000,
         'reason': 'plan_within_allowance',
     }
+
+
+@pytest.mark.parametrize('plan,cap', [(PlanType.basic, BASIC_CAP), (PlanType.plus, PLUS_CAP)])
+@pytest.mark.parametrize('failure', ['invalid_usage', 'lookup_error'])
+def test_closed_result_keeps_known_catalog_total(monkeypatch, sub, plan, cap, failure):
+    _situate(monkeypatch, sub, plan=plan, usage_record={'transcription_seconds': -1})
+    if failure == 'lookup_error':
+
+        def failed_lookup(uid):
+            raise RuntimeError('usage lookup unavailable')
+
+        monkeypatch.setattr(sub, 'get_monthly_usage_for_subscription', failed_lookup)
+    result = sub.resolve_transcription_allowance('uid')
+    assert result.mode == 'on_device'
+    assert result.remaining_seconds == 0
+    assert result.limit_seconds == cap
+    assert result.reason == ('usage_invalid' if failure == 'invalid_usage' else 'allowance_unavailable')
+
+
+@pytest.mark.parametrize('launch', [None, 'not-a-date', '2026-99-99'])
+@pytest.mark.parametrize('enforce', [False, True])
+def test_launch_config_does_not_manufacture_zero_usage_when_enforcing(sub, monkeypatch, launch, enforce):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
+    if launch is None:
+        monkeypatch.delenv('SUBSCRIPTION_LAUNCH_DATE', raising=False)
+    else:
+        monkeypatch.setenv('SUBSCRIPTION_LAUNCH_DATE', launch)
+    if enforce:
+        with pytest.raises(ValueError):
+            sub.get_monthly_usage_for_subscription('synthetic')
+    else:
+        assert sub.get_monthly_usage_for_subscription('synthetic') == {}
+
+
+def test_explicit_future_launch_is_intentionally_unlaunched(sub, monkeypatch):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setenv('SUBSCRIPTION_LAUNCH_DATE', '2099-01-01')
+    assert sub.get_monthly_usage_for_subscription('synthetic') == {}
+
+
+def test_funded_request_cannot_use_deepgram_key_for_another_provider(sub, monkeypatch):
+    _situate(monkeypatch, sub, plan=PlanType.plus, used_seconds=PLUS_CAP, byok_enrolled=True, byok_header=True)
+    assert sub.resolve_transcription_allowance('uid').reason == 'byok'
+    assert sub.resolve_transcription_allowance('uid', omi_funded=True).reason == 'plan_allowance_exhausted'

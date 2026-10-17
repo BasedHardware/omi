@@ -26,6 +26,18 @@ def anyio_backend():
     return 'asyncio'
 
 
+def _capture_product_event_inputs(monkeypatch, module):
+    events = []
+    emit_product_event = module.emit_product_event
+
+    def capture_source_event(**event):
+        events.append(event)
+        return emit_product_event(**event)
+
+    monkeypatch.setattr(module, 'emit_product_event', capture_source_event)
+    return events
+
+
 class _Persistence:
     async def call(self, fn, *args, **kwargs):
         return fn(*args, **kwargs)
@@ -1130,6 +1142,7 @@ async def test_transcript_loop_still_flushes_speaker_assignments_when_the_client
 
 @pytest.mark.anyio
 async def test_transcript_loop_emits_diarization_completion_after_terminal_flush(monkeypatch):
+    import routers.listen.transcripts as transcripts_module
     from utils.product_telemetry import set_product_telemetry_client_for_tests
 
     websocket = SimpleNamespace(send_json=lambda _payload: _async_result(None))
@@ -1138,18 +1151,21 @@ async def test_transcript_loop_emits_diarization_completion_after_terminal_flush
     processor.host.recording_session_id = 'recording-1'
     telemetry = _ProductTelemetryClient()
     set_product_telemetry_client_for_tests(telemetry)
+    source_events = _capture_product_event_inputs(monkeypatch, transcripts_module)
 
     await processor.process_loop()
 
     assert flushed == ['conversation-1']
     assert telemetry.events[0]['event'] == 'Diarization Completed'
     assert telemetry.events[0]['properties']['speaker_count'] == 1
-    assert telemetry.events[0]['properties']['recording_id'] == 'recording-1'
-    assert telemetry.events[0]['properties']['conversation_id'] == 'conversation-1'
+    assert source_events[0]['properties']['recording_id'] == 'recording-1'
+    assert source_events[0]['properties']['conversation_id'] == 'conversation-1'
+    assert not {'recording_id', 'conversation_id'} & telemetry.events[0]['properties'].keys()
 
 
 @pytest.mark.anyio
 async def test_transcript_loop_attributes_diarization_completion_to_each_conversation(monkeypatch):
+    import routers.listen.transcripts as transcripts_module
     from utils.product_telemetry import set_product_telemetry_client_for_tests
 
     websocket = SimpleNamespace(send_json=lambda _payload: _async_result(None))
@@ -1157,6 +1173,7 @@ async def test_transcript_loop_attributes_diarization_completion_to_each_convers
     processor.host.recording_session_id = 'recording-1'
     telemetry = _ProductTelemetryClient()
     set_product_telemetry_client_for_tests(telemetry)
+    source_events = _capture_product_event_inputs(monkeypatch, transcripts_module)
     processor.segment_buffer[0]['speaker_id'] = 2
     waits = 0
     updates = 0
@@ -1183,11 +1200,16 @@ async def test_transcript_loop_attributes_diarization_completion_to_each_convers
 
     await processor.process_loop()
 
-    assert [event['properties']['conversation_id'] for event in telemetry.events] == [
+    assert [
+        event['properties']['conversation_id']
+        for event in source_events
+        if event.get('event') == 'Diarization Completed'
+    ] == [
         'conversation-1',
         'conversation-2',
     ]
     assert [event['properties']['speaker_count'] for event in telemetry.events] == [1, 1]
+    assert all(not {'recording_id', 'conversation_id'} & event['properties'].keys() for event in telemetry.events)
 
 
 async def _async_result(value):
@@ -1230,13 +1252,29 @@ async def test_custom_stt_flush_meters_speech_in_isolated_lane(monkeypatch):
 
     assert await runtime._flush_usage(final=False) == 0
     assert recorded == [('custom-stt-user', 4200, 'custom_stt')]
-    assert usage_calls == [('custom-stt-user', {'speech_seconds': 4})]
+    assert usage_calls == [
+        (
+            'custom-stt-user',
+            {
+                'speech_seconds': 4,
+                'usage_metadata': {'funding': 'custom', 'provider': 'unknown', 'source': 'listen'},
+            },
+        )
+    ]
 
     # No speech delta → no meter write either.
     runtime.receiver = SimpleNamespace(vad_gate=SimpleNamespace(consume_speech_ms_delta=lambda: 0))
     assert await runtime._flush_usage(final=True) == 0
     assert recorded == [('custom-stt-user', 4200, 'custom_stt')]
-    assert usage_calls == [('custom-stt-user', {'speech_seconds': 4})]
+    assert usage_calls == [
+        (
+            'custom-stt-user',
+            {
+                'speech_seconds': 4,
+                'usage_metadata': {'funding': 'custom', 'provider': 'unknown', 'source': 'listen'},
+            },
+        )
+    ]
 
 
 @pytest.mark.anyio

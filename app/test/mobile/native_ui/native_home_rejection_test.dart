@@ -17,6 +17,7 @@ import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/mobile/native_ui/ios_native_home.dart';
 import 'package:omi/models/local_recording.dart';
+import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/home/home_content.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -27,9 +28,12 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/providers/speaker_tag_prompts_provider.dart';
+import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
+import 'package:omi/services/wals/wal.dart';
 
+import '../../support/typed_conversation_screen.dart';
 import 'native_test_host.dart';
 
 const _classicHome = 'classic flutter home';
@@ -73,6 +77,24 @@ class _InertCalls extends ChangeNotifier implements PhoneCallProvider {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// No recording is syncing or transcribing, so the pending row answers only to processing conversations.
+class _InertSync extends ChangeNotifier implements SyncProvider {
+  @override
+  SyncState get syncState => const SyncState();
+
+  @override
+  List<Wal> get allWals => const [];
+
+  @override
+  List<Wal> get displaySortedWals => const [];
+
+  @override
+  bool get isRateLimited => false;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 Future<({List<DailySummary> items, bool ok})> _noRecaps() async => (items: const <DailySummary>[], ok: true);
 
 /// The Home owners with no I/O behind them, around [home], with [conversations] already loaded.
@@ -87,6 +109,7 @@ Widget _app(Widget home, {List<ServerConversation> conversations = const []}) =>
       ChangeNotifierProvider(create: (_) => HomeProvider()),
       ChangeNotifierProvider<DeviceProvider>(create: (_) => _InertDevice()),
       ChangeNotifierProvider<PhoneCallProvider>(create: (_) => _InertCalls()),
+      ChangeNotifierProvider<SyncProvider>(create: (_) => _InertSync()),
       ChangeNotifierProvider(
           create: (_) => CaptureProvider(
               externalActions: const NoopCaptureExternalActions(),
@@ -220,7 +243,9 @@ void main() {
             status: ConversationStatus.completed,
             structured: Structured('Conversation $index', 'Overview'))
     ];
-    await tester.pumpWidget(_app(HomeContentPage(key: page, requestInitialLoad: false, loadRecaps: _noRecaps),
+    await tester.pumpWidget(_app(
+        HomeContentPage(
+            key: page, requestInitialLoad: false, loadRecaps: _noRecaps, pendingWork: inertPendingWorkStore()),
         conversations: conversations));
     await NativeTestHost.settle(tester);
     expect(find.byType(ConversationsPage), findsOneWidget);

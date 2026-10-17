@@ -239,7 +239,10 @@ def _ingress_literal_env(service: Mapping[str, Any], *, ingress_container_name: 
         None,
     )
     if ingress is None:
-        raise ValueError(f'Cloud Run service export had no ingress container named {ingress_container_name!r}')
+        candidates = [item for item in containers if isinstance(item, dict) and item.get('name') != SIDECAR_NAME]
+        if len(candidates) != 1:
+            raise ValueError(f'Cloud Run service export had no unambiguous ingress named {ingress_container_name!r}')
+        ingress = candidates[0]
     raw_env = ingress.get('env', [])
     if not isinstance(raw_env, list):
         raise ValueError('Cloud Run ingress env was not a list')
@@ -251,15 +254,14 @@ def _ingress_literal_env(service: Mapping[str, Any], *, ingress_container_name: 
             # Secret-backed reference, not a literal value -- must not be folded
             # into the literal-env map (and must not be coerced to '').
             continue
-        # Cloud Run's export omits the `value` key entirely for an env var whose
-        # literal value is the empty string -- it does not write `value: ''`.
-        # Reading a missing key as None here would make a legitimately empty
-        # literal look identical to a var that was never set at all, which is
-        # exactly the false-positive "<missing>" this check reported for
-        # OMI_PARITY_PACK_ALLOWED_PRINCIPALS. Absence of the key on a literal
-        # entry means empty string, not absence of the variable.
+        # Omitted value on a literal env entry means empty string in Cloud Run exports.
         actual[raw_entry['name']] = _cloud_run_string(raw_entry.get('value', ''))
     return actual
+
+
+_BACKFILL_SYNC_HANDLER_RE = re.compile(
+    r'https://backend-sync-backfill-[a-z0-9]+(?:-[a-z0-9]+)*\.[a-z0-9]+(?:-[a-z0-9]+)*\.run\.app/v2/sync-jobs/run'
+)
 
 
 def _validate_expected_literal_env(
@@ -273,6 +275,18 @@ def _validate_expected_literal_env(
     for name, expected_value in expected.items():
         actual_value = actual.get(name)
         if actual_value != expected_value:
+            # sync-backfill-lifecycle's ENV_OVERLAY replaces the cloned sync
+            # handler and audience with the backfill worker's own endpoint
+            # (also documented in utils/cloud_tasks.py). Rendered env state
+            # still carries backend-sync's URL. Accept only that named
+            # service's Cloud Run handler overlay, in both validation phases.
+            if (
+                service.get('metadata', {}).get('name') == 'backend-sync-backfill'
+                and name in {'SYNC_TASKS_HANDLER_URL', 'SYNC_TASKS_OIDC_AUDIENCE'}
+                and actual_value is not None
+                and _BACKFILL_SYNC_HANDLER_RE.fullmatch(actual_value)
+            ):
+                continue
             found = '<missing>' if actual_value is None else actual_value
             raise ValueError(
                 f'{phase} env {name} mismatch before GMP sidecar replace: '
@@ -395,6 +409,7 @@ def patch_service(
     ingress_container_name: str,
     config_secret: str,
     config_secret_version: str,
+    desktop_backend_liveness_probe: bool = False,
 ) -> ConfigDict:
     patched = cast(ConfigDict, json.loads(json.dumps(service)))
     patched.pop('status', None)
@@ -441,6 +456,13 @@ def patch_service(
         ingress = candidates[0]
         ingress['name'] = ingress_container_name
     _drop_startup_probe_initial_delay(ingress)
+    if desktop_backend_liveness_probe:
+        ingress['livenessProbe'] = {
+            'httpGet': {'path': '/healthz/live', 'port': 8080},
+            'periodSeconds': 10,
+            'timeoutSeconds': 5,
+            'failureThreshold': 3,
+        }
     retained_containers = [
         container for container in containers if container is not ingress and container.get('name') != SIDECAR_NAME
     ]
@@ -784,6 +806,7 @@ def attach_sidecar(args: argparse.Namespace) -> None:
         ingress_container_name=args.ingress_container,
         config_secret=args.config_secret,
         config_secret_version=config_secret_version,
+        desktop_backend_liveness_probe=args.desktop_backend_liveness_probe,
     )
 
     path: Path | None = None
@@ -1043,6 +1066,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--expected-env-state', type=Path)
     parser.add_argument('--tag', default='')
     parser.add_argument(
+        '--desktop-backend-liveness-probe',
+        action='store_true',
+        help='Set the desktop-backend ingress /healthz/live probe on the final service revision.',
+    )
+    parser.add_argument(
         '--repair-secret-annotations',
         action='store_true',
         help='Repair project-ID secret paths on the live service and exit. Does not attach a sidecar.',
@@ -1057,6 +1085,10 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.desktop_backend_liveness_probe and (
+        args.job or args.repair_secret_annotations or args.service != 'desktop-backend'
+    ):
+        raise SystemExit('--desktop-backend-liveness-probe requires a desktop-backend service attachment')
     if args.detach:
         if not args.job or args.repair_secret_annotations or args.dry_run:
             raise SystemExit('--detach is only supported with --job')

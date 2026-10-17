@@ -255,6 +255,7 @@ class MemoryGraphPage extends StatefulWidget {
   final bool showShareButton;
   final bool trackOpenEvent;
   final double initialZoom;
+  final bool fitToBounds;
   @visibleForTesting
   final Future<Map<String, dynamic>> Function() loadGraph;
 
@@ -267,14 +268,15 @@ class MemoryGraphPage extends StatefulWidget {
     this.showShareButton = true,
     this.trackOpenEvent = true,
     this.initialZoom = 1.0,
+    this.fitToBounds = false,
     this.loadGraph = KnowledgeGraphApi.getKnowledgeGraph,
   });
 
   @override
-  State<MemoryGraphPage> createState() => _MemoryGraphPageState();
+  State<MemoryGraphPage> createState() => MemoryGraphPageState();
 }
 
-class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+class MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final MemoryGraphController _graph;
   ForceDirectedSimulation3D get simulation => _graph.simulation;
   late Ticker _ticker;
@@ -294,9 +296,60 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   double _zoom = 1.0;
   double _baseZoom = 1.0;
 
+  @visibleForTesting
+  double get zoom => _zoom;
+
+  @visibleForTesting
+  bool get hasFittedBounds => _hasFittedBounds;
+
   Offset? _lastPanStart;
 
   final _repaintNotifier = ValueNotifier<int>(0);
+
+  bool _hasFittedBounds = false;
+
+  /// The first node of the graph the viewport was last fitted to. [MemoryGraphController.populate]
+  /// replaces every node, so a different first node is a new graph to fit once more.
+  GraphNode3D? _fittedGraphAnchor;
+
+  void _fitGraphToBounds(Size size) {
+    if (!_hasFittedBounds && widget.fitToBounds && simulation.nodes.isNotEmpty && size.width > 0 && size.height > 0) {
+      double maxExtentX = 0.0;
+      double maxExtentY = 0.0;
+      const cameraZ = 1500.0;
+
+      for (final node in simulation.nodes) {
+        final px = node.position.x;
+        final py = node.position.y;
+        final pz = node.position.z;
+
+        final denom = cameraZ - pz;
+        final perspective = (denom > 100.0) ? (cameraZ / denom) : (cameraZ / 100.0);
+
+        final extentX = (px * perspective).abs();
+        final extentY = (py * perspective).abs();
+
+        if (extentX > maxExtentX) maxExtentX = extentX;
+        if (extentY > maxExtentY) maxExtentY = extentY;
+      }
+
+      if (maxExtentX > 0.0 && maxExtentY > 0.0) {
+        const padding = 50.0;
+        final availW = (size.width / 2) - padding;
+        final availH = (size.height / 2) - padding;
+
+        if (availW > 0 && availH > 0) {
+          final zoomX = availW / maxExtentX;
+          final zoomY = availH / maxExtentY;
+          final targetZoom = min(zoomX, zoomY).clamp(0.05, widget.initialZoom);
+
+          _zoom = targetZoom;
+          _baseZoom = targetZoom;
+          _hasFittedBounds = true;
+        }
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -323,6 +376,12 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
   void _onGraphChanged() {
     if (!mounted) return;
+    // A repopulated graph fits the viewport again; a selection or load-state change keeps the fit.
+    final anchor = simulation.nodes.isEmpty ? null : simulation.nodes.first;
+    if (!identical(anchor, _fittedGraphAnchor)) {
+      _fittedGraphAnchor = anchor;
+      _hasFittedBounds = false;
+    }
     setState(() {});
     _repaintNotifier.value++;
   }
@@ -642,6 +701,8 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
     return LayoutBuilder(
       builder: (context, constraints) {
+        final size = Size(constraints.maxWidth, constraints.maxHeight);
+        _fitGraphToBounds(size);
         return Stack(
           children: [
             GestureDetector(

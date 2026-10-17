@@ -10,6 +10,11 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/widgets/cancel_subscription_sheet.dart';
 import 'package:omi/models/subscription.dart';
+import 'package:omi/models/plan_storefront.dart';
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/plan_storefront_api.dart';
+import 'package:omi/pages/settings/widgets/plans/storefront_plans_content.dart';
+import 'package:omi/services/experiments/plan_storefront_gate.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_cards.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
@@ -24,6 +29,7 @@ import 'package:omi/mobile/native_ui/native_plan_projection.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/plan_pricing.dart';
+import 'package:omi/utils/cancel_pending_purchase.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -159,6 +165,13 @@ Future<bool> confirmAnnualPlanSwitch(BuildContext context) {
   );
 }
 
+/// The old sheet keeps "Plans & Billing". "Plans" is only the storefront title, and only while its flag is on.
+Future<String> plansSheetTitle(BuildContext context, {Future<bool> Function()? sheetEnabled}) async {
+  final enabled = await (sheetEnabled ?? PlanStorefrontGate.sheetEnabled)();
+  if (!context.mounted) return '';
+  return enabled ? context.l10n.paywallPlans : context.l10n.plansAndBilling;
+}
+
 /// Plan picker, upgrade/downgrade and payment management.
 ///
 /// Content for a bottom sheet: present it with `showOmiSheet(context: context, padding:
@@ -179,6 +192,15 @@ class PlansSheet extends StatefulWidget {
   /// stops them when it leaves, so nothing ticks under the native sheet.
   final bool animateHeroOnMount;
 
+  /// Closed paywall `source` for the surface that opened this sheet.
+  final String analyticsSource;
+  final String storefrontTrigger;
+  final PlanStorefront? initialStorefront;
+  @visibleForTesting
+  final Future<bool> Function()? readStorefrontGate;
+  @visibleForTesting
+  final PlanStorefrontApi? storefrontApi;
+
   const PlansSheet({
     super.key,
     required this.waveController,
@@ -188,6 +210,11 @@ class PlansSheet extends StatefulWidget {
     this.onCancelSubscription,
     this.nativeSheet = false,
     this.animateHeroOnMount = false,
+    this.analyticsSource = 'usage_page',
+    this.storefrontTrigger = '',
+    this.initialStorefront,
+    this.readStorefrontGate,
+    this.storefrontApi,
   });
 
   @override
@@ -195,6 +222,12 @@ class PlansSheet extends StatefulWidget {
 }
 
 class _PlansSheetState extends State<PlansSheet> {
+  bool _storefrontGateResolved = false;
+  bool _storefrontEnabled = false;
+  bool _storefrontLoading = false;
+  bool _storefrontFailed = false;
+  PlanStorefront? _storefront;
+
   String selectedPlan = 'yearly'; // 'yearly' or 'monthly'  (billing period)
   String? selectedTierId; // 'unlimited', 'operator', 'architect'
   bool _isUpgrading = false;
@@ -203,6 +236,71 @@ class _PlansSheetState extends State<PlansSheet> {
   final _promoCodeController = TextEditingController();
   String? _promoCodeError;
   bool _showPromoCodeField = false;
+  bool _cancelSelectionTouched = false;
+  String? _renewalConfirmation;
+  String? _purchaseError;
+
+  Future<void> _initializeStorefront() async {
+    final enabled = await (widget.readStorefrontGate ?? PlanStorefrontGate.sheetEnabled)();
+    if (!mounted) return;
+    setState(() {
+      _storefrontGateResolved = true;
+      _storefrontEnabled = enabled;
+      _storefront = enabled ? widget.initialStorefront : null;
+      _storefrontLoading = enabled && _storefront == null;
+    });
+    if (!enabled) return;
+    if (_storefront == null) await _loadStorefront();
+  }
+
+  Future<void> _loadStorefront() async {
+    if (!mounted || !context.read<UsageProvider>().showSubscriptionUI) return;
+    setState(() {
+      _storefrontLoading = true;
+      _storefrontFailed = false;
+      _storefront = null;
+    });
+    final result = await (widget.storefrontApi ?? PlanStorefrontApi())
+        .load(source: widget.analyticsSource, trigger: widget.storefrontTrigger, locale: context.l10n.localeName);
+    if (!mounted) return;
+    setState(() {
+      _storefrontLoading = false;
+      _storefrontFailed = result is! ApiSuccess<PlanStorefront>;
+      _storefront = result is ApiSuccess<PlanStorefront> ? result.data : null;
+    });
+  }
+
+  StorefrontCheckoutDecision _storefrontDecision(StorefrontTier tier, StorefrontPrice price) {
+    final sub = context.read<UsageProvider>().subscription?.subscription;
+    return storefrontCheckoutDecision(
+      _storefront?.current,
+      sub?.plan,
+      tier,
+      price,
+      usageLegacy: _storefront?.usage?.kind == 'transcription',
+      cancelScheduled: (sub?.cancelAtPeriodEnd ?? false) || (_storefront?.current?.cancelAtPeriodEnd ?? false),
+      showSubscriptionUi: _storefront?.showSubscriptionUi ?? false,
+    );
+  }
+
+  Future<void> _selectStorefrontPrice(StorefrontTier tier, StorefrontPrice price) async {
+    if (_isUpgrading || !context.read<UsageProvider>().showSubscriptionUI) return;
+    if (_storefrontDecision(tier, price) == StorefrontCheckoutDecision.refuse) return;
+    setState(() => _isUpgrading = true);
+    selectedTierId = tier.planId;
+    selectedPlan = price.interval == 'year' ? 'yearly' : 'monthly';
+    try {
+      await _handleUpgradeWithSelectedPlan(storefrontPrice: price, releaseUpgradingLock: false);
+    } finally {
+      if (mounted) {
+        try {
+          await _loadStorefront();
+        } finally {
+          if (mounted) setState(() => _isUpgrading = false);
+        }
+      }
+    }
+  }
 
   Future<void> _loadAvailablePlans() async {
     final provider = context.read<UsageProvider>();
@@ -317,11 +415,31 @@ class _PlansSheetState extends State<PlansSheet> {
     await _handleSwitchToFreePlan();
   }
 
-  Future<void> _handleUpgradeWithSelectedPlan() async {
+  Future<void> _handleUpgradeWithSelectedPlan({
+    StorefrontPrice? storefrontPrice,
+    bool releaseUpgradingLock = true,
+  }) async {
     final bool isYearly = selectedPlan == 'yearly';
 
     // Get the price ID from the available plans
     final usageProvider = context.read<UsageProvider>();
+    final livePlan = usageProvider.subscription?.subscription.plan;
+    // The old Continue path is visible until the flag resolves. unlimited plans
+    // are not desktop-entitled, so the existing cross-tier hide does not cover them.
+    if (storefrontPrice == null &&
+        !_storefrontGateResolved &&
+        (livePlan == PlanType.unlimited || livePlan == PlanType.unlimitedV2 || livePlan?.isUnknown == true)) {
+      return;
+    }
+    StorefrontCheckoutDecision? storefrontDecision;
+    if (storefrontPrice != null) {
+      final tier = _storefront?.tiers.where((item) => item.planId == selectedTierId).firstOrNull;
+      final decision = tier == null ? StorefrontCheckoutDecision.refuse : _storefrontDecision(tier, storefrontPrice);
+      if (tier == null || decision == StorefrontCheckoutDecision.refuse) {
+        return;
+      }
+      storefrontDecision = decision;
+    }
     final availablePlans = usageProvider.availablePlans;
     if (availablePlans == null) {
       OmiFeedback.error(context, context.l10n.couldNotLoadPlans);
@@ -343,11 +461,26 @@ class _PlansSheetState extends State<PlansSheet> {
     }
 
     final priceId = selectedPlanData['id'] as String;
+    // A presentation payload cannot silently redirect checkout to a different price.
+    if (storefrontPrice != null &&
+        (storefrontPrice.id != priceId ||
+            storefrontPrice.interval != selectedPlanData['interval'] ||
+            storefrontPrice.amountMinor != selectedPlanData['unit_amount'])) {
+      OmiFeedback.error(context, context.l10n.selectedPlanNotAvailable);
+      return;
+    }
 
     // Check if user is upgrading from monthly to annual
     final provider = context.read<UsageProvider>();
     final currentSub = provider.subscription?.subscription;
-    if (currentSub?.cancelAtPeriodEnd == true && priceId != currentSub?.currentPriceId) {
+    // Pending cancellation rejects every price except the one already on the subscription.
+    if (cancelPendingPurchase(
+          cancelAtPeriodEnd: currentSub?.cancelAtPeriodEnd == true,
+          currentPriceId: currentSub?.currentPriceId,
+          priceId: priceId,
+        ) ==
+        CancelPendingPurchase.blocked) {
+      _surfacePurchaseError(context.l10n.resubscribeFirstToChangePlans);
       return;
     }
     // Only show "no charge until renewal" dialog for same-tier monthly→annual switch.
@@ -361,12 +494,28 @@ class _PlansSheetState extends State<PlansSheet> {
       if (!await confirmAnnualPlanSwitch(context) || !mounted) return;
     }
 
-    PlatformManager.instance.analytics.upgradePlanSelected(plan: selectedPlan, source: 'Usage Page Plan Sheet');
+    PlatformManager.instance.analytics.upgradePlanSelected(
+      plan: tierId ?? 'unknown',
+      billingInterval: isYearly ? 'year' : 'month',
+      source: widget.analyticsSource,
+    );
 
-    await _handleUpgrade(priceId, targetPlan: tierId ?? 'unknown', billingInterval: isYearly ? 'year' : 'month');
+    await _handleUpgrade(
+      priceId,
+      targetPlan: tierId ?? 'unknown',
+      billingInterval: isYearly ? 'year' : 'month',
+      releaseUpgradingLock: releaseUpgradingLock,
+      storefrontDecision: storefrontDecision,
+    );
   }
 
-  Future<void> _handleUpgrade(String priceId, {required String targetPlan, required String billingInterval}) async {
+  Future<void> _handleUpgrade(
+    String priceId, {
+    required String targetPlan,
+    required String billingInterval,
+    bool releaseUpgradingLock = true,
+    StorefrontCheckoutDecision? storefrontDecision,
+  }) async {
     final provider = context.read<UsageProvider>();
     final l10n = context.l10n;
 
@@ -383,21 +532,31 @@ class _PlansSheetState extends State<PlansSheet> {
       if (selectedPrice != null) break;
     }
 
-    if (selectedPrice == null) {
-      OmiFeedback.error(context, l10n.selectedPlanNotAvailable);
+    final currentSub = provider.subscription!.subscription;
+    final resubscribing = cancelPendingPurchase(
+          cancelAtPeriodEnd: currentSub.cancelAtPeriodEnd,
+          currentPriceId: currentSub.currentPriceId,
+          priceId: priceId,
+        ) ==
+        CancelPendingPurchase.resubscribe;
+
+    if (selectedPrice == null && !resubscribing) {
+      _surfacePurchaseError(l10n.selectedPlanNotAvailable);
       return;
     }
 
-    final currentSub = provider.subscription!.subscription;
-
-    if (currentSub.plan.isPaid) {
+    if (currentSub.plan.isPaid && !resubscribing) {
       final confirmed = await showOmiConfirm(
         context,
         title: l10n.confirmPlanChange,
-        message: l10n.planSwitchingDescriptionWithTitle(selectedPrice.title),
+        message:
+            '${currentPlanDisplayName(context, provider.subscription)} → ${planDisplayName(PlanType.fromWire(targetPlan), plans, l10n)} (${selectedPrice!.title})',
         confirmLabel: l10n.changePlan,
       );
-      if (!confirmed) return;
+      if (!confirmed) {
+        PlatformManager.instance.analytics.upgradeCancelled();
+        return;
+      }
     }
 
     setState(() => _isUpgrading = true);
@@ -405,26 +564,39 @@ class _PlansSheetState extends State<PlansSheet> {
     try {
       Map<String, dynamic>? result;
 
-      // If user already has a paid plan and it's not canceled
-      if (currentSub.plan.isPaid && currentSub.status == SubscriptionStatus.active && !currentSub.cancelAtPeriodEnd) {
+      // Resubscribe reactivates through checkout. The sheet payload can already
+      // say cancel_at_period_end while UsageProvider is still false; upgrade
+      // returns 409 for every price in that state, including the current one.
+      final resubscribe = storefrontDecision == StorefrontCheckoutDecision.resubscribe;
+      if (currentSub.plan.isPaid &&
+          currentSub.status == SubscriptionStatus.active &&
+          !currentSub.cancelAtPeriodEnd &&
+          !resubscribe) {
         result = await provider.upgradeUserSubscription(
           priceId: priceId,
           promotionCode: promoCode.isNotEmpty ? promoCode : null,
         );
         if (result != null && result['error'] == true) {
-          final detail = result['detail'] as String? ?? l10n.invalidPromotionCode;
-          if (promoCode.isNotEmpty) {
+          final detail = isPendingCancelConflict(result['status_code'])
+              ? l10n.resubscribeFirstToChangePlans
+              : result['detail'] as String? ?? l10n.invalidPromotionCode;
+          if (promoCode.isNotEmpty && !isPendingCancelConflict(result['status_code'])) {
             setState(() => _promoCodeError = detail);
           } else {
-            if (mounted) OmiFeedback.error(context, detail);
+            _surfacePurchaseError(detail);
           }
           return;
         } else if (result != null) {
           setState(() => _promoCodeError = null);
           _promoCodeController.clear();
           if (mounted) OmiFeedback.confirm(context, l10n.planUpgradeScheduledMessage);
+          PlatformManager.instance.analytics.upgradeSucceeded(
+            previousPlan: currentSub.plan.wireName,
+            newPlan: targetPlan,
+            billingInterval: billingInterval,
+          );
         } else {
-          if (mounted) OmiFeedback.error(context, l10n.couldNotSchedulePlanChange);
+          if (mounted) _surfacePurchaseError(l10n.couldNotSchedulePlanChange);
         }
       } else {
         // New subscription (for basic users or canceled subscriptions)
@@ -432,18 +604,35 @@ class _PlansSheetState extends State<PlansSheet> {
           priceId: priceId,
           promotionCode: promoCode.isNotEmpty ? promoCode : null,
         );
-        if (sessionData != null && mounted) {
+        if (!mounted) return;
+        if (sessionData != null && sessionData['error'] == true) {
+          _surfacePurchaseError(
+            isPendingCancelConflict(sessionData['status_code'])
+                ? l10n.resubscribeFirstToChangePlans
+                : sessionData['detail'] as String? ?? l10n.couldNotProcessSubscription,
+          );
+        } else if (sessionData != null) {
           // Check if this was a reactivation
           if (sessionData.containsKey('status') && sessionData['status'] == 'reactivated') {
-            // Quick reactivation - no charge now
-            final message = sessionData['message'] as String? ?? l10n.subscriptionReactivatedDefault;
-            if (mounted) OmiFeedback.confirm(context, message);
+            final planName = currentPlanDisplayName(context, provider.subscription);
+            final date = billingDateLabel(context, sessionData['next_billing_date']) ??
+                billingDateLabel(context, currentSub.currentPeriodEnd);
+            final message =
+                date == null ? l10n.subscriptionReactivatedDefault : l10n.yourPlanWillRenewOn(planName, date);
+            if (mounted) {
+              setState(() {
+                _renewalConfirmation = message;
+                _purchaseError = null;
+              });
+              OmiFeedback.confirm(context, message);
+            }
             PlatformManager.instance.analytics.upgradeSucceeded(
               previousPlan: currentSub.plan.wireName,
               newPlan: targetPlan,
               billingInterval: billingInterval,
             );
             await provider.fetchSubscription();
+            await provider.loadAvailablePlans();
           }
           // Otherwise, this is a new subscription requiring checkout
           else if (sessionData.containsKey('url') && sessionData['url'] != null) {
@@ -460,18 +649,78 @@ class _PlansSheetState extends State<PlansSheet> {
               PlatformManager.instance.analytics.upgradeCancelled();
             }
           } else {
-            if (mounted) OmiFeedback.error(context, l10n.couldNotProcessSubscription);
+            if (mounted) _surfacePurchaseError(l10n.couldNotProcessSubscription);
           }
         } else {
-          if (mounted) OmiFeedback.error(context, l10n.couldNotLaunchUpgradePage);
+          if (mounted) _surfacePurchaseError(l10n.couldNotLaunchUpgradePage);
         }
       }
     } catch (e) {
-      if (mounted) OmiFeedback.error(context, l10n.anErrorOccurredTryAgain);
+      if (mounted) _surfacePurchaseError(l10n.anErrorOccurredTryAgain);
     } finally {
       _loadAvailablePlans();
-      if (mounted) setState(() => _isUpgrading = false);
+      if (releaseUpgradingLock && mounted) setState(() => _isUpgrading = false);
     }
+  }
+
+  void _surfacePurchaseError(String message) {
+    if (!mounted) return;
+    setState(() => _purchaseError = message);
+    OmiFeedback.error(context, message);
+  }
+
+  /// Resubscribe always uses the price already on the subscription. The card
+  /// the reader highlighted may be a different interval; that must not become
+  /// a silent no-op or a 409.
+  Future<void> _resubscribeCurrent() async {
+    if (_isUpgrading) return;
+    final provider = context.read<UsageProvider>();
+    final sub = provider.subscription?.subscription;
+    final priceId = sub?.currentPriceId;
+    if (sub == null || priceId == null || priceId.isEmpty) {
+      _surfacePurchaseError(context.l10n.couldNotProcessSubscription);
+      return;
+    }
+    var interval = 'month';
+    final catalog = provider.availablePlans?['plans'];
+    if (catalog is List) {
+      for (final plan in catalog) {
+        if (plan is Map && plan['id'] == priceId && plan['interval'] is String) {
+          interval = plan['interval'] as String;
+        }
+      }
+    }
+    selectedTierId = sub.plan.wireName;
+    selectedPlan = interval == 'year' ? 'yearly' : 'monthly';
+    await _handleUpgrade(
+      priceId,
+      targetPlan: sub.plan.wireName,
+      billingInterval: interval,
+    );
+  }
+
+  void _keepCurrentPriceSelected(List<Map<String, dynamic>> plans) {
+    if (_cancelSelectionTouched) return;
+    final sub = context.read<UsageProvider>().subscription?.subscription;
+    if (sub?.cancelAtPeriodEnd != true) return;
+    final current = plans.where((plan) => plan['id'] == sub?.currentPriceId).firstOrNull;
+    if (current == null) return;
+    selectedTierId = current['plan_id'] as String?;
+    selectedPlan = current['interval'] == 'year' ? 'yearly' : 'monthly';
+  }
+
+  bool _selectionMatchesCurrentPrice(UsageProvider provider) {
+    final currentId = provider.subscription?.subscription.currentPriceId;
+    if (currentId == null || currentId.isEmpty) return false;
+    final raw = provider.availablePlans?['plans'];
+    if (raw is! List) return false;
+    final interval = selectedPlan == 'yearly' ? 'year' : 'month';
+    return raw.whereType<Map>().any(
+          (plan) =>
+              plan['id'] == currentId &&
+              plan['interval'] == interval &&
+              (selectedTierId == null || plan['plan_id'] == selectedTierId),
+        );
   }
 
   Future<void> _openPaymentPortal() async {
@@ -499,6 +748,7 @@ class _PlansSheetState extends State<PlansSheet> {
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadAvailablePlans();
+      _initializeStorefront();
     });
     super.initState();
   }
@@ -544,11 +794,28 @@ class _PlansSheetState extends State<PlansSheet> {
       builder: (context, provider, child) {
         // Pop on build if the server-driven visibility flag is off, in case any
         // caller bypassed the call-site check.
-        if (!provider.showSubscriptionUI) {
+        if (!provider.showSubscriptionUI || (_storefrontEnabled && _storefront?.showSubscriptionUi == false)) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (Navigator.of(context).canPop()) Navigator.of(context).pop();
           });
           return const SizedBox.shrink();
+        }
+
+        if (_storefrontEnabled) {
+          // The server-driven storefront is Flutter only (no native projection yet). Under a native sheet
+          // host the chrome is native, so the content brings the handle-less header with the close button.
+          final storefront = StorefrontPlansContent(
+            storefront: _storefront,
+            loading: _storefrontLoading,
+            failed: _storefrontFailed,
+            busy: _isUpgrading,
+            livePlan: provider.subscription?.subscription.plan,
+            cancelScheduled: provider.subscription?.subscription.cancelAtPeriodEnd ?? false,
+            onRetry: _loadStorefront,
+            onSelect: _selectStorefrontPrice,
+            onManage: _openPaymentPortal,
+          );
+          return widget.nativeSheet ? OmiSheetScaffold(padding: EdgeInsets.zero, child: storefront) : storefront;
         }
 
         final l10n = context.l10n;
@@ -561,11 +828,13 @@ class _PlansSheetState extends State<PlansSheet> {
 
         String renewalDate = '—';
         final periodEnd = sub?.currentPeriodEnd;
-        if (periodEnd != null) {
-          renewalDate = OmiDateFormat.of(context).date(DateTime.fromMillisecondsSinceEpoch(periodEnd * 1000));
+        final DateTime? periodEndAt =
+            periodEnd != null && periodEnd > 0 ? DateTime.fromMillisecondsSinceEpoch(periodEnd * 1000) : null;
+        if (periodEndAt != null) {
+          renewalDate = OmiDateFormat.of(context).date(periodEndAt);
         }
-        final periodEnded =
-            periodEnd != null && DateTime.fromMillisecondsSinceEpoch(periodEnd * 1000).isBefore(DateTime.now());
+        final periodEnded = periodEndAt != null && periodEndAt.isBefore(DateTime.now());
+        final knownFutureEnd = periodEndAt != null && periodEndAt.isAfter(DateTime.now());
         final secondary = OmiType.subhead.copyWith(color: OmiColors.textSecondary);
 
         final classic = DecoratedBox(
@@ -609,11 +878,36 @@ class _PlansSheetState extends State<PlansSheet> {
                       ),
                       if (isUnlimited && isCancelled) ...[
                         const SizedBox(height: OmiSpacing.xs),
-                        // Ended: must create a new subscription. Not yet ended: reactivate without charge.
                         Text(
-                          periodEnded ? l10n.planEndedOn(renewalDate) : l10n.planSetToCancelOn(renewalDate),
+                          _renewalConfirmation ??
+                              (periodEnded
+                                  ? l10n.planEndedOn(renewalDate)
+                                  : knownFutureEnd
+                                      ? l10n.yourPlanEndsOn(
+                                          currentPlanDisplayName(context, provider.subscription), renewalDate)
+                                      : l10n.subscriptionSetToCancel),
+                          key: const ValueKey('plans_sheet_cancel_status'),
                           textAlign: TextAlign.center,
-                          style: OmiType.subhead.copyWith(color: OmiColors.warning),
+                          style: OmiType.subhead.copyWith(
+                            color: _renewalConfirmation == null ? OmiColors.warning : OmiColors.success,
+                          ),
+                        ),
+                        if (_renewalConfirmation == null && knownFutureEnd) ...[
+                          const SizedBox(height: OmiSpacing.xxs),
+                          Text(
+                            l10n.resubscribeNowNoChargeUntil(renewalDate),
+                            key: const ValueKey('plans_sheet_cancel_reassurance'),
+                            textAlign: TextAlign.center,
+                            style: OmiType.subhead.copyWith(color: OmiColors.warning),
+                          ),
+                        ],
+                      ] else if (_renewalConfirmation != null) ...[
+                        const SizedBox(height: OmiSpacing.xs),
+                        Text(
+                          _renewalConfirmation!,
+                          key: const ValueKey('plans_sheet_renew_confirmation'),
+                          textAlign: TextAlign.center,
+                          style: OmiType.subhead.copyWith(color: OmiColors.success),
                         ),
                       ] else if (isUnlimited && !isCancelled) ...[
                         const SizedBox(height: OmiSpacing.xs),
@@ -739,8 +1033,37 @@ class _PlansSheetState extends State<PlansSheet> {
                         ],
                       ],
 
-                      // Resubscribe for cancelled subscriptions
-                      if (isCancelled && plansLoaded) _primaryAction(label: l10n.resubscribe),
+                      if (isCancelled && plansLoaded && !_selectionMatchesCurrentPrice(provider)) ...[
+                        Text(
+                          l10n.resubscribeFirstToChangePlans,
+                          key: const ValueKey('plans_sheet_resubscribe_first'),
+                          textAlign: TextAlign.center,
+                          style: OmiType.subhead.copyWith(color: OmiColors.warning),
+                        ),
+                        const SizedBox(height: OmiSpacing.sm),
+                      ],
+                      if (_purchaseError != null) ...[
+                        Text(
+                          _purchaseError!,
+                          key: const ValueKey('plans_sheet_purchase_error'),
+                          textAlign: TextAlign.center,
+                          style: OmiType.subhead.copyWith(color: OmiColors.danger),
+                        ),
+                        const SizedBox(height: OmiSpacing.sm),
+                      ],
+
+                      // Resubscribe for cancelled subscriptions. Always the current price.
+                      if (isCancelled && plansLoaded)
+                        OmiButton(
+                          key: const ValueKey('plans_sheet_resubscribe_button'),
+                          label: l10n.resubscribe,
+                          expand: true,
+                          isLoading: _isUpgrading,
+                          onPressed: () {
+                            HapticFeedback.mediumImpact();
+                            return _resubscribeCurrent();
+                          },
+                        ),
                       const SizedBox(height: OmiSpacing.md),
                       if (isUnlimited || sub?.stripeSubscriptionId?.isNotEmpty == true) ...[
                         OmiButton.secondary(
@@ -809,17 +1132,23 @@ class _PlansSheetState extends State<PlansSheet> {
                               ? l10n.youAreOnAPaidPlan
                               : l10n.planSheetChooseYourPlan,
                       kind: 'label'),
-                  if (isUnlimited)
+                  if (isUnlimited || _renewalConfirmation != null)
                     NativeRow(
                         'plans_renewal',
-                        isCancelled
-                            ? periodEnded
-                                ? l10n.planEndedOn(renewalDate)
-                                : l10n.planSetToCancelOn(renewalDate)
-                            : hasScheduledUpgrade
-                                ? l10n.annualPlanStartsAutomatically
-                                : l10n.planRenewsOn(renewalDate),
+                        _renewalConfirmation ??
+                            (isCancelled
+                                ? periodEnded
+                                    ? l10n.planEndedOn(renewalDate)
+                                    : knownFutureEnd
+                                        ? l10n.yourPlanEndsOn(
+                                            currentPlanDisplayName(context, provider.subscription), renewalDate)
+                                        : l10n.subscriptionSetToCancel
+                                : hasScheduledUpgrade
+                                    ? l10n.annualPlanStartsAutomatically
+                                    : l10n.planRenewsOn(renewalDate)),
                         kind: 'label'),
+                  if (isUnlimited && isCancelled && _renewalConfirmation == null && knownFutureEnd)
+                    NativeRow('plans_cancel_reassurance', l10n.resubscribeNowNoChargeUntil(renewalDate), kind: 'label'),
                   NativeRow(
                       'plans_features',
                       [
@@ -852,16 +1181,21 @@ class _PlansSheetState extends State<PlansSheet> {
                       plansLoaded: plansLoaded,
                       selectedTierId: selectedTierId,
                       currentTierId: sub?.plan.wireName,
-                      currentGrantsDesktop: sub?.plan.grantsDesktop ?? false))
+                      currentGrantsDesktop: sub?.plan.grantsDesktop ?? false,
+                      selectedPriceIsCurrent: _selectedPriceIsCurrent(provider.availablePlans)))
                     NativeRow('plans_upgrade', isUnlimited ? l10n.continueText : l10n.upgrade, enabled: !busy,
                         action: (_) async {
                       HapticFeedback.mediumImpact();
                       await _handleUpgradeWithSelectedPlan();
                     }),
+                  if (isCancelled && plansLoaded && !_selectionMatchesCurrentPrice(provider))
+                    NativeRow('plans_resubscribe_first', l10n.resubscribeFirstToChangePlans, kind: 'label'),
+                  if (_purchaseError != null) NativeRow('plans_purchase_error', _purchaseError!, kind: 'label'),
+                  // Resubscribe for cancelled subscriptions. Always the current price.
                   if (isCancelled && plansLoaded)
                     NativeRow('plans_resubscribe', l10n.resubscribe, enabled: !busy, action: (_) async {
                       HapticFeedback.mediumImpact();
-                      await _handleUpgradeWithSelectedPlan();
+                      await _resubscribeCurrent();
                     }),
                 ]),
                 if (!isUnlimited)
@@ -987,6 +1321,7 @@ class _PlansSheetState extends State<PlansSheet> {
   /// Groups available plans by plan_id and shows one card per tier.
   Widget _buildTierPlanCards({required Map<String, dynamic> availablePlans}) {
     final plans = (availablePlans['plans'] as List).cast<Map<String, dynamic>>();
+    _keepCurrentPriceSelected(plans);
 
     // Group plans by plan_id
     final Map<String, List<Map<String, dynamic>>> grouped = {};
@@ -1026,7 +1361,10 @@ class _PlansSheetState extends State<PlansSheet> {
         PlanBillingPeriodToggle(
           isYearly: isYearly,
           savePercent: bestAnnualDiscountPercent(grouped.values),
-          onChanged: (yearly) => setState(() => selectedPlan = yearly ? 'yearly' : 'monthly'),
+          onChanged: (yearly) {
+            _cancelSelectionTouched = true;
+            setState(() => selectedPlan = yearly ? 'yearly' : 'monthly');
+          },
         ),
         const SizedBox(height: 18),
         ...sortedTierIds.map((tierId) {
@@ -1050,6 +1388,7 @@ class _PlansSheetState extends State<PlansSheet> {
               desktopAccess: _tierGrantsDesktop(tierId),
               onTap: () {
                 HapticFeedback.lightImpact();
+                _cancelSelectionTouched = true;
                 setState(() => selectedTierId = tierId);
               },
             ),
@@ -1061,27 +1400,35 @@ class _PlansSheetState extends State<PlansSheet> {
 
   /// Fallback for single-tier plan display (old monthly/yearly cards).
   Widget _buildLegacyPlanCards({required List<Map<String, dynamic>> plans}) {
+    _keepCurrentPriceSelected(plans);
+    final yearly = plans.firstWhere((plan) => plan['interval'] == 'year', orElse: () => plans.first);
+    final monthly = plans.firstWhere((plan) => plan['interval'] == 'month', orElse: () => plans.first);
     return Column(
       children: [
         _buildDynamicPlanOption(
           isSelected: selectedPlan == 'yearly',
-          planData: plans.firstWhere((plan) => plan['interval'] == 'year', orElse: () => plans.first),
+          planData: yearly,
           saveTag: _monthsFreeLabel(annualMonthsFree(plans)),
           isPopular: true,
           onTap: () {
             HapticFeedback.lightImpact();
+            _cancelSelectionTouched = true;
             setState(() => selectedPlan = 'yearly');
           },
         ),
-        const SizedBox(height: 18),
-        _buildDynamicPlanOption(
-          isSelected: selectedPlan == 'monthly',
-          planData: plans.firstWhere((plan) => plan['interval'] == 'month', orElse: () => plans.first),
-          onTap: () {
-            HapticFeedback.lightImpact();
-            setState(() => selectedPlan = 'monthly');
-          },
-        ),
+        // One price fills both slots with the same card (and the same keyed native row): draw it once.
+        if (!identical(monthly, yearly)) ...[
+          const SizedBox(height: 18),
+          _buildDynamicPlanOption(
+            isSelected: selectedPlan == 'monthly',
+            planData: monthly,
+            onTap: () {
+              HapticFeedback.lightImpact();
+              _cancelSelectionTouched = true;
+              setState(() => selectedPlan = 'monthly');
+            },
+          ),
+        ],
       ],
     );
   }

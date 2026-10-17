@@ -13,6 +13,8 @@ import types
 import unittest
 from unittest.mock import MagicMock, patch
 
+from utils.retrieval.turn_refs import register_record_ref  # noqa: F401 - real pure module before package stubs
+
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
 os.environ.setdefault(
@@ -25,7 +27,9 @@ def _pkg(name):
     mod = sys.modules.get(name)
     if mod is None or not hasattr(mod, "__path__"):
         mod = types.ModuleType(name)
-        mod.__path__ = [str(BACKEND_DIR / name.replace('.', '/'))] if name.startswith('utils') else []
+        mod.__path__ = (
+            [str(BACKEND_DIR / name.replace('.', '/'))] if name.startswith('utils') or name == 'database' else []
+        )
         sys.modules[name] = mod
     return mod
 
@@ -77,6 +81,9 @@ for _p in [
 _conv_db_mod = _mod("database.conversations")
 _conv_db_mod.get_conversations = MagicMock(return_value=[])
 
+_auth_db_mod = _mod("database.auth")
+_auth_db_mod.get_user_name = MagicMock(return_value="Test User")
+
 _notif_db_mod = _mod("database.notifications")
 _notif_db_mod.get_user_time_zone = MagicMock(return_value="UTC")
 
@@ -88,6 +95,9 @@ _vector_db_mod = _mod("database.vector_db")
 # Stub models.other
 _models_other_mod = _mod("models.other")
 _models_other_mod.Person = MagicMock
+
+_transcript_segment_mod = _mod("models.transcript_segment")
+_transcript_segment_mod.TranscriptSegment = MagicMock
 
 # Stub utils.conversations modules
 _conv_factory_mod = _mod("utils.conversations.factory")

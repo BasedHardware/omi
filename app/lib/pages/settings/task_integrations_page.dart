@@ -136,13 +136,18 @@ extension TaskIntegrationAppExtension on TaskIntegrationApp {
 }
 
 class TaskIntegrationsPage extends StatefulWidget {
-  const TaskIntegrationsPage({super.key});
+  const TaskIntegrationsPage({super.key, this.authenticate});
+
+  final Future<bool> Function(TaskIntegrationApp app)? authenticate;
 
   @override
   State<TaskIntegrationsPage> createState() => _TaskIntegrationsPageState();
 }
 
 class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with WidgetsBindingObserver {
+  TaskIntegrationApp? _pendingAuthApp;
+  bool _startingAuth = false;
+  bool _selectingPending = false;
   @override
   void initState() {
     super.initState();
@@ -163,12 +168,28 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       // Refresh when app comes back from background (e.g., after OAuth)
-      _loadFromBackend();
+      _loadFromBackend(forceRefresh: true);
     }
   }
 
-  Future<void> _loadFromBackend() async {
-    await context.read<TaskIntegrationProvider>().loadFromBackend();
+  Future<void> _loadFromBackend({bool forceRefresh = false}) async {
+    if (!mounted) return;
+    final provider = context.read<TaskIntegrationProvider>();
+    await provider.loadFromBackend(forceRefresh: forceRefresh);
+    if (!mounted || provider.hasLoadError || provider.isLoading || _selectingPending) return;
+    final pending = _pendingAuthApp;
+    if (pending != null && provider.isAppConnected(pending)) {
+      _selectingPending = true;
+      final selected = await provider.setSelectedApp(pending);
+      _selectingPending = false;
+      if (!mounted) return;
+      if (selected) {
+        setState(() => _pendingAuthApp = null);
+        OmiFeedback.confirm(context, context.l10n.connectedToApp(pending.displayName));
+      } else {
+        OmiFeedback.error(context, context.l10n.connectionErrorDesc);
+      }
+    }
   }
 
   bool _shouldShowSettingsIcon() {
@@ -236,121 +257,40 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
       return;
     }
 
-    // Check if Todoist requires authentication
-    if (app == TaskIntegrationApp.todoist) {
-      final todoistService = TodoistService();
-      if (!todoistService.isAuthenticated) {
-        final provider = context.read<TaskIntegrationProvider>();
-        final shouldAuth = await _showAuthDialog(app);
-        if (shouldAuth) {
-          final success = await todoistService.authenticate();
-          if (success) {
-            if (mounted) {
-              OmiFeedback.info(context, context.l10n.completeAuthBrowser);
-            }
-            await provider.setSelectedApp(app);
-            // Note: OAuth callback will save connection to Firebase
-            // Provider will refresh when user returns to this page
-            Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
-          } else {
-            // Track authentication failure
-            PlatformManager.instance.analytics.taskIntegrationAuthFailed(appName: 'todoist');
-
-            if (mounted) {
-              OmiFeedback.error(context, context.l10n.failedToStartAppAuth('Todoist'));
-            }
-          }
-        }
+    final (authenticated, authenticate) = switch (app) {
+      TaskIntegrationApp.todoist => (TodoistService().isAuthenticated, TodoistService().authenticate),
+      TaskIntegrationApp.asana => (AsanaService().isAuthenticated, AsanaService().authenticate),
+      TaskIntegrationApp.googleTasks => (GoogleTasksService().isAuthenticated, GoogleTasksService().authenticate),
+      TaskIntegrationApp.clickup => (ClickUpService().isAuthenticated, ClickUpService().authenticate),
+      _ => (false, () async => false),
+    };
+    if (!authenticated) {
+      if (_startingAuth) return;
+      _startingAuth = true;
+      if (!await _showAuthDialog(app) || !mounted) {
+        _startingAuth = false;
         return;
       }
-    }
-
-    // Check if Asana requires authentication
-    if (app == TaskIntegrationApp.asana) {
-      final asanaService = AsanaService();
-      if (!asanaService.isAuthenticated) {
-        final provider = context.read<TaskIntegrationProvider>();
-        final shouldAuth = await _showAuthDialog(app);
-        if (shouldAuth) {
-          final success = await asanaService.authenticate();
-          if (success) {
-            if (mounted) {
-              OmiFeedback.info(context, context.l10n.completeAuthBrowser);
-            }
-            await provider.setSelectedApp(app);
-            Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
-          } else {
-            // Track authentication failure
-            PlatformManager.instance.analytics.taskIntegrationAuthFailed(appName: 'asana');
-
-            if (mounted) {
-              OmiFeedback.error(context, context.l10n.failedToStartAppAuth('Asana'));
-            }
-          }
-        }
-        return;
+      final started = await (widget.authenticate?.call(app) ?? authenticate());
+      _startingAuth = false;
+      if (!mounted) return;
+      if (started) {
+        setState(() => _pendingAuthApp = app);
+        OmiFeedback.info(context, context.l10n.completeAuthBrowser);
+        await _loadFromBackend(forceRefresh: true);
+      } else {
+        PlatformManager.instance.analytics.taskIntegrationAuthFailed(appName: app.key);
+        OmiFeedback.error(context, context.l10n.failedToStartAppAuth(app.displayName));
       }
-    }
-
-    // Check if Google Tasks requires authentication
-    if (app == TaskIntegrationApp.googleTasks) {
-      final googleTasksService = GoogleTasksService();
-      if (!googleTasksService.isAuthenticated) {
-        final provider = context.read<TaskIntegrationProvider>();
-        final shouldAuth = await _showAuthDialog(app);
-        if (shouldAuth) {
-          final success = await googleTasksService.authenticate();
-          if (success) {
-            if (mounted) {
-              OmiFeedback.info(context, context.l10n.completeAuthBrowser);
-            }
-            await provider.setSelectedApp(app);
-            Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
-          } else {
-            // Track authentication failure
-            PlatformManager.instance.analytics.taskIntegrationAuthFailed(appName: 'google_tasks');
-
-            if (mounted) {
-              OmiFeedback.error(context, context.l10n.failedToStartAppAuth('Google Tasks'));
-            }
-          }
-        }
-        return;
-      }
-    }
-
-    // Check if ClickUp requires authentication
-    if (app == TaskIntegrationApp.clickup) {
-      final clickupService = ClickUpService();
-      if (!clickupService.isAuthenticated) {
-        final provider = context.read<TaskIntegrationProvider>();
-        final shouldAuth = await _showAuthDialog(app);
-        if (shouldAuth) {
-          final success = await clickupService.authenticate();
-          if (success) {
-            if (mounted) {
-              OmiFeedback.info(context, context.l10n.completeAuthBrowser);
-            }
-            await provider.setSelectedApp(app);
-            Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
-          } else {
-            // Track authentication failure
-            PlatformManager.instance.analytics.taskIntegrationAuthFailed(appName: 'clickup');
-
-            if (mounted) {
-              OmiFeedback.error(context, context.l10n.failedToStartAppAuth('ClickUp'));
-            }
-          }
-        }
-        return;
-      }
+      return;
     }
 
     // Save to backend via provider
-    await context.read<TaskIntegrationProvider>().setSelectedApp(app);
+    final saved = await context.read<TaskIntegrationProvider>().setSelectedApp(app);
+    if (!saved && mounted) OmiFeedback.error(context, context.l10n.connectionErrorDesc);
 
     // Log app selection
-    Logger.debug('✓ Task integration selected: ${app.displayName} (${app.key})');
+    if (saved) Logger.debug('✓ Task integration selected: ${app.displayName} (${app.key})');
   }
 
   Future<bool> _showAuthDialog(TaskIntegrationApp app) {
@@ -404,10 +344,17 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
   }
 
   VoidCallback? _appTap(TaskIntegrationApp app, bool isLoading) {
-    final isSelected = context.read<TaskIntegrationProvider>().selectedApp == app;
+    final provider = context.read<TaskIntegrationProvider>();
+    final isSelected = provider.selectedApp == app;
     final isConnected = _isAppConnected(app);
+    // Apple Reminders has no backend status; a failed status read offers a refresh instead.
+    final statusError = app != TaskIntegrationApp.appleReminders && provider.hasLoadError;
     if (!app.isAvailable || isLoading) return null;
     return () {
+      if (statusError) {
+        _loadFromBackend(forceRefresh: true);
+        return;
+      }
       // If already connected and selected, open settings
       if (isConnected && isSelected) {
         if (app == TaskIntegrationApp.asana) {
@@ -429,15 +376,18 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     final isSelected = context.read<TaskIntegrationProvider>().selectedApp == app;
     final isAvailable = app.isAvailable;
     final isConnected = _isAppConnected(app);
+    final statusError =
+        app != TaskIntegrationApp.appleReminders && context.read<TaskIntegrationProvider>().hasLoadError;
 
     final onTap = _appTap(app, isLoading);
 
     final Widget trailing;
-    if (isLoading && app != TaskIntegrationApp.appleReminders) {
-      // Shimmer while loading (except for Apple Reminders, which is always connected)
-      trailing = _buildShimmerButton();
-    } else if (!isAvailable) {
+    if (!isAvailable) {
       trailing = IntegrationStatusChip(context.l10n.comingSoon, tone: IntegrationChipTone.muted);
+    } else if (isLoading && app != TaskIntegrationApp.appleReminders) {
+      trailing = _buildShimmerButton();
+    } else if (statusError) {
+      trailing = IntegrationStatusChip(context.l10n.tryAgain, tone: IntegrationChipTone.muted);
     } else if (!isConnected) {
       trailing = IntegrationStatusChip(context.l10n.connect);
     } else if (isSelected) {
@@ -529,6 +479,14 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (provider.hasLoadError)
+                Semantics(liveRegion: true, child: Text(context.l10n.connectionErrorDesc, style: OmiType.subhead)),
+              if (_pendingAuthApp != null) ...[
+                Text(context.l10n.completeAuthBrowser, style: OmiType.subhead),
+                TextButton(
+                    onPressed: isLoading ? null : () => _loadFromBackend(forceRefresh: true),
+                    child: Text(context.l10n.tryAgain)),
+              ],
               // App List
               Expanded(
                 child: ListView(
@@ -580,6 +538,19 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
               symbol: 'gearshape', action: (_) => _openSelectedAppSettings()),
       ],
       sections: [
+        // The classic column shows a failed status read as a live-region banner and a pending browser
+        // auth as a notice with a retry; this leading section is the native counterpart of both.
+        if (provider.hasLoadError || _pendingAuthApp != null)
+          NativeSection('task_integrations_status', [
+            if (provider.hasLoadError)
+              NativeRow('task_integrations_status_error', context.l10n.connectionErrorDesc,
+                  kind: 'label', symbol: 'exclamationmark.triangle', destructive: true),
+            if (_pendingAuthApp != null) ...[
+              NativeRow('task_integrations_pending_auth', context.l10n.completeAuthBrowser, kind: 'label'),
+              NativeRow('task_integrations_pending_retry', context.l10n.tryAgain,
+                  symbol: 'arrow.clockwise', enabled: !isLoading, action: (_) => _loadFromBackend(forceRefresh: true)),
+            ],
+          ]),
         NativeSection(
             'task_integrations',
             [
@@ -587,13 +558,16 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                   .where((app) => app != TaskIntegrationApp.appleReminders || PlatformService.isApple))
                 NativeRow('task_integration_${app.name}', app.displayName,
                     symbol: provider.selectedApp == app && _isAppConnected(app) ? 'checkmark.circle.fill' : null,
+                    // Same precedence as the classic tile's chip: a failed status read offers a refresh.
                     subtitle: !app.isAvailable
                         ? context.l10n.comingSoon
                         : isLoading
                             ? context.l10n.loading
-                            : !_isAppConnected(app)
-                                ? context.l10n.connect
-                                : '',
+                            : app != TaskIntegrationApp.appleReminders && provider.hasLoadError
+                                ? context.l10n.tryAgain
+                                : !_isAppConnected(app)
+                                    ? context.l10n.connect
+                                    : '',
                     enabled: _appTap(app, isLoading) != null,
                     action: (_) => _appTap(app, isLoading)?.call()),
             ],

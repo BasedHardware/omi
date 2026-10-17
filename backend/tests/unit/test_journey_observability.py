@@ -97,6 +97,7 @@ def test_listener_projects_the_closed_durable_finalization_states(monkeypatch):
                 'leased': 0,
                 'dead_letter': 1,
                 'oldest_nonterminal_age_seconds': 12.5,
+                'oldest_blocked_byok_age_seconds': 42.0,
             }
         ),
     )
@@ -104,7 +105,10 @@ def test_listener_projects_the_closed_durable_finalization_states(monkeypatch):
     monkeypatch.setattr(conversation_finalization, 'LISTEN_FINALIZATION_JOB_STATUS', backlog)
     monkeypatch.setattr(conversation_finalization, 'LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS', MagicMock())
 
+    blocked_age = MagicMock()
+    monkeypatch.setattr(conversation_finalization, 'LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS', blocked_age)
     conversation_finalization._publish_job_metrics()
+    blocked_age.set.assert_called_once_with(42.0)
 
     assert {call.kwargs['state'] for call in durable.labels.call_args_list} == {
         'accepted',

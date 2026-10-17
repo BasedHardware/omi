@@ -151,6 +151,188 @@ final class ExtensionCatalogTests: XCTestCase {
       ExtensionCatalogService.authorizationValue(header: "X-Api-Key", secret: "abc123"), "abc123")
   }
 
+  // MARK: - Install receipts
+
+  @MainActor
+  private final class CommittedReceiptGate {
+    private var releaseContinuation: CheckedContinuation<Void, Never>?
+    private var commitWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func suspendAfterCommit() async {
+      await withCheckedContinuation { continuation in
+        releaseContinuation = continuation
+        let waiters = commitWaiters
+        commitWaiters.removeAll()
+        for waiter in waiters { waiter.resume() }
+      }
+    }
+
+    func waitUntilCommitted() async {
+      guard releaseContinuation == nil else { return }
+      await withCheckedContinuation { commitWaiters.append($0) }
+    }
+
+    func release() {
+      guard let continuation = releaseContinuation else {
+        XCTFail("Expected a committed install awaiting receipt delivery")
+        return
+      }
+      releaseContinuation = nil
+      continuation.resume()
+    }
+  }
+
+  @MainActor
+  func testDismissedCommittedInstallRefreshesActualLocalProjection() async throws {
+    let provider = AppProvider()
+    let gate = CommittedReceiptGate()
+    let entry = ExtensionCatalog.Entry(
+      id: "com.example/example", name: "Example", subtitle: "Remote", detail: "",
+      install: .mcpRemote(url: "https://example.test/mcp", transport: "http", secretHeader: nil))
+    let session = ExtensionInstallSession(
+      install: { entry, secrets in
+        let receipt = try await ExtensionCatalogService.install(entry, secrets: secrets)
+        await gate.suspendAfterCommit()
+        return receipt
+      },
+      refresh: { await provider.fetchUserExtensions() })
+    let pending = Task { await session.install(entry, secrets: [:]) }
+    await gate.waitUntilCommitted()
+
+    XCTAssertEqual(LocalMcpStore.listServers().map(\.name), ["example"])
+    XCTAssertTrue(provider.localMcpServers.isEmpty, "The mounted list has not consumed the committed receipt yet")
+    session.close()
+    pending.cancel()
+    gate.release()
+    await pending.value
+
+    XCTAssertEqual(session.phase, .closed)
+    XCTAssertEqual(provider.localMcpServers, LocalMcpStore.listServers())
+    XCTAssertEqual(provider.localMcpServers.map(\.name), [LocalSkillsStore.slugify(entry.name)])
+    XCTAssertNil(session.installedServer, "Refreshing the underlying list must not reopen dismissed setup")
+    await session.install(entry, secrets: [:])
+    XCTAssertEqual(LocalMcpStore.listServers().map(\.name), ["example"], "The dismissed session cannot install again")
+  }
+
+  func testRemoteInstallReceiptUsesPersistedCollisionResolvedName() async throws {
+    try LocalMcpStore.upsertServer(
+      "linear", entry: ["url": "https://existing.example/mcp", "custom": "preserve"])
+    try LocalMcpStore.upsertServer(
+      "linear-2", entry: ["command": "existing-command", "args": ["--existing"]])
+    let entry = ExtensionCatalog.Entry(
+      id: "app.linear/linear", name: "Linear", subtitle: "Remote", detail: "",
+      install: .mcpRemote(url: "https://new.example/mcp", transport: "http", secretHeader: nil))
+
+    let receipt = try await ExtensionCatalogService.install(entry)
+
+    XCTAssertEqual(
+      receipt,
+      .mcpServer(LocalMcpStore.Entry(name: "linear-3", summary: "https://new.example/mcp", isCommand: false)))
+    let persisted = LocalMcpStore.readAllServers()
+    let installed = try XCTUnwrap(persisted["linear-3"] as? [String: Any])
+    XCTAssertEqual(installed["url"] as? String, "https://new.example/mcp")
+    XCTAssertEqual(installed["transport"] as? String, "http")
+    let existing = try XCTUnwrap(persisted["linear"] as? [String: Any])
+    XCTAssertEqual(existing["url"] as? String, "https://existing.example/mcp")
+    XCTAssertEqual(existing["custom"] as? String, "preserve")
+    let second = try XCTUnwrap(persisted["linear-2"] as? [String: Any])
+    XCTAssertEqual(second["command"] as? String, "existing-command")
+    XCTAssertEqual(second["args"] as? [String], ["--existing"])
+    guard case .mcpServer(let installedEntry) = receipt else {
+      return XCTFail("Expected an MCP server receipt")
+    }
+    XCTAssertEqual(LocalMcpStore.listServers().first { $0.name == "linear-3" }, installedEntry)
+  }
+
+  func testRemoteInstallReceiptPreservesSseAndAuthorizationWithoutExposingSecret() async throws {
+    let entry = ExtensionCatalog.Entry(
+      id: "com.example/sse", name: "Example SSE", subtitle: "Remote", detail: "",
+      install: .mcpRemote(
+        url: "https://remote.example/sse", transport: "sse", secretHeader: "Authorization"))
+
+    let receipt = try await ExtensionCatalogService.install(
+      entry, secrets: ["Authorization": "  fixture-secret  "])
+
+    XCTAssertEqual(
+      receipt,
+      .mcpServer(
+        LocalMcpStore.Entry(name: "example-sse", summary: "https://remote.example/sse", isCommand: false)))
+    let installed = try XCTUnwrap(LocalMcpStore.readAllServers()["example-sse"] as? [String: Any])
+    XCTAssertEqual(installed["transport"] as? String, "sse")
+    XCTAssertEqual(installed["headers"] as? [String: String], ["Authorization": "Bearer fixture-secret"])
+    XCTAssertEqual(
+      McpServerProbe.Target(entry: installed),
+      .sse(
+        url: try XCTUnwrap(URL(string: "https://remote.example/sse")),
+        headers: ["Authorization": "Bearer fixture-secret"]))
+  }
+
+  func testLocalInstallReceiptPreservesArgumentsAndEnvironmentWithoutLaunchingCommand() async throws {
+    let marker = tempRoot.appendingPathComponent("command-was-launched")
+    let entry = ExtensionCatalog.Entry(
+      id: "com.example/local", name: "Local Helper", subtitle: "Local command", detail: "",
+      install: .mcpStdio(command: "/usr/bin/touch", args: [marker.path], requiredEnv: ["API_KEY"]))
+
+    let receipt = try await ExtensionCatalogService.install(
+      entry, secrets: ["API_KEY": "  local-fixture-secret  ", "UNDECLARED": "not-used"])
+
+    XCTAssertEqual(
+      receipt,
+      .mcpServer(
+        LocalMcpStore.Entry(
+          name: "local-helper", summary: "/usr/bin/touch \(marker.path)", isCommand: true)))
+    let installed = try XCTUnwrap(LocalMcpStore.readAllServers()["local-helper"] as? [String: Any])
+    XCTAssertEqual(installed["command"] as? String, "/usr/bin/touch")
+    XCTAssertEqual(installed["args"] as? [String], [marker.path])
+    XCTAssertEqual(installed["env"] as? [String: String], ["API_KEY": "local-fixture-secret"])
+    XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path), "Install saves configuration, not execution")
+  }
+
+  @MainActor
+  func testRemoteInstallNotifiesRuntimeExactlyOnceForItsConfigWrite() async throws {
+    let entry = ExtensionCatalog.Entry(
+      id: "com.example/public", name: "Public Server", subtitle: "Remote", detail: "",
+      install: .mcpRemote(url: "https://public.example/mcp", transport: "http", secretHeader: nil))
+    let changed = expectation(forNotification: .omiUserMcpDidChange, object: nil)
+    changed.expectedFulfillmentCount = 1
+    changed.assertForOverFulfill = true
+
+    let receipt = try await ExtensionCatalogService.install(entry)
+
+    await fulfillment(of: [changed], timeout: 1)
+    XCTAssertEqual(
+      receipt,
+      .mcpServer(LocalMcpStore.Entry(name: "public-server", summary: "https://public.example/mcp", isCommand: false)))
+    XCTAssertEqual(LocalMcpStore.listServers().count, 1)
+  }
+
+  func testCancelledInstallCannotWriteAnyExtensionConfiguration() async throws {
+    let installs: [ExtensionCatalog.Install] = [
+      .mcpRemote(url: "https://unused.example/mcp", transport: "http", secretHeader: nil),
+      .mcpStdio(command: "/usr/bin/touch", args: [], requiredEnv: []),
+      .skill(
+        source: ExtensionCatalog.SkillSource(repo: "unused/skills", ref: "main", slug: "unused", files: ["SKILL.md"])),
+    ]
+    for install in installs {
+      let entry = ExtensionCatalog.Entry(id: "unused", name: "Unused", subtitle: "", detail: "", install: install)
+      let cancelledInstall = Task {
+        withUnsafeCurrentTask { $0?.cancel() }
+        return try await ExtensionCatalogService.install(entry)
+      }
+
+      do {
+        _ = try await cancelledInstall.value
+        XCTFail("A cancelled install must throw before writing")
+      } catch is CancellationError {
+        // Cancellation is an expected terminal result, not a successful install receipt.
+      }
+    }
+    XCTAssertFalse(FileManager.default.fileExists(atPath: LocalMcpStore.fileURL.path))
+    XCTAssertFalse(FileManager.default.fileExists(atPath: LocalSkillsStore.skillsDirURL.path))
+    XCTAssertTrue(LocalMcpStore.listServers().isEmpty)
+    XCTAssertTrue(LocalSkillsStore.listSkills().isEmpty)
+  }
+
   // MARK: - Skills index
 
   /// A skill is a folder. 22 of the 33 skills in the two default catalogs ship files their

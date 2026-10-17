@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/pages/paywall/paywall_router.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -50,13 +52,22 @@ class FreemiumSwitchHandler {
       PromptPriority.low,
       // Still relevant when it is finally shown (the plan may have changed meanwhile).
       canShowNow: () => _eligible(context, captureProvider),
-      show: (promptContext) => showOmiSheet<void>(
-        context: promptContext,
-        padding: EdgeInsets.zero,
-        builder: (_) => const _PlansSheetWrapper(),
-        // The same sheet with native chrome; its Flutter fallback keeps the sheet scaffold.
-        nativeBuilder: (_) => const _PlansSheetWrapper(nativeSheet: true),
-      ),
+      show: (promptContext) async {
+        if (await PaywallRouter.openVariant(promptContext, source: 'freemium_switch')) return;
+        if (!promptContext.mounted) return;
+        final plan = promptContext.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
+        PlatformManager.instance.analytics.paywallOpened('freemium_switch', currentPlan: plan);
+        final title = await plansSheetTitle(promptContext);
+        if (!promptContext.mounted) return;
+        return showOmiSheet<void>(
+          context: promptContext,
+          title: title,
+          padding: EdgeInsets.zero,
+          builder: (_) => const _PlansSheetWrapper(),
+          // The same sheet with native chrome; its Flutter fallback keeps the sheet scaffold.
+          nativeBuilder: (_) => const _PlansSheetWrapper(nativeSheet: true),
+        );
+      },
     );
   }
 
@@ -127,6 +138,7 @@ class _PlansSheetWrapperState extends State<_PlansSheetWrapper> with TickerProvi
       arrowAnimation: _arrowAnimation,
       nativeSheet: widget.nativeSheet,
       animateHeroOnMount: true,
+      analyticsSource: 'freemium_switch',
     );
   }
 }

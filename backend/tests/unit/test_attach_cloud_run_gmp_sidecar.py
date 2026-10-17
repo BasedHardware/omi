@@ -159,6 +159,57 @@ def test_patch_service_drops_ingress_startup_probe_initial_delay_and_keeps_the_r
     assert source['spec']['template']['spec']['containers'][0]['startupProbe']['initialDelaySeconds'] == 60
 
 
+def test_desktop_backend_liveness_probe_survives_service_yaml_round_trip_and_keeps_startup_probe():
+    module = _load_module()
+    source = _service()
+    ingress = source['spec']['template']['spec']['containers'][0]
+    ingress['startupProbe'] = {
+        'tcpSocket': {'port': 8080},
+        'timeoutSeconds': 240,
+        'periodSeconds': 240,
+        'failureThreshold': 1,
+    }
+    ingress['livenessProbe'] = {'tcpSocket': {'port': 8080}}
+
+    patched = module.patch_service(
+        source,
+        project_number='1031333818730',
+        base_revision='desktop-backend-base',
+        latest_created_revision='desktop-backend-base',
+        final_revision='desktop-backend-final',
+        ingress_container_name='desktop-backend-1',
+        config_secret='cloud-run-gmp-config',
+        config_secret_version='7',
+        desktop_backend_liveness_probe=True,
+    )
+    rendered = yaml.load(yaml.safe_dump(patched), Loader=module.GcloudExportLoader)
+    final_ingress = rendered['spec']['template']['spec']['containers'][0]
+    assert final_ingress['startupProbe'] == ingress['startupProbe']
+    assert final_ingress['livenessProbe'] == {
+        'httpGet': {'path': '/healthz/live', 'port': 8080},
+        'periodSeconds': 10,
+        'timeoutSeconds': 5,
+        'failureThreshold': 3,
+    }
+    assert rendered['spec']['template']['spec']['containers'][-1]['livenessProbe']['httpGet']['path'] == '/liveness'
+    assert ingress['livenessProbe'] == {'tcpSocket': {'port': 8080}}
+
+
+def test_liveness_probe_is_opt_in_for_shared_sidecar_script():
+    module = _load_module()
+    patched = module.patch_service(
+        _service(),
+        project_number='1031333818730',
+        base_revision='desktop-backend-base',
+        latest_created_revision='desktop-backend-base',
+        final_revision='desktop-backend-final',
+        ingress_container_name='desktop-backend-1',
+        config_secret='cloud-run-gmp-config',
+        config_secret_version='7',
+    )
+    assert 'livenessProbe' not in patched['spec']['template']['spec']['containers'][0]
+
+
 def test_patch_service_leaves_an_absent_startup_probe_to_cloud_run_defaults():
     module = _load_module()
 
@@ -434,6 +485,7 @@ spec:
                 config_secret='cloud-run-gmp-config',
                 expected_env_state=expected_state,
                 tag='',
+                desktop_backend_liveness_probe=False,
             )
         )
 
@@ -505,6 +557,95 @@ def test_ingress_literal_env_excludes_valueFrom_secret_references():
 
     assert actual == {}
     assert 'OPENAI_API_KEY' not in actual
+
+
+@pytest.mark.parametrize('name', ['SYNC_TASKS_HANDLER_URL', 'SYNC_TASKS_OIDC_AUDIENCE'])
+@pytest.mark.parametrize(
+    ('service_name', 'actual_value', 'accepted'),
+    [
+        (
+            'backend-sync-backfill',
+            'https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run',
+            True,
+        ),
+        ('backend-sync-backfill', 'https://backend-sync-backfill-hhibjajaja-uc.a.run.app/v2/sync-jobs/run', True),
+        ('backend-sync-backfill', 'https://third-party.example/v2/sync-jobs/run', False),
+        (
+            'backend-sync-backfill',
+            'https://backend-sync-backfill-208440318997.us-central1.run.app.evil/v2/sync-jobs/run',
+            False,
+        ),
+        ('backend-sync-backfill', 'https://backend-sync-backfill-208440318997.us-central1.run.app/wrong', False),
+        (
+            'backend-sync-backfill',
+            'http://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run',
+            False,
+        ),
+        (
+            'backend-sync-backfill',
+            'https://backend-sync-backfill-other-208440318997.us-central1.run.app/v2/sync-jobs/run?x=1',
+            False,
+        ),
+        ('backend-sync-backfill', None, False),
+        ('backend-sync', 'https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run', True),
+        ('backend-sync', 'https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run', False),
+        ('backend', 'https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run', False),
+    ],
+)
+def test_validate_expected_literal_env_backfill_url_overlay(name, service_name, actual_value, accepted):
+    module = _load_module()
+    service = _service()
+    service['metadata']['name'] = service_name
+    service['spec']['template']['spec']['containers'][0]['env'] = (
+        [] if actual_value is None else [{'name': name, 'value': actual_value}]
+    )
+    kwargs = {
+        'expected': {name: 'https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run'},
+        'ingress_container_name': 'desktop-backend-1',
+        'phase': 'exported base revision',
+    }
+
+    if accepted:
+        module._validate_expected_literal_env(service, **kwargs)
+        patched = module.patch_service(
+            service,
+            project_number='208440318997',
+            base_revision='desktop-backend-base',
+            latest_created_revision='desktop-backend-base',
+            final_revision='desktop-backend-final',
+            ingress_container_name='desktop-backend-1',
+            config_secret='cloud-run-gmp-config',
+            config_secret_version='7',
+        )
+        serialized = yaml.load(yaml.safe_dump(patched), Loader=module.GcloudExportLoader)
+        kwargs['phase'] = 'rendered sidecar replacement'
+        module._validate_expected_literal_env(serialized, **kwargs)
+        assert module._ingress_literal_env(serialized, ingress_container_name='desktop-backend-1')[name] == actual_value
+    else:
+        with pytest.raises(ValueError, match=f'env {name} mismatch'):
+            module._validate_expected_literal_env(service, **kwargs)
+
+
+def test_validate_expected_literal_env_backfill_overlay_does_not_exempt_other_vars():
+    module = _load_module()
+    service = _service()
+    service['metadata']['name'] = 'backend-sync-backfill'
+    service['spec']['template']['spec']['containers'][0]['env'] = [
+        {
+            'name': 'AUDIO_MERGE_HANDLER_URL',
+            'value': 'https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run',
+        }
+    ]
+
+    with pytest.raises(ValueError, match='env AUDIO_MERGE_HANDLER_URL mismatch'):
+        module._validate_expected_literal_env(
+            service,
+            expected={
+                'AUDIO_MERGE_HANDLER_URL': 'https://backend-sync-hhibjajaja-uc.a.run.app/v2/audio-merge-jobs/run'
+            },
+            ingress_container_name='desktop-backend-1',
+            phase='exported base revision',
+        )
 
 
 def test_validate_expected_literal_env_accepts_empty_string_matching_a_missing_value_key():
@@ -640,6 +781,7 @@ spec:
             config_secret='cloud-run-gmp-config',
             expected_env_state=expected_state,
             tag='',
+            desktop_backend_liveness_probe=False,
         )
     )
 

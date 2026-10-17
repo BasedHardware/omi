@@ -115,7 +115,7 @@ extension _NativeUsagePresentation on _UsagePageState {
               NativeRow('usage_manage_plan', currentPlanDisplayName(context, subscription),
                   subtitle: subscription.subscription.plan.isPaid ? l10n.managePlan : l10n.basicPlanDescription,
                   symbol: 'creditcard',
-                  action: (_) => _showPlansSheet())
+                  action: (_) => _showPlansSheet(source: 'usage_page', trackOpen: true))
             ]),
           if (stageLabel != null)
             NativeSection('usage_fair_use', [

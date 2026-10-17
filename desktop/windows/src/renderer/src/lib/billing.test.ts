@@ -93,10 +93,10 @@ describe('resolvePlanTitle', () => {
   it('remaps unlimited to Operator when the price belongs to the Operator catalog plan', () => {
     expect(
       resolvePlanTitle(sub({ plan: 'unlimited', current_price_id: 'price_op_y' }), CATALOG)
-    ).toBe('Operator')
+    ).toBe('Pro')
   })
   it('maps operator to Operator and architect to Architect', () => {
-    expect(resolvePlanTitle(sub({ plan: 'operator' }), CATALOG)).toBe('Operator')
+    expect(resolvePlanTitle(sub({ plan: 'operator' }), CATALOG)).toBe('Pro')
     expect(resolvePlanTitle(sub({ plan: 'architect' }), CATALOG)).toBe('Architect')
   })
   it.each([
@@ -178,13 +178,13 @@ const LIVE_CATALOG: SubscriptionPlan[] = [
 ]
 
 describe('resolvePlanTitle — catalog-first with the live Windows catalog', () => {
-  it('shows the catalog title the user actually bought, not the enum name', () => {
+  it('uses the canonical name when a legacy catalog title differs', () => {
     expect(
       resolvePlanTitle(sub({ plan: 'unlimited', current_price_id: 'price_u_m' }), LIVE_CATALOG)
-    ).toBe('Unlimited Plan')
+    ).toBe('Neo')
     expect(
       resolvePlanTitle(sub({ plan: 'architect', current_price_id: 'price_p_m' }), LIVE_CATALOG)
-    ).toBe('Omi Pro')
+    ).toBe('Architect')
   })
   it('falls back to the enum name when the price id is not in the catalog', () => {
     expect(
@@ -249,7 +249,12 @@ describe('currentPlanSubtitle', () => {
         sub({ plan: 'operator', status: 'active', current_price_id: 'price_op_m' }),
         CATALOG
       )
-    ).toBe('Operator Monthly • $49/mo')
+    ).toBe('Pro Monthly • $49/mo')
+  })
+  it('uses the price owner id despite a stale legacy title', () => {
+    const catalog = CATALOG.map((p) => ({ ...p, title: p.id === 'architect' ? 'Omi Pro' : p.title }))
+    expect(currentPlanSubtitle(sub({ plan: 'architect', status: 'active', current_price_id: 'price_arch_m' }), catalog))
+      .toBe('Architect Monthly • $99/mo')
   })
   it('shows the free-tier line otherwise', () => {
     expect(currentPlanSubtitle(sub({ plan: 'basic' }), CATALOG)).toBe(
@@ -276,10 +281,28 @@ describe('currentPlanPeriodText', () => {
         cancel_at_period_end: true
       })
     )
-    expect(t).toMatch(/^Access ends on /)
+    expect(t).toMatch(/^Your Pro plan ends /)
+    expect(t).toContain('2026')
   })
   it('is empty for a free plan', () => {
     expect(currentPlanPeriodText(sub({ plan: 'basic' }))).toBe('')
+  })
+  it('is empty when a cancellation is pending and the end date is missing', () => {
+    expect(
+      currentPlanPeriodText(
+        sub({ plan: 'operator', status: 'active', cancel_at_period_end: true })
+      )
+    ).toBe('')
+    expect(
+      currentPlanPeriodText(
+        sub({
+          plan: 'operator',
+          status: 'active',
+          cancel_at_period_end: true,
+          current_period_end: 0
+        })
+      )
+    ).toBe('')
   })
 })
 
@@ -456,13 +479,33 @@ describe('startCheckout', () => {
         currentSubscription: sub({
           plan: 'unlimited',
           status: 'active',
-          cancel_at_period_end: true
+          cancel_at_period_end: true,
+          current_price_id: 'price_op_m'
         })
       },
       deps
     )
     expect(deps.upgradeSubscription).not.toHaveBeenCalled()
     expect(deps.createCheckoutSession).toHaveBeenCalled()
+  })
+
+  it('refuses a different price while cancellation is pending without calling the API', async () => {
+    const deps = makeDeps()
+    const res = await startCheckout(
+      {
+        priceId: 'price_op_y',
+        currentSubscription: sub({
+          plan: 'operator',
+          status: 'active',
+          cancel_at_period_end: true,
+          current_price_id: 'price_op_m'
+        })
+      },
+      deps
+    )
+    expect(res).toEqual({ kind: 'blocked' })
+    expect(deps.createCheckoutSession).not.toHaveBeenCalled()
+    expect(deps.upgradeSubscription).not.toHaveBeenCalled()
   })
 
   it('opens the Stripe URL for a free user and completes on success', async () => {
@@ -473,6 +516,32 @@ describe('startCheckout', () => {
     )
     expect(deps.openCheckout).toHaveBeenCalledWith('https://checkout.stripe.com/x')
     expect(res.kind).toBe('completed')
+  })
+
+  it('names the plan and renew date when a cancel-pending subscription is reactivated', async () => {
+    const end = Math.floor(new Date('2026-11-03T00:00:00').getTime() / 1000)
+    const deps = makeDeps({
+      createCheckoutSession: vi.fn().mockResolvedValue({ status: 'reactivated', next_billing_date: end })
+    })
+    const res = await startCheckout(
+      {
+        priceId: 'price_op_m',
+        currentSubscription: sub({
+          plan: 'operator',
+          status: 'active',
+          cancel_at_period_end: true,
+          current_price_id: 'price_op_m',
+          current_period_end: end
+        })
+      },
+      deps
+    )
+    expect(res.kind).toBe('reactivated')
+    if (res.kind === 'reactivated') {
+      expect(res.message).toMatch(/^Your Pro plan will renew on /)
+      expect(res.message).toContain('2026')
+    }
+    expect(deps.openCheckout).not.toHaveBeenCalled()
   })
 
   it('skips the browser when the session reports reactivated', async () => {

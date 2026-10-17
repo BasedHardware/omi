@@ -1,3 +1,5 @@
+import 'package:omi/ui/components/local_stt_recovery_notice.dart';
+import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'dart:async';
 
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -7,21 +9,16 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
-import 'package:omi/pages/processing_conversations/page.dart';
 import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/processing_timeout.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
@@ -148,15 +145,22 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           return const SizedBox.shrink();
         }
 
-        return GestureDetector(
-          onTap: () => _openCapture(provider),
-          child: Semantics(
-            button: !batch,
-            hint: batch ? null : context.l10n.liveTranscript,
-            child: _cardShell(_buildUnifiedRecordingUI(provider),
-                padding: batch ? _liveCardPadding : EdgeInsets.zero, decorated: batch),
+        return Column(children: [
+          if (provider.localSttFailure case final failure?)
+            LocalSttRecoveryNotice(
+                failure: failure,
+                onRetry: provider.retryLocalTranscription,
+                onSetup: () => routeToPage(context, const TranscriptionSettingsPage())),
+          GestureDetector(
+            onTap: () => _openCapture(provider),
+            child: Semantics(
+              button: !batch,
+              hint: batch ? null : context.l10n.liveTranscript,
+              child: _cardShell(_buildUnifiedRecordingUI(provider),
+                  padding: batch ? _liveCardPadding : EdgeInsets.zero, decorated: batch),
+            ),
           ),
-        );
+        ]);
       },
     );
   }
@@ -332,7 +336,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       osHoldsMic: provider.isCallActive,
     );
     final micTaken = interruption == CaptureInterruption.micTaken;
-    final hasTerminalTranscriptionFailure = provider.terminalTranscriptionFailure != null;
+    final hasTerminalTranscriptionFailure =
+        provider.terminalTranscriptionFailure != null || provider.localSttFailure != null;
     final bufferingFor = provider.customSttBufferingDuration;
 
     // Determine if this is an OmiGlass-type device (captures photos)
@@ -351,12 +356,15 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     final starting = isPhoneRecording &&
         provider.recordingState == RecordingState.initialising &&
         displayState == CaptureDisplayState.listening;
-    final copy = unverified
-        ? CaptureCardCopy(context.l10n.captureSourcePendant)
-        : starting
-            ? CaptureCardCopy(context.l10n.captureStarting)
-            : captureCardCopy(context.l10n, displayState,
-                micTaken: micTaken, socketDown: !provider.transcriptServiceReady);
+    final copy = provider.localSttFailure != null
+        ? CaptureCardCopy(context.l10n.transcriptionUnavailable,
+            detail: context.l10n.setupOnDevice, explanation: context.l10n.transcriptionUnavailableRecordingSaved)
+        : unverified
+            ? CaptureCardCopy(context.l10n.captureSourcePendant)
+            : starting
+                ? CaptureCardCopy(context.l10n.captureStarting)
+                : captureCardCopy(context.l10n, displayState,
+                    micTaken: micTaken, socketDown: !provider.transcriptServiceReady);
 
     // When recording is active: the one capture status and control surface.
     if (isDeviceRecording || isPhoneRecording) {
@@ -696,266 +704,4 @@ getPhoneMicRecordingButton(
       ],
     ),
   );
-}
-
-ServerConversation? newestProcessingConversation(List<ServerConversation> conversations) {
-  if (conversations.isEmpty) return null;
-  // Live events append new IDs; list position is not recency. Processing begins
-  // at capture end, while the optimistic Process Now row has only createdAt.
-  return conversations.reduce((a, b) {
-    final aTime = a.finishedAt ?? a.createdAt;
-    final bTime = b.finishedAt ?? b.createdAt;
-    return bTime.isAfter(aTime) ? b : a;
-  });
-}
-
-// PROCESSING CONVERSATION
-
-class ProcessingConversationWidget extends StatefulWidget {
-  final ServerConversation conversation;
-
-  /// Optional clock override for tests.
-  final DateTime Function()? now;
-
-  /// Optional reprocess override for tests.
-  final Future<ServerConversation?> Function(String conversationId)? reprocess;
-
-  const ProcessingConversationWidget({super.key, required this.conversation, this.now, this.reprocess});
-
-  @override
-  State<ProcessingConversationWidget> createState() => _ProcessingConversationWidgetState();
-}
-
-/// The processing timeout and its retry, shared by the processing card and the processing page so
-/// both offer the same "Try again" once processing looks stuck (#5481).
-class ProcessingRetryController extends ChangeNotifier {
-  ProcessingRetryController({required ServerConversation conversation, this.now, this.reprocess})
-      : _conversation = conversation {
-    _processingStartedAt = _resolveProcessingStartedAt();
-    _refreshTimeout();
-    _timeoutTicker = Timer.periodic(const Duration(seconds: 1), (_) => _refreshTimeout());
-  }
-
-  /// Optional clock override for tests.
-  final DateTime Function()? now;
-
-  /// Optional reprocess override for tests.
-  final Future<ServerConversation?> Function(String conversationId)? reprocess;
-
-  ServerConversation _conversation;
-  Timer? _timeoutTicker;
-  bool _timedOut = false;
-  bool _retrying = false;
-  bool _disposed = false;
-
-  bool get timedOut => _timedOut;
-  bool get retrying => _retrying;
-
-  /// Wall-clock when processing is treated as having started for the timeout.
-  /// Prefer [ServerConversation.finishedAt] (capture end ≈ processing start);
-  /// fall back to first paint / retry so long recordings are not instantly flagged.
-  late DateTime _processingStartedAt;
-
-  DateTime get _now => now?.call() ?? DateTime.now();
-
-  DateTime _resolveProcessingStartedAt() {
-    return _conversation.finishedAt ?? _now;
-  }
-
-  /// The owner's widget now shows [next].
-  void updateConversation(ServerConversation next) {
-    final previous = _conversation;
-    _conversation = next;
-    if (previous.id != next.id) {
-      _processingStartedAt = _resolveProcessingStartedAt();
-      _refreshTimeout();
-      return;
-    }
-    final nextFinishedAt = next.finishedAt;
-    if (nextFinishedAt != null && nextFinishedAt != previous.finishedAt) {
-      _processingStartedAt = nextFinishedAt;
-      _refreshTimeout();
-    }
-  }
-
-  void _refreshTimeout() {
-    if (_disposed) return;
-    final timedOut = isConversationProcessingTimedOut(
-      conversationId: _conversation.id,
-      processingStartedAt: _processingStartedAt,
-      now: _now,
-    );
-    if (timedOut != _timedOut) {
-      _timedOut = timedOut;
-      notifyListeners();
-    }
-  }
-
-  /// Reprocesses the conversation through [ConversationProvider], read from [context] once the
-  /// request answers. Nothing changes after [context] unmounts.
-  Future<void> retry(BuildContext context) async {
-    if (_retrying || _disposed || _conversation.id == '0') return;
-    final conversationId = _conversation.id;
-    _retrying = true;
-    notifyListeners();
-    try {
-      final reprocess = this.reprocess ?? reProcessConversationServer;
-      final updated = await reprocess(conversationId);
-      if (!context.mounted || _disposed) return;
-      final provider = context.read<ConversationProvider>();
-      if (updated == null) {
-        AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
-        return;
-      }
-      if (updated.status == ConversationStatus.processing || updated.status == ConversationStatus.merging) {
-        // Fresh attempt — give the new processing pass another full timeout window.
-        _processingStartedAt = _now;
-        _timedOut = false;
-        provider.addProcessingConversation(updated);
-      } else {
-        // Processed: nothing is stuck any more, so the retry is withdrawn.
-        _timedOut = false;
-        provider.removeProcessingConversation(conversationId);
-        provider.upsertConversation(updated);
-      }
-    } catch (_) {
-      if (!context.mounted || _disposed) return;
-      AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
-    } finally {
-      if (context.mounted && !_disposed) {
-        _retrying = false;
-        notifyListeners();
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _disposed = true;
-    _timeoutTicker?.cancel();
-    super.dispose();
-  }
-}
-
-class _ProcessingConversationWidgetState extends State<ProcessingConversationWidget> {
-  late final ProcessingRetryController _retry;
-
-  bool get _timedOut => _retry.timedOut;
-  bool get _retrying => _retry.retrying;
-
-  void _onRetryChanged() {
-    if (mounted) setState(() {});
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _retry = ProcessingRetryController(conversation: widget.conversation, now: widget.now, reprocess: widget.reprocess)
-      ..addListener(_onRetryChanged);
-  }
-
-  @override
-  void didUpdateWidget(ProcessingConversationWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _retry.updateConversation(widget.conversation);
-  }
-
-  @override
-  void dispose() {
-    _retry.dispose();
-    super.dispose();
-  }
-
-  Future<void> _onRetry() => _retry.retry(context);
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () async {
-        routeToPage(context, ProcessingConversationPage(conversation: widget.conversation));
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        child: Container(
-          width: double.maxFinite,
-          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24.0)),
-          // Static skeleton - no animation to save CPU/battery
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header row
-                Row(
-                  children: [
-                    // Icon placeholder
-                    Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: OmiColors.surface2,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Processing label
-                    Container(
-                      decoration: BoxDecoration(
-                        color: OmiColors.categorySurface,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Text(
-                        captureStateLabel(context.l10n, CaptureDisplayState.processing),
-                        style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                    const Spacer(),
-                    // The real start time, not a placeholder bar (hub audit #25).
-                    Text(
-                      OmiDateFormat.of(context).time(widget.conversation.startedAt ?? widget.conversation.createdAt),
-                      style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                // Title placeholder
-                Container(
-                  width: double.maxFinite,
-                  height: 16,
-                  decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: BorderRadius.circular(4)),
-                ),
-                if (_timedOut) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    context.l10n.processingTakingLonger,
-                    style: TextStyle(color: OmiColors.textTertiary, fontSize: 13, height: 1.3),
-                  ),
-                  const SizedBox(height: 10),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: GestureDetector(
-                      onTap: () {}, // absorb so the card's open-on-tap does not fire
-                      child: TextButton(
-                        key: const Key('processing_conversation_retry_button'),
-                        onPressed: _retrying ? null : _onRetry,
-                        style: TextButton.styleFrom(
-                          foregroundColor: OmiColors.textPrimary,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          minimumSize: const Size(44, 44),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        child: _retrying ? const OmiSpinner(size: OmiSpinnerSize.small) : Text(context.l10n.tryAgain),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }

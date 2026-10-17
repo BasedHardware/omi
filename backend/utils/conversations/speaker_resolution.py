@@ -15,6 +15,8 @@ on capture's ids and ``speaker_resolution`` says whether those ids can be counte
 
 from __future__ import annotations
 
+from config.transcription_final_pass import authoritative_for
+
 import bisect
 from collections.abc import Sequence
 import json
@@ -56,8 +58,15 @@ from utils.metrics import (
     OMI_CONVERSATION_SPEAKER_RESOLUTION_VOICES,
 )
 from utils.observability.owner_recognition import record_owner_identity_repair
-from utils.observability.owner_identity_retry import identity_pass, record_retry, resolver_reason, resolver_trace
+from utils.observability import owner_recognition_diagnostics as owner_diagnostics
+from utils.observability.owner_identity_retry import (
+    identity_pass,
+    record_retry,
+    resolver_reason as retry_resolver_reason,
+    resolver_trace,
+)
 from utils.observability.fallback import record_fallback
+from utils.llm.known_spellings import reuse_people_for_spellings
 from utils.other.audio_chunks import (
     AudioChunkReadSession,
     chunk_end_upper_bound,
@@ -99,6 +108,11 @@ CAPTURE_SPAN_KEY_PREFIX = 'capture-span:'
 MAX_ADVISORY_PLACEMENTS = 1500
 MAX_PLACEMENT_SPANS = 10000
 ADVISORY_PLACEMENT_SECONDS = 0.25
+
+
+def resolver_reason(reason: str) -> None:
+    retry_resolver_reason(reason)
+    owner_diagnostics.resolver_reason(reason)
 
 
 def resolution_enabled() -> bool:
@@ -203,6 +217,7 @@ def load_voiceprints_for_resolution(uid: str, *, allow_audio_repair: bool = True
         return prints
     try:
         people = users_db.get_people(uid)
+        reuse_people_for_spellings(uid, people)
     except Exception as error:
         logger.warning(
             'event=speaker_resolution_person_profiles outcome=failed exception_type=%s', type(error).__name__
@@ -710,6 +725,7 @@ def _without_resolution(
     diagnostics: Optional[Mapping[str, Any]] = None,
 ) -> None:
     segments = conversation.transcript_segments
+    owner_diagnostics.resolver_counts(**(diagnostics or {}))
     # Independent sync batches can each accept an owner in isolation. Without
     # conversation audio there is no evidence that their capture IDs name the
     # same voice. Withdraw only automatic claims when several scoped voices
@@ -891,6 +907,7 @@ def _apply_receipt_overlay(conversation: Conversation, receipt: Mapping[str, Any
     return matched
 
 
+@owner_diagnostics.observe_resolver
 def resolve_speakers_for_processing(
     uid: str,
     conversation: Any,
@@ -939,7 +956,10 @@ def resolve_speakers_for_processing(
                     'event=conversation_speaker_resolution outcome=manual_receipt_failed exception_type=%s',
                     type(error).__name__,
                 )
-        if resolution_enabled():
+        final_record = authoritative_for(uid) and all(
+            (segment.speaker_id_scope or '').startswith('final:') for segment in conversation.transcript_segments
+        )
+        if resolution_enabled() and not final_record:
             _resolve(
                 uid,
                 conversation,
@@ -1186,6 +1206,9 @@ def _resolve(
     input_ids = len({s.speaker_id for s in segments if s.speaker_id != OMI_SPEAKER_ID_SENTINEL})
     if not conversation.private_cloud_sync_enabled or not speaker_embedding_configured():
         resolver_reason('no_audio')
+        owner_diagnostics.resolver_reason(
+            'private_cloud_disabled' if not conversation.private_cloud_sync_enabled else 'endpoint_unconfigured'
+        )
         _without_resolution(conversation, 'no_audio')
         return
     spans_on = live_speaker_span_resolution_enabled()
@@ -1451,6 +1474,14 @@ def _resolve(
             evidence_seconds=clip_seconds,
             max_attempts=max_embedding_attempts,
         )
+        owner_diagnostics.resolver_counts(
+            attempted=diagnostics.attempted,
+            successful=new_embeddings,
+            failed=diagnostics.embed_failures,
+            embeddable=len(embeddable),
+            pending=len(pending),
+            stop=stop,
+        )
         if read_session is not None and read_session.limit_hit:
             resolver_reason('read_budget')
             _without_resolution(conversation, 'unaligned_audio', reason='unverified_inventory', force_unavailable=True)
@@ -1508,7 +1539,18 @@ def _resolve(
             seconds = min(seconds, sum(b - a for a, b in fresh))
             covered_windows.append((low, high))
         score_durations[sid] = seconds
+    owner_diagnostics.resolver_counts(
+        attempted=diagnostics.attempted,
+        successful=new_embeddings,
+        failed=diagnostics.embed_failures,
+        embeddable=len(embeddable),
+        pending=len(pending),
+        cache_hits=len(embeddable) - len(pending),
+        valid_vectors=len(vectors),
+        stop=stop,
+    )
     voiceprints = load_voiceprints_for_resolution(uid, allow_audio_repair=allow_owner_audio_repair)
+    owner_diagnostics.resolver_counts(owner_profile_available=int(OWNER_IDENTITY in voiceprints))
     manual_speakers = _manual_speakers(receipt)
     resolution = resolve_conversation_speakers(
         segments,
@@ -1560,6 +1602,7 @@ def _resolve(
         owner_voiceprint_available=resolution.owner_voiceprint_available,
         contradicted_segment_ids=resolution.contradicted_segment_ids,
     )
+    owner_diagnostics.resolver_counts(coverage=resolution.coverage)
     if resolution.coverage >= MIN_RESOLVED_COVERAGE:
         conversation.speaker_resolution = ConversationSpeakers(
             status='resolved', version=RESOLUTION_VERSION, participant_speaker_ids=resolution.significant_speaker_ids

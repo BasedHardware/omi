@@ -296,6 +296,23 @@ import XCTest
       XCTAssertEqual(attempts, [Attempt(keyCode: 38, modifiers: 256)])
     }
 
+    func testOnboardingValidationActuallyProbesTheRecommendedSummonChord() {
+      let original = savedRegistration()
+      defer { restoreRegistration(original) }
+      settings.updateAskOmiRegistration(enabled: true, shortcut: GlobalShortcutManager.summonShortcut)
+      var attempts = 0
+      let manager = makeManager(
+        registrar: { _, _ in
+          attempts += 1
+          return .testing(status: OSStatus(eventHotKeyExistsErr), reference: nil)
+        },
+        observesSettings: false
+      )
+      manager.setRegistrationSuspended(true)
+      XCTAssertEqual(manager.validateAskOmiShortcutForOnboarding(), .alreadyInUse)
+      XCTAssertEqual(attempts, 1, "the default must not assume the suspended summon hotkey is registered")
+    }
+
     private func savedRegistration() -> (enabled: Bool, shortcut: ShortcutSettings.KeyboardShortcut) {
       (settings.askOmiEnabled, settings.askOmiShortcut)
     }

@@ -45,6 +45,7 @@ class CaptureHarness:
         self.deleted: list[str] = []
         self.pointer: str | None = None
         monkeypatch.setattr(listen_continuations, 'get_firestore_client', lambda: self.store)
+        monkeypatch.setattr(pc, 'conversation_known_spellings', lambda *_: '')
         monkeypatch.setattr(
             controller_module.lifecycle_service, 'delete_empty_recording_conversation', self.delete_empty
         )

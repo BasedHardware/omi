@@ -68,6 +68,16 @@ live in `cost_rate_cards.yaml`; unknown models, non-token units, and cache write
 recorded as `unpriced`, never as zero cost. The estimate uses marginal token rates and deliberately excludes cache
 storage charges and provider request/tool fees.
 
+Dream v2 reasoning enables function tools; its verification lane uses the same
+dedicated route and configured non-Gemini fallback, with structured output and no
+tools. Nested function schemas use Vertex `parametersJsonSchema`. Session turns
+reuse an identical prefix (contract, tools and seed) for Vertex implicit caching.
+[Google documents implicit caching on Provisioned Throughput](https://cloud.google.com/blog/products/ai-machine-learning/vertex-ai-context-caching),
+so this route does not require an explicit cached-content resource, TTL or delete
+call. Cache hits are measured from provider usage, never assumed. Identical
+prefixes improve reuse; provider minimum-size and retention constraints still
+apply. Other lanes retain their existing capabilities and cache behavior.
+
 Set `LLM_GATEWAY_ACCOUNTING_ENABLED=true` only for a gateway identity with Firestore read/write access to the backend
 project (normally `roles/datastore.user`). Ledger writes are detached from the response path,
 `LLM_GATEWAY_ACCOUNTING_WRITE_TIMEOUT_SECONDS` bounds each non-fatal Firestore write and the orderly-shutdown drain,
@@ -114,3 +124,62 @@ Existing Vertex 4xx JSON logs use fixed reason classes (`schema_keyword`,
 `schema_reference`, `schema_complexity`, `schema`, or `unknown`) alongside existing
 thought-signature/thinking classes; provider bodies and echoed user values are never
 logged. Only the `llm-gateway` service needs redeployment for these changes.
+
+Request counters also expose bounded `upstream_http_status` (common rejection/error codes, status classes, or `none`). The latency histogram omits that label. Use it with `provider_rejection` and `fallback_reason` when diagnosing a failing lane; old series without this label cannot supply a retrospective status breakdown. See `backend/docs/runbooks/stale-queues-and-desktop-vertex.md`.
+
+## Prompt caching
+
+`cache_policies.yaml` owns defaults after model resolution: agent/session and
+long static prompt lanes use `explicit`; short or unique prompts use `implicit`
+or `off`. Existing caller opt-outs win. OpenAI-compatible routes retain
+`prompt_cache_options` and part breakpoints. Keys are additionally hashed with
+the authenticated owner at the provider boundary. BYOK does not acquire a
+Vertex cache; requests without an authenticated owner never create one.
+
+Vertex explicit caching moves `systemInstruction`, tools, tool configuration,
+and leading contents through the marked seed boundary into `cachedContents`.
+The continuation uses `cachedContent` and omits those cached fields. Cache keys
+include owner, model, region/project and complete stable prefix; handles are
+process-local, bounded to 1024 entries, and never logged. Replicas may create
+separate billable entries. Expired/invalid handles recreate once, then use the
+original uncached request on ordinary lanes. Dream permits exactly one generation
+attempt: a rejected cache handle is invalidated for the next pass, without a
+second generation call. Control-plane failures degrade to implicit caching;
+capacity headers and model routing on inference remain authoritative.
+
+`LLM_GATEWAY_VERTEX_CACHE_TTL_SECONDS` defaults to 1800 seconds (minimum 1800,
+maximum 86400), covering a ~28 minute Dream pass. A reuse in the latter half of
+the TTL refreshes expiry rather than recreating the prefix. Cache I/O has a
+one-second timeout per operation. Explicit eligibility uses a conservative
+4096-token prefix estimate; Gemini 3.8 implicit eligibility uses 6144. Estimates
+are heuristics; provider minimum validation remains authoritative.
+
+Each attempt emits a content-free `llm_gateway_cache_receipt` with lane,
+provider/model, traffic type, prompt/cached tokens, reported flag, mode and
+prefix estimate. `llm_gateway_cache_{attempts,eligible_attempts,prompt_tokens,read_tokens}_total`
+use only lane/model/mode/reported labels. Missing cache fields remain unknown,
+including normalized Vertex streams; reported zero is a distinct receipt.
+Dream returns additive `dream_usage.attempt_usage` alongside existing totals.
+Harness prefix mutation emits `omi_shaped_agent_cache_prefix_violations_total`.
+
+Cache creation tokens and committed storage token-seconds are recorded
+separately from generation input. Rate cards optionally specify
+`cache_write_micro_usd_per_million` and
+`cache_storage_micro_usd_per_million_token_hours`; missing rates or ambiguous
+cache-operation usage produce `unpriced`, never zero. Refresh charges only the
+additional committed lifetime. Entries evicted from the local handle map still
+expire upstream at their TTL, so already committed storage stays charged.
+The cached read rate applies to generation's cached tokens for PT and
+on-demand traffic. Cache receipts do not authorize a change of traffic type.
+
+Grafana definitions in `backend/charts/monitoring/pending/llm-cache.json` warn per lane at under 20% cached input or over 20%
+unreported cache fields, over at least 100 eligible attempts in 15 minutes.
+These are pending admission: the frozen production metric inventory predates
+the counters. After the counters ship, verify live series and calibration,
+then admit to `alerts/` and the combined import. No alert is enabled by this change.
+
+API references: [create](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/context-cache/context-cache-create),
+[use](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/context-cache/context-cache-use),
+[refresh](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/context-cache/context-cache-update).
+The 3.8 minimums follow the ratified 2026-10-15 launch brief; no live cache or
+production-account calls are part of local verification.

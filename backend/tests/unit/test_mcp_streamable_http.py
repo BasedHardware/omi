@@ -76,10 +76,12 @@ EXPECTED_TOOL_ORDER = [
     "dismiss_person",
     "get_screen_activity",
     "get_daily_summaries",
+    "process_recent_conversations",
 ]
 
 # Representative handler results exercising every success output schema.
 FAKE_SUCCESS = {
+    "process_recent_conversations": {"status": "processing", "ready": False, "promoted": 1, "has_more": False},
     "get_user_profile": {
         "profile_text": "p",
         "generated_at": "2026-06-11T10:30:00+00:00",
@@ -297,16 +299,25 @@ class TestVersionNegotiation:
 
 
 class TestStateless2026:
-    def test_tools_list_2026_via_header(self):
+    def test_tools_list_2026_via_header(self, monkeypatch):
+        monkeypatch.setenv("DEMAND_PROCESSING_ENABLED", "false")
         auth = _full_auth()
         request = mcp_transport.McpRequestContext(auth_context=auth, header_version=PROTOCOL_VERSION_2026)
         response = mcp_transport.handle_mcp_message(auth, _msg("tools/list"), request)
         result = response["result"]
         assert result["resultType"] == "complete"
         assert result["_meta"][META_SERVER_INFO] == SERVER_INFO
-        assert len(result["tools"]) == len(TOOL_SPECS)
+        assert len(result["tools"]) == len(TOOL_SPECS) - 1
+        assert "process_recent_conversations" not in {tool["name"] for tool in result["tools"]}
         assert result["ttlMs"] == TOOLS_LIST_TTL_MS == 3_600_000
         assert result["cacheScope"] == TOOLS_LIST_CACHE_SCOPE == "private"
+
+    def test_demand_tool_is_advertised_only_with_its_opt_in(self, monkeypatch):
+        monkeypatch.setenv("DEMAND_PROCESSING_ENABLED", "true")
+        monkeypatch.setenv("DEMAND_PROCESSING_TOOL_ENABLED", "true")
+        auth = _full_auth()
+        result = mcp_transport.handle_mcp_message(auth, _msg("tools/list"))["result"]
+        assert [tool["name"] for tool in result["tools"]] == EXPECTED_TOOL_ORDER
 
     def test_stateless_2026_via_meta_wins(self):
         auth = _full_auth()
@@ -828,6 +839,32 @@ class TestToolResultContract:
         result = response["result"]
         assert result["isError"] is True
         Draft202012Validator(spec.output_schema).validate(result["structuredContent"])
+
+    def test_conversation_search_schema_describes_match_snippets(self):
+        spec = next(item for item in TOOL_SPECS if item.name == "search_conversations")
+        conversation_schema = spec.output_schema["anyOf"][0]["properties"]["conversations"]["items"]
+        assert "match_snippets" in conversation_schema["properties"]
+        Draft202012Validator(spec.output_schema).validate(
+            {
+                "conversations": [
+                    {
+                        "id": "conversation-id",
+                        "match_snippets": [
+                            {
+                                "text": "Speaker 1: search result",
+                                "segment_id": "segment-id",
+                                "start": 1.0,
+                                "end": 2.0,
+                                "start_ms": 1000,
+                                "end_ms": 2000,
+                                "speaker_id": 1,
+                            }
+                        ],
+                    }
+                ],
+                "search_coverage": "summary_vectors_with_keyword_recovery",
+            }
+        )
 
     @pytest.mark.parametrize(
         ("raised", "expected_code"),

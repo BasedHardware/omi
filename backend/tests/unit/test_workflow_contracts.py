@@ -326,7 +326,7 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     test time, and sharing processes across files is blocked by dense
     sys.modules contamination (see the BACKEND_PYTEST_PARALLEL_SESSION
     measurement in backend/test.sh). The workflow therefore runs the SAME
-    selection as four parallel shard jobs whose interleaved slices partition
+    selection as six parallel shard jobs whose interleaved slices partition
     the sorted file list exactly (union = full selection), plus a concurrent
     guardrails job, and publishes the verdict through a literal-named gate so
     the required check surface never changes. Each shard carries a wall-clock
@@ -337,8 +337,9 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     workflow = (repo / ".github/workflows/backend-unit-tests.yml").read_text(encoding="utf-8")
     runner = (BACKEND_DIR / "scripts/run-unit-ci.sh").read_text(encoding="utf-8")
 
-    assert "shard: [1, 2, 3, 4]" in workflow
-    assert "--shard 4/${{ matrix.shard }}" in workflow
+    assert "shard: [1, 2, 3, 4, 5, 6]" in workflow
+    assert "--shard 6/${{ matrix.shard }}" in workflow
+    assert "name: Backend unit shard ${{ matrix.shard }}/6" in workflow
     assert 'BACKEND_UNIT_STEP_BUDGET_SECONDS: "720"' in workflow
     assert "backend unit shard wall: ${elapsed}s" in workflow
     # The gate keeps the exact check name and fails closed on any shard or
@@ -862,10 +863,105 @@ def _workflow_policy():
     return module
 
 
+def test_gcp_diarizer_checks_deployment_files_only_after_checkout():
+    workflow_path = BACKEND_DIR.parent / ".github/workflows/gcp_diarizer.yml"
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["deploy"]["steps"]
+    checkout_index = next(
+        index for index, step in enumerate(steps) if step.get("uses", "").startswith("actions/checkout@")
+    )
+    target_index = next(index for index, step in enumerate(steps) if step.get("name") == "Resolve deployment target")
+    file_check_indices = [
+        index
+        for index, step in enumerate(steps)
+        if re.search(r"(?:\[\[?|\btest\b)[^\n]*(?:-f|-e)\b", step.get("run", ""))
+    ]
+
+    assert file_check_indices
+    assert target_index > checkout_index
+    assert all(index > checkout_index for index in file_check_indices)
+    target_script = steps[target_index]["run"]
+    assert re.search(r"(?:\[\[?|\btest\b)[^\n]*-f[^\n]*\$dockerfile", target_script)
+    assert re.search(r"(?:\[\[?|\btest\b)[^\n]*-f[^\n]*\$values_file", target_script)
+
+
 def test_firestore_readiness_gate_covers_every_backend_image_shipment():
     """Every backend-source image push/deploy needs the shared immutable gate."""
     policy = _workflow_policy()
-    assert policy.repository_gate_violations(BACKEND_DIR.parent) == []
+    assert policy.repository_gate_violations(BACKEND_DIR.parent, validate_unrelated_workflows=False) == []
+    assert policy._yaml_document.cache_info().hits > 0
+
+
+def test_firestore_repository_scan_keeps_worker_workflow_in_scope():
+    policy = _workflow_policy()
+    worker_workflow = (BACKEND_DIR.parent / '.github/workflows/gcp_diarizer.yml').read_text(encoding='utf-8')
+
+    assert policy._workflow_policy_relevant(worker_workflow)
+
+
+def test_firestore_repository_scan_still_rejects_malformed_workflows(tmp_path):
+    policy = _workflow_policy()
+    repo = tmp_path / 'repo'
+    workflows = repo / '.github/workflows'
+    (repo / 'backend').mkdir(parents=True)
+    workflows.mkdir(parents=True)
+    (repo / 'backend/runtime_images.json').write_text('{"images": []}', encoding='utf-8')
+    (workflows / 'unrelated.yml').write_text('name: [', encoding='utf-8')
+
+    assert policy.repository_gate_violations(repo) == ['.github/workflows/unrelated.yml: workflow YAML must parse']
+
+
+def test_firestore_repository_scan_follows_local_image_builder_actions(tmp_path):
+    policy = _workflow_policy()
+    repo = tmp_path / 'repo'
+    (repo / 'backend').mkdir(parents=True)
+    action_dir = repo / '.github/actions/build-backend'
+    action_dir.mkdir(parents=True)
+    workflows = repo / '.github/workflows'
+    workflows.mkdir(parents=True)
+    (repo / 'backend/runtime_images.json').write_text(
+        json.dumps({'images': [{'dockerfile': 'backend/Dockerfile', 'name': 'backend'}]}), encoding='utf-8'
+    )
+    (action_dir / 'action.yml').write_text(
+        '''name: Build backend
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: docker build -f backend/Dockerfile -t gcr.io/project/backend:abc . && docker push gcr.io/project/backend:abc
+''',
+        encoding='utf-8',
+    )
+    (workflows / 'new-backend-builder.yml').write_text(
+        '''name: New backend builder
+on: workflow_dispatch
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ./.github/actions/build-backend
+''',
+        encoding='utf-8',
+    )
+
+    violations = policy.repository_gate_violations(repo)
+
+    assert any('new-backend-builder.yml:build:' in violation for violation in violations)
+    assert any('lacks an earlier successful Firestore readiness gate' in violation for violation in violations)
+
+
+def test_firestore_workflow_yaml_documents_are_parsed_once():
+    policy = _workflow_policy()
+    policy._yaml_document.cache_clear()
+    text = 'jobs: {}\n'
+
+    first = policy._yaml_document(text)
+    second = policy._yaml_document(text)
+
+    assert first == second == {'jobs': {}}
+    cache = policy._yaml_document.cache_info()
+    assert cache.misses == 1
+    assert cache.hits == 1
 
 
 def test_firestore_gate_policy_rejects_ungated_deploy_mutations():
@@ -1829,6 +1925,7 @@ def _composite_control_root(tmp_path: Path) -> Path:
         'firestore_query_types.py',
         'review_queries.py',
         'messaging_queries.py',
+        'sync_pipeline_indexes.py',
     ):
         (database_dir / name).write_text((backend / 'database' / name).read_text(encoding='utf-8'), encoding='utf-8')
     (scripts_dir / '__init__.py').write_text('', encoding='utf-8')
@@ -2008,3 +2105,23 @@ def test_notifications_job_deploy_restores_singleton_before_action_and_reattache
     assert '--job' in attach['run'] and '--detach' not in attach['run']
     assert 'if' not in detach and 'if' not in attach
     assert workflow['concurrency']['cancel-in-progress'] is False
+
+
+def test_notifications_job_renders_the_verified_gateway_endpoint():
+    """The manifest default for OMI_LLM_GATEWAY_URL is the inert http://127.0.0.1:9.
+
+    The 2026-10-10 deploy rendered without the gated endpoint and every daily
+    recap generation failed with APIConnectionError until the next redeploy.
+    """
+    workflow = yaml.safe_load(
+        (BACKEND_DIR.parent / ".github" / "workflows" / "gcp_notifications_job.yml").read_text(encoding="utf-8")
+    )
+    steps = workflow["jobs"]["deploy"]["steps"]
+    ids = [step.get("id") for step in steps]
+    gate = ids.index("gateway-serving")
+    render = ids.index("runtime-env")
+    assert gate < render
+    assert "verify-llm-gateway-serving.py" in steps[gate]["run"]
+    assert "--github-output" in steps[gate]["run"]
+    assert steps[render]["env"]["OMI_LLM_GATEWAY_URL"] == "${{ steps.gateway-serving.outputs.gateway_url }}"
+    assert "http://127.0.0.1:9" in steps[render]["run"]

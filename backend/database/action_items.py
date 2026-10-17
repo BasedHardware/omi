@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta, tzinfo
 import logging
 from typing import Any, Dict, Iterable, List, Optional, Protocol, cast
+from database import chat_edits
 from database.dream_dirty import after_write
 from google.api_core.exceptions import (
     DeadlineExceeded as FirestoreDeadlineExceeded,
@@ -959,7 +960,9 @@ def get_action_items_by_ids(uid: str, action_item_ids: List[str]) -> List[Dict[s
 
 
 @after_write('action_items')
-def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any]) -> bool:
+def update_action_item(
+    uid: str, action_item_id: str, update_data: Dict[str, Any], *, expected_chat_state: Optional[Dict[str, Any]] = None
+) -> bool:
     """
     Update an action item.
 
@@ -998,7 +1001,16 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
                 firestore_client=db,
                 allow_ended_goal=(goal_id, workstream_id) == (current.get('goal_id'), current.get('workstream_id')),
             )
-            write_transaction.update(action_item_ref, {**update_data, 'updated_at': now})
+            payload = dict(update_data)
+            # A settled export must leave the capped pending-sync query. Keep
+            # this single-item path aligned with batch_sync_update_action_items.
+            if payload.get('exported') is True:
+                payload['sync_requested'] = False
+            # Same preserve as the plain update path below: a re-completion
+            # keeps the stored completed_at instead of re-stamping.
+            if payload.get('completed') is True and current.get('completed') is True:
+                payload['completed_at'] = current.get('completed_at')
+            write_transaction.update(action_item_ref, {**payload, 'updated_at': now})
             return True
 
         updated = bool(
@@ -1015,14 +1027,32 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
         return updated
 
     # Check if exists
-    if not action_item_ref.get().exists:
+    existing = action_item_ref.get()
+    if not existing.exists:
         return False
+
+    # A completion that already happened keeps its original completed_at —
+    # a duplicate tap, a whole-object edit, or a sync replay must not
+    # re-stamp when the task was done. Preserve the stored timestamp when
+    # the item is already completed.
+    existing_data = typed_doc(existing)
+    # A settled export must leave the capped pending-sync query. Keep this
+    # single-item path aligned with batch_sync_update_action_items.
+    if update_data.get('exported') is True:
+        update_data['sync_requested'] = False
+    if update_data.get('completed') is True and existing_data.get('completed') is True:
+        update_data['completed_at'] = existing_data.get('completed_at')
 
     # Add updated timestamp
     update_data['updated_at'] = datetime.now(timezone.utc)
 
     # Update the document
-    action_item_ref.update(update_data)
+    if expected_chat_state is not None:
+        expected_chat_state['after'] = chat_edits.apply_update(
+            uid, 'task', action_item_id, expected_chat_state['before'], update_data, firestore_client=db
+        )
+    else:
+        action_item_ref.update(update_data)
     if update_data.get('completed') is True:
         _record_followup_completion(uid, action_item_id)
     bump_action_items_list_version(uid)
@@ -1388,6 +1418,17 @@ def batch_sync_update_action_items(uid: str, updates: List[Dict[str, Any]]) -> B
         # Clear sync_requested when item is successfully exported
         if update_data.get('exported') is True:
             update_data['sync_requested'] = False
+        if update_data.get('completed') is True:
+            # A sync replay of an already-completed row must not re-stamp
+            # completed_at — same preserve as update_action_item. Costs one
+            # read per completion entry only.
+            existing = doc_ref.get()
+            if not existing.exists:
+                result.missing_ids.append(entry['id'])
+                continue
+            existing_data = typed_doc(existing)
+            if existing_data.get('completed') is True:
+                update_data['completed_at'] = existing_data.get('completed_at')
         try:
             doc_ref.update(update_data)
         except NotFound:
@@ -1402,27 +1443,27 @@ def batch_sync_update_action_items(uid: str, updates: List[Dict[str, Any]]) -> B
     return result
 
 
-def unlock_all_action_items(uid: str) -> None:
-    """
-    Finds all action items for a user with is_locked: True and updates them to is_locked = False.
-    """
+def unlock_all_action_items(uid: str, *, limit: Optional[int] = None) -> int:
+    """Unlock all locked rows, or one bounded page when limit is supplied."""
     action_items_ref = db.collection('users').document(uid).collection(action_items_collection)
     locked_items_query = action_items_ref.where(filter=FieldFilter('is_locked', '==', True))
 
-    batch = db.batch()
-    docs = locked_items_query.stream()
-    count = 0
-    for doc in docs:
-        batch.update(doc.reference, {'is_locked': False, 'updated_at': datetime.now(timezone.utc)})
-        count += 1
-        if count >= 499:  # Firestore batch limit is 500
-            batch.commit()
-            batch = db.batch()
-            count = 0
-    if count > 0:
-        batch.commit()
-    bump_action_items_list_version(uid)
-    logger.info(f"Unlocked all action items for user {uid}")
+    from database.locked_content import unlock_query_rows
+    from database.legal_holds import external_write_fence
+
+    with external_write_fence(uid):
+        total = unlock_query_rows(
+            db,
+            locked_items_query,
+            {'is_locked': False, 'updated_at': datetime.now(timezone.utc)},
+            limit=limit,
+        )
+        # An empty locked query is a duplicate unlock. Bumping would only
+        # invalidate the list cache; no row was rewritten.
+        if total:
+            bump_action_items_list_version(uid)
+        logger.info(f"Unlocked all action items for user {uid}")
+        return total
 
 
 # ============================================================================

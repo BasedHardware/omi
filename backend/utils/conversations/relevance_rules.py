@@ -269,3 +269,32 @@ def _is_mic_check(latin: Sequence[str]) -> bool:
         return False
     leftovers = [t for t in latin if t not in MIC_CHECK_WORDS and not _is_filler(t) and t not in FUNCTION_WORDS]
     return not leftovers
+
+
+# The measured 286-conversation cohort above supports zero-content lexicon
+# decisions (0 false discards), not a nonzero content-density cutoff. Use the
+# conservative boundary: content density == 0 and filler ratio > 0. No duration
+# or minimum word count participates; even one content token protects speech.
+FALLBACK_MAX_CONTENT_DENSITY = 0.0
+FALLBACK_MIN_FILLER_RATIO = 0.0
+
+
+def deterministic_tiebreak(texts: Sequence[str]) -> Verdict:
+    """Total decision when paid arms cannot answer; preserve rule ordering.
+
+    Extend the measured lexicon-only rule beyond its 25-token model referral
+    only for backchannel-bearing runs. Unknown scripts, numbers and names
+    remain protected. This is deliberately not calibrated to one outage.
+    """
+    verdict, _ = deterministic_relevance(texts, None)
+    if verdict is not None:
+        return verdict
+    latin, foreign, cjk = _tokenise(texts)
+    joined = ' '.join(_normalise(t) for t in texts)
+    if (not latin) or foreign or cjk or any(ch.isdigit() for ch in joined) or _has_mid_sentence_capital(texts):
+        return 'keep'
+    filler_ratio = sum(_is_filler(t) for t in latin) / len(latin)
+    content_density = sum(not _is_filler(t) and t not in FUNCTION_WORDS for t in latin) / len(latin)
+    if content_density <= FALLBACK_MAX_CONTENT_DENSITY and filler_ratio > FALLBACK_MIN_FILLER_RATIO:
+        return 'discard'
+    return 'keep'

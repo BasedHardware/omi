@@ -540,7 +540,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("--expect-absent", embed)
         self.assertIn("-emit-const-values", _runner_text())
         self.assertIn("Metadata.appintents", advisory)
-        self.assertIn("Siri release metadata requires Xcode 27.0", embed)
+        self.assertIn("Siri release metadata requires Xcode 27 or newer", embed)
         self.assertNotRegex(embed, r"\brg\b", "release metadata script must run on stock macos-26")
 
     def test_stable_metadata_check_does_not_invoke_unsupported_processor(self):
@@ -592,6 +592,46 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             result = subprocess.run(command, env=environment, text=True, capture_output=True, check=False)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("unexpectedly includes", result.stderr)
+
+    def test_siri_metadata_accepts_every_xcode_27_and_refuses_older(self):
+        """An exact `Xcode 27.0` match refused every dev build once Xcode 27.1 shipped."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "Desktop"
+            bundle = root / "Omi.app"
+            (bundle / "Contents/Resources").mkdir(parents=True)
+            objects = package / ".build/out/Debug/Omi Computer.build/Objects-normal/arm64"
+            objects.mkdir(parents=True)
+            (objects / "Main.swiftconstvalues").write_text("[]")
+            (package / "Sources").mkdir()
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            marker = root / "processor-called"
+            (fake_bin / "xcodebuild").write_text(
+                '#!/bin/sh\nprintf "%s\\nBuild version 27A1\\n" "$SIRI_TEST_XCODE"\n', encoding="utf-8")
+            (fake_bin / "xcrun").write_text(
+                '#!/bin/sh\ntouch "$SIRI_TEST_PROCESSOR_MARKER"; exit 99\n', encoding="utf-8")
+            for tool in fake_bin.iterdir():
+                tool.chmod(0o755)
+            command = [
+                "bash", str(REPO_ROOT / "desktop/macos/scripts/embed-app-intents-metadata.sh"),
+                str(package), str(bundle), "Debug", "arm64",
+            ]
+            for version, reaches_processor in (
+                ("Xcode 26.6", False), ("Xcode 27.0", True), ("Xcode 27.1", True), ("Xcode 28.0", True),
+            ):
+                with self.subTest(version=version):
+                    marker.unlink(missing_ok=True)
+                    environment = os.environ | {
+                        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+                        "SIRI_TEST_XCODE": version,
+                        "SIRI_TEST_PROCESSOR_MARKER": str(marker),
+                    }
+                    result = subprocess.run(command, env=environment, text=True, capture_output=True, check=False)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertEqual(marker.exists(), reaches_processor, result.stderr)
+                    if not reaches_processor:
+                        self.assertIn("requires Xcode 27 or newer", result.stderr)
 
     def test_mobile_27_only_sources_compile_out_on_required_ci(self):
         root = REPO_ROOT / "app/ios/Runner/SiriIntegration"

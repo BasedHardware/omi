@@ -1,0 +1,132 @@
+{
+  "schema_version": 2,
+  "catalog_revision": 7,
+  "show_subscription_ui": true,
+  "header": "You've used 80% of this month's usage",
+  "current": {
+    "plan_id": "plus",
+    "name": "Plus",
+    "price_id": "price_plus_month",
+    "interval": "month",
+    "legacy": false,
+    "cancel_at_period_end": false,
+    "line": "You're on Plus · $19.99/mo · renews Nov 1",
+    "legacy_note": null
+  },
+  "usage": {
+    "kind": "usage_budget",
+    "percent": 80,
+    "period_id": "2026-10",
+    "reset_label": "resets Nov 1",
+    "meter_line": "80% used · about 20 hours of recording left · resets Nov 1",
+    "nudge_line": "You've used 80% of this month's usage · resets Nov 1",
+    "pro_gates": [
+      "proactive_agent",
+      "screen_context"
+    ]
+  },
+  "tiers": [
+    {
+      "tier_id": "operator:ladder_v1",
+      "plan_id": "operator",
+      "name": "Pro",
+      "recommended": true,
+      "is_current": false,
+      "hours_line": "About 280 hours of recording a month, enough to wear it all day",
+      "bullets": [
+        "Omi reminds you of things you said you'd do",
+        "On your Mac, Omi can see what you're working on and help with it",
+        "5,000 MCP requests a day"
+      ],
+      "action": "checkout",
+      "cta_label": "Upgrade to Pro",
+      "blocked_line": null,
+      "compact": false,
+      "prices": [
+        {
+          "price_id": "price_operator_month",
+          "interval": "month",
+          "amount_minor": 4999,
+          "currency": "usd",
+          "headline": "$49.99/month",
+          "subline": null,
+          "renewal_line": "Renews monthly until you cancel. Cancel anytime in settings."
+        },
+        {
+          "price_id": "price_operator_year",
+          "interval": "year",
+          "amount_minor": 49990,
+          "currency": "usd",
+          "headline": "$41.66/month",
+          "subline": "$499.90 billed yearly · 2 months free",
+          "renewal_line": "Renews yearly until you cancel. Cancel anytime in settings.",
+          "months_free": 2
+        }
+      ]
+    },
+    {
+      "tier_id": "plus:ladder_v1",
+      "plan_id": "plus",
+      "name": "Plus",
+      "recommended": false,
+      "is_current": true,
+      "hours_line": "About 100 hours of recording a month, around 3 hours a day",
+      "bullets": [],
+      "action": "checkout",
+      "cta_label": null,
+      "blocked_line": null,
+      "compact": false,
+      "prices": [
+        {
+          "price_id": "price_plus_year",
+          "interval": "year",
+          "amount_minor": 19990,
+          "currency": "usd",
+          "headline": "$19.99/month",
+          "subline": "$199.90 billed yearly · 2 months free",
+          "renewal_line": "Renews yearly until you cancel. Cancel anytime in settings.",
+          "months_free": 2,
+          "cta_label": "Switch to yearly · save $39.98"
+        }
+      ]
+    },
+    {
+      "tier_id": "architect:ladder_v1",
+      "plan_id": "architect",
+      "name": "Architect",
+      "recommended": false,
+      "is_current": false,
+      "hours_line": "About 1,200 hours of recording a month, for all-day use on more than one device",
+      "bullets": [
+        "Everything in Pro, with over 4 times the usage",
+        "At least 5,000 MCP requests a day"
+      ],
+      "action": "checkout",
+      "cta_label": "Upgrade to Architect",
+      "blocked_line": null,
+      "compact": false,
+      "prices": [
+        {
+          "price_id": "price_architect_month",
+          "interval": "month",
+          "amount_minor": 19900,
+          "currency": "usd",
+          "headline": "$199/month",
+          "subline": null,
+          "renewal_line": "Renews monthly until you cancel. Cancel anytime in settings."
+        },
+        {
+          "price_id": "price_architect_year",
+          "interval": "year",
+          "amount_minor": 199000,
+          "currency": "usd",
+          "headline": "$165.83/month",
+          "subline": "$1,990 billed yearly · 2 months free",
+          "renewal_line": "Renews yearly until you cancel. Cancel anytime in settings.",
+          "months_free": 2
+        }
+      ]
+    }
+  ],
+  "yearly_toggle_label": "Yearly · 2 months free"
+}

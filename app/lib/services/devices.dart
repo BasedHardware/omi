@@ -188,7 +188,17 @@ class DeviceService {
         await connection.connect(
           onConnectionStateChanged: onDeviceConnectionStateChanged,
         );
-      } catch (_) {
+      } catch (e) {
+        final isTimeout = e is TimeoutException || (e is DeviceConnectionException && e.isTimeout);
+        if (isTimeout) {
+          // A launch connection attempt timed out waiting for an offline or
+          // out-of-range device. Native BLE maintains auto-reconnect in the
+          // background; preserve the transport and registration so when the
+          // peripheral comes back in range, native device-ready events restore
+          // the connection and resume capture.
+          rethrow;
+        }
+
         // A native GATT link may already be up even when device-specific
         // initialization (for example, a protected Limitless write) fails.
         // Tear that partial connection down so the UI cannot retain a ghost
@@ -359,12 +369,17 @@ class DeviceService {
     return null;
   }
 
+  /// A connection leaving [_connections] is always disposed: an orphaned
+  /// transport stays registered for native events and would swallow the next
+  /// device-ready, leaving the UI disconnected over a live link.
   Future<void> disconnectDevice(String deviceId) async {
-    final connection = _connections[deviceId];
-    if (connection != null) {
-      Logger.debug("DeviceService: Disconnecting device $deviceId...");
+    final connection = _connections.remove(deviceId);
+    if (connection == null) return;
+    Logger.debug("DeviceService: Disconnecting device $deviceId...");
+    try {
       await connection.disconnect();
-      _connections.remove(deviceId);
+    } finally {
+      await connection.transport.dispose();
     }
   }
 

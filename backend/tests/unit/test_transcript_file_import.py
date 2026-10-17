@@ -2607,3 +2607,29 @@ def test_a_shutdown_during_a_failing_save_still_releases_its_bytes(tmp_path, job
 
     release.assert_called_once_with(UID, 'byte', 'reservation')
     assert job.store.docs == {}
+
+
+def test_paragraph_title_line_stays_its_own_cue():
+    """#21203 — a title line + one speaker label must not glue onto the name.
+
+    Before: a block with <2 labels joined into one cue, so 'Meeting notes'
+    became part of the first speaker's name ('Meeting notes Alice')."""
+    from utils.imports.transcript_files import _paragraph_cues
+
+    cues = _paragraph_cues(['Meeting notes', 'Alice: hi there'])
+    texts = [c.text for c in cues]
+    assert texts == ['Meeting notes', 'Alice: hi there']
+
+
+def test_paragraph_wrapped_turn_still_joins():
+    from utils.imports.transcript_files import _paragraph_cues
+
+    cues = _paragraph_cues(['Alice: hi', 'more of the turn'])
+    assert [c.text for c in cues] == ['Alice: hi more of the turn']
+
+
+def test_paragraph_no_labels_whole_block():
+    from utils.imports.transcript_files import _paragraph_cues
+
+    cues = _paragraph_cues(['just', 'a', 'paragraph'])
+    assert [c.text for c in cues] == ['just a paragraph']

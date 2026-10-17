@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-stale-audio-outage-bills-connected-day",
+  "status": "open",
+  "violated_contract": "Daily lost-audio accounting must not charge a stale native outage marker for time the device was connected. A marker retained across reconnect or process restore is not a full calendar day of lost audio; real loss cannot exceed disconnected time, and a never-recovered gap still counts when the day has no connection evidence.",
+  "canonical_prevention": "Do not reopen an outage from a native start once the current link has delivered audio; close markers that predate that link at the link start and leave a newer in-link gap alone. Cap emitted lost-audio seconds by the day's disconnected time. On iOS, clear the native marker when audio resumes even if the history plist write fails.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/device_health_telemetry_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/utils/analytics/device_health_telemetry.dart",
+    "app/ios/Runner/Ble/OmiBleManager.swift"
+  ]
+}

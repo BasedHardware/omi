@@ -9,8 +9,8 @@ import time
 from datetime import datetime, timezone
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
-import httpx
 import pytest
 from testing.messaging.adapter_contract import AdapterContract
 from testing.messaging.adapter_fakes import FixtureTransport, FixtureLedger, no_sleep
@@ -46,7 +46,7 @@ def signed(adapter, body, *, timestamp=None):
 def adapter(request, monkeypatch):
     transport, ledger = FixtureTransport(), FixtureLedger()
     if request.param == 'telegram':
-        result = TelegramAdapter(
+        result: Any = TelegramAdapter(
             '000:fixture-token', 'fixture_secret', transport=transport, ledger=ledger, sleep=no_sleep
         )
     else:
@@ -61,9 +61,9 @@ def adapter(request, monkeypatch):
     result.sent = []
     send = result.send
 
-    async def record(message, *, text=None, artifact=None, draft=False):
+    async def record(message, *, text=None, artifact=None, draft=False, link=None):
         result.sent.append(dict(message=message, text=text, artifact=artifact, draft=draft))
-        await send(message, text=text, artifact=artifact, draft=draft)
+        await send(message, text=text, artifact=artifact, draft=draft, **({'link': link} if link else {}))
 
     async def owned_bytes(artifact):
         return b'abc'
@@ -146,7 +146,7 @@ def test_linq_link_then_reply_and_next_turn_after_failure(adapter, monkeypatch, 
 
     monkeypatch.setattr(store, 'append_event', append_history)
     cleaned = []
-    usage = ContextVar('fixture_usage', default=None)
+    usage: ContextVar[str | None] = ContextVar('fixture_usage', default=None)
     turns = []
 
     def turn(*args, **kwargs):
@@ -170,13 +170,13 @@ def test_linq_link_then_reply_and_next_turn_after_failure(adapter, monkeypatch, 
                 usage.reset(token)
                 cleaned.append(True)
 
-        return ClientJourneyAttempt('chat_first_answer', 'unknown').observe_stream(
+        return ClientJourneyAttempt('mobile_chat', 'unknown').observe_stream(
             source(),
             success_when=lambda frame: frame.startswith('done: '),
             failure_when=lambda frame: frame.startswith('error: '),
         )
 
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
 
     async def deliver(kind, message_id, text=None):
         value = json.loads(fixture('linq', kind))
@@ -280,7 +280,7 @@ def test_failed_deferred_reply_remains_fenced(adapter, monkeypatch):
 
         return stream()
 
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
     principal = Principal('user', frozenset(), datetime.now(timezone.utc) + timedelta(minutes=5), 'task')
     event = ReentryEvent('event', 'Synthetic result', 'task')
 
@@ -326,7 +326,7 @@ def test_task_cancellation_retains_lease_until_worker_stops(adapter, monkeypatch
 
         return stream()
 
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
 
     async def deliver(kind, message_id, text=None):
         value = json.loads(fixture('linq', kind))
@@ -489,7 +489,7 @@ def test_voice_notes_off_does_not_run_a_turn(adapter):
     async def turn(*args, **kwargs):
         turns.append(args)
 
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
     asyncio.run(gateway.process(path))
     assert turns == []
     assert 'Voice notes are turned off' in adapter.sent[-1]['text']
@@ -517,7 +517,7 @@ def test_renderers_escape_split_and_citations(adapter):
     assert all(len(p.encode('utf-16-le')) // 2 <= adapter.capabilities.max_text_len for p in parts)
     assert '[1]' not in ''.join(parts)
     assert not any(p.endswith('\\') for p in parts)
-    assert source_phrases('See [1]', [{'title': 'Weekly review'}]) == 'See (from Weekly review)'
+    assert source_phrases('See [1]', [{'title': 'Weekly review'}]) == 'See'
     assert ''.join(split_text('a b\n😀' * 10, 8)) == 'a b\n😀' * 10
 
 
@@ -639,8 +639,8 @@ def test_followups_buttons_and_citation_source_prose(adapter):
         await adapter.admitted(message)
         await ChannelReplySink(adapter, message).finish_payload(
             {
-                'text': 'Found [1].',
-                'conversations': [{'title': 'Daily standup'}],
+                'text': 'Found Daily standup [1].',
+                'conversations': [{'id': 'conv-1', 'title': 'Daily standup'}],
                 'follow_up_suggestions': ['Explain more', 'x' * 80],
             }
         )
@@ -648,11 +648,41 @@ def test_followups_buttons_and_citation_source_prose(adapter):
     asyncio.run(run())
     payload = adapter.transport.calls[-1][2]['json']
     if adapter.channel == 'telegram':
-        assert payload['reply_markup']['inline_keyboard'][0][0]['callback_data'] == 'ask:Explain more'
-        assert 'Daily standup' in payload['text']
+        assert payload['reply_markup']['inline_keyboard'][0][0] == {
+            'text': 'Daily standup',
+            'url': 'https://h.omi.me/conversation/conv-1',
+        }
+        assert '[1]' not in payload['text']
     else:
-        assert 'Daily standup' in payload['message']['parts'][0]['value']
+        assert 'https://h.omi.me' not in payload['message']['parts'][0]['value']
         assert 'Explain more' not in str(payload)
+
+
+def test_many_items_are_one_imessage_link_or_bounded_telegram_buttons(adapter):
+    message = adapter.parse(fixture(adapter.provider))[0]
+    conversations = [{'id': f'id {index}', 'kind': 'task', 'title': f'Task {index}'} for index in range(6)]
+
+    async def run():
+        await adapter.admitted(message)
+        await ChannelReplySink(adapter, message).finish_payload(
+            {'text': ', '.join(item['title'] for item in conversations) + ' [#1][#2].', 'conversations': conversations}
+        )
+
+    asyncio.run(run())
+    payload = adapter.transport.calls[-1][2]['json']
+    if adapter.channel == 'telegram':
+        rows = payload['reply_markup']['inline_keyboard']
+        assert len(rows) == 5
+        assert all(row[0]['url'] != 'https://h.omi.me' for row in rows)
+        assert all(row[0]['url'].startswith('https://h.omi.me/task/id%20') for row in rows)
+        assert '[#1]' not in payload['text']
+        assert payload['text'].count('https://') == 0
+    else:
+        body = payload['message']['parts'][0]['value']
+        assert 'h.omi.me' not in body
+        assert body.count('https://') == 0
+        assert 'Open in Omi' not in body
+        assert '[#1]' not in body
 
 
 def test_media_fetch_bounds_and_ssrf(monkeypatch):
@@ -675,8 +705,8 @@ def test_real_followup_wire_block_and_source_title(adapter):
         await adapter.admitted(message)
         await ChannelReplySink(adapter, message).finish_payload(
             {
-                'text': 'See [1].',
-                'memories': [{'structured': {'title': 'Team meeting'}}],
+                'text': 'See Team meeting [1].',
+                'memories': [{'id': 'conv-1', 'structured': {'title': 'Team meeting'}}],
                 'content_blocks': [{'type': 'followUp', 'id': 'synthetic:followup', 'text': 'What changed?'}],
             }
         )
@@ -684,11 +714,12 @@ def test_real_followup_wire_block_and_source_title(adapter):
     asyncio.run(run())
     payload = adapter.transport.calls[-1][2]['json']
     if adapter.channel == 'telegram':
-        assert payload['reply_markup']['inline_keyboard'][0][0]['callback_data'] == 'ask:What changed?'
-        assert 'Team meeting' in payload['text']
+        assert '[1]' not in payload['text']
+        assert payload['reply_markup']['inline_keyboard'][0][0]['text'] == 'Team meeting'
+        assert payload['reply_markup']['inline_keyboard'][0][0]['url'] == 'https://h.omi.me/conversation/conv-1'
     else:
         assert 'What changed?' not in str(payload)
-        assert 'Team meeting' in payload['message']['parts'][0]['value']
+        assert 'https://h.omi.me' not in payload['message']['parts'][0]['value']
 
 
 def test_revocation_during_429_backoff_blocks_retry(adapter):
@@ -720,14 +751,16 @@ def test_revocation_during_429_backoff_blocks_retry(adapter):
 def test_media_prepare_stt_and_searchable_file_ids(adapter, monkeypatch):
     from database import chat
     from utils.messaging.adapters.media import ChatMediaStore
-    from utils.stt import pre_recorded
+    from utils import chat as voice_chat
 
+    monkeypatch.setattr(voice_chat, 'linear16_pcm_is_silent', lambda *a, **k: False)
+    monkeypatch.setattr(voice_chat, 'resolve_voice_message_language', lambda *a: 'en')
     calls = []
     media = ChatMediaStore()
     monkeypatch.setattr(
-        pre_recorded,
+        voice_chat,
         'prerecorded_from_bytes',
-        lambda data, **kwargs: [{'word': 'voice'}, {'punctuated_word': 'transcribed.'}],
+        lambda data, **kwargs: [{'text': 'voice transcribed.', 'timestamp': [0, 0.12], 'speaker': 'SPEAKER_00'}],
     )
 
     def ingest(uid, attachment, data):
@@ -739,6 +772,14 @@ def test_media_prepare_stt_and_searchable_file_ids(adapter, monkeypatch):
         chat, 'add_files_to_chat_session', lambda uid, session, ids: calls.append(('session', uid, session, ids))
     )
     adapter.media = media
+
+    async def download(attachment):
+        if attachment.voice:
+            filename = 'voice.m4a' if adapter.provider == 'linq' else 'voice.ogg'
+            return (FIXTURES / 'audio' / filename).read_bytes()
+        return b'fixture file'
+
+    monkeypatch.setattr(adapter, 'download', download)
     checks = []
 
     async def guard():
@@ -747,7 +788,7 @@ def test_media_prepare_stt_and_searchable_file_ids(adapter, monkeypatch):
     async def run():
         voice = adapter.parse(fixture(adapter.provider, 'voice'))[0]
         result = await adapter.prepare(voice, 'test', {'id': 'surface-session'}, guard)
-        assert 'voice transcribed.' in result.text and not result.attachments
+        assert 'Voice transcribed.' in result.text and not result.attachments
         document = adapter.parse(fixture(adapter.provider, 'document'))[0]
         result = await adapter.prepare(document, 'test', {'id': 'surface-session'}, guard)
         assert result.media[0].file_store_ref == 'owned-file-id'
@@ -836,12 +877,12 @@ def test_app_writes_do_not_create_undo_or_channel_capture(monkeypatch):
     monkeypatch.setattr(preference_tools, 'capture_memory_write', lambda **kwargs: called.append(kwargs))
     token = surface_runtime.set(SurfaceRuntime('channel:test', '', Principal('test')))
     try:
-        preference_tools._capture_app_memory_write(content='synthetic')
+        getattr(preference_tools, '_capture_app_memory_write')(content='synthetic')
         assert not called
     finally:
         surface_runtime.reset(token)
     assert undo.record_write('test', 'task', 'id', None, {}) == ''
-    preference_tools._capture_app_memory_write(content='synthetic')
+    getattr(preference_tools, '_capture_app_memory_write')(content='synthetic')
     assert len(called) == 1
 
 
@@ -850,7 +891,8 @@ def test_adapter_http_routes_authenticate_before_admission(adapter, monkeypatch)
     from fastapi.testclient import TestClient
     from routers import messaging
 
-    gateway = Gateway(adapter, store=MemoryStore(), turn=lambda *a, **k: pytest.fail('Turn before HTTP ACK'))
+    store = MemoryStore()
+    gateway = Gateway(adapter, store=store, turn=lambda *a, **k: pytest.fail('Turn before HTTP ACK'))
     monkeypatch.setattr(messaging, '_gateways', {'provider-test': gateway})
     app = FastAPI()
     app.include_router(messaging.router)
@@ -858,7 +900,7 @@ def test_adapter_http_routes_authenticate_before_admission(adapter, monkeypatch)
     with TestClient(app) as client:
         assert client.post('/v1/messaging/webhooks/provider-test', content=body, headers=headers).status_code == 202
         assert client.post('/v1/messaging/webhooks/provider-test', content=body, headers=headers).status_code == 202
-        assert len(gateway.store.jobs) == 1
+        assert len(store.jobs) == 1
         assert not adapter.transport.calls
         assert client.post('/v1/messaging/webhooks/provider-test', content=body, headers={}).status_code == 401
         assert client.post('/v1/messaging/webhooks/missing', content=body, headers=headers).status_code == 404
@@ -903,3 +945,68 @@ def test_provider_http_logs_filter_credential_urls():
     )
     assert not filter_.filter(record)
     assert filter_.filter(logging.LogRecord('httpx', logging.INFO, '', 0, 'unrelated request', (), None))
+
+
+def test_telegram_definite_html_rejection_falls_back_once():
+    transport = FixtureTransport([(400, {'ok': False, 'description': "Bad Request: can't parse entities"}, {})])
+    adapter = TelegramAdapter('000:fixture-token', 'fixture_secret', transport=transport, sleep=no_sleep)
+    asyncio.run(adapter.api('sendMessage', {'chat_id': 'fixture', 'text': '<b>A &amp; B</b>', 'parse_mode': 'HTML'}))
+    assert len(transport.calls) == 2
+    first, second = [call[2]['json'] for call in transport.calls]
+    assert first['parse_mode'] == 'HTML'
+    assert second == {'chat_id': 'fixture', 'text': 'A & B'}
+
+
+@pytest.mark.parametrize('status', [400, 500])
+def test_telegram_other_failure_never_replays_send_as_plain(status):
+    transport = FixtureTransport([(status, {'ok': False, 'description': 'unrelated rejection'}, {})])
+    adapter = TelegramAdapter('000:fixture-token', 'fixture_secret', transport=transport, sleep=no_sleep)
+    with pytest.raises(ProviderError):
+        asyncio.run(adapter.api('sendMessage', {'chat_id': 'fixture', 'text': '<b>A</b>', 'parse_mode': 'HTML'}))
+    assert len(transport.calls) == 1
+
+
+def test_follow_up_suggestions_are_not_rendered_on_channels(adapter):
+    message = adapter.parse(fixture(adapter.provider))[0]
+
+    async def run():
+        await adapter.admitted(message)
+        await ChannelReplySink(adapter, message).finish_payload(
+            {
+                'text': 'Nothing linked here.',
+                'follow_up_suggestions': ['What was the next step for the share-buyback review?'],
+                'content_blocks': [{'type': 'followUp', 'id': 'synthetic:followup', 'text': 'What changed?'}],
+            }
+        )
+
+    asyncio.run(run())
+    payload = adapter.transport.calls[-1][2]['json']
+    assert 'reply_markup' not in payload
+    assert 'share-buyback' not in str(payload)
+    assert 'What changed?' not in str(payload)
+
+
+def test_legacy_follow_up_button_tap_still_asks():
+    adapter = TelegramAdapter(
+        '000:fixture-token', 'fixture_secret', transport=FixtureTransport(), ledger=FixtureLedger(), sleep=no_sleep
+    )
+    item = json.loads(fixture('telegram'))['message']
+    body = json.dumps(
+        {
+            'update_id': 9,
+            'callback_query': {'id': 'cb', 'from': item['from'], 'message': item, 'data': 'ask:What changed?'},
+        }
+    )
+    assert adapter.parse(body.encode())[0].text == 'What changed?'
+
+
+@pytest.mark.parametrize(
+    'channel, words', [('telegram', ('/new', '/unlink', 'Undo button')), ('imessage', ('new chat', 'unlink', 'undo'))]
+)
+def test_help_uses_channel_command_words(channel, words):
+    from utils.messaging.gateway import help_text
+
+    text = help_text(channel)
+    assert all(word in text for word in words)
+    if channel == 'imessage':
+        assert '/' not in text

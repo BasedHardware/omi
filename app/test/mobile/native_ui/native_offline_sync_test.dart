@@ -123,6 +123,16 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   List<Wal> get displaySortedWals => wals;
   @override
   int get needsAttentionWalsCount => 0;
+
+  @override
+  int get missingWalsInSeconds => 0;
+
+  @override
+  List<Wal> get retryableAttentionWals => wals.where((w) => w.syncDisplayState == WalSyncDisplayState.failed).toList();
+
+  @override
+  ({int doneSeconds, int totalSeconds, bool tracked}) get offlineServerProcessingSeconds =>
+      (doneSeconds: 0, totalSeconds: 0, tracked: false);
   @override
   Future<void> discoverDeviceWals({String? firmwareVersion}) async {}
   @override
@@ -155,6 +165,8 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   String get currentFirmwareVersion => 'Unknown';
   @override
   BtDevice? get connectedDevice => null;
+  @override
+  bool get isConnected => false;
   @override
   Future<void> refreshRingStorageStatus() async {}
   @override
@@ -349,7 +361,7 @@ void main() {
       await _send(tester, host, 'sync_filter', 'synced');
       expect(sync.calls, ['filter:synced']);
       expect(nativeProjectedRow(tester, 'sync_filter').value, 'synced');
-      expect(nativeProjectedRow(tester, _walRow(tester, 0)).subtitle, _l10n.syncStatusConversationCreated);
+      expect(nativeProjectedRow(tester, _walRow(tester, 0)).subtitle, _l10n.statusProcessed);
 
       await _send(tester, host, 'sync_filter', 'corrupted');
       expect(nativeProjectedRow(tester, _walRow(tester, 0)).subtitle, _l10n.syncStatusFileUnavailable);
@@ -694,7 +706,8 @@ void main() {
   group('AutoSyncPage', () {
     testWidgets('continuous files become one recording with the worst status and retry only failed files',
         (tester) async {
-      final older = _wal(0, status: WalStatus.synced);
+      // Both still to sync: the pending segment groups continuous files; a synced file is on the other one.
+      final older = _wal(0);
       final newer = _wal(0)..timerStart = older.timerStart + 75;
       newer.retryCount = walMaxAutoRetries;
       final sync = _Sync()..wals = [newer, older];
@@ -715,6 +728,8 @@ void main() {
       final host = await _pump(tester, const AutoSyncPage(), sync);
       await tester.pump(const Duration(milliseconds: 100));
       await NativeTestHost.settle(tester);
+      // Synced recordings live on the second segment, as on the classic chips.
+      await _send(tester, host, 'offline_filter', 'synced');
 
       int walRows() => _rowIds(tester).where((id) => RegExp(r'^offline_wal:[^:]+:\d+$').hasMatch(id)).length;
       expect(walRows(), 200);
@@ -730,7 +745,20 @@ void main() {
       addTearDown(sync.dispose);
       final presented = _answerPresentations((_) => {'action': null, 'reason': 'cancel'});
       final host = await _pump(tester, const AutoSyncPage(), sync);
-      await _send(tester, host, 'offline_info');
+      // The explainer opens from the Flutter Sync details sheet, as on the classic page: no info toolbar row.
+      expect(_rowIds(tester), isNot(contains('offline_info')));
+      // The row's handler awaits the details sheet, so the send only completes once it closes.
+      unawaited(
+          host.sendFromNative(host.created.last, const MethodCall('action', {'id': 'offline_details', 'value': null})));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      // The button sits below the fold of the test viewport.
+      await tester.ensureVisible(find.text(_l10n.howSyncingWorks));
+      await tester.pump();
+      await tester.tap(find.text(_l10n.howSyncingWorks));
+      // The details sheet underneath keeps animating, so settle by frames rather than until idle.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
       final snapshot = presented.single;
       expect(snapshot['title'], _l10n.howSyncingWorks);
       final section = (snapshot['sections'] as List).single as Map;

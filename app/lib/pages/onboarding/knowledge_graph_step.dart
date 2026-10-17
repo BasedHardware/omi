@@ -171,6 +171,7 @@ class _OnboardingKnowledgeGraphStepState extends State<OnboardingKnowledgeGraphS
                     showAppBar: false,
                     showShareButton: false,
                     initialZoom: 0.72,
+                    fitToBounds: true,
                     loadGraph: widget.loadGraph,
                   ),
                 ),

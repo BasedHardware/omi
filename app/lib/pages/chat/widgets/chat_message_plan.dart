@@ -1,29 +1,7 @@
 import 'package:omi/backend/schema/chat_content_block.dart';
 import 'package:omi/backend/schema/memory_review.dart';
 import 'package:omi/backend/schema/message.dart';
-import 'package:omi/models/chat_evidence_reference.dart';
 import 'package:omi/widgets/extensions/string.dart';
-
-/// Conversation-shaped evidence is the same source list as [ServerMessage.memories].
-/// Keep those citations on [MemoriesMessageWidget] only.
-bool isConversationSourceEvidence(ChatEvidenceReferenceKind kind) {
-  return kind == ChatEvidenceReferenceKind.conversationSummary || kind == ChatEvidenceReferenceKind.conversationSegment;
-}
-
-/// Supplemental chrome to render beside the answer. Conversation sources that
-/// already appear as citation cards are stripped so the message has one list.
-ChatEvidenceReferenceEnvelope? visibleSupplementalEvidence(ServerMessage message) {
-  final evidence = message.evidenceEnvelope;
-  if (evidence == null || evidence.isEmpty) return null;
-  if (message.memories.isEmpty) return evidence;
-  final leftover = evidence.references.where((ref) => !isConversationSourceEvidence(ref.kind)).toList();
-  if (leftover.isEmpty) return null;
-  return ChatEvidenceReferenceEnvelope(
-    schemaVersion: evidence.schemaVersion,
-    requestId: evidence.requestId,
-    references: leftover,
-  );
-}
 
 /// The widget that draws an AI reply's body, chosen exactly as [buildMessageWidget] always has.
 enum ChatMessageLayout {
@@ -53,7 +31,6 @@ enum ChatMessagePartKind {
   citations,
   blocks,
   reviewCard,
-  evidence,
   memoryActionReceipt,
 }
 
@@ -143,7 +120,6 @@ class ChatMessagePlan {
       },
       if (renderable && !replace) ChatMessagePartKind.blocks,
       if (!typing && message.memoryReviewCard != null) ChatMessagePartKind.reviewCard,
-      if (visibleSupplementalEvidence(message) != null) ChatMessagePartKind.evidence,
       if (!typing && message.memoryAction != null) ChatMessagePartKind.memoryActionReceipt,
     ];
     return ChatMessagePlan._(message, layout, parts, showTypingIndicator: typing);
@@ -161,14 +137,12 @@ class ChatMessagePlan {
   static const _appended = [
     ChatMessagePartKind.blocks,
     ChatMessagePartKind.reviewCard,
-    ChatMessagePartKind.evidence,
     ChatMessagePartKind.memoryActionReceipt,
   ];
   static const _layoutParts = {
     ChatMessageLayout.blocks: [
       ChatMessagePartKind.blocksReplaceBody,
       ChatMessagePartKind.reviewCard,
-      ChatMessagePartKind.evidence,
       ChatMessagePartKind.memoryActionReceipt,
     ],
     ChatMessageLayout.citations: [
@@ -214,8 +188,6 @@ class ChatMessagePlan {
   static List<String> _steps(ServerMessage message) =>
       message.thinkings.map((t) => t.decodeString).where((t) => t.trim().isNotEmpty).toList();
 
-  ChatEvidenceReferenceEnvelope? get evidence => visibleSupplementalEvidence(message);
-
   MemoryReviewCardBlock? get reviewCard => has(ChatMessagePartKind.reviewCard) ? message.memoryReviewCard : null;
 
   /// The content blocks that render, in wire order.
@@ -230,6 +202,7 @@ class ChatMessagePlan {
         block is CaptureLinkContentBlock ||
         block is ConversationLinkContentBlock ||
         block is MemoryLinkContentBlock ||
+        block is EditReceiptContentBlock ||
         block is QuestionCardContentBlock ||
         block is DiscoveryCardContentBlock ||
         block is AgentSpawnContentBlock ||

@@ -4,6 +4,7 @@ import 'package:omi/mobile/native_ui/ios_native_home.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
+import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -11,13 +12,16 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// more as it scrolls. Home and the Conversations tab are one page since 2026-09-29; search,
 /// folders, starred and places open from the header's search button.
 class HomeContentPage extends StatefulWidget {
-  const HomeContentPage({super.key, this.requestInitialLoad = true, this.loadRecaps});
+  const HomeContentPage({super.key, this.requestInitialLoad = true, this.loadRecaps, this.pendingWork});
 
   /// See [ConversationsPage.requestInitialLoad].
   final bool requestInitialLoad;
 
   /// Injectable for tests and the visual audit; defaults to the recaps endpoint.
   final RecentRecapsLoader? loadRecaps;
+
+  /// See [ConversationsPage.pendingWork].
+  final PendingWorkStore? pendingWork;
 
   @override
   State<HomeContentPage> createState() => HomeContentPageState();
@@ -44,6 +48,7 @@ class HomeContentPageState extends State<HomeContentPage> {
       key: _listKey,
       requestInitialLoad: widget.requestInitialLoad,
       loadRecaps: widget.loadRecaps,
+      pendingWork: widget.pendingWork,
     );
     if (!nativePresentationEnabled) return classic;
     return FutureBuilder<bool>(

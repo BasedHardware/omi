@@ -10,6 +10,8 @@ import 'package:omi/pages/onboarding/find_device/device_discovery_controller.dar
 import 'package:omi/utils/device.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/widgets/connection_guide_sheet.dart';
+import 'pairing_failure_card.dart';
 
 @visibleForTesting
 Future<void> retryOfflineSavedDevice(Future<void> Function() connect) => connect();
@@ -71,7 +73,10 @@ class _FoundDevicesState extends State<FoundDevices> {
       builder: (context, provider, child) {
         final visibleDevices = provider.visibleDeviceList;
         return MessageListener<OnboardingProvider>(
-          showError: (error) => OmiFeedback.error(context, error),
+          showError: (error) {
+            // The inline card owns connect-failure recovery and its shown event.
+            if (error != 'DEVICE_CONNECT_FAILED') OmiFeedback.error(context, error);
+          },
           showInfo: (info) {
             if (info == "DEVICE_CONNECTED") {
               // Navigator.of(context).pushAndRemoveUntil(
@@ -100,6 +105,17 @@ class _FoundDevicesState extends State<FoundDevices> {
                 )
               else
                 Text(context.l10n.pairingSuccessful, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+              if (provider.pairingFailureReason != null && !provider.isConnected)
+                Padding(
+                  padding: const EdgeInsets.all(OmiSpacing.lg),
+                  child: PairingFailureCard(
+                    key: ValueKey(provider.pairingFailureVersion),
+                    reason: provider.pairingFailureReason!,
+                    onDismiss: provider.dismissPairingFailure,
+                    onRetry: widget.onRescan,
+                    onGuide: () => ConnectionGuideSheet.show(context),
+                  ),
+                ),
               if (visibleDevices.isNotEmpty) const SizedBox(height: 16),
               if (!provider.isConnected) ..._devicesList(provider),
               if (provider.isConnected)

@@ -64,19 +64,27 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
   }
 
   /// The existing reply body: sends [reply] trimmed, updates the provider and the review, and shows
-  /// the same toasts. [onSent] runs where the dialog used to close. Answers whether it was sent.
+  /// the same toasts. [onSent] runs where the dialog used to close. Answers whether it was sent: a
+  /// refused reply reports the failure and leaves the provider and the review unreplied, so the
+  /// editor stays open with its text.
   Future<bool> _submitReply(AppReview review, String reply, {VoidCallback? onSent}) async {
     final text = reply.trim();
     if (text.isEmpty) return false;
     try {
-      await ((kDebugMode ? ReviewsListPage.debugReplySenderForTest : null) ?? replyToAppReview)(
-          widget.app.id, text, review.uid);
+      final sent = await ((kDebugMode ? ReviewsListPage.debugReplySenderForTest : null) ?? replyToAppReview)(
+        widget.app.id,
+        text,
+        review.uid,
+      );
+      // replyToAppReview answers false instead of throwing; keep the editor and its text open.
+      if (!sent) {
+        if (mounted) {
+          OmiFeedback.error(context, context.l10n.failedToSendReply(context.l10n.somethingWentWrongTryAgain));
+        }
+        return false;
+      }
       if (mounted) {
-        context.read<AppProvider>().updateLocalAppReviewResponse(
-              widget.app.id,
-              text,
-              review.uid,
-            );
+        context.read<AppProvider>().updateLocalAppReviewResponse(widget.app.id, text, review.uid);
       }
       review.response = text;
       review.respondedAt = DateTime.now();
@@ -102,8 +110,8 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
   }
 
   /// Answers false when the native editor could not be used, so the caller opens the Flutter dialog.
-  /// Blank text is never sent and keeps the editor open, as does a send that throws; [onDraft] keeps
-  /// the latest text for the Flutter dialog.
+  /// Blank text is never sent and keeps the editor open, as does a send that is refused or throws;
+  /// [onDraft] keeps the latest text for the Flutter dialog.
   Future<bool> _replyNative(AppReview review, ValueChanged<String> onDraft) async {
     var draft = review.response;
     while (true) {
@@ -267,10 +275,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
             const SizedBox(height: OmiSpacing.xl),
             // Reviews List
             filteredReviews.isEmpty
-                ? OmiEmptyState(
-                    glyph: const FaIcon(FontAwesomeIcons.star),
-                    title: context.l10n.noReviewsFound,
-                  )
+                ? OmiEmptyState(glyph: const FaIcon(FontAwesomeIcons.star), title: context.l10n.noReviewsFound)
                 : ListView.separated(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
@@ -380,10 +385,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
 
     return Container(
       padding: const EdgeInsets.all(OmiSpacing.md),
-      decoration: BoxDecoration(
-        color: OmiColors.surface1.withValues(alpha: 0.8),
-        borderRadius: OmiRadius.lgAll,
-      ),
+      decoration: BoxDecoration(color: OmiColors.surface1.withValues(alpha: 0.8), borderRadius: OmiRadius.lgAll),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -452,10 +454,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                 children: [
                   Row(
                     children: [
-                      Text(
-                        widget.app.author,
-                        style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600),
-                      ),
+                      Text(widget.app.author, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600)),
                       if (review.respondedAt != null) ...[
                         const SizedBox(width: OmiSpacing.xs),
                         Text(

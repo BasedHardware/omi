@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 from collections.abc import AsyncIterator
@@ -6,8 +7,11 @@ from contextlib import asynccontextmanager
 import firebase_admin
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import Response
 
+from database.firestore_tier_context import FirestoreTierMiddleware
 from utils.byok import BYOKMiddleware
+from utils.llm.desktop_proxy_lifetime import DesktopProxyDeadlineMiddleware
 from utils.env_loader import firebase_admin_options, load_backend_env
 from utils.firebase_admin_runtime import (
     firebase_verify_only_credential,
@@ -42,6 +46,8 @@ from utils.jit_rollout import close_posthog_control_plane
 from utils.free_tier_cohort import close_free_tier_control_plane
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
 from utils.llm.managed_spend_ledger import shutdown_managed_spend_ledger
+from utils.executors import log_executor_health, start_background_task
+from utils.desktop_loop_watchdog import DesktopLoopWatchdog, InFlightRequestsMiddleware
 
 
 def _initialize_firebase_admin() -> None:
@@ -78,13 +84,27 @@ def _initialize_firebase_admin() -> None:
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     prepare_google_credentials()
     _initialize_firebase_admin()
     start_metrics_sidecar_server()
+    watchdog: DesktopLoopWatchdog = app.state.loop_watchdog
+    watchdog.start()
+    health_task = start_background_task(log_executor_health(), name="executor_health")
+    heartbeat_task = (
+        start_background_task(watchdog.heartbeat(), name="desktop_loop_heartbeat") if watchdog.enabled else None
+    )
     try:
         yield
     finally:
+        watchdog.stop()
+        for task in (health_task, heartbeat_task):
+            if task is not None:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
         await shutdown_managed_spend_ledger()
         await reservation_state.aclose()
         await close_all_clients()
@@ -102,6 +122,15 @@ def _cors_allowed_origins_from_env() -> list[str]:
 
 def _build_app() -> FastAPI:
     app = FastAPI(lifespan=lifespan)
+    app.add_middleware(FirestoreTierMiddleware)
+    watchdog = DesktopLoopWatchdog(enabled=os.getenv("DESKTOP_LOOP_WATCHDOG_ENABLED", "true").lower() != "false")
+    app.state.loop_watchdog = watchdog
+    app.add_middleware(InFlightRequestsMiddleware, watchdog=watchdog)
+
+    @app.get("/healthz/live", include_in_schema=False)
+    async def desktop_liveness() -> Response:
+        return Response(status_code=200 if watchdog.is_live() else 503)
+
     # Explicit, default-deny CORS: desktop backend traffic is Bearer-token
     # authenticated, so no cross-origin browser caller needs to be allowed by
     # default. CORS_ALLOWED_ORIGINS lets an operator opt a specific web frontend
@@ -128,6 +157,7 @@ def _build_app() -> FastAPI:
     # always returns None here and BYOK users silently ride the managed/quota
     # lane instead of their own keys. main.py installs the same middleware.
     app.add_middleware(BYOKMiddleware)
+    app.add_middleware(DesktopProxyDeadlineMiddleware)
     app.include_router(desktop_core.router)
     app.include_router(auth.router)
     app.include_router(desktop_agent_vm.router)

@@ -1,4 +1,7 @@
+from config.stt_cap_dispatch import enabled as stt_cap_dispatch_enabled
+from utils.observability.stt_cap_dispatch import CONFIG_ERRORS
 import os
+from database.fsr_read_cache import fresh_reader
 from dataclasses import dataclass
 import time
 from datetime import datetime, timezone
@@ -28,6 +31,8 @@ from config.plan_catalog import (
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits, TrialMetadata
 from utils.byok import get_byok_key, get_byok_uid, get_cached_byok_state, has_validated_byok_keys
 from utils.log_sanitizer import sanitize
+from utils.plan_wire_capabilities import understands_plan_identity
+from utils.transcription_allowance import TranscriptionAllowance
 from utils.observability.fallback import record_fallback
 import logging
 
@@ -544,7 +549,7 @@ def get_paid_plan_definitions() -> List[Dict[str, Any]]:
         {
             "plan_type": PlanType.operator,
             "plan_id": "operator",
-            "title": "Operator",
+            "title": "Operator",  # Released macOS title parsers infer price ownership from this.
             "subtitle": f"{_chat_allowance_text(PlanType.operator)}",
             "description": f"{_chat_allowance_text(PlanType.operator)}. Shared with mobile and web.",
             "eyebrow": "Most popular",
@@ -735,36 +740,13 @@ def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -
     return False
 
 
-# Minimum client build whose plan enum includes `plus`/`max`. Defaulted ahead of
-# any shipped build so every current client is remapped today (see
-# wire_plan_for_client); lower once a plus/unlimited_v2-aware client ships.
-PLUS_UNLIMITED_V2_MIN_MOBILE_VERSION = os.getenv('PLUS_UNLIMITED_V2_MIN_MOBILE_VERSION', '99.0.0')
-PLUS_UNLIMITED_V2_MIN_DESKTOP_VERSION = os.getenv('PLUS_UNLIMITED_V2_MIN_DESKTOP_VERSION', '99.0.0')
-
-
-def client_understands_plus_unlimited_v2(platform: Optional[str], app_version: Optional[str]) -> bool:
-    if not platform or not app_version:
-        return False
-    platform_lower = platform.lower()
-    if platform_lower in _MOBILE_PLATFORM_TOKENS:
-        floor = PLUS_UNLIMITED_V2_MIN_MOBILE_VERSION
-    elif platform_lower in DESKTOP_PLATFORMS:
-        floor = PLUS_UNLIMITED_V2_MIN_DESKTOP_VERSION
-    else:
-        return False
-    try:
-        return compare_versions(app_version, floor) >= 0
-    except Exception:
-        return False
-
-
-def wire_plan_for_client(plan: PlanType, platform: Optional[str], app_version: Optional[str]) -> PlanType:
-    """Serialize `plus`/`max` as `unlimited` for clients whose enum predates them.
-
-    Only the label is remapped — real entitlement/limits are computed from the
-    true plan before this is called. Mirrors the `operator`→`unlimited` remap.
-    """
-    if plan in MOBILE_PLAN_TYPES and not client_understands_plus_unlimited_v2(platform, app_version):
+def wire_plan_for_client(
+    plan: PlanType, platform: Optional[str], app_version: Optional[str], plan_identity_version: Optional[str] = None
+) -> PlanType:
+    """Remap labels for old decoders; entitlement/limits use the true plan."""
+    if plan in MOBILE_PLAN_TYPES and not understands_plan_identity(
+        platform, app_version, plan_identity_version, compare_versions
+    ):
         return PlanType.unlimited
     return plan
 
@@ -1506,6 +1488,7 @@ def is_pending_cancellation(subscription: Optional[Subscription], now: Optional[
     return subscription.current_period_end > (now or int(time.time()))
 
 
+@fresh_reader
 def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tuple[bool, str]:
     """
     Checks if a user can make a new payment based on their current subscription status.
@@ -1603,9 +1586,15 @@ def get_monthly_usage_for_subscription(uid: str) -> Dict[str, Any]:
     """
     Gets the current monthly usage for subscription purposes, considering the launch date from env variables.
     The launch date format is expected to be YYYY-MM-DD.
-    If the launch date is not set, not valid, or in the future, usage is considered zero.
+    Legacy mode treats unset, invalid and future dates as zero usage. Dispatch
+    enforcement rejects missing/invalid configuration; an explicit future date
+    is the intentionally unlaunched policy in both modes.
     """
     subscription_launch_date_str = os.getenv('SUBSCRIPTION_LAUNCH_DATE')
+    if stt_cap_dispatch_enabled() and not subscription_launch_date_str:
+        CONFIG_ERRORS.labels(reason='missing').inc()
+        logger.error('event=stt_cap_launch_config outcome=invalid reason=missing')
+        raise ValueError('missing subscription launch date')
     if not subscription_launch_date_str:
         # Subscription not launched, so no usage is counted against limits.
         return {}
@@ -1614,6 +1603,10 @@ def get_monthly_usage_for_subscription(uid: str) -> Dict[str, Any]:
         # Use strptime to enforce YYYY-MM-DD format
         launch_date = datetime.strptime(subscription_launch_date_str, '%Y-%m-%d').replace(tzinfo=timezone.utc)
     except ValueError:
+        if stt_cap_dispatch_enabled():
+            CONFIG_ERRORS.labels(reason='invalid').inc()
+            logger.error('event=stt_cap_launch_config outcome=invalid reason=invalid')
+            raise
         # Invalid date format, treat as not launched.
         return {}
 
@@ -1635,34 +1628,13 @@ TRANSCRIPTION_MODE_BLOCKED = 'blocked'
 _UNRESOLVED: Any = object()
 
 
-@dataclass(frozen=True)
-class TranscriptionAllowance:
-    """The one answer to "may this user's audio be transcribed on Omi's managed STT right now?".
+def _closed(reason: str, *, limit_seconds: Optional[int] = 0) -> TranscriptionAllowance:
+    """No managed minutes; preserve a known total without reopening enforcement.
 
-    ``mode`` is what the client should open: ``managed`` (Omi-billed socket),
-    ``on_device`` (no managed minutes to spend — the plan's are used up, the
-    subscription is not active, or the answer could not be resolved; the local
-    engine is free on every plan), or ``blocked`` (the desktop trial paywall;
-    nothing opens). ``remaining_seconds`` is ``None`` when the allowance is
-    unlimited (unlimited plans, BYOK, reviewers), else the managed seconds
-    left this month. ``reason`` is a low-cardinality label for logs and tests.
+    A zero total here means unresolved, not unlimited. Snapshot serialization
+    retains its existing finite plan cap when this result has no known total.
     """
-
-    mode: str
-    remaining_seconds: Optional[int]
-    reason: str
-
-    @property
-    def managed(self) -> bool:
-        return self.mode == TRANSCRIPTION_MODE_MANAGED
-
-    def as_dict(self) -> Dict[str, Any]:
-        return {'mode': self.mode, 'remaining_seconds': self.remaining_seconds, 'reason': self.reason}
-
-
-def _closed(reason: str) -> TranscriptionAllowance:
-    """No managed minutes: the free local path, never a billed socket."""
-    return TranscriptionAllowance(TRANSCRIPTION_MODE_ON_DEVICE, 0, reason)
+    return TranscriptionAllowance(TRANSCRIPTION_MODE_ON_DEVICE, 0, reason, limit_seconds=limit_seconds)
 
 
 # resolve_transcription_allowance() reasons meaning "this lookup could not be
@@ -1708,6 +1680,7 @@ def resolve_transcription_allowance(
     subscription: Any = _UNRESOLVED,
     usage: Any = _UNRESOLVED,
     byok_active: Any = _UNRESOLVED,
+    omi_funded: bool = False,
 ) -> TranscriptionAllowance:
     """Resolve the managed-transcription allowance for one uid, once. Never raises.
 
@@ -1730,46 +1703,55 @@ def resolve_transcription_allowance(
     other caller — and any usage record that cannot be trusted, resolves to
     the free local path rather than a billed socket.
     """
+    known_limit_seconds: Optional[int] = 0
     try:
         # The reviewer identities the subscription snapshot already treats as
         # unlimited; resolved first so the paywall cannot contradict that snapshot.
         if is_marketplace_reviewer(uid):
-            return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'marketplace_reviewer')
+            return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'marketplace_reviewer', limit_seconds=None)
         # A Deepgram BYOK request is exempt from the trial paywall, as it is
         # from the quota: the user pays Deepgram directly. strict: a paywall
         # lookup failure must not open a billed socket for a paywalled account,
         # and only a validated key on this request (not a stored fingerprint)
         # exempts.
-        if is_trial_paywalled(uid, source, required_byok_provider='deepgram', strict=True):
+        paywall_kwargs = {'byok_exempt': False} if omi_funded else {}
+        if is_trial_paywalled(uid, source, required_byok_provider='deepgram', strict=True, **paywall_kwargs):
             return TranscriptionAllowance(TRANSCRIPTION_MODE_BLOCKED, 0, 'trial_paywalled')
         # Require the Deepgram header on this request so a user cannot activate
         # BYOK with fake fingerprints and then omit x-byok-deepgram to ride Omi's key.
+        if omi_funded:
+            byok_active = False
         if byok_active is _UNRESOLVED:
             byok_active = users_db.is_byok_active(uid)
         if byok_active and get_byok_key('deepgram'):
-            return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'byok')
+            return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'byok', limit_seconds=None)
         if subscription is _UNRESOLVED:
             subscription = users_db.get_user_valid_subscription(uid)
         if not subscription:
             return _closed('subscription_inactive')
         allowance = transcription_allowance_seconds(subscription.plan)
+        known_limit_seconds = allowance
         # The catalog's explicit unlimited marker projects to None. A finite
         # zero is a real zero allowance and must therefore fail closed.
         if allowance is None:
-            return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'plan_unlimited')
+            return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'plan_unlimited', limit_seconds=None)
         if usage is _UNRESOLVED:
             usage = get_monthly_usage_for_subscription(uid)
         used = _usage_seconds(usage)
         if used is None:
             logger.warning('transcription allowance: untrusted usage record for uid=%s', uid)
-            return _closed('usage_invalid')
+            return _closed('usage_invalid', limit_seconds=allowance)
         remaining = max(0, allowance - used)
         if remaining > 0:
-            return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, remaining, 'plan_within_allowance')
-        return _closed('plan_allowance_exhausted')
+            return TranscriptionAllowance(
+                TRANSCRIPTION_MODE_MANAGED, remaining, 'plan_within_allowance', limit_seconds=allowance
+            )
+        return TranscriptionAllowance(
+            TRANSCRIPTION_MODE_ON_DEVICE, 0, 'plan_allowance_exhausted', limit_seconds=allowance
+        )
     except Exception as exc:  # fail closed: a billed socket is never the default
         logger.warning('transcription allowance unavailable for uid=%s: %s', uid, type(exc).__name__)
-        return _closed('allowance_unavailable')
+        return _closed('allowance_unavailable', limit_seconds=known_limit_seconds)
 
 
 def has_transcription_credits(uid: str, source: Optional[str] = None) -> bool:
@@ -1936,12 +1918,22 @@ def get_remaining_transcription_seconds(uid: str, source: Optional[str] = None) 
     return resolve_transcription_allowance(uid, source).remaining_seconds
 
 
+def _stored_paid_period_lapsed(subscription: Subscription) -> bool:
+    end = subscription.current_period_end
+    return not end or datetime.fromtimestamp(end, tz=timezone.utc) < datetime.now(timezone.utc)
+
+
 def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None) -> Subscription | None:
     """
-    If Firestore says `basic` but there is a Stripe subscription with a future period end
-    that actually maps to an unlimited plan, fix it once by reconciling with Stripe.
+    If Firestore says `basic`, or a paid plan whose period has passed, but Stripe holds an
+    active paid subscription, fix it once by reconciling with Stripe.
     """
-    if not subscription or subscription.plan != PlanType.basic:
+    if not subscription:
+        return subscription
+    # A stored paid plan whose period has passed reads as Basic everywhere
+    # (get_user_valid_subscription), so heal it the same way: a missed renewal
+    # webhook otherwise leaves a paying subscriber on Free indefinitely.
+    if subscription.plan != PlanType.basic and not _stored_paid_period_lapsed(subscription):
         return subscription
 
     try:

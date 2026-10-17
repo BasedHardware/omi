@@ -152,15 +152,16 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       // Refresh when app comes back from background (e.g., after OAuth)
-      _loadFromBackend().then((_) => _resolvePendingIntegrationAttempts());
+      _loadFromBackend(forceRefresh: true);
     }
   }
 
-  Future<void> _loadFromBackend() async {
+  Future<void> _loadFromBackend({bool forceRefresh = false}) async {
+    if (!mounted) return;
     unawaited(context.read<MessagingChannelsProvider>().load());
     // IntegrationProvider.loadFromBackend() already fetches all connection statuses
     // and syncs SharedPreferences for backward compatibility with services
-    await context.read<IntegrationProvider>().loadFromBackend();
+    await context.read<IntegrationProvider>().loadFromBackend(forceRefresh: forceRefresh);
     _resolvePendingIntegrationAttempts();
   }
 
@@ -168,7 +169,8 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     if (!mounted || _pendingIntegrationAttempts.isEmpty) return;
     final provider = context.read<IntegrationProvider>();
     for (final entry in Map<IntegrationApp, ProductAttempt>.from(_pendingIntegrationAttempts).entries) {
-      if (provider.isAppConnected(entry.key)) {
+      if (!provider.hasStatusError(entry.key) && provider.isAppConnected(entry.key)) {
+        PlatformManager.instance.analytics.integrationConnectSucceeded(integrationName: entry.key.displayName);
         entry.value.complete(ProductOutcome.success);
         _pendingIntegrationAttempts.remove(entry.key);
       }
@@ -255,7 +257,6 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
 
     final success = await authenticate();
     if (success) {
-      PlatformManager.instance.analytics.integrationConnectSucceeded(integrationName: app.displayName);
       if (mounted) OmiFeedback.info(context, context.l10n.completeAuthInBrowser);
       await _loadFromBackend();
       Logger.debug('✓ Integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
@@ -372,11 +373,14 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
 
   Widget _buildAppTile(IntegrationApp app, bool isLoading) {
     final isConnected = _isAppConnected(app);
+    final statusError = context.read<IntegrationProvider>().hasStatusError(app);
     final isAvailable = app.isAvailable;
 
     final Widget trailing;
     if (isLoading) {
       trailing = _buildShimmerButton();
+    } else if (statusError) {
+      trailing = IntegrationStatusChip(context.l10n.tryAgain, tone: IntegrationChipTone.muted);
     } else if (!isAvailable) {
       trailing = IntegrationStatusChip(context.l10n.comingSoon, tone: IntegrationChipTone.muted);
     } else if (!isConnected) {
@@ -403,6 +407,10 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       onTap: isAvailable
           ? () {
               if (isLoading) return;
+              if (statusError) {
+                _loadFromBackend();
+                return;
+              }
 
               if (app == IntegrationApp.appleHealth) {
                 _openAppleHealthDetail();
@@ -457,44 +465,62 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     final catalog = ExploreInstallPage(
       nativeTitle: iosSwiftUiEnabled ? context.l10n.integrations : null,
       nativeLeadingSections: [
-        NativeSection('connected_integrations', [
-          if (context.watch<MessagingChannelsProvider>().showEntry)
-            NativeRow('integrations_chat_apps', context.l10n.chatAppsEntryTitle,
-                kind: 'navigation',
-                subtitle: context.l10n.chatAppsEntryRowSubtitle,
-                action: (_) => routeToPage(context, const ChatAppsPage())),
-          for (final app in IntegrationApp.values)
-            NativeRow('integration_${app.name}', app.displayName,
-                subtitle: !app.isAvailable
-                    ? context.l10n.comingSoon
-                    : isLoading
+        NativeSection(
+            'connected_integrations',
+            [
+              if (context.watch<MessagingChannelsProvider>().showEntry)
+                NativeRow('integrations_chat_apps', context.l10n.chatAppsEntryTitle,
+                    kind: 'navigation',
+                    subtitle: context.l10n.chatAppsEntryRowSubtitle,
+                    action: (_) => routeToPage(context, const ChatAppsPage())),
+              for (final app in IntegrationApp.values)
+                NativeRow('integration_${app.name}', app.displayName,
+                    // Same precedence as the classic tile's chip: a failed status read offers a refresh.
+                    subtitle: isLoading
                         ? context.l10n.loading
-                        : _isAppConnected(app)
-                            ? context.l10n.disconnect
-                            : context.l10n.connect,
-                enabled: app.isAvailable && !isLoading,
-                destructive: app != IntegrationApp.appleHealth && _isAppConnected(app), action: (_) {
-              if (app == IntegrationApp.appleHealth) {
-                _openAppleHealthDetail();
-              } else if (_isAppConnected(app)) {
-                _disconnectApp(app);
-              } else {
-                _connectApp(app);
-              }
-            }),
-          NativeRow('integrations_create', context.l10n.createYourOwnApp,
-              symbol: 'plus', action: (_) => routeToPage(context, const AddAppPage(presetExternalIntegration: true))),
-          NativeRow('integrations_mcp', context.l10n.addMcpServer, symbol: 'cable.connector', action: (_) {
-            PlatformManager.instance.analytics.pageOpened('Add MCP Server');
-            routeToPage(context, const AddMcpServerPage());
-          }),
-        ])
+                        : provider.hasStatusError(app)
+                            ? context.l10n.tryAgain
+                            : !app.isAvailable
+                                ? context.l10n.comingSoon
+                                : _isAppConnected(app)
+                                    ? context.l10n.disconnect
+                                    : context.l10n.connect,
+                    enabled: app.isAvailable && !isLoading,
+                    destructive: app != IntegrationApp.appleHealth &&
+                        !provider.hasStatusError(app) &&
+                        _isAppConnected(app), action: (_) {
+                  if (provider.hasStatusError(app)) {
+                    _loadFromBackend();
+                  } else if (app == IntegrationApp.appleHealth) {
+                    _openAppleHealthDetail();
+                  } else if (_isAppConnected(app)) {
+                    _disconnectApp(app);
+                  } else {
+                    _connectApp(app);
+                  }
+                }),
+              NativeRow('integrations_create', context.l10n.createYourOwnApp,
+                  symbol: 'plus',
+                  action: (_) => routeToPage(context, const AddAppPage(presetExternalIntegration: true))),
+              NativeRow('integrations_mcp', context.l10n.addMcpServer, symbol: 'cable.connector', action: (_) {
+                PlatformManager.instance.analytics.pageOpened('Add MCP Server');
+                routeToPage(context, const AddMcpServerPage());
+              }),
+            ],
+            // The classic list shows a failed status read as a live-region banner above the rows; the
+            // section footer is the native counterpart, and each affected row offers "Try again".
+            footer: provider.hasLoadError ? context.l10n.connectionErrorDesc : '')
       ],
       leadingSlivers: [
         const SliverToBoxAdapter(child: SizedBox(height: OmiSpacing.sm)),
         SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
             sliver: SliverList.list(children: [
+              if (provider.hasLoadError)
+                Padding(
+                    padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+                    child: Semantics(
+                        liveRegion: true, child: Text(context.l10n.connectionErrorDesc, style: OmiType.subhead))),
               const ChatAppsIntegrationsEntry(),
               ...IntegrationApp.values.map((app) => _buildAppTile(app, isLoading)),
               Padding(

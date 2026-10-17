@@ -45,6 +45,13 @@ def manifest_and_charts():
     return env_scopes, charts, base
 
 
+@pytest.fixture(scope='module')
+def feature_flag_registry_data():
+    registry = yaml.safe_load((ROOT.parent / 'config/feature-flags.yaml').read_text())
+    classification = json.loads((ROOT.parent / 'config/deployment-setting-classification.json').read_text())
+    return registry, classification
+
+
 def _base_env_blocks(base):
     shared = base['environment_shared']
     for scope, body in shared['gke'].items():
@@ -89,11 +96,10 @@ def test_charts_carry_the_literal_shadow(manifest_and_charts):
         assert entries[_FLAG].value == 'shadow', f'{name} {_FLAG} must be the literal shadow'
 
 
-def test_registry_declares_the_flag():
-    registry = yaml.safe_load((ROOT.parent / 'config/feature-flags.yaml').read_text())
+def test_registry_declares_the_flag(feature_flag_registry_data):
+    registry, classification = feature_flag_registry_data
     rows = [row for row in registry['flags'] if row.get('key') == _FLAG]
     assert len(rows) == 1
     assert rows[0]['lifecycle'] == 'rollout' and rows[0]['fail'] == 'open'
     assert rows[0]['surfaces'] == ['backend'] and rows[0]['decision'] == 'keep'
-    classification = json.loads((ROOT.parent / 'config/deployment-setting-classification.json').read_text())
     assert _FLAG in classification['kinds']['config']

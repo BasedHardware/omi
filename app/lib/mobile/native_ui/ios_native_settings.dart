@@ -96,6 +96,7 @@ final _settingsSymbols = <IconData, String>{
   FontAwesomeIcons.volumeHigh.data: 'speaker.wave.2',
   FontAwesomeIcons.solidBell.data: 'bell',
   FontAwesomeIcons.networkWired.data: 'point.3.connected.trianglepath.dotted',
+  FontAwesomeIcons.terminal.data: 'terminal',
   FontAwesomeIcons.shield.data: 'shield',
   FontAwesomeIcons.shieldHalved.data: 'checkmark.shield',
   FontAwesomeIcons.brain.data: 'brain',

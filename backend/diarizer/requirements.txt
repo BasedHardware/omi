@@ -110,9 +110,10 @@ tqdm==4.67.1
 triton==3.4.0
 typing-extensions==4.15.0
 tzdata==2025.3
-urllib3==2.7.0
+urllib3==2.8.0
 uvicorn==0.40.0
 uvloop==0.20.0
 yarl==1.22.0
 zipp==3.23.0
 
+prometheus-client==0.22.1

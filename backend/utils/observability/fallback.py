@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from typing import Literal, TypedDict
 
 from utils.metrics import OMI_FALLBACK_TOTAL
+from utils.observability.demand_cohort import record_metric
+from utils.observability.demand_cohort import FAILURE_DETAIL, current_demand
 from utils.observability.routing_cohort import current_routing_cohort
 from utils.stt.live_reason import LIVE_STT_REASONS
 
@@ -129,6 +131,12 @@ ALLOWED_OUTCOMES = frozenset({'recovered', 'degraded', 'exhausted'})
 ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
     {
         'gate_unavailable',
+        'http_error',
+        'http_429',
+        'transport_error',
+        'unavailable',
+        'unconfigured',
+        'malformed',
         'timeout',
         'provider_5xx',
         'provider_429',
@@ -156,6 +164,7 @@ ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
         'not_authorized',
         'authorization_unavailable',
         'unmigrated_principal',
+        'document_size_limit',
         'other',
         'none',
     }
@@ -206,6 +215,7 @@ ALLOWED_COMPONENTS = frozenset(
         'firestore_read',
         'knowledge_graph',
         'agent_tools',
+        'conversation_relevance',
         'conversation_finalization',
         'conversation_notes',
         'daily_summary',
@@ -249,6 +259,27 @@ def record_fallback(
     except Exception:
         pass
 
+    try:
+        demand = current_demand.get()
+        if demand is not None and component_label in {'stt_selection', 'stt_live_session'}:
+            if outcome_label == 'exhausted':
+                demand.exhausted = True
+            record_metric(
+                FAILURE_DETAIL,
+                {
+                    'demand_cohort': demand.cohort,
+                    'reason': reason_label if reason_label in {'first_text_deadline', 'capacity_full'} else 'other',
+                    'capacity_subtype': (
+                        (capacity_subtype if capacity_subtype in ALLOWED_CAPACITY_SUBTYPES else 'unknown')
+                        if reason_label == 'capacity_full'
+                        else 'none'
+                    ),
+                    'outcome': outcome_label,
+                },
+                1,
+            )
+    except Exception:
+        pass
     cohort = current_routing_cohort.get()
     if cohort is not None and component_label in {'stt_selection', 'stt_live_session'} and outcome_label == 'exhausted':
         cohort.exhausted = True

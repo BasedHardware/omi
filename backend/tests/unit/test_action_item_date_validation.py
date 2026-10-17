@@ -109,6 +109,8 @@ _SYS_MODULE_NAMES = [
     "database.action_items",
     "database.notifications",
     "utils",
+    "utils.model_text",
+    "utils.user_clock",
     "utils.notifications",
     "utils.byok",
     "utils.llm",
@@ -129,6 +131,7 @@ _SYS_MODULE_NAMES = [
     "utils.messaging.turn_context",
     "utils.retrieval.agentic",
     "utils.retrieval.chat_scope",
+    "utils.retrieval.turn_refs",
     "utils.conversations",
     "utils.conversations.render",
     "utils.conversations.wake_word",
@@ -276,6 +279,8 @@ _stub_package("utils.retrieval.tools")
 _stub_package("utils.messaging")
 _stub_package("utils.llm")
 _stub_package("utils.conversations")
+_load_module_from_file("utils.model_text", BACKEND_DIR / "utils" / "model_text.py")
+_load_module_from_file("utils.user_clock", BACKEND_DIR / "utils" / "user_clock.py")
 
 # Stub utils.conversations.render (action_item_tools imports resolve_display_tz, format_local_time)
 _render_stub = _stub_module("utils.conversations.render")
@@ -343,6 +348,8 @@ conv_folder_stub.build_folders_context = MagicMock(return_value="")
 # Stub utils.llm.gateway_error_contract (conversation_processing imports from it)
 gateway_error_contract_stub = _stub_module("utils.llm.gateway_error_contract")
 gateway_error_contract_stub.is_byok_rate_limit_gateway_error = MagicMock(return_value=False)
+_stub_module("database.chat_edits").snapshot = MagicMock(return_value={})
+_stub_module("database.chat_edits").envelope = MagicMock(return_value={})
 _stub_module("utils.messaging.undo").record_write = MagicMock(return_value="")
 _stub_module("utils.messaging.projection").surface_runtime = types.SimpleNamespace(get=lambda: None)
 _load_module_from_file("utils.messaging.turn_context", BACKEND_DIR / "utils" / "messaging" / "turn_context.py")
@@ -354,6 +361,7 @@ _load_module_from_file("models.conversation", BACKEND_DIR / "models" / "conversa
 _load_module_from_file("models.app", BACKEND_DIR / "models" / "app.py")
 
 # Load action_item_tools
+_load_module_from_file("utils.retrieval.turn_refs", BACKEND_DIR / "utils" / "retrieval" / "turn_refs.py")
 action_item_tools = _load_module_from_file(
     "utils.retrieval.tools.action_item_tools",
     BACKEND_DIR / "utils" / "retrieval" / "tools" / "action_item_tools.py",
@@ -460,7 +468,9 @@ del _SYS_MODULES_SNAPSHOT, _SYS_MODULE_NAMES
 
 
 def _make_config(uid="test-user-123"):
-    return {"configurable": {"user_id": uid}}
+    # Chat turns always carry the resolved zone; without it DisplayClock would import the real
+    # database.notifications after the stubs above are restored.
+    return {"configurable": {"user_id": uid, "user_timezone": "UTC"}}
 
 
 # ===========================================================================
@@ -612,6 +622,9 @@ class TestUpdateActionItemDateValidation:
     def test_accepts_future_date_on_update(self):
         """Updating due date to a future date should work."""
         future_date = (datetime.now(timezone.utc) + timedelta(days=3)).strftime('%Y-%m-%dT%H:%M:%S+00:00')
+        action_items_db.update_action_item.side_effect = (
+            lambda *args, **kwargs: kwargs['expected_chat_state'].update(after={}) or True
+        )
         result = update_action_item_tool(
             action_item_id="test-item-id",
             due_at=future_date,

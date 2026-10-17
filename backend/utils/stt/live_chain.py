@@ -8,7 +8,7 @@ import os
 import threading
 import time
 from collections import deque
-from typing import TYPE_CHECKING, Awaitable, Callable
+from typing import TYPE_CHECKING, Awaitable, Callable, Mapping
 
 if TYPE_CHECKING:
     from utils.stt.streaming import STTService
@@ -20,6 +20,8 @@ from utils.stt.live_failure import PendingLiveFailover, fallback_metric_reason
 from utils.stt.live_outcome import LiveLegOutcome, record_managed_leg_handoff
 from utils.stt.live_reason import normalize_live_stt_reason
 from utils.stt.live_signal import provider_observation
+from utils.observability.demand_cohort import record_metric
+from utils.observability.demand_cohort import demand_cohort
 from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS, ROUTING_DECISION_LATENCY, WINDOW_ADMISSION
 from utils.stt.live_health import health, bounded_language, mode as routing_mode
 from utils.stt.live_router import (
@@ -132,7 +134,7 @@ async def connect_configured_chain(
     *,
     primary_service: STTService,
     connect_primary: Connect,
-    callbacks: dict[STTService, Connect | None],
+    callbacks: Mapping[STTService, Connect | None],
     failed: set[str],
     models: list[str],
     routing_uid: str | None = None,
@@ -141,6 +143,7 @@ async def connect_configured_chain(
     routing_models: dict[str, str | None] | None = None,
     failed_targets: set[str] | None = None,
     _routing_static: bool = False,
+    optional_handover: bool = False,
 ) -> tuple[STTSocket, STTService]:
     from utils.stt.streaming import STTService, _circuit_for_primary  # type: ignore[reportPrivateUsage]  # shared circuit owner
 
@@ -1064,7 +1067,9 @@ async def connect_configured_chain(
             if result is not None:
                 return result
             break
-    CHAIN_EXHAUSTED.inc()
+    if optional_handover:
+        raise RejectedStream(prior_reason)
+    record_metric(CHAIN_EXHAUSTED, {'demand_cohort': demand_cohort()}, 1)
     pending = PendingLiveFailover(
         component='stt_selection',
         from_mode=origin,

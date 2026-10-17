@@ -1475,6 +1475,31 @@
               }
             ]
           },
+          "operation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HarnessEdit"
+              },
+              {
+                "$ref": "#/components/schemas/MemoryHygieneEdit"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation"
+          },
+          "other_content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Other Content"
+          },
           "other_label": {
             "anyOf": [
               {
@@ -1485,6 +1510,17 @@
               }
             ],
             "title": "Other Label"
+          },
+          "target_content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Content"
           },
           "target_label": {
             "default": "",
@@ -4209,6 +4245,209 @@
         "title": "AssistantVoicePreferenceUpdate",
         "type": "object"
       },
+      "AttentionItem": {
+        "properties": {
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "failure_code": {
+            "title": "Failure Code",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "conversation_summary_failed",
+            "title": "Kind",
+            "type": "string"
+          },
+          "retry": {
+            "$ref": "#/components/schemas/AttentionRetryStatus"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          },
+          "seen": {
+            "title": "Seen",
+            "type": "boolean"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "conversation_id",
+          "title",
+          "started_at",
+          "duration_seconds",
+          "failure_code",
+          "retryable",
+          "created_at",
+          "seen",
+          "retry"
+        ],
+        "title": "AttentionItem",
+        "type": "object"
+      },
+      "AttentionItemsPage": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AttentionItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "unseen_count": {
+            "title": "Unseen Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "items",
+          "unseen_count"
+        ],
+        "title": "AttentionItemsPage",
+        "type": "object"
+      },
+      "AttentionRetryAllOperation": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "operation_id": {
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "in_progress",
+              "succeeded",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation_id",
+          "state",
+          "id"
+        ],
+        "title": "AttentionRetryAllOperation",
+        "type": "object"
+      },
+      "AttentionRetryAllResponse": {
+        "properties": {
+          "operations": {
+            "items": {
+              "$ref": "#/components/schemas/AttentionRetryAllOperation"
+            },
+            "title": "Operations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "operations"
+        ],
+        "title": "AttentionRetryAllResponse",
+        "type": "object"
+      },
+      "AttentionRetryResponse": {
+        "properties": {
+          "operation_id": {
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "in_progress",
+              "succeeded",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation_id",
+          "state"
+        ],
+        "title": "AttentionRetryResponse",
+        "type": "object"
+      },
+      "AttentionRetryStatus": {
+        "properties": {
+          "operation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation Id"
+          },
+          "state": {
+            "enum": [
+              "none",
+              "in_progress",
+              "succeeded",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "operation_id"
+        ],
+        "title": "AttentionRetryStatus",
+        "type": "object"
+      },
       "AudioDownloadPendingResponse": {
         "properties": {
           "poll_after_ms": {
@@ -4272,6 +4511,17 @@
             "description": "Storage provider (e.g., 'gcp')",
             "title": "Provider",
             "type": "string"
+          },
+          "source_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Fingerprint"
           },
           "started_at": {
             "anyOf": [
@@ -5020,6 +5270,125 @@
           "file"
         ],
         "title": "Body_upload_profile_v3_upload_audio_post",
+        "type": "object"
+      },
+      "BudgetChoiceRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "choice": {
+            "enum": [
+              "on_device",
+              "upgrade"
+            ],
+            "title": "Choice",
+            "type": "string"
+          },
+          "dont_ask_again": {
+            "default": false,
+            "title": "Dont Ask Again",
+            "type": "boolean"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          }
+        },
+        "required": [
+          "period",
+          "choice"
+        ],
+        "title": "BudgetChoiceRecord",
+        "type": "object"
+      },
+      "BudgetChoiceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "choice": {
+            "enum": [
+              "on_device",
+              "upgrade"
+            ],
+            "title": "Choice",
+            "type": "string"
+          },
+          "dont_ask_again": {
+            "default": false,
+            "title": "Dont Ask Again",
+            "type": "boolean"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          }
+        },
+        "required": [
+          "period",
+          "choice"
+        ],
+        "title": "BudgetChoiceRequest",
+        "type": "object"
+      },
+      "BudgetChoiceResponse": {
+        "properties": {
+          "ask": {
+            "title": "Ask",
+            "type": "boolean"
+          },
+          "choice": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BudgetChoiceRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "managed",
+              "unavailable",
+              "on_device",
+              "held_pending_choice"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "period",
+          "state",
+          "choice",
+          "ask"
+        ],
+        "title": "BudgetChoiceResponse",
+        "type": "object"
+      },
+      "BudgetChoiceWriteResponse": {
+        "properties": {
+          "ask": {
+            "const": false,
+            "default": false,
+            "title": "Ask",
+            "type": "boolean"
+          },
+          "choice": {
+            "$ref": "#/components/schemas/BudgetChoiceRecord"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          }
+        },
+        "required": [
+          "period",
+          "choice"
+        ],
+        "title": "BudgetChoiceWriteResponse",
         "type": "object"
       },
       "BulkAssignSegmentsRequest": {
@@ -6765,6 +7134,36 @@
         "title": "ChangeRef",
         "type": "object"
       },
+      "ChannelAvailability": {
+        "description": "Whether this user may link a channel now, and why not. Content-free.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "waitlisted": {
+            "default": false,
+            "title": "Waitlisted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "available"
+        ],
+        "title": "ChannelAvailability",
+        "type": "object"
+      },
       "ChannelLink": {
         "properties": {
           "channel": {
@@ -6928,6 +7327,14 @@
       },
       "ChannelLinksResponse": {
         "properties": {
+          "availability": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ChannelAvailability"
+            },
+            "default": {},
+            "title": "Availability",
+            "type": "object"
+          },
           "links": {
             "items": {
               "$ref": "#/components/schemas/ChannelLink"
@@ -8564,6 +8971,25 @@
             ],
             "title": "Updated At"
           },
+          "user_corrections": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "User Corrections",
+            "type": "array"
+          },
+          "user_overview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Overview"
+          },
           "uses_custom_stt": {
             "default": false,
             "title": "Uses Custom Stt",
@@ -9801,6 +10227,25 @@
             ],
             "title": "Updated At"
           },
+          "user_corrections": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "User Corrections",
+            "type": "array"
+          },
+          "user_overview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Overview"
+          },
           "uses_custom_stt": {
             "default": false,
             "title": "Uses Custom Stt",
@@ -9819,6 +10264,38 @@
           "structured"
         ],
         "title": "ConversationSearchItem",
+        "type": "object"
+      },
+      "ConversationSearchResponse": {
+        "properties": {
+          "conversations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Conversations",
+            "type": "array"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "search_coverage": {
+            "title": "Search Coverage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "search_coverage"
+        ],
+        "title": "ConversationSearchResponse",
         "type": "object"
       },
       "ConversationSource": {
@@ -12633,6 +13110,26 @@
             ],
             "title": "Language"
           },
+          "participants": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Participants",
+            "type": "array"
+          },
+          "participants_included": {
+            "default": false,
+            "title": "Participants Included",
+            "type": "boolean"
+          },
+          "person_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Person Ids",
+            "type": "array"
+          },
           "source": {
             "anyOf": [
               {
@@ -12658,6 +13155,11 @@
           },
           "structured": {
             "$ref": "#/components/schemas/DeveloperConversationStructured"
+          },
+          "transcript_included": {
+            "default": false,
+            "title": "Transcript Included",
+            "type": "boolean"
           },
           "transcript_segments": {
             "anyOf": [
@@ -13228,6 +13730,11 @@
             "title": "Archive Default Visible",
             "type": "boolean"
           },
+          "effective_limit": {
+            "default": 20,
+            "title": "Effective Limit",
+            "type": "integer"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/DeveloperMemoryVectorItem"
@@ -13235,12 +13742,28 @@
             "title": "Items",
             "type": "array"
           },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
           "policy": {
             "$ref": "#/components/schemas/DeveloperMemoryVectorPolicy"
           },
           "returned_count": {
             "title": "Returned Count",
             "type": "integer"
+          },
+          "search_coverage": {
+            "default": "eligible_indexed_memories",
+            "title": "Search Coverage",
+            "type": "string"
           }
         },
         "required": [
@@ -13280,6 +13803,17 @@
               }
             ],
             "title": "Id"
+          },
+          "original_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Text"
           },
           "speaker_id": {
             "anyOf": [
@@ -13782,11 +14316,13 @@
         "properties": {
           "after": {
             "default": "",
+            "description": "The corrected text, not a record ref. Required and nonempty for spelling, title and overview edits.",
             "title": "After",
             "type": "string"
           },
           "before": {
             "default": "",
+            "description": "Exact wrong text as it appears in the target, including its capitalization. For spelling, one edit fixes every occurrence of this text.",
             "title": "Before",
             "type": "string"
           },
@@ -13800,6 +14336,7 @@
             "type": "array"
           },
           "kind": {
+            "description": "Spelling corrects a misheard or misspelled name or term. Never rewrite grammar, remove filler, or guess unclear speech.",
             "enum": [
               "spelling",
               "title",
@@ -13816,6 +14353,7 @@
           },
           "other": {
             "default": "",
+            "description": "Only the second supplied record ref for merge_people or merge_memories. Empty for every non-merge edit.",
             "title": "Other",
             "type": "string"
           },
@@ -13826,6 +14364,7 @@
             "type": "string"
           },
           "target": {
+            "description": "Supplied record ref to edit, optionally with #segment-id or #start-seconds. One spelling edit fixes every occurrence in its target; with a fragment, only that transcript segment is changed.",
             "title": "Target",
             "type": "string"
           }
@@ -13837,6 +14376,84 @@
           "evidence"
         ],
         "title": "Edit",
+        "type": "object"
+      },
+      "EditReceiptBlock": {
+        "description": "Server-authored write receipt. IDs and URLs never encode item content.",
+        "properties": {
+          "action": {
+            "enum": [
+              "created",
+              "updated",
+              "deleted",
+              "completed",
+              "uncompleted",
+              "renamed"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "receiptId": {
+            "title": "Receiptid",
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "targetId": {
+            "title": "Targetid",
+            "type": "string"
+          },
+          "targetKind": {
+            "enum": [
+              "conversation",
+              "memory",
+              "task",
+              "person"
+            ],
+            "title": "Targetkind",
+            "type": "string"
+          },
+          "type": {
+            "const": "editReceipt",
+            "default": "editReceipt",
+            "title": "Type",
+            "type": "string"
+          },
+          "undoable": {
+            "default": true,
+            "title": "Undoable",
+            "type": "boolean"
+          },
+          "undoneAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Undoneat"
+          }
+        },
+        "required": [
+          "id",
+          "receiptId",
+          "targetKind",
+          "action",
+          "targetId",
+          "summary"
+        ],
+        "title": "EditReceiptBlock",
         "type": "object"
       },
       "EntitiesResponse": {
@@ -15994,6 +16611,26 @@
             "title": "Match Snippets",
             "type": "array"
           },
+          "participants": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Participants",
+            "type": "array"
+          },
+          "participants_included": {
+            "default": false,
+            "title": "Participants Included",
+            "type": "boolean"
+          },
+          "person_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Person Ids",
+            "type": "array"
+          },
           "started_at": {
             "anyOf": [
               {
@@ -17335,6 +17972,108 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HarnessEdit": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "default": "",
+            "description": "Corrected text or new language tag. For supersede_memory choose new fact text OR other. Empty for retirement, dismissal and task/conversation/person merges: preserve the survivor.",
+            "maxLength": 16000,
+            "title": "After",
+            "type": "string"
+          },
+          "before": {
+            "default": "",
+            "description": "Exact wrong text as it appears in the target, including its capitalization. For spelling, one edit fixes every occurrence of this text.",
+            "maxLength": 16000,
+            "title": "Before",
+            "type": "string"
+          },
+          "effective_from": {
+            "default": "",
+            "description": "For supersede_memory: optional timezone-aware ISO 8601 time when the cited evidence says the new fact became true. Never invent a time; omit to use apply time.",
+            "maxLength": 40,
+            "title": "Effective From",
+            "type": "string"
+          },
+          "evidence": {
+            "description": "Fully read owner refs, with segment ids for speech when available. Cited evidence must support this change; do not invent refs or use the old memory itself as retirement support.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "kind": {
+            "description": "Correct evidenced defects, never style or low importance. Retire memories only for garbage, contradiction or facts spoken by someone else but attributed to the owner. Supersede only with a newer fact about the same attribute. Dismiss junk person detections (filler, nationalities, fragments), never a real person. Merge tasks only when they represent the same obligation; retire duplicates or someone else's task misfiled to the owner. Autonomous agents must not change manual or edited tasks. Merge conversations only for overlapping captures of the same speech, preserving both records and audio. Set language to the language actually spoken, never translate speech.",
+            "enum": [
+              "spelling",
+              "title",
+              "overview",
+              "memory",
+              "merge_memories",
+              "retire_memory",
+              "supersede_memory",
+              "merge_people",
+              "entity_summary",
+              "close_task",
+              "dismiss_person",
+              "merge_tasks",
+              "retire_task",
+              "merge_conversations",
+              "set_language"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "other": {
+            "default": "",
+            "description": "Second fully read ref for a merge; target is retired into other for task/conversation merges. For supersede_memory, the existing newer memory. Otherwise empty.",
+            "maxLength": 256,
+            "title": "Other",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Explain the defect and cited evidence.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "target": {
+            "description": "Supplied record ref to edit, optionally with #segment-id or #start-seconds. One spelling edit fixes every occurrence in its target; with a fragment, only that transcript segment is changed.",
+            "maxLength": 256,
+            "minLength": 3,
+            "title": "Target",
+            "type": "string"
+          },
+          "value": {
+            "default": 3,
+            "description": "how much the answer changes what future agents should believe about this person's people, projects or vocabulary; trivial acronym casing is 1",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Value",
+            "type": "integer"
+          },
+          "why_it_matters": {
+            "default": "",
+            "description": "Short explanation of future value.",
+            "maxLength": 200,
+            "title": "Why It Matters",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "target",
+          "reason",
+          "evidence"
+        ],
+        "title": "HarnessEdit",
         "type": "object"
       },
       "HasSpeechProfileResponse": {
@@ -20882,6 +21621,76 @@
         "title": "MemoryGlobalReadGateObservability",
         "type": "object"
       },
+      "MemoryHygieneEdit": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "default": "",
+            "description": "For supersede_memory without other, the newer time-scoped fact text supported by conversations. Empty for retire_memory.",
+            "maxLength": 2000,
+            "title": "After",
+            "type": "string"
+          },
+          "before": {
+            "default": "",
+            "description": "Exact wrong text as it appears in the target, including its capitalization. For spelling, one edit fixes every occurrence of this text.",
+            "title": "Before",
+            "type": "string"
+          },
+          "effective_from": {
+            "default": "",
+            "description": "For supersede_memory: optional timezone-aware ISO 8601 time when the cited evidence says the new fact became true. Never invent a time; omit to use apply time.",
+            "maxLength": 40,
+            "title": "Effective From",
+            "type": "string"
+          },
+          "evidence": {
+            "description": "Supplied conversation refs or other memory refs supporting retirement or replacement. The target alone is not evidence.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "kind": {
+            "description": "Retire garbage (not merely low-importance facts), facts misattributed from another speaker, or facts contradicted by evidence. Supersede an old fact only with a newer time-scoped fact about the same attribute; age alone is not staleness.",
+            "enum": [
+              "retire_memory",
+              "supersede_memory"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "other": {
+            "default": "",
+            "description": "For supersede_memory, the supplied newer memory ref. Otherwise empty. Choose exactly one of other or after.",
+            "title": "Other",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Required explanation of garbage, another speaker attribution, contradiction, or the newer fact about the same attribute.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "target": {
+            "description": "Supplied record ref to edit, optionally with #segment-id or #start-seconds. One spelling edit fixes every occurrence in its target; with a fragment, only that transcript segment is changed.",
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "target",
+          "reason",
+          "evidence"
+        ],
+        "title": "MemoryHygieneEdit",
+        "type": "object"
+      },
       "MemoryItemStatus": {
         "enum": [
           "active",
@@ -21050,6 +21859,43 @@
           "raw_provenance_capability"
         ],
         "title": "MemorySearchPolicyPayload",
+        "type": "object"
+      },
+      "MemorySearchResponse": {
+        "properties": {
+          "effective_limit": {
+            "default": 20,
+            "title": "Effective Limit",
+            "type": "integer"
+          },
+          "memories": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Memories",
+            "type": "array"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "search_coverage": {
+            "title": "Search Coverage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "search_coverage"
+        ],
+        "title": "MemorySearchResponse",
         "type": "object"
       },
       "MemorySubjectScope": {
@@ -23054,6 +23900,117 @@
         "title": "PendingSyncResponse",
         "type": "object"
       },
+      "PendingWorkItem": {
+        "properties": {
+          "conversation_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Conversation Ids",
+            "type": "array"
+          },
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "conversation",
+              "sync_job"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "state": {
+            "enum": [
+              "queued",
+              "transcribing",
+              "summarizing"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "state",
+          "conversation_ids",
+          "started_at",
+          "duration_seconds",
+          "updated_at"
+        ],
+        "title": "PendingWorkItem",
+        "type": "object"
+      },
+      "PendingWorkSnapshot": {
+        "properties": {
+          "attention_unseen_count": {
+            "title": "Attention Unseen Count",
+            "type": "integer"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PendingWorkItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "items",
+          "attention_unseen_count"
+        ],
+        "title": "PendingWorkSnapshot",
+        "type": "object"
+      },
+      "PeopleResponse": {
+        "properties": {
+          "people": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "People",
+            "type": "array"
+          }
+        },
+        "title": "PeopleResponse",
+        "type": "object"
+      },
       "Person": {
         "properties": {
           "auto_conversation_count": {
@@ -23458,6 +24415,219 @@
           "numbers"
         ],
         "title": "PhoneNumbersResponse",
+        "type": "object"
+      },
+      "PlanIdentitySubscription": {
+        "properties": {
+          "cancel_at_period_end": {
+            "default": false,
+            "title": "Cancel At Period End",
+            "type": "boolean"
+          },
+          "current_period_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Period End"
+          },
+          "current_period_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Period Start"
+          },
+          "current_price_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Price Id"
+          },
+          "deprecated": {
+            "default": false,
+            "title": "Deprecated",
+            "type": "boolean"
+          },
+          "deprecation_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deprecation Message"
+          },
+          "features": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/PlanLimits",
+            "default": {}
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PlanType",
+            "default": "basic"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SubscriptionStatus",
+            "default": "active"
+          },
+          "stripe_subscription_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stripe Subscription Id"
+          }
+        },
+        "title": "PlanIdentitySubscription",
+        "type": "object"
+      },
+      "PlanIdentityUserSubscriptionResponse": {
+        "properties": {
+          "available_plans": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SubscriptionPlan"
+            },
+            "title": "Available Plans",
+            "type": "array"
+          },
+          "chat_quota_allowed": {
+            "default": true,
+            "title": "Chat Quota Allowed",
+            "type": "boolean"
+          },
+          "chat_quota_percent": {
+            "default": 0.0,
+            "title": "Chat Quota Percent",
+            "type": "number"
+          },
+          "chat_quota_reset_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Quota Reset At"
+          },
+          "chat_quota_unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatQuotaUnit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "chat_quota_used": {
+            "default": 0.0,
+            "title": "Chat Quota Used",
+            "type": "number"
+          },
+          "desktop_grandfather_until": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Desktop Grandfather Until"
+          },
+          "insights_gained_limit": {
+            "title": "Insights Gained Limit",
+            "type": "integer"
+          },
+          "insights_gained_used": {
+            "title": "Insights Gained Used",
+            "type": "integer"
+          },
+          "phone_call_quota": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PhoneCallQuota"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "show_subscription_ui": {
+            "default": true,
+            "title": "Show Subscription Ui",
+            "type": "boolean"
+          },
+          "subscription": {
+            "$ref": "#/components/schemas/PlanIdentitySubscription"
+          },
+          "transcription_allowance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranscriptionAllowanceSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "transcription_seconds_limit": {
+            "title": "Transcription Seconds Limit",
+            "type": "integer"
+          },
+          "transcription_seconds_used": {
+            "title": "Transcription Seconds Used",
+            "type": "integer"
+          },
+          "words_transcribed_limit": {
+            "title": "Words Transcribed Limit",
+            "type": "integer"
+          },
+          "words_transcribed_used": {
+            "title": "Words Transcribed Used",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "subscription",
+          "transcription_seconds_used",
+          "transcription_seconds_limit",
+          "words_transcribed_used",
+          "words_transcribed_limit",
+          "insights_gained_used",
+          "insights_gained_limit"
+        ],
+        "title": "PlanIdentityUserSubscriptionResponse",
         "type": "object"
       },
       "PlanLimits": {
@@ -24359,6 +25529,64 @@
           "app_context"
         ],
         "title": "ProductRolloutObservability",
+        "type": "object"
+      },
+      "ProfileResponse": {
+        "properties": {
+          "data_sources_used": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Sources Used"
+          },
+          "generated_at": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile"
+          },
+          "profile_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Text"
+          }
+        },
+        "title": "ProfileResponse",
         "type": "object"
       },
       "ProgressExtractRequest": {
@@ -25551,6 +26779,21 @@
         "title": "RestoreLegacyConversationItemsResponse",
         "type": "object"
       },
+      "RetryAllRequest": {
+        "properties": {
+          "idempotency_key": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "idempotency_key"
+        ],
+        "title": "RetryAllRequest",
+        "type": "object"
+      },
       "ReviewAnswer": {
         "additionalProperties": false,
         "properties": {
@@ -25736,14 +26979,71 @@
       },
       "ReviewChange": {
         "properties": {
+          "after": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
           "change_id": {
             "title": "Change Id",
             "type": "string"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpellingContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "diff": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewChangeDiff"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional before/after excerpt with surrounding context. Released clients ignore it. Never a whole transcript."
+          },
+          "edit_kind": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edit Kind"
           },
           "kind": {
             "enum": [
@@ -25804,6 +27104,134 @@
           "created_at"
         ],
         "title": "ReviewChange",
+        "type": "object"
+      },
+      "ReviewChangeDiff": {
+        "description": "Bounded before/after excerpt. Released clients ignore this object.\n\n``group_key`` is stable for the same term change across conversations so a\nclient can group by change, by conversation, or by term.",
+        "properties": {
+          "after": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
+          "context_after": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context After"
+          },
+          "context_before": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Before"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "group_key": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Key"
+          },
+          "occurrences": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurrences"
+          },
+          "source_started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Started At"
+          },
+          "source_title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Title"
+          },
+          "target_label": {
+            "anyOf": [
+              {
+                "maxLength": 180,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Label"
+          }
+        },
+        "title": "ReviewChangeDiff",
         "type": "object"
       },
       "ReviewChangesResponse": {
@@ -25933,6 +27361,17 @@
               }
             ]
           },
+          "source_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Ref"
+          },
           "speaker": {
             "anyOf": [
               {
@@ -26029,6 +27468,17 @@
                 "type": "null"
               }
             ]
+          },
+          "source_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Ref"
           },
           "speaker": {
             "anyOf": [
@@ -26347,6 +27797,38 @@
           "truncated"
         ],
         "title": "ScreenActivityCoverage",
+        "type": "object"
+      },
+      "ScreenActivityResponse": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "screen_activity": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Screen Activity",
+            "type": "array"
+          }
+        },
+        "required": [
+          "has_more"
+        ],
+        "title": "ScreenActivityResponse",
         "type": "object"
       },
       "ScreenActivityRow": {
@@ -27191,6 +28673,26 @@
           "body_markdown"
         ],
         "title": "Section",
+        "type": "object"
+      },
+      "SeenRequest": {
+        "properties": {
+          "all": {
+            "default": false,
+            "title": "All",
+            "type": "boolean"
+          },
+          "ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "title": "SeenRequest",
         "type": "object"
       },
       "SendMessageRequest": {
@@ -28150,6 +29652,17 @@
             "title": "Is User",
             "type": "boolean"
           },
+          "original_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Text"
+          },
           "person_id": {
             "anyOf": [
               {
@@ -28420,6 +29933,26 @@
             "title": "Match Snippets",
             "type": "array"
           },
+          "participants": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Participants",
+            "type": "array"
+          },
+          "participants_included": {
+            "default": false,
+            "title": "Participants Included",
+            "type": "boolean"
+          },
+          "person_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Person Ids",
+            "type": "array"
+          },
           "started_at": {
             "anyOf": [
               {
@@ -28521,6 +30054,17 @@
               }
             ],
             "title": "Id"
+          },
+          "original_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Text"
           },
           "speaker_id": {
             "anyOf": [
@@ -29355,11 +30899,119 @@
         "title": "SpellingAnswer",
         "type": "object"
       },
+      "SpellingContext": {
+        "properties": {
+          "conversation_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Date"
+          },
+          "conversation_title": {
+            "title": "Conversation Title",
+            "type": "string"
+          },
+          "main_index": {
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Main Index",
+            "type": "integer"
+          },
+          "quote_end": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Exclusive UTF-16 offset in the main segment.",
+            "title": "Quote End"
+          },
+          "quote_start": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Inclusive UTF-16 offset in the main segment.",
+            "title": "Quote Start"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/SpellingContextSegment"
+            },
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Segments",
+            "type": "array"
+          }
+        },
+        "required": [
+          "conversation_title",
+          "segments",
+          "main_index"
+        ],
+        "title": "SpellingContext",
+        "type": "object"
+      },
+      "SpellingContextSegment": {
+        "properties": {
+          "is_user": {
+            "default": false,
+            "title": "Is User",
+            "type": "boolean"
+          },
+          "speaker_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Label"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "SpellingContextSegment",
+        "type": "object"
+      },
       "SpellingItem": {
         "properties": {
           "allow_custom": {
             "title": "Allow Custom",
             "type": "boolean"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpellingContext"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Server-computed surrounding speech for this question."
           },
           "options": {
             "items": {
@@ -29519,6 +31171,398 @@
           "store_recording_permission"
         ],
         "title": "StoreRecordingPermissionResponse",
+        "type": "object"
+      },
+      "StorefrontCurrent": {
+        "properties": {
+          "cancel_at_period_end": {
+            "default": false,
+            "title": "Cancel At Period End",
+            "type": "boolean"
+          },
+          "interval": {
+            "anyOf": [
+              {
+                "enum": [
+                  "month",
+                  "year"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval"
+          },
+          "legacy": {
+            "title": "Legacy",
+            "type": "boolean"
+          },
+          "legacy_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legacy Note"
+          },
+          "line": {
+            "title": "Line",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "plan_id": {
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "price_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Id"
+          }
+        },
+        "required": [
+          "plan_id",
+          "name",
+          "legacy",
+          "line"
+        ],
+        "title": "StorefrontCurrent",
+        "type": "object"
+      },
+      "StorefrontPrice": {
+        "properties": {
+          "amount_minor": {
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "cta_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cta Label"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "headline": {
+            "title": "Headline",
+            "type": "string"
+          },
+          "interval": {
+            "enum": [
+              "month",
+              "year"
+            ],
+            "title": "Interval",
+            "type": "string"
+          },
+          "months_free": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Months Free"
+          },
+          "price_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Id"
+          },
+          "renewal_line": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renewal Line"
+          },
+          "subline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subline"
+          }
+        },
+        "required": [
+          "interval",
+          "amount_minor",
+          "currency",
+          "headline"
+        ],
+        "title": "StorefrontPrice",
+        "type": "object"
+      },
+      "StorefrontResponse": {
+        "properties": {
+          "catalog_revision": {
+            "title": "Catalog Revision",
+            "type": "integer"
+          },
+          "current": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StorefrontCurrent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "header": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Header"
+          },
+          "schema_version": {
+            "const": 2,
+            "default": 2,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "show_subscription_ui": {
+            "default": true,
+            "title": "Show Subscription Ui",
+            "type": "boolean"
+          },
+          "tiers": {
+            "items": {
+              "$ref": "#/components/schemas/StorefrontTier"
+            },
+            "title": "Tiers",
+            "type": "array"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/StorefrontUsage"
+          },
+          "yearly_toggle_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Yearly Toggle Label"
+          }
+        },
+        "required": [
+          "catalog_revision"
+        ],
+        "title": "StorefrontResponse",
+        "type": "object"
+      },
+      "StorefrontTier": {
+        "properties": {
+          "action": {
+            "enum": [
+              "checkout",
+              "current",
+              "none"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "blocked_line": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked Line"
+          },
+          "bullets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Bullets",
+            "type": "array"
+          },
+          "compact": {
+            "default": false,
+            "title": "Compact",
+            "type": "boolean"
+          },
+          "cta_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cta Label"
+          },
+          "hours_line": {
+            "title": "Hours Line",
+            "type": "string"
+          },
+          "is_current": {
+            "default": false,
+            "title": "Is Current",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "plan_id": {
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "prices": {
+            "items": {
+              "$ref": "#/components/schemas/StorefrontPrice"
+            },
+            "title": "Prices",
+            "type": "array"
+          },
+          "recommended": {
+            "default": false,
+            "title": "Recommended",
+            "type": "boolean"
+          },
+          "tier_id": {
+            "title": "Tier Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tier_id",
+          "plan_id",
+          "name",
+          "hours_line",
+          "bullets",
+          "action",
+          "prices"
+        ],
+        "title": "StorefrontTier",
+        "type": "object"
+      },
+      "StorefrontUsage": {
+        "properties": {
+          "kind": {
+            "default": "unavailable",
+            "enum": [
+              "usage_budget",
+              "transcription",
+              "unavailable"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "meter_line": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meter Line"
+          },
+          "nudge_line": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nudge Line"
+          },
+          "percent": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percent"
+          },
+          "period_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Id"
+          },
+          "pro_gates": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Pro Gates",
+            "type": "array"
+          },
+          "reset_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reset Label"
+          }
+        },
+        "title": "StorefrontUsage",
         "type": "object"
       },
       "StripeConnectAccountResponse": {
@@ -29909,6 +31953,38 @@
         "title": "SummaryTaskReference",
         "type": "object"
       },
+      "SurfaceStateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "foreground": {
+            "title": "Foreground",
+            "type": "boolean"
+          },
+          "session_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9-]+$",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "surface_open": {
+            "title": "Surface Open",
+            "type": "boolean"
+          },
+          "transcript_visible": {
+            "title": "Transcript Visible",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "session_id",
+          "surface_open",
+          "foreground",
+          "transcript_visible"
+        ],
+        "title": "SurfaceStateRequest",
+        "type": "object"
+      },
       "SyncBatchItem": {
         "properties": {
           "apple_reminder_id": {
@@ -30065,6 +32141,47 @@
         "title": "SyncCaptureManifestResponse",
         "type": "object"
       },
+      "SyncContentInProgressResponse": {
+        "description": "A duplicate upload follows its live owner; older servers omit hints.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "default": "The same audio is already processing",
+            "title": "Detail",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "poll_after_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poll After Ms"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "SyncContentInProgressResponse",
+        "type": "object"
+      },
       "SyncJobStartResponse": {
         "properties": {
           "job_id": {
@@ -30129,6 +32246,17 @@
             "default": "fresh",
             "title": "Lane",
             "type": "string"
+          },
+          "poll_after_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poll After Ms"
           },
           "processed_segments": {
             "default": 0,
@@ -30213,6 +32341,17 @@
             "default": 0,
             "title": "Failed Segments",
             "type": "integer"
+          },
+          "held_audio": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Held Audio"
           },
           "new_memories": {
             "items": {
@@ -32246,6 +34385,18 @@
             "title": "Is User",
             "type": "boolean"
           },
+          "original_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Immutable captured text when text includes active corrections.",
+            "title": "Original Text"
+          },
           "person_id": {
             "anyOf": [
               {
@@ -32953,6 +35104,28 @@
           }
         },
         "title": "UnapprovedPublicAppResponse",
+        "type": "object"
+      },
+      "UndoChatReceiptResponse": {
+        "properties": {
+          "block": {
+            "$ref": "#/components/schemas/EditReceiptBlock"
+          },
+          "status": {
+            "enum": [
+              "undone",
+              "already_undone",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "block"
+        ],
+        "title": "UndoChatReceiptResponse",
         "type": "object"
       },
       "UpdateAIUserProfileRequest": {
@@ -41898,6 +44071,431 @@
         "summary": "Get App Subscription"
       }
     },
+    "/v1/attention-items": {
+      "get": {
+        "operationId": "attention_items_v1_attention_items_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttentionItemsPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Attention Items",
+        "tags": [
+          "processing"
+        ]
+      }
+    },
+    "/v1/attention-items/retry-all": {
+      "post": {
+        "operationId": "retry_all_v1_attention_items_retry_all_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetryAllRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttentionRetryAllResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Retry All",
+        "tags": [
+          "processing"
+        ]
+      }
+    },
+    "/v1/attention-items/seen": {
+      "post": {
+        "operationId": "seen_v1_attention_items_seen_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Seen",
+        "tags": [
+          "processing"
+        ]
+      }
+    },
+    "/v1/attention-items/{item_id}/dismiss": {
+      "post": {
+        "operationId": "dismiss_v1_attention_items__item_id__dismiss_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Dismiss",
+        "tags": [
+          "processing"
+        ]
+      }
+    },
+    "/v1/attention-items/{item_id}/retry": {
+      "post": {
+        "operationId": "retry_v1_attention_items__item_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttentionRetryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Retry",
+        "tags": [
+          "processing"
+        ]
+      }
+    },
     "/v1/calendar/capture-gaps": {
       "get": {
         "description": "Accepted calendar events in [start, end] with no overlapping non-discarded conversation.\n\nThe honesty surface for the Conversations list (SCA-381): what was booked\nbut never recorded. Read-only against Google Calendar; it never creates or\nmutates conversations. Declined, cancelled, tentative, and all-day / >8h\nblocks are excluded by ``select_capture_gaps``.",
@@ -43915,6 +46513,90 @@
         ]
       }
     },
+    "/v1/chat/receipts/{receipt_id}/undo": {
+      "post": {
+        "description": "Undo an owner-scoped chat write once and return its updated content block.",
+        "operationId": "undo_chat_receipt_v1_chat_receipts__receipt_id__undo_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "receipt_id",
+            "required": true,
+            "schema": {
+              "title": "Receipt Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UndoChatReceiptResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Undo Chat Receipt"
+      }
+    },
     "/v1/connectors/synthesize": {
       "post": {
         "description": "Return-only calendar/gmail/notes synthesis through the managed memories feature.\n\nDoes not write Firestore. Desktop connector importers call this instead of building\ntheir own prompts and inventing memories via Anthropic Haiku chat completions, then\npersist through the normal memory/task write APIs.",
@@ -44920,14 +47602,7 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StatusResponse"
-                }
-              }
-            },
+          "204": {
             "description": "Successful Response"
           },
           "401": {
@@ -49186,7 +51861,7 @@
         ]
       },
       "post": {
-        "description": "Create a new Developer API key with optional scopes.\n\n- **name**: Descriptive name for the key\n- **scopes**: Optional list of scopes. If not provided, defaults to read-only access.\n  Available scopes:\n  - conversations:read\n  - conversations:write\n  - memories:read\n  - memories:write\n  - action_items:read\n  - action_items:write\n  - goals:read\n  - goals:write",
+        "description": "Create a new Developer API key with optional scopes.\n\n- **name**: Descriptive name for the key\n- **scopes**: Optional list of scopes. If not provided, defaults to read-only access.\n  Available scopes:\n  - conversations:read\n  - conversations:write\n  - memories:read\n  - memories:write\n  - action_items:read\n  - action_items:write\n  - goals:read\n  - goals:write\n  - people:read (explicit opt-in)\n  - profile:read (explicit opt-in)\n  - screen_activity:read (explicit opt-in)",
         "operationId": "createApiKey",
         "requestBody": {
           "content": {
@@ -49743,6 +52418,22 @@
               ],
               "title": "Starred"
             }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
           }
         ],
         "responses": {
@@ -49878,6 +52569,104 @@
           }
         ],
         "summary": "Create Conversation From Segments",
+        "tags": [
+          "Conversations"
+        ]
+      }
+    },
+    "/v1/dev/user/conversations/search": {
+      "get": {
+        "operationId": "searchConversations",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": true,
+            "schema": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Query",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationSearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Search Conversations",
         "tags": [
           "Conversations"
         ]
@@ -50844,6 +53633,70 @@
         ]
       }
     },
+    "/v1/dev/user/memories/search": {
+      "get": {
+        "operationId": "searchMemories",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": true,
+            "schema": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Query",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemorySearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Search Memories",
+        "tags": [
+          "Memories"
+        ]
+      }
+    },
     "/v1/dev/user/memories/vector/search": {
       "get": {
         "description": "Search developer-readable default memory memory through hydrated vector candidates.\n\nThis narrow developer API vector endpoint fails closed unless the authenticated\nDeveloper API app/key has a verified memories.read scope and a persisted app/key\ndefault-read grant. Vector hits are hydrated through the universal repository\nagainst authoritative\n`users/{uid}/memory_items` before returning results, so stale Short-term and\nArchive remain unavailable by default.",
@@ -51021,6 +53874,181 @@
         "summary": "Update Memory",
         "tags": [
           "Memories"
+        ]
+      }
+    },
+    "/v1/dev/user/people": {
+      "get": {
+        "operationId": "listPeople",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeopleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get People",
+        "tags": [
+          "People"
+        ]
+      }
+    },
+    "/v1/dev/user/profile": {
+      "get": {
+        "operationId": "getUserProfile",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Profile",
+        "tags": [
+          "Profile"
+        ]
+      }
+    },
+    "/v1/dev/user/screen-activity": {
+      "get": {
+        "operationId": "listScreenActivity",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "App"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenActivityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Screen Activity",
+        "tags": [
+          "Screen Activity"
         ]
       }
     },
@@ -61549,6 +64577,83 @@
         "summary": "Save Paypal Payment Details"
       }
     },
+    "/v1/pending-work": {
+      "get": {
+        "operationId": "pending_work_v1_pending_work_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingWorkSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Pending Work",
+        "tags": [
+          "processing"
+        ]
+      }
+    },
     "/v1/phone/numbers": {
       "get": {
         "description": "List all verified phone numbers for the user.",
@@ -67485,6 +70590,282 @@
         ]
       }
     },
+    "/v1/users/budget-choice": {
+      "get": {
+        "operationId": "get_budget_choice_v1_users_budget_choice_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Held-Content",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Held-Content"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetChoiceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Budget Choice"
+      },
+      "put": {
+        "operationId": "put_budget_choice_v1_users_budget_choice_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Held-Content",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Held-Content"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BudgetChoiceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetChoiceWriteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Put Budget Choice"
+      }
+    },
+    "/v1/users/client-state": {
+      "post": {
+        "description": "Explicit expiring human-surface intent; no user-document lookup.",
+        "operationId": "report_surface_state_v1_users_client_state_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SurfaceStateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Report Surface State",
+        "tags": [
+          "users"
+        ]
+      }
+    },
     "/v1/users/daily-summaries": {
       "get": {
         "description": "Get list of daily summaries for the authenticated user.\nReturns summaries in reverse chronological order.",
@@ -70486,6 +73867,15 @@
               "title": "X-Device-Id-Hash",
               "type": "string"
             }
+          },
+          {
+            "description": "Value 1 declares catalog plan IDs and lossless unknown-plan decoding on a recognized client platform. Otherwise the platform release floor determines capability; older or unidentified clients retain legacy labels.",
+            "in": "header",
+            "name": "X-Omi-Plan-Identity",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -70521,7 +73911,13 @@
         "summary": "Get User Subscription Endpoint",
         "tags": [
           "v1"
-        ]
+        ],
+        "x-omi-plan-identity-response": {
+          "description": "application/json response when the server plan-identity capability predicate accepts the header or platform/version floor. The default 200 schema is the legacy projection.",
+          "schema": {
+            "$ref": "#/components/schemas/PlanIdentityUserSubscriptionResponse"
+          }
+        }
       }
     },
     "/v1/users/me/trial": {
@@ -77630,6 +81026,141 @@
         ]
       }
     },
+    "/v2/payments/plans": {
+      "get": {
+        "operationId": "get_storefront_v2_payments_plans_get",
+        "parameters": [
+          {
+            "description": "Paywall Opened source vocabulary (#21337)",
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Paywall Opened source vocabulary (#21337)",
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "trigger",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "proactive_agent",
+                    "screen_context",
+                    "usage_budget",
+                    "mcp_daily_cap"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Trigger"
+            }
+          },
+          {
+            "description": "BCP 47 tag. Unknown locales fall back to en.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "BCP 47 tag. Unknown locales fall back to en.",
+              "title": "Locale"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorefrontResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Storefront",
+        "tags": [
+          "payments"
+        ]
+      }
+    },
     "/v2/review/items": {
       "get": {
         "operationId": "get_review_items_v2_v2_review_items_get",
@@ -78030,6 +81561,38 @@
           },
           {
             "in": "header",
+            "name": "X-Omi-Firmware-Version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Firmware-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Device-Model",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Device-Model"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Omi-Conversation-Geolocation",
             "required": false,
             "schema": {
@@ -78078,6 +81641,16 @@
           "401": {
             "$ref": "#/components/responses/Error401"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncContentInProgressResponse"
+                }
+              }
+            },
+            "description": "The same audio is already processing; follow its owner when present"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -78117,6 +81690,16 @@
             "schema": {
               "title": "Job Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "surface_open",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Surface Open",
+              "type": "boolean"
             }
           },
           {

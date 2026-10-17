@@ -12,7 +12,7 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/wal.dart';
 
-import 'journeys/support/hermetic_boot.dart';
+import 'journeys/support/hermetic_boot.dart' hide InertSyncProvider;
 import 'support/native_host_harness.dart';
 import 'visual_audit/fakes.dart';
 

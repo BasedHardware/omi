@@ -11,7 +11,6 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
-import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/l10n/app_localizations.dart';
@@ -20,11 +19,9 @@ import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
-import 'package:omi/pages/processing_conversations/page.dart';
 import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/people_provider.dart';
@@ -490,93 +487,6 @@ void main() {
     expect(row(tester, 'capture_segment:0')!.subtitle, contains('Maya'));
     expect(row(tester, 'capture_segment:0')!.options, contains('identify'));
     expect(row(tester, 'capture_carried'), isNull);
-  });
-
-  testWidgets('processing renders natively and keeps the timed-out Try again', (tester) async {
-    host = NativeTestHost.install();
-    final now = DateTime(2026, 10, 8, 12);
-    final conversation = ServerConversation(
-      id: 'processing-1',
-      createdAt: now.subtract(const Duration(minutes: 10)),
-      finishedAt: now.subtract(const Duration(minutes: 5)),
-      status: ConversationStatus.processing,
-      structured: Structured('', ''),
-      transcriptSegments: [_segment('a', 'Words so far')],
-    );
-    final reprocessed = <String>[];
-    final conversations = ConversationProvider(isSignedIn: () => false);
-    addTearDown(conversations.dispose);
-    await tester.pumpWidget(ChangeNotifierProvider<ConversationProvider>.value(
-      value: conversations,
-      child: NativeTestHost.app(ProcessingConversationPage(
-        conversation: conversation,
-        now: () => now,
-        reprocess: (id) async {
-          reprocessed.add(id);
-          return ServerConversation(
-              id: id,
-              createdAt: conversation.createdAt,
-              status: ConversationStatus.completed,
-              structured: Structured('Done', ''));
-        },
-      )),
-    ));
-    await NativeTestHost.settle(tester);
-    expect(surface(tester).title, _l10n.processing);
-    expect(surface(tester).loading, true, reason: 'the classic header spins while processing');
-    expect(surface(tester).loadingLabel, _l10n.processing);
-    expect(section(tester, 'processing_timeline'), ['processing_segment:0']);
-    expect(row(tester, 'processing_segment:0')!.title, 'Words so far');
-    expect(row(tester, 'processing_timeout')!.title, _l10n.processingTakingLonger);
-    await send(tester, 'processing_retry');
-    await NativeTestHost.settle(tester);
-    expect(reprocessed, ['processing-1']);
-    // The reprocess answered with a finished conversation: nothing is stuck, so no second retry.
-    expect(row(tester, 'processing_retry'), isNull);
-  });
-
-  testWidgets('processing with nothing captured says so', (tester) async {
-    host = NativeTestHost.install();
-    final conversation = ServerConversation(
-        id: 'processing-2',
-        createdAt: DateTime(2026, 10, 8),
-        status: ConversationStatus.processing,
-        structured: Structured('', ''));
-    await tester.pumpWidget(NativeTestHost.app(ProcessingConversationPage(conversation: conversation)));
-    await NativeTestHost.settle(tester);
-    expect(row(tester, 'processing_empty')!.title, _l10n.noContentToDisplay);
-    expect(row(tester, 'processing_retry'), isNull);
-  });
-
-  testWidgets('the classic processing page keeps the same timed-out Try again', (tester) async {
-    final now = DateTime(2026, 10, 8, 12);
-    final conversation = ServerConversation(
-      id: 'processing-3',
-      createdAt: now.subtract(const Duration(minutes: 10)),
-      finishedAt: now.subtract(const Duration(minutes: 5)),
-      status: ConversationStatus.processing,
-      structured: Structured('', ''),
-    );
-    final reprocessed = <String>[];
-    final conversations = ConversationProvider(isSignedIn: () => false);
-    addTearDown(conversations.dispose);
-    await tester.pumpWidget(ChangeNotifierProvider<ConversationProvider>.value(
-      value: conversations,
-      child: NativeTestHost.app(ProcessingConversationPage(
-        conversation: conversation,
-        now: () => now,
-        reprocess: (id) async {
-          reprocessed.add(id);
-          return conversation;
-        },
-      )),
-    ));
-    await tester.pump();
-    expect(find.byType(IosNativeSurface), findsNothing);
-    expect(find.text(_l10n.processingTakingLonger), findsOneWidget);
-    await tester.tap(find.byKey(const Key('processing_page_retry_button')));
-    await tester.pump();
-    expect(reprocessed, ['processing-3']);
   });
 
   testWidgets('without the native host the live page is the classic page', (tester) async {

@@ -19,10 +19,26 @@ description: "Manage your Developer API keys"
 </CardGroup>
 
 <Note>
-Developer API keys are self-service: while signed in to Omi, open **Developer → API Keys** to create,
-list, and revoke your keys. The lifecycle endpoints below use that signed-in Omi/Firebase session; an
+Developer API keys are self-service: while signed in to Omi, open the
+[Developers page](https://app.omi.me/developers) on the web to create, list, and revoke your keys. The lifecycle endpoints below use that signed-in Omi/Firebase session; an
 `omi_dev_...` key cannot create, list, or revoke keys itself.
 </Note>
+
+
+## Hand a key to an agent without pasting it
+
+After you create a key there, choose **Send to My Agent Securely**. Omi encrypts the key in your
+browser and stores only the ciphertext in [ZK Relay](https://zkr.scalingforever.com) as a one-time
+share that expires after one hour or its first reveal. The copy-paste prompt then contains only the
+share's **agent link** (`https://zkr.scalingforever.com/a/<id>#v1.<key>.<token>`), never the raw key.
+The decryption key and access token live in the link's `#` fragment, which is never sent to any
+server.
+
+Your agent installs the `zkr` receiver if needed (see
+[llms.txt](https://zkr.scalingforever.com/llms.txt)), runs
+`zkr receive --link-stdin --output <relative-path>`, moves the value into its own secret store or
+environment variable, and deletes the file. If the link was already opened or has expired, create a
+new one. **Show the key instead** remains available when you would rather store the key yourself.
 
 ---
 
@@ -409,14 +425,15 @@ If a key is compromised, revoke it immediately and create a new one.
 
 ## Managing Keys in the App
 
-You can also manage API keys directly in the Omi app:
+You can also manage API keys in the Omi mobile app (the web
+[Developers page](https://app.omi.me/developers) is the primary place):
 
 <Steps>
   <Step title="Open Omi App" icon="mobile">
     Launch the Omi app on your device
   </Step>
   <Step title="Navigate to Settings" icon="gear">
-    Go to **Settings → Developer**
+    Go to **Settings → Developer Settings**
   </Step>
   <Step title="Manage Keys" icon="key">
     Under "Developer API Keys" you can:
@@ -429,3 +446,8 @@ You can also manage API keys directly in the Omi app:
 <Info>
 Keys created in the app and via the API are the same - you can manage them from either place.
 </Info>
+
+Additional opt-in read scopes are `people:read`, `profile:read`, and
+`screen_activity:read`. Include them in `scopes` when creating a Developer key
+with `POST /v1/dev/keys`. Omitted scopes retain the existing read-only defaults
+and do not include these new capabilities.

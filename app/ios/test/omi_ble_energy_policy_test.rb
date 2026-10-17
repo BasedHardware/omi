@@ -108,6 +108,72 @@ class OmiBleEnergyPolicyTest < Minitest::Test
     end
   end
 
+  def test_resolved_outage_ages_from_resolution_and_unresolved_start_still_prunes
+    Dir.mktmpdir('omi-ble-resolution-retention') do |directory|
+      harness = File.join(directory, 'main.swift')
+      binary = File.join(directory, 'omi-ble-resolution-retention-test')
+      File.write(harness, <<~SWIFT)
+        import Foundation
+
+        @main
+        struct ResolutionRetentionHarness {
+            static func main() {
+                let hour: Int64 = 3_600_000
+                let day: Int64 = 24 * hour
+                let now: Int64 = 10 * day
+                let retentionMs: Int64 = 7 * day
+                var diagnostics = OmiBleReconnectDiagnostics()
+                let resolvedStart = now - 8 * day
+                let resolvedAt = now - hour
+                let unresolvedStart = resolvedStart - 1
+                let events: [[String: Any]] = [
+                    ["timestamp": resolvedStart, "lostAudioResolvedAt": resolvedAt, "eventType": "disconnect"],
+                    ["timestamp": unresolvedStart, "eventType": "disconnect"],
+                ]
+                precondition(OmiBleReconnectDiagnostics.retentionTimestamp(events[0]) == resolvedAt)
+                precondition(OmiBleReconnectDiagnostics.retentionTimestamp(events[1]) == unresolvedStart)
+                let kept = diagnostics.retainedHistory(
+                    events, nowMs: now, retentionMs: retentionMs, limit: 500,
+                    timestampOf: OmiBleReconnectDiagnostics.retentionTimestamp
+                )
+                precondition(kept.count == 1)
+                precondition(kept[0]["timestamp"] as? Int64 == resolvedStart)
+                precondition(kept[0]["lostAudioResolvedAt"] as? Int64 == resolvedAt)
+
+                // Resolution outside the window still prunes; the count cap is unchanged.
+                let staleResolved: [String: Any] = [
+                    "timestamp": now - 20 * day,
+                    "lostAudioResolvedAt": now - 8 * day,
+                ]
+                let pruned = diagnostics.retainedHistory(
+                    [staleResolved], nowMs: now, retentionMs: retentionMs, limit: 500,
+                    timestampOf: OmiBleReconnectDiagnostics.retentionTimestamp
+                )
+                precondition(pruned.isEmpty)
+
+                // Unresolved reconnect matching still keys off the start.
+                diagnostics.recordEvent(timestampMs: 1_000, eventType: "disconnect", isManual: false)
+                let open: [[String: Any]] = [["timestamp": Int64(1_000), "timeToReconnectMs": Int64(0)]]
+                let backfilled = diagnostics.backfilledHistory(
+                    open, nowMs: 2_000, hadConnection: true,
+                    timestampOf: OmiBleReconnectDiagnostics.retentionTimestamp,
+                    withDuration: { event, duration in
+                        var updated = event
+                        updated["timeToReconnectMs"] = duration
+                        return updated
+                    }
+                )
+                precondition(backfilled?[0]["timeToReconnectMs"] as? Int64 == 1_000)
+            }
+        }
+      SWIFT
+      stdout, stderr, compile = Open3.capture3('swiftc', '-parse-as-library', POLICY_SOURCE, harness, '-o', binary)
+      assert compile.success?, "swiftc failed:\n#{stdout}\n#{stderr}"
+      stdout, stderr, run = Open3.capture3(binary)
+      assert run.success?, "resolution retention assertions failed:\n#{stdout}\n#{stderr}"
+    end
+  end
+
   def test_recovery_latency_tracks_the_disconnect_across_failed_retries
     Dir.mktmpdir('omi-ble-recovery') do |directory|
       harness = File.join(directory, 'main.swift')

@@ -3,6 +3,8 @@ import re
 import threading
 from typing import Any
 
+from database.fsr_cache_telemetry import OMI_FALLBACK_TOTAL as OMI_FALLBACK_TOTAL
+
 from fastapi import Response
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
@@ -502,7 +504,7 @@ def record_lazy_desktop_deferral(*, event: str) -> None:
 # Conversation relevance (utils/conversations/relevance.py): one increment per
 # processed conversation. `decided_by="policy"` counts triggers that never
 # assess; a share of them that grows is a path skipping the gate by design,
-# and `reason="model_error"` is the model tier failing open to keep.
+# and degraded reasons identify the cheaper arm that resolved a model failure.
 CONVERSATION_RELEVANCE_LABELS = {
     'trigger': frozenset(
         {
@@ -517,7 +519,7 @@ CONVERSATION_RELEVANCE_LABELS = {
         }
     ),
     'verdict': frozenset({'keep', 'discard'}),
-    'decided_by': frozenset({'policy', 'user', 'rule', 'model', 'jev', 'override'}),
+    'decided_by': frozenset({'policy', 'user', 'rule', 'model', 'jev', 'override', 'deterministic'}),
 }
 
 CONVERSATION_RELEVANCE_DECISION_TOTAL = Counter(
@@ -525,7 +527,7 @@ CONVERSATION_RELEVANCE_DECISION_TOTAL = Counter(
     'omi_conversation_relevance_decision_total',
     (
         'Conversation relevance decisions by processing trigger, verdict, deciding tier, and '
-        'bounded reason (a rule id, model_keep/model_discard/model_error, jev_keep/jev_discard/jev_error, a policy trigger, '
+        'bounded reason (a rule id, model_keep/model_discard, jev_keep/jev_discard, fallback arm reasons, a policy trigger, '
         'restored, or calendar_overlap). Never labeled by uid. Per-pod; sum() across jobs.'
     ),
     ['trigger', 'verdict', 'decided_by', 'reason'],
@@ -674,6 +676,42 @@ MEMORY_OWNER_JEV_TOTAL = Counter(
 )
 
 
+# Primary scorer outcomes provide the denominator and failure categories for
+# degraded relevance paths. Keep this separate from shared transition telemetry.
+CONVERSATION_RELEVANCE_SCORER_TOTAL = Counter(
+    'omi_conversation_relevance_scorer_total',
+    'Paid relevance scorer outcomes; failures enter the cheaper decision chain.',
+    ['arm', 'outcome'],
+)
+
+
+CONVERSATION_RELEVANCE_CIRCUIT_TOTAL = Counter(
+    'omi_conversation_relevance_circuit_total',
+    'Primary relevance circuit transitions; open skips all paid decision arms.',
+    ['arm', 'state'],
+)
+
+
+def record_relevance_circuit_state(arm: str, state: str) -> None:
+    try:
+        CONVERSATION_RELEVANCE_CIRCUIT_TOTAL.labels(
+            arm=arm if arm in {'jev', 'model'} else 'other',
+            state=state if state in {'open', 'half_open', 'closed'} else 'other',
+        ).inc()
+    except Exception:
+        pass
+
+
+def record_relevance_scorer_outcome(outcome: str, *, arm: str = 'jev') -> None:
+    try:
+        CONVERSATION_RELEVANCE_SCORER_TOTAL.labels(
+            arm=arm if arm in {'jev', 'model'} else 'other',
+            outcome=outcome if outcome in JEV_DECISION_LABELS['outcome'] | {'unavailable'} else 'other',
+        ).inc()
+    except Exception:
+        pass
+
+
 def record_jev_decision(*, lane: str, outcome: str, latency_seconds: float) -> None:
     """Never raises: observability must not change a decision."""
     try:
@@ -762,8 +800,14 @@ OMI_CLIENT_JOURNEY_DURATION_SECONDS = Histogram(
 # different images, mixes two different answers to the same question.
 LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS = Gauge(
     'listen_finalization_oldest_nonterminal_age_seconds',
-    'Global age of the oldest queued, leased, or blocked listen finalization job; '
+    'Global age of the oldest queued or leased listen finalization job; '
     'replicated per process, aggregate with max() not sum()',
+)
+
+LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS = Gauge(
+    'listen_finalization_oldest_blocked_byok_age_seconds',
+    'Global age of the oldest listen finalization job waiting for user BYOK credentials; '
+    'replicated per process, aggregate with max() not sum(); informational only',
 )
 
 # Durable-queue substrate age. Every replica publishes the same Firestore-derived
@@ -778,15 +822,50 @@ OMI_QUEUE_OLDEST_READY_AGE_SECONDS = Gauge(
 OMI_QUEUE_NAMES = (
     'memory_outbox',
     'candidate_integration_outbox',
-    'chat_first_proactive_intents',
     'conversation_finalization_jobs',
     'daily_summary_hour_groups',
     'daily_memory_sweep',
     'vector_repair_outbox',
     'task_recurrence_inbox',
     'frame_deletion_outbox',
-    'projection_repairs',
 )
+
+# Closed queue inventory bounds cardinality. Before the first tick, age absence
+# remains the startup signal; thereafter unknown is explicit per queue.
+OMI_QUEUE_OLDEST_READY_SAMPLE_UNKNOWN = Gauge(
+    'omi_queue_oldest_ready_sample_unknown',
+    'Whether the latest durable-queue age sample is unknown; aggregate with max()',
+    ['queue'],
+)
+for _queue_name in OMI_QUEUE_NAMES:
+    OMI_QUEUE_OLDEST_READY_SAMPLE_UNKNOWN.labels(queue=_queue_name).set(0)
+
+# Closed sweep dispositions. Zero-initialize every child so an idle process
+# exports the whole set; never label by uid.
+CANDIDATE_INTEGRATION_SWEEP_DISPOSITIONS = (
+    'dead_letter_generation_mismatch',
+    'dead_letter_in_doubt',
+    'dead_letter_malformed',
+    'dead_letter_missing_created_at',
+    'dead_letter_stale_abandoned',
+    'error',
+    'recovered_external_id',
+    'retried',
+    'skipped_account_deleting',
+    'skipped_attempt_budget',
+    'skipped_live_lease',
+    'skipped_not_claimed',
+    'skipped_not_due',
+    'skipped_pending_young',
+)
+OMI_CANDIDATE_INTEGRATION_SWEEP_TOTAL = Counter(
+    'omi_candidate_integration_sweep_total',
+    'Candidate integration outbox sweep rows by closed disposition',
+    ['disposition'],
+)
+for _disposition in CANDIDATE_INTEGRATION_SWEEP_DISPOSITIONS:
+    OMI_CANDIDATE_INTEGRATION_SWEEP_TOTAL.labels(disposition=_disposition)
+
 
 LISTEN_FINALIZATION_JOB_STATUS = Gauge(
     'listen_finalization_jobs',
@@ -865,12 +944,6 @@ LLM_GATEWAY_CLIENT_FIRST_BYTE_SECONDS = Histogram(
     buckets=(0.1, 0.25, 0.5, 1, 2, 3, 5, 10, 15, 30),
 )
 
-OMI_FALLBACK_TOTAL = Counter(
-    'omi_fallback_total',
-    'Fallback / resilience transitions by component, path, reason, and outcome',
-    ['component', 'from_mode', 'to_mode', 'reason', 'outcome'],
-)
-
 DESKTOP_UPDATE_RESOLUTION_TOTAL = Counter(
     'desktop_update_resolution_total',
     (
@@ -924,6 +997,12 @@ OMI_SYNC_LANE_SPEECH_MS_TOTAL = Counter(
     'omi_sync_lane_speech_ms_total',
     'Successfully reserved sync speech milliseconds by lane',
     ['lane'],
+)
+
+OMI_SYNC_LANE_ADMISSIONS_TOTAL = Counter(
+    'omi_sync_lane_admissions_total',
+    'V2 sync upload lane decisions after the legacy fresh budget',
+    ['lane', 'trust', 'reason'],
 )
 
 OMI_SYNC_RECORDING_AGE_SECONDS = Histogram(
@@ -1063,7 +1142,7 @@ OMI_LIVE_STT_TERMINAL_TOTAL = Counter(
 OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL = Counter(
     'omi_live_session_transcript_outcome_total',
     'Terminal transcript outcome per backend-STT live listen session (transcribed / no_transcript / too_short)',
-    ['outcome'],
+    ['outcome', 'demand_cohort'],
 )
 
 # Process-local STT breaker state (utils/stt/provider_resilience.py), published
@@ -1137,6 +1216,22 @@ OMI_LISTEN_AUDIO_DECODE_FAILURES_TOTAL = Counter(
     'Undecodable /v4/listen audio frames by bounded declared codec and client platform',
     ['codec', 'client_platform'],
 )
+# Publish every bounded child at zero (alert doctrine: a scraped zero before the
+# first failure makes family absence unambiguously a source failure). The label
+# vocabularies mirror _record_decode_failure in routers/listen/receiver.py.
+for _codec in ('opus', 'opus_fs320', 'aac', 'lc3', 'pcm8', 'other'):
+    for _decode_platform in (
+        'android',
+        'desktop',
+        'ios',
+        'linux',
+        'macos',
+        'mobile',
+        'web',
+        'windows',
+        'unknown',
+    ):
+        OMI_LISTEN_AUDIO_DECODE_FAILURES_TOTAL.labels(codec=_codec, client_platform=_decode_platform)
 
 OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL = Counter(
     'omi_listen_unknown_channel_prefix_total',
@@ -1184,13 +1279,10 @@ OMI_SYNC_LINEAGE_RESOLVE_TOTAL = Counter(
     ['outcome'],
 )
 
-# Per task written by a conversation's action-item replace
-# (utils/conversations/action_item_identity.py). Emitted from every processing host,
-# several unscraped, so the `event=action_item_identity` log line is the backup.
+# Task identity is emitted by all processing hosts; event=action_item_identity logs cover unscraped hosts.
 OMI_ACTION_ITEM_IDENTITY_TOTAL = Counter(
     'omi_action_item_identity_total',
-    'Task identity on a conversation task replace. outcome is a closed set: '
-    'reused_identity|new|skipped_already_exported|disabled',
+    'Task identity on replace: reused_identity|new|skipped_already_exported|disabled',
     ['outcome'],
 )
 
@@ -1200,10 +1292,13 @@ OMI_ACTION_ITEM_REFRESH_TOTAL = Counter(
     ['outcome'],
 )
 
-# Conversation shape at first durable completed persist. source is a closed
-# 6-value vocabulary (live/sync/import/integration/desktop/unknown). Sync
-# children are emitted from backend-sync, which is not scraped today; the
-# matching omi_conversation_shape log line is the Cloud Logging backup.
+OMI_ACTION_ITEM_EXTRACTION_DROPPED_TOTAL = Counter(
+    'omi_action_item_extraction_dropped_total',
+    'Model-extracted tasks rejected by conservative guards: other_owner|status_statement',
+    ['reason'],
+)
+
+# Shape at first durable completed persist; omi_conversation_shape logs cover unscraped backend-sync hosts.
 CONVERSATION_SHAPE_SOURCES = (
     'live',
     'sync',
@@ -1277,12 +1372,6 @@ TASK_INTELLIGENCE_ATTRIBUTION_TOTAL = Counter(
     'task_intelligence_attribution_total',
     'Privacy-safe task intervention, feedback, and outcome events',
     ['event', 'subject_kind', 'code'],
-)
-
-CHAT_FIRST_PROACTIVE_TOTAL = Counter(
-    'chat_first_proactive_total',
-    'Chat-first proactive engine activity with no user content',
-    ['event', 'source', 'reason'],
 )
 
 MEMORY_UNIVERSAL_READ_ORIGIN_TOTAL = Counter(
@@ -1373,6 +1462,16 @@ PUSHER_DRAIN_IN_PROGRESS = Gauge(
 )
 PUSHER_READY.set(1)
 PUSHER_DRAIN_IN_PROGRESS.set(0)
+
+
+OMI_SYNC_JOB_POLL_REQUESTS_TOTAL = Counter(
+    'omi_sync_job_poll_requests_total',
+    'Authenticated GET /v2/sync-local-files/{job_id} requests, including rejected polls',
+)
+OMI_SYNC_JOB_POLL_THROTTLED_TOTAL = Counter(
+    'omi_sync_job_poll_throttled_total',
+    'GET /v2/sync-local-files/{job_id} requests rejected by the per-UID poll ceiling',
+)
 
 
 # GET /v1/action-items read-cost controls (see database/action_items_cache.py).

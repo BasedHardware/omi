@@ -19,6 +19,14 @@ Omi uses a **dual-collection architecture** for storing user data:
 
 This separation allows for efficient retrieval of both full conversation context and quick access to key facts about the user.
 
+Offline uploads can finish in a different order from their recording times.
+The sync intake transaction joins compatible adjacent intervals in either
+direction and stores transcript offsets relative to the earliest capture.
+Chunks within an upload assign chronologically; a later-arriving earlier chunk
+can still join the same conversation across uploads. Device/source boundaries,
+user-managed records, explicit live targets and conversation size limits remain
+separate constraints on automatic merging.
+
 ## On-device summaries in desktop reads
 
 The app conversation response may carry a display-only `client_processing` projection.
@@ -51,6 +59,18 @@ xcrun swift test --package-path desktop/macos/Desktop --filter 'ConversationProj
 
 These hermetic tests exercise decode, reconciliation, and production SQLite storage. Named-bundle
 end-to-end acceptance remains a separate check.
+
+## Restoring access to already-transcribed content
+
+Subscription upgrades restore access by clearing lock metadata on stored
+conversations, memories, and action items. The optional reset recovery path uses
+the same updates in bounded pages after authenticated HTTP requests while the
+current plan allowance is available. Unfinished UTC quota months retry on later
+requests until recovery completes. Initial enablement starts draining the current
+month’s already-locked backlog without waiting for a month boundary. Once that
+month is complete, content locked later waits until the next UTC quota month.
+Recovery does not retranscribe audio or debit transcription usage; clients continue
+using the existing `is_locked` field.
 
 ## Architecture Diagram
 
@@ -451,6 +471,12 @@ Vectors are created ONCE during initial processing. Reprocessed conversations do
 </CardGroup>
 
 ### Manual speaker attribution during concurrent writes
+
+Conversation and person IDs are opaque strings: send the exact stored value,
+including valid legacy Unicode or punctuation. Speaker routes validate Firestore
+storage limits before lookup without trimming IDs or adding arbitrary speaker
+number bounds. An integer speaker ID that does not exist retains the existing
+not-found response.
 
 Manual speaker decisions live in a protected sparse receipt alongside the transcript.
 Live STT merging and both processing-result writers read that receipt in their

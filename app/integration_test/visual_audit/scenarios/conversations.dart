@@ -94,10 +94,10 @@ const _twoSourceGroup = CaptureGroup(
 final conversationsScenarios = <AuditScenario>[
   AuditScenario(
     id: 'conversations-locked-preview',
-    title: 'Locked conversations with an upgrade action',
+    title: 'Saved conversations waiting on their allowance',
     page: _page,
     state: 'An unlocked conversation followed by three consecutive locked previews, which share one '
-        'frosted card and one upgrade action; synthetic titles only',
+        'frosted card, a waiting status and one usage action; synthetic titles only',
     run: (a) async {
       final items = [
         auditConversation('unlocked', title: 'Design catch-up with Alex'),
@@ -114,8 +114,11 @@ final conversationsScenarios = <AuditScenario>[
       await a.pump(const ConversationsPage(requestInitialLoad: false), providers: _listProviders(items));
       expect(find.byType(ConversationListItem), findsNWidgets(4));
       expect(find.byType(LockedConversationRun), findsOneWidget);
-      expect(find.text('Upgrade to Unlimited'), findsOneWidget);
-      await a.shot('Conversation list with frosted locked previews');
+      expect(find.text('Pending'), findsOneWidget);
+      expect(find.text('View Usage'), findsOneWidget);
+      expect(find.byIcon(Icons.lock_outline), findsNothing);
+      expect(find.byIcon(Icons.hourglass_empty), findsOneWidget);
+      await a.shot('Conversation list with saved-content waiting previews');
     },
   ),
   AuditScenario(
@@ -206,8 +209,7 @@ final conversationsScenarios = <AuditScenario>[
     run: (a) async {
       await a.pump(const AutoSyncPage(),
           providers: [ChangeNotifierProvider<SyncProvider>(create: (_) => _HistorySyncProvider())]);
-      await a.tap(find.text('All'));
-      await a.scrollSeries('Open Offline Sync, choose All and scroll the recordings');
+      await a.scrollSeries('Open Offline Sync and scroll the recordings still to sync');
     },
   ),
   AuditScenario(
@@ -218,7 +220,7 @@ final conversationsScenarios = <AuditScenario>[
     run: (a) async {
       await a.pump(const AutoSyncPage(),
           providers: [ChangeNotifierProvider<SyncProvider>(create: (_) => _HistorySyncProvider())]);
-      await a.tap(find.text('All'));
+      await a.tap(find.text('Synced'));
       await a.tap(find.textContaining('12:56'));
       await a.shot('Tap a recording to see the files it is made of');
     },

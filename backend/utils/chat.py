@@ -16,7 +16,7 @@ from models.transcript_segment import TranscriptSegment
 from utils.apps import get_available_app_by_id
 from utils.executors import db_executor, run_blocking, storage_executor, sync_executor
 from utils.conversation_helpers import extract_memory_ids
-from utils.conversations.factory import deserialize_conversation
+from utils.chat_citations import resolve_conversation_citations
 from utils.llm.chat import initial_chat_message
 from utils.llm.persona import initial_persona_chat_message
 from utils.notifications import send_client_displayed_notification, send_client_displayed_notification_async
@@ -40,6 +40,14 @@ from utils.llm.usage_tracker import track_usage, set_usage_context, reset_usage_
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _log_skipped_memory(member, exc) -> None:
+    logger.warning(
+        'Skipping malformed memory conversation %s: %s',
+        member.get('id') if isinstance(member, dict) else getattr(member, 'id', None),
+        type(exc).__name__,
+    )
 
 
 def _log_skipped_message(record, exc) -> None:
@@ -340,7 +348,9 @@ def process_voice_message_segment(
         memories_id=memories_id,
     )
     chat_db.add_message(uid, ai_message.model_dump())
-    ai_message.memories = memories if len(memories) < 5 else memories[:5]
+    # Same defensive conversion as process_message — raw members can be dicts
+    # or live objects; assigning them untyped breaks model_dump() serialization.
+    ai_message.memories = MessageConversation.safe_build_many(memories[:5], on_error=_log_skipped_memory)
     if app_id:
         record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
@@ -510,16 +520,8 @@ async def process_voice_message_segment_stream(
         langsmith_run_id = callback_data.get('langsmith_run_id')
         prompt_name = callback_data.get('prompt_name')
         prompt_commit = callback_data.get('prompt_commit')
-        memories_id = []
-        # check if the items in the conversations list are dict
-        if memories:
-            converted_memories = []
-            for m in memories[:5]:
-                if isinstance(m, dict):
-                    converted_memories.append(deserialize_conversation(m))
-                else:
-                    converted_memories.append(m)
-            memories_id = [str(getattr(m, 'id', '')) for m in converted_memories]
+        response, memories = resolve_conversation_citations(response, memories)
+        memories_id = extract_memory_ids(memories)
         ai_message = Message(
             id=str(uuid.uuid4()),
             text=response,
@@ -541,7 +543,11 @@ async def process_voice_message_segment_stream(
             await run_blocking(db_executor, chat_db.add_message_to_chat_session, uid, chat_session.id, ai_message.id)
 
         await run_blocking(db_executor, chat_db.add_message, uid, ai_message.model_dump())
-        ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
+        # Convert memories defensively — a non-mapping member or a doc missing
+        # structured/created_at must not raise here: add_message already
+        # persisted this id, and a throw abandons the write while a fresh
+        # in-memory id desyncs the client from the stored document.
+        ai_message.memories = MessageConversation.safe_build_many(memories[:5], on_error=_log_skipped_memory)
 
         if app_id:
             await run_blocking(

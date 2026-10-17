@@ -30,6 +30,7 @@ class GeneratedTranscriptSegment {
   final double end;
   final String? id;
   final bool isUser;
+  final String? originalText;
   final String? personId;
   final String? speaker;
   final int? speakerId;
@@ -44,6 +45,7 @@ class GeneratedTranscriptSegment {
     required this.end,
     this.id,
     required this.isUser,
+    this.originalText,
     this.personId,
     this.speaker = "SPEAKER_00",
     this.speakerId,
@@ -60,6 +62,7 @@ class GeneratedTranscriptSegment {
       end: _required(_readFieldValue<double>(_readField(json, const ["end"]), "end", _readDouble, requiredField: true, nullable: false), "end"),
       id: _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: false, nullable: true),
       isUser: _required(_readFieldValue<bool>(_readField(json, const ["is_user"]), "is_user", _readBool, requiredField: true, nullable: false), "is_user"),
+      originalText: _readFieldValue<String>(_readField(json, const ["original_text"]), "original_text", _readString, requiredField: false, nullable: true),
       personId: _readFieldValue<String>(_readField(json, const ["person_id"]), "person_id", _readString, requiredField: false, nullable: true),
       speaker: _readFieldValue<String>(_readField(json, const ["speaker"]), "speaker", _readString, requiredField: false, nullable: true, defaultValue: "SPEAKER_00"),
       speakerId: _readFieldValue<int>(_readField(json, const ["speaker_id"]), "speaker_id", _readInt, requiredField: false, nullable: true),
@@ -77,6 +80,7 @@ class GeneratedTranscriptSegment {
       'end': end,
       'id': id,
       'is_user': isUser,
+      'original_text': originalText,
       'person_id': personId,
       'speaker': speaker,
       'speaker_id': speakerId,
@@ -625,6 +629,7 @@ class GeneratedAudioFile {
   final double duration;
   final String id;
   final String provider;
+  final String? sourceFingerprint;
   final DateTime? startedAt;
   final String uid;
 
@@ -635,6 +640,7 @@ class GeneratedAudioFile {
     required this.duration,
     required this.id,
     this.provider = "gcp",
+    this.sourceFingerprint,
     this.startedAt,
     required this.uid,
   });
@@ -647,6 +653,7 @@ class GeneratedAudioFile {
       duration: _required(_readFieldValue<double>(_readField(json, const ["duration"]), "duration", _readDouble, requiredField: true, nullable: false), "duration"),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
       provider: _required(_readFieldValue<String>(_readField(json, const ["provider"]), "provider", _readString, requiredField: false, nullable: false, defaultValue: "gcp"), "provider"),
+      sourceFingerprint: _readFieldValue<String>(_readField(json, const ["source_fingerprint"]), "source_fingerprint", _readString, requiredField: false, nullable: true),
       startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: false, nullable: true),
       uid: _required(_readFieldValue<String>(_readField(json, const ["uid"]), "uid", _readString, requiredField: true, nullable: false), "uid"),
     );
@@ -660,6 +667,7 @@ class GeneratedAudioFile {
       'duration': duration,
       'id': id,
       'provider': provider,
+      'source_fingerprint': sourceFingerprint,
       'started_at': startedAt?.toUtc().toIso8601String(),
       'uid': uid,
     };
@@ -987,6 +995,8 @@ class GeneratedConversation {
   final List<GeneratedTranscriptSegment> transcriptSegments;
   final bool? transcriptSegmentsCompressed;
   final DateTime? updatedAt;
+  final List<Map<String, dynamic>>? userCorrections;
+  final String? userOverview;
   final bool usesCustomStt;
   final String visibility;
 
@@ -1039,6 +1049,8 @@ class GeneratedConversation {
     this.transcriptSegments = const [],
     this.transcriptSegmentsCompressed = false,
     this.updatedAt,
+    this.userCorrections,
+    this.userOverview,
     this.usesCustomStt = false,
     this.visibility = "private",
   });
@@ -1093,6 +1105,8 @@ class GeneratedConversation {
       transcriptSegments: _required(_readFieldValue<List<GeneratedTranscriptSegment>>(_readField(json, const ["transcript_segments"]), "transcript_segments", (value) => _readObjectList(value, GeneratedTranscriptSegment.fromJson), requiredField: false, nullable: false, defaultValue: const []), "transcript_segments"),
       transcriptSegmentsCompressed: _readFieldValue<bool>(_readField(json, const ["transcript_segments_compressed"]), "transcript_segments_compressed", _readBool, requiredField: false, nullable: true, defaultValue: false),
       updatedAt: _readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: false, nullable: true),
+      userCorrections: _readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["user_corrections"]), "user_corrections", _readMapList, requiredField: false, nullable: true),
+      userOverview: _readFieldValue<String>(_readField(json, const ["user_overview"]), "user_overview", _readString, requiredField: false, nullable: true),
       usesCustomStt: _required(_readFieldValue<bool>(_readField(json, const ["uses_custom_stt"]), "uses_custom_stt", _readBool, requiredField: false, nullable: false, defaultValue: false), "uses_custom_stt"),
       visibility: _required(_readFieldValue<String>(_readField(json, const ["visibility"]), "visibility", _readString, requiredField: false, nullable: false, defaultValue: "private"), "visibility"),
     );
@@ -1148,6 +1162,8 @@ class GeneratedConversation {
       'transcript_segments': transcriptSegments.map((value) => value.toJson()).toList(),
       'transcript_segments_compressed': transcriptSegmentsCompressed,
       'updated_at': updatedAt?.toUtc().toIso8601String(),
+      'user_corrections': userCorrections,
+      'user_overview': userOverview,
       'uses_custom_stt': usesCustomStt,
       'visibility': visibility,
     };
@@ -1392,6 +1408,8 @@ class GeneratedConversationSearchItem {
   final List<GeneratedTranscriptSegment> transcriptSegments;
   final bool? transcriptSegmentsCompressed;
   final DateTime? updatedAt;
+  final List<Map<String, dynamic>>? userCorrections;
+  final String? userOverview;
   final bool usesCustomStt;
   final String visibility;
 
@@ -1445,6 +1463,8 @@ class GeneratedConversationSearchItem {
     this.transcriptSegments = const [],
     this.transcriptSegmentsCompressed = false,
     this.updatedAt,
+    this.userCorrections,
+    this.userOverview,
     this.usesCustomStt = false,
     this.visibility = "private",
   });
@@ -1500,6 +1520,8 @@ class GeneratedConversationSearchItem {
       transcriptSegments: _required(_readFieldValue<List<GeneratedTranscriptSegment>>(_readField(json, const ["transcript_segments"]), "transcript_segments", (value) => _readObjectList(value, GeneratedTranscriptSegment.fromJson), requiredField: false, nullable: false, defaultValue: const []), "transcript_segments"),
       transcriptSegmentsCompressed: _readFieldValue<bool>(_readField(json, const ["transcript_segments_compressed"]), "transcript_segments_compressed", _readBool, requiredField: false, nullable: true, defaultValue: false),
       updatedAt: _readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: false, nullable: true),
+      userCorrections: _readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["user_corrections"]), "user_corrections", _readMapList, requiredField: false, nullable: true),
+      userOverview: _readFieldValue<String>(_readField(json, const ["user_overview"]), "user_overview", _readString, requiredField: false, nullable: true),
       usesCustomStt: _required(_readFieldValue<bool>(_readField(json, const ["uses_custom_stt"]), "uses_custom_stt", _readBool, requiredField: false, nullable: false, defaultValue: false), "uses_custom_stt"),
       visibility: _required(_readFieldValue<String>(_readField(json, const ["visibility"]), "visibility", _readString, requiredField: false, nullable: false, defaultValue: "private"), "visibility"),
     );
@@ -1556,6 +1578,8 @@ class GeneratedConversationSearchItem {
       'transcript_segments': transcriptSegments.map((value) => value.toJson()).toList(),
       'transcript_segments_compressed': transcriptSegmentsCompressed,
       'updated_at': updatedAt?.toUtc().toIso8601String(),
+      'user_corrections': userCorrections,
+      'user_overview': userOverview,
       'uses_custom_stt': usesCustomStt,
       'visibility': visibility,
     };
@@ -1649,6 +1673,7 @@ class GeneratedSearchConversationsResponse {
 class GeneratedSyncLocalFilesResultResponse {
   final List<String>? errors;
   final int failedSegments;
+  final bool? heldAudio;
   final List<String>? newMemories;
   final int totalSegments;
   final List<String>? updatedMemories;
@@ -1656,6 +1681,7 @@ class GeneratedSyncLocalFilesResultResponse {
   const GeneratedSyncLocalFilesResultResponse({
     this.errors,
     this.failedSegments = 0,
+    this.heldAudio,
     this.newMemories,
     this.totalSegments = 0,
     this.updatedMemories,
@@ -1665,6 +1691,7 @@ class GeneratedSyncLocalFilesResultResponse {
     return GeneratedSyncLocalFilesResultResponse(
       errors: _readFieldValue<List<String>>(_readField(json, const ["errors"]), "errors", _readStringList, requiredField: false, nullable: true),
       failedSegments: _required(_readFieldValue<int>(_readField(json, const ["failed_segments"]), "failed_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "failed_segments"),
+      heldAudio: _readFieldValue<bool>(_readField(json, const ["held_audio"]), "held_audio", _readBool, requiredField: false, nullable: true),
       newMemories: _readFieldValue<List<String>>(_readField(json, const ["new_memories"]), "new_memories", _readStringList, requiredField: false, nullable: true),
       totalSegments: _required(_readFieldValue<int>(_readField(json, const ["total_segments"]), "total_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "total_segments"),
       updatedMemories: _readFieldValue<List<String>>(_readField(json, const ["updated_memories"]), "updated_memories", _readStringList, requiredField: false, nullable: true),
@@ -1675,6 +1702,7 @@ class GeneratedSyncLocalFilesResultResponse {
     return {
       'errors': errors,
       'failed_segments': failedSegments,
+      'held_audio': heldAudio,
       'new_memories': newMemories,
       'total_segments': totalSegments,
       'updated_memories': updatedMemories,
@@ -1750,11 +1778,44 @@ class GeneratedSyncRecoveryWindowExceededResponse {
   }
 }
 
+class GeneratedSyncContentInProgressResponse {
+  final String code;
+  final String detail;
+  final String? jobId;
+  final int? pollAfterMs;
+
+  const GeneratedSyncContentInProgressResponse({
+    required this.code,
+    this.detail = "The same audio is already processing",
+    this.jobId,
+    this.pollAfterMs,
+  });
+
+  factory GeneratedSyncContentInProgressResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedSyncContentInProgressResponse(
+      code: _required(_readFieldValue<String>(_readField(json, const ["code"]), "code", _readString, requiredField: true, nullable: false), "code"),
+      detail: _required(_readFieldValue<String>(_readField(json, const ["detail"]), "detail", _readString, requiredField: false, nullable: false, defaultValue: "The same audio is already processing"), "detail"),
+      jobId: _readFieldValue<String>(_readField(json, const ["job_id"]), "job_id", _readString, requiredField: false, nullable: true),
+      pollAfterMs: _readFieldValue<int>(_readField(json, const ["poll_after_ms"]), "poll_after_ms", _readInt, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'code': code,
+      'detail': detail,
+      'job_id': jobId,
+      'poll_after_ms': pollAfterMs,
+    };
+  }
+}
+
 class GeneratedSyncJobStatusResponse {
   final String? error;
   final int failedSegments;
   final String jobId;
   final String lane;
+  final int? pollAfterMs;
   final int processedSegments;
   final String? reasonCode;
   final int? recordingAgeSeconds;
@@ -1769,6 +1830,7 @@ class GeneratedSyncJobStatusResponse {
     this.failedSegments = 0,
     required this.jobId,
     this.lane = "fresh",
+    this.pollAfterMs,
     this.processedSegments = 0,
     this.reasonCode,
     this.recordingAgeSeconds,
@@ -1785,6 +1847,7 @@ class GeneratedSyncJobStatusResponse {
       failedSegments: _required(_readFieldValue<int>(_readField(json, const ["failed_segments"]), "failed_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "failed_segments"),
       jobId: _required(_readFieldValue<String>(_readField(json, const ["job_id"]), "job_id", _readString, requiredField: true, nullable: false), "job_id"),
       lane: _required(_readFieldValue<String>(_readField(json, const ["lane"]), "lane", _readString, requiredField: false, nullable: false, defaultValue: "fresh"), "lane"),
+      pollAfterMs: _readFieldValue<int>(_readField(json, const ["poll_after_ms"]), "poll_after_ms", _readInt, requiredField: false, nullable: true),
       processedSegments: _required(_readFieldValue<int>(_readField(json, const ["processed_segments"]), "processed_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "processed_segments"),
       reasonCode: _readFieldValue<String>(_readField(json, const ["reason_code"]), "reason_code", _readString, requiredField: false, nullable: true),
       recordingAgeSeconds: _readFieldValue<int>(_readField(json, const ["recording_age_seconds"]), "recording_age_seconds", _readInt, requiredField: false, nullable: true),
@@ -1802,6 +1865,7 @@ class GeneratedSyncJobStatusResponse {
       'failed_segments': failedSegments,
       'job_id': jobId,
       'lane': lane,
+      'poll_after_ms': pollAfterMs,
       'processed_segments': processedSegments,
       'reason_code': reasonCode,
       'recording_age_seconds': recordingAgeSeconds,

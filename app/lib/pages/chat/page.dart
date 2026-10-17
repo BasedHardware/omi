@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/mobile/native_ui/native_chat_voice.dart';
+import 'package:omi/mobile/native_ui/native_navigation_chrome.dart';
 
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
@@ -25,6 +26,8 @@ import 'package:omi/pages/chat/chat_scroll_policy.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/chat_message_native.dart';
 import 'package:omi/pages/chat/widgets/jump_to_latest_button.dart';
+import 'package:omi/pages/paywall/paywall_router.dart';
+import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
@@ -112,11 +115,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     apps = prefs.appsList;
     scrollController = ScrollController();
     textFieldFocusNode = FocusNode();
-    textController.addListener(() {
-      setState(() {});
-    });
     textFieldFocusNode.addListener(() {
-      setState(() {});
       if (textFieldFocusNode.hasFocus) {
         // Keep the live edge visible when the keyboard opens only if the reader is following.
         _scheduleModeAwareScroll(delayMs: 300, animated: true);
@@ -254,12 +253,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       if (!mounted) return;
       if (integrationProvider.isAppConnected(IntegrationApp.appleHealth)) {
         debugPrint('🍎 [Apple Health] Starting auto-sync on chat open…');
-        final success = await appleHealthService.syncHealthDataToBackend(
-          days: 7,
-        );
-        debugPrint(
-          '🍎 [Apple Health] Auto-sync ${success ? "completed" : "failed"}',
-        );
+        final success = await appleHealthService.syncHealthDataToBackend(days: 7);
+        debugPrint('🍎 [Apple Health] Auto-sync ${success ? "completed" : "failed"}');
       }
     }
   }
@@ -300,10 +295,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                   child: Column(
                     children: [
                       if (provider.historyProblem != null)
-                        OmiErrorState(
-                          message: context.l10n.somethingWentWrong,
-                          onRetry: provider.refreshMessages,
-                        ),
+                        OmiErrorState(message: context.l10n.somethingWentWrong, onRetry: provider.refreshMessages),
                       if (provider.hasOlderMessages)
                         TextButton(
                           key: const Key('chat_load_older'),
@@ -317,13 +309,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                       // Messages area - takes up remaining space
                       Expanded(
                         child: provider.isLoadingMessages && !provider.hasCachedMessages
-                            ? OmiLoadingState(
-                                label: provider.firstTimeLoadingText,
-                              )
+                            ? OmiLoadingState(label: provider.firstTimeLoadingText)
                             : provider.isClearingChat
-                                ? OmiLoadingState(
-                                    label: context.l10n.deletingMessages,
-                                  )
+                                ? OmiLoadingState(label: context.l10n.deletingMessages)
                                 : (provider.messages.isEmpty)
                                     ? ChatGreeting(isConnected: connectivityProvider.isConnected, name: prefs.givenName)
                                     : _buildTranscript(provider),
@@ -564,6 +552,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   Widget _buildTranscript(MessageProvider provider) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final messageKeys = [for (final message in provider.messages) _chatMessageRowKey(message)];
         return Theme(
           data: Theme.of(context).copyWith(
             textSelectionTheme: TextSelectionThemeData(
@@ -583,85 +572,33 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                 Positioned.fill(
                   child: NotificationListener<ScrollNotification>(
                     onNotification: _handleScrollNotification,
-                    child: ListView.builder(
-                      shrinkWrap: false,
-                      reverse: false,
+                    child: ListView.custom(
                       controller: scrollController,
-                      padding: const EdgeInsets.fromLTRB(
-                        18,
-                        16,
-                        18,
-                        ChatScrollPolicy.transcriptBottomPadding,
+                      padding: const EdgeInsets.fromLTRB(18, 16, 18, ChatScrollPolicy.transcriptBottomPadding),
+                      childrenDelegate: _StableChatMessageDelegate(
+                        messageKeys: messageKeys,
+                        builder: (context, chatIndex) {
+                          if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
+                            _hasInitialScrolled = true;
+                            _schedulePostFrameModeAwareScroll();
+                          }
+                          return _ChatMessageSlot(
+                            key: messageKeys[chatIndex],
+                            index: chatIndex,
+                            sendMessage: _sendMessageUtil,
+                            onAskOmi: (text) {
+                              setState(() {
+                                _selectedContext = text;
+                              });
+                              textFieldFocusNode.requestFocus();
+                            },
+                            updateConversation: (ServerConversation conversation) {
+                              context.read<ConversationProvider>().updateConversation(conversation);
+                            },
+                            onRetry: _retryReply,
+                          );
+                        },
                       ),
-                      itemCount: provider.messages.length,
-                      itemBuilder: (context, chatIndex) {
-                        if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
-                          _hasInitialScrolled = true;
-                          _schedulePostFrameModeAwareScroll();
-                        }
-
-                        final message = provider.messages[chatIndex];
-                        double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
-                        double bottomPadding = chatIndex == 0 ? 16 : 0;
-
-                        final messageBody = message.sender == MessageSender.ai
-                            ? AIMessage(
-                                showTypingIndicator:
-                                    provider.showTypingIndicator && chatIndex == provider.messages.length - 1,
-                                showThinkingAfterText: provider.agentThinkingAfterText,
-                                message: message,
-                                sendMessage: _sendMessageUtil,
-                                onAskOmi: (text) {
-                                  setState(() {
-                                    _selectedContext = text;
-                                  });
-                                  textFieldFocusNode.requestFocus();
-                                },
-                                displayOptions: provider.messages.length <= 1,
-                                appSender: provider.messageSenderApp(
-                                  message.appId,
-                                ),
-                                updateConversation: (ServerConversation conversation) {
-                                  context.read<ConversationProvider>().updateConversation(conversation);
-                                },
-                                setMessageNps: (int value, {String? reason}) => provider.setMessageNps(
-                                  message,
-                                  value,
-                                  reason: reason,
-                                ),
-                                replyFailed: provider.isReplyFailed(message),
-                                replyFailure: provider.replyFailure(message),
-                                onRetry: provider.canRetryReply(message) ? () => _retryReply(message) : null,
-                              )
-                            : HumanMessage(
-                                message: message,
-                                onAskOmi: (text) {
-                                  setState(() {
-                                    _selectedContext = text;
-                                  });
-                                  textFieldFocusNode.requestFocus();
-                                },
-                              );
-                        return VisibilityDetector(
-                          key: ValueKey('chat-result-visibility-${message.id}'),
-                          onVisibilityChanged: (info) {
-                            if (message.sender == MessageSender.ai &&
-                                !message.isEmpty &&
-                                info.visibleFraction > 0 &&
-                                context.mounted) {
-                              provider.markChatResultVisible(message.id);
-                            }
-                          },
-                          child: Padding(
-                            key: ValueKey(message.id),
-                            padding: EdgeInsets.only(
-                              bottom: bottomPadding,
-                              top: topPadding,
-                            ),
-                            child: messageBody,
-                          ),
-                        );
-                      },
                     ),
                   ),
                 ),
@@ -676,11 +613,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
   /// The composer card: the field (or the voice waveform) on top; attach, who answers, and the
   /// mic or send button underneath.
-  Widget _buildComposer(
-    BuildContext context,
-    MessageProvider provider,
-    ConnectivityProvider connectivityProvider,
-  ) {
+  Widget _buildComposer(BuildContext context, MessageProvider provider, ConnectivityProvider connectivityProvider) {
     return Consumer<VoiceRecorderProvider>(
       builder: (context, voiceRecorderProvider, child) {
         final voiceActive = voiceRecorderProvider.isActive;
@@ -715,9 +648,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                     child: Row(
                       children: [
                         _ComposerChip(
-                          label: l10n.chatScopeAbout(
-                            scope!.title ?? l10n.conversationTab,
-                          ),
+                          label: l10n.chatScopeAbout(scope!.title ?? l10n.conversationTab),
                           onRemove: () => setState(() => _chatScope = null),
                         ),
                       ],
@@ -744,10 +675,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
             if (followUp != null && connectivityProvider.isConnected && !voiceActive)
               Padding(
                 key: const Key('chat_followup_suggestions'),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: OmiSpacing.sm,
-                  vertical: OmiSpacing.xs,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.xs),
                 child: ChatFollowUpChip(
                   question: followUp,
                   onSend: _sendMessageUtil,
@@ -758,12 +686,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
               bottom: true,
               maintainBottomViewPadding: false,
               child: Container(
-                margin: EdgeInsets.fromLTRB(
-                  10,
-                  provider.selectedFiles.isNotEmpty ? 0 : 8,
-                  10,
-                  10,
-                ),
+                margin: EdgeInsets.fromLTRB(10, provider.selectedFiles.isNotEmpty ? 0 : 8, 10, 10),
                 padding: const EdgeInsets.fromLTRB(16, 8, 6, 4),
                 decoration: BoxDecoration(
                   color: OmiColors.surface1,
@@ -801,9 +724,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                       Theme(
                         data: Theme.of(context).copyWith(
                           textSelectionTheme: TextSelectionThemeData(
-                            selectionColor: OmiColors.textSecondary.withValues(
-                              alpha: 0.4,
-                            ),
+                            selectionColor: OmiColors.textSecondary.withValues(alpha: 0.4),
                             selectionHandleColor: OmiColors.textPrimary,
                           ),
                         ),
@@ -816,17 +737,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                           textAlign: TextAlign.start,
                           decoration: InputDecoration(
                             hintText: context.l10n.askAnything,
-                            hintStyle: OmiType.callout.copyWith(
-                              color: OmiColors.textTertiary,
-                            ),
+                            hintStyle: OmiType.callout.copyWith(color: OmiColors.textTertiary),
                             border: InputBorder.none,
                             focusedBorder: InputBorder.none,
                             enabledBorder: InputBorder.none,
-                            contentPadding: const EdgeInsets.only(
-                              top: 6,
-                              bottom: 4,
-                              right: 10,
-                            ),
+                            contentPadding: const EdgeInsets.only(top: 6, bottom: 4, right: 10),
                             isDense: true,
                           ),
                           minLines: 1,
@@ -854,17 +769,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                               : _buildAttachButton(context, provider),
                         ),
                         if (!voiceActive)
-                          Transform.translate(
-                            offset: const Offset(-10, 0),
-                            child: _buildAppChip(context, provider),
-                          ),
+                          Transform.translate(offset: const Offset(-10, 0), child: _buildAppChip(context, provider)),
                         const Spacer(),
                         // Stop fills the draft; Send transcribes and sends.
                         if (recording)
                           ChatComposerRoundButton(
-                            buttonKey: const ValueKey(
-                              'omi.chat.voice.transcribe',
-                            ),
+                            buttonKey: const ValueKey('omi.chat.voice.transcribe'),
                             icon: const Icon(Icons.stop),
                             label: context.l10n.stopRecording,
                             onPressed: () {
@@ -883,28 +793,26 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                               voiceRecorderProvider.processRecording();
                             },
                           ),
-                        if (!voiceActive && textController.text.isEmpty)
-                          ChatComposerRoundButton(
-                            icon: const FaIcon(FontAwesomeIcons.microphone),
-                            label: context.l10n.startVoiceRecording,
-                            onPressed: () {
-                              OmiHaptics.light();
-                              FocusScope.of(context).unfocus();
-                              voiceRecorderProvider.startRecording();
-                            },
-                          ),
-                        // Send — only with text and not in voice mode. Offline or uploading it
-                        // stays visible but is drawn disabled.
-                        if (!voiceActive && !provider.sendingMessage)
+                        // Mic and send follow the draft. Keeping that listen local avoids
+                        // rebuilding the transcript on every keystroke.
+                        if (!voiceActive)
                           ValueListenableBuilder<TextEditingValue>(
                             valueListenable: textController,
                             builder: (context, value, child) {
+                              if (value.text.isEmpty) {
+                                return ChatComposerRoundButton(
+                                  icon: const FaIcon(FontAwesomeIcons.microphone),
+                                  label: context.l10n.startVoiceRecording,
+                                  onPressed: () {
+                                    OmiHaptics.light();
+                                    FocusScope.of(context).unfocus();
+                                    voiceRecorderProvider.startRecording();
+                                  },
+                                );
+                              }
                               final hasText = value.text.trim().isNotEmpty;
-                              if (!hasText) return const SizedBox.shrink();
-                              final canSend = hasText &&
-                                  !provider.sendingMessage &&
-                                  !provider.isUploadingFiles &&
-                                  connectivityProvider.isConnected;
+                              if (!hasText || provider.sendingMessage) return const SizedBox.shrink();
+                              final canSend = !provider.isUploadingFiles && connectivityProvider.isConnected;
                               return ChatComposerRoundButton(
                                 buttonKey: const ValueKey('omi.chat.send'),
                                 icon: const FaIcon(FontAwesomeIcons.arrowUp),
@@ -912,7 +820,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                 onPressed: canSend
                                     ? () {
                                         OmiHaptics.medium();
-                                        final message = textController.text.trim();
+                                        final message = value.text.trim();
                                         if (message.isEmpty) return;
                                         _sendMessageUtil(message);
                                       }
@@ -985,9 +893,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   Widget _buildAppChip(BuildContext context, MessageProvider provider) {
     return Consumer<AppProvider>(
       builder: (context, appProvider, _) {
-        final selectedApp = provider.chatApps.firstWhereOrNull(
-          (app) => app.id == appProvider.selectedChatAppId,
-        );
+        final selectedApp = provider.chatApps.firstWhereOrNull((app) => app.id == appProvider.selectedChatAppId);
         return ChatAppChip(
           name: selectedApp != null ? selectedApp.getName() : context.l10n.omiAppName,
           avatar: selectedApp != null ? ChatAppAvatar(app: selectedApp) : const ChatOmiAvatar(),
@@ -995,9 +901,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
             OmiHaptics.selection();
             // Dismiss the keyboard before opening the drawer, once the scaffold has settled.
             FocusScope.of(context).unfocus();
-            WidgetsBinding.instance.addPostFrameCallback(
-              (_) => scaffoldKey.currentState?.openEndDrawer(),
-            );
+            WidgetsBinding.instance.addPostFrameCallback((_) => scaffoldKey.currentState?.openEndDrawer());
           },
         );
       },
@@ -1049,11 +953,34 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     await provider.retryFailedReply(failed);
   }
 
-  void _showPlansSheetOnQuotaExceeded() {
+  Future<void> _showPlansSheetOnQuotaExceeded() async {
     if (!mounted) return;
+    final usage = context.read<UsageProvider>();
     // Refresh subscription data so the plans sheet is up-to-date
-    context.read<UsageProvider>().fetchSubscription();
-    showChatQuotaPlansSheet(context);
+    usage.fetchSubscription();
+    if (await PaywallRouter.openVariant(context, source: 'chat_quota_exceeded')) return;
+    if (!mounted) return;
+    PlatformManager.instance.analytics.paywallOpened(
+      'chat_quota_exceeded',
+      currentPlan: usage.subscription?.subscription.plan.wireName ?? 'unknown',
+    );
+    final title = await plansSheetTitle(context);
+    if (!mounted) return;
+    showOmiSheet<void>(
+      context: context,
+      title: title,
+      padding: EdgeInsets.zero,
+      builder: (_) => const _PlansSheetWrapper(analyticsSource: 'chat_quota_exceeded'),
+      // Natively, PlansSheet projects its own surface with its own close row, and the hero animations
+      // stay stopped beneath it; a surface that falls back gets the sheet scaffold and its title back.
+      nativeBuilder: (_) => TickerMode(
+        enabled: false,
+        child: NativeNavigationChrome(
+          wrapFallback: (fallback) => OmiSheetScaffold(title: title, padding: EdgeInsets.zero, child: fallback),
+          child: const _PlansSheetWrapper(analyticsSource: 'chat_quota_exceeded'),
+        ),
+      ),
+    );
   }
 
   sendInitialAppMessage(App? app) async {
@@ -1099,10 +1026,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
     if (_chatScrollMode == ChatScrollMode.followingBottom &&
         (addedMessages || lastMessageChanged || streamedTextChanged || streamedBlocksChanged)) {
-      _scheduleModeAwareScroll(
-        delayMs: 0,
-        animated: streamedTextChanged || streamedBlocksChanged,
-      );
+      _scheduleModeAwareScroll(delayMs: 0, animated: streamedTextChanged || streamedBlocksChanged);
     }
   }
 
@@ -1151,10 +1075,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   }
 
   Widget _buildJumpToLatestButton() {
-    return ChatJumpToLatestButton(
-      label: context.l10n.latest,
-      onTap: () => _resumeFollowingAndScroll(animated: true),
-    );
+    return ChatJumpToLatestButton(label: context.l10n.latest, onTap: () => _resumeFollowingAndScroll(animated: true));
   }
 
   void scrollToBottomOnSend() {
@@ -1170,21 +1091,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     _scheduleModeAwareScroll(delayMs: delayMs, animated: animated, force: true);
   }
 
-  void _schedulePostFrameModeAwareScroll({
-    bool animated = false,
-    bool force = false,
-  }) {
+  void _schedulePostFrameModeAwareScroll({bool animated = false, bool force = false}) {
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _scheduleModeAwareScroll(delayMs: 0, animated: animated, force: force);
     });
   }
 
-  void _scheduleModeAwareScroll({
-    int delayMs = 50,
-    bool animated = false,
-    bool force = false,
-  }) {
+  void _scheduleModeAwareScroll({int delayMs = 50, bool animated = false, bool force = false}) {
     final timer = Timer(Duration(milliseconds: delayMs), () {
       _pendingScrollTimers.removeWhere((candidate) => !candidate.isActive);
       if (!mounted) return;
@@ -1222,11 +1136,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     }
 
     scrollController
-        .animateTo(
-          target,
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOut,
-        )
+        .animateTo(target, duration: const Duration(milliseconds: 220), curve: Curves.easeOut)
         .whenComplete(() => _isProgrammaticScroll = false);
   }
 
@@ -1264,10 +1174,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     await routeToPage(
       context,
       CapabilityAppsPage(
-        capability: AppCapability(
-          id: 'chat',
-          title: context.l10n.chatAssistantsTitle,
-        ),
+        capability: AppCapability(id: 'chat', title: context.l10n.chatAssistantsTitle),
         apps: const [],
       ),
     );
@@ -1293,18 +1200,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   /// Disables a chat app everywhere, with Undo (the same action as Disable on its detail page).
   Future<void> _disableChatApp(App app) async {
     final messageProvider = context.read<MessageProvider>();
-    Navigator.of(
-      context,
-    ).maybePop(); // close the drawer so the Undo toast is visible
+    Navigator.of(context).maybePop(); // close the drawer so the Undo toast is visible
     await disableAppWithUndo(
       context,
       app,
       onHidden: () => messageProvider.removeChatApp(app.id),
       onRestored: () {
         if (messageProvider.chatApps.every((a) => a.id != app.id)) {
-          messageProvider.setChatApps(
-            List.of(messageProvider.chatApps)..add(app),
-          );
+          messageProvider.setChatApps(List.of(messageProvider.chatApps)..add(app));
         }
       },
     );
@@ -1363,22 +1266,11 @@ class _OfflineHint extends StatelessWidget {
     return Semantics(
       liveRegion: true,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          OmiSpacing.md,
-          OmiSpacing.xs,
-          OmiSpacing.md,
-          0,
-        ),
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, 0),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            ExcludeSemantics(
-              child: Icon(
-                Icons.cloud_off_rounded,
-                size: 14,
-                color: OmiColors.textTertiary,
-              ),
-            ),
+            ExcludeSemantics(child: Icon(Icons.cloud_off_rounded, size: 14, color: OmiColors.textTertiary)),
             const SizedBox(width: 6),
             Flexible(
               child: Text(
@@ -1414,10 +1306,7 @@ class _ComposerChip extends StatelessWidget {
           constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
           child: Center(
             child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: OmiSpacing.sm,
-                vertical: 6,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 6),
               decoration: BoxDecoration(
                 color: OmiColors.surface2,
                 borderRadius: OmiRadius.lgAll,
@@ -1432,9 +1321,7 @@ class _ComposerChip extends StatelessWidget {
                         label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: OmiType.footnote.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
+                        style: OmiType.footnote.copyWith(fontWeight: FontWeight.w500),
                       ),
                     ),
                     const SizedBox(width: 6),
@@ -1462,10 +1349,7 @@ class _SelectedTextChip extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: OmiSpacing.xxs, left: 2),
       child: Container(
-        decoration: BoxDecoration(
-          color: OmiColors.surface2,
-          borderRadius: OmiRadius.lgAll,
-        ),
+        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
         padding: const EdgeInsets.only(left: OmiSpacing.sm),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1475,10 +1359,7 @@ class _SelectedTextChip extends StatelessWidget {
             Flexible(
               child: Text(
                 text,
-                style: OmiType.subhead.copyWith(
-                  color: OmiColors.textSecondary,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -1494,4 +1375,180 @@ class _SelectedTextChip extends StatelessWidget {
       ),
     );
   }
+}
+
+class _PlansSheetWrapper extends StatefulWidget {
+  const _PlansSheetWrapper({this.analyticsSource = 'chat_quota_exceeded'});
+
+  final String analyticsSource;
+
+  @override
+  State<_PlansSheetWrapper> createState() => _PlansSheetWrapperState();
+}
+
+class _PlansSheetWrapperState extends State<_PlansSheetWrapper> with TickerProviderStateMixin {
+  late AnimationController _waveController;
+  late AnimationController _arrowController;
+  late AnimationController _notesController;
+  late Animation<double> _arrowAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _waveController = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
+    _arrowController = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))..repeat();
+    _notesController = AnimationController(vsync: this, duration: const Duration(seconds: 3))..repeat();
+    _arrowAnimation = Tween<double>(
+      begin: 0,
+      end: 10,
+    ).animate(CurvedAnimation(parent: _arrowController, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _waveController.dispose();
+    _arrowController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PlansSheet(
+      waveController: _waveController,
+      notesController: _notesController,
+      arrowController: _arrowController,
+      arrowAnimation: _arrowAnimation,
+      analyticsSource: widget.analyticsSource,
+    );
+  }
+}
+
+/// Row identity for the transcript sliver. Persisted messages use their id.
+/// Placeholder replies all keep id `0000`, so those rows use the message object.
+Key _chatMessageRowKey(ServerMessage message) => message.isEmpty ? ObjectKey(message) : ValueKey<String>(message.id);
+
+/// Same identity as [_chatMessageRowKey], namespaced for persisted ids so the
+/// visibility detector does not share a key with the row widget.
+Key _chatMessageVisibilityKey(ServerMessage message) =>
+    message.isEmpty ? ObjectKey(message) : ValueKey<String>('chat-result-visibility-${message.id}');
+
+/// Keeps already-built chat rows when a reply is appended or an existing
+/// identity stays put. Relocation looks up these keys, because placeholder
+/// ids are not unique. Content changes reach the row through [_ChatMessageSlot].
+class _StableChatMessageDelegate extends SliverChildBuilderDelegate {
+  _StableChatMessageDelegate({required List<Key> messageKeys, required NullableIndexedWidgetBuilder builder})
+      : _messageKeys = messageKeys,
+        super(
+          builder,
+          childCount: messageKeys.length,
+          findChildIndexCallback: (Key key) {
+            final index = messageKeys.indexOf(key);
+            return index < 0 ? null : index;
+          },
+        );
+
+  final List<Key> _messageKeys;
+
+  @override
+  bool shouldRebuild(covariant _StableChatMessageDelegate oldDelegate) {
+    final previous = oldDelegate._messageKeys;
+    if (_messageKeys.length < previous.length) return true;
+    for (var i = 0; i < previous.length; i++) {
+      if (_messageKeys[i] != previous[i]) return true;
+    }
+    return false;
+  }
+}
+
+class _ChatMessageSlot extends StatelessWidget {
+  const _ChatMessageSlot({
+    super.key,
+    required this.index,
+    required this.sendMessage,
+    required this.onAskOmi,
+    required this.updateConversation,
+    required this.onRetry,
+  });
+
+  final int index;
+  final Function(String) sendMessage;
+  final Function(String)? onAskOmi;
+  final Function(ServerConversation) updateConversation;
+  final Future<void> Function(ServerMessage message) onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    context.select<MessageProvider, int>((provider) {
+      if (index >= provider.messages.length) return -1;
+      return _chatMessageSignature(provider, index);
+    });
+    final provider = context.read<MessageProvider>();
+    if (index >= provider.messages.length) return const SizedBox.shrink();
+    final message = provider.messages[index];
+    final last = index == provider.messages.length - 1;
+    final messageBody = message.sender == MessageSender.ai
+        ? AIMessage(
+            showTypingIndicator: provider.showTypingIndicator && last,
+            showThinkingAfterText: provider.agentThinkingAfterText,
+            message: message,
+            sendMessage: sendMessage,
+            onAskOmi: onAskOmi,
+            displayOptions: provider.messages.length <= 1,
+            appSender: provider.messageSenderApp(message.appId),
+            updateConversation: updateConversation,
+            setMessageNps: (int value, {String? reason}) => provider.setMessageNps(message, value, reason: reason),
+            replyFailed: provider.isReplyFailed(message),
+            replyFailure: provider.replyFailure(message),
+            onRetry: provider.canRetryReply(message) ? () => onRetry(message) : null,
+          )
+        : HumanMessage(message: message, onAskOmi: onAskOmi);
+    return VisibilityDetector(
+      key: _chatMessageVisibilityKey(message),
+      onVisibilityChanged: (info) {
+        if (message.sender == MessageSender.ai && !message.isEmpty && info.visibleFraction > 0 && context.mounted) {
+          provider.markChatResultVisible(message.id);
+        }
+      },
+      child: Padding(
+        key: _chatMessageRowKey(message),
+        padding: EdgeInsets.only(bottom: index == 0 ? 16 : 0, top: last ? 8 : 16),
+        child: messageBody,
+      ),
+    );
+  }
+}
+
+int _chatMessageSignature(MessageProvider provider, int index) {
+  final message = provider.messages[index];
+  final last = index == provider.messages.length - 1;
+  final app = provider.messageSenderApp(message.appId);
+  return Object.hashAll([
+    identityHashCode(message),
+    message.id,
+    message.text,
+    message.sender,
+    message.type,
+    message.appId,
+    message.rating,
+    message.askForNps,
+    message.memoryAction,
+    message.thinkings.length,
+    message.thinkings.isEmpty ? '' : message.thinkings.last,
+    message.files.length,
+    message.files.map((file) => '${file.id}:${file.thumbnail != null}').join('|'),
+    message.memories.length,
+    message.contentBlocks.length,
+    identityHashCode(message.chartData),
+    identityHashCode(message.evidenceEnvelope),
+    app?.id,
+    app?.name,
+    last && provider.showTypingIndicator,
+    last && provider.agentThinkingAfterText,
+    provider.messages.length <= 1,
+    provider.isReplyFailed(message),
+    provider.replyFailure(message),
+    provider.canRetryReply(message),
+    last,
+  ]);
 }

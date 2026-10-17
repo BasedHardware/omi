@@ -234,11 +234,11 @@ void main() {
       expect(row.valid, isTrue);
     });
 
-    testWidgets('a locked memory carries only the upgrade title', (tester) async {
+    testWidgets('a locked memory reads as pending with where to look, and nothing of its content', (tester) async {
       final memory = _memory('m2', 'Secret plan', locked: true, conversationId: 'c1', slot: 'plan');
       final row = await _row(tester, _Memories([memory]), memory);
-      expect(row.title, _en.upgradeToUnlimited);
-      expect([row.options, row.subtitle, row.swipeTrailing], [isEmpty, '', isEmpty]);
+      expect(row.title, _en.statusPending);
+      expect([row.options, row.subtitle, row.swipeTrailing], [isEmpty, _en.viewUsage, isEmpty]);
       expect(row.projection.toString(), isNot(contains('Secret plan')));
     });
 
@@ -280,10 +280,11 @@ void main() {
   });
 
   group('memory row actions', () {
-    testWidgets('without a plan to offer, a locked row is a neutral title', (tester) async {
+    testWidgets('without a plan to offer, a locked row is pending and saved', (tester) async {
       final memory = _memory('m2', 'Secret plan', locked: true);
       final row = await _row(tester, _Memories([memory]), memory, subscriptionUI: false);
-      expect(row.title, _en.memoryDetailsTitle);
+      expect(row.title, _en.statusPending);
+      expect(row.subtitle, _en.saved);
       expect(row.projection.toString(), isNot(contains('Secret plan')));
     });
 
@@ -318,7 +319,7 @@ void main() {
   });
 
   group('native Memories page', () {
-    testWidgets('a locked tap routes to the plan page when subscriptions show', (tester) async {
+    testWidgets('a locked tap opens the usage page, not the plans sheet, when subscriptions show', (tester) async {
       final host = NativeTestHost.install();
       final pushes = _Pushes();
       final memories = _Memories([_memory('m2', 'Secret plan', locked: true)]);
@@ -329,7 +330,7 @@ void main() {
       await _send(host, 'memory_m2');
       final route = pushes.routes.skip(before).single as ModalRoute;
       final page = (route as dynamic).builder(tester.element(find.byType(MemoriesPage))) as Widget;
-      expect(page, isA<UsagePage>().having((page) => page.showUpgradeDialog, 'showUpgradeDialog', isTrue));
+      expect(page, isA<UsagePage>().having((page) => page.showUpgradeDialog, 'showUpgradeDialog', isFalse));
       route.navigator!.removeRoute(route);
       await tester.pump();
     });

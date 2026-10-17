@@ -199,6 +199,10 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
     super.build(context);
     return Consumer<MemoriesProvider>(
       builder: (context, provider, _) {
+        // filteredMemories filters (and, while searching, lowercases) every
+        // memory. Take it once per build: reading it per row made each row
+        // built during a scroll cost O(all memories).
+        final visibleMemories = provider.filteredMemories;
         final classic = Scaffold(
           backgroundColor: OmiColors.surface0,
           appBar: AppBar(
@@ -243,7 +247,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                 ),
                               ),
                             ),
-                          if (provider.showLoadError || provider.filteredMemories.isEmpty)
+                          if (provider.showLoadError || visibleMemories.isEmpty)
                             SliverFillRemaining(
                               hasScrollBody: false,
                               child: MemoriesEmptyOrError(
@@ -257,7 +261,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                               padding: const EdgeInsets.only(top: 8, left: 16, right: 16, bottom: 120),
                               sliver: SliverList(
                                 delegate: SliverChildBuilderDelegate((context, index) {
-                                  final memory = provider.filteredMemories[index];
+                                  final memory = visibleMemories[index];
                                   return MemoryItem(
                                     memory: memory,
                                     highlighted: memory.id == _highlightedMemoryId,
@@ -268,7 +272,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                       _showQuickEditSheet(context, tappedMemory, tappedProvider);
                                     },
                                   );
-                                }, childCount: provider.filteredMemories.length),
+                                }, childCount: visibleMemories.length),
                               ),
                             ),
                         ],
@@ -302,13 +306,13 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
           ),
         );
         if (!nativePresentationEnabled) return classic;
-        return _buildNative(context, provider, classic);
+        return _buildNative(context, provider, classic, visibleMemories);
       },
     );
   }
 
   /// The Memories list as one native surface over the same provider and handlers.
-  Widget _buildNative(BuildContext context, MemoriesProvider provider, Widget classic) {
+  Widget _buildNative(BuildContext context, MemoriesProvider provider, Widget classic, List<Memory> visibleMemories) {
     final l10n = context.l10n;
     final loading = provider.loading && _isInitialLoad;
     final searching = provider.searchQuery.isNotEmpty;
@@ -363,11 +367,11 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                 NativeRow('memory_history_more', l10n.showMore, action: (_) => provider.loadMoreHistory()),
             ]),
           NativeSection('memories', [
-            for (final memory in provider.filteredMemories) memoryNativeRow(context, memory, provider, onEdit: onEdit),
+            for (final memory in visibleMemories) memoryNativeRow(context, memory, provider, onEdit: onEdit),
           ]),
           // The Flutter empty state and its one action: clear the search, reset the filters, or add
           // the first memory.
-          if (!loading && !provider.showLoadError && provider.filteredMemories.isEmpty)
+          if (!loading && !provider.showLoadError && visibleMemories.isEmpty)
             NativeSection('memory_empty', [
               NativeRow(
                   'memory_empty_label',

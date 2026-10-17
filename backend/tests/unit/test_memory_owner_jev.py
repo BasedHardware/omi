@@ -101,6 +101,7 @@ def capture(monkeypatch, pc):
     monkeypatch.setattr(pc, 'record_memory_owner_jev', outcomes.append)
     monkeypatch.setattr(pc, 'MemoryService', lambda **_kwargs: service)
     monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda _uid: 'en')
+    monkeypatch.setattr(pc, 'conversation_known_spellings', lambda *_: '')
     monkeypatch.setattr(pc, 'get_user_name', lambda *_args, **_kwargs: 'Alex')
     monkeypatch.setattr(transcript_for_llm, 'get_user_name', lambda *_args, **_kwargs: 'Alex')
     monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda _uid: 'UTC')

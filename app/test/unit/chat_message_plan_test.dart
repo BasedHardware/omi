@@ -17,7 +17,6 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
-import 'package:omi/widgets/components/chat_evidence_card.dart';
 import 'package:omi/widgets/components/memory_review_card.dart';
 
 /// The fixtures of server_message_content_blocks_test and chat_content_block_parity_test, decoded
@@ -130,19 +129,16 @@ void main() {
       expect(ChatMessagePlan.of(message, displayOptions: false).has(ChatMessagePartKind.initialOptions), isFalse);
     });
 
-    test('memory citations keep the normal body and strip conversation evidence they already list', () {
+    test('memory citations keep the normal body; evidence on the wire draws nothing on mobile', () {
       final message = _message(
         text: 'You met twice.',
         memories: [_citation],
-        evidence: _evidence(['conversation_summary', 'conversation_segment']),
+        evidence: _evidence(['conversation_summary', 'keyframe']),
       );
       final plan = ChatMessagePlan.of(message, displayOptions: false);
       expect(plan.layout, ChatMessageLayout.citations);
       expect(plan.parts, [ChatMessagePartKind.body, ChatMessagePartKind.actionBar, ChatMessagePartKind.citations]);
-      expect(plan.evidence, isNull);
-
-      final mixed = _message(text: 'You met twice.', memories: [_citation], evidence: _evidence(['keyframe']));
-      expect(ChatMessagePlan.of(mixed, displayOptions: false).evidence!.references.single.kind.wireValue, 'keyframe');
+      expect(message.evidenceEnvelope, isNotNull, reason: 'the wire data stays decoded for later use');
     });
 
     test('a day summary keeps its own layout and its review card, which waits for the stream', () {
@@ -275,8 +271,6 @@ void main() {
         final blocks = plan.has(ChatMessagePartKind.blocks) || plan.has(ChatMessagePartKind.blocksReplaceBody);
         expect(find.byType(ChatContentBlockList), blocks ? findsOneWidget : findsNothing);
         expect(find.byType(MemoryReviewCard), plan.has(ChatMessagePartKind.reviewCard) ? findsOneWidget : findsNothing);
-        expect(find.byType(ChatEvidenceReferenceList),
-            plan.has(ChatMessagePartKind.evidence) ? findsOneWidget : findsNothing);
         expect(
             find.byType(MessageActionBar),
             plan.has(ChatMessagePartKind.actionBar) || plan.has(ChatMessagePartKind.daySummary)

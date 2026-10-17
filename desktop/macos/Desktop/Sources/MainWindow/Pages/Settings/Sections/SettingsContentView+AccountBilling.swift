@@ -289,17 +289,15 @@ extension SettingsContentView {
               ProgressView()
                 .controlSize(.small)
             } else if hasPaidSubscription {
-              Button(action: openCustomerPortal) {
-                if isOpeningCustomerPortal {
-                  ProgressView()
-                    .controlSize(.small)
-                } else {
-                  Text("Manage")
-                    .scaledFont(size: OmiType.body, weight: .semibold)
-                }
-              }
-              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-              .disabled(isOpeningCustomerPortal)
+              CurrentPlanCardActions(
+                cancelAtPeriodEnd: userSubscription?.subscription.cancelAtPeriodEnd == true,
+                currentPriceId: userSubscription?.subscription.currentPriceId,
+                checkoutBusy: activeCheckoutPriceId != nil
+                  && activeCheckoutPriceId == userSubscription?.subscription.currentPriceId,
+                portalBusy: isOpeningCustomerPortal,
+                onResubscribe: { startCheckout(for: $0) },
+                onManage: openCustomerPortal
+              )
             } else {
               Button("Refresh") {
                 loadSubscriptionInfo()
@@ -315,6 +313,12 @@ extension SettingsContentView {
             Text(periodText)
               .scaledFont(size: OmiType.caption)
               .foregroundColor(Ink.secondary)
+          }
+
+          if let confirmation = subscriptionConfirmation {
+            Text(confirmation)
+              .scaledFont(size: OmiType.caption, weight: .semibold)
+              .foregroundColor(Ink.listeningGreen)
           }
 
           if let userSubscription {
@@ -348,7 +352,7 @@ extension SettingsContentView {
 
             Text(
               subscription.deprecationMessage
-                ?? "Your Unlimited plan is being retired. Try the new Operator plan — same great features at \(operatorDeprecationFallbackPrice)."
+                ?? "Your Unlimited plan is being retired. Try the new Pro plan — same great features at \(operatorDeprecationFallbackPrice)."
             )
             .scaledFont(size: OmiType.body)
             .foregroundColor(Ink.secondary)
@@ -357,7 +361,7 @@ extension SettingsContentView {
             Button(action: {
               selectedPlanIdForCheckout = "operator"
             }) {
-              Text("Try Operator")
+              Text("Try Pro")
                 .scaledFont(size: OmiType.body, weight: .semibold)
             }
             .buttonStyle(OmiButtonStyle(.primary, size: .compact))
@@ -390,6 +394,14 @@ extension SettingsContentView {
     }
     .sheet(isPresented: $showOverageExplainer) {
       overageExplainerSheet
+    }
+    .onAppear {
+      // The plan grid is part of this settings section, so this is a settings
+      // impression, not a blocked purchase gate. Quota and usage-limit surfaces
+      // keep their own sources.
+      AnalyticsManager.shared.paywallOpened(
+        source: "macos_settings_view",
+        currentPlan: userSubscription?.subscription.plan.rawValue ?? "unknown")
     }
   }
 

@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'dart:ui';
 
-import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -54,10 +52,117 @@ class MemoryItem extends StatelessWidget {
     final provenanceLabel = memoryProvenanceLabel(context, memory);
     final temporalLabel = memoryTemporalLabel(context, memory);
     final editable = memoryIsEditable(memory);
+    // The same access guard as the native row's tap: locked rows go to the plan page or open
+    // read-only, editable ones edit and the rest open read-only.
+    void openMemory() => openMemoryRow(context, memory, provider, onEdit: onTap);
+
+    final rowContent = Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (memory.isKnowledgeLedger) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2, right: 8),
+                      child: Icon(
+                        _ledgerIcon(memory),
+                        size: 15,
+                        color: memory.isHistoricalKnowledgeLedgerRow
+                            ? OmiColors.textPrimary.withValues(alpha: 0.6)
+                            : OmiColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                  Expanded(
+                    child: Text(memory.content.decodeString, style: OmiType.subhead.copyWith(height: 1.4)),
+                  ),
+                  if (editable)
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(start: 12),
+                      child: Icon(
+                        Icons.edit_outlined,
+                        size: 16,
+                        color: OmiColors.textTertiary,
+                        semanticLabel: context.l10n.editMemoryTitle,
+                      ),
+                    ),
+                ],
+              ),
+              if (memory.ledgerSlot != null && memory.ledgerSlot!.trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    memory.ledgerSlot!,
+                    style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
+                  ),
+                ),
+              if (memory.isLedgerPlaybook && (memory.ledgerBody ?? '').trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    memory.ledgerBody!.trim(),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                  ),
+                ),
+              if (provenanceLabel != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(provenanceLabel, style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
+                ),
+              if (temporalLabel != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(temporalLabel, style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(width: AppStyles.spacingM),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (memory.isBaseline) ...[
+              Icon(
+                Icons.flag,
+                color: OmiColors.textSecondary,
+                size: 20,
+                semanticLabel: context.l10n.baselineMemory,
+              ),
+              const SizedBox(width: AppStyles.spacingS),
+            ],
+            if (memory.conversationId != null) ...[
+              _buildConversationLinkButton(context),
+              const SizedBox(width: AppStyles.spacingS),
+            ],
+            if (memoryCanReviewLedgerRow(memory)) ...[
+              _buildReviewButton(context, accepted: true),
+              const SizedBox(width: AppStyles.spacingS),
+              _buildReviewButton(context, accepted: false),
+              const SizedBox(width: AppStyles.spacingS),
+            ],
+            if (provider.memoryBeliefEnabled && memoryCanSetUse(memory)) ...[
+              _buildMemoryUseButton(context),
+              const SizedBox(width: AppStyles.spacingS),
+            ],
+            if (provider.canRevertSupersededFact(memory)) ...[
+              _buildRevertButton(context),
+              const SizedBox(width: AppStyles.spacingS),
+            ],
+            // _buildVisibilityButton(context),
+          ],
+        ),
+      ],
+    );
     final Widget memoryWidget = GestureDetector(
-      // Every memory opens: editable ones into the edit sheet, the rest read-only.
-      onTap:
-          editable ? () => onTap(context, memory, provider) : () => showMemoryQuickEditSheet(context, memory, provider),
+      // Padding and frosted-content taps obey the same access guard as the action.
+      onTap: openMemory,
       // A locked row's content is behind the paywall overlay; the row menu would show it in full.
       onLongPress: memory.isLocked ? null : () => _showRowMenu(context, editable),
       child: AnimatedContainer(
@@ -67,144 +172,19 @@ class MemoryItem extends StatelessWidget {
         decoration: BoxDecoration(
           color: highlighted ? OmiColors.surface3 : OmiColors.surface1,
           borderRadius: OmiRadius.xlAll,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4, offset: const Offset(0, 2))],
         ),
-        child: Stack(
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (memory.isKnowledgeLedger) ...[
-                            Padding(
-                              padding: const EdgeInsets.only(top: 2, right: 8),
-                              child: Icon(
-                                _ledgerIcon(memory),
-                                size: 15,
-                                color: memory.isHistoricalKnowledgeLedgerRow
-                                    ? OmiColors.textPrimary.withValues(alpha: 0.6)
-                                    : OmiColors.textPrimary,
-                              ),
-                            ),
-                          ],
-                          Expanded(
-                            child: Text(
-                              memory.content.decodeString,
-                              style: OmiType.subhead.copyWith(height: 1.4),
-                            ),
-                          ),
-                          if (editable)
-                            Padding(
-                              padding: const EdgeInsetsDirectional.only(start: 12),
-                              child: Icon(Icons.edit_outlined,
-                                  size: 16, color: OmiColors.textTertiary, semanticLabel: context.l10n.editMemoryTitle),
-                            ),
-                        ],
-                      ),
-                      if (memory.ledgerSlot != null && memory.ledgerSlot!.trim().isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            memory.ledgerSlot!,
-                            style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
-                          ),
-                        ),
-                      if (memory.isLedgerPlaybook && (memory.ledgerBody ?? '').trim().isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Text(
-                            memory.ledgerBody!.trim(),
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-                          ),
-                        ),
-                      if (provenanceLabel != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            provenanceLabel,
-                            style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
-                          ),
-                        ),
-                      if (temporalLabel != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            temporalLabel,
-                            style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
-                          ),
-                        ),
-                    ],
-                  ),
+        child: memory.isLocked
+            ? OmiLockedPreview(
+                status: context.l10n.statusPending,
+                label: memoryLockedActionLabel(
+                  context,
+                  showSubscriptionUI: context.watch<UsageProvider>().showSubscriptionUI,
                 ),
-                const SizedBox(width: AppStyles.spacingM),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (memory.isBaseline) ...[
-                      Icon(Icons.flag,
-                          color: OmiColors.textSecondary, size: 20, semanticLabel: context.l10n.baselineMemory),
-                      const SizedBox(width: AppStyles.spacingS),
-                    ],
-                    if (memory.conversationId != null) ...[
-                      _buildConversationLinkButton(context),
-                      const SizedBox(width: AppStyles.spacingS),
-                    ],
-                    if (memoryCanReviewLedgerRow(memory)) ...[
-                      _buildReviewButton(context, accepted: true),
-                      const SizedBox(width: AppStyles.spacingS),
-                      _buildReviewButton(context, accepted: false),
-                      const SizedBox(width: AppStyles.spacingS),
-                    ],
-                    if (provider.memoryBeliefEnabled && memoryCanSetUse(memory)) ...[
-                      _buildMemoryUseButton(context),
-                      const SizedBox(width: AppStyles.spacingS),
-                    ],
-                    if (provider.canRevertSupersededFact(memory)) ...[
-                      _buildRevertButton(context),
-                      const SizedBox(width: AppStyles.spacingS),
-                    ],
-                    // _buildVisibilityButton(context),
-                  ],
-                ),
-              ],
-            ),
-            if (memory.isLocked)
-              Positioned.fill(
-                child: ClipRRect(
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 2.0, sigmaY: 2.0),
-                    child: GestureDetector(
-                      onTap: () => _openLockedMemory(context, memory, provider),
-                      child: Container(
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.01),
-                          borderRadius: OmiRadius.smAll,
-                        ),
-                        child: context.watch<UsageProvider>().showSubscriptionUI
-                            ? Text(context.l10n.upgradeToUnlimited, style: OmiType.headline)
-                            : const SizedBox.shrink(),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
+                onPressed: openMemory,
+                child: rowContent,
+              )
+            : rowContent,
       ),
     );
 
@@ -219,10 +199,7 @@ class MemoryItem extends StatelessWidget {
       onDismissed: (direction) => _delete(context),
       background: Container(
         margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: OmiColors.danger,
-          borderRadius: OmiRadius.xlAll,
-        ),
+        decoration: BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.xlAll),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
         child: const Icon(Icons.delete_outline, color: Colors.white),
@@ -252,7 +229,10 @@ class MemoryItem extends StatelessWidget {
         ),
         if (editable) ...[
           OmiMenuAction(
-              icon: Icons.edit_outlined, label: l10n.edit, onSelected: () => onTap(context, memory, provider)),
+            icon: Icons.edit_outlined,
+            label: l10n.edit,
+            onSelected: () => onTap(context, memory, provider),
+          ),
           OmiMenuAction(
             icon: Icons.delete_outline,
             label: l10n.delete,
@@ -285,10 +265,7 @@ class MemoryItem extends StatelessWidget {
             onPressed: inFlight
                 ? null
                 : () async {
-                    final persisted = await provider.setMemoryUse(
-                      memory,
-                      action,
-                    );
+                    final persisted = await provider.setMemoryUse(memory, action);
                     if (!persisted && context.mounted) {
                       OmiFeedback.error(context, context.l10n.somethingWentWrong);
                     }
@@ -346,9 +323,7 @@ class MemoryItem extends StatelessWidget {
             onPressed: inFlight
                 ? null
                 : () async {
-                    final persisted = await provider.revertSupersededFact(
-                      memory,
-                    );
+                    final persisted = await provider.revertSupersededFact(memory);
                     if (!persisted && context.mounted) {
                       OmiFeedback.error(context, context.l10n.somethingWentWrong);
                     }
@@ -458,24 +433,26 @@ bool memoryCanSetUse(Memory memory) {
   return true;
 }
 
-/// A locked row opens the plan page with its upgrade dialog, or read-only without a plan to offer.
+/// What a locked row's tap leads to, named honestly: the usage page where a plan can be offered,
+/// otherwise the saved memory itself (read-only). One copy for the classic preview's button and the
+/// native row's subtitle; the caller decides whether it watches or reads [UsageProvider].
+String memoryLockedActionLabel(BuildContext context, {required bool showSubscriptionUI}) {
+  return showSubscriptionUI ? context.l10n.viewUsage : context.l10n.saved;
+}
+
+/// A locked row opens the usage page, or read-only without a plan to offer. No Paywall Opened
+/// here: the usage page reports it once plan choices are actually visible.
 void _openLockedMemory(BuildContext context, Memory memory, MemoriesProvider provider) {
   if (!context.read<UsageProvider>().showSubscriptionUI) {
     // No upgrade path to offer: still let the reader open what is visible.
     showMemoryQuickEditSheet(context, memory, provider, readOnly: true);
     return;
   }
-  PlatformManager.instance.analytics.paywallOpened(
-    'Action Item',
-  );
-  routeToPage(
-    context,
-    const UsagePage(showUpgradeDialog: true),
-  );
+  routeToPage(context, const UsagePage());
 }
 
-/// A row tap: locked memories go to the paywall (or read-only), editable ones to [onEdit] and the
-/// rest open read-only.
+/// A row tap: locked memories go to the usage page (or read-only), editable ones to [onEdit] and
+/// the rest open read-only.
 void openMemoryRow(BuildContext context, Memory memory, MemoriesProvider provider,
     {required Function(BuildContext, Memory, MemoriesProvider) onEdit}) {
   if (memory.isLocked) {
@@ -518,21 +495,13 @@ Future<void> openMemoryConversation(BuildContext context, Memory memory) async {
   if (activity == null) Navigator.of(context).pop();
 
   if (conversation != null) {
-    final conversationProvider = Provider.of<ConversationProvider>(
-      context,
-      listen: false,
-    );
-    final detailProvider = Provider.of<ConversationDetailProvider>(
-      context,
-      listen: false,
-    );
+    final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
+    final detailProvider = Provider.of<ConversationDetailProvider>(context, listen: false);
 
     // One derivation for both the group insert and the selected day, in local
     // time — inserting under the UTC day and selecting another key opened the
     // detail page on a day nothing was grouped under (#10980).
-    final conversationDate = conversationProvider.ensureConversationInGroup(
-      conversation,
-    );
+    final conversationDate = conversationProvider.ensureConversationInGroup(conversation);
     detailProvider.updateConversation(conversation.id, conversationDate);
 
     routeToPage(context, ConversationDetailPage(conversation: conversation));
@@ -541,17 +510,21 @@ Future<void> openMemoryConversation(BuildContext context, Memory memory) async {
   }
 }
 
-/// The native list row for [memory]. A locked row carries only the upgrade title: its content,
-/// subtitle and actions never cross the bridge. Options repeat the Flutter row's controls.
+/// The native list row for [memory]. A locked row carries only the classic preview's two labels
+/// (its pending status and where a tap leads): its content, details and actions never cross the
+/// bridge. Options repeat the Flutter row's controls.
 NativeRow memoryNativeRow(BuildContext context, Memory memory, MemoriesProvider provider,
     {required Function(BuildContext, Memory, MemoriesProvider) onEdit}) {
   final l10n = context.l10n;
   void open(Object? _) => openMemoryRow(context, memory, provider, onEdit: onEdit);
   if (memory.isLocked) {
-    // The upgrade copy only where the plan page can offer one, as the classic overlay shows it.
-    final title = context.read<UsageProvider>().showSubscriptionUI ? l10n.upgradeToUnlimited : l10n.memoryDetailsTitle;
-    return NativeRow('memory_${memory.id}', title,
-        kind: 'navigation', symbol: memoryLedgerSymbol(memory), action: open);
+    // The page watches UsageProvider; the row only reads it, as the classic tap guard does.
+    final showSubscriptionUI = context.read<UsageProvider>().showSubscriptionUI;
+    return NativeRow('memory_${memory.id}', l10n.statusPending,
+        kind: 'navigation',
+        subtitle: memoryLockedActionLabel(context, showSubscriptionUI: showSubscriptionUI),
+        symbol: memoryLedgerSymbol(memory),
+        action: open);
   }
   final editable = memoryIsEditable(memory);
   final reviewable = memoryCanReviewLedgerRow(memory);

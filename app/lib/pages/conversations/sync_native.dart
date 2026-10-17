@@ -101,8 +101,11 @@ extension _NativeSyncPresentation on _SyncPageState {
     final wals = owner.filteredByStatusWals;
     if (wals.isEmpty) {
       header.add(switch (filter) {
-        WalStatusFilter.pending => NativeRow('sync_empty', l.noPendingRecordings,
-            kind: 'label', subtitle: l.allCaughtUp, symbol: 'checkmark.circle'),
+        // "All caught up" only when nothing needs attention either, as the classic empty state says.
+        WalStatusFilter.pending => owner.needsAttentionWalsCount > 0
+            ? NativeRow('sync_empty', l.noPendingRecordings, kind: 'label', symbol: 'clock.arrow.circlepath')
+            : NativeRow('sync_empty', l.noPendingRecordings,
+                kind: 'label', subtitle: l.allCaughtUp, symbol: 'checkmark.circle'),
         WalStatusFilter.corrupted =>
           NativeRow('sync_empty', l.syncStatusFileUnavailable, kind: 'label', symbol: 'exclamationmark.triangle'),
         WalStatusFilter.synced => NativeRow('sync_empty', l.noProcessedRecordings, kind: 'label', symbol: 'clock'),

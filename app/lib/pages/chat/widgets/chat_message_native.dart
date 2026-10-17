@@ -11,11 +11,8 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/mobile/native_ui/ios_native_modal.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
-import 'package:omi/mobile/native_ui/native_navigation_chrome.dart';
 import 'package:omi/mobile/native_ui/native_rich_text.dart';
-import 'package:omi/models/chat_evidence_reference.dart';
 import 'package:omi/pages/memories/widgets/memory_dialog.dart';
-import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
@@ -203,17 +200,6 @@ class ChatNativeTranscript {
           rows.addAll(_citationRows(context, message, key, actions));
         case ChatMessagePartKind.reviewCard:
           rows.addAll(_reviewRows(context, plan, key));
-        case ChatMessagePartKind.evidence:
-          rows.addAll([
-            for (final (index, reference) in plan.evidence!.references.indexed)
-              NativeRow(
-                'chat_evidence_${key}_$index',
-                reference.title?.trim().isNotEmpty == true ? reference.title! : reference.sourceLabel,
-                kind: 'label',
-                subtitle: reference.summary?.trim().isNotEmpty == true ? reference.summary! : reference.statusLabel,
-                symbol: chatEvidenceSymbol(reference.kind),
-              ),
-          ]);
         case ChatMessagePartKind.memoryActionReceipt:
           rows.add(NativeRow(
             'chat_receipt_${key}_0',
@@ -701,12 +687,14 @@ class ChatNativeTranscript {
       case AgentCompletionContentBlock():
         final status = agentCompletionStatus(l10n, block.status);
         return [_agentRow(next('agent'), status.symbol, status.label, block.title, block.output)];
+      case EditReceiptContentBlock():
       case TextContentBlock():
       case ThinkingContentBlock():
       case ToolCallContentBlock():
       case CitationContentBlock():
       case UnknownContentBlock():
-        // Not a component: an invalid row keeps the complete Flutter chat rather than dropping it.
+        // Not a component, or one without a native row yet (the edit receipt's Undo): an invalid row
+        // keeps the complete Flutter chat rather than dropping it.
         return [NativeRow('_unmapped_${next('block')}', '')];
     }
   }
@@ -921,15 +909,6 @@ String chatFileSymbol(String name) {
   };
 }
 
-/// A symbol for an evidence reference, by its kind.
-String chatEvidenceSymbol(ChatEvidenceReferenceKind kind) => switch (kind) {
-      ChatEvidenceReferenceKind.conversationSummary => 'text.alignleft',
-      ChatEvidenceReferenceKind.conversationSegment => 'text.quote',
-      ChatEvidenceReferenceKind.screen => 'desktopcomputer',
-      ChatEvidenceReferenceKind.keyframe => 'photo',
-      ChatEvidenceReferenceKind.request || ChatEvidenceReferenceKind.unknown => 'link',
-    };
-
 /// Literal text inside a rich block, which Swift reads as inline Markdown.
 String _escape(String text) => text.replaceAllMapped(RegExp(r'[\\`*_\[\]]'), (match) => '\\${match[0]}');
 
@@ -958,73 +937,4 @@ class _RichBody {
   final String source;
   final List<Map<String, Object>> blocks;
   final Map<String, String> links;
-}
-
-/// The plans sheet the chat opens when the chat quota runs out. Natively, [PlansSheet] projects its
-/// own surface, with its own close row, and the hero animations stay stopped beneath it; a surface
-/// that falls back gets the Flutter sheet scaffold and its close control back. Plans the projection
-/// cannot map keep [PlansSheet]'s complete classic body, which closes by drag or the scrim.
-Future<void> showChatQuotaPlansSheet(BuildContext context) => showOmiSheet<void>(
-      context: context,
-      padding: EdgeInsets.zero,
-      builder: (_) => const _QuotaPlansSheet(),
-      nativeBuilder: (_) => TickerMode(
-        enabled: false,
-        child: NativeNavigationChrome(
-          wrapFallback: (fallback) => OmiSheetScaffold(padding: EdgeInsets.zero, child: fallback),
-          child: const _QuotaPlansSheet(),
-        ),
-      ),
-    );
-
-class _QuotaPlansSheet extends StatefulWidget {
-  const _QuotaPlansSheet();
-
-  @override
-  State<_QuotaPlansSheet> createState() => _QuotaPlansSheetState();
-}
-
-class _QuotaPlansSheetState extends State<_QuotaPlansSheet> with TickerProviderStateMixin {
-  late AnimationController _waveController;
-  late AnimationController _arrowController;
-  late AnimationController _notesController;
-  late Animation<double> _arrowAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _waveController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat();
-    _arrowController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    )..repeat();
-    _notesController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 3),
-    )..repeat();
-    _arrowAnimation = Tween<double>(begin: 0, end: 10).animate(
-      CurvedAnimation(parent: _arrowController, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _waveController.dispose();
-    _arrowController.dispose();
-    _notesController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return PlansSheet(
-      waveController: _waveController,
-      notesController: _notesController,
-      arrowController: _arrowController,
-      arrowAnimation: _arrowAnimation,
-    );
-  }
 }

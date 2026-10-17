@@ -623,7 +623,7 @@ void main() {
     expect(harness.rows.any((row) => row.id.startsWith('chat_chart_')), isFalse);
   });
 
-  testWidgets('evidence leaves out conversation sources the citations already list', (tester) async {
+  testWidgets('evidence on the wire draws no rows; the citations still list their conversations', (tester) async {
     final message = ServerMessage.fromJson({
       'id': 'a1',
       'created_at': '2026-09-02T12:00:00Z',
@@ -647,10 +647,9 @@ void main() {
       },
     });
     final harness = await pump(tester, [_human('h1', 'Hi'), message]);
-    final evidence = harness.rows.where((row) => row.id.startsWith('chat_evidence_')).toList();
-    expect(
-        evidence.map((row) => (row.id, row.title, row.symbol)), [('chat_evidence_a1_0', 'Editor', 'desktopcomputer')]);
-    expect(evidence.single.action, isNull, reason: 'evidence has no navigator yet');
+    // Mobile renders no evidence UI (upstream 9b92bdf974); the wire data stays decoded for later use.
+    expect(harness.rows.where((row) => row.id.startsWith('chat_evidence_')), isEmpty);
+    expect(message.evidenceEnvelope, isNotNull);
     expect(harness.row('chat_citation_a1_0').kind, 'navigation');
     expect(harness.row('chat_citation_a1_0').title, contains('Standup'));
   });

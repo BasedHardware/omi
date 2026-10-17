@@ -40,7 +40,7 @@ import 'package:omi/pages/phone_calls/phone_setup_number_page.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/ui/ui.dart';
 
-import 'journeys/support/hermetic_boot.dart';
+import 'journeys/support/hermetic_boot.dart' hide InertSyncProvider;
 import 'support/native_host_harness.dart';
 import 'visual_audit/fakes.dart';
 import 'visual_audit/screen_frame_fixtures.dart';
