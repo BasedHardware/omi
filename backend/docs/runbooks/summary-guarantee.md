@@ -26,7 +26,9 @@ active lease or repeatedly sends waiting work to the queue tail.
 
 A nonempty overview or section `body_markdown` constitutes a summary. A title,
 actions, events, or empty headings do not. Empty kept model output raises before
-persistence and retains debt; previously good output survives. Discard is an
+persistence and retains debt; previously good output survives. With the gate on,
+notes dedupe treats an empty checkpoint as a cache miss so retries can actually
+generate a summary instead of replaying the same empty cached output. Discard is an
 explicit separate outcome. Local-only, deferred, locked, E2EE, manual title/overview,
 client projection, terminal-no-derived and existing finalization generations are
 not background repair admissions. BYOK-enrolled accounts remain blocked, with
