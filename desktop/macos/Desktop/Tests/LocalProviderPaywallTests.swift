@@ -47,6 +47,14 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
   override func stopLoading() {}
 }
 
+/// Counts calls made from a `@Sendable` closure.
+private final class DispatchCounter: @unchecked Sendable {
+  private let lock = NSLock()
+  private var count = 0
+  func increment() { lock.withLock { count += 1 } }
+  var value: Int { lock.withLock { count } }
+}
+
 /// Free-tier quota exists to meter Omi's cloud model usage. When the Local
 /// provider is active and a feature runs entirely against the user's own
 /// server, it must not be blocked or counted against that quota. These pin
@@ -450,35 +458,35 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
   }
 
   /// Regression: cloud-assist on must let embedding proceed to its normal
-  /// network path (which will fail here for lack of a real proxy URL/auth;
-  /// the point is only that it is NOT the `localProviderCloudOff` gate).
-  /// Hermetic: registers `FixedStatusURLCapture` process-wide so that if
-  /// `authHeader()` succeeds in this environment and the call actually
-  /// reaches `URLSession.shared`, it is intercepted locally rather than
-  /// dialing out to a real Omi proxy. The stub's fixed JSON body is not a
-  /// valid embedding response either way, so the call still ends in an
-  /// error: the point is only that it is never `.localProviderCloudOff`,
-  /// and never a real network request.
+  /// network path, i.e. it is NOT the `localProviderCloudOff` gate. Hermetic:
+  /// the service is built with a stubbed auth header and `dispatch`, so the
+  /// call can only ever end at that seam; no process-wide `URLProtocol` is
+  /// registered, and a real network request is impossible.
   func testEmbeddingServiceEmbedProceedsPastLocalGateWhenCloudAssistOn() async {
     UserDefaults.standard.set("local", forKey: bridgeModeKey)
     UserDefaults.standard.set(
       AIProvider.CloudAssistMode.cloud.rawValue, forKey: AIProvider.cloudAssistModeKey)
-    FixedStatusURLCapture.reset(statusCode: 200)
-    URLProtocol.registerClass(FixedStatusURLCapture.self)
-    defer { URLProtocol.unregisterClass(FixedStatusURLCapture.self) }
+    let dispatchCount = DispatchCounter()
+    let service = EmbeddingService(
+      acquireAuth: { _ in "Bearer test" },
+      dispatch: { _ in
+        dispatchCount.increment()
+        throw URLError(.notConnectedToInternet)
+      })
 
     do {
-      _ = try await EmbeddingService.shared.embed(text: "test")
-      // The stub's body never parses as a valid embedding, so success here
-      // would itself be surprising, but is not what this test pins.
+      _ = try await service.embed(text: "test")
+      XCTFail("the stubbed dispatch always throws, so embed cannot succeed")
     } catch let error as EmbeddingService.EmbeddingError {
       if case .localProviderCloudOff = error {
         XCTFail("cloud-assist on must not hit the Local-provider gate")
       }
     } catch {
-      // Any other failure (auth, invalid stubbed response) is expected;
-      // it can no longer be a real network round trip.
+      // The stub's transport error is the expected outcome.
     }
+    XCTAssertGreaterThanOrEqual(
+      dispatchCount.value, 1,
+      "cloud-assist on must reach the network seam instead of failing closed")
   }
 
   /// `ChatToolExecutor`'s `web_search` tool always calls Omi's backend and
