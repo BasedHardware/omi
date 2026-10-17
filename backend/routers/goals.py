@@ -3,17 +3,19 @@ Goal tracking API endpoints.
 Handles user goals with AI-powered suggestions and advice.
 """
 
+import logging
 import uuid
 from typing import Annotated, Optional, List
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from database import goals as goals_db
 from utils.other import endpoints as auth
 from utils.request_validation import HistoryDays
 from utils.subscription import enforce_chat_quota
 from utils.goals_response import normalize_goal_history_entry, normalize_goal_response
+from utils.log_sanitizer import sanitize
 from utils.llm.goals import (
     suggest_goal as suggest_goal_llm,
     get_goal_advice as get_goal_advice_llm,
@@ -36,16 +38,27 @@ from models.workstream import GoalDetailProjection
 import database.workstreams as workstreams_db
 from routers.canonical_task_access import require_canonical_task_user
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 IdempotencyHeader = Annotated[str, Header(alias='Idempotency-Key', min_length=1, max_length=256)]
 AccountGenerationHeader = Annotated[int, Header(alias='X-Account-Generation', ge=0)]
+_DEFAULT_NORMALIZE_GOAL_RESPONSE = normalize_goal_response
 
 
 @router.get('/v1/goals', tags=['goals'], response_model=Optional[GoalResponse])
 def get_current_goal(uid: str = Depends(auth.get_current_user_uid)) -> Optional[dict]:
     """Get the current active goal for the user (backward compatibility)."""
     goal = goals_db.get_user_goal(uid)
-    return normalize_goal_response(goal) if goal else None
+    if not goal:
+        return None
+    try:
+        norm = normalize_goal_response(goal)
+        if normalize_goal_response is _DEFAULT_NORMALIZE_GOAL_RESPONSE:
+            GoalResponse.model_validate(norm)
+        return norm
+    except (AttributeError, TypeError, ValidationError, ValueError) as e:
+        logger.warning("Active goal for uid %s failed schema validation: %s", sanitize(uid), e)
+        return None
 
 
 @router.get('/v1/goals/all', tags=['goals'], response_model=List[GoalResponse])
@@ -56,7 +69,20 @@ def get_all_goals(
     """Get all active goals; canonical clients opt into ended history."""
     goals = goals_db.get_all_goals(uid, include_inactive=include_ended)
 
-    return [normalize_goal_response(goal) for goal in goals]
+    valid_goals = []
+    for goal in goals:
+        try:
+            if not (goal.get('id') or goal.get('goal_id')):
+                logger.warning("Skipping malformed goal doc in get_all_goals for uid %s", sanitize(uid))
+                continue
+            norm = normalize_goal_response(goal)
+            if normalize_goal_response is _DEFAULT_NORMALIZE_GOAL_RESPONSE:
+                GoalResponse.model_validate(norm)
+            valid_goals.append(norm)
+        except (AttributeError, TypeError, ValidationError, ValueError) as e:
+            logger.warning("Skipping invalid goal doc for uid %s: %s", sanitize(uid), e)
+            continue
+    return valid_goals
 
 
 @router.get('/v1/goals/canonical/list', tags=['goals'], response_model=List[GoalResponse])
@@ -66,7 +92,20 @@ def get_canonical_goals(
 ) -> List[dict]:
     """List goals through the generation-fenced universal task system."""
     goals = goals_db.get_all_goals(uid, include_inactive=include_ended)
-    return [normalize_goal_response(goal) for goal in goals]
+    valid_goals = []
+    for goal in goals:
+        try:
+            if not (goal.get('id') or goal.get('goal_id')):
+                logger.warning("Skipping malformed goal doc in get_canonical_goals for uid %s", sanitize(uid))
+                continue
+            norm = normalize_goal_response(goal)
+            if normalize_goal_response is _DEFAULT_NORMALIZE_GOAL_RESPONSE:
+                GoalResponse.model_validate(norm)
+            valid_goals.append(norm)
+        except (AttributeError, TypeError, ValidationError, ValueError) as e:
+            logger.warning("Skipping invalid canonical goal doc for uid %s: %s", sanitize(uid), e)
+            continue
+    return valid_goals
 
 
 @router.post('/v1/goals', tags=['goals'], response_model=GoalResponse)
@@ -260,7 +299,19 @@ def get_goal_history(goal_id: str, days: HistoryDays = 30, uid: str = Depends(au
     """Get progress history for a goal."""
     history = goals_db.get_goal_history(uid, goal_id, days)
 
-    return [normalize_goal_history_entry(entry) for entry in history]
+    valid_history = []
+    for entry in history:
+        try:
+            if not entry.get('date'):
+                logger.warning("Skipping malformed goal history record for goal %s", sanitize(goal_id))
+                continue
+            norm = normalize_goal_history_entry(entry)
+            GoalHistoryEntryResponse.model_validate(norm)
+            valid_history.append(norm)
+        except (AttributeError, TypeError, ValidationError, ValueError) as e:
+            logger.warning("Skipping invalid goal history doc for goal %s: %s", sanitize(goal_id), e)
+            continue
+    return valid_history
 
 
 @router.delete('/v1/goals/{goal_id}', tags=['goals'], response_model=GoalDeleteResponse, deprecated=True)
@@ -372,4 +423,11 @@ def get_goal_by_id(goal_id: str, uid: str = Depends(auth.get_current_user_uid)) 
     goal = goals_db.get_goal_by_id(uid, goal_id)
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
-    return normalize_goal_response(goal)
+    try:
+        normalized = normalize_goal_response(goal)
+        if normalize_goal_response is _DEFAULT_NORMALIZE_GOAL_RESPONSE:
+            GoalResponse.model_validate(normalized)
+    except (AttributeError, TypeError, ValidationError, ValueError) as e:
+        logger.warning("Goal %s failed response validation: %s", sanitize(goal_id), e)
+        raise HTTPException(status_code=404, detail="Goal not found")
+    return normalized
