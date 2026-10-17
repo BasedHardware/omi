@@ -69,13 +69,16 @@ Offline replay: `scripts/sync_live_dedupe_replay.py` replays supplied STT candid
 
 ## Relevance and remaining differences
 
-### Phone Transcribe Later / Process Now
+### Native recordings / Process Now
 
 `LocalRecordingsProvider` uploads one selected native file at a time through
 `/v2/sync-local-files`. The native `audio_omibatchphone_` marker denotes explicit
 Transcribe Later; `audio_omibatchphoneauto_` denotes automatic offline fallback.
 The shared job coordinator recognizes only a single explicit file, covering
-already-released clients without a new request field. Mixed/bulk jobs retain
+already-released clients without a new request field. A single Watch recovery
+file matching `audio_omibatchwatch<32-hex-session>s<segment>_pcm16_16000_1_fs160_<timestamp>.bin`
+uses this same explicit keep path. Watch backups are uploaded only when selected
+in the local Recordings list. Mixed/bulk jobs and malformed Watch markers retain
 automatic relevance policy.
 
 After all speech segments finish assignment, the coordinator enrolls every

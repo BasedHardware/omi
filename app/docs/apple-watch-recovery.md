@@ -66,13 +66,18 @@ are manual, including when auto-sync is enabled: automatically retranscribing
 successful live audio would create duplicate conversations. They remain local
 until the user chooses processing or deletion. Originals may span several
 one-minute copies; this change does not promise one eleven-hour conversation.
+The shared sync coordinator treats a single selected Watch recovery segment as
+an explicit keep choice, just like phone Transcribe Later. It restores retained
+rule-discarded speech before enrichment; automatic and mixed/bulk sync policy
+is unchanged. Silence still produces no conversation.
 
 The Watch shows when saved audio awaits transfer and offers Retry transfer.
 Opening the Watch app, session activation, reachability changes and a periodic
 retry also resume the queue. Both the iPhone app and its Watch companion need
 the new release. Legacy streamed chunks and pre-upgrade recordings cannot be
-retroactively reconstructed by this protocol. No backend deployment is needed
-for the new file format or manual processing path.
+retroactively reconstructed by this protocol. The format is already supported,
+but the Process Now keep rule requires deploying the shared sync backend image
+to the processing services as well as releasing both mobile companions.
 
 ## Implementation and rollout checklist
 
@@ -86,11 +91,13 @@ for the new file format or manual processing path.
 - [x] Surface pending transfer and an explicit retry on Watch.
 - [x] Isolate damaged partials, preserve conflicting originals and fairly retry
   current-account transfers without blocking later segments.
+- [x] Preserve explicit Process Now keep intent for Watch recovery speech.
 - [ ] Qualify physical paired devices with screen off, phone terminated, phone
   unavailable, disk pressure, account switch, Stop before transfer and at least
   11h06m of capture. Compare sample counts/digests, memory, battery and transfer
   completion, and verify playback/Process Now on iPhone.
-- [ ] Complete full iPhone build/CI review, merge, and release both companions.
+- [ ] Complete full iPhone build/CI review, merge, deploy the sync processing
+  backend and release both companions.
 - [ ] Verify this customer's old server records, crash diagnostics and queued
   legacy transfers using private account ID and exact recording times.
 - [ ] Confirm customer recovery or explicitly document which audio could not be

@@ -16,6 +16,7 @@ import hashlib
 import io
 import logging
 import os
+import re
 import shutil
 import threading
 import time
@@ -2194,9 +2195,11 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     # LocalRecordingsProvider uploads one explicitly selected native recording
     # at a time. The writer's exact marker distinguishes Transcribe Later from
     # automatic offline fallback (omibatchphoneauto) in already-released clients.
+    # Watch recovery files use the same manual Process Now workflow.
     # Keep this narrow: a mixed/bulk sync job does not establish a keep choice.
-    user_selected_phone_recording = len(raw_paths) == 1 and os.path.basename(raw_paths[0]).lower().startswith(
-        'audio_omibatchphone_'
+    selected_name = os.path.basename(raw_paths[0]).lower() if len(raw_paths) == 1 else ''
+    user_selected_recording = selected_name.startswith('audio_omibatchphone_') or (
+        re.fullmatch(r'audio_omibatchwatch[0-9a-f]{32}s\d+_pcm16_16000_1_fs160_\d+\.bin', selected_name) is not None
     )
     # Enrich raw sync geolocation (address / place id) once per job before any
     # conversation is created. This is the single enrichment point covering both
@@ -3068,7 +3071,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 uid,
                 response,
                 on_fenced=_checkpoint_fenced_conversations,
-                **({'user_selected': True} if user_selected_phone_recording else {}),
+                **({'user_selected': True} if user_selected_recording else {}),
             )
 
             # Persist conversation audio (private-cloud chunks → audio_files) so synced
