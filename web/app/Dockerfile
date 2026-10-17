@@ -10,16 +10,16 @@ WORKDIR /app/web/app
 # Copy only the lock and package files
 COPY web/app/package.json web/app/bun.lock ./
 
+COPY web/packages/note-shared /app/web/packages/note-shared
+
 RUN bun install --frozen-lockfile
 
 # Rebuild the source code only when needed
 FROM base AS builder
 WORKDIR /app/web/app
 COPY --from=deps /app/web/app/node_modules ./node_modules
+COPY --from=deps /app/web/packages/note-shared /app/web/packages/note-shared
 COPY web/app .
-# Note-citation shared modules are tracked under web/frontend/shared; the app's
-# relative imports reach into that tree, so the builder needs the files present.
-COPY web/frontend/shared /app/web/frontend/shared
 
 ARG NEXT_PUBLIC_API_BASE_URL
 ARG NEXT_PUBLIC_FIREBASE_API_KEY
@@ -64,6 +64,8 @@ ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 COPY --from=builder --chown=bun:bun /app/web/app/.moonshine ./.moonshine
 COPY --from=builder --chown=bun:bun /app/web/app/package.json ./package.json
 COPY --from=builder --chown=bun:bun /app/web/app/bun.lock ./bun.lock
+
+COPY --from=deps /app/web/packages/note-shared /app/web/packages/note-shared
 
 RUN bun install --production --frozen-lockfile
 
