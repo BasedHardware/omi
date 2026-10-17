@@ -388,7 +388,7 @@ def margin_by_plan():
     money += [("basicCost", "Free cost/day", "number"), ("unattributedCost", "Unattributed cost/day", "number"),
               ("shared", "Shared pool/day", "number"), ("allInTotal", "All-in total/day", "number")]
     free = {"matcher": {"id": "byName", "options": FREE}, "properties": [
-        {"id": "displayName", "value": FREE}, {"id": "unit", "value": "currencyUSD"}, 
+        {"id": "displayName", "value": FREE}, {"id": "unit", "value": "currencyUSD"},
         {"id": "color", "value": {"mode": "fixed", "fixedColor": MUTED}},
         {"id": "custom.drawStyle", "value": "bars"}, {"id": "custom.fillOpacity", "value": 70},
         {"id": "custom.barWidthFactor", "value": 0.7},
