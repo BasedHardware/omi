@@ -25,7 +25,7 @@ class ChatGptConnectSheet extends StatelessWidget {
     if (opened) {
       Navigator.of(context).pop();
     } else {
-      OmiFeedback.error(context, context.l10n.chatAppsCouldNotOpen('ChatGPT'));
+      OmiFeedback.error(context, context.l10n.chatAppsCouldNotOpen(chatGptBrandName));
     }
   }
 

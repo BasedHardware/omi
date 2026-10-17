@@ -108,7 +108,7 @@ class _ConnectAgentPageState extends State<ConnectAgentPage> with WidgetsBinding
                       OmiSettingsRow(
                         key: const ValueKey('connect_agent_chatgpt'),
                         leading: const AgentMonogram('GPT'),
-                        title: 'ChatGPT',
+                        title: chatGptBrandName,
                         subtitle: connections.chatGptConnected ? l10n.connected : null,
                         trailing: connections.chatGptConnected ? null : _connectButton(_openChatGpt),
                         onTap: _openChatGpt,

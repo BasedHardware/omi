@@ -6,6 +6,9 @@ import 'package:omi/env/env.dart';
 import 'package:omi/services/agent_connect/agent_prompts.dart';
 import 'package:omi/services/agent_connect/zkr_share.dart';
 
+/// Product name; never translated.
+const chatGptBrandName = 'ChatGPT';
+
 /// The approved ChatGPT directory listing: the one-tap ChatGPT path (same link as the macOS app's
 /// `MemoryExportDestination.chatGPTDirectoryInstallURL`).
 final chatGptDirectoryUrl =

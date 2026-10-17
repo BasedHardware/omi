@@ -24,7 +24,7 @@ class _ChatGptPageState extends State<ChatGptPage> {
 
   Future<void> _ask(String question) async {
     final opened = await launchUrl(chatGptPromptUrl(question), mode: LaunchMode.externalApplication);
-    if (!opened && mounted) OmiFeedback.error(context, context.l10n.chatAppsCouldNotOpen('ChatGPT'));
+    if (!opened && mounted) OmiFeedback.error(context, context.l10n.chatAppsCouldNotOpen(chatGptBrandName));
   }
 
   Future<void> _disconnect() async {
@@ -53,9 +53,7 @@ class _ChatGptPageState extends State<ChatGptPage> {
     final l10n = context.l10n;
     final examples = [l10n.chatGptExampleMeetings, l10n.chatGptExampleTasks, l10n.chatGptExampleGoals];
     return Scaffold(
-      appBar: AppBar(
-          leading: const OmiBackButton(),
-          title: const Text('ChatGPT')), // omi-ux-allow: hardcoded-text -- brand name, never translated
+      appBar: AppBar(leading: const OmiBackButton(), title: const Text(chatGptBrandName)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, OmiSpacing.xxl),
         children: [
@@ -67,8 +65,7 @@ class _ChatGptPageState extends State<ChatGptPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('ChatGPT',
-                        style: OmiType.title2), // omi-ux-allow: hardcoded-text -- brand name, never translated
+                    Text(chatGptBrandName, style: OmiType.title2),
                     const SizedBox(height: OmiSpacing.xs),
                     Row(
                       children: [
