@@ -729,7 +729,10 @@ runs:
                  // .[0].spec.template.metadata.annotations["autoscaling.knative.dev/maxScale"]
                  // "50") end
             | if type == "string" and test("^[1-9][0-9]*$") then .
-              else error("Invalid Cloud Run maxScale") end')"
+              else error("Invalid Cloud Run maxScale") end
+            # Bound digits before shell arithmetic; oversized annotations use the fresh-service default.
+            | if length > 3 then "50"
+              elif tonumber > 500 then "50" else . end')"
         echo "max_scale=$MAX_SCALE" >> "$GITHUB_OUTPUT"
 
     - name: Deploy ${{ inputs.service }}-sync to Cloud Run

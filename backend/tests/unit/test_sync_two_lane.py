@@ -378,7 +378,7 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     sync_step = stack.split('id: deploy-backend-sync\n', 1)[1].split('- name:', 1)[0]
     assert '--max-instances=${{ steps.live-max-scale.outputs.max_scale }}' in sync_step
     assert 'gcloud tasks queues create sync-backfill' in action
-    assert '--max-concurrent-dispatches=90' in action
+    assert '--max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES"' in action
     assert '--max-dispatches-per-second=15' in action
     assert '--max-backoff=60s' in action
     assert 'collection-group=sync_content_ledger' in action
@@ -416,9 +416,15 @@ def test_sync_backfill_dispatch_mode_reconciles_queue_without_platform_mutation(
     assert 'dispatch' in abort['if'] and 'platform' in abort['if']
     assert "provision_budget_alerts == 'true'" in abort['if']
 
+    resolver = next(step for step in lifecycle['runs']['steps'] if step.get('id') == 'live-max-scale')
+    assert 'if' not in resolver  # Also resolve for platform/dispatch, not just the worker deploy.
+    assert lifecycle['runs']['steps'].index(resolver) < lifecycle['runs']['steps'].index(queue)
+    assert queue['env']['BACKFILL_MAX_CONCURRENT_DISPATCHES'] == (
+        '${{ steps.live-max-scale.outputs.max_concurrent_dispatches }}'
+    )
     run = queue['run']
     for flag in (
-        '--max-concurrent-dispatches=90',
+        '--max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES"',
         '--max-dispatches-per-second=15',
         '--min-backoff=5s',
         '--max-backoff=60s',
