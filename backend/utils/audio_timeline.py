@@ -843,7 +843,11 @@ class ProviderEpochTranslator:
                     self._append_unplaced(translated, segment)
                 continue
             rate = self.provider_sample_rate
-            first_sample, last_sample = int(start * rate), int(end * rate)
+            # round(), not int(): int() truncates 32159.999 (2.01*16000) to
+            # 32159 instead of 32160 — a sample early — while
+            # note_accepted_spans already round()s the same products, so the
+            # two sides of the boundary compare used different rounding.
+            first_sample, last_sample = round(start * rate), round(end * rate)
             if self.wire_pending_from is not None and max(first_sample, last_sample) > self.wire_pending_from:
                 # Prediction is a send-time cursor, not capture evidence until
                 # its own FIFO acknowledgment verifies it. No transport wait.
@@ -1016,8 +1020,9 @@ class ProviderEpochTranslator:
         if reason == 'outside_accepted_sends':
             if self._on_outside is not None:
                 try:
-                    first = int(float(segment['start']) * self.provider_sample_rate)
-                    end = int(float(segment['end']) * self.provider_sample_rate)
+                    # round() for the same boundary-math reason as translate().
+                    first = round(float(segment['start']) * self.provider_sample_rate)
+                    end = round(float(segment['end']) * self.provider_sample_rate)
                     self._on_outside(self.send_map.outside_reason(first, end))
                 except Exception:
                     pass
