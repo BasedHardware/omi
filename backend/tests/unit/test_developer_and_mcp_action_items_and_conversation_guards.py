@@ -229,3 +229,18 @@ def test_mcp_sync_page_filters_locked(monkeypatch):
         'u', updated_since=MagicMock(isoformat=lambda: 't'), limit=10, cursor_kind='x'
     )
     assert [i['id'] for i in items] == ['a1']
+
+
+def test_clean_action_item_drops_locked_description_entirely():
+    """Review follow-up: a locked item reaching the MCP shaper must not
+    leak even a truncated description — exclusion parity, not redaction."""
+    from utils.mcp_data import clean_action_item
+
+    locked = _item('l1', is_locked=True)
+    locked['description'] = 'x' * 200
+    out = clean_action_item(locked)
+    assert out['description'] == ''
+
+    unlocked = _item('u1')
+    unlocked['description'] = 'full text here'
+    assert clean_action_item(unlocked)['description'] == 'full text here'
