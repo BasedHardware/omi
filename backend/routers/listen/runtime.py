@@ -803,10 +803,6 @@ class ListenSessionRuntime:
 
     async def _refresh_credits(self, *, transcription_seconds: int = 0) -> None:
         admission = getattr(getattr(self, 'receiver', None), 'cap_admission', None)
-        if admission is not None:
-            await admission.refresh()
-            if getattr(self.receiver, 'cap_paused', False) and admission.managed:
-                await self.receiver.initialize_stt()
         now = time.time()
         subscription = await self.persistence.call(user_db.get_user_valid_subscription, self.request.uid)
         ladder_session = (
@@ -814,11 +810,14 @@ class ListenSessionRuntime:
             and ladder_policy.entitlements(subscription) is not None
         )
         invalidated = await self.persistence.call(check_credits_invalidation, self.request.uid)
+        if admission is not None:
+            await admission.refresh(force=bool(invalidated))
+            if getattr(self.receiver, 'cap_paused', False) and admission.managed:
+                await self.receiver.initialize_stt()
         needs_refresh = (
             not self.state.remaining_seconds_cache_initialized
             or invalidated
-            or now - self.state.remaining_seconds_cache_ts
-            >= (60 if ladder_session else self.limits.credits_refresh_seconds)
+            or now - self.state.remaining_seconds_cache_ts >= self.limits.credits_refresh_seconds
             or (
                 self.state.remaining_seconds_cache is not None
                 and self.state.remaining_seconds_cache <= 0

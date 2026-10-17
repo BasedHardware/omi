@@ -9,7 +9,7 @@ import logging
 import time
 import uuid
 
-from config.stt_cap_dispatch import enabled as stt_cap_dispatch_enabled
+from config.stt_cap_dispatch import execution_admission_enabled as stt_cap_dispatch_enabled
 from utils.stt_cap_dispatch import LiveAdmission, current_live_admission, suppress_socket_audio
 from utils.observability.stt_cap_dispatch import record_audio as record_cap_audio
 from utils.manual_speaker_assignments import acknowledged_teaching
@@ -1246,7 +1246,7 @@ class ListenReceiver(ReplayFilterMixin):
     async def initialize_stt(self) -> bool:
         admission = getattr(self, 'cap_admission', None)
         if admission is not None:
-            await admission.refresh()
+            await admission.refresh(force=False)
             if not admission.allowed(self.host.stt_service):
                 admission.omi_selected = True
                 self.cap_paused = True

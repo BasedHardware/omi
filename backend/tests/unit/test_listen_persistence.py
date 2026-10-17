@@ -157,8 +157,8 @@ async def _completed():
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize('enforce,legacy,expected_reads', [(True, False, 1), (False, False, 0), (True, True, 0)])
-async def test_ladder_crossing_refreshes_within_one_usage_flush(monkeypatch, enforce, legacy, expected_reads):
+@pytest.mark.parametrize('enforce,legacy', [(True, False), (False, False), (True, True)])
+async def test_without_funded_admission_keeps_main_long_refresh(monkeypatch, enforce, legacy):
     from types import SimpleNamespace
     from unittest.mock import Mock
 
@@ -171,7 +171,7 @@ async def test_ladder_crossing_refreshes_within_one_usage_flush(monkeypatch, enf
         remaining_seconds_cache=None, remaining_seconds_cache_ts=100, remaining_seconds_cache_initialized=True
     )
     runtime.user_has_credits = True
-    # No dispatch admission: this also closes the gap when #21866 stays dark.
+    # Custom STT has no funded socket; it must not scan the ledger each minute.
     runtime.receiver = SimpleNamespace(cap_admission=None)
     reads = Mock(return_value=0)
 
@@ -192,8 +192,12 @@ async def test_ladder_crossing_refreshes_within_one_usage_flush(monkeypatch, enf
         await runtime._refresh_credits(transcription_seconds=10)
         if now < 160:
             reads.assert_not_called()
-    assert reads.call_count == expected_reads
-    assert runtime.user_has_credits is (expected_reads == 0)
+    reads.assert_not_called()
+    assert runtime.user_has_credits
+    monkeypatch.setattr(listen_runtime.time, 'time', lambda: 1000)
+    await runtime._refresh_credits(transcription_seconds=10)
+    reads.assert_called_once()
+    assert not runtime.user_has_credits
 
 
 @pytest.mark.anyio

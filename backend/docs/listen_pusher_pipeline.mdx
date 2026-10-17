@@ -24,40 +24,38 @@ the unflagged retry follows main's behavior.
 
 ## Ladder budget refresh and execution admission (default off)
 
-With `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED=true`, ladder/Free live sessions
-re-read the shared budget after every 60-second durable usage flush, including
-when `STT_CAP_DISPATCH_ENFORCEMENT` remains off. The existing subscription read
-selects the cadence; a funded admission snapshot is reused to avoid a second
-monthly-rollup scan on the same flush. Legacy accounts keep the 900-second cache and finite local
-debit. There is no per-audio-chunk I/O. With funded dispatch enabled, its shared
-live admission state obtains the ladder budget through the common allowance
-resolver rather than consulting legacy monthly seconds.
+With `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED=true`, funded ladder/Free live sessions
+install the shared provider admission state even when legacy dispatch remains off.
+It carries remaining units and debits accepted PCM at the pinned provider speech
+rate. A packet exceeding the estimate is suppressed while capture continues.
+There is no per-audio-chunk I/O. A full snapshot is refreshed at the existing
+60-second flush only when >=90% used or below two minutes at the maximum managed
+speech rate; otherwise it uses 900 seconds. Subscription invalidation forces a
+refresh. Custom STT without a funded socket keeps the 900-second cache.
 
-A budget crossing just after a refresh is detected on the next flush: about
-60 seconds of speech per live session, plus persistence/read latency. This is
-not a distributed reservation or a bound on concurrent already-admitted batch
-work; accepted provider queues can drain. Sync execution and each GPU ASR
-microbatch reauthorize even with the legacy dispatch flag off. Denied work uses
-the durable encrypted hold/defer and reset/upgrade recovery described above.
-Ladder-only execution activation bypasses legacy monthly-seconds dispatch.
+Near-cap external usage is detected within a 60-second flush plus persistence
+latency. Far from cap, concurrent external spending can remain unseen for 900
+seconds. This is not a distributed reservation; accepted provider queues and
+already-admitted batch work may drain. Sync execution and each GPU ASR microbatch
+reauthorize with the current ladder allowance. Exhausted uploads use durable
+holds instead of a ladder 402 or locked transcript; reset/upgrade recovery checks
+the current allowance again. Ladder-only activation bypasses legacy monthly seconds.
 
-Enforced ladder totals include unprojected transcription seconds priced as
-speech at rate-card v1's unknown-provider provisional rate, without a silence
-ratio. Missing-price/unknown-funding hourly leaves do not claim coverage;
-known BYOK/custom/on-device leaves remain excluded. Unprojected/unpriced gateway
-attempts use the provisional standard-chat quantity from the same rate card.
-These estimates are computed on read; no historical record is rewritten. Mixed
-hourly leaves with any missing price conservatively estimate the full leaf's
-seconds because historical rollups cannot split seconds by pricing status.
-Unknown attempt sizes and producers with no durable quantity remain measurement
-limitations, not proof of complete cost coverage.
+The month reader batches only elapsed day refs, never future days. For H hourly
+docs and D elapsed days its ledger reads/minute/session are (H+2D)/15 at 0% / 50%
+and H+2D at 95%, versus H+62 previously. See the account-inclusive read costs and
+custody response contract in [provider dispatch](stt-cap-dispatch.md#ladder-v1-admission-in-21488).
 
-`omi_ladder_unprojected_transcription_seconds` and
-`omi_ladder_unprojected_gateway_attempts` are histograms of the gaps observed
-per enforced budget evaluation (no user labels); repeated evaluations are not
-unique consumed usage. The completeness payload retains both residual counts.
-With ladder flags off, shadow totals and all #21866 dispatch behavior remain
-unchanged. No switch or deployment binding is activated by this change.
+Unprojected seconds receive the pinned provisional speech rate without a silence
+ratio; unpriced gateway attempts receive the standard-chat estimate. Atomic
+unpriced-quantity counters ensure each priced second/event is excluded from the
+residual even when its status is missing. Historical mixed leaves already carrying
+units cannot reconstruct exact quantities and are never charged a second time.
+Residual and historical ambiguity histograms (`omi_ladder_unprojected_*` and
+`omi_ladder_ambiguous_priced_*`) expose both limitations, without user labels or
+historical writes. Repeated evaluations are observations, not unique usage.
+With ladder flags off, shadow totals and #21866 dispatch behavior remain unchanged.
+No switch or deployment binding is activated.
 
 ## Windowed live transcription deadlines
 

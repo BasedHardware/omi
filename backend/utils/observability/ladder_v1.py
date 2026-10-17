@@ -25,6 +25,20 @@ UNPROJECTED_ATTEMPTS = _histogram(
 )
 
 
+AMBIGUOUS_SECONDS = _histogram(
+    'omi_ladder_ambiguous_priced_transcription_seconds',
+    'Historical mixed-status seconds already containing units without quantity attribution',
+    buckets=(0, 1, 60, 600, 3600, 18000, 90000),
+)
+AMBIGUOUS_ATTEMPTS = _histogram(
+    'omi_ladder_ambiguous_priced_gateway_attempts',
+    'Historical missing-status attempts in priced leaves without quantity attribution',
+    buckets=(0, 1, 10, 100, 1000, 10000),
+)
+
+
 def record_coverage(completeness: dict) -> None:
     UNPROJECTED_SECONDS.observe(completeness.get('unprojected_transcription_seconds', 0))
     UNPROJECTED_ATTEMPTS.observe(completeness.get('unprojected_gateway_attempts', 0))
+    AMBIGUOUS_SECONDS.observe(completeness.get('ambiguous_priced_transcription_seconds', 0))
+    AMBIGUOUS_ATTEMPTS.observe(completeness.get('ambiguous_priced_gateway_attempts', 0))

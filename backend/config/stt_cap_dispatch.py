@@ -8,5 +8,5 @@ def enabled() -> bool:
 
 
 def execution_admission_enabled() -> bool:
-    """Queued work must recheck ladder budgets even when legacy dispatch is dark."""
+    """Live and queued work enforce ladder budgets even when legacy dispatch is dark."""
     return enabled() or os.getenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false') == 'true'

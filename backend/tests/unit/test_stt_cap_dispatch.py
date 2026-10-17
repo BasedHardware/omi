@@ -233,7 +233,11 @@ def test_funded_dispatch_uses_ladder_budget_instead_of_legacy_seconds(monkeypatc
 
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(dispatch).lower())
     monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    monkeypatch.setattr(ladder_v1, 'budget_snapshot', lambda *a, **k: {'budget_percent': percent})
+    monkeypatch.setattr(
+        ladder_v1,
+        'budget_snapshot',
+        lambda *a, **k: {'budget_percent': percent, 'budget_units': 100, 'used_units': percent},
+    )
     monkeypatch.setattr(subscription, 'is_marketplace_reviewer', lambda _: False)
     monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda *a, **k: False)
     monkeypatch.setattr(subscription.users_db, 'get_user_valid_subscription', lambda _: SimpleNamespace(plan='plus'))
@@ -258,7 +262,9 @@ def test_ladder_only_execution_bypasses_legacy_dispatch_and_fails_closed_on_budg
 
 async def test_live_minute_refresh_stops_funded_audio_after_ladder_crossing(monkeypatch):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
-    allowance = SimpleNamespace(managed=True, remaining_seconds=None, reason='usage_budget_available')
+    allowance = SimpleNamespace(
+        managed=True, remaining_seconds=None, reason='usage_budget_available', remaining_units=None, budget_units=None
+    )
     monkeypatch.setattr(cap, 'funded_allowance', lambda *a: allowance)
 
     async def run(_executor, fn, *args):
@@ -271,8 +277,62 @@ async def test_live_minute_refresh_stops_funded_audio_after_ladder_crossing(monk
     # Crossing just after a flush permits at most the next minute's audio.
     for _ in range(60):
         state.send(raw, b'\0' * 32000, 'modulate', 16000)
-    allowance = SimpleNamespace(managed=False, remaining_seconds=0, reason='usage_budget_exhausted')
+    allowance = SimpleNamespace(
+        managed=False, remaining_seconds=0, reason='usage_budget_exhausted', remaining_units=0, budget_units=100
+    )
     await state.refresh()
     for _ in range(60):
         state.send(raw, b'\0' * 32000, 'modulate', 16000)
     assert raw.send.call_count == 60
+
+
+@pytest.mark.parametrize('percent,interval', [(0, 900), (50, 900), (95, 60)])
+@pytest.mark.parametrize('dispatch', [False, True])
+async def test_ladder_live_estimate_debits_locally_and_bounds_rescans(monkeypatch, percent, interval, dispatch):
+    from utils.transcription_allowance import TranscriptionAllowance
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(dispatch).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    now = [0]
+    monkeypatch.setattr(cap.time, 'monotonic', lambda: now[0])
+    budget = 100000
+    resolver = Mock(
+        return_value=TranscriptionAllowance(
+            'managed', None, 'usage_budget_available', remaining_units=budget * (1 - percent / 100), budget_units=budget
+        )
+    )
+    monkeypatch.setattr(cap, 'funded_allowance', resolver)
+
+    async def run(executor, fn, *args):
+        return fn(*args)
+
+    monkeypatch.setattr(cap, 'run_blocking', run)
+    state = cap.LiveAdmission('synthetic')
+    await state.refresh()
+    raw = Mock(send=Mock(return_value=True))
+    token = cap.current_live_admission.set(state)
+    try:
+        socket = await cap.live_provider('modulate', 0)(AsyncMock(return_value=raw))(16000)
+    finally:
+        cap.current_live_admission.reset(token)
+    before = state.remaining_units
+    for second in range(1, interval):
+        now[0] = second
+        socket.send(b'\0' * 32000)
+        await state.refresh(force=False)
+    assert state.remaining_units < before
+    assert resolver.call_count == 1
+    now[0] = interval
+    await state.refresh(force=False)
+    assert resolver.call_count == 2
+    # Local exhaustion suppresses every subsequent provider packet, including
+    # ladder-only activation with the legacy dispatch switch still dark.
+    state.remaining_units = cap._units_per_second('modulate') * 0.5
+    state.remaining = state.remaining_units / cap._units_per_second()
+    sent = raw.send.call_count
+    for _ in range(100):
+        socket.send(b'\0' * 32000)
+    assert raw.send.call_count == sent
+    assert state.reason == 'usage_budget_exhausted'
+    await state.refresh(force=True)  # Subscription invalidation bypasses cadence.
+    assert resolver.call_count == 3

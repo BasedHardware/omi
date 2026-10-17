@@ -2,7 +2,8 @@
 
 import logging
 import os
-from functools import wraps
+import time
+from functools import lru_cache, wraps
 from contextvars import ContextVar
 from typing import Any
 from utils.stt.socket import STTSocket
@@ -44,6 +45,8 @@ def funded_allowance(uid, source=None):
                 0 if exhausted else None,
                 'usage_budget_exhausted' if exhausted else 'usage_budget_available',
                 limit_seconds=None,
+                remaining_units=max(0, snapshot['budget_units'] - snapshot['used_units']),
+                budget_units=snapshot['budget_units'],
             )
         except Exception:
             return TranscriptionAllowance('on_device', 0, 'allowance_unavailable')
@@ -59,12 +62,19 @@ def sync_allowed(uid: str, seconds: float = 0, provider: Any = 'unknown') -> boo
     return allowance.managed
 
 
+@lru_cache(maxsize=16)
+def _units_per_second(provider='deepgram'):
+    from config.rate_card import price_transcription
+
+    return price_transcription(3600, provider=provider, accepted=True)['micro_units'] / 3_600_000_000
+
+
 class LiveAdmission:
     """One balance shared by every channel, replay and replacement in a session.
 
-    Refresh uses the existing usage flush cadence. Accepted packets debit the
-    finite snapshot locally, so no further packet starts after it reaches zero.
-    Provider queues already accepting audio remain free to drain.
+    Accepted packets debit a finite seconds or unit snapshot locally. Ladder
+    snapshots rescan only near the cap, on invalidation, or after 900 seconds;
+    legacy admission keeps main's flush cadence. Provider queues may drain.
     """
 
     def __init__(self, uid, source=None):
@@ -74,10 +84,29 @@ class LiveAdmission:
         self.managed = False
         self.held = []
         self.omi_selected = False
+        self.remaining_units = None
+        self.budget_units = None
+        self.refreshed_at = None
 
-    async def refresh(self):
+    def refresh_due(self):
+        if self.refreshed_at is None or self.remaining_units is None:
+            return True  # Preserve main's per-flush legacy admission refresh.
+        near = self.remaining_units <= 120 * _units_per_second() or (
+            self.budget_units is not None and self.remaining_units <= self.budget_units * 0.1
+        )
+        return time.monotonic() - self.refreshed_at >= (60 if near else 900)
+
+    async def refresh(self, *, force=True):
+        if not force and not self.refresh_due():
+            return
         allowance = await run_blocking(db_executor, funded_allowance, self.uid, self.source)
         self.remaining, self.reason, self.managed = allowance.remaining_seconds, allowance.reason, allowance.managed
+        self.remaining_units = allowance.remaining_units
+        self.budget_units = allowance.budget_units
+        self.refreshed_at = time.monotonic()
+        if self.remaining_units is not None:
+            # A conservative seconds equivalent for existing client warnings.
+            self.remaining = self.remaining_units / _units_per_second()
         if self.managed:
             for socket in list(self.held):
                 try:
@@ -102,11 +131,29 @@ class LiveAdmission:
             # Policy absorption is not a transport failure. The receive/archive
             # paths continue, and recovery must not fail over or close capture.
             return True
+        seconds = len(data) / (2 * rate)
+        unit_debit = (
+            seconds * _units_per_second(str(getattr(provider, 'value', provider)))
+            if self.remaining_units is not None and not customer_funded(provider)
+            else 0
+        )
+        if self.remaining_units is not None and unit_debit > self.remaining_units:
+            # Never overspend even for a large replay packet. Capture/archive
+            # owns these bytes independently; policy suppression is success.
+            self.remaining_units, self.remaining = 0, 0
+            self.reason = 'usage_budget_exhausted'
+            record_audio('live', 'suppressed', provider, seconds, False)
+            return True
         accepted = raw.send(data, *args, **kwargs)
         if accepted is not False and not customer_funded(provider):
             seconds = len(data) / (2 * rate)
             record_audio('live', 'accepted', provider, seconds, self.reason == 'plan_allowance_exhausted')
-            if self.remaining is not None:
+            if self.remaining_units is not None:
+                self.remaining_units = max(0, self.remaining_units - unit_debit)
+                self.remaining = self.remaining_units / _units_per_second()
+                if self.remaining_units == 0:
+                    self.reason = 'usage_budget_exhausted'
+            elif self.remaining is not None:
                 self.remaining = max(0, self.remaining - seconds)
                 if self.remaining == 0:
                     self.reason = 'plan_allowance_exhausted'
@@ -228,7 +275,7 @@ def live_provider(provider, rate_index):
     def decorate(fn):
         @wraps(fn)
         async def connect(*args, **kwargs):
-            admission = current_live_admission.get() if enabled() else None
+            admission = current_live_admission.get() if execution_admission_enabled() else None
             if admission is None:
                 return await fn(*args, **kwargs)
             rate = kwargs.get('sample_rate') or args[rate_index]

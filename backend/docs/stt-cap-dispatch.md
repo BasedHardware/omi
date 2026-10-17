@@ -14,8 +14,9 @@ Live receiver creation installs one funded admission state for the session.
 Actual Deepgram, Soniox, Modulate, Parakeet and window-provider constructors use
 that state, including direct registry endpoints and fallback/recovery legs.
 The state debits accepted PCM seconds across channels, replay and successors.
-The existing 60-second usage flush refreshes it from ordinary funded allowance;
-root counters retain their received-audio semantics. Timestamp adapters suppress
+The existing 60-second usage flush refreshes legacy funded allowance; ladder
+units use the bounded cadence below.
+Root counters retain their received-audio semantics. Timestamp adapters suppress
 before recording accepted-provider spans. Denial is a policy pause, not provider
 death: receiving, pusher audio and existing private-cloud/raw archive paths
 continue. Accepted provider queues drain. Nothing enables cloud audio retention
@@ -122,9 +123,9 @@ source and frozen pieces only after content/usage settlement.
 `reconciled_ingested`, `redispatched`, and `failed`. Structured
 `event=stt_cap_recovery_reconciliation` logs include hold id and piece name, never
 content. Metric labels contain no uid, hold id or piece name. New recovery and
-its signals are inert when the dispatch flag is off. WS-only and inactive
+its signals are inert when both dispatch and ladder enforcement are off. WS-only and inactive
 accounts wait for their next authenticated HTTP request; there is no new cron.
-Rolling back the dispatch flag pauses this new recovery, preserving its audio.
+Turning both admission switches off pauses recovery, preserving its audio.
 
 ## Launch configuration and measurement
 
@@ -152,11 +153,11 @@ Held sync quantities count durably retained audio; queue denials count attempted
 held quantities and can repeat across policy retries. They are not a distinct
 captured-content counter. Provider-internal retries/uncertain failures are not an
 exact vendor invoice ledger. Existing root counters and unit projections do not
-change, and no new provenance is emitted with the flag off.
+change, and no new provenance is emitted with both admission switches off.
 
 Admission checks are not distributed quota reservations. Concurrent already
-admitted work can drain across the cap; live refresh is bounded by its existing
-flush cadence. Do not interpret a zero violation metric as proof against every
+admitted work can drain across the cap; legacy live refresh uses its existing
+flush cadence; ladder refresh and local depletion are described below. Do not interpret a zero violation metric as proof against every
 cross-process admission race.
 
 ## What users see when the flag is on
@@ -179,9 +180,40 @@ cross-process admission race.
 These visible gaps and the change from locked transcripts to held audio are the
 activation decision for David; default-off deployment preserves today's policy.
 
-## Follow-ups in #21488
+## Ladder-v1 admission in #21488
 
-Findings #6 and #7 remain outside this PR: budget-aware live refresh when ladder
-allowance returns `remaining_seconds=None`, and conservative admission when usage
-unit projection has coverage gaps. Carry this funded-dispatch/held-audio contract
-into that ladder cutover without changing the legacy meter here.
+`LADDER_V1_BUDGET_ENFORCEMENT_ENABLED` independently installs the live provider
+suppression and sync hold/recovery paths. Ladder allowance comes from units;
+legacy accounts bypass dispatch when only the ladder switch is enabled. Both
+switches default off. Upload intake never raises the ladder budget 402: v1 holds
+the decoded capture before VAD; v2 archives/queues it and holds in the coordinator.
+Reset or upgrade recovery rechecks the current ladder budget before dispatch.
+
+Live sessions carry numeric remaining units, debited from accepted provider PCM
+at the pinned provider speech rate (silence is conservatively included). Shared
+channels, replacements and replay share this estimate. A packet exceeding the local estimate is suppressed; there is no packet-level I/O.
+Full snapshots refresh every 900 seconds, every 60 seconds below 10% remaining
+or two minutes at the maximum managed speech rate, and on subscription
+invalidation. The near-cap external-usage detection bound is one 60-second
+flush plus persistence latency; this is not a cross-session quota reservation.
+Concurrent spending far from the local estimate can remain unseen for 900 seconds.
+
+For H hourly docs and D elapsed UTC days, a ladder snapshot reads H + 2D docs
+in one hourly query plus one batched day RPC, with no future-day reads. The
+existing account/invalidation lookups are separate. Against the former monthly
+H + 62 day reads every minute, steady-state usage-ledger reads per session/minute
+are (H + 2D)/15 at 0% and 50%, and H + 2D at 95%. On October 17 these are
+(H + 34)/15, (H + 34)/15 and H + 34. Batching reduces RPCs, not billed doc reads.
+Including the two subscription/account lookups (one per minute, one per scan),
+the uncached ladder-only path is 1 + (H + 2D + 1)/15 away from cap, H + 2D + 2 near cap;
+Redis invalidation/fair-use operations are outside these Firestore doc totals.
+At H=408 and D=17 this is 30.53 / 30.53 / 444 versus the old 472 at each level.
+No month aggregate cache hides late-arriving usage or corrections.
+
+Hourly/day writers atomically record unpriced counter seconds/events separately
+from status counts. Only zero-unit missing quantities receive a residual proxy;
+missing annotations with nonzero units are already charged. Historical mixed
+leaves without quantity attribution cannot be reconstructed exactly: quantities
+in leaves containing priced units are never priced a second time. Coverage
+metrics report residual quantities and ambiguous historical mixed leaves separately.
+Unknown historical attribution remains a coverage limitation, not a reason to double-bill.

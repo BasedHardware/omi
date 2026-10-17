@@ -1783,6 +1783,8 @@ def resolve_transcription_allowance(
                 0 if exhausted else None,
                 'usage_budget_exhausted' if exhausted else 'usage_budget_available',
                 limit_seconds=None,
+                remaining_units=max(0, ladder_budget['budget_units'] - ladder_budget['used_units']),
+                budget_units=ladder_budget['budget_units'],
             )
         allowance = transcription_allowance_seconds(subscription.plan)
         known_limit_seconds = allowance

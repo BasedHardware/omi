@@ -133,6 +133,12 @@ def hourly_shadow(updates: Mapping[str, Any], metadata: Mapping[str, Any] | None
             priced['reasons'].append('initial_vad_counter_ratio_estimate')
     leaf = _leaf(priced, provider=provider, source=source)
     leaf['legacy_counter_seconds'] = firestore.Increment(elapsed or 0)
+    leaf['quantity_attributed_seconds'] = firestore.Increment(elapsed or 0)
+    # Status alone is not coverage: a missing annotation can still carry priced
+    # units. Persist disjoint unpriced quantities in the same atomic increment.
+    leaf['unpriced_counter_seconds'] = firestore.Increment(
+        (elapsed or 0) if priced['status'] == 'missing' and not priced['micro_units'] else 0
+    )
     if 'accepted_speech_seconds' in priced:
         leaf['accepted_speech_seconds'] = firestore.Increment(priced['accepted_speech_seconds'])
     lane = (
@@ -175,6 +181,10 @@ def gateway_shadow(data: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, A
     if provider not in {'openai', 'gemini', 'anthropic', 'perplexity', 'openrouter'}:
         provider = 'unknown'
     leaf = _leaf(priced, provider=provider, source='gateway_attempt')
+    leaf['quantity_attributed_events'] = firestore.Increment(1)
+    leaf['unpriced_events'] = firestore.Increment(
+        1 if priced['status'] == 'missing' and not priced['micro_units'] else 0
+    )
     features = {feature: {'funding': {funding: leaf}}}
     if feature == 'web_search':
         # Each vendor synthesis attempt is a web request; retries remain separate infra attempts.
@@ -214,14 +224,30 @@ def normalize_plan_usage(data: Mapping[str, Any]) -> dict[str, Any]:
     return plans
 
 
+def _covered_quantity(leaf, funding, quantity, unpriced, enforcing):
+    total = float(leaf.get(quantity, 0))
+    if not enforcing or funding in EXCLUDED_FUNDING:
+        return total
+    if unpriced in leaf:
+        return max(0, total - float(leaf[unpriced]))
+    # Old aggregates cannot split mixed statuses. Never re-price quantities
+    # whose leaf already contains units: that would double-bill historical
+    # priced events. Missing zero-unit legacy leaves remain fully uncovered.
+    if leaf.get('micro_units', 0):
+        return total
+    if funding == 'omi' and not leaf.get('status_counts', {}).get('missing', 0):
+        return total
+    return 0
+
+
 def get_usage_units(
     uid: str, period: datetime, *, firestore_client: Any | None = None, entitlements: Mapping[str, Any] | None = None
 ) -> dict[str, Any]:
     """Read one UTC calendar month; annual plans still use monthly budgets.
 
     period selects the month. Uses one existing year/month query and at most
-    31 direct day-rollup reads; never scans immutable attempts. Missing records
-    and known producer gaps make this a lower-bound shadow total. Flagged ladder
+    two day-rollups per elapsed day in one batched RPC, without immutable attempt
+    scans. Missing records and known producer gaps make this a lower-bound shadow total. Flagged ladder
     enforcement adds conservative residual-second and attempt estimates in memory;
     legacy and flag-off reads retain the shadow-only total.
     """
@@ -244,6 +270,8 @@ def get_usage_units(
     missing_days = 0
     missing_attempts = 0
     missing_seconds = 0.0
+    ambiguous_seconds = 0.0
+    ambiguous_attempts = 0
     lane_totals: dict[str, int] = {}
     lane_seconds: dict[str, float] = {}
     lane_accepted: dict[str, int] = {}
@@ -276,12 +304,15 @@ def get_usage_units(
                 lane_seconds[lane] = lane_seconds.get(lane, 0) + float(values.get('speech_seconds', 0))
                 lane_accepted[lane] = lane_accepted.get(lane, 0) + int(values.get('accepted_events', 0))
             covered = sum(
-                float(leaf.get('legacy_counter_seconds', 0))
+                _covered_quantity(leaf, funding, 'legacy_counter_seconds', 'unpriced_counter_seconds', enforcing)
                 for funding, leaf in features.get('transcription', {}).get('funding', {}).items()
-                if not enforcing
-                or funding in EXCLUDED_FUNDING
-                or funding == 'omi'
-                and not leaf.get('status_counts', {}).get('missing', 0)
+            )
+            ambiguous_seconds += sum(
+                max(0, float(leaf.get('legacy_counter_seconds', 0)) - float(leaf.get('quantity_attributed_seconds', 0)))
+                for funding, leaf in features.get('transcription', {}).get('funding', {}).items()
+                if funding not in EXCLUDED_FUNDING
+                and leaf.get('micro_units', 0)
+                and leaf.get('status_counts', {}).get('missing', 0)
             )
             residual = max(float(data.get('transcription_seconds', 0)) - covered, 0)
             missing_seconds += residual
@@ -291,30 +322,47 @@ def get_usage_units(
             missing_hourly += 1
             missing_seconds += float(data.get('transcription_seconds', 0))
     hashed = hashlib.sha256(uid.encode()).hexdigest()[:16]
+    # Batch explicit day refs in one RPC. Missing docs still cost a read, so
+    # never request future dates (including the future tail of this month).
+    through = min(
+        end, datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    )
+    days = []
     day = start
-    while day < end:
-        snap = (
-            client.collection('llm_gateway_user_days')
-            .document(f'{day.date().isoformat()}_{hashed}')
-            .get(['shadow_v1', 'attempts'])
-        )
-        data = snap.to_dict() or {}
+    while day < through:
+        days.append(day.date().isoformat())
+        day += timedelta(days=1)
+    refs = [client.collection('llm_gateway_user_days').document(f'{day}_{hashed}') for day in days]
+    if entitlements['entitlement_version'] == 'ladder_v1':
+        refs.extend(user.collection('ladder_v1_api_days').document(day) for day in days)
+    documents = (
+        {
+            snap.id: snap.to_dict() or {}
+            for snap in client.get_all(refs, field_paths=['shadow_v1', 'attempts', 'micro_units', 'requests'])
+        }
+        if refs
+        else {}
+    )
+    for day in days:
+        data = documents.get(f'{day}_{hashed}', {})
         shadow = data.get('shadow_v1')
         projected = 0
         if isinstance(shadow, Mapping):
             for hour in shadow.get('hours', {}).values():
                 features = hour.get('features', {})
                 consume(features)
-                projected += sum(
-                    (
-                        int(leaf.get('events', 0))
-                        if not enforcing or funding in EXCLUDED_FUNDING
-                        else (
-                            max(0, int(leaf.get('events', 0)) - int(leaf.get('status_counts', {}).get('missing', 0)))
-                            if funding == 'omi'
-                            else 0
-                        )
+                ambiguous_attempts += sum(
+                    min(
+                        int(leaf.get('status_counts', {}).get('missing', 0)),
+                        max(0, int(leaf.get('events', 0)) - int(leaf.get('quantity_attributed_events', 0))),
                     )
+                    for feature, row in features.items()
+                    if feature != 'web_search_tool'
+                    for funding, leaf in row.get('funding', {}).items()
+                    if funding not in EXCLUDED_FUNDING and leaf.get('micro_units', 0)
+                )
+                projected += sum(
+                    _covered_quantity(leaf, funding, 'events', 'unpriced_events', enforcing)
                     for feature, row in features.items()
                     if feature != 'web_search_tool'
                     for funding, leaf in row.get('funding', {}).items()
@@ -325,13 +373,7 @@ def get_usage_units(
             missing_attempts += residual
         # New daily API quantities are priced separately from tool/model attempts.
         if entitlements['entitlement_version'] == 'ladder_v1':
-            api = (
-                user.collection('ladder_v1_api_days')
-                .document(day.date().isoformat())
-                .get(['micro_units', 'requests'])
-                .to_dict()
-                or {}
-            )
+            api = documents.get(day, {})
             if api.get('micro_units'):
                 consume(
                     {
@@ -345,7 +387,6 @@ def get_usage_units(
                         }
                     }
                 )
-        day += timedelta(days=1)
     if enforcing:
         # Treat every residual second as speech at the pinned unknown-provider
         # provisional rate. Do not apply the historical elapsed/silence ratio.
@@ -375,6 +416,8 @@ def get_usage_units(
             'unprojected_gateway_days': missing_days,
             'unprojected_gateway_attempts': missing_attempts,
             'unprojected_transcription_seconds': missing_seconds,
+            'ambiguous_priced_transcription_seconds': ambiguous_seconds,
+            'ambiguous_priced_gateway_attempts': ambiguous_attempts,
             'coverage_gaps': list(COVERAGE_GAPS),
         },
         'entitlement_version': entitlements['entitlement_version'],

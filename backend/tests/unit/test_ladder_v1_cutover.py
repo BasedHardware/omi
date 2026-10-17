@@ -507,7 +507,11 @@ def test_chat_pause_payload_is_only_flagged_exhausted_ladder(monkeypatch, cap_pr
 
 @pytest.mark.parametrize('percent', [0, 80, 99.99])
 def test_chat_below_shared_budget_still_allowed(monkeypatch, percent):
-    monkeypatch.setattr(ladder, 'budget_snapshot', lambda *a, **k: {'budget_percent': percent})
+    monkeypatch.setattr(
+        ladder,
+        'budget_snapshot',
+        lambda *a, **k: {'budget_percent': percent, 'budget_units': 100, 'used_units': percent},
+    )
     assert ladder.enforce_chat_budget('u') is True
 
 

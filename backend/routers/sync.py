@@ -1,4 +1,3 @@
-from utils import ladder_v1
 from utils.observability.sync_phases import sync_attempt, set_sync_metrics_lane
 import asyncio
 import json
@@ -601,8 +600,6 @@ async def sync_local_files(
             base_headers=_V1_DEPRECATION_HEADERS,
         )
 
-    await run_blocking(db_executor, ladder_v1.enforce_budget, uid)
-
     # Legacy exhaustion retains the installed-client path below.
 
     # A lookup failure must not durably lock: unlike gating the live listen socket, nothing
@@ -684,7 +681,8 @@ async def sync_local_files(
                 content={
                     'new_memories': [],
                     'updated_memories': [],
-                    'credits_exhausted': cap_admission.get('reason') == 'plan_allowance_exhausted',
+                    'credits_exhausted': cap_admission.get('reason')
+                    in {'plan_allowance_exhausted', 'usage_budget_exhausted'},
                     'held_audio': True,
                     'held_files': len(wav_paths),
                 },
@@ -1106,8 +1104,6 @@ async def sync_local_files_v2(
             request_id=x_request_id if isinstance(x_request_id, str) else None,
             cloud_trace_context=x_cloud_trace_context if isinstance(x_cloud_trace_context, str) else None,
         )
-
-    await run_blocking(db_executor, ladder_v1.enforce_budget, uid)
 
     # A lookup failure must not durably lock: unlike gating the live listen socket, nothing
     # routinely re-checks is_locked later, so a transient blip would paywall it forever (#15232).

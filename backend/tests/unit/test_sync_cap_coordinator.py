@@ -66,7 +66,7 @@ async def test_full_hold_contains_only_wal_audio_not_already_committed(coordinat
     )
     writer = _ledger(pipeline, monkeypatch)
     monkeypatch.setattr(
-        cap_hold, 'funded_allowance', lambda uid: SimpleNamespace(managed=False, reason='plan_allowance_exhausted')
+        cap_hold, 'funded_allowance', lambda uid: SimpleNamespace(managed=False, reason='usage_budget_exhausted')
     )
     retained = []
 
