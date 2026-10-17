@@ -238,7 +238,9 @@ class PipelineWorker:
         self._unavailable = False
         self.counts = {'items': 0, 'reused_live': 0, 'silence': 0, 'failed': 0}
 
-    def process_batch(self, items: Sequence[WorkItem], *, authorize_dispatch=None) -> Sequence[WorkResult | HeldWork]:
+    def process_batch(
+        self, items: Sequence[WorkItem], *, authorize_dispatch=None
+    ) -> Sequence[WorkResult | HeldWork | RecoveryWork]:
         if len(items) > 32 or len({i.segment_id for i in items}) != len(items):
             raise ValueError('pull must contain at most 32 distinct conversations')
         if any(item.duration_seconds > self.config.max_unit_seconds for item in items):
