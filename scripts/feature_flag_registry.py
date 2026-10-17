@@ -34,6 +34,8 @@ SWIFT_HARDCODED = re.compile(
 DART_DEFINITION = re.compile(r"\bExperimentDefinition(?:<[^>]+>)?\s*\(\s*key\s*:\s*['\"]([^'\"\n]+)['\"]")
 DART_MASTER = re.compile(r"\benabledFlag\s*=\s*['\"]([^'\"\n]+)['\"]")
 BUILD_DEFINE = re.compile(r"\b(?:import\.meta\.env\.VITE_ENABLE_|process\.env\.NEXT_PUBLIC_ENABLE_)([A-Z0-9_]+)")
+# Static pages served into the mobile webview (web/paywall) read PostHog flags by a *_FLAG_KEY constant.
+WEB_PAGE_FLAG = re.compile(r"\b[A-Z_]*FLAG_KEY\s*=\s*['\"]([^'\"\n]+)['\"]")
 # Cataloged server-side Node switches are runtime env reads, not build defines.
 # Restrict discovery to known names so this does not re-inventory every legacy
 # private Node setting while registering a new runtime switch.
@@ -179,6 +181,8 @@ def relevant_code(path: str) -> bool:
         or path.startswith(("web/", "desktop/windows/src/"))
         and path.endswith((".ts", ".tsx"))
         and "/generated/" not in path.lower()
+        or path.startswith("web/paywall/")
+        and path.endswith((".js", ".html"))
     )
 
 
@@ -284,7 +288,9 @@ def extract_code_reads(root: Path, known: set[str]) -> list[Read]:
             patterns = (
                 (SWIFT_FLAG, SWIFT_LITERAL, SWIFT_HEADER)
                 if path.endswith(".swift")
-                else (DART_DEFINITION, DART_MASTER) if path.endswith(".dart") else (BUILD_DEFINE, NODE_RUNTIME_ENV)
+                else (DART_DEFINITION, DART_MASTER)
+                if path.endswith(".dart")
+                else (WEB_PAGE_FLAG,) if path.startswith("web/paywall/") else (BUILD_DEFINE, NODE_RUNTIME_ENV)
             )
             for pattern in patterns:
                 for match in pattern.finditer(text):

@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Omi Unlimited</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#fff; --ink:#0b0b0c; --text2:#5a5b62; --text3:#8c8d94; --card:#f4f4f6; --line:#0000001a; --badge-bg:#d9f2e1; --badge-ink:#146c3a; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; background:var(--bg); color:var(--ink); font-family:Manrope,-apple-system,BlinkMacSystemFont,system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+  button { font:inherit; color:inherit; }
+  .close { position:fixed; z-index:20; top:calc(env(safe-area-inset-top) + 8px); right:16px; width:34px; height:34px; border:0; border-radius:50%; background:#7a7a7a26; -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); display:flex; align-items:center; justify-content:center; padding:0; }
+  .close svg { width:24px; height:24px; opacity:.5; }
+  main { padding:calc(env(safe-area-inset-top) + 56px) 24px 300px; display:flex; flex-direction:column; gap:20px; }
+  .top { display:flex; flex-direction:column; align-items:center; }
+  .top img { width:76px; height:96px; object-fit:contain; }
+  .eyebrow { padding-top:8px; font-size:12px; letter-spacing:1.7px; text-transform:uppercase; color:var(--text3); font-weight:700; }
+  h1 { margin:0; padding-top:10px; font-size:30px; line-height:1.08; letter-spacing:-1.1px; font-weight:800; text-align:center; }
+  .benefits { background:var(--card); border-radius:20px; padding:20px; display:flex; flex-direction:column; gap:18px; }
+  .benefit { display:flex; gap:14px; align-items:flex-start; }
+  .tick { width:24px; height:24px; border-radius:12px; background:var(--ink); flex:none; display:flex; align-items:center; justify-content:center; }
+  .tick svg { width:14px; height:14px; }
+  .benefit b { display:block; font-size:16px; line-height:1.35; font-weight:700; }
+  .benefit span { display:block; margin-top:2px; font-size:14px; line-height:1.45; color:var(--text2); }
+  footer { position:fixed; z-index:10; left:0; right:0; bottom:0; background:var(--bg); padding:16px 16px max(24px, env(safe-area-inset-bottom)); }
+  footer::before { content:""; position:absolute; top:-48px; left:0; right:0; height:48px; background:linear-gradient(180deg, #ffffff00 0%, #fff 100%); pointer-events:none; }
+  .plans { padding-top:10px; display:flex; flex-direction:column; gap:10px; }
+  .plan { position:relative; height:64px; border:1px solid var(--line); border-radius:14px; background:#fff; padding:0 56px 0 16px; display:flex; flex-direction:column; justify-content:center; align-items:flex-start; gap:2px; cursor:pointer; transition:all .2s cubic-bezier(.4,0,.2,1); text-align:left; width:100%; }
+  .plan.selected { border-color:var(--ink); box-shadow:0 8px 16px rgba(0,0,0,.1); }
+  .plan .name { font-size:16px; font-weight:700; text-transform:uppercase; }
+  .plan .sub { font-size:13px; font-weight:500; color:var(--text2); }
+  .plan .price { position:absolute; right:54px; top:20px; font-size:17px; letter-spacing:-.4px; font-weight:800; }
+  .check { position:absolute; top:18px; right:16px; width:26px; height:26px; border-radius:50%; border:1px solid var(--line); background:#fff; display:flex; align-items:center; justify-content:center; }
+  .check svg { width:16px; height:16px; opacity:0; }
+  .plan.selected .check { background:var(--ink); }
+  .plan.selected .check svg { opacity:1; }
+  .badge { position:absolute; top:-10px; right:16px; padding:3px 8px; border-radius:999px; border:2px solid #fff; background:var(--badge-bg); color:var(--badge-ink); font-size:9px; line-height:12px; letter-spacing:.7px; font-weight:800; }
+  .cta { position:relative; overflow:hidden; margin-top:16px; width:100%; height:56px; border:0; border-radius:999px; background:var(--ink); color:#fff; font-size:17px; font-weight:700; }
+  .cta:disabled { opacity:.35; }
+  .cta svg { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  .caption { padding-top:12px; text-align:center; font-size:12px; font-weight:500; color:var(--text3); }
+  .legal { display:flex; gap:16px; justify-content:center; padding-top:8px; font-size:12px; }
+  .legal a { color:var(--text2); text-decoration:underline; text-underline-offset:2px; }
+  .hidden { display:none !important; }
+</style>
+<script>window.omiTrack = window.omiExposure = function () {}; // replaced by track.js; the page works without it</script>
+<script>window.OMI_PAYWALL_VERSION = 'benefits';</script>
+<script src="/track.js"></script>
+</head>
+<body>
+  <button class="close" id="free" type="button" aria-label="Use Free Plan">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="#0b0b0c" stroke-width="2.2" stroke-linecap="round"/></svg>
+  </button>
+  <main>
+    <div class="top">
+      <img src="/omi-pendant-front.webp" alt="" onerror="this.remove()">
+      <div class="eyebrow">Omi Unlimited</div>
+      <h1>Never forget a conversation again.</h1>
+    </div>
+    <div class="benefits">
+      <div class="benefit"><div class="tick"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div><b>Record without limits</b><span>Every meeting, call and chat, captured. No monthly cap.</span></div></div>
+      <div class="benefit"><div class="tick"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div><b>Ask anything, get answers</b><span>“What did Sam say about the launch?” Up to 1,000 questions a month.</span></div></div>
+      <div class="benefit"><div class="tick"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div><b>Notes that write themselves</b><span>A summary and action items after every conversation.</span></div></div>
+      <div class="benefit"><div class="tick"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div><b>Phone calls, covered</b><span>Live transcripts and recaps for every call you make.</span></div></div>
+    </div>
+  </main>
+  <footer>
+    <div class="plans">
+      <button class="plan" id="yearly" data-interval="year" type="button">
+        <span class="badge">BEST VALUE</span>
+        <span class="name">Yearly</span>
+        <span class="sub" id="yearly-sub"></span>
+        <span class="price" id="yearly-price"></span>
+        <span class="check"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      </button>
+      <button class="plan" id="monthly" data-interval="month" type="button">
+        <span class="name">Monthly</span>
+        <span class="sub">Flexible, cancel anytime</span>
+        <span class="price" id="monthly-price"></span>
+        <span class="check"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      </button>
+    </div>
+    <button class="cta" id="cta" type="button">Unlock Omi Unlimited
+      <svg viewBox="0 0 358 56" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".32"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><rect y="-20" width="70" height="96" fill="url(#g)" transform="skewX(-20)"><animate attributeName="x" values="-140;-140;460" keyTimes="0;0.45;1" dur="3.2s" repeatCount="indefinite"/></rect></svg>
+    </button>
+    <div class="caption" id="caption">Billed today. Renews automatically. Cancel anytime.</div>
+    <div class="legal"><a href="https://www.omi.me/pages/terms-of-service">Terms of Service</a><a href="https://www.omi.me/pages/privacy">Privacy Policy</a></div>
+  </footer>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  var selected = 'year';
+  function send(msg) {
+    var channel = window.OmiPaywall;
+    if (channel && channel.postMessage) channel.postMessage(JSON.stringify(msg));
+    else console.log('[OmiPaywall]', JSON.stringify(msg));
+  }
+  function money(minor, currency) {
+    try { return new Intl.NumberFormat(q.get('locale') || 'en-US', { style: 'currency', currency: (currency || 'usd').toUpperCase() }).format(minor / 100); }
+    catch (e) { return '$' + (minor / 100).toFixed(2); }
+  }
+  function $(id) { return document.getElementById(id); }
+
+  // Prices come from the app (the plan catalog), never from this page.
+  var year = q.get('year_amount') ? parseInt(q.get('year_amount'), 10) : null;
+  var month = q.get('month_amount') ? parseInt(q.get('month_amount'), 10) : null;
+  if (year != null) {
+    var yc = q.get('year_currency');
+    $('yearly-price').textContent = money(year, yc) + '/yr';
+    $('yearly-sub').textContent = 'Just ' + money(Math.round(year / 12), yc) + '/mo, billed yearly';
+  } else { $('yearly').classList.add('hidden'); selected = 'month'; }
+  if (month != null) $('monthly-price').textContent = money(month, q.get('month_currency')) + '/mo';
+  else $('monthly').classList.add('hidden');
+  if (year == null && month == null) { $('cta').disabled = true; $('caption').textContent = 'Unable to load plans'; }
+
+  function render() {
+    ['yearly', 'monthly'].forEach(function (id) {
+      var el = $(id);
+      el.classList.toggle('selected', el.dataset.interval === selected);
+    });
+  }
+  ['yearly', 'monthly'].forEach(function (id) {
+    $(id).addEventListener('click', function () {
+      selected = this.dataset.interval; render();
+      omiTrack('Web Paywall Plan Selected', { interval: selected });
+    });
+  });
+  $('cta').addEventListener('click', function () {
+    this.disabled = true;
+    omiTrack('Web Paywall Checkout Tapped', { interval: selected });
+    send({ type: 'checkout', interval: selected });
+  });
+  $('free').addEventListener('click', function () {
+    omiTrack('Web Paywall Dismissed', { step: 1 });
+    send({ type: 'free' });
+  });
+  window.OmiPaywallHost = {
+    onCheckout: function (outcome) {
+      omiTrack('Web Paywall Checkout Result', { interval: selected, outcome: outcome });
+      $('cta').disabled = false;
+      // The app shows its own message when checkout fails; "unavailable" means it had no plan to sell.
+      if (outcome === 'unavailable') $('caption').textContent = "Couldn't start checkout. Please try again in a moment.";
+    },
+    onRestore: function () {}
+  };
+  render();
+  Array.prototype.forEach.call(document.querySelectorAll('.legal a'), function (a) {
+    a.addEventListener('click', function () { omiTrack('Web Paywall Legal Tapped', { link: /privacy/.test(a.href) ? 'privacy' : 'terms' }); });
+  });
+  var scrolled = false;
+  window.addEventListener('scroll', function () {
+    if (scrolled || window.scrollY < 40) return;
+    scrolled = true;
+    omiTrack('Web Paywall Scrolled', {});
+  }, { passive: true });
+  window.omiStep = function () { return 1; };
+  omiExposure();
+  omiTrack('Web Paywall Viewed', { has_prices: year != null || month != null, default_interval: selected, load_ms: Math.round(performance.now()) });
+  send({ type: 'ready' });
+})();
+</script>
+</body>
+</html>
