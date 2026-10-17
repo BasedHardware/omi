@@ -107,3 +107,7 @@ def recover_all_admitted() -> bool:
 
 def recovery_enabled_for(owner_id: str) -> bool:
     return recover_all_admitted() or owner_id in recovery_owners()
+
+
+def projection_contention_enabled() -> bool:
+    return os.getenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'false').strip().lower() == 'true'
