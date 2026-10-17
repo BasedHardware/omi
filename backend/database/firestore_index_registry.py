@@ -334,6 +334,14 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION',
         (_asc('completed'), _asc('conversation_id'), _asc('due_at'), _asc('__name__')),
     ),
+    # GET /v1/action-items?conversation_id=...&completed=... orders undated
+    # action items created_at newest-first in the two-stream pagination design (#21225).
+    FirestoreIndexRequirement(
+        'action_items_completed_conversation_created_newest_first',
+        'action_items',
+        'COLLECTION',
+        (_asc('completed'), _asc('conversation_id'), _desc('created_at'), _desc('__name__')),
+    ),
     FirestoreIndexRequirement(
         'candidate_integration_outbox_generation_status',
         'candidate_integration_outbox',
