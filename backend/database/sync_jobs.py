@@ -287,8 +287,17 @@ def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bo
     # direct Cloud Tasks dispatch-stale threshold for a heavy account.
     if job.get('dispatch_mode') == 'sequenced':
         return False
+    reference_time = time.time() if now is None else now
     status = job.get('status')
     if status == 'processing':
+        # A budget-expired Cloud Tasks attempt keeps the job processing under
+        # its preserved run lock and schedules its own replacement past that
+        # lock's TTL (routers/sync.py). The silence until the replacement is
+        # due is planned, not a lost owner; a poll in the unlocked gap must
+        # not finalize it.
+        deferred_until = job.get('deferred_until')
+        if isinstance(deferred_until, (int, float)) and reference_time < deferred_until:
+            return False
         threshold = STALE_THRESHOLD_SECONDS
     elif (
         status == 'queued'
@@ -302,7 +311,6 @@ def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bo
     updated_at = job.get('updated_at') or job.get('created_at')
     if not isinstance(updated_at, (int, float)):
         return False
-    reference_time = time.time() if now is None else now
     return reference_time - updated_at > threshold
 
 

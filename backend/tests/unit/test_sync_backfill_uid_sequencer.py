@@ -1309,3 +1309,53 @@ def test_guard_independent_of_old_retirement_switch(retirement, monkeypatch):
     _register('a', 'live', 1, db=retirement)
     assert uid_sequencer._claim_next('a')['job_id'] == 'live'
     assert retirement.docs[(sync_redrive.COLLECTION, 'expired')]['status'] == 'redrive_required'
+
+
+def test_budget_deferral_count_survives_lease_expiry_redrive(db):
+    """A budget-deferred sequenced job redrives from the owner's original
+    ``active_payload``, which carries no chain count: without the owner-side
+    copy persisted at deferral time, every lease-expiry redrive would restart
+    ``budget_deferrals`` at zero and an over-budget job could defer forever."""
+    _register('a', 'job', 0, db=db)
+    first = registry.claim_next('a', firestore_client=db, now=NOW)
+    assert registry.begin_job('a', 'job', first['epoch'], firestore_client=db, now=NOW)
+    assert first['payload'].get(registry.BUDGET_DEFERRALS_PAYLOAD_KEY) is None
+
+    # The handler defers the attempt (e.g. second whole-budget expiry) and
+    # persists the incremented count on the running owner.
+    registry.note_budget_deferral('a', 'job', first['epoch'], 2, firestore_client=db, now=NOW)
+
+    # Lease expires before the delayed replacement begins; the sweep's redrive
+    # must re-attach the persisted count to the epoch-original payload.
+    redriven = registry.redrive_job('a', 'job', first['epoch'], firestore_client=db, now=NOW + timedelta(minutes=35))
+    assert redriven is not None
+    assert redriven['payload'][registry.BUDGET_DEFERRALS_PAYLOAD_KEY] == 2
+    # The stored owner payload itself stays untouched: the count rides the
+    # owner field, not a mutation of the durable original payload.
+    owner = registry.get_owner('a', firestore_client=db)
+    assert owner['active_payload'].get(registry.BUDGET_DEFERRALS_PAYLOAD_KEY) is None
+    assert owner['active_budget_deferrals'] == 2
+
+
+def test_note_budget_deferral_is_inert_for_released_or_mismatched_owner(db):
+    """The owner write is epoch-fenced and must not resurrect an owner a
+    completion has already released, nor pin a count to a different epoch."""
+    _register('a', 'job', 0, db=db)
+    _register('a', 'next', 60, db=db)
+    first = registry.claim_next('a', firestore_client=db, now=NOW)
+    assert first['job_id'] == 'job'
+    assert registry.begin_job('a', 'job', first['epoch'], firestore_client=db, now=NOW)
+    assert registry.finish_job('a', 'job', first['epoch'], 'completed', firestore_client=db, now=NOW)
+
+    registry.note_budget_deferral('a', 'job', first['epoch'], 3, firestore_client=db, now=NOW)
+
+    owner = registry.get_owner('a', firestore_client=db)
+    assert 'active_budget_deferrals' not in owner
+    assert 'active_job_id' not in owner
+
+    # An epoch mismatch on a live owner is equally inert.
+    second = registry.claim_next('a', firestore_client=db, now=NOW)
+    assert second is not None
+    assert registry.begin_job('a', second['job_id'], second['epoch'], firestore_client=db, now=NOW)
+    registry.note_budget_deferral('a', second['job_id'], second['epoch'] + 5, 4, firestore_client=db, now=NOW)
+    assert 'active_budget_deferrals' not in registry.get_owner('a', firestore_client=db)
