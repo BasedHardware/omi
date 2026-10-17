@@ -229,3 +229,34 @@ class AvailableLanguage(BaseModel):
 
 class AvailableLanguagesResponse(BaseModel):
     languages: List[AvailableLanguage]
+
+
+CUSTOM_INSTRUCTIONS_MAX_LENGTH = 1500
+
+
+def sanitize_custom_instruction_text(value: Optional[str]) -> str:
+    """Normalize user-authored custom instruction text.
+
+    Strips leading/trailing whitespace, normalizes CRLF to LF, and removes ASCII
+    control characters (except newlines and tabs) so stored instructions are
+    clean and bounded across clients.
+    """
+    if not value:
+        return ''
+    normalized = value.replace('\r\n', '\n').replace('\r', '\n')
+    cleaned = ''.join(ch for ch in normalized if ch in ('\n', '\t') or (ord(ch) >= 32 and ord(ch) != 127))
+    return cleaned.strip()
+
+
+class UpdateCustomInstructionsRequest(BaseModel):
+    enabled: Optional[bool] = None
+    about_me: Optional[str] = Field(default=None, max_length=CUSTOM_INSTRUCTIONS_MAX_LENGTH)
+    response_style: Optional[str] = Field(default=None, max_length=CUSTOM_INSTRUCTIONS_MAX_LENGTH)
+
+
+class CustomInstructionsResponse(BaseModel):
+    enabled: bool = True
+    about_me: str = Field(default='', max_length=CUSTOM_INSTRUCTIONS_MAX_LENGTH)
+    response_style: str = Field(default='', max_length=CUSTOM_INSTRUCTIONS_MAX_LENGTH)
+    updated_at: Optional[datetime] = None
+

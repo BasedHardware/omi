@@ -1546,6 +1546,7 @@ async def execute_agentic_chat_stream(
     setup_deadline_at: Optional[float] = None,
     device_tool_names: Optional[set] = None,
     shaped_invocation: bool = False,
+    custom_instructions_enabled: Optional[bool] = None,
 ) -> AsyncGenerator[str, None]:
     """Execute an agentic chat interaction with streaming.
 
@@ -1594,8 +1595,21 @@ async def execute_agentic_chat_stream(
             tz = tz or await run_blocking(db_executor, get_user_timezone, uid)
             city = await get_mobile_city(uid, platform) if current_datetime_block is None else None
             jit_conversation_retrieval_enabled = await _resolve_jit_conversation_retrieval(uid)
+            effective_custom_instructions_enabled = (
+                custom_instructions_enabled
+                if custom_instructions_enabled is not None
+                else getattr(chat_session, 'custom_instructions_enabled', None)
+            )
+            prompt_loader = _get_agentic_qa_prompt
+            if effective_custom_instructions_enabled is not None:
+                from functools import partial
+
+                prompt_loader = partial(
+                    _get_agentic_qa_prompt,
+                    custom_instructions_enabled=effective_custom_instructions_enabled,
+                )
             system_prompt = await load_legacy_prompt_for_surface(
-                _get_agentic_qa_prompt,
+                prompt_loader,
                 uid,
                 app,
                 messages,
