@@ -581,9 +581,17 @@ def edit_memory(
 
 _MEMORY_SEARCH_TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9']*")
 _MEMORY_LEXICAL_PAGE_SIZE = 100
+_MEMORY_LEXICAL_NO_HIT_MAX_ROUNDS = 1
+_PROGRAMMING_ERRORS = (TypeError, KeyError, AttributeError, ValueError)
 
 
-def _lexical_search_memories(uid: str, query: str, *, limit: int) -> List[Dict[str, Any]]:
+def _lexical_search_memories(
+    uid: str,
+    query: str,
+    *,
+    limit: int,
+    max_rounds: int = _MEMORY_KEYSET_MAX_ROUNDS,
+) -> List[Dict[str, Any]]:
     """Bounded lexical fallback over ``MemoryService.read_page`` when vector/canonical search misses."""
     normalized_query = " ".join(str(query or "").split()).casefold()
     if not normalized_query:
@@ -592,11 +600,12 @@ def _lexical_search_memories(uid: str, query: str, *, limit: int) -> List[Dict[s
     service = MemoryService(db_client=db)
     uml_cursor: Optional[str] = None
     rounds = 0
+    bounded_rounds = max(1, min(max_rounds, _MEMORY_KEYSET_MAX_ROUNDS))
     scored: List[tuple[float, int, Dict[str, Any]]] = []
     seen_ids: set[str] = set()
     ordinal = 0
 
-    while rounds < _MEMORY_KEYSET_MAX_ROUNDS:
+    while rounds < bounded_rounds:
         page = service.read_page(uid, limit=_MEMORY_LEXICAL_PAGE_SIZE, cursor=uml_cursor)
         uml_cursor = page.next_cursor
         rounds += 1
@@ -681,30 +690,43 @@ def search_memories(
 def search_memories_core(uid: str, query: str, *, limit: int) -> Dict[str, Any]:
     """Shared authorized-by-caller search; eligibility remains in MemoryService."""
     capped_limit = max(1, min(limit, 20))
+    index_unavailable = False
+    fallback_reason = "unavailable"
     try:
         rows = MemoryService(db_client=db).search_mcp(uid, query, limit=limit)
     except HTTPException as exc:
         if exc.status_code < 500:
             raise_tool_error_from_http(exc)
-        logger.warning("MCP memory index search unavailable: %s", exc.detail)
+        index_unavailable = True
+        fallback_reason = "http_error"
+        logger.warning("MCP memory index search unavailable (HTTP %s): %s", exc.status_code, exc.detail)
         rows = []
-    except Exception:
-        logger.warning("MCP memory index search unavailable")
+    except _PROGRAMMING_ERRORS:
+        raise
+    except Exception as exc:
+        index_unavailable = True
+        fallback_reason = "unavailable"
+        logger.warning("MCP memory index search unavailable (%s): %s", type(exc).__name__, exc)
         rows = []
 
+    coverage = "eligible_indexed_memories"
     if not rows:
-        record_fallback(
-            component="other",
-            from_mode="none",
-            to_mode="none",
-            reason="other",
-            outcome="degraded",
-            log=logger,
-        )
+        if index_unavailable:
+            record_fallback(
+                component="agent_tools",
+                from_mode="indexed_memories",
+                to_mode="lexical_scan",
+                reason=fallback_reason,
+                outcome="degraded",
+                log=logger,
+            )
+        max_rounds = _MEMORY_KEYSET_MAX_ROUNDS if index_unavailable else _MEMORY_LEXICAL_NO_HIT_MAX_ROUNDS
         try:
-            rows = _lexical_search_memories(uid, query, limit=capped_limit)
+            rows = _lexical_search_memories(uid, query, limit=capped_limit, max_rounds=max_rounds)
         except HTTPException as exc:
             raise_tool_error_from_http(exc)
+        except _PROGRAMMING_ERRORS:
+            raise
         except Exception as exc:
             raise ToolExecutionError(
                 "No indexed memory matches and lexical memory search is unavailable. "
@@ -712,9 +734,14 @@ def search_memories_core(uid: str, query: str, *, limit: int) -> Dict[str, Any]:
                 code=-32009,
                 http_status=503,
             ) from exc
+        if index_unavailable:
+            coverage = "lexical_fallback_only"
+        elif rows:
+            coverage = "eligible_indexed_memories_with_lexical_recovery"
 
-    result = {"memories": rows[:capped_limit], "effective_limit": capped_limit, "search_coverage": "eligible_indexed_memories"}
+    result = {"memories": rows[:capped_limit], "effective_limit": capped_limit, "search_coverage": coverage}
     if not rows:
         result["message"] = "No eligible indexed matches. This does not establish absence; use the memory list."
     return result
+
 

@@ -236,7 +236,7 @@ def _memory_item(mid: str, content: str, *, category: str = 'system', is_locked:
     )
 
 
-def test_empty_memory_vectors_recover_lexical_matches(memory_core):
+def test_empty_memory_vectors_recover_lexical_matches_without_outage_telemetry(memory_core):
     handler, service, telemetry = memory_core
     service.read_page.return_value = SimpleNamespace(
         memories=[
@@ -244,14 +244,45 @@ def test_empty_memory_vectors_recover_lexical_matches(memory_core):
             _memory_item('activity-hit', 'Focused on quarterly budget spreadsheet', tags=['activity']),
             _memory_item('lexical-hit', 'Agreed quarterly budget cap with finance team', category='work'),
         ],
-        next_cursor=None,
+        next_cursor='page-2',
         truncated=False,
     )
     result = handler.search_memories_core('owner', 'quarterly budget', limit=10)
     assert [m['id'] for m in result['memories']] == ['lexical-hit']
     assert result['memories'][0]['relevance_score'] == 1.0
+    assert result['search_coverage'] == 'eligible_indexed_memories_with_lexical_recovery'
     assert 'message' not in result
+    # Healthy-index no-hit must not fire outage fallback telemetry and scans at most 1 page.
+    telemetry.assert_not_called()
+    assert service.read_page.call_count == 1
+
+
+def test_memory_index_outage_emits_typed_fallback_telemetry_and_coverage(memory_core):
+    handler, service, telemetry = memory_core
+    service.search_mcp.side_effect = RuntimeError('vector unavailable')
+    service.read_page.return_value = SimpleNamespace(
+        memories=[_memory_item('lexical-hit', 'Agreed quarterly budget cap with finance team', category='work')],
+        next_cursor=None,
+        truncated=False,
+    )
+    result = handler.search_memories_core('owner', 'quarterly budget', limit=10)
+    assert [m['id'] for m in result['memories']] == ['lexical-hit']
+    assert result['search_coverage'] == 'lexical_fallback_only'
     telemetry.assert_called_once()
+    assert telemetry.call_args.kwargs['component'] == 'agent_tools'
+    assert telemetry.call_args.kwargs['from_mode'] == 'indexed_memories'
+    assert telemetry.call_args.kwargs['to_mode'] == 'lexical_scan'
+    assert telemetry.call_args.kwargs['reason'] == 'unavailable'
+    assert telemetry.call_args.kwargs['outcome'] == 'degraded'
+
+
+def test_memory_index_programming_error_is_not_masked_as_outage(memory_core):
+    handler, service, telemetry = memory_core
+    service.search_mcp.side_effect = TypeError('bad payload shape')
+    with pytest.raises(TypeError, match='bad payload shape'):
+        handler.search_memories_core('owner', 'budget', limit=10)
+    telemetry.assert_not_called()
+    service.read_page.assert_not_called()
 
 
 def test_memory_index_failure_and_lexical_failure_is_actionable(memory_core):
@@ -270,4 +301,5 @@ def test_search_memories_rejects_blank_query(memory_core):
         handler.search_memories('owner', {'query': '   '}, auth_context=object())
     assert exc.value.code == -32602
     service.search_mcp.assert_not_called()
+
 
