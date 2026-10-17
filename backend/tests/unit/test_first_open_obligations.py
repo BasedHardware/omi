@@ -165,9 +165,9 @@ def test_commit_first_open_folder_count_handles_aggregation_error(monkeypatch):
     mock_query = MagicMock()
     mock_count = MagicMock()
     mock_count.get.side_effect = RuntimeError("Quota or network error")
-    mock_query.count.return_value = mock_count
-
-    monkeypatch.setattr(foo.FIRST_OPEN_FOLDER_CONVERSATION_COUNT_QUERY, "build", lambda *a, **k: mock_query)
+    mock_spec = MagicMock()
+    mock_spec.build.return_value = mock_query
+    monkeypatch.setattr(foo, "FIRST_OPEN_FOLDER_CONVERSATION_COUNT_QUERY", mock_spec)
     # The count query failure should be caught, defaulting count to 0 and proceeding cleanly
     res = foo.commit_first_open_folder_count("u1", "c1", "tok", "f1", firestore_client=client)
     assert res is False  # transaction fails safely because conversation/authority mock is absent, without raising
