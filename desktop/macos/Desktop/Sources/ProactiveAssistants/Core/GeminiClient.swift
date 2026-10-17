@@ -221,6 +221,7 @@ actor GeminiClient {
       case .networkError: return "offline"
       case .invalidResponse: return "invalid_response"
       case .missingAPIKey: return "auth"
+      case .localProviderCloudOff: return "local_failure"
       }
     }
 

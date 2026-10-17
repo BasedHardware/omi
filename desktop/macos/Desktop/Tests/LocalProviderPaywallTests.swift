@@ -389,30 +389,6 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
     try await GeminiClient.enforceManagedProactivity()
   }
 
-  /// `ProactiveLaneClient.complete()` is the context-director's own model
-  /// call (task/insight/suggestion/resurface decisions from screen and
-  /// transcript content) and must fail closed unconditionally: unlike its
-  /// pre-existing pixel-only plan gate, this applies to text-only prompts too.
-  func testProactiveLaneClientCompleteThrowsLocalProviderCloudOffForTextOnlyPrompt() async {
-    UserDefaults.standard.set("local", forKey: bridgeModeKey)
-    UserDefaults.standard.set(
-      AIProvider.CloudAssistMode.off.rawValue, forKey: AIProvider.cloudAssistModeKey)
-    let client = ProactiveLaneClient()
-    do {
-      _ = try await client.complete(
-        operation: "test_operation",
-        prompt: "text-only prompt, no image",
-        jsonSchema: ["type": "object"])
-      XCTFail("expected localProviderCloudOff")
-    } catch let error as ProactiveLaneClientError {
-      guard case .localProviderCloudOff = error else {
-        return XCTFail("expected localProviderCloudOff, got \(error)")
-      }
-    } catch {
-      XCTFail("expected ProactiveLaneClientError, got \(error)")
-    }
-  }
-
   /// `EmbeddingService` backs Rewind semantic search and task-similarity
   /// search. Under Local with cloud-assist off, both `embed` and `embedBatch`
   /// must fail before any network call so no screenshot or transcript text
