@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #ifndef __BATTERY_H__
@@ -76,5 +77,15 @@ int battery_get_percentage(uint8_t *battery_percentage, uint16_t battery_millivo
  * @retval 0 if successful. Negative errno number on error.
  */
 int battery_init(void);
+
+struct battery_diagnostics {
+    uint16_t millivolts;                  // Uncorrected ADC battery voltage; UINT16_MAX if unknown.
+    uint16_t last_off_charger_millivolts; // UINT16_MAX until an off-charger sample.
+    uint16_t charge_edge_count;           // Since boot, saturates at 0xFFFE.
+    uint8_t charge_pin;                   // 0/1, UINT8_MAX until the pin is read successfully.
+    bool soc_frozen;
+};
+
+void battery_get_diagnostics(struct battery_diagnostics *diagnostics);
 
 #endif
