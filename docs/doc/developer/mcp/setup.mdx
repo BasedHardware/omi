@@ -103,6 +103,17 @@ available read scopes — writes are never included by default.
     The preferred path is **Omi → Use omi memory anywhere → ChatGPT / Codex → ChatGPT
     (cloud)**. Add Omi from the directory page and approve the OAuth consent screen.
 
+    <Note>
+    The approved ChatGPT directory listing requests `scope=memories.read` only, while conversation
+    tools (`get_conversations`, `search_conversations`, `get_conversation_by_id`,
+    `get_conversations_by_ids`) require `conversations.read`. Omi's OAuth server widens
+    `omi-chatgpt-prod` authorizations to include the standard read scope floor (`memories.read`,
+    `conversations.read`, `action_items.read`, `goals.read`) at consent time. If an existing
+    ChatGPT connection was authorized before that widening and only shows memory tools, disconnect
+    and reconnect Omi in ChatGPT (or use the developer-mode custom connector below, which merges
+    the full read scope set onto the existing grant).
+    </Note>
+
     For the advanced developer-mode fallback, use:
 
     - **Connection / server URL:** `https://api.omi.me/v1/mcp`
