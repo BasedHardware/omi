@@ -174,6 +174,7 @@ def conversations_db():
     exceptions_module = ModuleType("google.api_core.exceptions")
     exceptions_module.AlreadyExists = type("AlreadyExists", (Exception,), {})
     exceptions_module.Conflict = type("Conflict", (Exception,), {})
+    exceptions_module.FailedPrecondition = type("FailedPrecondition", (Exception,), {})
     exceptions_module.NotFound = type("NotFound", (Exception,), {})
 
     database_client = ModuleType("database._client")
