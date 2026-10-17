@@ -1596,3 +1596,74 @@ OMI_CONVERSATION_SPEAKER_RESOLUTION_VOICES = Histogram(
     ['stage'],
     buckets=(1, 2, 3, 4, 6, 8, 12, 16, 25, 50, 100, 250, 1000, 2500),
 )
+
+OMI_LISTEN_WS_HANDSHAKE_FAILURES_TOTAL = Counter(
+    'omi_listen_ws_handshake_failures_total',
+    'WebSocket accept/handshake failures on /v4/listen endpoints by bounded surface and reason',
+    ['surface', 'reason'],
+)
+_LISTEN_WS_HANDSHAKE_SURFACES = frozenset({'mobile', 'web'})
+_LISTEN_WS_HANDSHAKE_REASONS = frozenset({'accept_runtime_error'})
+for _ws_surface in _LISTEN_WS_HANDSHAKE_SURFACES:
+    for _ws_reason in _LISTEN_WS_HANDSHAKE_REASONS:
+        OMI_LISTEN_WS_HANDSHAKE_FAILURES_TOTAL.labels(surface=_ws_surface, reason=_ws_reason)
+
+
+def record_listen_ws_handshake_failure(*, surface: str, reason: str = 'accept_runtime_error') -> None:
+    if surface not in _LISTEN_WS_HANDSHAKE_SURFACES:
+        surface = 'other'
+    if reason not in _LISTEN_WS_HANDSHAKE_REASONS:
+        reason = 'other'
+    OMI_LISTEN_WS_HANDSHAKE_FAILURES_TOTAL.labels(surface=surface, reason=reason).inc()
+
+
+OMI_API_RATE_LIMIT_THROTTLED_TOTAL = Counter(
+    'omi_api_rate_limit_throttled_total',
+    'HTTP 429 rate-limit/quota rejections returned by backend rate limiters by bounded scope and policy family',
+    ['scope', 'policy_family'],
+)
+_API_RATE_LIMIT_SCOPES = frozenset({'redis_policy', 'ip_window'})
+_API_RATE_LIMIT_POLICY_FAMILIES = frozenset(
+    'action_items agent apps chat connectors conversations dev file frame_requests goals import integration '
+    'knowledge_graph mcp memories memory_imports proactivity review screen_activity screen_task screenshots '
+    'speaker_tag_prompts static_map storefront stt test tools tts users voice wrapped custom'.split()
+)
+for _rl_scope in _API_RATE_LIMIT_SCOPES:
+    for _rl_family in ('chat', 'conversations', 'memories', 'stt', 'voice', 'custom'):
+        OMI_API_RATE_LIMIT_THROTTLED_TOTAL.labels(scope=_rl_scope, policy_family=_rl_family)
+
+
+def record_api_rate_limit_throttled(*, scope: str, policy: str) -> None:
+    if scope not in _API_RATE_LIMIT_SCOPES:
+        scope = 'other'
+    family = (policy or '').split(':', 1)[0].strip().lower()
+    if family not in _API_RATE_LIMIT_POLICY_FAMILIES:
+        family = 'custom'
+    OMI_API_RATE_LIMIT_THROTTLED_TOTAL.labels(scope=scope, policy_family=family).inc()
+
+
+OMI_DIRECT_LLM_RATE_LIMIT_ERRORS_TOTAL = Counter(
+    'omi_direct_llm_rate_limit_errors_total',
+    'Direct LLM SDK 429 and quota errors by bounded provider, credential source, and reason',
+    ['provider', 'source', 'reason'],
+)
+_DIRECT_LLM_PROVIDERS = frozenset({'openai', 'anthropic', 'gemini', 'openrouter', 'groq', 'other'})
+_DIRECT_LLM_SOURCES = frozenset({'platform', 'byok'})
+_DIRECT_LLM_REASONS = frozenset({'quota', 'rate_limit'})
+for _llm_provider in ('openai', 'anthropic', 'gemini'):
+    for _llm_source in _DIRECT_LLM_SOURCES:
+        for _llm_reason in _DIRECT_LLM_REASONS:
+            OMI_DIRECT_LLM_RATE_LIMIT_ERRORS_TOTAL.labels(
+                provider=_llm_provider, source=_llm_source, reason=_llm_reason
+            )
+
+
+def record_direct_llm_rate_limit_error(*, provider: str | None, source: str, reason: str) -> None:
+    norm_provider = (provider or '').strip().lower()
+    if norm_provider not in _DIRECT_LLM_PROVIDERS:
+        norm_provider = 'other'
+    if source not in _DIRECT_LLM_SOURCES:
+        source = 'other'
+    if reason not in _DIRECT_LLM_REASONS:
+        reason = 'rate_limit'
+    OMI_DIRECT_LLM_RATE_LIMIT_ERRORS_TOTAL.labels(provider=norm_provider, source=source, reason=reason).inc()
