@@ -321,6 +321,7 @@ environments:
           REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
           BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
@@ -934,6 +935,7 @@ environments:
             MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
@@ -1225,6 +1227,7 @@ environments:
             MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
@@ -1497,6 +1500,7 @@ environments:
             MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
@@ -1713,6 +1717,7 @@ environments:
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
@@ -2540,6 +2545,7 @@ environments:
           REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
           BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
@@ -3187,6 +3193,7 @@ environments:
             MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
@@ -3561,6 +3568,7 @@ environments:
             MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
@@ -3881,6 +3889,7 @@ environments:
             MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
@@ -4145,6 +4154,7 @@ environments:
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}

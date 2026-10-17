@@ -540,6 +540,7 @@ environment_shared:
         BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
           value: 'false'
           category: rollout
+        BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
         BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
           value: 'false'
           category: rollout
@@ -1330,6 +1331,7 @@ environment_shared:
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
             value: 'false'
             category: rollout
@@ -1741,6 +1743,7 @@ environment_shared:
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
             value: 'false'
             category: rollout
@@ -2117,6 +2120,7 @@ environment_shared:
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
             value: 'false'
             category: rollout
@@ -2427,6 +2431,7 @@ environment_shared:
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
             value: 'false'
             category: rollout
