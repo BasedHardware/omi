@@ -71,6 +71,7 @@ class QuarantineRecovery:
     def __init__(self, store, artifacts, *, stt=transcribe, clock=time.time):
         self.store, self.artifacts, self.stt, self.clock = store, artifacts, stt, clock
         self.protocol = RecoveryStore(store)
+        self._candidate_after: str | None = None
 
     def recover(self, segment_id, owner_id):
         if not recovery_enabled_for(owner_id):
@@ -135,9 +136,16 @@ class QuarantineRecovery:
 
     def sweep(self):
         counts = {}
-        owners = (None,) if recover_all_admitted() else recovery_owners()
+        all_admitted = recover_all_admitted()
+        owners = (None,) if all_admitted else recovery_owners()
         for selected_owner in owners:
-            for segment_id, owner_id in recovery_candidates(self.store.client, self.store.namespace, selected_owner):
+            kwargs = {'after_id': self._candidate_after} if all_admitted else {}
+            candidates = recovery_candidates(self.store.client, self.store.namespace, selected_owner, **kwargs)
+            if all_admitted and not candidates:
+                self._candidate_after = None  # Wrap next tick, without a second query.
+            for segment_id, owner_id in candidates:
+                if all_admitted:
+                    self._candidate_after = segment_id  # Held/capped rows cannot pin the global page.
                 try:
                     outcome = self.recover(segment_id, owner_id)
                 except Exception:
@@ -148,5 +156,5 @@ class QuarantineRecovery:
                 except Exception:
                     pass
                 if outcome in {'recovered', 'failed_held', 'result_held', 'cancelled'}:
-                    break  # At most one provider dispatch per owner per sweep.
+                    break  # One provider dispatch per queried cohort per sweep; continue at this cursor next tick.
         return counts

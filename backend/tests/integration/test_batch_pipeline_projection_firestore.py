@@ -1085,3 +1085,60 @@ def test_projection_completed_metric_is_one_per_upload_not_replay(lane, monkeypa
     lane.projector.project(batch.ids[0])
     lane.projector.project(batch.ids[0])
     metric.assert_called_once_with('projection_completed', seconds=30.0)
+
+
+def test_authoritative_gap_ids_do_not_inherit_speaker_zero_manual_owner(lane, monkeypatch):
+    from utils.manual_speaker_assignments import apply_manual_assignments
+
+    monkeypatch.setenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'true')
+    lane.payload.update(
+        words=[
+            {'word': 'First.', 'timestamp': [0, 1]},
+            {'word': 'Gap.', 'timestamp': [2, 3]},
+            {'word': 'Last.', 'timestamp': [4, 5]},
+        ],
+        diarization={
+            'turns': [{'start': 0, 'end': 1, 'speaker': 'SPEAKER_00'}, {'start': 4, 'end': 5, 'speaker': 'SPEAKER_01'}]
+        },
+    )
+    batch = lane.seed()
+    lane.finish(batch)
+    lane.projector.project(batch.ids[0])
+    segments = active_rows(lane)[0]['transcript_segments']
+    assert len({s['speaker_id'] for s in segments}) == 3
+    first = next(s for s in segments if s['speaker'] == 'SPEAKER_00')
+    gap = next(s for s in segments if s['speaker_match_source'] == 'batch_abstention')
+    assert gap['speaker_id'] != first['speaker_id']
+    labeled = apply_manual_assignments(
+        segments, {'speakers': {str(first['speaker_id']): {'is_user': True, 'person_id': None}}}
+    )
+    gap = next(s for s in labeled if s['id'] == gap['id'])
+    assert not gap['is_user'] and gap['person_id'] is None
+    assert gap['speaker_match_source'] == 'batch_abstention'
+
+
+def test_global_recovery_sweep_advances_past_held_pages_without_extra_query(lane, monkeypatch):
+    from unittest.mock import Mock
+    from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'on')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
+    for index in range(12):
+        lane.projector.store.ref('jobs', f'held-{index:02d}').set(
+            {'owner_id': 'synthetic-first' if index < 10 else 'synthetic-other', 'recovery_state': 'prepared'}
+        )
+    recovery = QuarantineRecovery(lane.store, Mock())
+    recovery.recover = Mock(return_value='held')
+    original = module.recovery_candidates
+    query = Mock(wraps=original)
+    monkeypatch.setattr(module, 'recovery_candidates', query)
+    assert recovery.sweep() == {'held': 10}
+    assert recovery.sweep() == {'held': 2}
+    assert query.call_count == 2
+    assert query.call_args.kwargs['after_id'] == 'held-09'
+    assert recovery.recover.call_args.args == ('held-11', 'synthetic-other')
+    assert recovery.sweep() == {}  # Empty tail resets cursor, without an extra query.
+    assert query.call_count == 3
+    assert recovery.sweep() == {'held': 10}
+    assert query.call_args.kwargs['after_id'] is None

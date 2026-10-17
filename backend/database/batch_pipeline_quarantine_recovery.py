@@ -124,17 +124,19 @@ class RecoveryStore:
         return changed
 
 
-def recovery_candidates(client, namespace: str, owner_id: str | None, limit: int = 10):
+def recovery_candidates(client, namespace: str, owner_id: str | None, limit: int = 10, *, after_id: str | None = None):
     """Only unattempted or reconcilable units; failed STT never hot-loops."""
-    query = client.collection(f'{namespace}_jobs')
+    collection = client.collection(f'{namespace}_jobs')
+    query = collection
     if owner_id is not None:
         query = query.where('owner_id', '==', owner_id)
-    return [
-        (doc.id, (doc.to_dict() or {})['owner_id'])
-        for doc in query.where('recovery_state', 'in', ['held', 'prepared', 'running'])
-        .limit(max(1, min(limit, 10)))
-        .stream()
-    ]
+    query = query.where('recovery_state', 'in', ['held', 'prepared', 'running'])
+    if owner_id is None:
+        # A document-reference cursor requires no extra document read.
+        query = query.order_by('__name__')
+        if after_id is not None:
+            query = query.start_after({'__name__': collection.document(after_id)})
+    return [(doc.id, (doc.to_dict() or {})['owner_id']) for doc in query.limit(max(1, min(limit, 10))).stream()]
 
 
 def cancel_fenced_recovery(store, segment_id):

@@ -5179,7 +5179,9 @@ hands the unit directly to existing quarantine recovery. Empty ASR is never sile
 `BATCH_PIPELINE_RECOVERY_MODE=on` and the existing recovery UID allowlist run David's
 recovery. `BATCH_PIPELINE_RECOVERY_ALL_ADMITTED=false` additionally permits the same
 bounded sweep across already-admitted owners when enabled, replacing the owner
-filter on the existing query. The durable prepared/running token forbids repeated
+filter on the existing query. A bounded process-local document-ID cursor advances
+past held/capped/running rows and wraps on an empty page, without a second query
+or document lookup. The durable prepared/running token forbids repeated
 paid STT after timeout, lost reply or process death. `failed_held` needs separate
 operator disposition; no automated reset or second paid attempt is introduced.
 
