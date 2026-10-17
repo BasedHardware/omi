@@ -1,4 +1,5 @@
 from database import sync_redrive
+from utils.sync import redrive_policy
 from utils.observability.sync_phases import sync_attempt, set_sync_metrics_lane
 import asyncio
 import json
@@ -2164,7 +2165,7 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
             ledger_fence_active = await run_blocking(db_executor, sync_job_uses_ledger_fence, job)
             if ledger_fence_active and runtime_fence_mode is not SyncLedgerFenceMode.ACTIVE:
                 return JSONResponse(status_code=503, content={'status': 'fence_mode_mismatch'})
-        if not job and sync_redrive.enabled():
+        if not job and redrive_policy.enabled():
             custody = await run_blocking(db_executor, sync_redrive.preserve_missing_job, uid, job_id, payload)
             # ACK only after durable custody. Neither branch deletes staged
             # bytes or releases a partial ledger claim to blind provider retry.
@@ -2229,7 +2230,7 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
                 content_id=content_id,
                 run_lock_token=lock_token,
             )
-        elif sync_redrive.legacy_convergence_enabled():
+        elif redrive_policy.legacy_convergence_enabled():
             converged = await run_blocking(
                 db_executor,
                 sync_redrive.converge_legacy_completion,

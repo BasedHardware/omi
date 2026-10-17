@@ -1490,6 +1490,7 @@ def _load_sync_router_for_fast_path():
         preserve_missing_job=MagicMock(return_value='redrive_required'),
         converge_legacy_completion=MagicMock(return_value=None),
     )
+    module.redrive_policy = module.sync_redrive
     module.uid_sequencer.enabled = MagicMock(return_value=False)
     module.uid_sequencer.production_fence_mode = MagicMock(
         side_effect=lambda: module.get_sync_ledger_fence_mode() if module.uid_sequencer.production_stage() else None

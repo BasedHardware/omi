@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 from typing import Any
 
@@ -11,23 +10,13 @@ from prometheus_client import Gauge
 
 from database._client import get_firestore_client
 from database.sync_ledger import is_valid_completed_sync_content_result, sync_content_reference
-from utils.sync import stage
+from utils.sync.redrive_policy import enabled, legacy_convergence_enabled
 
 COLLECTION = 'sync_redrive_required'
 STATS_COLLECTION = 'sync_redrive_stats'
 BACKLOG = Gauge('sync_redrive_required', 'Accepted obligations retained for operator redrive')
 DEADLINE = Gauge('sync_redrive_nearest_deadline_timestamp_seconds', 'Earliest source deadline; 0 if empty')
 UNKNOWN_DEADLINE = Gauge('sync_redrive_unknown_deadline', 'Obligations without an exact source deadline')
-
-
-def enabled() -> bool:
-    return stage.production_stage() and os.getenv('SYNC_DURABLE_REDRIVE_GUARD', 'false').strip().lower() == 'true'
-
-
-def legacy_convergence_enabled() -> bool:
-    return (
-        stage.production_stage() and os.getenv('SYNC_LEGACY_COMPLETION_CONVERGENCE', 'false').strip().lower() == 'true'
-    )
 
 
 def prepare(transaction: Any, client: Any, uid: str, job_id: str, payload: dict, accepted_at: datetime) -> dict:
