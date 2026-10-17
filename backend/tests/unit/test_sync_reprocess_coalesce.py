@@ -277,6 +277,12 @@ def test_train1_runtime_flags_are_on_only_for_prod_sync_hosts(runtime_manifest):
                 assert str(service.get('env', {}).get(switch, {}).get('value', 'false')).lower() != 'true'
 
 
+def test_expired_backfill_retirement_is_disabled_for_prod_sync_hosts(runtime_manifest):
+    services = runtime_manifest['environments']['prod']['cloud_run']['services']
+    for name in ('backend-sync', 'backend-sync-backfill'):
+        assert services[name]['env']['SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM']['value'] == 'false'
+
+
 @pytest.fixture(scope='module')
 def sync_router():
     import importlib
