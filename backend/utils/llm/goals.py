@@ -128,6 +128,15 @@ def suggest_goal(uid: str) -> Dict[str, Any]:
         memory_texts = [
             cast(str, m.get('content', '')) for m in memories[:50] if m.get('content') and not m.get('is_locked')
         ]
+        if not memory_texts:
+            return {
+                'suggested_title': 'Learn something new every day',
+                'suggested_type': 'scale',
+                'suggested_target': 10,
+                'suggested_min': 0,
+                'suggested_max': 10,
+                'reasoning': 'Start tracking your daily learning progress!',
+            }
         memory_context = '\n'.join(memory_texts[:20])  # Limit context size
 
         prompt = f"""Based on the user's memories and interests, suggest ONE meaningful personal goal they could track.
@@ -159,10 +168,29 @@ Make the goal specific, measurable, and relevant to their interests."""
         json_match = re.search(r'\{[^{}]*\}', response, re.DOTALL)
         if json_match:
             suggestion = json.loads(json_match.group())
-            # Ensure min/max are present, default if not
-            suggestion['suggested_min'] = suggestion.get('suggested_min', 0)
-            suggestion['suggested_max'] = suggestion.get('suggested_max', suggestion.get('suggested_target', 10))
-            return suggestion
+            if isinstance(suggestion, dict):
+                # Ensure required fields and min/max are non-null so GoalSuggestionResponse validation never fails
+                suggestion['suggested_title'] = suggestion.get('suggested_title') or 'Track your daily progress'
+                suggestion['suggested_type'] = suggestion.get('suggested_type') or 'scale'
+                raw_target = suggestion.get('suggested_target')
+                target_val = (
+                    float(raw_target)
+                    if isinstance(raw_target, (int, float)) and not isinstance(raw_target, bool)
+                    else 10.0
+                )
+                raw_min = suggestion.get('suggested_min')
+                min_val = float(raw_min) if isinstance(raw_min, (int, float)) and not isinstance(raw_min, bool) else 0.0
+                raw_max = suggestion.get('suggested_max')
+                max_val = (
+                    float(raw_max)
+                    if isinstance(raw_max, (int, float)) and not isinstance(raw_max, bool)
+                    else target_val
+                )
+                suggestion['suggested_target'] = target_val
+                suggestion['suggested_min'] = min_val
+                suggestion['suggested_max'] = max_val
+                suggestion['reasoning'] = suggestion.get('reasoning') or 'A simple goal to get you started!'
+                return suggestion
 
         # Fallback if parsing fails
         return {
@@ -197,14 +225,17 @@ def get_goal_advice(uid: str, goal_id: str) -> str:
         if not goal or not goal.get('is_active'):
             raise ValueError("Goal not found")
 
-        goal_title = goal.get('title', 'Unknown')
-        current_value = goal.get('current_value', 0)
-        target_value = goal.get('target_value', 10)
+        goal_title = goal.get('title') or 'Unknown'
+        raw_current = goal.get('current_value', 0)
+        raw_target = goal.get('target_value', 10)
 
-        # Calculate progress
-        progress_pct = 0
-        if target_value > 0:
-            progress_pct = (current_value / target_value) * 100
+        if raw_current is not None and raw_target is not None:
+            current_value = float(raw_current)
+            target_value = float(raw_target)
+            progress_pct = (current_value / target_value) * 100 if target_value > 0 else 0.0
+            progress_line = f"{current_value:,.0f} / {target_value:,.0f} ({progress_pct:.1f}%)"
+        else:
+            progress_line = "Qualitative goal (no numeric metric)"
 
         # Get rich context using hybrid retrieval
         context = _get_goal_context(uid, goal_title)
@@ -213,7 +244,7 @@ def get_goal_advice(uid: str, goal_id: str) -> str:
         prompt = f"""You are a strategic advisor. Based on the user's goal and their context, give ONE specific actionable step they should take THIS WEEK.
 
 GOAL: "{goal_title}"
-PROGRESS: {current_value:,.0f} / {target_value:,.0f} ({progress_pct:.1f}%)
+PROGRESS: {progress_line}
 
 RECENT CONVERSATIONS (what they've been discussing/working on):
 {context['conversation_context'][:1500] if context['conversation_context'] else 'No recent conversations'}

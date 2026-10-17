@@ -67,8 +67,8 @@ async def get_omi_github_releases(
 
             if tag_filter:
                 for release in page_releases:
-                    tag_name = release.get("tag_name", "")
-                    if tag_filter.match(tag_name):
+                    tag_name = release.get("tag_name") or ""
+                    if isinstance(tag_name, str) and tag_filter.match(tag_name):
                         collected.append(release)
             else:
                 collected.extend(page_releases)
