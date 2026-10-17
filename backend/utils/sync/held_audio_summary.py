@@ -1,6 +1,7 @@
 """Held-audio totals for clients. Admission-off callers get nothing and read nothing."""
 
 from datetime import datetime, timezone
+from typing import Any
 
 from config.stt_cap_dispatch import execution_admission_enabled
 from models.users import HeldAudioRecording, HeldAudioSummary
@@ -18,7 +19,7 @@ def next_utc_month_start(now: datetime | None = None) -> int:
     return int(datetime(year, month, 1, tzinfo=timezone.utc).timestamp())
 
 
-def _whole_seconds(value) -> int:
+def _whole_seconds(value: Any) -> int:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return 0
     return max(0, int(round(value)))
@@ -41,7 +42,7 @@ def _load_rows(uid: str) -> list[dict]:
 def client_held_audio(
     uid: str,
     *,
-    allowance=None,
+    allowance: Any | None = None,
     rows: list[dict] | None = None,
     now: datetime | None = None,
 ) -> HeldAudioSummary | None:
