@@ -19,6 +19,16 @@ from tests.unit.fixtures import containment_long_pair as long_pair
 from utils.conversations import capture_containment as cc
 from utils.conversations.shared_speech import measure_shared_speech
 
+
+@pytest.fixture(scope='module', autouse=True)
+def warm_containment_imports():
+    """Warm module imports and detector fixtures during setup so first-test CPU does not trip guard (#20942)."""
+    import models.conversation  # noqa: F401
+    import tests.unit.fixtures.containment_long_pair as _lp  # noqa: F401
+    import utils.conversations.capture_containment as _cc  # noqa: F401
+    import utils.conversations.shared_speech as _ss  # noqa: F401
+
+
 T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 UTTERANCES = [
