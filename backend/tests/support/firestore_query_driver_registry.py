@@ -2106,7 +2106,10 @@ def _seed_sync_retirement(client, combo, trial):
         }
 
 
-_SYNC_PROD = (_stub('database.sync_backfill_sequencer.production_stage', True),)
+_SYNC_PROD = (
+    _stub('database.sync_backfill_sequencer.production_stage', True),
+    _stub('database.sync_redrive.enabled', False),
+)
 
 
 def _sync_order_trial(client, combo, trial):
