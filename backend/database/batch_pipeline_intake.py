@@ -7,6 +7,7 @@ from config.batch_pipeline import enabled_for
 from database.batch_pipeline_store import Store
 from database.batch_pipeline_staging import artifact_id
 from database.sync_ledger import LEDGER_RETENTION_DAYS, is_valid_completed_sync_content_result
+from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.scheduler import Scheduler
 
@@ -87,9 +88,17 @@ def admit(
                 },
             },
         )
-        return {'outcome': 'batch', 'job_id': binding.job_id}
+        return {
+            'outcome': 'batch',
+            'job_id': binding.job_id,
+            '_admitted_seconds': sum(i.duration_seconds for i in items),
+        }
 
-    return store.run(commit)
+    outcome = store.run(commit)
+    seconds = outcome.pop('_admitted_seconds', None)
+    if seconds is not None:
+        record_correctness('admitted', seconds=float(seconds))
+    return outcome
 
 
 def cache_completed(store: Store, uid: str, content_id: str, job_id: str, intake: dict, now: float) -> bool:

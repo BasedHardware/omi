@@ -9,6 +9,7 @@ on:
       - 'backend/charts/monitoring/alerts/live-stt.json'
       - 'backend/charts/monitoring/alerts/resilience.json'
       - 'backend/charts/monitoring/live-alert-gate.json'
+      - 'backend/charts/monitoring/gmp/frontend-values.prod.yaml'
       - '.github/workflows/gcp_cloud_run_metrics_egress.yml'
   workflow_dispatch:
     inputs:
@@ -145,15 +146,29 @@ jobs:
             --version 4.8.3 \
             --namespace "$MONITORING_NAMESPACE" \
             --values "$SYNC_EXPORTER_VALUES" >/dev/null
+          stack_values=(--values "$STACK_VALUES")
           stack_flags=()
           if [[ -n "$STATS_PROXY_SHA256" ]]; then
             stack_flags=(--set-string "grafana.podAnnotations.omi-stats-proxy-sha256=$STATS_PROXY_SHA256")
           fi
+          if [[ "$MONITORING_NAMESPACE" == prod-omi-monitoring ]]; then
+            stack_values+=(--values backend/charts/monitoring/gmp/frontend-values.prod.yaml)
+            umask 077
+            helm template "$STACK_RELEASE" prometheus-community/kube-prometheus-stack \
+              --version 75.15.1 --namespace "$MONITORING_NAMESPACE" \
+              --values "$STACK_VALUES" "${stack_flags[@]}" > "$RUNNER_TEMP/monitoring-base.yaml"
+            helm template "$STACK_RELEASE" prometheus-community/kube-prometheus-stack \
+              --version 75.15.1 --namespace "$MONITORING_NAMESPACE" \
+              "${stack_values[@]}" "${stack_flags[@]}" > "$RUNNER_TEMP/monitoring-gmp.yaml"
+            python3 -m venv "$RUNNER_TEMP/monitoring-tools"
+            "$RUNNER_TEMP/monitoring-tools/bin/pip" install --timeout 15 --retries 2 PyYAML==6.0.2
+            "$RUNNER_TEMP/monitoring-tools/bin/python" backend/scripts/verify_gmp_frontend_render.py \
+              --baseline "$RUNNER_TEMP/monitoring-base.yaml" --candidate "$RUNNER_TEMP/monitoring-gmp.yaml"
+          fi
           helm template "$STACK_RELEASE" prometheus-community/kube-prometheus-stack \
             --version 75.15.1 \
             --namespace "$MONITORING_NAMESPACE" \
-            --values "$STACK_VALUES" \
-            "${stack_flags[@]}" >/dev/null
+            "${stack_values[@]}" "${stack_flags[@]}" >/dev/null
 
       # The sync exporter goes first so the families it takes over from the main
       # exporter are being collected before the main exporter stops reading them.
@@ -182,12 +197,14 @@ jobs:
       - name: Deploy Prometheus scrape configuration
         run: |
           set -euo pipefail
+          stack_values=(--values "$STACK_VALUES")
           rollback_flags=(--atomic)
           if [[ "$MONITORING_NAMESPACE" == prod-omi-monitoring ]]; then
             # The previous revision scales down with PVC whenScaled=Delete.
             # Its automatic rollback could delete the new replica's history.
             # Parent reviews old values with Retain before a manual rollback.
             rollback_flags=()
+            stack_values+=(--values backend/charts/monitoring/gmp/frontend-values.prod.yaml)
           fi
           stack_flags=()
           if [[ -n "$STATS_PROXY_SHA256" ]]; then
@@ -197,7 +214,7 @@ jobs:
           helm upgrade --install "$STACK_RELEASE" prometheus-community/kube-prometheus-stack \
             --version 75.15.1 \
             --namespace "$MONITORING_NAMESPACE" \
-            --values "$STACK_VALUES" \
+            "${stack_values[@]}" \
             "${stack_flags[@]}" \
             --skip-crds \
             "${rollback_flags[@]}" \
@@ -243,6 +260,23 @@ jobs:
               --namespace "$MONITORING_NAMESPACE"
           done
 
+      - name: Verify production GMP query path
+        if: github.event.inputs.environment == 'prod'
+        env:
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
+        run: |
+          set -euo pipefail
+          kubectl --context gke_based-hardware_us-central1_prod-omi-gke \
+            --namespace prod-omi-monitoring rollout status deployment/prod-omi-gmp-query-frontend --timeout=5m
+          # The datasource sidecar can reload shortly after Helm reports Ready.
+          for attempt in 1 2 3; do
+            if python3 backend/scripts/provision_monitoring_alerts.py --probe-datasources; then
+              exit 0
+            fi
+            if [[ "$attempt" != 3 ]]; then sleep 5; fi
+          done
+          exit 1
+
       # Runs after Helm so a Monitoring permission gap cannot block the Grafana/Prometheus
       # rollout; it still fails the job (fail closed) when the dead-man cannot be reconciled.
       - name: Ensure external prod Grafana dead-man
@@ -260,6 +294,9 @@ jobs:
     # Helm failure must not suppress live-STT alert updates.
     if: github.ref == 'refs/heads/main'
     environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
+    concurrency:
+      group: grafana-alert-provisioning-${{ github.event.inputs.environment == 'prod' && 'prod' || 'dev' }}
+      cancel-in-progress: false
     permissions:
       contents: read
     runs-on: ubuntu-latest

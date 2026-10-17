@@ -107,3 +107,81 @@ def test_retry_age_survives_requeue_and_clears_only_after_success():
     queue.complete(WorkResult('retry-head', 'gs://results/retry'), lease.token, 1001)
     metrics.refresh(store, 1002)
     assert registry.get_sample_value('omi_batch_pipeline_retry_age_seconds', labels) == 0
+
+
+@pytest.fixture
+def correctness(monkeypatch):
+    from prometheus_client import Counter
+    from utils.batch_pipeline import correctness_metrics as metrics
+
+    registry = CollectorRegistry()
+    monkeypatch.setattr(
+        metrics,
+        'TRANSITIONS',
+        Counter('omi_batch_pipeline_correctness_transitions_total', '', ['event', 'source'], registry=registry),
+    )
+    monkeypatch.setattr(
+        metrics,
+        'DURATION',
+        Counter('omi_batch_pipeline_correctness_audio_seconds_total', '', ['event'], registry=registry),
+    )
+    monkeypatch.setattr(
+        metrics, 'LABELS', Counter('omi_batch_pipeline_projected_segments_total', '', ['authority'], registry=registry)
+    )
+    monkeypatch.setenv('BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED', 'true')
+    return metrics, registry
+
+
+def test_cpu_and_gpu_commits_and_failed_duration_count_only_changed_transitions(correctness):
+    from utils.batch_pipeline.merge import OrderedMerge
+    from utils.batch_pipeline.contracts import WorkResult
+
+    _, registry = correctness
+    store = MemoryStore()
+    queue = Scheduler(store)
+    for index, source in enumerate(('gpu_pump', 'ordered_merge')):
+        sid = f'unit{index}'
+        queue.enqueue(item(sid), 0)
+        lease = queue.pull(1)[0]
+        result = WorkResult(sid, 'gs://synthetic/result')
+        assert queue.complete(result, lease.token, 2)
+        merge = OrderedMerge(store, commit_source=source)
+        assert merge.commit_next('heavy', 3)
+        assert merge.commit_next('heavy', 4) is None
+        assert (
+            registry.get_sample_value(
+                'omi_batch_pipeline_correctness_transitions_total', {'event': 'committed', 'source': source}
+            )
+            == 1
+        )
+    queue.enqueue(item('bad'), 0)
+    lease = queue.pull(5)[0]
+    assert queue.fail('bad', lease.token, 6, quarantine=True)
+    assert not queue.fail('bad', lease.token, 7, quarantine=True)
+    assert (
+        registry.get_sample_value('omi_batch_pipeline_correctness_audio_seconds_total', {'event': 'failed'})
+        == lease.item.duration_seconds
+    )
+
+
+def test_metrics_dark_and_label_abstention_is_separate(correctness, monkeypatch):
+    metrics, registry = correctness
+    monkeypatch.delenv('BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED')
+    metrics.record('admitted', seconds=123)
+    assert (
+        registry.get_sample_value('omi_batch_pipeline_correctness_audio_seconds_total', {'event': 'admitted'}) is None
+    )
+    monkeypatch.setenv('BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED', 'true')
+    metrics.record_labels(
+        [
+            {'speaker': 'SPEAKER_00', 'speaker_id_scope': 'final:batch:unit'},
+            {
+                'speaker': 'BATCH_UNASSIGNED_1',
+                'speaker_id_scope': 'final:batch:unit',
+                'speaker_match_source': 'batch_abstention',
+            },
+            {'speaker': 'SPEAKER_00', 'speaker_id_scope': 'sync:legacy'},
+        ]
+    )
+    for authority in ('batch', 'abstained', 'legacy'):
+        assert registry.get_sample_value('omi_batch_pipeline_projected_segments_total', {'authority': authority}) == 1

@@ -9,7 +9,7 @@ import wave
 from utils.stt_cap_dispatch import sync_allowed, funded_allowance
 from config.stt_cap_dispatch import execution_admission_enabled as cap_enabled
 from utils.observability.stt_cap_dispatch import record_audio
-from config.batch_pipeline import recovery_owners
+from config.batch_pipeline import recovery_owners, recovery_enabled_for, recover_all_admitted
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore, recovery_candidates, cancel_fenced_recovery
@@ -71,9 +71,10 @@ class QuarantineRecovery:
     def __init__(self, store, artifacts, *, stt=transcribe, clock=time.time):
         self.store, self.artifacts, self.stt, self.clock = store, artifacts, stt, clock
         self.protocol = RecoveryStore(store)
+        self._candidate_after: str | None = None
 
     def recover(self, segment_id, owner_id):
-        if owner_id not in recovery_owners():
+        if not recovery_enabled_for(owner_id):
             return 'disabled'
         try:
             job = self.protocol.prepare(segment_id, owner_id, self.clock())
@@ -97,7 +98,7 @@ class QuarantineRecovery:
             # immediately before issuing the sole application-level STT call.
             if not sync_allowed(owner_id, item.duration_seconds):
                 return 'held'
-            if owner_id not in recovery_owners() or not self.protocol.start(segment_id, token, self.clock()):
+            if not recovery_enabled_for(owner_id) or not self.protocol.start(segment_id, token, self.clock()):
                 return 'held'
             from database.batch_pipeline_projection_protocol import normalized_binding
             from utils.observability.fallback import record_fallback
@@ -135,8 +136,20 @@ class QuarantineRecovery:
 
     def sweep(self):
         counts = {}
-        for owner_id in recovery_owners():
-            for segment_id in recovery_candidates(self.store.client, self.store.namespace, owner_id):
+        all_admitted = recover_all_admitted()
+        owners = (None,) if all_admitted else recovery_owners()
+        for selected_owner in owners:
+            if all_admitted:
+                candidates = recovery_candidates(
+                    self.store.client, self.store.namespace, None, after_id=self._candidate_after
+                )
+            else:
+                candidates = recovery_candidates(self.store.client, self.store.namespace, selected_owner)
+            if all_admitted and not candidates:
+                self._candidate_after = None  # Wrap next tick, without a second query.
+            for segment_id, owner_id in candidates:
+                if all_admitted:
+                    self._candidate_after = segment_id  # Held/capped rows cannot pin the global page.
                 try:
                     outcome = self.recover(segment_id, owner_id)
                 except Exception:
@@ -147,5 +160,5 @@ class QuarantineRecovery:
                 except Exception:
                     pass
                 if outcome in {'recovered', 'failed_held', 'result_held', 'cancelled'}:
-                    break  # At most one provider dispatch per owner per sweep.
+                    break  # One provider dispatch per queried cohort per sweep; continue at this cursor next tick.
         return counts

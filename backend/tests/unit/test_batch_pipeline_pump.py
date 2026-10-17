@@ -260,3 +260,18 @@ async def test_worker_dispatch_denial_defers_without_quarantining_or_losing_audi
     assert job['state'] == 'retry' and job['attempt'] == 0
     assert ('results', 'first') not in store.rows
     assert calls == [['first'], ['first']]
+
+
+@pytest.mark.asyncio
+async def test_empty_asr_handoff_quarantines_first_attempt_and_stale_token_cannot_complete():
+    from utils.batch_pipeline.contracts import RecoveryWork
+
+    worker = Worker()
+    worker.process_batch = lambda items: [RecoveryWork(v.segment_id) for v in items]
+    store, queue, pump = setup(worker)
+    await pump.run_once()
+    job = store.rows['jobs', 'first']
+    assert job['state'] == 'quarantined' and job['attempt'] == 1
+    assert job['recovery_state'] == 'held' and not job['merge_pending']
+    assert ('results', 'first') not in store.rows
+    assert not queue.complete(WorkResult('first', 'gs://synthetic/stale'), '', time.time())

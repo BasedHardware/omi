@@ -724,7 +724,8 @@
       "sources": [
         ".github/workflows/gcp_cloud_run_metrics_egress.yml",
         "backend/charts/monitoring/prometheus-stackdriver-exporter/*_omi_cloud_run_metrics_exporter.yaml",
-        "backend/charts/monitoring/kube-prometheus-stack/*_omi_monitoring_values.yaml"
+        "backend/charts/monitoring/kube-prometheus-stack/*_omi_monitoring_values.yaml",
+        "backend/charts/monitoring/gmp/**"
       ],
       "tests": [
         "tests/unit/test_cloud_run_metrics_egress_workflow.py"
@@ -733,7 +734,7 @@
       "invariants": [
         "reviewed Cloud Run application exporter values are automatically installed in development after merge",
         "production metrics egress deploys only through an explicit protected-environment dispatch from main",
-        "the isolated exporter and its Prometheus scrape configuration use pinned charts and atomic Helm upgrades"
+        "pinned Helm charts preserve new production PVCs on failure; production stack rollback requires reviewed Retain values"
       ]
     },
     {
@@ -845,6 +846,68 @@
         "Parakeet retains 2 request and 35 percent GPU scale-out triggers, floor 3 and cap 12 with a latency guard",
         "Self-hosted teardown is blocked by any caller or unresolved runtime binding",
         "Gateway qualification uses served clients and synthetic speech; refusals and protocol failures block qualification"
+      ]
+    },
+    {
+      "id": "monitoring_as_code",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/grafana_dashboard_provisioning.yml",
+        "backend/scripts/provision_grafana_dashboards.py",
+        "backend/scripts/provision_monitoring_alerts.py",
+        "backend/scripts/verify_gmp_frontend_render.py",
+        "backend/charts/monitoring/gmp/**",
+        "backend/scripts/monitoring_gmp_shadow.py",
+        "backend/charts/monitoring/gmp-query-migration-inventory.json",
+        "backend/charts/monitoring/gmp-shadow-mappings.json"
+      ],
+      "tests": [
+        "tests/unit/test_provision_grafana_dashboards.py",
+        "tests/unit/test_provision_monitoring_alerts.py",
+        "tests/unit/test_monitoring_gmp_frontend.py",
+        "tests/unit/test_monitoring_datasource_health.py",
+        "tests/unit/test_cloud_run_metrics_egress_workflow.py",
+        "tests/unit/test_monitoring_gmp_shadow.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "production Grafana changes require explicit prod dispatch with the production Environment secret",
+        "alert upserts retain unknown live rules, preserve provenance, back up before writes, and verify complete definitions",
+        "dashboard imports preserve folders and authenticated requests never follow redirects",
+        "GMP addition preserves local sources, HPA routing, recording rules and the history warmup pin",
+        "canaries are installed, read back and queried before KeepLast business updates",
+        "shadow comparison rejects missingness, nonfinite values and redirected credentials; it never authorizes cutover"
+      ]
+    },
+    {
+      "id": "monitoring_log_and_route_migration",
+      "risk": "high",
+      "sources": [
+        "backend/charts/monitoring/dashboards/omi-services/omi-services-overview.json",
+        "backend/charts/monitoring/alert-rules.json",
+        "backend/charts/monitoring/alerts/**",
+        "backend/charts/monitoring/metric-inventory.prod.json",
+        "backend/charts/monitoring/retired-loki-alerts.json",
+        "backend/charts/monitoring/route-errors/**",
+        "backend/scripts/retire_paused_loki_alerts.py",
+        "backend/scripts/check_route_error_preparation.py",
+        "backend/scripts/check_edge_storm_preparation.py"
+      ],
+      "tests": [
+        "tests/unit/test_monitoring_log_plane_migration.py",
+        "tests/unit/test_retire_paused_loki_alerts.py",
+        "tests/unit/test_route_error_preparation.py",
+        "tests/unit/test_edge_storm_preparation.py",
+        "tests/unit/test_monitoring_alert_rule_contract.py",
+        "tests/unit/test_monitoring_gmp_shadow.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "Cloud Logging panels use scoped supported log queries and do not claim numeric LogQL parity",
+        "manual deletion requires exact still-paused Loki identities and an exclusive private backup",
+        "route labels remain finite; metrics and alerts stay held until source coverage and replay acceptance",
+        "same-LB-stream storm and nonstorm partitions preserve unrelated errors without a blanket mute",
+        "collector or datastore retirement never happens through these preparation sources"
       ]
     }
   ]

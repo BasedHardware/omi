@@ -7,7 +7,14 @@ from collections.abc import Callable
 from typing import Any
 
 from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
-from utils.batch_pipeline.contracts import BatchWorker, HEARTBEAT_SECONDS, LeasedWork, PoolCapacity, HeldWork
+from utils.batch_pipeline.contracts import (
+    BatchWorker,
+    HEARTBEAT_SECONDS,
+    LeasedWork,
+    PoolCapacity,
+    HeldWork,
+    RecoveryWork,
+)
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.compute_client import from_env as compute_client_from_env
@@ -37,7 +44,7 @@ class Pump:
             raise ValueError('invalid bounded pump configuration')
         self.scheduler = scheduler
         self.worker = worker
-        self.merge = merge or OrderedMerge(scheduler.store, metrics=metrics)
+        self.merge = merge or OrderedMerge(scheduler.store, metrics=metrics, commit_source='gpu_pump')
         self.metrics = metrics
         self.batch_size = batch_size
         self.poll_seconds = poll_seconds
@@ -220,8 +227,11 @@ class Pump:
                             db_executor, self.scheduler.defer, segment, lease.token, time.time(), result.retry_after
                         )
                         continue
-                    if result is None:
-                        if await run_blocking(db_executor, self.scheduler.fail, segment, lease.token, time.time()):
+                    if result is None or isinstance(result, RecoveryWork):
+                        failure_kwargs = {'quarantine': True} if isinstance(result, RecoveryWork) else {}
+                        if await run_blocking(
+                            db_executor, self.scheduler.fail, segment, lease.token, time.time(), **failure_kwargs
+                        ):
                             await self.drain_owner(lease.item.owner_id)
                         continue
                     accepted = await run_blocking(

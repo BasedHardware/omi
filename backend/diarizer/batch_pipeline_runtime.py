@@ -25,6 +25,7 @@ from diarizer.batch_pipeline_startup import ChainMemoryProbe, load_worker, synch
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.capacity import PoolCapacity
 from utils.batch_pipeline.metrics import QueueMetrics
+from utils.batch_pipeline.correctness_metrics import TRANSITIONS, DURATION, LABELS
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.scheduler import Scheduler
@@ -90,6 +91,9 @@ class SynchronizedWorker:
 def health_server(state: RuntimeState, registry: CollectorRegistry, port: int) -> ThreadingHTTPServer:
     if cap_dispatch_enabled():
         registry.register(AUDIO_SECONDS)
+    registry.register(TRANSITIONS)
+    registry.register(DURATION)
+    registry.register(LABELS)
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):

@@ -4,6 +4,7 @@ import {
   assembleSeries,
   BAD_MARK,
   COHORT_WEEKS,
+  CURVE_MARK,
   GOOD_MARK,
   headlineDelta,
   GROWTH_WEEKS,
@@ -148,15 +149,16 @@ describe("v3 series agree with the v2 snapshot", () => {
     const f = await all(wall, s);
     const rate = value(wall, "activation.rate");
     const rows = f.activation.sources;
+    // Largest group first.
     expect(rows.map((r) => r.source)).toEqual([
-      "Pendant · 8",
       "Phone mic · 12",
-      "None · 10",
+      "No capture · 10",
+      "Omi pendant · 8",
     ]);
     expect(rows.reduce((n, r) => n + Number(r.people), 0)).toBe(
       rate.denominator
     );
-    expect(rows[0].activation).toBe(75);
+    expect(rows.at(-1)?.activation).toBe(75);
   });
 
   it("every chart's latest point is the stat above it", async () => {
@@ -234,17 +236,17 @@ describe("v3 series agree with the v2 snapshot", () => {
       unit: "pp",
       delta: expect.closeTo(6.6, 6),
       tone: "good",
-      text: `▲ 6.6 pp${GOOD_MARK}`,
+      text: `▲\u00a06.6\u00a0pp${GOOD_MARK}`, // never wraps in a narrow strip
     });
     expect(headlineDelta("wau", rows(4000, 3600))).toMatchObject({
       unit: "%",
       delta: -10,
       tone: "bad",
-      text: `▼ 10.0%${BAD_MARK}`,
+      text: `▼\u00a010.0%${BAD_MARK}`,
     });
     // Cost up is bad; flat is neutral; one row has no prior.
     expect(headlineDelta("netCost", rows(2000, 2500)).tone).toBe("bad");
-    expect(headlineDelta("costPerMau", rows(7, 7)).text).toBe("■ 0.0%");
+    expect(headlineDelta("costPerMau", rows(7, 7)).text).toBe("■\u00a00.0%");
     expect(headlineDelta("mrr", [{ date: "b", value: 1 }]).text).toBe(
       "no prior"
     );
@@ -335,9 +337,18 @@ describe("v3 series agree with the v2 snapshot", () => {
     );
     // Snapshot: 3 maturities × 3 chunks + true-new 3; series: 2 histories × 3 chunks.
     expect(cohortSql).toHaveLength(12 + 6);
-    expect(f.retention.curve[0]).toMatchObject({ week: 0 });
-    expect(f.retention.curve).toHaveLength(9);
-    expect(f.retention.curve[1]).toHaveProperty("week", 1);
+    // One frame per cohort age, nine week rows each; the field name carries
+    // the age as invisible marks (the board's ramp matcher).
+    const newest = f.retention.cohort_0;
+    expect(newest).toHaveLength(9);
+    expect(newest[1]).toHaveProperty("week", 1);
+    const [label] = Object.keys(newest[0]).filter((k) => k !== "week");
+    expect(label).toMatch(/^[A-Z][a-z]{2} \d+$/);
+    const older = Object.keys(f.retention.cohort_2[0]).find(
+      (k) => k !== "week"
+    );
+    expect(older?.endsWith(CURVE_MARK.repeat(2))).toBe(true);
+    expect(older?.slice(0, -2)).not.toContain(CURVE_MARK);
   });
 
   it("lists sourceless wall metrics as compact coverage gaps", async () => {
@@ -583,6 +594,11 @@ describe("v3 series converge across Cloud Run instances", () => {
       expect(JSON.stringify(l)).not.toMatch(/SELECT|actor|distinct_id/i);
     expect(head.status?.through).toBe(isoDay(shiftDay(end, -1)));
     expect(head.frames.gaps[0]).toMatchObject({ metric: "Data through" });
+    // The TV's single freshness line, without the rollup diagnostics.
+    expect(String(head.frames.through[0].text)).toMatch(
+      /^Data through Oct 14 \(UTC\)/
+    );
+    expect(String(head.frames.through[0].text)).not.toContain("rollup");
     expect(String(head.frames.gaps[0].missing)).toMatch(/^Oct 14 \(UTC\)/);
   });
 });
