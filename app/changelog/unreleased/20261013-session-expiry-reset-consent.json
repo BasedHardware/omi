@@ -1,0 +1,3 @@
+{
+  "change": "Reset AI consent and onboarding progress on session expiry so subsequent accounts are prompted for consent"
+}
