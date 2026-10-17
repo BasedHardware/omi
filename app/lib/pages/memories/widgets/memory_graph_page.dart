@@ -233,9 +233,18 @@ String memoryGraphUserLabel(String givenName, AppLocalizations l10n) {
 /// plus the given name. The localized display fallback is not one of them, so a concept
 /// node that happens to read "tú" or "you" stays a concept.
 @visibleForTesting
-Set<String> memoryGraphKnownUserLabels(String givenName) {
+Set<String> memoryGraphKnownUserLabels(String givenName, {String? fullName}) {
   final name = givenName.trim().toLowerCase();
-  return {'me', 'the user', if (name.isNotEmpty) name};
+  final full = (fullName ?? '').trim().toLowerCase();
+  return {
+    'me',
+    'the user',
+    'user',
+    'myself',
+    'i',
+    if (name.isNotEmpty) name,
+    if (full.isNotEmpty && full != name) full,
+  };
 }
 
 class MemoryGraphPage extends StatefulWidget {
@@ -274,6 +283,9 @@ class MemoryGraphPage extends StatefulWidget {
 }
 
 class MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  @visibleForTesting
+  ForceDirectedSimulation3D get simulationForTesting => simulation;
+
   late ForceDirectedSimulation3D simulation;
   late Ticker _ticker;
 
@@ -460,12 +472,21 @@ class MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProvi
     final edges = data['edges'] as List<dynamic>? ?? [];
 
     final givenName = SharedPreferencesUtil().givenName;
+    final fullName = SharedPreferencesUtil().fullName;
     final userLabel = memoryGraphUserLabel(givenName, context.l10n);
-    final knownUserLabels = memoryGraphKnownUserLabels(givenName);
+    final knownUserLabels = memoryGraphKnownUserLabels(givenName, fullName: fullName);
     bool isUserLikeNode(Map<dynamic, dynamic> nodeData) {
       final label = (nodeData['label'] as String? ?? '').trim().toLowerCase();
       final nodeType = (nodeData['node_type'] as String? ?? '').trim().toLowerCase();
-      return knownUserLabels.contains(label) || nodeType == 'user';
+      final id = (nodeData['id'] ?? '').toString().trim().toLowerCase();
+      return knownUserLabels.contains(label) ||
+          nodeType == 'user' ||
+          nodeType == 'primary_user' ||
+          nodeType == 'self' ||
+          nodeType == 'owner' ||
+          id == 'user' ||
+          id == 'user-node' ||
+          id == 'primary_user';
     }
 
     String? primaryUserId;
