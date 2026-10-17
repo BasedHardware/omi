@@ -71,6 +71,8 @@ def with_memory_env(payload: str) -> str:
         {"name": "BATCH_PIPELINE_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_UID_ALLOWLIST", "value": ""},
         {"name": "BATCH_PIPELINE_PERCENT", "value": "0"},
+        {"name": "FIRST_SUMMARY_DEADLINE_PERCENT", "value": "0"},
+        {"name": "BATCH_LIVE_STT_RETIRE_PERCENT", "value": "0"},
         {"name": "BATCH_PIPELINE_SERVING_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_LIVE_ADMISSION_ENABLED", "value": "false"},

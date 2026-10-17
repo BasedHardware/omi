@@ -24,6 +24,7 @@ from config.capture_evidence import (
     listen_committed_capture_coverage_enabled,
 )
 from routers.listen.contracts import ConversationCaptureOrigin
+from routers.listen.batch_preview import capture_batch_preview
 from routers.listen.demand_routing import attach_live_demand
 from routers.listen.demand_switch import switch_live_demand
 from routers.listen.lane_meter import LiveLaneMeter
@@ -1253,6 +1254,7 @@ class ListenReceiver(ReplayFilterMixin):
                 self.cap_paused = True
                 return True  # Receive/persist without consulting provider routing.
             self.cap_paused = False
+        capture_batch_preview(self.host)
         self.live_demand = attach_live_demand(self)
         if self.live_demand is not None:
             await self.live_demand.publish()
