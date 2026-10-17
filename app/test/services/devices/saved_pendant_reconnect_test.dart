@@ -51,6 +51,33 @@ void main() {
     });
   }
 
+  test('a native-only reconnect does not reuse the completed Dart attempt outcome', () {
+    fakeAsync((async) {
+      var connected = false;
+      final outcomes = <String>[];
+      final retry = SavedPendantReconnect(
+        target: () => 'saved',
+        blocked: (_) => false,
+        connected: (_) => connected,
+        connect: (_) async {},
+        configure: (_, __) async {},
+        killed: () async => false,
+        record: (_, __, result, ___) => outcomes.add(result),
+      );
+      retry.start();
+      retry.ensure('launch');
+      async.flushMicrotasks();
+      connected = true;
+      retry.stateChanged('saved', true);
+      connected = false;
+      retry.stateChanged('saved', false);
+      connected = true;
+      retry.stateChanged('saved', true);
+      expect(outcomes.where((result) => result == 'connected'), hasLength(1));
+      retry.stop();
+    });
+  });
+
   test('dedupes overlapping triggers and rechecks manual intent after flag read', () {
     fakeAsync((async) {
       var manual = false;

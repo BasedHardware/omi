@@ -106,7 +106,7 @@ final class OmiBleManager: NSObject {
     }
 
     private func reportSavedReconnect(_ uuid: String, result: String) {
-        guard savedReconnect.contains(uuid) else { return }
+        guard savedReconnect.contains(uuid), (savedRetryAttempts[uuid] ?? 0) > 0 else { return }
         let elapsed = Int64(max(0, Date().timeIntervalSince(savedOutageStarted[uuid] ?? Date()) * 1000))
         logBle(uuid: uuid, event: "saved_pendant_reconnect", detail: result)
         flutterApi?.onSavedReconnect(peripheralUuid: uuid, attempt: Int64(savedRetryAttempts[uuid] ?? 0),
@@ -118,13 +118,13 @@ final class OmiBleManager: NSObject {
               savedRetryTasks[uuid] == nil else { return }
         savedOutageStarted[uuid] = savedOutageStarted[uuid] ?? Date()
         let attempt = (savedRetryAttempts[uuid] ?? 0) + 1
-        savedRetryAttempts[uuid] = attempt
         let task = DispatchWorkItem { [weak self, weak peripheral] in
             guard let self, let peripheral else { return }
             self.savedRetryTasks.removeValue(forKey: uuid)
             guard self.savedReconnect.contains(uuid), self.shouldAutoReconnect(uuid: uuid, pairingLost: false),
                   self.centralManager.state == .poweredOn, self.peripherals[uuid] === peripheral,
                   peripheral.state != .connected else { return }
+            self.savedRetryAttempts[uuid] = attempt
             self.reportSavedReconnect(uuid, result: "attempted")
             self.centralManager.connect(peripheral, options: nil)
         }

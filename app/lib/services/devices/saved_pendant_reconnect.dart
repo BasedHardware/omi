@@ -60,6 +60,7 @@ class SavedPendantReconnect {
   bool get _running => _runningGeneration == _generation;
   bool _active = false;
   bool _killActive = false;
+  bool _awaitingOutcome = false;
   int _generation = 0;
   int _attempt = 0;
   int _delaySeconds = 5;
@@ -83,6 +84,7 @@ class SavedPendantReconnect {
     _delaySeconds = 5;
     _disconnectedAt = null;
     _killActive = false;
+    _awaitingOutcome = false;
     _timer?.cancel();
     _lifecycle?.dispose();
     _lifecycle = null;
@@ -95,7 +97,8 @@ class SavedPendantReconnect {
   void stateChanged(String id, bool isConnected) {
     if (!_active || target() != id) return;
     if (isConnected) {
-      _record(_trigger, _attempt, 'connected', _elapsed);
+      if (_awaitingOutcome) _record(_trigger, _attempt, 'connected', _elapsed);
+      _awaitingOutcome = false;
       _timer?.cancel();
       _disconnectedAt = null;
       _delaySeconds = 5;
@@ -141,6 +144,7 @@ class SavedPendantReconnect {
       _disconnectedAt ??= DateTime.now();
       _trigger = trigger;
       _attempt++;
+      _awaitingOutcome = true;
       _record(trigger, _attempt, 'attempted', _elapsed);
       await connect(id);
       if (!current()) return;

@@ -488,7 +488,7 @@ class OmiBleForegroundService : Service() {
                 bleManager.mainHandler.post {
                     bleManager.flutterApi?.onPeripheralDisconnected(addr, "connect_gatt_unavailable") {}
                 }
-                handleRetryLogic(addr, 133)
+                if (!isDestroying && isBluetoothEnabled) scheduleReconnect(addr, managed, RECONNECT_DELAY_MS)
                 return
             }
 
@@ -668,8 +668,14 @@ class OmiBleForegroundService : Service() {
         val delayMs = bleManager.cccdReconnectPolicy.reconnectDelay(
             addr, status == OmiBleManager.CCCD_TIMEOUT_STATUS, RECONNECT_DELAY_MS,
         ) ?: return false
+        scheduleReconnect(addr, managed, delayMs)
+        return true
+    }
+
+    private fun scheduleReconnect(addr: String, managed: ManagedDevice, delayMs: Long) {
+        managed.pendingReconnect?.let { handler.removeCallbacks(it) }
         managed.retryCount++
-        Log.i(TAG, "Retry #${managed.retryCount} for $addr in ${delayMs}ms (status=$status)")
+        Log.i(TAG, "Retry #${managed.retryCount} for $addr in ${delayMs}ms")
 
         val runnable = Runnable {
             managed.pendingReconnect = null
@@ -677,7 +683,6 @@ class OmiBleForegroundService : Service() {
         }
         managed.pendingReconnect = runnable
         handler.postDelayed(runnable, delayMs)
-        return true
     }
 
     private fun reportCccdRecovery(address: String, generation: String, exhausted: Boolean) {

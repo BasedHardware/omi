@@ -25,7 +25,7 @@ internal class BleSavedReconnect {
 
     @Synchronized fun event(address: String, result: String, now: Long): Triple<Long, String, Long>? {
         val key = address.uppercase()
-        if (key !in enabled) return null
+        if (key !in enabled || (result != "attempted" && key !in attempts)) return null
         if (result == "attempted") attempts[key] = (attempts[key] ?: 0) + 1
         val start = outages.getOrPut(key) { now }
         val event = Triple(attempts[key] ?: 0, result, (now - start).coerceAtLeast(0))
