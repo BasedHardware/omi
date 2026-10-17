@@ -75,15 +75,24 @@ _DEFAULT_FREE_PLAN = _profile_default('free')
 _DEFAULT_PAID_PLAN = _profile_default('paid')
 
 
-def _fetch_config() -> Dict[str, Any]:
-    doc = db.collection("phone_call_config").document("default").get()
-    if not getattr(doc, "exists", False):
+def _fetch_config(firestore_client: Optional[Any] = None) -> Dict[str, Any]:
+    try:
+        client = firestore_client if firestore_client is not None else db
+        doc = client.collection("phone_call_config").document("default").get()
+        if not getattr(doc, "exists", False):
+            return {}
+        raw: object = doc.to_dict()
+        return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+    except Exception:
+        # A transient Firestore failure must not crash policy resolution —
+        # callers fall back to catalog defaults for the cache lifetime.
+        _LOGGER.warning('phone_call_config fetch failed; using catalog defaults', exc_info=True)
         return {}
-    raw: object = doc.to_dict()
-    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
 
 
-def _get_config() -> Dict[str, Any]:
+def _get_config(firestore_client: Optional[Any] = None) -> Dict[str, Any]:
+    if firestore_client is not None:
+        return _fetch_config(firestore_client)
     fetched = get_memory_cache().get_or_fetch(_CACHE_KEY, _fetch_config, ttl=_CACHE_TTL_SECONDS)
     return cast(Dict[str, Any], fetched) if isinstance(fetched, dict) else {}
 
@@ -120,11 +129,60 @@ def _merge_defaults(override: Optional[Dict[str, Any]], defaults: Dict[str, Any]
     return merged
 
 
+def _sanitize_countries(value: object) -> list[str]:
+    """Normalize allowed_countries to uppercase 2-letter ISO codes.
+
+    A non-list value or malformed items are dropped rather than letting a
+    string ("US") or padded/lowercase entries bypass restriction checks.
+    """
+    if not isinstance(value, list):
+        return []
+    out: list[str] = []
+    for item in value:
+        if isinstance(item, str):
+            code = item.strip().upper()
+            if len(code) == 2 and code.isalpha():
+                out.append(code)
+    return out
+
+
+def _sanitize_limit(value: object) -> object:
+    """Return a valid non-negative int limit or a sentinel to drop the field.
+
+    Booleans are rejected explicitly (``True`` is an ``int`` in Python but is
+    never a legitimate call limit); negative values are dropped; ``None``
+    (unlimited) is preserved.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        return _REJECT
+    return value if value >= 0 else _REJECT
+
+
+_REJECT = object()
+_LIMIT_FIELDS = ('monthly_call_limit', 'max_duration_seconds')
+
+
 def _declared_override(override: object, defaults: Dict[str, Any]) -> Dict[str, Any]:
-    """Return only known Firestore fields that are declared for this overlay."""
+    """Return only known, sanitized Firestore fields declared for this overlay."""
     if not isinstance(override, dict):
         return {}
-    return {key: override[key] for key in defaults if key in override}
+    declared: Dict[str, Any] = {}
+    for key in defaults:
+        if key not in override:
+            continue
+        value = override[key]
+        if key == 'allowed_countries':
+            declared[key] = _sanitize_countries(value)
+        elif key in _LIMIT_FIELDS:
+            value = _sanitize_limit(value)
+            if value is _REJECT:
+                continue
+            declared[key] = value
+        else:
+            declared[key] = value
+    return declared
 
 
 def _ignored_override_fields(override: object, defaults: Dict[str, Any]) -> tuple[str, ...]:
