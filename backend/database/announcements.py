@@ -304,6 +304,11 @@ def _parse_version(version: str) -> Tuple[Any, ...]:
         return ((0, 0, 0), 0, False)
 
 
+# Public alias: _parse_version stays internal to this module's implementation
+# history; consumers that need the same semantics import the public name.
+parse_version = _parse_version
+
+
 def _version_tuple(version: str) -> Tuple[Any, ...]:
     """
     Convert version string to tuple for sorting.
