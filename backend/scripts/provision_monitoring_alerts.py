@@ -8,9 +8,11 @@ notification timing. Runtime IDs and update timestamps are not configuration.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import math
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -58,10 +60,49 @@ def index_rules(payload: object) -> dict[str, dict]:
     return result
 
 
+# Grafana 13 writes these defaults into every query on save, so readback carries
+# them even when the committed source omits them; they are not semantic drift.
+QUERY_DEFAULTS = (('queryType', ''),)
+MODEL_DEFAULTS = (('intervalMs', 1000), ('maxDataPoints', 43200))
+DURATION_UNITS = {'ms': 0.001, 's': 1, 'm': 60, 'h': 3600, 'd': 86400, 'w': 604800}
+
+
+def duration_seconds(value: object) -> object:
+    # Grafana 13 re-renders notification durations (24h reads back as 1d).
+    if not isinstance(value, str):
+        return value
+    parts = re.fullmatch(r'(?:\d+(?:ms|[smhdw]))+', value) and re.findall(r'(\d+)(ms|[smhdw])', value)
+    return sum(int(n) * DURATION_UNITS[u] for n, u in parts) if parts else value
+
+
 def definition(rule: dict) -> dict:
     # Grafana12.1 nullable semantic fields use null and omission equivalently.
     nullable = {'record', 'missingSeriesEvalsToResolve'}
     return {key: rule[key] for key in FIELDS if key in rule and (key not in nullable or rule[key] is not None)}
+
+
+def comparable(rule: dict) -> dict:
+    """definition() with Grafana's save-time rewrites undone, for readback comparison only.
+
+    Never send this to Grafana: it renders durations as seconds."""
+    result = copy.deepcopy(definition(rule))
+    for query in result.get('data') or []:
+        if not isinstance(query, dict):
+            continue
+        for key, default in QUERY_DEFAULTS:
+            if query.get(key) == default:
+                query.pop(key)
+        model = query.get('model')
+        if isinstance(model, dict):
+            for key, default in MODEL_DEFAULTS:
+                if model.get(key) == default:
+                    model.pop(key)
+    settings = result.get('notification_settings')
+    if isinstance(settings, dict):
+        for key in ('group_wait', 'group_interval', 'repeat_interval'):
+            if key in settings:
+                settings[key] = duration_seconds(settings[key])
+    return result
 
 
 def load_rules(path: Path) -> dict[str, dict]:
@@ -131,7 +172,8 @@ def drift(desired: dict[str, dict], live: dict[str, dict]) -> list[str]:
         if uid not in live:
             result.append(f'{uid}: absent')
         else:
-            keys = [key for key in FIELDS if rule.get(key) != live[uid].get(key)]
+            want, have = comparable(rule), comparable(live[uid])
+            keys = [key for key in FIELDS if want.get(key) != have.get(key)]
             if keys:
                 result.append(f'{uid}: divergent fields: {",".join(keys)}')
     for uid in sorted(live.keys() - desired.keys()):
@@ -239,7 +281,7 @@ def reconcile(api: Grafana, desired: dict[str, dict], *, backup: Path | None = N
         provenance[group] = value
     planned = []
     for uid, rule in sorted(desired.items()):
-        if uid in live and definition(rule) == definition(live[uid]):
+        if uid in live and comparable(rule) == comparable(live[uid]):
             continue
         current = live[uid].get('provenance', '') if uid in live else 'api'
         group = (rule['folderUID'], rule['ruleGroup'])
@@ -272,7 +314,7 @@ def reconcile(api: Grafana, desired: dict[str, dict], *, backup: Path | None = N
         failures = [
             f'{uid}: canary readback differs'
             for uid, rule in canaries.items()
-            if uid not in current or definition(current[uid]) != definition(rule)
+            if uid not in current or comparable(current[uid]) != comparable(rule)
         ]
         if failures:
             return failures
