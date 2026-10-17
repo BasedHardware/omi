@@ -1,14 +1,16 @@
 """Ordered durable result log. Projection consumers must use stable segment IDs."""
 
 from database.batch_pipeline_store import Store
+from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.metrics import QueueMetrics
 
 
 class OrderedMerge:
-    def __init__(self, store: Store, *, metrics: QueueMetrics | None = None):
+    def __init__(self, store: Store, *, metrics: QueueMetrics | None = None, commit_source: str = 'ordered_merge'):
         self.store = store
         self.metrics = metrics
+        self.commit_source = commit_source
 
     def commit_next(self, owner_id: str, now: float) -> dict | None:
         key = owner_key(owner_id)
@@ -61,8 +63,10 @@ class OrderedMerge:
             return entry
 
         entry = self.store.run(commit)
-        if entry and self.metrics:
-            self.metrics.record('committed')
+        if entry:
+            record_correctness('committed', source=self.commit_source)
+            if self.metrics:
+                self.metrics.record('committed')
         return entry
 
     def committed_result(self, segment_id: str) -> dict:

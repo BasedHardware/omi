@@ -13,10 +13,12 @@ import threading
 from typing import Any, Callable, Mapping, Sequence
 
 from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
+from config.batch_pipeline import empty_asr_recovery_enabled
 from utils.observability.stt_cap_dispatch import record_audio
 from config.batch_pipeline_providers import ProviderConfig
 from config.sync_live_dedupe import sync_live_dedupe_active_for
-from utils.batch_pipeline.contracts import WorkItem, WorkResult, HeldWork
+from utils.batch_pipeline.correctness_metrics import record as record_correctness
+from utils.batch_pipeline.contracts import WorkItem, WorkResult, HeldWork, RecoveryWork
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.observability.fallback import record_fallback
 
@@ -236,7 +238,9 @@ class PipelineWorker:
         self._unavailable = False
         self.counts = {'items': 0, 'reused_live': 0, 'silence': 0, 'failed': 0}
 
-    def process_batch(self, items: Sequence[WorkItem], *, authorize_dispatch=None) -> Sequence[WorkResult | HeldWork]:
+    def process_batch(
+        self, items: Sequence[WorkItem], *, authorize_dispatch=None
+    ) -> Sequence[WorkResult | HeldWork | RecoveryWork]:
         if len(items) > 32 or len({i.segment_id for i in items}) != len(items):
             raise ValueError('pull must contain at most 32 distinct conversations')
         if any(item.duration_seconds > self.config.max_unit_seconds for item in items):
@@ -286,6 +290,15 @@ class PipelineWorker:
                 failed.add(item.segment_id)
                 self.counts['failed'] += 1
                 reason = exc.reason if isinstance(exc, BatchValidationError) else 'unclassified'
+                if reason == 'empty_asr':
+                    record_correctness('empty_asr_attempt', source='gpu_worker', seconds=item.duration_seconds)
+                if (
+                    reason == 'empty_asr'
+                    and stage == 'assemble_words'
+                    and self.recover_words is not None
+                    and empty_asr_recovery_enabled()
+                ):
+                    results.append(RecoveryWork(item.segment_id))
                 owned = len(states.get(item.segment_id, {}).get('words', []))
                 shape = shapes[item.segment_id]
                 failure_records.append(
