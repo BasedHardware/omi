@@ -462,7 +462,11 @@ def test_real_fenced_client_status_changes_only_after_durable_persist(lane, monk
     result = lane.projector.project(batch.ids[0])
     assert batch.ledger.get().to_dict()['status'] == 'completed'
     client_job = sync_jobs.get_sync_job(batch.binding.job_id)
-    assert client_job['status'] == 'completed' and client_job['result'] == result
+    assert client_job['status'] == 'completed'
+    # Redis intentionally stores only the bounded public result fields.
+    assert client_job['result'] == {
+        key: result[key] for key in ('new_memories', 'updated_memories', 'failed_segments', 'total_segments', 'errors')
+    }
 
 
 def test_erased_gap_can_advance_cursor_without_recreating_deleted_payload(lane):
@@ -940,3 +944,143 @@ def test_crash_after_final_part_commit_resumes_marks_without_loading_result(lane
     assert result['total_segments'] == 2 and len(lane.tasks) == 2
     assert lane.loads == [batch.ids[0]]
     assert all(row['sync_content_revision'] == 1 for row in active_rows(lane))
+
+
+def test_live_wal_concurrent_missing_target_replay_has_one_canonical_row(lane, monkeypatch):
+    """WAL wins the first race; listen creates its named row during that attempt."""
+    from dataclasses import asdict
+    from datetime import datetime, timezone
+    from utils.sync import assignment
+    from utils.sync.assignment_errors import SyncAssignmentConflict
+
+    monkeypatch.setenv('BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'true')
+    batch = lane.seed(device='synthetic-device')
+    binding = replace(batch.binding, target_conversation_id='synthetic-live')
+    lane.projector.store.ref('jobs', batch.ids[0]).update({'projection_binding': asdict(binding)})
+    lane.finish(batch)
+    missing, writing = threading.Event(), threading.Event()
+    original = assignment.assign_in_transaction
+
+    def observe_missing(*args, **kwargs):
+        try:
+            return original(*args, **kwargs)
+        except SyncAssignmentConflict:
+            missing.set()
+            # Let the writer start; its commit waits for this transaction's
+            # read lock to release when the conflict aborts.
+            assert writing.wait(10)
+            raise
+
+    monkeypatch.setattr(assignment, 'assign_in_transaction', observe_missing)
+    live_ref = lane.user.collection('conversations').document('synthetic-live')
+
+    def live_create():
+        assert missing.wait(10)
+        writing.set()
+        live_ref.set(
+            {
+                'id': 'synthetic-live',
+                'source': 'omi',
+                'client_device_id': 'synthetic-device',
+                'started_at': datetime.fromtimestamp(1000, timezone.utc),
+                'finished_at': datetime.fromtimestamp(1004, timezone.utc),
+                'created_at': datetime.fromtimestamp(1000, timezone.utc),
+                'transcript_segments': [],
+                'is_locked': False,
+                'status': 'in_progress',
+                'structured': {},
+                'data_protection_level': 'standard',
+            }
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        writer = pool.submit(live_create)
+        projection = pool.submit(lane.projector.project, batch.ids[0])
+        with pytest.raises(SyncAssignmentConflict, match='not persisted'):
+            projection.result(timeout=20)
+        writer.result(timeout=20)
+    assert len(active_rows(lane)) == 1 and not live_ref.get().to_dict().get('sync_content_revision')
+    assert batch.ledger.get().to_dict()['status'] == 'processing'
+    result = lane.projector.project(batch.ids[0])
+    assert result['updated_memories'] == ['synthetic-live']
+    assert len(active_rows(lane)) == 1
+    row = active_rows(lane)[0]
+    assert row['sync_content_revision'] == 1
+    assert all(s['speaker_id_scope'] == f'final:batch:{batch.ids[0]}' for s in row['transcript_segments'])
+    assert lane.projector.project(batch.ids[0]) == result
+    assert active_rows(lane)[0]['sync_content_revision'] == 1
+    assert len(lane.tasks) == 1
+
+
+def test_authoritative_append_preserves_manual_text_translation_and_ids(lane, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'true')
+    first = lane.seed()
+    lane.finish(first)
+    lane.projector.project(first.ids[0])
+    row = active_rows(lane)[0]
+    original = row['transcript_segments'][0]
+    original.update(
+        text='We discussed the project.',
+        original_text='We discussed the project.',
+        person_id='synthetic-person',
+        speaker_label_source='manual',
+        translations=[{'lang': 'fr', 'text': 'Synthetic translation.'}],
+    )
+    lane.user.collection('conversations').document(row['id']).update(
+        {
+            'transcript_segments': [original],
+            'transcript_segments_compressed': False,
+            'has_transcript_corrections': True,
+            'manual_speaker_assignments': {
+                'segments': {original['id']: {'person_id': 'synthetic-person', 'is_user': False}}
+            },
+            'manual_speaker_assignments_compressed': False,
+        }
+    )
+    from database import review_store
+    from utils.agent_capabilities import transcripts
+
+    correction = {
+        'segment_id': original['id'],
+        'segment_index': 0,
+        'start': original['start'],
+        'before': 'project',
+        'after': 'plan',
+        'kind': 'word',
+        'source': 'human',
+        'change_id': 'synthetic-edit',
+        'undone': False,
+    }
+    overlay = review_store.encode_doc(lane.uid, {'source': [correction]})
+    lane.user.collection('transcript_corrections').document(row['id']).set(overlay)
+    second = lane.seed(capture_at=1060)
+    from dataclasses import asdict
+
+    binding = replace(second.binding, target_conversation_id=row['id'])
+    lane.projector.store.ref('jobs', second.ids[0]).update({'projection_binding': asdict(binding)})
+    lane.finish(second)
+    lane.projector.project(second.ids[0])
+    assert len(active_rows(lane)) == 1
+    stored = active_rows(lane)[0]['transcript_segments']
+    retained = next(s for s in stored if s['id'] == original['id'])
+    for field in ('text', 'original_text', 'translations', 'id', 'person_id', 'speaker_label_source'):
+        assert retained[field] == original[field]
+    assert all(s['speaker_id_scope'].startswith('final:batch:') for s in stored)
+    projected = transcripts.project(lane.uid, active_rows(lane)[0], firestore_client=lane.client)
+    edited = next(s for s in projected['transcript_segments'] if s['id'] == original['id'])
+    assert edited['text'] == 'We discussed the plan.'
+    assert lane.user.collection('transcript_corrections').document(row['id']).get().to_dict() == overlay
+
+
+def test_projection_completed_metric_is_one_per_upload_not_replay(lane, monkeypatch):
+    from unittest.mock import Mock
+    from database import batch_pipeline_projection as module
+
+    metric = Mock()
+    monkeypatch.setattr(module, 'record_correctness', metric)
+    batch = lane.seed()
+    lane.finish(batch)
+    lane.projector.project(batch.ids[0])
+    lane.projector.project(batch.ids[0])
+    metric.assert_called_once_with('projection_completed', seconds=30.0)

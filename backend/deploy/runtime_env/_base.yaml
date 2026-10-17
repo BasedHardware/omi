@@ -543,6 +543,18 @@ environment_shared:
         REVIEW_SURFACE_MODE:
           value: 'on'
           category: rollout
+        BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
+          value: 'false'
+          category: rollout
+        BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
+          value: 'false'
+          category: rollout
+        BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
+          value: 'false'
+          category: rollout
+        BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED:
+          value: 'false'
+          category: rollout
         BATCH_PIPELINE_RECOVERY_MODE:
           value: 'off'
           category: rollout
@@ -1336,6 +1348,18 @@ environment_shared:
           CAPTURE_JEV_SHADOW_PERCENT:
             value: '0'
             category: rollout
+          BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED:
+            value: 'false'
+            category: rollout
           BATCH_PIPELINE_RECOVERY_MODE:
             value: 'off'
             category: rollout
@@ -1741,6 +1765,18 @@ environment_shared:
           CAPTURE_JEV_SHADOW_PERCENT:
             value: '0'
             category: rollout
+          BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED:
+            value: 'false'
+            category: rollout
           BATCH_PIPELINE_RECOVERY_MODE:
             value: 'off'
             category: rollout
@@ -2111,6 +2147,18 @@ environment_shared:
           CAPTURE_JEV_SHADOW_PERCENT:
             value: '0'
             category: rollout
+          BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED:
+            value: 'false'
+            category: rollout
           BATCH_PIPELINE_RECOVERY_MODE:
             value: 'off'
             category: rollout
@@ -2404,6 +2452,18 @@ environment_shared:
             value: https://us.posthog.com
             category: rollout
           SONIOX_ORDERED_FINALIZE:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_RECOVERY_MODE:

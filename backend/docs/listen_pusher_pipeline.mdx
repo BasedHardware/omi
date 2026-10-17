@@ -5155,3 +5155,55 @@ telemetry resolves to `ineligible`; failed label binding, counter/histogram
 updates, lane observations and wire observations cannot interrupt bootstrap,
 audio writes, transcript delivery or teardown. Missing measurements remain a
 ramp HOLD, never evidence of healthy exposure.
+
+### Dark record correctness controls
+
+`BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED=false` preserves today's projection.
+When enabled, successful batch pyannote turns persist `final:batch:<unit>` speaker
+scopes, shared across that unit's projection parts. These scopes survive rollback;
+enrichment skips conversation-wide AHC when any such segment is present, including
+mixed live/WAL conversations. There are no enrollment-compatible worker centroids:
+identities stay anonymous, owner-safe, and gaps carry explicit `batch_abstention`.
+Existing manual receipts still apply; text, translations and segment IDs are retained.
+Recovery output keeps legacy scopes and never claims pyannote authority.
+
+`BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED=false` is the default. When enabled,
+projection with an explicit target waits if that row has not persisted; replay uses
+the same transaction and receipt. This closes the WAL-before-live-create race
+without adding a target lookup or weakening source/device/privacy checks. Captures
+without an explicit target retain existing lineage and assignment policies.
+
+`BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED=false` preserves bounded GPU retries.
+When enabled on the worker, nonempty VAD plus empty ASR after the padded retry
+hands the unit directly to existing quarantine recovery. Empty ASR is never silence.
+`BATCH_PIPELINE_RECOVERY_MODE=on` and the existing recovery UID allowlist run David's
+recovery. `BATCH_PIPELINE_RECOVERY_ALL_ADMITTED=false` additionally permits the same
+bounded sweep across already-admitted owners when enabled, replacing the owner
+filter on the existing query. The durable prepared/running token forbids repeated
+paid STT after timeout, lost reply or process death. `failed_held` needs separate
+operator disposition; no automated reset or second paid attempt is introduced.
+
+`BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED=false` enables no counters by default.
+When enabled, existing committed transitions emit
+`omi_batch_pipeline_correctness_transitions_total{event,source}` and
+`omi_batch_pipeline_correctness_audio_seconds_total{event}`. Events are admitted,
+failed (terminal quarantine, once per unit), recovered (recovery settlement),
+committed, projection_completed (one durable upload completion) and
+empty_asr_attempt (raw GPU failures, may repeat). Commit sources distinguish
+`gpu_pump` from CPU `ordered_merge`; aggregate across both processes.
+`omi_batch_pipeline_projected_segments_total{authority=batch|legacy|abstained}`
+counts newly persisted survivors, not input words or complete conversations.
+No telemetry reads are added. Counters can miss a lost commit reply or process
+exit; they do not replace durable receipts. Projection completion establishes
+canonical persistence and enrichment scheduling, not completed summary/client display.
+
+Enable plan for the authorized operator: deploy dark; enable these controls for
+David with admission enabled, percent 0 and David on both admission and recovery
+allowlists. Require at least 30 minutes of clean, nonempty correctness sentinel
+observations. Set admission percent to 5 on every intake host and enable
+`BATCH_PIPELINE_RECOVERY_ALL_ADMITTED=true` on integration; after another clean
+30-minute sentinel, go directly to percent 100. Preserve the David allowlists.
+Worker label/retry flags apply only to already-admitted work. Warm capacity and
+budget checks precede each percentage flip. Close admission everywhere to roll
+back, retaining worker, integration and recovery drain paths. Unsetting producer
+flags does not remove persisted label authority or reset paid recovery intents.

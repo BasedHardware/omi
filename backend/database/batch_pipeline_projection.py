@@ -16,6 +16,7 @@ from database.sync_ledger import (
     sync_content_ledger_ref,
     is_valid_completed_sync_content_result,
 )
+from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import ProjectionBinding
 from utils.batch_pipeline.scheduler import owner_key
 from database.batch_pipeline_projection_protocol import (
@@ -239,6 +240,7 @@ class ProjectionStore:
             receipts = []
             live_siblings = []
             erased_count = 0
+            captured_seconds = 0.0
             for sibling in binding.segment_ids:
                 job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
                 entry = self.ref('results', sibling).get(transaction=transaction).to_dict() or {}
@@ -249,11 +251,12 @@ class ProjectionStore:
                     erased_count += 1
                     continue
                 live_siblings.append(sibling)
+                captured_seconds += job.get('duration_seconds', 0.0)
                 if not job.get('projection_binding') or normalized_binding(job['projection_binding']) != binding:
                     raise ProjectionBlocked('sibling binding mismatch')
                 receipt = entry.get('projection') or {}
                 if receipt.get('state') != 'ready':
-                    return None
+                    return None, False, 0
                 parts = entry.get('projection_parts')
                 receipts.extend(parts.values() if parts else [receipt])
             # Earlier receipt IDs can have become bridge donors. Follow the
@@ -299,7 +302,7 @@ class ProjectionStore:
                 old = session.ledger.get('result')
                 if not is_valid_completed_sync_content_result(old):
                     raise ProjectionBlocked('invalid existing ledger completion')
-                return old
+                return old, False, 0
             # Part-level attribution need not sum to the worker's speech union
             # for older receipts. The immutable result summary owns metering.
             seconds = sum(
@@ -340,7 +343,10 @@ class ProjectionStore:
                 # before client publication or completion retention.
                 transaction.update(self.ref('results', sibling), {'projection_state': 'ready'})
                 transaction.update(self.ref('jobs', sibling), {'client_status': 'completed', 'client_result': result})
-            return result
+            return result, True, captured_seconds
 
         with writing('usage_month_cache', binding.owner_id):
-            return self.run(commit)
+            result, changed, seconds = self.run(commit)
+        if changed:
+            record_correctness('projection_completed', seconds=seconds)
+        return result

@@ -5,6 +5,7 @@ No admission flag is consulted: already accepted work drains after rollback.
 """
 
 from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
+from config.batch_pipeline import authoritative_labels_enabled, require_live_target_enabled
 from datetime import datetime, timezone
 import time
 import math
@@ -15,11 +16,12 @@ from uuid import NAMESPACE_URL, uuid5
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
 from database.batch_pipeline_store import FirestoreStore
 from utils.batch_pipeline.contracts import WorkItem
+from utils.batch_pipeline.correctness_metrics import record_labels
 
 logger = logging.getLogger(__name__)
 
 
-def build_incoming(item: WorkItem, binding, payload: dict, *, geolocation=None) -> dict:
+def build_incoming(item: WorkItem, binding, payload: dict, *, geolocation=None, batch_segment_id=None) -> dict:
     """Use legacy word alignment, segment grouping and minimum conversation shape."""
     from models.conversation import Conversation, CreateConversation
     from models.conversation_enums import ConversationSource
@@ -39,6 +41,23 @@ def build_incoming(item: WorkItem, binding, payload: dict, *, geolocation=None) 
     # The existing final-pass aligner abstains in diarization gaps; the existing
     # prerecorded grouper supplies the same sentence/segment shapes as sync.
     aligned = words if payload.get('recovery_version') == 1 else assign_words(words, payload['diarization']['turns'])
+    authoritative = authoritative_labels_enabled() and payload.get('recovery_version') != 1
+    if authoritative:
+        # The legacy grouper imputes None from adjacent voices. Keep each gap an
+        # explicit anonymous abstention instead of borrowing a speaker/owner.
+        gap = 0
+        in_gap = False
+        prepared = []
+        for word in aligned:
+            if word['speaker'] is None:
+                if not in_gap:
+                    gap += 1
+                in_gap = True
+                word = {**word, 'speaker': f'BATCH_UNASSIGNED_{gap}'}
+            else:
+                in_gap = False
+            prepared.append(word)
+        aligned = prepared
     segments = postprocess_words([{**word, 'text': word['word']} for word in aligned], 0)
     if not segments:
         raise ValueError('successful batch result produced no transcript')
@@ -50,8 +69,15 @@ def build_incoming(item: WorkItem, binding, payload: dict, *, geolocation=None) 
         segment.start = round(segment.start + offset, 2)
         segment.end = round(segment.end + offset, 2)
         segment.id = str(uuid5(NAMESPACE_URL, f'batch:{item.segment_id}:{index}'))
-        segment.speaker_id_scope = f'sync:{item.segment_id}'
+        segment.speaker_id_scope = (
+            f'final:batch:{batch_segment_id or item.segment_id}' if authoritative else f'sync:{item.segment_id}'
+        )
         segment.stt_provider = payload.get('words_provider')
+        if authoritative:
+            abstained = (segment.speaker or '').startswith('BATCH_UNASSIGNED_')
+            segment.is_user, segment.person_id = False, None
+            segment.speaker_identity_status = 'ambiguous' if abstained else 'no_match'
+            segment.speaker_match_source = 'batch_abstention' if abstained else 'batch_pyannote'
     started = datetime.fromtimestamp(item.capture_at, timezone.utc)
     create = CreateConversation(
         started_at=started,
@@ -218,7 +244,12 @@ class Projector:
                 if not part_payload['words']:
                     receipt = session.persist_empty()
                 else:
-                    incoming = build_incoming(part, binding, part_payload, geolocation=context.geolocation)
+                    incoming = build_incoming(
+                        part, binding, part_payload, geolocation=context.geolocation, batch_segment_id=item.segment_id
+                    )
+                    session.speaker_scope = incoming['transcript_segments'][0]['speaker_id_scope']
+                    if require_live_target_enabled() and context.target_id:
+                        incoming['_batch_require_live_target'] = True
                     if context.binding_reason is not None and context.target_id:
                         incoming['_sync_lineage_binding'] = context.binding_reason
                     session.incoming_segment_count = len(incoming['transcript_segments'])
@@ -234,7 +265,7 @@ class Projector:
                             int(incoming['started_at'].timestamp()),
                             int(incoming['finished_at'].timestamp()),
                         )
-                    assign_sync_conversation(
+                    assigned = assign_sync_conversation(
                         binding.owner_id,
                         incoming,
                         target_id=context.target_id,
@@ -245,6 +276,7 @@ class Projector:
                         after_assign=persisted,
                     )
                     receipt = receipt_box[0]
+                    record_labels(assigned[2])
             except ProjectionReplay as replay:
                 receipt = replay.receipt
             self.finish_part(item, binding, receipt, index)
@@ -303,6 +335,10 @@ class Projector:
         for segment in segments:
             if segment.get('speaker_id_scope') == scope:
                 stamp = origin + segment['start']
+                if scope.startswith('final:batch:') and not (
+                    capture_at <= stamp < (receipt.get('audio_end') or item.capture_at + item.duration_seconds)
+                ):
+                    continue
                 survivors.append(
                     {
                         **segment,

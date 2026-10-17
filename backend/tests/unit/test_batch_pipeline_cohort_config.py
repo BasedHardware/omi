@@ -124,3 +124,23 @@ def test_policy_identity_storage_and_unit_ceiling_match_chart(manifest):
         if name != 'backend-sync':
             assert values['BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT']['value'] == ''
             assert values['BATCH_PIPELINE_WORKER_AUDIENCE']['value'] == ''
+
+
+@pytest.mark.parametrize(
+    'name,reader',
+    [
+        ('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'authoritative_labels_enabled'),
+        ('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'empty_asr_recovery_enabled'),
+        ('BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED', 'require_live_target_enabled'),
+    ],
+)
+def test_record_controls_default_off_and_read_at_call_time(monkeypatch, name, reader):
+    from config import batch_pipeline
+
+    read = getattr(batch_pipeline, reader)
+    monkeypatch.delenv(name, raising=False)
+    assert not read()
+    monkeypatch.setenv(name, 'true')
+    assert read()
+    monkeypatch.setenv(name, 'invalid')
+    assert not read()

@@ -1422,3 +1422,39 @@ def test_shadow_failure_does_not_withdraw_incumbent_resolution(monkeypatch, env)
     assert c.speaker_resolution.status == 'resolved'
     assert all(s.is_user for s in c.transcript_segments)
     assert all(s.speaker_grouping_shadow is None for s in c.transcript_segments)
+
+
+@pytest.mark.parametrize('mixed', [False, True])
+def test_persisted_batch_authority_survives_rollbacks_and_mixed_live_segments(monkeypatch, mixed):
+    from unittest.mock import Mock
+
+    monkeypatch.delenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', raising=False)
+    monkeypatch.setattr(stage, 'authoritative_for', lambda _: False)
+    monkeypatch.setattr(stage, 'resolution_enabled', lambda: True)
+    resolver = Mock()
+    monkeypatch.setattr(stage, '_resolve', resolver)
+    conv = _conversation([0, 1], scopes=['final:batch:unit', 'sync:later' if mixed else 'final:batch:unit'])
+    conv.transcript_segments[0].text = 'Edited synthetic text'
+    before = [s.model_dump() for s in conv.transcript_segments]
+    assert stage.resolve_speakers_for_processing('synthetic', conv)
+    assert [s.model_dump() for s in conv.transcript_segments] == before
+    assert conv.speaker_resolution.status == ('unavailable' if mixed else 'capture')
+    resolver.assert_not_called()
+
+
+def test_batch_authority_applies_existing_manual_receipt_without_resolver(monkeypatch):
+    from unittest.mock import Mock
+
+    monkeypatch.setattr(stage, 'resolution_enabled', lambda: True)
+    resolver = Mock()
+    monkeypatch.setattr(stage, '_resolve', resolver)
+    conv = _conversation([0], scopes=['final:batch:unit'])
+    monkeypatch.setattr(
+        stage.conversations_db,
+        'get_manual_speaker_receipt',
+        lambda *args: {'segments': {'s0': {'is_user': False, 'person_id': 'synthetic-person'}}},
+    )
+    stage.resolve_speakers_for_processing('synthetic', conv)
+    assert conv.transcript_segments[0].person_id == 'synthetic-person'
+    assert conv.transcript_segments[0].speaker_label_source == 'manual'
+    resolver.assert_not_called()

@@ -466,3 +466,60 @@ def test_unavailable_completion_lookup_is_not_reported_as_genuine_exhaustion(set
     monkeypatch.setattr(module, 'record_audio', metric)
     assert recovery.recover('bad', 'synthetic-owner') == 'recovered'
     metric.assert_called_once_with('sync', 'accepted', 'unknown', 5, False)
+
+
+def test_all_admitted_gate_drains_non_allowlisted_obligations_without_admission_flag(setup, monkeypatch):
+    client, _, binding, _, stt, recovery = setup
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', '')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert stt.call_count == 1 and row(client)['recovery_state'] == 'recovered'
+
+
+def test_authoritative_projection_preserves_pyannote_groups_and_gap_abstention(monkeypatch, legacy_dependencies):
+    _, _, _, build_incoming, *_ = legacy_dependencies
+    monkeypatch.setenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'true')
+    binding = ProjectionBinding('synthetic-owner', 'job', 'content', ('unit',))
+    item = WorkItem('part', binding.owner_id, 100, 'gs://synthetic/audio', 5, Priority.FRESH)
+    payload = {
+        'audio_seconds': 5,
+        'words_provider': 'parakeet',
+        'words': [
+            {'word': 'First.', 'timestamp': [0, 1]},
+            {'word': 'Gap.', 'timestamp': [2, 3]},
+            {'word': 'Last.', 'timestamp': [4, 5]},
+        ],
+        'diarization': {
+            'turns': [
+                {'start': 0, 'end': 1, 'speaker': 'SPEAKER_00'},
+                {'start': 4, 'end': 5, 'speaker': 'SPEAKER_01'},
+            ]
+        },
+    }
+    row = build_incoming(item, binding, payload, batch_segment_id='unit')
+    segments = row['transcript_segments']
+    assert [s['speaker'] for s in segments] == ['SPEAKER_00', 'BATCH_UNASSIGNED_1', 'SPEAKER_01']
+    assert {s['speaker_id_scope'] for s in segments} == {'final:batch:unit'}
+    assert all(not s['is_user'] and s['person_id'] is None for s in segments)
+    assert segments[1]['speaker_match_source'] == 'batch_abstention'
+    assert segments[1]['speaker_identity_status'] == 'ambiguous'
+    # Recovery returns legacy utterance labels, never pyannote authority.
+    recovered = dict(payload, recovery_version=1)
+    recovered['words'] = [dict(w, speaker='SPEAKER_01') for w in payload['words']]
+    assert all(
+        s['speaker_id_scope'].startswith('sync:')
+        for s in build_incoming(item, binding, recovered)['transcript_segments']
+    )
+
+
+def test_recovered_duration_counts_only_one_settlement(setup, monkeypatch):
+    from database import batch_pipeline_quarantine_recovery as module
+
+    _, _, binding, _, _, recovery = setup
+    metric = Mock()
+    monkeypatch.setattr(module, 'record_correctness', metric)
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    metric.assert_called_once_with('recovered', seconds=5)
