@@ -26,7 +26,6 @@ from database.vector_db import (
     delete_vector,
 )
 
-
 from models.audio_file import AudioFile
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus

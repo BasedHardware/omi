@@ -23,8 +23,6 @@ from database.vector_db import (
     upsert_action_item_vector,
 )
 import database.vector_db as vector_db
-
-
 from utils.other.storage import delete_privacy_conversation_audio, delete_owner_prompt_embedding_cache
 from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
