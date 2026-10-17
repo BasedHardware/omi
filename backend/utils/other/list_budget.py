@@ -68,6 +68,11 @@ LIST_READ_MIN_RPC_SECONDS = 0.05
 BudgetExhaustionReason = str  # 'deadline' | 'documents'
 
 
+def indexed_list_reads_enabled() -> bool:
+    """Dark rollout of index-gated memory and slim conversation list reads."""
+    return os.getenv('OMI_INDEXED_LIST_READS_ENABLED', '').strip().lower() in {'1', 'true', 'on', 'yes'}
+
+
 def _env_float(name: str) -> Optional[float]:
     raw = os.environ.get(name)
     if raw is None or not str(raw).strip():
@@ -291,17 +296,26 @@ def budgeted_stream_list(query: Any, budget: Optional[ListReadBudget]) -> List[A
         return list(query.stream())
     timeout = budget.rpc_timeout()
     try:
-        iterator = query.stream(timeout=timeout)
+        iterator = query.stream(timeout=timeout, retry=None)
     except TypeError:
         # Test fakes predating the budget seam do not accept a timeout kwarg;
         # the deadline still bites on the next charge/check.
         iterator = query.stream()
+    docs = []
     try:
-        docs = list(iterator)
-    except _FirestoreDeadlineExceeded as exc:
-        budget.mark_exhausted('deadline')
-        raise ListReadBudgetExhausted('deadline') from exc
-    budget.charge(len(docs))
+        for doc in iterator:
+            docs.append(doc)
+            budget.charge(1)
+    except (_FirestoreDeadlineExceeded, ListReadBudgetExhausted) as exc:
+        if isinstance(exc, _FirestoreDeadlineExceeded):
+            budget.mark_exhausted('deadline')
+        exhausted = ListReadBudgetExhausted(budget.exhaustion_reason or 'deadline')
+        setattr(exhausted, 'partial_snapshots', docs)
+        raise exhausted from exc
+    finally:
+        close = getattr(iterator, 'close', None)
+        if callable(close):
+            close()
     return docs
 
 
@@ -312,7 +326,7 @@ def budgeted_get_all(client: Any, refs: Iterable[Any], budget: Optional[ListRead
         return list(client.get_all(ref_list))
     timeout = budget.rpc_timeout()
     try:
-        snapshots = list(client.get_all(ref_list, timeout=timeout))
+        snapshots = list(client.get_all(ref_list, timeout=timeout, retry=None))
     except TypeError:
         snapshots = list(client.get_all(ref_list))
     except _FirestoreDeadlineExceeded as exc:
@@ -335,7 +349,7 @@ def budgeted_document_get(reference: Any, budget: Optional[ListReadBudget]) -> A
         return reference.get()
     timeout = budget.rpc_timeout()
     try:
-        snapshot = reference.get(timeout=timeout)
+        snapshot = reference.get(timeout=timeout, retry=None)
     except TypeError:
         snapshot = reference.get()
     except _FirestoreDeadlineExceeded as exc:
@@ -367,7 +381,7 @@ def budgeted_stream_iter(
         yield from query.stream()
         return
     timeout = budget.rpc_timeout()
-    stream_kwargs = {'timeout': timeout}
+    stream_kwargs = {'timeout': timeout, 'retry': None}
     if retry is not _STREAM_RETRY_UNSET:
         stream_kwargs['retry'] = retry
     try:
@@ -379,6 +393,7 @@ def budgeted_stream_iter(
         except TypeError:
             # Test fakes predating the budget seam do not accept a timeout kwarg.
             iterator = query.stream()
+    iterator = iter(iterator)
     try:
         while True:
             try:

@@ -435,15 +435,21 @@ _driver(
 _driver(
     'utils.memory.canonical_memory_adapter.read_canonical_scan_page',
     base={'uid': UID},
-    domains={'start_after': [None, (T0, 'memory-1')]},
+    domains={
+        'start_after': [None, (T0, 'memory-1')],
+        'include_pending_processing': [False, True],
+        'include_archive': [False, True],
+        'view': ['released', 'history', 'all'],
+    },
+    patchers=(
+        _stub('utils.memory.canonical_memory_adapter.indexed_list_reads_enabled', True),
+        _stub('utils.memory.canonical_memory_adapter.belief_model_enabled', True),
+    ),
     neutrals={
         'limit': LIMIT,
         'device_scope_request': (None, 'post-read visibility only'),
-        'include_pending_processing': (False, 'post-read visibility only'),
-        'include_archive': (False, 'post-read visibility only'),
         'now': NOW,
         'budget': BUDGET,
-        'view': ('released', 'post-read temporal visibility only'),
         'as_of': (None, 'post-read temporal visibility only'),
         'item_filter': (None, 'post-read predicate only'),
     },

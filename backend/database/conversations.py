@@ -55,7 +55,12 @@ from .conversation_revisions import ensure_timezone_aware, firestore_revision_da
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from .people_stats_cache import invalidate_people_stats_cache
 from .read_boundary import parse_payload_strict
-from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_stream_iter
+from utils.other.list_budget import (
+    ListReadBudget,
+    ListReadBudgetExhausted,
+    budgeted_stream_iter,
+    indexed_list_reads_enabled,
+)
 from utils.other.portability_read import (
     check_portability_read,
     current_portability_read,
@@ -1632,6 +1637,7 @@ def get_conversations_without_photos(
     folder_id: Optional[str] = None,
     starred: Optional[bool] = None,
     budget: Optional[ListReadBudget] = None,
+    list_fields_only: bool = False,
 ):
     """
     Same as get_conversations but without loading photos.
@@ -1645,6 +1651,28 @@ def get_conversations_without_photos(
     instead of pretending to be complete.
     """
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
+    if list_fields_only and indexed_list_reads_enabled():
+        # The archive list contract permits omitted transcript detail. Exclude
+        # the large blob before download/decompression and correction-overlay
+        # point reads, rather than fetching it and discarding it at the router.
+        # Keep every other response field and all visibility/title metadata.
+        from models.conversation import Conversation
+
+        fields = set(Conversation.model_fields) - {'transcript_segments', 'transcript_segments_compressed'}
+        fields.update(
+            {
+                'data_protection_level',
+                'user_title',
+                'user_corrections_compressed',
+                'deleted',
+                'dream_duplicate_of',
+                'relevance_decision',
+                'sync_relevance_user_kept',
+                'has_photos',
+                'folder_user_set',
+            }
+        )
+        conversations_ref = conversations_ref.select(sorted(fields))
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
     if sources:
