@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import sys
 from contextlib import contextmanager
+from importlib.machinery import ExtensionFileLoader
 from pathlib import Path
 from types import ModuleType
 from typing import Iterable, Iterator
@@ -164,7 +165,10 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
                 "google.ai.generativelanguage_v1beta.types.safety",
                 "google.ai.generativelanguage_v1beta.types.text_service",
                 "google.ai.generativelanguage_v1beta.types.tuned_model",
-            )
+            ),
+            # Jiter's package initializer relies on this C-extension submodule
+            # remaining paired with the package across isolated imports.
+            "jiter": ("jiter.jiter",),
         }
         extra_names = list(sys.modules.keys() - saved_keys)
         # Some extension modules cannot be safely re-imported after removal. Keep
@@ -180,12 +184,22 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
         for candidate_name, candidate_module in list(sys.modules.items()):
             spec = getattr(candidate_module, "__spec__", None)
             origin = getattr(spec, "origin", None) if spec else None
+            loader = getattr(spec, "loader", None) if spec else None
             is_backend = any(candidate_name == p.rstrip(".") or candidate_name.startswith(p) for p in _backend_prefixes)
-            if is_backend or not origin or not origin.endswith((".so", ".pyd")):
+            if (
+                is_backend
+                or not isinstance(loader, ExtensionFileLoader)
+                or not origin
+                or not origin.endswith((".so", ".pyd"))
+            ):
                 continue
             root_name = candidate_name.partition(".")[0]
             if candidate_name in extra_name_set:
                 preserve_for_import_safety.add(candidate_name)
+            # Keep the exact top-level owner of this verified extension. The
+            # explicit companion map below adds only packages with known
+            # process-global import state; neither mechanism infers membership
+            # from a package path.
             if root_name in extra_name_set:
                 preserve_for_import_safety.add(root_name)
             for companion_name in _extension_family_companions.get(root_name, ()):

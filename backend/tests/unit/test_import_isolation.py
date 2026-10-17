@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from importlib.machinery import ModuleSpec
+from importlib.machinery import ExtensionFileLoader, ModuleSpec, SourceFileLoader
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -70,7 +70,11 @@ def test_stub_modules_preserves_native_extension_owner_and_evicts_python_sibling
     package.__spec__ = ModuleSpec(package_name, loader=None, is_package=True)
     package.__spec__.submodule_search_locations = [str(package_path)]
     extension = ModuleType(extension_name)
-    extension.__spec__ = ModuleSpec(extension_name, loader=None, origin=str(extension_path))
+    extension.__spec__ = ModuleSpec(
+        extension_name,
+        loader=ExtensionFileLoader(extension_name, str(extension_path)),
+        origin=str(extension_path),
+    )
     sibling = ModuleType(sibling_name)
     sibling.__spec__ = ModuleSpec(sibling_name, loader=None, origin=str(sibling_path))
     external_fake = ModuleType(fake_name)
@@ -124,13 +128,75 @@ def test_stub_modules_evicts_fake_with_origin_inside_native_namespace_family(tmp
     package.__spec__ = ModuleSpec(package_name, loader=None, is_package=True)
     package.__spec__.submodule_search_locations = [str(package_path)]
     extension = ModuleType(extension_name)
-    extension.__spec__ = ModuleSpec(extension_name, loader=None, origin=str(extension_path))
+    extension.__spec__ = ModuleSpec(
+        extension_name,
+        loader=ExtensionFileLoader(extension_name, str(extension_path)),
+        origin=str(extension_path),
+    )
     fake_parent = ModuleType(fake_parent_name)
     fake_parent.__path__ = [str(secret_path)]  # type: ignore[attr-defined]
     fake_parent.__spec__ = ModuleSpec(fake_parent_name, loader=None, is_package=True)
     fake_parent.__spec__.submodule_search_locations = [str(secret_path)]
     fake = ModuleType(fake_name)
     fake.__spec__ = ModuleSpec(fake_name, loader=None, origin=str(fake_path))
+
+    try:
+        with stub_modules({}):
+            sys.modules[package_name] = package
+            sys.modules[extension_name] = extension
+            sys.modules[fake_parent_name] = fake_parent
+            sys.modules[fake_name] = fake
+            package._native = extension
+            package.secret = fake_parent
+            fake_parent.internal = fake
+
+        assert sys.modules[package_name] is package
+        assert sys.modules[extension_name] is extension
+        assert fake_name not in sys.modules
+        assert fake_parent_name not in sys.modules
+        assert not hasattr(package, "secret")
+    finally:
+        sys.modules.pop(fake_name, None)
+        sys.modules.pop(fake_parent_name, None)
+        sys.modules.pop(extension_name, None)
+        sys.modules.pop(package_name, None)
+
+
+def test_stub_modules_evicts_fake_with_forged_native_origin_suffix(tmp_path: Path):
+    package_name = "_import_isolation_forged_native_origin"
+    extension_name = f"{package_name}._native"
+    fake_name = f"{package_name}.secret.internal"
+    package_path = tmp_path / package_name
+    secret_path = package_path / "secret"
+    secret_path.mkdir(parents=True)
+    extension_path = package_path / "_native.cpython-311.so"
+    source_path = secret_path / "internal.py"
+    forged_origin = secret_path / "internal.cpython-311.so"
+    extension_path.touch()
+    source_path.touch()
+    forged_origin.touch()
+
+    package = ModuleType(package_name)
+    package.__path__ = [str(package_path)]  # type: ignore[attr-defined]
+    package.__spec__ = ModuleSpec(package_name, loader=None, is_package=True)
+    package.__spec__.submodule_search_locations = [str(package_path)]
+    extension = ModuleType(extension_name)
+    extension.__spec__ = ModuleSpec(
+        extension_name,
+        loader=ExtensionFileLoader(extension_name, str(extension_path)),
+        origin=str(extension_path),
+    )
+    fake_parent_name = f"{package_name}.secret"
+    fake_parent = ModuleType(fake_parent_name)
+    fake_parent.__path__ = [str(secret_path)]  # type: ignore[attr-defined]
+    fake_parent.__spec__ = ModuleSpec(fake_parent_name, loader=None, is_package=True)
+    fake_parent.__spec__.submodule_search_locations = [str(secret_path)]
+    fake = ModuleType(fake_name)
+    fake.__spec__ = ModuleSpec(
+        fake_name,
+        loader=SourceFileLoader(fake_name, str(source_path)),
+        origin=str(forged_origin),
+    )
 
     try:
         with stub_modules({}):
