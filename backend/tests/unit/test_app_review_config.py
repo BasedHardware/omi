@@ -16,6 +16,23 @@ install_database_client_stub()
 import database.app_review_config as arc
 
 
+class _MemoryCache:
+    def __init__(self):
+        self._store = {}
+
+    def get_or_fetch(self, key, fetch, ttl=None):
+        if key not in self._store:
+            self._store[key] = fetch()
+        return self._store[key]
+
+
+@pytest.fixture(autouse=True)
+def mock_memory_cache(monkeypatch):
+    cache = _MemoryCache()
+    monkeypatch.setattr(arc, "get_memory_cache", lambda: cache)
+    return cache
+
+
 def test_unsupported_platform():
     assert arc.should_hide_subscription_ui("user-1", "android", "1.0.0") is False
     assert arc.should_hide_subscription_ui("user-1", "windows", "1.0.0") is False
