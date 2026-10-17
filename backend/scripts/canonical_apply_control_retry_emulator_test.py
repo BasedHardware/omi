@@ -45,6 +45,7 @@ from google.api_core.exceptions import ServiceUnavailable  # noqa: E402
 from google.cloud import firestore  # noqa: E402
 
 from database.memory_collections import MemoryCollections  # noqa: E402
+import utils.memory.memory_system as memory_system_module  # noqa: E402
 from utils.memory.memory_system import (  # noqa: E402
     CanonicalApplyStateUnavailable,
     ensure_canonical_apply_control_state,
@@ -199,11 +200,9 @@ def main() -> int:
         control_suffix = MemoryCollections(uid=uid).memory_apply_control_state
         wipe_state = _install_flaky_batch_get(db_client, fail_first=1, control_path_suffix=control_suffix)
 
-        import utils.memory.memory_system as memory_system_module
-
         real_fence = memory_system_module.read_account_deletion_projection_fence
 
-        def wiping_fence_reader(uid_arg: str, *, db_client: Any = None) -> Any:
+        def wiping_fence_reader(uid_arg: str, *, db_client: Any = None, **_kwargs: Any) -> Any:
             calls = getattr(wiping_fence_reader, "calls", 0)
             wiping_fence_reader.calls = calls + 1  # type: ignore[attr-defined]
             if calls > 0:

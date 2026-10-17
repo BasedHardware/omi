@@ -58,9 +58,16 @@ def ensure_canonical_apply_control_state(uid: str, *, db_client: Any) -> MemoryC
         raise CanonicalApplyStateUnavailable("canonical apply control state requires a database client")
 
     # Account deletion (or a completed wipe marker) must not re-enroll maintenance
-    # or recreate apply control under a fresh account_generation=1.
+    # or recreate apply control under a fresh account_generation=1. The fence is
+    # re-read after transient recovery below: the retry budget widens the window
+    # in which a deletion can start and remove the control document.
     try:
-        deletion_fence = read_account_deletion_projection_fence(uid, db_client=db_client)
+        deletion_fence = read_account_deletion_projection_fence(
+            uid,
+            db_client=db_client,
+            retry=None,
+            timeout=CANONICAL_APPLY_READ_TIMEOUT_SECONDS,
+        )
     except Exception as exc:
         raise CanonicalApplyStateUnavailable("canonical apply control state is unreadable") from exc
     if deletion_fence.blocks_projection_writes:
@@ -87,11 +94,7 @@ def ensure_canonical_apply_control_state(uid: str, *, db_client: Any) -> MemoryC
                     continue
                 raise CanonicalApplyStateUnavailable(unavailable_message) from exc
 
-    def _read_existing() -> MemoryControlState:
-        snapshot = _read_snapshot(
-            ref,
-            unavailable_message="canonical apply control state is unreadable",
-        )
+    def _control_from_snapshot(snapshot: Any) -> MemoryControlState:
         if not getattr(snapshot, "exists", False):
             raise CanonicalApplyStateUnavailable("canonical apply control state disappeared during provisioning")
         try:
@@ -105,12 +108,29 @@ def ensure_canonical_apply_control_state(uid: str, *, db_client: Any) -> MemoryC
             raise CanonicalApplyStateUnavailable("canonical apply control state uid mismatch")
         return control
 
+    def _recheck_deletion_fence() -> None:
+        """A deletion may have started while the retry loop was waiting."""
+        try:
+            deletion_fence = read_account_deletion_projection_fence(
+                uid,
+                db_client=db_client,
+                retry=None,
+                timeout=CANONICAL_APPLY_READ_TIMEOUT_SECONDS,
+            )
+        except Exception as exc:
+            raise CanonicalApplyStateUnavailable("canonical apply control state is unreadable") from exc
+        if deletion_fence.blocks_projection_writes:
+            raise CanonicalApplyStateUnavailable("canonical apply control refused during account deletion")
+
     snapshot = _read_snapshot(
         ref,
         unavailable_message="canonical apply control state is unreadable",
     )
     if getattr(snapshot, "exists", False):
-        control = _read_existing()
+        # The recovered snapshot already holds the control payload: validate it
+        # directly instead of a second read with its own fresh retry budget.
+        control = _control_from_snapshot(snapshot)
+        _recheck_deletion_fence()
         _ensure_maintenance_registry_entry(uid, db_client=db_client)
         return control
 
@@ -119,12 +139,7 @@ def ensure_canonical_apply_control_state(uid: str, *, db_client: Any) -> MemoryC
     # in that gap. Re-read the deletion fence before the first-write path so a
     # durable running/completed wipe cannot be re-enrolled as a fresh
     # generation-1 account.
-    try:
-        deletion_fence = read_account_deletion_projection_fence(uid, db_client=db_client)
-    except Exception as exc:
-        raise CanonicalApplyStateUnavailable("canonical apply control state is unreadable") from exc
-    if deletion_fence.blocks_projection_writes:
-        raise CanonicalApplyStateUnavailable("canonical apply control refused during account deletion")
+    _recheck_deletion_fence()
 
     control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
     payload = control.model_dump(mode="json")
@@ -137,7 +152,13 @@ def ensure_canonical_apply_control_state(uid: str, *, db_client: Any) -> MemoryC
             # uses create() so a concurrent writer cannot be overwritten.
             ref.set(payload)
     except (AlreadyExists, Conflict):
-        raced_control = _read_existing()
+        # Lost the create race: read the winner's state (one bounded retry
+        # budget) and validate it from that snapshot.
+        raced_snapshot = _read_snapshot(
+            ref,
+            unavailable_message="canonical apply control state is unreadable",
+        )
+        raced_control = _control_from_snapshot(raced_snapshot)
         _ensure_maintenance_registry_entry(uid, db_client=db_client)
         return raced_control
     _ensure_maintenance_registry_entry(uid, db_client=db_client)
