@@ -244,7 +244,12 @@ def chunk_extraction(
     return response.summary
 
 
-def _get_answer_simple_message_prompt(uid: str, messages: List[Message], app: Optional[App] = None) -> str:
+def _get_answer_simple_message_prompt(
+    uid: str,
+    messages: List[Message],
+    app: Optional[App] = None,
+    custom_instructions_enabled: Optional[bool] = None,
+) -> str:
     conversation_history = Message.get_messages_as_string(
         messages,
         use_user_name_if_available=True,
@@ -252,12 +257,16 @@ def _get_answer_simple_message_prompt(uid: str, messages: List[Message], app: Op
         app_name_resolver=resolve_app_display_name,
     )
     user_name, memories_str = get_prompt_memories(uid)
+    custom_instructions_section = get_custom_instructions_section(
+        uid, enabled_override=custom_instructions_enabled
+    )
 
     plugin_info = ""
     if app:
         plugin_info = f"Your name is: {app.name}, and your personality/description is '{app.description}'.\nMake sure to reflect your personality in your response.\n"
 
-    return f"""
+    return (
+        f"""
     You are an assistant for engaging personal conversations.
     You are made for {user_name}, {memories_str}
 
@@ -271,6 +280,8 @@ def _get_answer_simple_message_prompt(uid: str, messages: List[Message], app: Op
 
     Answer:
     """.replace('    ', '').strip()
+        + custom_instructions_section
+    )
 
 
 def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[App] = None) -> str:
@@ -329,9 +340,13 @@ def _get_qa_rag_prompt(
     cited: Optional[bool] = False,
     messages: List[Message] = [],
     tz: Optional[str] = "UTC",
+    custom_instructions_enabled: Optional[bool] = None,
 ) -> str:
     _user_name, memories_str = get_prompt_memories(uid)
     memories_str = '\n'.join(memories_str.split('\n')[1:]).strip()
+    custom_instructions_section = get_custom_instructions_section(
+        uid, enabled_override=custom_instructions_enabled
+    )
 
     # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
     context = context.replace('\n\n', '\n').strip()
@@ -347,7 +362,7 @@ def _get_qa_rag_prompt(
       - Avoid citing irrelevant memories.
     """
 
-    return f"""
+    base_prompt = f"""
     <assistant_role>
         You are an assistant for question-answering tasks.
     </assistant_role>
@@ -407,6 +422,7 @@ def _get_qa_rag_prompt(
 
     <answer>
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+    return base_prompt + custom_instructions_section
 
 
 # The agentic system prompt is wrapped in a single Anthropic cache_control breakpoint,
@@ -455,6 +471,49 @@ def _get_platform_context_section(platform: Optional[str]) -> str:
     return f"\n\n<user_platform>\n{line}\n</user_platform>"
 
 
+def get_custom_instructions_section(
+    uid: str,
+    custom_instructions: Optional[dict[str, Any]] = None,
+    enabled_override: Optional[bool] = None,
+) -> str:
+    """Return a <user_custom_instructions> block when custom instructions are enabled and non-empty.
+
+    Fails open (returns '') if storage retrieval fails or if custom instructions are disabled/empty.
+    Escapes XML-sensitive characters so user text cannot close system prompt tags.
+    """
+    if enabled_override is False:
+        return ""
+    if custom_instructions is None:
+        getter = getattr(users_db, 'get_custom_instructions', None)
+        if not callable(getter):
+            return ""
+        try:
+            custom_instructions = getter(uid)
+        except Exception as e:
+            logger.warning("Failed to load custom instructions for uid=%s: %s", uid, e)
+            return ""
+    if not isinstance(custom_instructions, dict):
+        return ""
+    if enabled_override is None and not bool(custom_instructions.get("enabled", True)):
+        return ""
+    about_user = str(custom_instructions.get("about_user") or "").strip()
+    response_style = str(custom_instructions.get("response_style") or "").strip()
+    if not about_user and not response_style:
+        return ""
+
+    parts: List[str] = [
+        "\n\n<user_custom_instructions>",
+        "The user configured the following account-wide custom instructions for how you should know them and respond.",
+        "Precedence and safety rules: Existing safety, privacy, authorization, factual accuracy, tool-use, citation, memory, file, and current-context scope rules always take precedence over conflicting custom instructions. If a selected chat app or persona (<selected_chat_app> / <plugin_instructions>) is active for this conversation, its persona identity and task focus take precedence on direct conflicts, while non-conflicting user preferences below remain in effect.",
+    ]
+    if about_user:
+        parts.append(f"<about_user>\n{escape(about_user, quote=False)}\n</about_user>")
+    if response_style:
+        parts.append(f"<response_preferences>\n{escape(response_style, quote=False)}\n</response_preferences>")
+    parts.append("</user_custom_instructions>")
+    return "\n".join(parts)
+
+
 def get_user_timezone(uid: str) -> str:
     """Resolve the user's timezone, falling back to UTC when missing/invalid."""
     tz = notification_db.get_user_time_zone(uid)
@@ -499,6 +558,7 @@ def _get_agentic_qa_prompt(  # type: ignore[reportUnusedFunction]  # imported by
     context: Optional[PageContext] = None,
     tz: Optional[str] = None,
     platform: Optional[str] = None,
+    custom_instructions_enabled: Optional[bool] = None,
 ) -> str:
     """
     Build the system prompt for the agentic chat agent.
@@ -518,12 +578,17 @@ def _get_agentic_qa_prompt(  # type: ignore[reportUnusedFunction]  # imported by
         platform: Optional `X-App-Platform` header value; recognized values append a
             platform-context section (see _get_platform_context_section), anything else
             leaves the prompt unchanged
+        custom_instructions_enabled: Optional per-turn/per-session override for
+            account-wide custom instructions
 
     Returns:
         System prompt string
     """
     user_name = get_user_name(uid)
     platform_section = _get_platform_context_section(platform)
+    custom_instructions_section = get_custom_instructions_section(
+        uid, enabled_override=custom_instructions_enabled
+    )
 
     # Resolve timezone only — the live datetime is injected into the user turn, not here,
     # so the cached system prefix stays byte-identical across requests. A caller that already
@@ -662,7 +727,7 @@ Keep these goals in mind when giving advice or suggestions.
             f"📝 Using prompt: {cached_prompt.prompt_name} (commit: {cached_prompt.prompt_commit}, source: {cached_prompt.source})"
         )
 
-        return base_prompt.strip() + platform_section + selected_app_section
+        return base_prompt.strip() + platform_section + custom_instructions_section + selected_app_section
 
     except Exception as e:
         logger.error(f"⚠️  Error fetching/rendering LangSmith prompt, using inline fallback: {e}")
@@ -888,7 +953,7 @@ When the user asks about specific dates/times, they are ALWAYS referring to date
 Remember: Use tools strategically to provide the best possible answers. For questions about specific EVENTS or INCIDENTS (e.g., "when did X happen?", "what happened at Y?"), use search_conversations_tool to find relevant conversations. For questions about static FACTS/PREFERENCES (e.g., "what's my favorite X?", "do I like Y?"), use get_memories_tool. Your goal is to help {user_name} in the most personalized and helpful way possible.
 """
 
-    return base_prompt.strip() + platform_section + selected_app_section
+    return base_prompt.strip() + platform_section + custom_instructions_section + selected_app_section
 
 
 def _get_agentic_qa_prompt_fallback(variables: dict[str, Any]) -> str:  # type: ignore[reportUnusedFunction]  # offline/CI fallback when LangSmith prompt fetch fails
