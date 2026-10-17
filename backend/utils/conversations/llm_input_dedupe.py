@@ -19,6 +19,7 @@ from typing import Any
 
 from prometheus_client import Counter
 from pydantic import BaseModel
+from models.structured import Structured
 
 from config.summary_guarantee import enabled as summary_enabled
 from utils.conversations.summary_delivery import present as summary_present
@@ -144,8 +145,6 @@ def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, 
         },
     )
     row = _stored(uid, conversation) if getattr(conversation, 'id', None) else {}
-    from models.conversation import Structured
-
     saved = None
     if row.get(NOTES_HASH) == digest and row.get(NOTES_OUTPUT_HASH) and not row.get('discarded'):
         from pydantic import ValidationError

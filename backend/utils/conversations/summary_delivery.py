@@ -10,10 +10,12 @@ import time
 import os
 from contextvars import ContextVar
 from datetime import datetime
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 from prometheus_client import Counter, Gauge, Histogram
 from config.summary_guarantee import deadline_seconds, enabled
+
+Row = dict[str, Any]
 
 RECEIPTS = Counter(
     'omi_summary_terminal_total', 'Fenced durable summary outcomes', ['lane', 'reason', 'structured_present']
@@ -29,13 +31,13 @@ OLDEST = Gauge('omi_summary_debt_oldest_age_seconds', 'Oldest overdue summary de
 SAMPLED_AT = Gauge('omi_summary_debt_sample_timestamp_seconds', "Timestamp of this replica's bounded debt sample")
 
 
-PROCESS_CONTEXT: ContextVar[dict | None] = ContextVar('summary_process', default=None)
+PROCESS_CONTEXT: ContextVar[Row | None] = ContextVar('summary_process', default=None)
 ACCEPT_CONTEXT: ContextVar[float | None] = ContextVar('summary_accept', default=None)
 LANE_CONTEXT: ContextVar[str | None] = ContextVar('summary_lane', default=None)
-REPAIR_CONTEXT: ContextVar[dict | None] = ContextVar('summary_repair', default=None)
+REPAIR_CONTEXT: ContextVar[Row | None] = ContextVar('summary_repair', default=None)
 
 
-def processing_fenced(existing: dict) -> bool:
+def processing_fenced(existing: Row) -> bool:
     context = PROCESS_CONTEXT.get()
     return bool(
         context
@@ -47,7 +49,7 @@ def processing_fenced(existing: dict) -> bool:
     )
 
 
-def repair_fenced(existing: dict) -> bool:
+def repair_fenced(existing: Row) -> bool:
     context = REPAIR_CONTEXT.get()
     return context is not None and (
         refusal(existing) is not None
@@ -63,22 +65,26 @@ class SummaryOutputUnavailable(RuntimeError):
     """A kept first-summary run returned no usable summary; retain its debt."""
 
 
-def field(value: Any, name: str, default=None):
-    return value.get(name, default) if isinstance(value, Mapping) else getattr(value, name, default)
+def field(value: Any, name: str, default: Any = None) -> Any:
+    return (
+        cast(Mapping[str, Any], value).get(name, default)
+        if isinstance(value, Mapping)
+        else getattr(value, name, default)
+    )
 
 
 def present(structured: Any) -> bool:
     overview = field(structured, 'overview')
     if isinstance(overview, str) and overview.strip():
         return True
-    for section in field(structured, 'sections', []) or []:
+    for section in cast(list[Any], field(structured, 'sections', []) or []):
         body = field(section, 'body_markdown')
         if isinstance(body, str) and body.strip():
             return True
     return False
 
 
-def prepare(data: dict, uid: str, *, now: float | None = None) -> None:
+def prepare(data: Row, uid: str, *, now: float | None = None) -> None:
     """Called on plaintext inside the existing write codec: zero reads."""
     if not enabled(uid) or 'structured' not in data:
         return
@@ -92,7 +98,7 @@ def prepare(data: dict, uid: str, *, now: float | None = None) -> None:
         data.setdefault('summary_lane', lane(data))
 
 
-def refusal(row: dict) -> str | None:
+def refusal(row: Row) -> str | None:
     if row.get('status') != 'completed' or row.get('deleted') or row.get('discarded'):
         return 'lifecycle'
     if row.get('deferred') or row.get('is_locked') or row.get('processing_state') == 'local_pending':
@@ -112,7 +118,7 @@ def refusal(row: dict) -> str | None:
     return None
 
 
-def creation_result(write: dict, uid: str) -> dict | None:
+def creation_result(write: Row, uid: str) -> Row | None:
     # A deliberate minimum is durable debt, not a terminal summary receipt.
     if (
         write.get('summary_title_provenance') == 'server_minimum'
@@ -125,7 +131,7 @@ def creation_result(write: dict, uid: str) -> dict | None:
     return merge_result({}, write, uid)
 
 
-def merge_result(existing: dict, write: dict, uid: str, *, now: float | None = None) -> dict | None:
+def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = None) -> Row | None:
     """Inside the existing revision-fenced transaction, before its write."""
     if not enabled(uid) or 'summary_output_present' not in write:
         return None
@@ -175,7 +181,7 @@ def merge_result(existing: dict, write: dict, uid: str, *, now: float | None = N
     return None
 
 
-def lane(row: dict) -> str:
+def lane(row: Row) -> str:
     value = LANE_CONTEXT.get() or row.get('summary_lane')
     if value in {'live', 'fresh', 'backfill', 'integration', 'batch'}:
         return value
@@ -191,7 +197,7 @@ def lane(row: dict) -> str:
     return 'live' if not service or service == 'backend' else 'unknown'
 
 
-def emit(receipt: dict | None) -> None:
+def emit(receipt: Row | None) -> None:
     if receipt is None:
         return
     RECEIPTS.labels(receipt['lane'], receipt['reason'], str(receipt['present']).lower()).inc()

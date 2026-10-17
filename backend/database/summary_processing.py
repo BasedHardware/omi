@@ -5,6 +5,7 @@ because a replaced/expired owner cannot persist through the lifecycle writer.
 """
 
 import time
+from typing import Any
 
 from google.api_core.exceptions import FailedPrecondition, NotFound
 from google.cloud import firestore
@@ -12,7 +13,7 @@ from google.cloud import firestore
 from utils.conversations.summary_delivery import PROCESS_CONTEXT
 
 
-def claim_from_snapshot(client, uid: str, conversation_id: str, row: dict) -> bool:
+def claim_from_snapshot(client: Any, uid: str, conversation_id: str, row: dict[str, Any]) -> bool:
     context = PROCESS_CONTEXT.get()
     if context is None or row.get('summary_completed_at'):
         return True

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Any
+from typing import Any, Callable, cast
 
 from google.cloud import firestore
 from config.summary_guarantee import (
@@ -25,6 +25,7 @@ from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPri
 from utils.conversations import summary_delivery as delivery
 from utils.sync import reprocess
 
+Row = dict[str, Any]
 CURSOR = 'maintenance/summary_debt_repair_v1'
 
 
@@ -33,31 +34,31 @@ def redrive(client: Any, uid: str, conversation_id: str, *, now: float) -> bool:
     if not enabled(uid):
         return False
     admitted = False
-    blocked_receipt = None
+    blocked_receipt: Row | None = None
 
-    def mutate(document_id, operation):
+    def mutate(document_id: str, operation: Callable[[Row | None], tuple[Row, tuple[Row, bool]]]) -> tuple[Row, bool]:
         @firestore.transactional
-        def commit(transaction):
+        def commit(transaction: Any) -> tuple[Row, bool]:
             nonlocal admitted, blocked_receipt
             admitted = False
             blocked_receipt = None
             ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
             snapshot = ref.get(transaction=transaction)
-            row = snapshot.to_dict() or {}
+            row: Row = snapshot.to_dict() or {}
             due = row.get('summary_due_at')
             if delivery.refusal(row) or not isinstance(due, (int, float)) or due > now:
                 return {}, True
             assert_batch_write_allowed(client, transaction, uid, conversation_ids=[conversation_id])
-            user = client.collection('users').document(uid).get(transaction=transaction).to_dict() or {}
+            user: Row = client.collection('users').document(uid).get(transaction=transaction).to_dict() or {}
             # No credentials in background tasks, and never substitute Omi keys.
-            if (user.get('byok') or {}).get('active'):
+            if cast(Row, user.get('byok') or {}).get('active'):
                 if row.get('summary_blocked_reason') != 'blocked_byok':
                     transaction.update(ref, {'summary_blocked_reason': 'blocked_byok'})
                     blocked_receipt = dict(lane=delivery.lane(row), reason='blocked_byok', present=False, latency=None)
                 return {}, True
             outbox = client.collection(reprocess.COLLECTION).document(document_id)
             prior = outbox.get(transaction=transaction)
-            old = prior.to_dict() if prior.exists else None
+            old: Row | None = prior.to_dict() if prior.exists else None
             if old and (old.get('lease_until', 0) > now or old.get('summary_seen')):
                 return {}, True
             new, _ = operation(old)
@@ -96,8 +97,8 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
     owner = uuid.uuid4().hex
 
     @firestore.transactional
-    def claim(transaction):
-        old = cursor_ref.get(transaction=transaction).to_dict() or {}
+    def claim(transaction: Any) -> Row | None:
+        old: Row = cursor_ref.get(transaction=transaction).to_dict() or {}
         if old.get('lease_until', 0) > current or old.get('next_at', 0) > current:
             return None
         transaction.set(
@@ -120,7 +121,7 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
     oldest = 0.0
     for snapshot in page:
         counts['scanned'] += 1
-        row = snapshot.to_dict() or {}
+        row: Row = snapshot.to_dict() or {}
         if delivery.refusal(row):
             continue
         parts = snapshot.reference.path.split('/')
@@ -141,8 +142,8 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
     delivery.SAMPLED_AT.set(current)
 
     @firestore.transactional
-    def finish(transaction):
-        old = cursor_ref.get(transaction=transaction).to_dict() or {}
+    def finish(transaction: Any) -> None:
+        old: Row = cursor_ref.get(transaction=transaction).to_dict() or {}
         if old.get('owner') != owner:
             return
         last = page[-1] if len(page) == REPAIR_SCAN_LIMIT else None
@@ -151,7 +152,7 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
             {
                 'lease_until': 0,
                 'path': last.reference.path if last else None,
-                'due': (last.to_dict() or {}).get('summary_due_at') if last else None,
+                'due': cast(Row, last.to_dict() or {}).get('summary_due_at') if last else None,
             },
         )
 
