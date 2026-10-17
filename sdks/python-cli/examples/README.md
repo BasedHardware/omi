@@ -29,6 +29,7 @@
 * [`action_items_todotxt.md`](action_items_todotxt.md) — turn an action-item
   export into a todo.txt file with due: tags for todo.txt apps.
 * [`conversations_markdown.md`](conversations_markdown.md) — export conversations to structured Markdown notes for Obsidian & Notion.
+* [`conversations_podcast.md`](conversations_podcast.md) — export conversations and transcripts to a Podcast RSS 2.0 XML feed for Apple Podcasts & Spotify.
 * [`conversations_html.md`](conversations_html.md) — build a self-contained HTML
   report of conversations: one section per day, printable, no scripts.
 * [`conversations_markdown.pt.md`](conversations_markdown.pt.md) — exportar conversas do Omi para Markdown (Portuguese recipe).
