@@ -41,6 +41,13 @@ class StoreMeetingResponse(BaseModel):
     message: str = "Meeting stored successfully"
 
 
+class DeleteMeetingResponse(BaseModel):
+    """Response after deleting a meeting"""
+
+    meeting_id: str
+    message: str = "Meeting deleted successfully"
+
+
 @router.post('/v1/calendar/meetings', response_model=StoreMeetingResponse, tags=['calendar'])
 def store_calendar_meeting(
     request: StoreMeetingRequest,
@@ -71,8 +78,11 @@ def store_calendar_meeting(
         uid, request.calendar_event_id, request.calendar_source
     )
     if existing_meeting_id:
-        calendar_db.update_meeting(uid, existing_meeting_id, meeting_dict)
-        meeting_id = existing_meeting_id
+        success = calendar_db.update_meeting(uid, existing_meeting_id, meeting_dict)
+        if success:
+            meeting_id = existing_meeting_id
+        else:
+            meeting_id = calendar_db.create_meeting(uid, meeting_dict)
     else:
         meeting_id = calendar_db.create_meeting(uid, meeting_dict)
     return StoreMeetingResponse(meeting_id=meeting_id, calendar_event_id=request.calendar_event_id)
@@ -103,6 +113,18 @@ def get_calendar_meeting(
             type(exc).__name__,
         )
         raise HTTPException(status_code=404, detail="Meeting not found")
+
+
+@router.delete('/v1/calendar/meetings/{meeting_id}', response_model=DeleteMeetingResponse, tags=['calendar'])
+def delete_calendar_meeting(
+    meeting_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Delete a calendar meeting by its Firestore document ID"""
+    deleted = calendar_db.delete_meeting(uid, meeting_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    return DeleteMeetingResponse(meeting_id=meeting_id)
 
 
 @router.get('/v1/calendar/meetings', response_model=List[CalendarMeetingContext], tags=['calendar'])
