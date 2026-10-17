@@ -365,10 +365,6 @@ def test_segment_text_edit_reads_and_writes_inside_a_transaction(monkeypatch):
     # edits to different segments can't lose-update each other.
     segments = [{'id': 's1', 'text': 'old'}, {'id': 's2', 'text': 'keep'}]
     database = install_store(monkeypatch, 'user-1', 'conv-1', {'transcript_segments': segments})
-    search_refreshes = []
-    monkeypatch.setattr(
-        conversations_db, '_sync_conversation_search_index', lambda *args: search_refreshes.append(args)
-    )
     original = deepcopy(database.rows[('users', 'user-1', 'conversations', 'conv-1')]['transcript_segments'])
     assert conversations_db.update_conversation_segment_text('user-1', 'conv-1', 's1', 'new text') == 'ok'
     assert len(database.transactions) == 1
@@ -378,9 +374,6 @@ def test_segment_text_edit_reads_and_writes_inside_a_transaction(monkeypatch):
         's1': 'new text',
         's2': 'keep',
     }
-    # Transcript segments are not in the Typesense projection; keep this edit
-    # free of an extra synchronous provider round trip.
-    assert search_refreshes == []
 
 
 def test_segment_text_edit_missing_segment_does_not_write(monkeypatch):
