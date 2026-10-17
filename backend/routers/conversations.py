@@ -80,7 +80,6 @@ from utils.conversations.process_conversation import (
     retrieve_in_progress_conversation,
 )
 from utils.conversations import lifecycle as lifecycle_service
-from utils.conversations.capture_shadow_outcomes import record_capture_outcome
 from utils.conversations import share_email
 from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
 from utils.integration_telemetry import emit_posthog_event
@@ -1252,16 +1251,8 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
     ),
 )
 def separate_conversation_from_capture_group(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
-    group = conversation.get('capture_group') or {}
+    _get_valid_conversation_by_id(uid, conversation_id)
     changed = conversations_db.leave_capture_group(uid, conversation_id, sticky=True)
-    if changed:
-        record_capture_outcome(
-            uid,
-            'separate',
-            [m['id'] for m in group.get('members', []) if m.get('id')],
-            separated_id=conversation_id,
-        )
     return StatusResponse(status='ok' if changed else 'unchanged')
 
 

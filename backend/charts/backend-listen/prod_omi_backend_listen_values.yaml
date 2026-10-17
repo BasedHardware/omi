@@ -356,12 +356,6 @@ env:
     value: "60000"
   - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP
     value: "60000"
-  - name: CAPTURE_JEV_SHADOW_ENABLED
-    value: "true"
-  - name: CAPTURE_JEV_SHADOW_UID_ALLOWLIST
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
-  - name: CAPTURE_JEV_SHADOW_PERCENT
-    value: "0"
   # Staged sync-lineage rollout (omi#19947); keep identical to the Cloud Run services in
   # backend/deploy/runtime_env/prod.overlay.yaml. Empty admits every user.
   - name: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST

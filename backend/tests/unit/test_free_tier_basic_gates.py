@@ -33,7 +33,9 @@ _READERS = (
 
 @functools.cache
 def _composed() -> dict:
-    return yaml.safe_load((BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))
+    text = (BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8')
+    loader = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+    return yaml.load(text, Loader=loader)
 
 
 @pytest.fixture(autouse=True)
