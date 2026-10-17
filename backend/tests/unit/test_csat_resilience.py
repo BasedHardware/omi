@@ -16,6 +16,23 @@ install_database_client_stub()
 import database.csat as csat_db
 
 
+class _MemoryCache:
+    def __init__(self):
+        self._store = {}
+
+    def get_or_fetch(self, key, fetch, ttl=None):
+        if key not in self._store:
+            self._store[key] = fetch()
+        return self._store[key]
+
+
+@pytest.fixture(autouse=True)
+def mock_memory_cache(monkeypatch):
+    cache = _MemoryCache()
+    monkeypatch.setattr(csat_db, "get_memory_cache", lambda: cache)
+    return cache
+
+
 def test_fetch_config_firestore_exception_fails_open():
     mock_client = MagicMock()
     mock_client.collection.side_effect = Exception("Transient Firestore timeout")
