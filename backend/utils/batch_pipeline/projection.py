@@ -176,14 +176,19 @@ class Projector:
         session = self.store.session(segment_id, binding, self.clock())
         try:
             self.store.check(session)
+        except ProjectionReplay:
+            pass
+        else:
             if entry['result']['outcome'] == 'silence':
-                session.persist_empty()
+                try:
+                    session.persist_empty()
+                except ProjectionReplay:
+                    if not projection_contention_enabled():
+                        raise
+                    # A receipt is assignment progress, not completion. Resume
+                    # every post-persist obligation after losing the empty race.
             else:
                 self.assign_parts(item, entry, binding)
-        except ProjectionReplay:
-            # The empty-result persist may lose a race after check too. A
-            # receipt is only assignment progress: resume every obligation below.
-            pass
         entry = self.store.ref('results', segment_id).get().to_dict() or {}
         parts = entry.get('projection_parts')
         for index, receipt in (
@@ -422,4 +427,12 @@ class Projector:
                 logger.error(
                     'event=batch_projection action=sweep outcome=error exception_type=%s', type(error).__name__
                 )
+        if projection_contention_enabled():
+            logger.info(
+                'event=batch_projection action=sweep outcome=summary completed=%d waiting=%d blocked=%d error=%d',
+                counts['completed'],
+                counts['waiting'],
+                counts['blocked'],
+                counts['error'],
+            )
         return counts

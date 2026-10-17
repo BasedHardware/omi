@@ -280,3 +280,19 @@ def test_default_off_projection_uses_one_existing_read_and_no_claim(monkeypatch)
     projector.store.read.assert_called_once_with('synthetic-segment')
     projector._project.assert_called_once_with('synthetic-segment', job, entry, binding)
     claim.assert_not_called()
+
+
+def test_dark_control_preserves_empty_race_failure_boundary(monkeypatch, binding):
+    from dataclasses import asdict
+    from utils.batch_pipeline.contracts import WorkItem, Priority
+    from utils.batch_pipeline.projection import Projector
+    from database.batch_pipeline_projection import ProjectionReplay
+
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', raising=False)
+    projector = Projector(Mock(), Mock())
+    projector.store = Mock()
+    projector.store.session.return_value.persist_empty.side_effect = ProjectionReplay({'state': 'persisted'})
+    item = WorkItem('segment', binding.owner_id, 0, 'gs://synthetic/audio', 1, Priority.DEEP)
+    with pytest.raises(ProjectionReplay):
+        projector._project('segment', asdict(item), {'result': {'outcome': 'silence'}}, binding)
+    projector.store.complete.assert_not_called()

@@ -1215,7 +1215,15 @@ def test_three_instance_sweeps_coalesce_owner_and_complete_once(lane, monkeypatc
 
 
 def test_concurrent_empty_receipt_replay_resumes_durable_completion(lane, monkeypatch):
-    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', raising=False)
+    from database import batch_pipeline_projection_claim as claims
+    from unittest.mock import Mock
+
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'true')
+    # Advisory coalescing can be unavailable/expired. Durable replay must remain
+    # safe without it; all Firestore transaction races below are real.
+    redis = Mock()
+    redis.set.side_effect = ConnectionError('synthetic Redis unavailable')
+    monkeypatch.setattr(claims.redis_db, 'r', redis)
     batch = lane.seed()
     lane.finish(batch, outcome='silence')
     barrier = threading.Barrier(3)
@@ -1288,7 +1296,7 @@ def test_batch_flag_recovers_real_sdk_read_abort_with_fresh_transaction(lane, mo
     monkeypatch.setitem(transport._wrapped_methods, transport.batch_get_documents, read)
     result = lane.projector.project(batch.ids[0])
     assert result['outcome'] == 'success' and injected
-    assert len(set(transactions)) >= 2
+    assert transactions[0] != transactions[1]
     assert batch.ledger.get().to_dict()['status'] == 'completed'
     assert len(active_rows(lane)) == 1 and active_rows(lane)[0]['sync_content_revision'] == 1
     assert len(lane.tasks) == len(lane.published) == len(lane.loads) == 1

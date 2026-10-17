@@ -5222,10 +5222,10 @@ batch assignment then use the existing bounded five-attempt fresh-transaction co
 retry with jitter. Legacy assignment retains its separate `SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED`
 control. No STT or admission path is changed.
 
-Silence persistence can discover another projector's receipt after its initial check. Resume
+With the control enabled, silence persistence can discover another projector's receipt after its initial check. Resume
 all post-persist obligations and durable completion; a replay alone is never client completion.
 With the contention control on, content-free `action=project outcome=completed|waiting` and
-`action=claim outcome=busy|unavailable` logs distinguish drain progress from contention. Keep
+`action=claim outcome=busy|unavailable` logs plus per-sweep completed/waiting/blocked/error summaries distinguish drain progress from contention. Keep
 admission paused until accepted-work completion, visible synthetic canary and at least 30 minutes
 of correctness sentinels pass. Scaling all integration traffic to one instance is a temporary
 capacity tradeoff, not a distributed projection fence (revision overlap remains possible).
