@@ -351,7 +351,7 @@ def test_channel_skips_discarded_legacy_prompt_but_keeps_tool_projection(monkeyp
     monkeypatch.setattr(agentic, '_resolve_jit_conversation_retrieval', AsyncMock(return_value=False))
     monkeypatch.setattr(agentic, 'load_app_tools', lambda *args: [])
 
-    async def runner(*args):
+    async def runner(*args, **kwargs):
         assert 'create_action_item_tool' in args[3]
         assert args[7]['user_id'] == 'test'
         args[5].append('Synthetic answer')

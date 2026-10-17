@@ -480,7 +480,9 @@ async def test_gateway_mode_selects_openai_agent_runner(agentic_mod):
             return []
         raise AssertionError(f'unexpected blocking setup call: {function}')
 
-    async def openai_runner(system, messages, schemas, _registry, callback, full_response, _guard, _configurable):
+    async def openai_runner(
+        system, messages, schemas, _registry, callback, full_response, _guard, _configurable, **_kwargs
+    ):
         seen.update({'system': system, 'messages': messages, 'schemas': schemas})
         full_response.append('managed answer')
         await callback.put_data('managed answer')
@@ -533,7 +535,9 @@ async def test_anthropic_byok_stays_on_openai_agent_runner(agentic_mod):
             return []
         raise AssertionError(f'unexpected blocking setup call: {function}')
 
-    async def openai_runner(_system, _messages, _schemas, _registry, callback, full_response, _guard, _configurable):
+    async def openai_runner(
+        _system, _messages, _schemas, _registry, callback, full_response, _guard, _configurable, **_kwargs
+    ):
         seen['openai'] = True
         full_response.append('managed answer')
         await callback.put_data('managed answer')
@@ -603,7 +607,9 @@ def _chat_message(text, sender='human'):
 async def test_unrecovered_provider_failure_is_reported_to_the_caller(agentic_mod):
     """The router reads ``callback_data['error']``; a gave-up provider failure must land there."""
 
-    async def producer(_system, _messages, _schemas, _registry, callback, _full_response, _guard, _configurable):
+    async def producer(
+        _system, _messages, _schemas, _registry, callback, _full_response, _guard, _configurable, **_kwargs
+    ):
         await callback.put_thought('Searching your conversations')
         await callback.end()
         return 'provider_ReadTimeout'
@@ -624,7 +630,9 @@ async def test_unrecovered_provider_failure_is_reported_to_the_caller(agentic_mo
 
 
 async def test_successful_turn_reports_no_error(agentic_mod):
-    async def producer(_system, _messages, _schemas, _registry, callback, full_response, _guard, _configurable):
+    async def producer(
+        _system, _messages, _schemas, _registry, callback, full_response, _guard, _configurable, **_kwargs
+    ):
         full_response.append('an answer')
         await callback.put_data('an answer')
         await callback.end()

@@ -91,20 +91,24 @@ def test_notes_routing_calls_only_shaped_entrypoint(monkeypatch, mode, uid):
 
 
 @pytest.mark.parametrize('route', ['off', 'cohort', 'on'])
-def test_chat_routing_off_and_enabled(monkeypatch, route):
+@pytest.mark.parametrize('model_feature', ['chat_agent', 'chat_graph'])
+def test_chat_routing_off_and_enabled(monkeypatch, route, model_feature):
     uid = shaped.COHORT_UID
     monkeypatch.setenv(shaped.FLAG, route)
     calls, background = [], []
+    expected_feature = model_feature
     served = []
     callback = object()
 
-    async def old(*args):
+    async def old(*args, model_feature):
+        assert model_feature == expected_feature
         calls.append('old')
         assert args[4] is callback
         args[5].append('old bytes')
         return 'old status'
 
-    async def new(*args, shadow=False):
+    async def new(*args, shadow=False, model_feature='chat_agent'):
+        assert model_feature == expected_feature
         calls.append('new')
         if shadow:
             assert args[4] is not callback
@@ -119,7 +123,9 @@ def test_chat_routing_off_and_enabled(monkeypatch, route):
     monkeypatch.setattr(agentic, 'start_background_task', lambda coro, **kw: background.append(coro))
 
     async def run():
-        result = await agentic._run_routed_chat_stream('prompt', [], [], {}, callback, served, None, {'user_id': uid})
+        result = await agentic._run_routed_chat_stream(
+            'prompt', [], [], {}, callback, served, None, {'user_id': uid}, model_feature=model_feature
+        )
         for coro in background:
             await coro
         return result
@@ -350,7 +356,7 @@ def test_execute_chat_stream_mount_wiring_and_off_bytes(monkeypatch, mode, opt_i
     monkeypatch.setattr(agentic, 'load_app_tools', lambda *a: [])
     captured = []
 
-    async def runner(*args):
+    async def runner(*args, **kwargs):
         captured.append(copy.deepcopy(args[0:3]))
         args[5].append('Original answer bytes\n')
         await args[4].put_data('Original answer bytes\n')
