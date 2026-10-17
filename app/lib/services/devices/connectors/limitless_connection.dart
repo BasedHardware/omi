@@ -6,6 +6,7 @@ import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/limitless_clock_drift.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
+import 'package:omi/services/devices/transports/native_ble_transport.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -82,11 +83,14 @@ class LimitlessDeviceConnection extends DeviceConnection {
     _resetClockDriftCapture();
     try {
       await super.connect(onConnectionStateChanged: onConnectionStateChanged);
-    } on DeviceConnectionTimeoutException {
-      // DeviceService preserves the native transport after a launch timeout.
-      // Keep the device-specific setup alive too, including its first RX subscription.
-      _listenForTransportReconnects();
-      if (status == DeviceConnectionState.connected) unawaited(_handleTransportReconnected());
+    } on DeviceConnectionException catch (error) {
+      final native = transport;
+      if (error.isTimeout ||
+          (native is NativeBleTransport && native.savedReconnectEnabled && native.hasRetryableConnectFailure)) {
+        // Keep first-ready setup alive whenever DeviceService retains this owner.
+        _listenForTransportReconnects();
+        if (status == DeviceConnectionState.connected) unawaited(_handleTransportReconnected());
+      }
       rethrow;
     }
 

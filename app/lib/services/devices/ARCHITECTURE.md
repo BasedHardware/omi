@@ -26,7 +26,7 @@ A later `BleBridge.onDeviceReady` can therefore
 publish a connected device without returning through the original `connect()`.
 Bluetooth readiness alone does not establish the pendant's audio mode.
 
-`LimitlessDeviceConnection` keeps its readiness subscription after that timeout.
+`LimitlessDeviceConnection` keeps its readiness subscription after retained launch failures.
 Its first late ready completes the existing clock-observation, time-sync, and
 stream-selection pipeline. Later ready events use the existing reconnect setup.
 The existing connection epoch fences each asynchronous setup continuation;

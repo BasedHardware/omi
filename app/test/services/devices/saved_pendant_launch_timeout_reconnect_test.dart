@@ -120,7 +120,15 @@ void main() {
     void Function(FakeAsync, LimitlessDeviceConnection, NativeBleTransport, List<List<int>>) scenario, {
     bool suppressRealtime = false,
     int transientWriteFailures = 0,
+    bool failBeforeReady = false,
   }) {
+    if (failBeforeReady) {
+      setHostApiHandler('configureSavedReconnect', (_) async => <Object?>[]);
+      setHostApiHandler('manageDevice', (_) async {
+        scheduleMicrotask(() => BleBridge.instance.onPeripheralDisconnected(_deviceId, 'connection_failed'));
+        return <Object?>[];
+      });
+    }
     // Use the production UUIDs, rather than a substitute audio transport.
     LimitlessDeviceConnection.realtimeSuppressionPolicy = () => suppressRealtime;
     final writes = <List<int>>[];
@@ -143,9 +151,14 @@ void main() {
       SharedPreferencesUtil().btDeviceSet(device);
       final transport = NativeBleTransport(_deviceId, requiresBond: true);
       final connection = LimitlessDeviceConnection(device, transport);
-      final service = DeviceService(connectionBuilder: (_) => connection);
-      service.ensureConnection(device.id, force: true);
-      async.elapse(const Duration(seconds: 60));
+      final service = DeviceService(connectionBuilder: (_) => connection, reconnectKilled: () async => false);
+      if (failBeforeReady) {
+        service.reconnectSavedDevice('launch');
+        async.flushMicrotasks();
+      } else {
+        service.ensureConnection(device.id, force: true);
+        async.elapse(const Duration(seconds: 60));
+      }
       expect(service.connectionFor(device.id), same(connection));
       expect(unmanagedCalls, 0);
 
@@ -156,6 +169,7 @@ void main() {
       expect(connection.status, DeviceConnectionState.connected);
       scenario(async, connection, transport, writes);
 
+      service.savedReconnect.stop();
       connection.disconnect();
       async.flushMicrotasks();
       transport.dispose();
@@ -192,6 +206,18 @@ void main() {
       async.flushMicrotasks();
       expect(frames, hasLength(8));
     });
+  });
+
+  test('Limitless native failure before first ready still initializes and delivers audio', () {
+    withLateLimitless((async, connection, transport, writes) {
+      final frames = <List<int>>[];
+      connection.getBleAudioBytesListener(onAudioBytesReceived: frames.add);
+      async.elapse(const Duration(seconds: 5));
+      expect(writes, hasLength(2), reason: 'late native recovery must run first clock sync and stream enable');
+      emitAudioFixture();
+      async.flushMicrotasks();
+      expect(frames, hasLength(8));
+    }, failBeforeReady: true);
   });
 
   test('late Limitless ready preserves Transcribe Later instead of enabling realtime', () {
