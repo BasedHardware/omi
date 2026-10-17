@@ -287,9 +287,38 @@ def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bo
     # direct Cloud Tasks dispatch-stale threshold for a heavy account.
     if job.get('dispatch_mode') == 'sequenced':
         return False
+    reference_time = time.time() if now is None else now
+    # Marker read before any status branching: a budget expiry can land during
+    # staged-file download or other post-lock work before the attempt marks the
+    # job processing, and the delayed replacement is scheduled past the
+    # preserved run lock's TTL — beyond the queued dispatch-stale threshold.
+    # Whether the deferral caught the job queued or processing, the silence
+    # until the replacement is due is planned, not a lost dispatch: a poll in
+    # the unlocked gap must not finalize it in either state.
+    raw_deferred_until = job.get('deferred_until')
+    deferred_until = (
+        float(raw_deferred_until)
+        if isinstance(raw_deferred_until, (int, float)) and not isinstance(raw_deferred_until, bool)
+        else None
+    )
+    deferred = deferred_until is not None
     status = job.get('status')
     if status == 'processing':
+        if deferred and reference_time < deferred_until:
+            return False
         threshold = STALE_THRESHOLD_SECONDS
+    elif (
+        status == 'queued'
+        and job.get('dispatch_mode') == 'cloud_tasks'
+        and deferred
+        and reference_time < deferred_until
+    ):
+        # The replacement is deliberately scheduled ~31 minutes out (past the
+        # preserved lock's TTL); the 30-minute queued-dispatch-stale threshold
+        # would classify it dispatch-lost before it is due. Guard the window
+        # exactly as the processing branch does, then resume normal
+        # queued-dispatch staleness once the replacement is overdue.
+        return False
     elif (
         status == 'queued'
         and job.get('dispatch_mode') == 'cloud_tasks'
@@ -302,7 +331,6 @@ def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bo
     updated_at = job.get('updated_at') or job.get('created_at')
     if not isinstance(updated_at, (int, float)):
         return False
-    reference_time = time.time() if now is None else now
     return reference_time - updated_at > threshold
 
 
@@ -672,6 +700,11 @@ def fenced_mark_job_processing(
         {
             'status': 'processing',
             'started_at': started_at,
+            # The budget-deferral marker guards the planned-silence window
+            # while the delayed replacement waits; the delivery that is now
+            # running IS that replacement arriving, so its transition to
+            # processing retires the marker instead of leaving it to expire.
+            'deferred_until': None,
         },
         now=started_at,
         allowed_current_statuses={'queued', 'processing'},
@@ -685,6 +718,7 @@ def mark_job_processing(job_id: str) -> Optional[Dict[str, Any]]:
         {
             'status': 'processing',
             'started_at': time.time(),
+            'deferred_until': None,
         },
     )
 

@@ -2180,6 +2180,18 @@ _add(
 )
 _add(
     DriverEntry(
+        'database.sync_backfill_sequencer.finish_expired_job',
+        base={'uid': UID, 'job_id': 'shape-job', 'epoch': 1, 'outcome': 'budget_chain_exhausted'},
+        domains={'now': [None, T0]},
+        setup=_seed(
+            f'sync_backfill_sequencer/{UID}',
+            {'active_job_id': 'shape-job', 'active_epoch': 1, 'lease_expires_at': T0},
+        ),
+        patchers=_SYNC_PROD,
+    )
+)
+_add(
+    DriverEntry(
         'database.sync_backfill_sequencer.retire_expired',
         base={'uid': UID, 'job_id': 'shape-job'},
         domains={'now': [None, T0], 'epoch': [None, 1], 'allow_active_owner': [False, True]},

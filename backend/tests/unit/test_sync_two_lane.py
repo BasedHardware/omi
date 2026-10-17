@@ -381,6 +381,11 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     assert '--max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES"' in action
     assert '--max-dispatches-per-second=15' in action
     assert '--max-backoff=60s' in action
+    # The queue's attempt cap must mirror get_sync_tasks_max_attempts()
+    # (default 5): omitted queue fields keep Google's default of 100, so a
+    # handler-budget deferral chain ended through the 409 would keep retrying
+    # past the preserved run lock and re-run whole-budget pipelines.
+    assert '--max-attempts=5' in action
     assert 'collection-group=sync_content_ledger' in action
     assert "inputs.provision_sync_ledger_ttl == 'true'" in action
     assert 'firestore_project_id:' in action

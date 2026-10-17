@@ -28,6 +28,12 @@ logger = logging.getLogger(__name__)
 OWNER_REPAIRED = Counter('sync_backfill_owner_repaired', 'Missing backfill owners recreated')
 
 COLLECTION = 'sync_backfill_sequencer'
+
+# Must match utils.cloud_tasks.SYNC_JOB_BUDGET_DEFERRALS_PAYLOAD_KEY (pinned by
+# test): the handler-budget chain count rides task payloads, and a lease-expiry
+# redrive re-dispatches the owner's original ``active_payload`` — without this
+# persisted copy the redrive would restart the chain at zero.
+BUDGET_DEFERRALS_PAYLOAD_KEY = 'budget_deferrals'
 PENDING_COLLECTION = 'sync_backfill_pending'
 LEASE_SECONDS = 30 * 60  # Running lease; queue wait is unbounded by the dispatch deadline.
 HEARTBEAT_SECONDS = 120
@@ -588,6 +594,79 @@ def defer_owner(uid: str, seconds: int, *, firestore_client: Any = None, now: Op
         pass
 
 
+def note_budget_deferral(
+    uid: str, job_id: str, epoch: int, deferrals: int, *, firestore_client: Any = None, now: Optional[datetime] = None
+) -> None:
+    """Persist the handler-budget chain count on the running owner.
+
+    The count rides task payloads, but ``redrive_job`` re-dispatches the
+    owner's original ``active_payload``; without this copy, a lease that
+    expires before the delayed replacement begins would restart the chain at
+    zero and an over-budget job could defer forever. Best-effort on purpose:
+    the handler has already acked, and the write must not resurrect an owner
+    a completion has already released.
+    """
+    _require_production()
+    client = firestore_client or get_firestore_client()
+    root = _root(client, uid)
+    current = now or _now()
+
+    @firestore.transactional
+    def commit(transaction: Any) -> None:
+        owner = _data(root.get(transaction=transaction))
+        if owner.get('active_job_id') != job_id or owner.get('active_epoch') != epoch:
+            return
+        transaction.update(root, {'active_budget_deferrals': deferrals, 'updated_at': current})
+
+    try:
+        commit(client.transaction())
+    except NotFound:
+        pass
+
+
+def finish_expired_job(
+    uid: str,
+    job_id: str,
+    epoch: int,
+    outcome: str,
+    *,
+    firestore_client: Any = None,
+    now: Optional[datetime] = None,
+) -> bool:
+    """Release an owner whose lease expired, fenced exactly like redrive_job.
+
+    The deadline is re-checked inside the transaction: a delivery that began
+    and renewed between the sweeper's read and this write must never be
+    released out from under its running worker.
+    """
+    _require_production()
+    client = firestore_client or get_firestore_client()
+    root = _root(client, uid)
+    current = now or _now()
+
+    @firestore.transactional
+    def commit(transaction: Any) -> bool:
+        owner = _data(root.get(transaction=transaction))
+        if owner.get('active_job_id') != job_id or owner.get('active_epoch') != epoch:
+            return False
+        dispatching = owner.get('active_state') == 'dispatching'
+        deadline = owner.get('dispatch_retry_at' if dispatching else 'lease_expires_at')
+        if not isinstance(deadline, datetime) or deadline > current:
+            return False
+        has_pending = _has_pending(client, uid, transaction=transaction)
+        _release_owner(transaction, root, owner, current, has_pending=has_pending)
+        return True
+
+    released = False
+    try:
+        released = commit(client.transaction())
+    except NotFound:
+        return False
+    if released:
+        logger.info('event=sync_uid_sequencer action=finished outcome=%s', outcome)
+    return released
+
+
 def redrive_job(
     uid: str, job_id: str, epoch: int, *, firestore_client: Any = None, now: Optional[datetime] = None
 ) -> Optional[dict[str, Any]]:
@@ -613,6 +692,13 @@ def redrive_job(
         # Separate task identity from execution fencing. A fresh named attempt
         # also recovers tasks deleted/exhausted before begin_job (name tombstones).
         dispatch_attempt = int(owner.get('dispatch_attempt') or 0) + 1 if dispatching else 0
+        # A budget-deferred job redrives from this original payload, which
+        # carries no chain count; re-attach the count persisted at deferral
+        # time so the replacement chain stays bounded across lease expiry.
+        payload = dict(owner['active_payload'])
+        deferrals = owner.get('active_budget_deferrals')
+        if isinstance(deferrals, int) and not isinstance(deferrals, bool) and deferrals > 0:
+            payload[BUDGET_DEFERRALS_PAYLOAD_KEY] = deferrals
         transaction.update(
             root,
             {
@@ -629,7 +715,7 @@ def redrive_job(
         return {
             'uid': uid,
             'job_id': job_id,
-            'payload': owner['active_payload'],
+            'payload': payload,
             'epoch': next_epoch,
             'dispatch_attempt': dispatch_attempt,
             'accepted_at': owner['active_accepted_at'],
