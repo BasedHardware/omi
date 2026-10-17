@@ -4192,5 +4192,7 @@
     "copyForAnyApp": "คัดลอกไปใช้กับแอปใดก็ได้",
     "askConnectChatGptFirst": "เชื่อมต่อ ChatGPT ครั้งเดียวเพื่อถามเกี่ยวกับการสนทนาของคุณ",
     "reconnect": "เชื่อมต่อใหม่",
-    "chatGptNeedsReconnect": "ต้องการสิทธิ์เข้าถึงเพิ่มเติม เชื่อมต่อใหม่เพื่อแก้ไข"
+    "chatGptNeedsReconnect": "ต้องการสิทธิ์เข้าถึงเพิ่มเติม เชื่อมต่อใหม่เพื่อแก้ไข",
+    "connectAgentWaiting": "กำลังรอให้เอเจนต์ใช้คีย์ของตน",
+    "connectAgentWaitingTitle": "{name} ยังไม่ได้เชื่อมต่อ"
 }

@@ -11615,5 +11615,7 @@
     "copyForAnyApp": "कोणत्याही अ‍ॅपसाठी कॉपी करा",
     "askConnectChatGptFirst": "तुमच्या संभाषणांबद्दल विचारण्यासाठी एकदा ChatGPT कनेक्ट करा.",
     "reconnect": "पुन्हा कनेक्ट करा",
-    "chatGptNeedsReconnect": "अधिक प्रवेश आवश्यक आहे. निराकरणासाठी पुन्हा कनेक्ट करा."
+    "chatGptNeedsReconnect": "अधिक प्रवेश आवश्यक आहे. निराकरणासाठी पुन्हा कनेक्ट करा.",
+    "connectAgentWaiting": "एजंटने त्याची की वापरण्याची प्रतीक्षा आहे",
+    "connectAgentWaitingTitle": "{name} अजून कनेक्ट झालेला नाही"
 }

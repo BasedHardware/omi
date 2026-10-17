@@ -13708,4 +13708,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get chatGptNeedsReconnect => 'Nepieciešama plašāka piekļuve. Savienojiet vēlreiz, lai labotu.';
+
+  @override
+  String get connectAgentWaiting => 'Gaida, kamēr aģents izmantos savu atslēgu';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name vēl nav savienots';
+  }
 }

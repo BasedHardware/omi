@@ -13708,4 +13708,12 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get chatGptNeedsReconnect => 'Potreban je dodatni pristup. Ponovo poveži da popraviš.';
+
+  @override
+  String get connectAgentWaiting => 'Čeka se da agent upotrijebi svoj ključ';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name još nije povezan';
+  }
 }

@@ -4192,5 +4192,7 @@
     "copyForAnyApp": "Копирай за всяко приложение",
     "askConnectChatGptFirst": "Свържете ChatGPT веднъж, за да го питате за разговорите си.",
     "reconnect": "Свържи отново",
-    "chatGptNeedsReconnect": "Нужен е по-голям достъп. Свържи отново, за да поправиш."
+    "chatGptNeedsReconnect": "Нужен е по-голям достъп. Свържи отново, за да поправиш.",
+    "connectAgentWaiting": "Изчакване агентът да използва своя ключ",
+    "connectAgentWaitingTitle": "{name} все още не е свързан"
 }

@@ -13604,4 +13604,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get chatGptNeedsReconnect => 'يحتاج إلى صلاحيات أكثر. أعد الاتصال للإصلاح.';
+
+  @override
+  String get connectAgentWaiting => 'في انتظار أن يستخدم الوكيل مفتاحه';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name لم يتصل بعد';
+  }
 }

@@ -4192,5 +4192,7 @@
     "copyForAnyApp": "Kopiera för valfri app",
     "askConnectChatGptFirst": "Anslut ChatGPT en gång för att fråga den om dina konversationer.",
     "reconnect": "Anslut igen",
-    "chatGptNeedsReconnect": "Behöver mer åtkomst. Anslut igen för att åtgärda."
+    "chatGptNeedsReconnect": "Behöver mer åtkomst. Anslut igen för att åtgärda.",
+    "connectAgentWaiting": "Väntar på att agenten ska använda sin nyckel",
+    "connectAgentWaitingTitle": "{name} är inte ansluten än"
 }

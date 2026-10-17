@@ -11615,5 +11615,7 @@
     "copyForAnyApp": "העתקה לכל אפליקציה",
     "askConnectChatGptFirst": "חברו את ChatGPT פעם אחת כדי לשאול אותו על השיחות שלכם.",
     "reconnect": "התחבר מחדש",
-    "chatGptNeedsReconnect": "נדרשת גישה נוספת. התחבר מחדש כדי לתקן."
+    "chatGptNeedsReconnect": "נדרשת גישה נוספת. התחבר מחדש כדי לתקן.",
+    "connectAgentWaiting": "ממתין לכך שהסוכן ישתמש במפתח שלו",
+    "connectAgentWaitingTitle": "{name} עדיין לא מחובר"
 }

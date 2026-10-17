@@ -13734,4 +13734,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get chatGptNeedsReconnect => 'Több hozzáférésre van szükség. Csatlakoztasd újra a javításhoz.';
+
+  @override
+  String get connectAgentWaiting => 'Várakozás, hogy az ügynök használja a kulcsát';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name még nincs csatlakoztatva';
+  }
 }

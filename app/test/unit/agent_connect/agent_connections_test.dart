@@ -74,16 +74,12 @@ void main() {
       expect(prepared.prompt, isNot(contains('omi_mcp_secretvalue')));
     });
 
-    test('a new link replaces older keys of the agent only after it exists', () async {
+    test('preparing a link never touches existing keys; retiring keeps only the new one', () async {
       final deleted = <String>[];
       final service = AgentConnectService(
         apiBase: 'https://api.example.test/',
         createKey: (name) async => created('k-new', name),
-        share: (_) async {
-          // Nothing is revoked while the replacement is still being made.
-          expect(deleted, isEmpty);
-          return const ZkrShare(id: 'x', agentLink: 'https://zkr.scalingforever.com/a/x#v1.K.T');
-        },
+        share: (_) async => const ZkrShare(id: 'x', agentLink: 'https://zkr.scalingforever.com/a/x#v1.K.T'),
         loadKeys: () async => [
           key('k-new', 'Muse (Omi app)'),
           key('k-old', 'Muse (Omi app)'),
@@ -91,7 +87,9 @@ void main() {
         ],
         deleteKey: (id) async => deleted.add(id),
       );
-      await service.preparePrompt(ComputerAgent.muse);
+      final prepared = await service.preparePrompt(ComputerAgent.muse);
+      expect(deleted, isEmpty);
+      await service.retireOlderKeys(ComputerAgent.muse, prepared.keyId);
       expect(deleted, ['k-old']);
     });
 

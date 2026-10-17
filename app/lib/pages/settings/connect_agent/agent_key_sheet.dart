@@ -46,8 +46,9 @@ class _AgentKeySheetState extends State<AgentKeySheet> {
     await _makeAndCopy();
   }
 
-  /// A fresh link replaces the previous key once it exists ([AgentConnectService.preparePrompt]);
-  /// if making it fails, the previous prompt and key stay as they were.
+  /// A fresh link replaces the previous key only once it has been copied
+  /// ([AgentConnectService.retireOlderKeys]); if making it fails or the sheet closes first, the
+  /// previous prompt and key stay as they were.
   Future<void> _newLink() => _makeAndCopy();
 
   Future<void> _makeAndCopy() async {
@@ -66,6 +67,9 @@ class _AgentKeySheetState extends State<AgentKeySheet> {
         _working = false;
       });
       await OmiClipboard.copy(context, prepared.prompt, what: l10n.prompt);
+      // The new prompt is in hand, so the key it replaces (an earlier link, or one a stale list
+      // missed) can go now, and only now.
+      await widget.service.retireOlderKeys(widget.agent, prepared.keyId);
     } catch (_) {
       if (!mounted) return;
       setState(() => _working = false);
@@ -244,11 +248,14 @@ class _ActiveAgentSheetState extends State<ActiveAgentSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(l10n.connectAgentActiveTitle(_name), style: OmiType.title3),
+                    Text(
+                      lastUsed == null ? l10n.connectAgentWaitingTitle(_name) : l10n.connectAgentActiveTitle(_name),
+                      style: OmiType.title3,
+                    ),
                     const SizedBox(height: 2),
                     Text(
                       lastUsed == null
-                          ? l10n.connectAgentKeyActive
+                          ? l10n.connectAgentWaiting
                           : l10n.connectAgentLastUsed(OmiDateFormat.of(context).timestamp(lastUsed.toLocal())),
                       style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
                     ),

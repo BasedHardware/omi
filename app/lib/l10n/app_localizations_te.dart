@@ -13732,4 +13732,12 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get chatGptNeedsReconnect => 'మరిన్ని యాక్సెస్ అవసరం. సరిచేయడానికి మళ్లీ కనెక్ట్ చేయండి.';
+
+  @override
+  String get connectAgentWaiting => 'ఏజెంట్ తన కీని ఉపయోగించడానికి వేచి ఉంది';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name ఇంకా కనెక్ట్ కాలేదు';
+  }
 }

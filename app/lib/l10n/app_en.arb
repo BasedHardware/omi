@@ -16529,5 +16529,18 @@
     "chatGptNeedsReconnect": "Needs more access. Reconnect to fix.",
     "@chatGptNeedsReconnect": {
         "description": "Status under ChatGPT when it is connected but was approved without access to some Omi data"
+    },
+    "connectAgentWaiting": "Waiting for the agent to use its key",
+    "@connectAgentWaiting": {
+        "description": "Status under an AI agent whose Omi key was made but has not been used yet (the prompt was not pasted or not run)"
+    },
+    "connectAgentWaitingTitle": "{name} Hasn't Connected Yet",
+    "@connectAgentWaitingTitle": {
+        "description": "Sheet title for an agent whose Omi key has never been used; name is the agent's product name such as Muse",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
     }
 }

@@ -13684,4 +13684,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get chatGptNeedsReconnect => 'Tarvitsee lisäoikeuksia. Korjaa yhdistämällä uudelleen.';
+
+  @override
+  String get connectAgentWaiting => 'Odotetaan, että agentti käyttää avaintaan';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name ei ole vielä yhdistetty';
+  }
 }

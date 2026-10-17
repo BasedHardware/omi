@@ -11615,5 +11615,7 @@
     "copyForAnyApp": "Скапіраваць для любой праграмы",
     "askConnectChatGptFirst": "Падключыце ChatGPT адзін раз, каб пытацца ў яго пра свае размовы.",
     "reconnect": "Падключыць зноў",
-    "chatGptNeedsReconnect": "Патрабуецца больш доступу. Падключыце зноў, каб выправіць."
+    "chatGptNeedsReconnect": "Патрабуецца больш доступу. Падключыце зноў, каб выправіць.",
+    "connectAgentWaiting": "Чакаем, пакуль агент выкарыстае свой ключ",
+    "connectAgentWaitingTitle": "{name} яшчэ не падключаўся"
 }

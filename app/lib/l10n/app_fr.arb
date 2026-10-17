@@ -4227,5 +4227,7 @@
     "copyForAnyApp": "Copier pour n'importe quelle app",
     "askConnectChatGptFirst": "Connectez ChatGPT une fois pour l'interroger sur vos conversations.",
     "reconnect": "Reconnecter",
-    "chatGptNeedsReconnect": "Accès supplémentaire requis. Reconnectez pour corriger."
+    "chatGptNeedsReconnect": "Accès supplémentaire requis. Reconnectez pour corriger.",
+    "connectAgentWaiting": "En attente que l'agent utilise sa clé",
+    "connectAgentWaitingTitle": "{name} n'est pas encore connecté"
 }

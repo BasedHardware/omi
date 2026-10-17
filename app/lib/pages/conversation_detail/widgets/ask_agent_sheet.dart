@@ -40,20 +40,23 @@ final _drafts = <String, String>{};
 class _AskAgentSheetState extends State<AskAgentSheet> {
   late final _question = TextEditingController(text: _drafts[widget.conversation.id]);
   bool? _chatGptConnected;
+  bool _checkFailed = false;
 
   @override
   void initState() {
     super.initState();
     _question.addListener(() => _drafts[widget.conversation.id] = _question.text);
-    widget.service.chatGptCanReadConversations().then(
-      (connected) {
-        if (mounted) setState(() => _chatGptConnected = connected);
-      },
-      onError: (_) {
-        // Unknown counts as not connected: the sheet offers Connect, which is harmless if it is.
-        if (mounted) setState(() => _chatGptConnected = false);
-      },
-    );
+    _checkChatGpt();
+  }
+
+  /// Null while checking; a failed check is its own state, never "not connected".
+  Future<void> _checkChatGpt() async {
+    try {
+      final connected = await widget.service.chatGptCanReadConversations();
+      if (mounted) setState(() => _chatGptConnected = connected);
+    } catch (_) {
+      if (mounted) setState(() => _checkFailed = true);
+    }
   }
 
   @override
@@ -125,7 +128,26 @@ class _AskAgentSheetState extends State<AskAgentSheet> {
             ],
           ),
           const SizedBox(height: OmiSpacing.xl),
-          if (connected == null)
+          if (_checkFailed) ...[
+            Text(
+              l10n.connectAgentLoadFailed,
+              textAlign: TextAlign.center,
+              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+            ),
+            const SizedBox(height: OmiSpacing.sm),
+            OmiButton(
+              key: const ValueKey('ask_agent_retry'),
+              label: l10n.tryAgain,
+              expand: true,
+              onPressed: () {
+                setState(() {
+                  _chatGptConnected = null;
+                  _checkFailed = false;
+                });
+                _checkChatGpt();
+              },
+            ),
+          ] else if (connected == null)
             const Center(child: OmiSpinner())
           else if (connected)
             OmiButton(

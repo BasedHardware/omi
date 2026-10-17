@@ -4192,5 +4192,7 @@
     "copyForAnyApp": "Kopier for hvilken som helst app",
     "askConnectChatGptFirst": "Koble til ChatGPT én gang for å spørre den om samtalene dine.",
     "reconnect": "Koble til på nytt",
-    "chatGptNeedsReconnect": "Trenger mer tilgang. Koble til på nytt for å fikse det."
+    "chatGptNeedsReconnect": "Trenger mer tilgang. Koble til på nytt for å fikse det.",
+    "connectAgentWaiting": "Venter på at agenten bruker nøkkelen sin",
+    "connectAgentWaitingTitle": "{name} er ikke tilkoblet ennå"
 }

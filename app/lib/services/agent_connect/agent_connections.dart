@@ -147,28 +147,28 @@ class AgentConnectService {
   String previewPrompt() => buildMcpKeyPrompt(_base, '<one-time secure link — made when you copy>');
 
   /// Creates a key named for [agent], seals it in a one-time link, and returns the prompt that
-  /// carries the link. If the link cannot be made, the new key is deleted again.
-  ///
-  /// One live key per agent: once the new link exists, every older key with the agent's name is
-  /// revoked. Replacing only after success means a failed attempt never cuts off a working agent,
-  /// and a list that missed a key (a failed reload) cannot leave a forgotten one behind.
+  /// carries the link. If the link cannot be made, the new key is deleted again. Older keys are left
+  /// alone here; [retireOlderKeys] replaces them once the new prompt has been handed over.
   Future<PreparedAgentPrompt> preparePrompt(ComputerAgent agent) async {
     final created = await _createKey(agent.keyName);
-    final PreparedAgentPrompt prepared;
     try {
       final share = await _share(created.key);
-      prepared = PreparedAgentPrompt(prompt: buildMcpKeyPrompt(_base, share.agentLink), keyId: created.id);
+      return PreparedAgentPrompt(prompt: buildMcpKeyPrompt(_base, share.agentLink), keyId: created.id);
     } catch (_) {
       await _deleteKey(created.id).catchError((_) {});
       rethrow;
     }
+  }
+
+  /// One live key per agent: revokes every key with [agent]'s name except [keepKeyId]. Called only
+  /// after the new prompt was copied, so an abandoned or failed attempt never cuts off a working
+  /// agent, and a list that missed a key (a failed reload) cannot leave a forgotten one behind.
+  /// Best effort: the next link for this agent retries.
+  Future<void> retireOlderKeys(ComputerAgent agent, String keepKeyId) async {
     try {
-      final older = (await _loadKeys()).where((key) => key.name == agent.keyName && key.id != created.id);
+      final older = (await _loadKeys()).where((key) => key.name == agent.keyName && key.id != keepKeyId);
       await Future.wait(older.map((key) => _deleteKey(key.id)));
-    } catch (_) {
-      // Best effort: the prompt is ready either way, and the next link for this agent retries.
-    }
-    return prepared;
+    } catch (_) {}
   }
 
   String get _base => _apiBase ?? Env.apiBaseUrl ?? 'https://api.omi.me/';

@@ -4192,5 +4192,7 @@
     "copyForAnyApp": "Salin untuk Mana-mana Aplikasi",
     "askConnectChatGptFirst": "Sambungkan ChatGPT sekali untuk bertanya tentang perbualan anda.",
     "reconnect": "Sambung semula",
-    "chatGptNeedsReconnect": "Perlukan akses tambahan. Sambung semula untuk membetulkan."
+    "chatGptNeedsReconnect": "Perlukan akses tambahan. Sambung semula untuk membetulkan.",
+    "connectAgentWaiting": "Menunggu ejen menggunakan kuncinya",
+    "connectAgentWaitingTitle": "{name} Belum Disambungkan"
 }

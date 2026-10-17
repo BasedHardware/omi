@@ -27,7 +27,8 @@ void main() {
     for (final name in ['Grok Bot', 'Muse', 'Instinct', 'Other Agent']) {
       expect(find.text(name), findsOneWidget);
     }
-    expect(find.text('Key active'), findsOneWidget);
+    // Muse's key was never used: the prompt has not been run yet.
+    expect(find.text('Waiting for the agent to use its key'), findsOneWidget);
     // ChatGPT and Muse are connected; Grok Bot, Instinct and Other Agent offer Connect.
     expect(find.text('Connect'), findsNWidgets(3));
   });
@@ -144,5 +145,26 @@ void main() {
     await tester.tap(find.text('Reconnect'));
     await settle(tester);
     expect(find.byKey(const ValueKey('connect_chatgpt_open')), findsOneWidget);
+  });
+
+  testWidgets('a new link abandoned mid-request keeps the working key', (tester) async {
+    captureClipboard(tester);
+    final backend = await pumpPage(tester, FakeAgentBackend());
+    await tester.tap(find.byKey(const ValueKey('connect_agent_instinct')));
+    await settle(tester);
+    await tester.tap(find.byKey(const ValueKey('agent_key_copy_prompt')));
+    await settle(tester);
+    expect(backend.keys.keys, ['key-new-1']);
+
+    backend.holdShare = Completer<void>();
+    await tester.tap(find.byKey(const ValueKey('agent_key_new_link')));
+    await tester.pump();
+    await tester.tapAt(const Offset(195, 20)); // the scrim
+    await settle(tester);
+    backend.holdShare!.complete();
+    await settle(tester);
+    // The unreceived replacement is revoked; the key the agent already has is untouched.
+    expect(backend.revokedKeys, ['key-new-2']);
+    expect(backend.keys.keys, ['key-new-1']);
   });
 }

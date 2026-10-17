@@ -24344,6 +24344,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Needs more access. Reconnect to fix.'**
   String get chatGptNeedsReconnect;
+
+  /// Status under an AI agent whose Omi key was made but has not been used yet (the prompt was not pasted or not run)
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for the agent to use its key'**
+  String get connectAgentWaiting;
+
+  /// Sheet title for an agent whose Omi key has never been used; name is the agent's product name such as Muse
+  ///
+  /// In en, this message translates to:
+  /// **'{name} Hasn\'t Connected Yet'**
+  String connectAgentWaitingTitle(String name);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

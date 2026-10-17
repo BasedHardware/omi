@@ -13691,4 +13691,12 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get chatGptNeedsReconnect => 'Perlu akses tambahan. Hubungkan ulang untuk memperbaiki.';
+
+  @override
+  String get connectAgentWaiting => 'Menunggu agen menggunakan kuncinya';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name Belum Terhubung';
+  }
 }

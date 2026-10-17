@@ -4192,5 +4192,7 @@
     "copyForAnyApp": "Kopeeri mis tahes rakenduse jaoks",
     "askConnectChatGptFirst": "Ühenda ChatGPT üks kord, et küsida temalt oma vestluste kohta.",
     "reconnect": "Ühenda uuesti",
-    "chatGptNeedsReconnect": "Vajab rohkem juurdepääsu. Paranda uuesti ühendamisega."
+    "chatGptNeedsReconnect": "Vajab rohkem juurdepääsu. Paranda uuesti ühendamisega.",
+    "connectAgentWaiting": "Ootame, kuni agent kasutab oma võtit",
+    "connectAgentWaitingTitle": "{name} pole veel ühendatud"
 }

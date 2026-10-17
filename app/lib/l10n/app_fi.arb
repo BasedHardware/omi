@@ -4192,5 +4192,7 @@
     "copyForAnyApp": "Kopioi mihin tahansa sovellukseen",
     "askConnectChatGptFirst": "Yhdistä ChatGPT kerran, niin voit kysyä siltä keskusteluistasi.",
     "reconnect": "Yhdistä uudelleen",
-    "chatGptNeedsReconnect": "Tarvitsee lisäoikeuksia. Korjaa yhdistämällä uudelleen."
+    "chatGptNeedsReconnect": "Tarvitsee lisäoikeuksia. Korjaa yhdistämällä uudelleen.",
+    "connectAgentWaiting": "Odotetaan, että agentti käyttää avaintaan",
+    "connectAgentWaitingTitle": "{name} ei ole vielä yhdistetty"
 }

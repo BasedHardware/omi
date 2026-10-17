@@ -13691,4 +13691,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get chatGptNeedsReconnect => 'Daha fazla erişim gerekiyor. Düzeltmek için yeniden bağlan.';
+
+  @override
+  String get connectAgentWaiting => 'Ajanın anahtarını kullanması bekleniyor';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name Henüz Bağlanmadı';
+  }
 }

@@ -71,4 +71,17 @@ void main() {
     expect(find.byKey(const ValueKey('ask_agent_chatgpt')), findsNothing);
     expect(find.byKey(const ValueKey('ask_agent_connect_chatgpt')), findsOneWidget);
   });
+
+  testWidgets('a failed ChatGPT check offers Try Again, not Connect', (tester) async {
+    usePhoneViewport(tester);
+    final backend = FakeAgentBackend(chatGptConnected: true, failLoad: true);
+    await tester.pumpWidget(host(backend));
+    await openAsk(tester, backend, 'c1');
+    expect(find.byKey(const ValueKey('ask_agent_connect_chatgpt')), findsNothing);
+    expect(find.byKey(const ValueKey('ask_agent_retry')), findsOneWidget);
+    backend.failLoad = false;
+    await tester.tap(find.byKey(const ValueKey('ask_agent_retry')));
+    await settle(tester);
+    expect(find.byKey(const ValueKey('ask_agent_chatgpt')), findsOneWidget);
+  });
 }

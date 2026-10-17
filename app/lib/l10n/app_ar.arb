@@ -4192,5 +4192,7 @@
     "copyForAnyApp": "نسخ لأي تطبيق",
     "askConnectChatGptFirst": "اربط ChatGPT مرة واحدة لتسأله عن محادثاتك.",
     "reconnect": "إعادة الاتصال",
-    "chatGptNeedsReconnect": "يحتاج إلى صلاحيات أكثر. أعد الاتصال للإصلاح."
+    "chatGptNeedsReconnect": "يحتاج إلى صلاحيات أكثر. أعد الاتصال للإصلاح.",
+    "connectAgentWaiting": "في انتظار أن يستخدم الوكيل مفتاحه",
+    "connectAgentWaitingTitle": "{name} لم يتصل بعد"
 }

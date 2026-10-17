@@ -13674,4 +13674,12 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get chatGptNeedsReconnect => 'به دسترسی بیشتری نیاز دارد. برای رفع مشکل دوباره متصل شوید.';
+
+  @override
+  String get connectAgentWaiting => 'در انتظار استفاده عامل از کلیدش';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name هنوز وصل نشده است';
+  }
 }

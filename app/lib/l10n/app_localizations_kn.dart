@@ -13719,4 +13719,12 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get chatGptNeedsReconnect => 'ಹೆಚ್ಚಿನ ಪ್ರವೇಶ ಬೇಕು. ಸರಿಪಡಿಸಲು ಮರುಸಂಪರ್ಕಿಸಿ.';
+
+  @override
+  String get connectAgentWaiting => 'ಏಜೆಂಟ್ ತನ್ನ ಕೀಯನ್ನು ಬಳಸುವುದಕ್ಕಾಗಿ ಕಾಯಲಾಗುತ್ತಿದೆ';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name ಇನ್ನೂ ಸಂಪರ್ಕಗೊಂಡಿಲ್ಲ';
+  }
 }

@@ -13660,4 +13660,12 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get chatGptNeedsReconnect => 'अधिक एक्सेस की ज़रूरत है। ठीक करने के लिए फिर से कनेक्ट करें।';
+
+  @override
+  String get connectAgentWaiting => 'एजेंट के अपनी कुंजी इस्तेमाल करने का इंतज़ार';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name अभी तक कनेक्ट नहीं हुआ है';
+  }
 }

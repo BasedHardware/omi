@@ -13674,4 +13674,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get chatGptNeedsReconnect => 'Potrebuje viac prístupu. Pripojte znova a opravte.';
+
+  @override
+  String get connectAgentWaiting => 'Čaká sa, kým agent použije svoj kľúč';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name sa zatiaľ nepripojil';
+  }
 }

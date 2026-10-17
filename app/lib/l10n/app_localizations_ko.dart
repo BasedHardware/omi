@@ -13493,4 +13493,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get chatGptNeedsReconnect => '더 많은 액세스 권한이 필요합니다. 다시 연결하여 해결하세요.';
+
+  @override
+  String get connectAgentWaiting => '에이전트가 키를 사용하기를 기다리는 중';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name 아직 연결되지 않음';
+  }
 }

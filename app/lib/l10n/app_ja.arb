@@ -4192,5 +4192,7 @@
     "copyForAnyApp": "どのアプリでも使えるようにコピー",
     "askConnectChatGptFirst": "ChatGPTを一度接続すると、会話について質問できます。",
     "reconnect": "再接続",
-    "chatGptNeedsReconnect": "追加のアクセス権が必要です。再接続して修正してください。"
+    "chatGptNeedsReconnect": "追加のアクセス権が必要です。再接続して修正してください。",
+    "connectAgentWaiting": "エージェントがキーを使うのを待っています",
+    "connectAgentWaitingTitle": "{name}はまだ接続していません"
 }

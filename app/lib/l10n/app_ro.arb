@@ -4192,5 +4192,7 @@
     "copyForAnyApp": "Copiază pentru orice aplicație",
     "askConnectChatGptFirst": "Conectează ChatGPT o singură dată ca să-l întrebi despre conversațiile tale.",
     "reconnect": "Reconectează",
-    "chatGptNeedsReconnect": "Are nevoie de mai mult acces. Reconectează pentru a remedia."
+    "chatGptNeedsReconnect": "Are nevoie de mai mult acces. Reconectează pentru a remedia.",
+    "connectAgentWaiting": "Se așteaptă ca agentul să-și folosească cheia",
+    "connectAgentWaitingTitle": "{name} nu s-a conectat încă"
 }

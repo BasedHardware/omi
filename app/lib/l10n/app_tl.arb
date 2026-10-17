@@ -11615,5 +11615,7 @@
     "copyForAnyApp": "Kopyahin para sa Kahit Anong App",
     "askConnectChatGptFirst": "Ikonekta ang ChatGPT nang isang beses para matanong ito tungkol sa iyong mga usapan.",
     "reconnect": "Muling ikonekta",
-    "chatGptNeedsReconnect": "Kailangan ng mas maraming access. Muling ikonekta para ayusin."
+    "chatGptNeedsReconnect": "Kailangan ng mas maraming access. Muling ikonekta para ayusin.",
+    "connectAgentWaiting": "Hinihintay na gamitin ng agent ang key nito",
+    "connectAgentWaitingTitle": "Hindi pa nakakonekta ang {name}"
 }

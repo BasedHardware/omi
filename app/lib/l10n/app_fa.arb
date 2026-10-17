@@ -11615,5 +11615,7 @@
     "copyForAnyApp": "کپی برای هر برنامه‌ای",
     "askConnectChatGptFirst": "یک بار ChatGPT را وصل کنید تا دربارهٔ گفتگوهایتان از آن بپرسید.",
     "reconnect": "اتصال دوباره",
-    "chatGptNeedsReconnect": "به دسترسی بیشتری نیاز دارد. برای رفع مشکل دوباره متصل شوید."
+    "chatGptNeedsReconnect": "به دسترسی بیشتری نیاز دارد. برای رفع مشکل دوباره متصل شوید.",
+    "connectAgentWaiting": "در انتظار استفاده عامل از کلیدش",
+    "connectAgentWaitingTitle": "{name} هنوز وصل نشده است"
 }

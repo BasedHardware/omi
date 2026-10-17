@@ -29,6 +29,7 @@ class _ConnectAgentPageState extends State<ConnectAgentPage> with WidgetsBinding
   late final AgentConnectService _service = widget.service ?? AgentConnectService();
   AgentConnections? _connections;
   bool _failed = false;
+  int _loadGeneration = 0;
 
   @override
   void initState() {
@@ -51,15 +52,17 @@ class _ConnectAgentPageState extends State<ConnectAgentPage> with WidgetsBinding
   /// Reloads from the server. A failed reload after the first load keeps the list but says so,
   /// so a stale row is never shown as current without a word.
   Future<void> _load() async {
+    // A reload that finishes after a newer one started must not overwrite the newer result.
+    final generation = ++_loadGeneration;
     try {
       final connections = await _service.load();
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _connections = connections;
         _failed = false;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       if (_connections == null) {
         setState(() => _failed = true);
       } else {
@@ -176,8 +179,9 @@ class _ConnectAgentPageState extends State<ConnectAgentPage> with WidgetsBinding
     String? subtitle;
     if (key != null) {
       final lastUsed = key.lastUsedAt;
+      // A key the agent has never used means the prompt was not run yet, not that it is connected.
       subtitle = lastUsed == null
-          ? l10n.connectAgentKeyActive
+          ? l10n.connectAgentWaiting
           : '${l10n.connectAgentKeyActive} · ${l10n.connectAgentLastUsed(OmiDateFormat.of(context).timestamp(lastUsed.toLocal()))}';
     }
     return OmiSettingsRow(

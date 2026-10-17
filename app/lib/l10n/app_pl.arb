@@ -4227,5 +4227,7 @@
     "copyForAnyApp": "Kopiuj do dowolnej aplikacji",
     "askConnectChatGptFirst": "Połącz ChatGPT raz, aby pytać go o swoje rozmowy.",
     "reconnect": "Połącz ponownie",
-    "chatGptNeedsReconnect": "Wymaga większego dostępu. Połącz ponownie, aby to naprawić."
+    "chatGptNeedsReconnect": "Wymaga większego dostępu. Połącz ponownie, aby to naprawić.",
+    "connectAgentWaiting": "Oczekiwanie, aż agent użyje swojego klucza",
+    "connectAgentWaitingTitle": "{name} nie połączył się jeszcze"
 }

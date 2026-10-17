@@ -11615,5 +11615,7 @@
     "copyForAnyApp": "ఏ యాప్ కోసమైనా కాపీ చేయండి",
     "askConnectChatGptFirst": "మీ సంభాషణల గురించి అడగడానికి ChatGPTని ఒకసారి కనెక్ట్ చేయండి.",
     "reconnect": "మళ్లీ కనెక్ట్ చేయండి",
-    "chatGptNeedsReconnect": "మరిన్ని యాక్సెస్ అవసరం. సరిచేయడానికి మళ్లీ కనెక్ట్ చేయండి."
+    "chatGptNeedsReconnect": "మరిన్ని యాక్సెస్ అవసరం. సరిచేయడానికి మళ్లీ కనెక్ట్ చేయండి.",
+    "connectAgentWaiting": "ఏజెంట్ తన కీని ఉపయోగించడానికి వేచి ఉంది",
+    "connectAgentWaitingTitle": "{name} ఇంకా కనెక్ట్ కాలేదు"
 }

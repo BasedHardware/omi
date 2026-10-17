@@ -13666,4 +13666,12 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get chatGptNeedsReconnect => 'Kræver mere adgang. Forbind igen for at rette det.';
+
+  @override
+  String get connectAgentWaiting => 'Venter på at agenten bruger sin nøgle';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name er endnu ikke forbundet';
+  }
 }

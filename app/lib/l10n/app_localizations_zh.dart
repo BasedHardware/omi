@@ -13467,4 +13467,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chatGptNeedsReconnect => '需要更多权限。重新连接以修复。';
+
+  @override
+  String get connectAgentWaiting => '正在等待 Agent 使用其密钥';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name 尚未连接';
+  }
 }

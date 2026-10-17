@@ -13612,4 +13612,12 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get chatGptNeedsReconnect => 'ต้องการสิทธิ์เข้าถึงเพิ่มเติม เชื่อมต่อใหม่เพื่อแก้ไข';
+
+  @override
+  String get connectAgentWaiting => 'กำลังรอให้เอเจนต์ใช้คีย์ของตน';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name ยังไม่ได้เชื่อมต่อ';
+  }
 }

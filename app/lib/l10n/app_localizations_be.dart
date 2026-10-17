@@ -13713,4 +13713,12 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get chatGptNeedsReconnect => 'Патрабуецца больш доступу. Падключыце зноў, каб выправіць.';
+
+  @override
+  String get connectAgentWaiting => 'Чакаем, пакуль агент выкарыстае свой ключ';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name яшчэ не падключаўся';
+  }
 }

@@ -13709,4 +13709,12 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get chatGptNeedsReconnect => 'Потрібен додатковий доступ. Підключіть знову, щоб виправити.';
+
+  @override
+  String get connectAgentWaiting => 'Очікуємо, поки агент використає свій ключ';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name ще не підключено';
+  }
 }

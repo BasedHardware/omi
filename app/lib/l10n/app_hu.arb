@@ -4288,5 +4288,7 @@
     "copyForAnyApp": "Másolás bármely alkalmazáshoz",
     "askConnectChatGptFirst": "Csatlakoztasd egyszer a ChatGPT-t, hogy a beszélgetéseidről kérdezhesd.",
     "reconnect": "Újracsatlakozás",
-    "chatGptNeedsReconnect": "Több hozzáférésre van szükség. Csatlakoztasd újra a javításhoz."
+    "chatGptNeedsReconnect": "Több hozzáférésre van szükség. Csatlakoztasd újra a javításhoz.",
+    "connectAgentWaiting": "Várakozás, hogy az ügynök használja a kulcsát",
+    "connectAgentWaitingTitle": "{name} még nincs csatlakoztatva"
 }

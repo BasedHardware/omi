@@ -4192,5 +4192,7 @@
     "copyForAnyApp": "Kopijuoti bet kuriai programai",
     "askConnectChatGptFirst": "Vieną kartą prijunkite ChatGPT, kad galėtumėte jo klausti apie savo pokalbius.",
     "reconnect": "Prisijungti iš naujo",
-    "chatGptNeedsReconnect": "Reikia daugiau prieigos. Prisijunkite iš naujo, kad ištaisytumėte."
+    "chatGptNeedsReconnect": "Reikia daugiau prieigos. Prisijunkite iš naujo, kad ištaisytumėte.",
+    "connectAgentWaiting": "Laukiama, kol agentas panaudos savo raktą",
+    "connectAgentWaitingTitle": "{name} dar neprijungtas"
 }

@@ -4192,5 +4192,7 @@
     "copyForAnyApp": "Kopēt jebkurai lietotnei",
     "askConnectChatGptFirst": "Vienreiz savienojiet ChatGPT, lai varētu jautāt par savām sarunām.",
     "reconnect": "Savienot vēlreiz",
-    "chatGptNeedsReconnect": "Nepieciešama plašāka piekļuve. Savienojiet vēlreiz, lai labotu."
+    "chatGptNeedsReconnect": "Nepieciešama plašāka piekļuve. Savienojiet vēlreiz, lai labotu.",
+    "connectAgentWaiting": "Gaida, kamēr aģents izmantos savu atslēgu",
+    "connectAgentWaitingTitle": "{name} vēl nav savienots"
 }

@@ -11615,5 +11615,7 @@
     "copyForAnyApp": "Kopiraj za bilo koju aplikaciju",
     "askConnectChatGptFirst": "Povežite ChatGPT jednom kako biste ga pitali o svojim razgovorima.",
     "reconnect": "Ponovno poveži",
-    "chatGptNeedsReconnect": "Potreban je dodatni pristup. Ponovno poveži za ispravak."
+    "chatGptNeedsReconnect": "Potreban je dodatni pristup. Ponovno poveži za ispravak.",
+    "connectAgentWaiting": "Čeka se da agent upotrijebi svoj ključ",
+    "connectAgentWaitingTitle": "{name} još nije povezan"
 }

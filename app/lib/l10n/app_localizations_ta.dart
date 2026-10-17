@@ -13774,4 +13774,12 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get chatGptNeedsReconnect => 'கூடுதல் அணுகல் தேவை. சரிசெய்ய மீண்டும் இணைக்கவும்.';
+
+  @override
+  String get connectAgentWaiting => 'முகவர் தனது விசையைப் பயன்படுத்துவதற்காகக் காத்திருக்கிறது';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name இன்னும் இணைக்கப்படவில்லை';
+  }
 }

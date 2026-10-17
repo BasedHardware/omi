@@ -4192,5 +4192,7 @@
     "copyForAnyApp": "复制到任意应用",
     "askConnectChatGptFirst": "只需连接一次 ChatGPT，即可询问你的对话。",
     "reconnect": "重新连接",
-    "chatGptNeedsReconnect": "需要更多权限。重新连接以修复。"
+    "chatGptNeedsReconnect": "需要更多权限。重新连接以修复。",
+    "connectAgentWaiting": "正在等待 Agent 使用其密钥",
+    "connectAgentWaitingTitle": "{name} 尚未连接"
 }

@@ -13679,4 +13679,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get chatGptNeedsReconnect => 'Cần thêm quyền truy cập. Kết nối lại để khắc phục.';
+
+  @override
+  String get connectAgentWaiting => 'Đang chờ tác nhân sử dụng khóa của nó';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name chưa kết nối';
+  }
 }

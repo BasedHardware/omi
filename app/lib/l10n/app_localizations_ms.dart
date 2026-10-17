@@ -13710,4 +13710,12 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get chatGptNeedsReconnect => 'Perlukan akses tambahan. Sambung semula untuk membetulkan.';
+
+  @override
+  String get connectAgentWaiting => 'Menunggu ejen menggunakan kuncinya';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name Belum Disambungkan';
+  }
 }

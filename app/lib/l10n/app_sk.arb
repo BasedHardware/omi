@@ -4192,5 +4192,7 @@
     "copyForAnyApp": "Kopírovať pre ľubovoľnú aplikáciu",
     "askConnectChatGptFirst": "Raz pripojte ChatGPT a pýtajte sa ho na svoje konverzácie.",
     "reconnect": "Znova pripojiť",
-    "chatGptNeedsReconnect": "Potrebuje viac prístupu. Pripojte znova a opravte."
+    "chatGptNeedsReconnect": "Potrebuje viac prístupu. Pripojte znova a opravte.",
+    "connectAgentWaiting": "Čaká sa, kým agent použije svoj kľúč",
+    "connectAgentWaitingTitle": "{name} sa zatiaľ nepripojil"
 }
