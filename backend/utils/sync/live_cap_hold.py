@@ -18,7 +18,7 @@ from google.cloud import firestore
 
 from database._client import get_firestore_client
 from database.legal_holds import external_write_fence
-from utils.executors import db_executor, storage_executor, run_blocking
+from utils.executors import db_executor, storage_executor, run_blocking, start_background_task
 from utils.sync import cap_hold, live_cap_manifest
 
 logger = logging.getLogger(__name__)
@@ -126,6 +126,12 @@ class LiveHeldAudio:
             self.pending_bytes += len(buffer)
 
     async def flush(self, *, force: bool = False) -> None:
+        # Callers include host-owned updater/receive tasks. Their cancellation
+        # must not release the lock or delete a WAV beneath an executor upload.
+        custody = start_background_task(self._flush(force=force), name='stt_cap_live_publish')
+        await asyncio.shield(custody)
+
+    async def _flush(self, *, force: bool = False) -> None:
         async with self._lock:
             if force or time.monotonic() - self._last_flush >= CHUNK_SECONDS:
                 for key in list(self.buffers):

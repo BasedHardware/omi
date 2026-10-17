@@ -296,3 +296,39 @@ async def test_cancelled_owner_keeps_supervised_tail_flush_alive(host, persisten
     release.set()
     await custody
     assert hold.seconds == 0.5 and persistence[0][0] == b'\1\0' * 8000
+
+
+async def test_cancel_during_executor_upload_keeps_wav_and_retires_once(host, persistence, monkeypatch):
+    import asyncio
+    import threading
+    from pathlib import Path
+
+    entered, release = threading.Event(), threading.Event()
+    original = cap_hold.upload_held_audio
+    paths = []
+
+    def blocked_upload(uid, path, *args, **kwargs):
+        paths.append(path)
+        entered.set()
+        assert release.wait(timeout=5)
+        assert Path(path).is_file()
+        return original(uid, path, *args, **kwargs)
+
+    monkeypatch.setattr(cap_hold, 'upload_held_audio', blocked_upload)
+    hold = live.LiveHeldAudio(host)
+    hold.append(b'\x01\x02' * 8000, 16000, 100.25, 'conversation')
+    caller = asyncio.create_task(hold.flush(force=True))
+    try:
+        assert await asyncio.to_thread(entered.wait, 5)
+        caller.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await caller
+        assert Path(paths[0]).is_file()
+        closer = asyncio.create_task(hold.close())
+        release.set()
+        await asyncio.wait_for(closer, timeout=5)
+    finally:
+        release.set()
+    assert hold.seconds == 0.5 and len(persistence) == 1
+    assert not hold.pending and not hold.buffers
+    assert not Path(paths[0]).exists()
