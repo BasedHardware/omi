@@ -239,3 +239,93 @@ def test_recording_quality_explicit_recording_target_does_not_fallback_to_conver
     with pytest.raises(Exception) as error:
         mobile_feedback.submit_mobile_feedback(payload, None, None, None, 'uid-1')
     assert getattr(error.value, 'status_code', None) == 404
+
+
+def test_submit_mobile_feedback_rejects_soft_deleted_conversation(monkeypatch):
+    payload = MobileFeedbackRequest(
+        feedback_id='client-f-tombstone-1',
+        kind=MobileFeedbackKind.summary_helpfulness,
+        target_id='conversation-1',
+        value=-1,
+        reason='summary_inaccurate',
+    )
+    monkeypatch.setattr(
+        mobile_feedback.conversations_db,
+        'get_conversation',
+        lambda uid, cid: {'id': cid, 'deleted': True, 'model_name': 'test-model'},
+    )
+    with pytest.raises(Exception) as error:
+        mobile_feedback.submit_mobile_feedback(payload, None, None, None, 'uid-1')
+    assert getattr(error.value, 'status_code', None) == 404
+    assert getattr(error.value, 'detail', None) == 'Conversation not found'
+
+
+def test_submit_mobile_feedback_explicit_conversation_target_rejects_soft_deleted(monkeypatch):
+    payload = MobileFeedbackRequest(
+        feedback_id='client-f-tombstone-2',
+        kind=MobileFeedbackKind.recording_quality,
+        target_kind='conversation',
+        target_id='conversation-1',
+        value=1,
+    )
+    monkeypatch.setattr(
+        mobile_feedback.conversations_db,
+        'get_conversation',
+        lambda uid, cid: {'id': cid, 'deleted': True},
+    )
+    with pytest.raises(Exception) as error:
+        mobile_feedback.submit_mobile_feedback(payload, None, None, None, 'uid-1')
+    assert getattr(error.value, 'status_code', None) == 404
+    assert getattr(error.value, 'detail', None) == 'Conversation not found'
+
+
+def test_submit_mobile_feedback_legacy_fallback_rejects_soft_deleted_conversation(monkeypatch):
+    payload = MobileFeedbackRequest(
+        feedback_id='client-f-tombstone-3',
+        kind=MobileFeedbackKind.recording_quality,
+        target_id='conversation-1',
+        value=1,
+    )
+    monkeypatch.setattr(mobile_feedback.recording_sessions_db, 'get_recording_session', lambda uid, sid: None)
+    monkeypatch.setattr(
+        mobile_feedback.conversations_db,
+        'get_conversation',
+        lambda uid, cid: {'id': cid, 'deleted': True},
+    )
+    with pytest.raises(Exception) as error:
+        mobile_feedback.submit_mobile_feedback(payload, None, None, None, 'uid-1')
+    assert getattr(error.value, 'status_code', None) == 404
+    assert getattr(error.value, 'detail', None) == 'Recording not found'
+
+
+def test_submit_mobile_feedback_recording_binding_skips_soft_deleted_provenance(monkeypatch):
+    payload = MobileFeedbackRequest(
+        feedback_id='client-f-tombstone-recording',
+        kind=MobileFeedbackKind.recording_quality,
+        target_kind='recording',
+        target_id='recording-1',
+        value=1,
+    )
+    monkeypatch.setattr(
+        mobile_feedback.recording_sessions_db,
+        'get_recording_session',
+        lambda uid, sid: {'conversation_id': 'conversation-1'},
+    )
+    monkeypatch.setattr(
+        mobile_feedback.conversations_db,
+        'get_conversation',
+        lambda uid, cid: {'id': cid, 'deleted': True, 'model_name': 'leaked-model', 'trace_id': 'secret-trace'},
+    )
+    recorded = {}
+    monkeypatch.setattr(
+        mobile_feedback.feedback_db,
+        'record_feedback_event_idempotent',
+        lambda *args, **kwargs: recorded.update(kwargs) or ('event-1', True),
+    )
+    monkeypatch.setattr(mobile_feedback, 'emit_product_event', lambda **kwargs: None)
+
+    receipt = mobile_feedback.submit_mobile_feedback(payload, None, None, None, 'uid-1')
+    assert receipt.persisted is True
+    assert recorded.get('model_name') is None
+    assert recorded.get('trace_id') is None
+    assert recorded.get('related_conversation_id') == 'conversation-1'
