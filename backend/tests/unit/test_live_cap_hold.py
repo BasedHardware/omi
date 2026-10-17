@@ -7,7 +7,7 @@ import wave
 import pytest
 
 from utils.sync import live_cap_hold as live
-from utils.sync import cap_hold, held_audio_summary
+from utils.sync import cap_hold, held_audio_summary, cap_hold_recovery
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
 
@@ -24,6 +24,7 @@ def host():
 @pytest.fixture
 def persistence(monkeypatch, tmp_path):
     persisted = []
+    monkeypatch.setattr(cap_hold_recovery, 'continue_after_cooldown', Mock())
     monkeypatch.setattr(held_audio_summary, 'next_utc_month_start', lambda: 123)
     monkeypatch.setattr(live, 'reserve', lambda *args, **kwargs: None)
     monkeypatch.setattr(
@@ -332,3 +333,14 @@ async def test_cancel_during_executor_upload_keeps_wav_and_retires_once(host, pe
     assert hold.seconds == 0.5 and len(persistence) == 1
     assert not hold.pending and not hold.buffers
     assert not Path(paths[0]).exists()
+
+
+async def test_funded_resume_retries_recovery_after_final_live_group_seals(host, persistence):
+    hold = live.LiveHeldAudio(host)
+    hold.append(b'\x01\x02' * 8000, 16000, 100.25, 'conversation')
+    await hold.flush(force=True)
+    await hold.notice(paused=False)
+    assert not hold.groups
+    cap_hold_recovery.continue_after_cooldown.assert_called_once_with('synthetic')
+    await hold.notice(paused=False)
+    cap_hold_recovery.continue_after_cooldown.assert_called_once()

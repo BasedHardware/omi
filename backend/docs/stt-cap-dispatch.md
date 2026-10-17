@@ -322,7 +322,9 @@ $33.53 for 44,640 continuous capped minutes. Firestore metadata/index storage
 (including up to three million source reservation receipts) is additional.
 Recovery operates on the grouped captures rather than one-second provider calls.
 A productive ten-row recovery page schedules the next pass after the existing
-60-second cooldown; a blocked page never self-polls.
+60-second cooldown; a blocked page never self-polls. Funded live resume also
+schedules one cooldown-delayed pass after sealing its final group, since the
+upgrade request may have observed that group while it was still stream-leased.
 Sources: [GCS pricing](https://cloud.google.com/storage/pricing),
 [Firestore pricing](https://cloud.google.com/firestore/pricing).
 

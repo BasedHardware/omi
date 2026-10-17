@@ -375,6 +375,11 @@ async def recover(uid: str) -> None:
             logger.warning('event=stt_cap_recovery outcome=deferred exception_type=%s', type(error).__name__)
 
     if progressed and len(rows) == 10:
+        continue_after_cooldown(uid)
+
+
+def continue_after_cooldown(uid: str) -> None:
+    if enabled():
         start_background_task(_continue_recovery(uid), name='stt_cap_hold_recovery_continuation')
 
 

@@ -246,6 +246,13 @@ class LiveHeldAudio:
     async def notice(self, *, paused: bool | None = None) -> None:
         if paused is False:
             await self.seal()
+            if self.paused and self.seconds:
+                # Upgrade/reset may have queried recovery while the final live
+                # group was still leased. Retry after its distributed cooldown,
+                # even when no later subscription request arrives.
+                from utils.sync.cap_hold_recovery import continue_after_cooldown
+
+                continue_after_cooldown(self.host.request.uid)
         if paused is not None:
             self.paused = paused
         state = (self.paused, int(self.seconds))
