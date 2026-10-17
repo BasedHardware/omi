@@ -17,6 +17,15 @@ from utils.storefront_copy import chat_at_cap
 from utils.transcription_allowance import TranscriptionAllowance
 
 
+def test_known_legacy_bypass_never_borrows_a_usage_session(monkeypatch):
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    monkeypatch.setattr(ladder.policy, 'entitlements', lambda subscription: None)
+    borrow = Mock(side_effect=AssertionError('legacy bypass allocated a usage session'))
+    monkeypatch.setattr(cache, 'budget_session', borrow)
+    assert ladder.budget_snapshot('legacy', {'plan': 'plus', 'current_price_id': 'retained-legacy'}) is None
+    borrow.assert_not_called()
+
+
 def entitlement(budget=100000):
     return {'plan_id': 'basic', 'entitlement_version': 'ladder_v1', 'budget': {'kind': 'units', 'value': budget}}
 

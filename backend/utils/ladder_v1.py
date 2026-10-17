@@ -55,6 +55,9 @@ def budget_snapshot(
 ):
     if not policy.budget_enforcement_enabled():
         return None
+    if subscription is not _UNRESOLVED and policy.entitlements(subscription) is None:
+        # Known legacy accounts bypass before importing/allocating usage sessions.
+        return None
     # Historical coverage gaps are our metering uncertainty, never a reason to
     # deny a subscriber. The projection prices each ambiguous quantity once.
     if session_cache is None:
