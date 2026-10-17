@@ -68,7 +68,12 @@ from models.product_memory import (
 )
 from utils.log_sanitizer import sanitize, sanitize_validation_error
 from utils.other.account_gate_http import account_gate_busy_http_exception
-from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_get_all
+from utils.other.list_budget import (
+    ListReadBudget,
+    ListReadBudgetExhausted,
+    budgeted_get_all,
+    indexed_list_reads_enabled,
+)
 from utils.other.portability_read import check_portability_read
 from utils.memory.canonical_visibility_filter import batch_canonical_expiry_observations
 from utils.memory.canonical_memory_adapter import (
@@ -615,7 +620,11 @@ class CanonicalMemoryBackend:
         with batch_canonical_expiry_observations():
             while len(collected) < needed and scanned < raw_cap:
                 scan_kwargs: Dict[str, Any] = {
-                    "limit": MEMORY_LIST_SCAN_CHUNK_SIZE,
+                    "limit": (
+                        min(500, needed - len(collected), raw_cap - scanned)
+                        if indexed_list_reads_enabled()
+                        else MEMORY_LIST_SCAN_CHUNK_SIZE
+                    ),
                     "start_after": start_after,
                     "db_client": self._db_client,
                     "device_scope_request": device_scope_request,
@@ -1734,6 +1743,7 @@ class _CanonicalCursorStream:
         self._view = view
         self._as_of = as_of
         self._page_limit = max(1, int(page_limit or 100))
+        self._consumed_count = 0
         self._peek: Optional[MemoryDB] = None
         self._peek_keyset: Optional[StreamKeyset] = None
         self._peek_scan: Optional[StreamKeyset] = None
@@ -1750,7 +1760,11 @@ class _CanonicalCursorStream:
             start_after = self._service.stream_keyset_to_scan_cursor(self.scan_keyset)
         try:
             scan_kwargs: dict[str, Any] = {
-                "limit": MEMORY_LIST_SCAN_CHUNK_SIZE,
+                "limit": (
+                    min(500, max(1, self._page_limit + 1 - self._consumed_count))
+                    if indexed_list_reads_enabled()
+                    else MEMORY_LIST_SCAN_CHUNK_SIZE
+                ),
                 "start_after": start_after,
                 "db_client": self._service.db_client,
                 "device_scope_request": self._device_scope_request,
@@ -1828,6 +1842,7 @@ class _CanonicalCursorStream:
     def consume(self) -> None:
         if self._peek is None or self._peek_keyset is None or self._peek_scan is None:
             raise RuntimeError("canonical cursor stream consume without peek")
+        self._consumed_count += 1
         self.emitted_keyset = self._peek_keyset
         self.scan_keyset = self._peek_scan
         self._peek = None
