@@ -102,6 +102,111 @@ the new check ID. After rollout, operators should confirm Grafana readiness,
 healthy multi-region samples and approved channel delivery; this change has only
 local validation, not a live acceptance receipt.
 
+## Source provisioning and GMP shadow datasource
+
+The existing `grafana_dashboard_provisioning.yml` validates dashboard JSON and
+split/combined alert equality. Main updates provision development dashboards;
+production requires explicit `environment=prod` dispatch from main. The job binds
+the protected `prod` Environment or `development`; production uses its existing
+`MONITOR_GRAFANA_TOKEN`, while development may inherit the repository's dev token.
+PR #21686 restored legacy dashboard provisioning through monitoring-specific
+Environments; the broader alert writer requires protected production authority
+and a permission probe. Rotate only failed credentials. Never use TV `GRAFANA_TOKEN`.
+
+The production path upserts `alert-rules.json` by stable UID, backs up live rules
+before writes, preserves UI/API provenance and notification timing, retains
+unknown live UIDs, and fails on definition drift after readback. File-provisioned
+rules require their owner; the API script refuses takeover. Both existing Grafana
+writers share an environment lock. Contact points and notification policies are
+read-only dependencies, not managed by the importer. Paused source rules stay
+paused. Removing source entries does not silently delete live rules.
+
+Parent/operator commands, after loading the authorized token in the environment:
+
+```bash
+python3 backend/scripts/provision_monitoring_alerts.py --lint
+python3 backend/scripts/provision_monitoring_alerts.py --probe-datasources
+python3 backend/scripts/provision_monitoring_alerts.py  # read-only UID/definition drift
+# After reviewing drift and query probes:
+gh workflow run grafana_dashboard_provisioning.yml --repo BasedHardware/omi \
+  --ref main -f environment=prod
+```
+
+The workflow retains pre-write alert and dashboard snapshots for 15 days.
+Canaries are installed, read back and queried successfully before any business
+rule can switch to `KeepLast`; a failed probe blocks those business updates.
+Preserve it before a reviewed rollback; it includes prior rule definitions and
+new UIDs, never token/contact settings. The direct parent API equivalent is
+`--apply --backup-file <new-file>`; backups use exclusive creation and mode0600.
+Dashboard imports require an exclusive `--backup-file`, preserve the existing
+folder, verify desired fields on readback and never follow credentialed redirects. Only the reviewed dashboard allowlist is imported; the overview board
+is production-only because it uses production datasource UIDs. Query/visible
+acceptance remains required; POST success and a version are not rendering proof.
+
+The protected production metrics-egress workflow additionally layers
+[`gmp/frontend-values.prod.yaml`](gmp/frontend-values.prod.yaml) onto the pinned
+stack. This adds Google's digest-pinned frontend, two node-separated replicas,
+PDB, internal Service and non-default datasource `gmp-cloud-run`. Existing local
+Prometheus, adapter URLs, recording rules and warm-up Service remain intact.
+`verify_gmp_frontend_render.py` compares base/candidate renders without printing
+Secret payloads. The rollout probes the actual Grafana query path; readiness
+alone cannot prove Google API authorization or credential renewal.
+
+The frontend uses the verified existing exporter KSA's Monitoring Viewer Workload
+Identity. No new token or IAM change is required. It is accessible inside the
+trusted cluster under that identity's metrics scope, not limited to Cloud Run by
+its name. All migration queries must scope project/location/resource labels.
+Before retiring the LB exporter, preserve/transfer its Helm-owned KSA; the separate
+`gmp/exporter-identity-retention-values.prod.yaml` targets that exporter release,
+not the stack. Verify the stored Helm manifest contains the retention annotation.
+
+No business query, panel or HPA is cut over by adding this datasource. Require
+accepted consumer-specific shadow comparisons for at least24h, full long-query
+warm-up, label/rate/histogram equivalence, and notification receipts before any
+exporter removal. An unsuccessful family comparison is a hold, never evidence
+that tolerances should be relaxed. Removing the overlay preserves the primary
+sources; with pruning disabled the unused shadow UID may remain in Grafana until
+an explicit datasource cleanup. Do not enable global datasource pruning.
+
+The read-only migration tools inventory source consumers and compare exact metric
+families without changing any datasource or rule. Regenerate the inventory after
+source changes, then run only reviewed mappings over at least24h:
+
+```bash
+python3 backend/scripts/monitoring_gmp_shadow.py --inventory \
+  --output backend/charts/monitoring/gmp-query-migration-inventory.json
+source ~/.local/bin/gcp-agent-env.sh ro-prod
+python3 backend/scripts/monitoring_gmp_shadow.py \
+  --kube-context gke_based-hardware_us-central1_prod-omi-gke --gcloud-token \
+  --hours 24 --step 300 --ids omi_fallback_total,omi_journey_accepted_total,omi_journey_terminal_total \
+  --output /tmp/gmp-shadow.json
+```
+
+For frontend acceptance, compare through Grafana's documented
+[datasource UID proxy](https://grafana.com/docs/grafana/latest/developer-resources/api-reference/http-api/api-legacy/data_source/#data-source-proxy-calls),
+using the parent's token loader instead of `--gcloud-token`:
+
+```bash
+python3 backend/scripts/monitoring_gmp_shadow.py \
+  --kube-context gke_based-hardware_us-central1_prod-omi-gke \
+  --managed-url https://monitor.omi.me/api/datasources/proxy/uid/gmp-cloud-run \
+  --managed-token-env MONITOR_GRAFANA_TOKEN --hours 24 --step 300 \
+  --ids omi_fallback_total,omi_journey_accepted_total,omi_journey_terminal_total \
+  --output /tmp/gmp-frontend-shadow.json
+```
+
+Credentialed URLs are fixed to the production Grafana GMP/Prometheus proxy UIDs;
+`--gcloud-token` is fixed to Google's project endpoint. Custom URLs accept no token.
+
+Keep the GMP canary healthy over the observation window, including credential
+renewal. Direct Google API comparisons alone do not prove the frontend path.
+
+An empty/partial response, mismatched labels or values, shared gaps, or an
+unsupported custom metric cannot pass. Family aggregates do not prove every
+consumer's threshold or label semantics; complete per-consumer rewrites and
+Grafana evaluation comparisons remain a separate admission gate. The report
+always records `cutover_authorized=false`, including a matched comparison.
+
 ## Architecture
 
 ```
@@ -221,7 +326,7 @@ Pod stdout/stderr → Alloy (kubernetesApi method) → Loki gateway (basic auth)
                                                                     Grafana Explore (LogQL)
 ```
 
-Alloy collects from `{env}-omi-backend` namespace only. Labels kept: `app_kubernetes_io_name`, `container`, `instance`, `job`, `level`, `namespace`, `service_name`, `pod` (structured metadata).
+Collector values stay enabled pending the valid teardown review in [LOG_CONSOLIDATION.md](LOG_CONSOLIDATION.md). Held route/error and storm preparations live in [route-errors/](route-errors/README.md). Alloy collects from `{env}-omi-backend` namespace only. Labels kept: `app_kubernetes_io_name`, `container`, `instance`, `job`, `level`, `namespace`, `service_name`, `pod` (structured metadata).
 
 Loki runs in distributed mode: 2x ingester, 2x querier, 2x query-frontend, 2x query-scheduler, 2x distributor, 1x compactor, 2x index-gateway, 1x ruler. Storage on GCS (`prod-omi-loki-chunks`). Retention: 15 days (360h).
 
@@ -685,7 +790,7 @@ curl -s -X POST -H "Authorization: Bearer $PROD_GRAFANA_TOKEN" \
 ```
 
 **Rules:**
-- Always export from prod to repo (prod is the live source until full provisioning is in place)
+- Export emergency production UI edits back to the repo before the next import
 - Strip `.id` and `.version` — they are instance-specific
 - Keep `.uid` — it prevents duplicate dashboards on import
 - Emergency UI edits must be synced back to repo within the same day
@@ -826,9 +931,9 @@ evidence of saturation. Operator response is in
 
 ## Dashboard & Metrics Lifecycle
 
-### Approach: UI-First, Git-Backed
+### Approach: repo definitions with explicit production apply
 
-Dashboards are created and edited directly in the Grafana UI — it's purpose-built for visual iteration. Git serves as backup, version control, and the restore source for disaster recovery or new cluster setup.
+Prototype dashboards in the development UI, export reviewed JSON, and merge it before production apply. Split alert files and the combined export must match. Emergency production UI changes must be exported before the next import; source equality is checked locally and live definition drift is checked through the API.
 
 ```
 Create/edit dashboard in Grafana UI
@@ -907,7 +1012,7 @@ datasource provisioning is disabled; an existing unused SQLite entry is retained
 until its exact live organization and ownership are checked. No datasource pruning
 or persistent-store deletion occurs.
 
-Two datasource canaries cover local Prometheus and Cloud Monitoring, with
+Three datasource canaries cover local Prometheus, Cloud Monitoring and GMP, with
 `execErrState=Alerting` and `noDataState=Alerting`, routed directly to Telegram.
 Business rules use `KeepLast` on query errors, preserving existing no-data policy
 and any firing state. Four active rules retain their fingerprinted admission debt
@@ -917,8 +1022,8 @@ exactly one page per outage is made while those exceptions remain.
 
 The Cloud Logging plugin does not support Grafana-managed alerting. A synthetic
 raw-log alert would be a permanent error, not a health canary; use bounded
-log-based metrics through Cloud Monitoring for alert signals. Loki rules remain
-paused pending the separate log-plane migration. The external deadman covers
+log-based metrics through Cloud Monitoring for alert signals. Four paused Loki definitions are retired from source; manual live retirement and
+Cloud Logging presentation acceptance follow [LOG_CONSOLIDATION.md](LOG_CONSOLIDATION.md). The external deadman covers
 Grafana availability independently; it cannot prove query-path or delivery health.
 
 ### Metrics Contract
@@ -1137,6 +1242,12 @@ tolerate one pod/node loss. It does not survive loss of zone a. Required zone se
 node in another zone before changing the preference to a requirement. No PVC
 migration/deletion or pool expansion is included. Recheck node capacity and
 placement before apply; these are dated measurements, not deployment receipts.
+
+Decide zone capacity before replica1's first claim binding. With only zone-a
+nodes, its standard-rwo claim will also bind in a; adding zone-b nodes later
+cannot move that disk. Cross-zone adoption then requires a separately reviewed
+retained-claim migration/replacement. Prefer zone-b capacity and required zone
+anti-affinity before the first replica1 rollout if zone HA is required.
 
 Grafana and the HPA adapter retain the existing Prometheus ClusterIP. After
 unpinning it selects ready replicas and balances TCP connections; keep-alive can pin a client to one

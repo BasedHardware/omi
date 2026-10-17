@@ -189,18 +189,14 @@ CORRUPTED_STREAM_METRIC_EXPR = (
 )
 
 
-def test_corrupted_stream_log_rule_stays_shadowed_by_the_decode_failures_counter():
-    """The paused corrupted-stream log rule must keep its metric shadow.
+def test_retired_corrupted_stream_log_rule_keeps_the_decode_failures_counter():
+    """The retired raw-log rule must retain bounded decode-failure coverage.
 
-    df2a40h2fbjswe scanned Loki raw lines for the corrupted-stream error and
-    sits under an admission hold (FC-alert-rule-scans-raw-log-lines). Its
-    signal exists as a counter the backend-listen scrape job already carries,
-    so the replacement keeps the coverage while the log rule stays paused. If
-    this rule is ever removed, the hold's re-admission path goes with it and
-    the two must be decided together.
+    The old definition is archived in retired-loki-alerts.json for a reviewed,
+    manual cleanup. Canonical exports must keep the Prometheus replacement.
     """
     for export_name, rules in _all_rule_exports().items():
-        assert rules[CORRUPTED_STREAM_LOG_RULE]["isPaused"] is True, export_name
+        assert CORRUPTED_STREAM_LOG_RULE not in rules, export_name
         replacement = rules[CORRUPTED_STREAM_METRIC_RULE]
         assert replacement["isPaused"] is False, export_name
         assert replacement["data"][0]["model"]["expr"] == CORRUPTED_STREAM_METRIC_EXPR, export_name
@@ -1605,3 +1601,13 @@ def test_redis_cache_connection_alerts_watch_listen_and_pusher_fail_open():
         assert page["data"][2]["model"]["expression"] == "$A >= 50 && $B > 0.5", export_name
         assert page["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)", export_name
         assert "capacity_full" not in page["data"][1]["model"]["expr"], export_name
+
+
+def test_retired_loki_alerts_cannot_reenter_canonical_sources():
+    retired = json.loads((MONITORING / "retired-loki-alerts.json").read_text())
+    retired_uids = {rule["uid"] for rule in retired["rules"]}
+    assert retired_uids == {"afd0krbk1bugwf", "fewwk2goqfklcf", "devzd05c0bocgc", "df2a40h2fbjswe"}
+    holds = json.loads((MONITORING / "metric-inventory.prod.json").read_text())["admission_holds"]
+    assert retired_uids.isdisjoint(holds)
+    for export_name, rules in _all_rule_exports().items():
+        assert retired_uids.isdisjoint(rules), export_name
