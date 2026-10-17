@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from importlib.machinery import ModuleSpec
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -45,6 +46,62 @@ def test_stub_modules_restores_child_attribute_when_child_is_stubbed_before_pare
     assert sys.modules[parent_name] is original_parent
     assert root.parent is original_parent
     assert original_parent.child is original_child
+
+
+@pytest.mark.parametrize("native_preloaded", [False, True])
+def test_stub_modules_keeps_extension_package_family_and_evicts_external_fake(tmp_path: Path, native_preloaded: bool):
+    package_name = "_import_isolation_extension_package"
+    extension_name = f"{package_name}.native"
+    sibling_name = f"{package_name}.sibling"
+    fake_name = f"{package_name}.external_fake"
+    package_path = tmp_path / package_name
+    package_path.mkdir()
+    extension_path = package_path / "native.cpython-311.so"
+    sibling_path = package_path / "sibling.py"
+    fake_path = tmp_path / "external_fake.py"
+    extension_path.touch()
+    sibling_path.touch()
+    fake_path.touch()
+
+    package = ModuleType(package_name)
+    package.__path__ = [str(package_path)]  # type: ignore[attr-defined]
+    package.__spec__ = ModuleSpec(package_name, loader=None, is_package=True)
+    package.__spec__.submodule_search_locations = [str(package_path)]
+    extension = ModuleType(extension_name)
+    extension.__spec__ = ModuleSpec(extension_name, loader=None, origin=str(extension_path))
+    sibling = ModuleType(sibling_name)
+    sibling.__spec__ = ModuleSpec(sibling_name, loader=None, origin=str(sibling_path))
+    external_fake = ModuleType(fake_name)
+    external_fake.__spec__ = ModuleSpec(fake_name, loader=None, origin=str(fake_path))
+
+    try:
+        if native_preloaded:
+            # As with google._upb._message after a module-scope google.auth import.
+            sys.modules[package_name] = package
+            sys.modules[extension_name] = extension
+            package.native = extension
+        with stub_modules({}):
+            if not native_preloaded:
+                sys.modules[package_name] = package
+                sys.modules[extension_name] = extension
+                package.native = extension
+            sys.modules[sibling_name] = sibling
+            sys.modules[fake_name] = external_fake
+            package.sibling = sibling
+            package.external_fake = external_fake
+
+        assert sys.modules[package_name] is package
+        assert sys.modules[extension_name] is extension
+        assert package.native is extension
+        assert sys.modules[sibling_name] is sibling
+        assert package.sibling is sibling
+        assert fake_name not in sys.modules
+        assert not hasattr(package, "external_fake")
+    finally:
+        sys.modules.pop(fake_name, None)
+        sys.modules.pop(sibling_name, None)
+        sys.modules.pop(extension_name, None)
+        sys.modules.pop(package_name, None)
 
 
 @pytest.fixture

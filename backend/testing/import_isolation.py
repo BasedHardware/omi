@@ -78,11 +78,13 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
     including deleting entries that were absent before and repairing parent attrs.
 
     It ALSO snapshots the FULL ``sys.modules`` mapping (key -> object) at entry and
-    restores it on teardown: newly-added keys are evicted AND existing keys whose
-    object was swapped (e.g. by ``load_module_fresh`` re-exec'ing a module against
-    the fakes) are restored to the original object. This is what makes a fixture
-    hermetic: subsequent test files always see the *real* module, never a stub-fed
-    fresh copy left behind.
+    restores it on teardown: newly-added keys are evicted except for non-backend
+    modules that cannot safely be re-imported, and existing keys whose object was
+    swapped (e.g. by ``load_module_fresh`` re-exec'ing a module against the fakes)
+    are restored to the original object. When native state requires retaining a
+    third-party package family, only modules rooted in its installed package path
+    remain. Explicit fakes are restored and backend-owned modules are always
+    evicted, so a stub-fed backend copy never leaks to later test files.
 
     Use ONLY inside a function/fixture scope (never at module scope in a test file —
     the static checker bans that). For most test seams prefer ``monkeypatch.setattr``
@@ -138,14 +140,60 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
         #    Backend-owned modules (database.*, utils.*, etc.) are always evicted
         #    because they may be stubs that must not leak.
         _backend_prefixes = ("database.", "utils.", "models.", "routers.", "jobs.", "dependencies")
-        for extra in list(sys.modules.keys() - saved_keys):
+        # Google's generated `proto` package registers descriptors in the
+        # process-global pool owned by google._upb._message. Keep it alongside
+        # the google extension family when both were loaded in this block.
+        _extension_family_companions = {"google": ("proto",)}
+        extra_names = list(sys.modules.keys() - saved_keys)
+        # Some extension modules cannot be safely re-imported after removal. Keep
+        # their top-level package family with them: retaining a native module while
+        # evicting Python siblings can leave process-global state (for example the
+        # protobuf descriptor pool) inconsistent on the next import. Only retain
+        # modules rooted inside that installed package path; fakes elsewhere still
+        # get evicted below.
+        preserve_for_import_safety: set[str] = set()
+        extension_families: dict[str, tuple[Path, ...]] = {}
+        for extra in extra_names:
             extra_mod = sys.modules.get(extra)
             if extra_mod is not None:
                 spec = getattr(extra_mod, "__spec__", None)
-                origin = getattr(spec, "origin", None) if spec else None
                 is_backend = any(extra == p.rstrip(".") or extra.startswith(p) for p in _backend_prefixes)
-                if not is_backend and (spec is None or (origin and origin.endswith((".so", ".pyd")))):
-                    continue
+                if not is_backend and spec is None:
+                    preserve_for_import_safety.add(extra)
+        # A native extension may predate this block (for example, tests import
+        # google.auth.credentials at module scope). Its package family still has
+        # to remain coherent when this block imports more of that package.
+        for candidate_name, candidate_module in list(sys.modules.items()):
+            spec = getattr(candidate_module, "__spec__", None)
+            origin = getattr(spec, "origin", None) if spec else None
+            is_backend = any(candidate_name == p.rstrip(".") or candidate_name.startswith(p) for p in _backend_prefixes)
+            if is_backend or not origin or not origin.endswith((".so", ".pyd")):
+                continue
+            root_name = candidate_name.partition(".")[0]
+            root_module = sys.modules.get(root_name)
+            root_paths = tuple(Path(path).resolve() for path in (getattr(root_module, "__path__", ()) or ()))
+            if not root_paths:
+                if candidate_name in extra_names:
+                    preserve_for_import_safety.add(candidate_name)
+                continue
+            extension_families[root_name] = root_paths
+            for companion_name in _extension_family_companions.get(root_name, ()):
+                companion = sys.modules.get(companion_name)
+                companion_paths = tuple(Path(path).resolve() for path in (getattr(companion, "__path__", ()) or ()))
+                if companion_paths:
+                    extension_families[companion_name] = companion_paths
+        for extra in extra_names:
+            extra_mod = sys.modules.get(extra)
+            if extra_mod is None:
+                continue
+            is_backend = any(extra == p.rstrip(".") or extra.startswith(p) for p in _backend_prefixes)
+            root_name = extra.partition(".")[0]
+            package_paths = extension_families.get(root_name)
+            if not is_backend and package_paths and _module_is_within_package_paths(extra_mod, package_paths):
+                preserve_for_import_safety.add(extra)
+        for extra in extra_names:
+            if extra in preserve_for_import_safety:
+                continue
             _clear_parent_attr_if_added(extra, saved_submodule_attrs)
             sys.modules.pop(extra, None)
         # 3. Restore existing keys whose object was swapped in place (load_module_fresh
@@ -177,6 +225,26 @@ def _get_parent_attr(name: str) -> ModuleType | None:
     if isinstance(parent, ModuleType):
         return getattr(parent, child_name, None)
     return None
+
+
+def _module_is_within_package_paths(module: ModuleType, package_paths: tuple[Path, ...]) -> bool:
+    """Whether a real module or namespace package belongs to an extension family."""
+    spec = getattr(module, "__spec__", None)
+    if spec is None:
+        return False
+    paths = []
+    origin = getattr(spec, "origin", None)
+    if origin and origin not in {"built-in", "frozen"}:
+        paths.append(origin)
+    paths.extend(getattr(spec, "submodule_search_locations", ()) or ())
+    for path in paths:
+        try:
+            candidate = Path(path).resolve()
+        except (OSError, RuntimeError):
+            continue
+        if any(candidate == root or candidate.is_relative_to(root) for root in package_paths):
+            return True
+    return False
 
 
 def _clear_parent_attr_if_added(name: str, saved_submodule_attrs: dict[str, ModuleType | None]) -> None:
