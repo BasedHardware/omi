@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from datetime import tzinfo
 from typing import Any, Callable, Iterable, List, Optional, cast
 
+from config.summary_guarantee import enabled
 from models.conversation_enums import CategoryEnum
 from models.structured import Structured
 
@@ -144,8 +145,6 @@ def build_deterministic_minimum_structured(
 ) -> Structured:
     """The whole §1.7 row: deterministic title, empty overview, category ``other``,
     no action items, no events. Every other field keeps its model default."""
-    from config.summary_guarantee import enabled
-
     return Structured(
         **({'title_provenance': 'server_minimum'} if enabled() else {}),
         title=deterministic_minimum_title(

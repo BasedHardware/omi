@@ -686,3 +686,46 @@ def test_short_first_summary_lease_and_rolled_back_later_revision(state, monkeyp
     assert tasks[-1]['due_at'] == 841
     assert reprocess.run(key, tasks[-1]['task_token'], Mock(), now=841) == 'processed'
     assert not rows
+
+
+def test_first_summary_retry_preserves_queued_token(state, monkeypatch):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    rows, tasks = state
+    key = reprocess.key('u', 'c')
+    reprocess.mark('u', 'c', 'en', now=0)
+    earliest = tasks[0]['task_token']
+    query = Mock()
+    query.where.return_value = query
+    query.order_by.return_value = query
+    query.limit.return_value = query
+    query.stream.return_value = [SimpleNamespace(id=key)]
+    monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: SimpleNamespace(collection=lambda _: query))
+    for now in (240, 360, 480):
+        reprocess.sweep(now=now)
+        assert rows[key]['task_token'] == earliest
+    assert rows[key]['wake_generation'] == 3
+    output = SimpleNamespace(discarded=False, structured={'overview': 'Real summary'})
+    assert reprocess.run(key, earliest, lambda *_: output, now=480) == 'processed'
+
+
+def test_superseded_repair_retires_only_its_own_generation(state, monkeypatch):
+    from utils.conversations.summary_delivery import SummaryRepairSuperseded
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    rows, tasks = state
+    key = reprocess.key('u', 'c')
+    reprocess.mark('u', 'c', 'en', now=0)
+
+    def supersede(*_):
+        raise SummaryRepairSuperseded('manual edit')
+
+    assert reprocess.run(key, tasks[-1]['task_token'], supersede, now=120) == 'superseded'
+    assert not rows
+    reprocess.mark('u', 'c', 'en', now=200)
+
+    def append_then_supersede(*args):
+        reprocess.mark(*args, now=321)
+        raise SummaryRepairSuperseded('new revision')
+
+    assert reprocess.run(key, tasks[-1]['task_token'], append_then_supersede, now=320) == 'superseded'
+    assert rows[key]['lease_until'] == 0 and not rows[key]['summary_repair']

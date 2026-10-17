@@ -29,6 +29,7 @@ import httpx
 import numpy as np
 from google.api_core import exceptions as google_exceptions
 from database._client import (
+    get_firestore_client,
     FIRESTORE_DOCUMENT_KINDS,
     firestore_document_kind,
     is_document_size_limit_error,
@@ -38,6 +39,8 @@ from fastapi import HTTPException, UploadFile
 from pydub import AudioSegment
 
 from database import conversations as conversations_db
+from database.summary_processing import claim_from_snapshot
+from utils.conversations.summary_delivery import repair_fenced, REPAIR_CONTEXT, PROCESS_CONTEXT, SummaryRepairSuperseded
 from database import users as users_db
 from database.auth import get_user_name
 from database.conversations import get_closest_conversation_to_timestamps
@@ -1051,10 +1054,8 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         logger.warning(f'Conversation {conversation_id} not found for reprocessing')
         return
 
-    from utils.conversations.summary_delivery import repair_fenced, REPAIR_CONTEXT
-
     if repair_fenced(conversation_data):
-        raise SyncConversationPersistenceFenced('summary repair ownership changed')
+        raise SummaryRepairSuperseded('summary repair ownership changed')
     if conversation_data.get('sync_live_target') and conversation_data.get('status') == 'in_progress':
         # Live finalization owns the open row. SYNC_UPDATE would mark it
         # completed while the socket is still adding speech, after which the
@@ -1083,9 +1084,9 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
                 record_conversation_relevance(trigger='sync_intake', verdict='discard', decided_by='rule', reason=rule)
             return
 
-    from database.summary_processing import claim_from_snapshot
-
-    if not claim_from_snapshot(conversations_db.db, uid, conversation_id, conversation_data):
+    if PROCESS_CONTEXT.get() is not None and not claim_from_snapshot(
+        get_firestore_client(), uid, conversation_id, conversation_data
+    ):
         raise SyncConversationPersistenceFenced('summary processing snapshot changed')
 
     # Convert to Conversation object

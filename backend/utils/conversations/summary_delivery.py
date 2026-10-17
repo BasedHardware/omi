@@ -55,6 +55,10 @@ def repair_fenced(existing: dict) -> bool:
     )
 
 
+class SummaryRepairSuperseded(RuntimeError):
+    """A repair lost eligibility or its transcript generation; acknowledge its wake."""
+
+
 class SummaryOutputUnavailable(RuntimeError):
     """A kept first-summary run returned no usable summary; retain its debt."""
 

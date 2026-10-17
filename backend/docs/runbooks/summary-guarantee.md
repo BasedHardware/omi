@@ -20,8 +20,9 @@ The lifecycle transaction refuses a replaced/expired owner before writing any
 result or emitting a summary receipt. This adds one write and **zero reads** to
 the first-summary path. A short lease therefore cannot let an old worker replace
 a newer summary. The existing processor persistence observer fences downstream
-side effects. The existing sweep rotates an exhausted first-summary task after
-120 seconds; it never steals an active lease.
+side effects. The existing sweep adds a distinct retry wake after 120 seconds while
+preserving the valid token of earlier queued deliveries; it never steals an
+active lease or repeatedly sends waiting work to the queue tail.
 
 A nonempty overview or section `body_markdown` constitutes a summary. A title,
 actions, events, or empty headings do not. Empty kept model output raises before

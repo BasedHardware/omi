@@ -63,8 +63,11 @@ def test_lost_enqueue_ack_and_expired_lease_preserve_deadline(debt_store, monkey
     recovered = outbox.get().to_dict()
     assert recovered['first_pending_at'] == first['first_pending_at'] == 100
     assert recovered['due_at'] == first['due_at'] == 220
-    assert recovered['task_token'] != first['task_token']
-    assert reprocess.run(outbox.id, first['task_token'], lambda *_: None, now=300) == 'stale'
+    assert recovered['task_token'] == first['task_token']
+    assert recovered['wake_generation'] > first['wake_generation']
+    # The earliest queued wake remains eligible instead of being sent to the tail.
+    output = SimpleNamespace(discarded=False, structured={'overview': 'Synthetic summary'})
+    assert reprocess.run(outbox.id, first['task_token'], lambda *_: output, now=300) == 'processed'
 
 
 @pytest.mark.parametrize(

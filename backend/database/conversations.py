@@ -1,4 +1,5 @@
 from database import conversation_visibility_counts
+from utils.conversations import summary_delivery
 import copy
 import hashlib
 import json
@@ -330,9 +331,8 @@ def _prepare_conversation_for_write(
     data: Dict[str, Any], uid: str, level: str, *, preserve_transcript_identity: bool = False
 ) -> Dict[str, Any]:
     data = copy.deepcopy(data)
-    from utils.conversations.summary_delivery import prepare as prepare_summary
 
-    prepare_summary(data, uid)
+    summary_delivery.prepare(data, uid)
     if owner_diagnostics.FIELD in data:
         try:
             value = owner_diagnostics.normalize(data[owner_diagnostics.FIELD])
@@ -994,22 +994,19 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
 
             _reapply_current_manual_assignments(uid, write_data, existing)
             guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
-            from utils.conversations.summary_delivery import merge_result
 
-            summary_receipt = merge_result(existing, write_data, uid)
+            summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
             transaction.set(conversation_ref, write_data, merge=True)
             return
 
         write_data.setdefault('has_photos', False)
-        from utils.conversations.summary_delivery import creation_result
 
-        summary_receipt = creation_result(write_data, uid)
+        summary_receipt = summary_delivery.creation_result(write_data, uid)
         transaction.set(conversation_ref, write_data)
 
     run_transactional(db, _write_processing_result)
-    from utils.conversations.summary_delivery import emit
 
-    emit(summary_receipt)
+    summary_delivery.emit(summary_receipt)
     invalidate_people_stats_cache(uid)
     _sync_conversation_search_index(uid, conversation_data['id'])
 
@@ -1069,9 +1066,12 @@ def persist_processing_result_with_lifecycle(
             return False
 
         existing = existing_snapshot.to_dict() or {}
-        from utils.conversations.summary_delivery import repair_fenced, processing_fenced
 
-        if existing.get('deleted') or repair_fenced(existing) or processing_fenced(existing):
+        if (
+            existing.get('deleted')
+            or summary_delivery.repair_fenced(existing)
+            or summary_delivery.processing_fenced(existing)
+        ):
             return False
         if smart_merge_refresh is not None:
             expected_revision, expected_owner = smart_merge_refresh
@@ -1178,9 +1178,8 @@ def persist_processing_result_with_lifecycle(
 
         _reapply_current_manual_assignments(uid, write_data, existing)
         guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
-        from utils.conversations.summary_delivery import merge_result
 
-        summary_receipt = merge_result(existing, write_data, uid)
+        summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
         transaction.set(conversation_ref, write_data, merge=True)
         existing_status = existing.get('status')
         write_status = write_data.get('status')
@@ -1192,9 +1191,8 @@ def persist_processing_result_with_lifecycle(
 
     persisted = run_transactional(db, _persist)
     if persisted:
-        from utils.conversations.summary_delivery import emit
 
-        emit(summary_receipt)
+        summary_delivery.emit(summary_receipt)
     if persisted:
         invalidate_people_stats_cache(uid)
     if persisted or stale_sync_revision:
@@ -1229,9 +1227,8 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
 
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
-    from utils.conversations.summary_delivery import creation_result, emit
 
-    summary_receipt = creation_result(conversation_data, uid)
+    summary_receipt = summary_delivery.creation_result(conversation_data, uid)
     try:
         conversation_ref.create(conversation_data)
     except (AlreadyExists, Conflict):
@@ -1239,7 +1236,7 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
         # lag, backfill gap); the read-back sync converges it either way.
         _sync_conversation_search_index(uid, conversation_data['id'])
         return False
-    emit(summary_receipt)
+    summary_delivery.emit(summary_receipt)
     invalidate_people_stats_cache(uid)
     _sync_conversation_search_index(uid, conversation_data['id'])
     return True

@@ -20,6 +20,7 @@ from config.summary_guarantee import (
     REPAIR_ADMISSION_LIMIT,
 )
 from database._client import get_firestore_client
+from database.summary_debt_queries import due_conversations
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked
 from utils.conversations import summary_delivery as delivery
 from utils.sync import reprocess
@@ -66,8 +67,10 @@ def redrive(client: Any, uid: str, conversation_id: str, *, now: float) -> bool:
             new['summary_lane'] = row.get('summary_lane', 'unknown')
             new['summary_repair'] = True
             new['summary_expected_revision'] = row.get('sync_content_revision')
-            # Tokens fence a lost ACK or an exhausted task's old delivery.
-            new.update(task_token=uuid.uuid4().hex, task_due_at=now, _wake=True)
+            # A repair wake must not invalidate an earlier delivery still
+            # waiting for capacity. Leases and the conversation owner fence
+            # duplicates; later revisions rotate the token as before.
+            new.update(wake_generation=new.get('wake_generation', 0) + 1, task_due_at=now, _wake=True)
             transaction.set(outbox, new)
             admitted = True
             return new, False
@@ -111,15 +114,7 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
     cursor = claim(client.transaction())
     if cursor is None:
         return counts
-    query = (
-        client.collection_group('conversations')
-        .where(filter=firestore.FieldFilter('summary_due_at', '<=', current))
-        .order_by('summary_due_at')
-        .order_by('__name__')
-    )
-    if cursor.get('path') and isinstance(cursor.get('due'), (float, int)):
-        query = query.start_after({'summary_due_at': cursor['due'], '__name__': client.document(cursor['path'])})
-    page = list(query.limit(REPAIR_SCAN_LIMIT).stream())
+    page = due_conversations(now=current, limit=REPAIR_SCAN_LIMIT, after=cursor, firestore_client=client)
     attempts = 0
     overdue = 0
     oldest = 0.0
