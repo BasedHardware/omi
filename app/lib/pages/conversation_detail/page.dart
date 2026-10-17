@@ -241,6 +241,14 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     _controller?.animateTo(_transcriptTabIndex);
   }
 
+  /// Brings the Summary tab forward. A reprocess started elsewhere (the ⋯ menu on Transcript,
+  /// a failed-transcript retry) shows its progress and, with the v2 gate, its failure card there.
+  void _openSummaryTab() {
+    _hasExplicitTabSelection = true;
+    setState(() => selectedTab = ConversationTab.summary);
+    _controller?.animateTo(_summaryTabIndex);
+  }
+
   void _createTabController({required int initialIndex}) {
     _controller = TabController(length: 2, vsync: this, initialIndex: initialIndex);
     _controller!.addListener(_onTabChanged);
@@ -579,8 +587,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
         _copyContent(context, provider.conversation.getTranscript(generate: true), context.l10n.transcript);
         break;
       case 'copy_summary':
-        final conversation = provider.conversation;
-        _copyContent(context, ConversationSummarySelection.select(conversation).content, context.l10n.summary);
+        // Copy the source the reader put on screen (a chip can show Omi while the canonical
+        // selection is still a template's result), not the canonical selection.
+        _copyContent(context, provider.getDisplayedSummarySelection().content, context.l10n.summary);
         break;
       case 'download_audio':
         await _downloadAudio(context, provider);
@@ -594,6 +603,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
           ConnectivityProvider.showNoInternetDialog(context);
           break;
         }
+        // The Summary tab is the single progress and (with the v2 gate) failure surface, so a
+        // request started from the ⋯ menu while Transcript is open moves there.
+        _openSummaryTab();
         await provider.reprocessConversation();
         break;
       case 'link_event':
@@ -1115,6 +1127,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
               actionLabel: context.l10n.tryAgain,
               onAction: () {
                 if (detailProvider.conversationOrNull?.id == failedId) {
+                  // The failure card explaining the retry lives on the Summary tab.
+                  _openSummaryTab();
                   detailProvider.reprocessConversation(appId: appId);
                 }
               },
@@ -1161,7 +1175,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                     // Title and facts, shared by both tabs (#17297), then the tab row (v3).
                     ConversationDetailHeader(onOpenRecordings: _openRecordings),
                     ConversationDetailTabs(controller: _controller!, onTap: (_) => _hasExplicitTabSelection = true),
-                    const ConversationActivityStrip(),
+                    ConversationActivityStrip(summaryTabVisible: selectedTab == ConversationTab.summary),
                     Expanded(
                       // Each tab owns the page's side margin, so a section can scroll edge to edge
                       // (the Summary tab's screenshot strip) instead of clipping at the margin.

@@ -6,21 +6,33 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/conversation_detail/widgets/summary_generation.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// A server-side processing pass on the open conversation, under the tab row: a hairline progress
-/// bar and one line saying so. A reprocess the reader started has one progress surface, the
-/// Summary tab's own "Summarizing with …" state, so it draws nothing here.
+/// bar and one line saying so.
+///
+/// While the reader's own reprocess runs, the Summary tab's "Summarizing with …" state is the one
+/// progress surface, so this draws only when another tab is on screen — a request started from the
+/// Transcript tab (the ⋯ menu, the speaker refresh) still shows progress.
 ///
 /// While the server reports the conversation as processing, the strip re-reads it every
 /// [pollInterval] (at most [maxPolls] times) so the result replaces the strip without the reader
 /// leaving and coming back.
 class ConversationActivityStrip extends StatefulWidget {
-  const ConversationActivityStrip({super.key, this.pollInterval = const Duration(seconds: 5), this.maxPolls = 36});
+  const ConversationActivityStrip({
+    super.key,
+    this.pollInterval = const Duration(seconds: 5),
+    this.maxPolls = 36,
+    this.summaryTabVisible = true,
+  });
 
   final Duration pollInterval;
   final int maxPolls;
+
+  /// Whether the Summary tab — the reprocess's primary progress surface — is on screen.
+  final bool summaryTabVisible;
 
   @override
   State<ConversationActivityStrip> createState() => _ConversationActivityStripState();
@@ -72,7 +84,11 @@ class _ConversationActivityStripState extends State<ConversationActivityStrip> {
 
     final l10n = context.l10n;
     final String? label;
-    if (!provider.isReprocessingOpenConversation && conversation?.status == ConversationStatus.processing) {
+    if (provider.isReprocessingOpenConversation && !widget.summaryTabVisible) {
+      // Not on the tab that owns the primary progress surface: keep a global indicator so a
+      // request started from this tab never runs invisibly.
+      label = l10n.summarySummarizingWith(summarySourceName(provider, provider.reprocessingAppId, l10n));
+    } else if (!provider.isReprocessingOpenConversation && conversation?.status == ConversationStatus.processing) {
       label = l10n.processingConversationProgress;
     } else {
       label = null;

@@ -68,7 +68,11 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
   }
 
   void _onProviderChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    // Template lists land (or change) after the sheet opens; a selection inherited from the
+    // displayed summary must not outlive its row.
+    _dropUnresolvableSelection();
+    setState(() {});
   }
 
   App? _appFor(String? appId) {
@@ -78,6 +82,20 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
         _provider.findAppById(appId);
   }
 
+  /// Whether [_selectedAppId] still names a source the sheet offers (or is Omi). The displayed
+  /// summary may reference a template that has since been deleted; such a selection must not
+  /// survive into Summarize as an invisible, predictable 403/404. While the template lists are
+  /// still loading nothing can prove the selection, so it does not resolve yet: Summarize stays
+  /// disabled until a row backs it (or the provider change drops it onto Omi).
+  bool get _selectionResolves {
+    final appId = _selectedAppId;
+    if (appId == null) return true; // Omi is always offered.
+    final app = _appFor(appId);
+    return app != null && (_isEnabled(app) || _isSuggested(app));
+  }
+
+  bool _isSuggested(App app) => _provider.cachedSuggestedApps.any((suggested) => suggested.id == app.id);
+
   bool _isEnabled(App app) =>
       _provider.cachedEnabledConversationApps.any((enabled) => enabled.id == app.id) ||
       _provider.isSuggestedAppAvailable(app.id);
@@ -85,6 +103,9 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
   Future<void> _summarize() async {
     final provider = _provider;
     if (provider.loadingReprocessConversation || _installingAppId != null) return;
+    // An inherited selection that no offered row backs (the template was deleted) is not a real
+    // choice: fall back to Omi instead of submitting an invisible id.
+    if (!_selectionResolves) _selectedAppId = null;
     final appId = _selectedAppId;
     final app = _appFor(appId);
     if (appId != null && app != null && !_isEnabled(app)) {
@@ -124,7 +145,9 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
     final suggested = provider.cachedSuggestedApps.where((app) => !enabledIds.contains(app.id)).toList();
     final lastUsedId = provider.getLastUsedSummarizationAppId();
     final load = provider.enabledTemplatesLoad;
-    final busy = provider.loadingReprocessConversation || _installingAppId != null;
+    // An inherited selection with no offered row behind it is not a choice yet: Summarize waits
+    // for the lists to back it (or the provider change to drop it onto Omi).
+    final busy = provider.loadingReprocessConversation || _installingAppId != null || !_selectionResolves;
 
     final templates = <Widget>[
       if (enabled.isNotEmpty)
@@ -205,6 +228,20 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
         ],
       ),
     );
+  }
+
+  /// Marks an inherited selection dead as soon as no offered row backs it, so the check mark
+  /// never sits on an invisible source while Summarize still submits its id. The template lists
+  /// may still be arriving, so this only judges after they settle; until then the Summarize
+  /// button is simply disabled ([_selectionResolves]).
+  void _dropUnresolvableSelection() {
+    if (_selectedAppId == null) return;
+    if (_provider.enabledTemplatesLoad == SummaryTemplatesLoad.loading ||
+        _provider.suggestedTemplatesLoad == SummaryTemplatesLoad.loading) {
+      return;
+    }
+    if (_selectionResolves) return;
+    _selectedAppId = null;
   }
 
   Widget _appRow(App app, {required bool isLastUsed}) {
