@@ -1,5 +1,6 @@
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/utils/note_citations.dart';
 
 /// The one summary body a conversation detail surface should render or export.
 ///
@@ -63,16 +64,20 @@ class ConversationSummarySelection {
       }
     }
 
+    final knownIDs = conversation.transcriptSegments.map((segment) => segment.id);
+    String presentable(String text) => repairNoteCitations(text, knownIDs).text;
     final overview = conversation.structured.overview.trim();
     final projectedSections = renderSections(conversation.structured.sections);
     if (projectedSections.isNotEmpty && overview == projectedSections) {
-      return ConversationSummarySelection(content: projectedSections, kind: ConversationSummaryKind.sections);
+      return ConversationSummarySelection(
+          content: presentable(projectedSections), kind: ConversationSummaryKind.sections);
     }
     if (overview.isNotEmpty) {
-      return ConversationSummarySelection(content: overview, kind: ConversationSummaryKind.overview);
+      return ConversationSummarySelection(content: presentable(overview), kind: ConversationSummaryKind.overview);
     }
     if (projectedSections.isNotEmpty) {
-      return ConversationSummarySelection(content: projectedSections, kind: ConversationSummaryKind.sections);
+      return ConversationSummarySelection(
+          content: presentable(projectedSections), kind: ConversationSummaryKind.sections);
     }
     return const ConversationSummarySelection(content: '', kind: ConversationSummaryKind.empty);
   }

@@ -66,4 +66,21 @@ describe('NoteSections', () => {
     const empty = render(<NoteSections sections={[]} />);
     expect(empty.container.querySelectorAll('section')).toHaveLength(0);
   });
+  it('repairs legacy citations in the rendered note while preserving code and ordinary links', () => {
+    const section = {
+      heading: 'Decision [] [s01234]',
+      body_markdown:
+        'Approved. [s01234 0] []\n\n`[s01234] []` and [RFC-123](https://example.com).',
+      source_segment_ids: ['s01234'],
+    };
+    const { container } = render(<NoteSections sections={[section]} />);
+    expect(screen.getByRole('heading', { name: 'Decision' })).toBeInTheDocument();
+    expect(screen.getByText('Approved.')).toBeInTheDocument();
+    expect(container.querySelector('code')?.textContent).toBe('[s01234] []');
+    expect(screen.getByRole('link', { name: 'RFC-123' })).toHaveAttribute(
+      'href',
+      'https://example.com',
+    );
+    expect(section.heading).toBe('Decision [] [s01234]');
+  });
 });

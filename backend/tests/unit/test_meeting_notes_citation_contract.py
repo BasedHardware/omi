@@ -12,6 +12,7 @@ from utils.llm.meeting_notes_validation import (
     _CODE_RE,
     enforce_structured_presentation_contract,
     repair_note_citations,
+    sanitize_structured_speaker_placeholders,
     visible_text_fields,
 )
 
@@ -156,3 +157,24 @@ def test_combinatorial_repetition_and_separators():
                 assert note.sections[0].body_markdown == 'Fact.'
                 assert note.sections[0].source_segment_ids == list(ids)
                 assert_visible_invariants(note)
+
+
+def test_unknown_drop_is_reported_without_inventing_provenance():
+    note = Structured(sections=[{'heading': 'Discussion', 'body_markdown': 'Fact [fabricated-segment].'}])
+    strict = enforce_structured_presentation_contract(note, KNOWN)
+    assert strict.violations == {'source_id_in_prose'}
+    assert note.sections[0].body_markdown == 'Fact [fabricated-segment].'
+    fallback = enforce_structured_presentation_contract(note, KNOWN, safe_fallback=True)
+    assert fallback.repairs == {'unknown_citation_dropped'}
+    assert note.sections[0].body_markdown == 'Fact.'
+    assert note.sections[0].source_segment_ids == []
+    assert_visible_invariants(note)
+
+
+def test_early_speaker_sanitizer_also_masks_code():
+    code = '`[spk 1] [s01234] []`'
+    note = Structured(title=f'spk 1: Use {code}', participants=[{'name': f'Name {code}', 'source': 'transcript'}])
+    sanitize_structured_speaker_placeholders(note)
+    assert note.title == f'Use {code}'
+    assert note.participants[0].name == f'Name {code}'
+    assert_visible_invariants(note)

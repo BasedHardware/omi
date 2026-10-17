@@ -1,6 +1,7 @@
 'use client';
 
 import ReactMarkdown from 'react-markdown';
+import { repairNoteCitations } from '../../../../shared/note-citations.mjs';
 import { cn } from '@/lib/utils';
 import { splitNoteSections, type NoteSectionInput } from '@/lib/meetingNotes';
 
@@ -33,7 +34,15 @@ interface NoteSectionsProps {
 }
 
 export function NoteSections({ sections }: NoteSectionsProps) {
-  const { mains, sideNotes } = splitNoteSections(sections);
+  const presentable = sections.map((section) => {
+    const valid = section.source_segment_ids ?? [];
+    return {
+      ...section,
+      heading: repairNoteCitations(section.heading ?? '', valid).text,
+      body_markdown: repairNoteCitations(section.body_markdown ?? '', valid).text,
+    };
+  });
+  const { mains, sideNotes } = splitNoteSections(presentable);
 
   return (
     <div>

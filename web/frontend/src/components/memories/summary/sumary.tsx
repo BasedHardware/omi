@@ -5,6 +5,7 @@ import ScreenMoments from './screen-moments';
 import MemoryEvents from '../events/memory-events';
 import Plugins from '../plugins/plugins';
 import Markdown from 'markdown-to-jsx';
+import { repairNoteCitations } from '../../../../../shared/note-citations.mjs';
 
 interface SummaryProps {
   memory: Memory;
@@ -12,8 +13,19 @@ interface SummaryProps {
 }
 
 export default function Summary({ memory, screenshots = null }: SummaryProps) {
-  const overview = (memory?.structured?.overview || '').trim();
-  const { mains, sideNotes } = splitSections(memory?.structured?.sections);
+  const knownIDs = (memory.transcript_segments ?? []).flatMap((segment) =>
+    segment.id ? [segment.id] : [],
+  );
+  const overview = repairNoteCitations(
+    (memory?.structured?.overview || '').trim(),
+    knownIDs,
+  ).text;
+  const presentable = memory?.structured?.sections?.map((section) => ({
+    ...section,
+    heading: repairNoteCitations(section.heading ?? '', knownIDs).text,
+    body_markdown: repairNoteCitations(section.body_markdown ?? '', knownIDs).text,
+  }));
+  const { mains, sideNotes } = splitSections(presentable);
   const ids = assignSectionIds(mains);
 
   return (

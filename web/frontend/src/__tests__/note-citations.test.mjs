@@ -1,0 +1,17 @@
+import { readFileSync } from 'node:fs';
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { repairNoteCitations } from '../../../shared/note-citations.mjs';
+const contract = JSON.parse(
+  readFileSync(
+    new URL('../../../../contracts/note_citation_contract.json', import.meta.url),
+  ),
+);
+for (const item of contract.cases) {
+  test(item.name, () => {
+    const result = repairNoteCitations(item.input, contract.known_ids);
+    assert.equal(result.text, item.output);
+    assert.deepEqual(result.sourceIDs, item.source_ids);
+    assert.equal(repairNoteCitations(result.text, contract.known_ids).text, item.output);
+  });
+}
