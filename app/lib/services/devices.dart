@@ -355,8 +355,9 @@ class DeviceService {
   }) async {
     await _mutex.acquire();
     try {
-      if (automatic && (_manuallyDisconnected(deviceId) || SharedPreferencesUtil().btDevice.id != deviceId))
+      if (automatic && (_manuallyDisconnected(deviceId) || SharedPreferencesUtil().btDevice.id != deviceId)) {
         return null;
+      }
       if (!automatic && force) _setManualDisconnect(deviceId, false);
       final existing = _connections[deviceId];
       Logger.debug(
