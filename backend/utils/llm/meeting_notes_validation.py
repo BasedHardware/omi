@@ -126,7 +126,7 @@ def _repair_note_citation_pass(
         prefix += '\ue000'
 
     def protect(value: str) -> str:
-        key = f'{prefix}{len(protected)}\ue001'
+        key = prefix + '\ue002' * len(protected) + '\ue001'
         protected[key] = value
         return key
 
@@ -307,13 +307,13 @@ def sanitize_structured_speaker_placeholders(structured: Structured) -> Structur
 
         def mask(match: re.Match[str]) -> str:
             protected.append(match.group(0))
-            return f'{prefix}{len(protected) - 1}\ue001'
+            return prefix + '\ue002' * len(protected) + '\ue001'
 
         value = _CODE_RE.sub(mask, value)
         value = re.sub(r'\[\s*(?:spk|speaker)[ _]\d+:?\s*\]', '', value, flags=re.IGNORECASE)
         value = strip_speaker_placeholders(value)
         for index, code in enumerate(protected):
-            value = value.replace(f'{prefix}{index}\ue001', code)
+            value = value.replace(prefix + '\ue002' * (index + 1) + '\ue001', code)
         setattr(owner, attribute, value or (None if attribute == 'owner_name' else value))
     return structured
 

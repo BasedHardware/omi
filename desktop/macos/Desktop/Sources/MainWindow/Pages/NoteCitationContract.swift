@@ -21,7 +21,7 @@ enum NoteCitationContract {
     while input.contains(prefix) { prefix += "\u{E000}" }
     let marker = "\u{0000}"
     func protect(_ value: String) -> String {
-      let key = "\(prefix)\(protected.count)\u{E001}"
+      let key = prefix + String(repeating: "\u{E002}", count: protected.count) + "\u{E001}"
       protected.append((key, value))
       return key
     }

@@ -9,9 +9,9 @@ const contract = JSON.parse(
 );
 for (const item of contract.cases) {
   test(item.name, () => {
-    const result = repairNoteCitations(item.input, contract.known_ids);
+    const result = repairNoteCitations(item.input, (item.known_ids ?? contract.known_ids));
     assert.equal(result.text, item.output);
     assert.deepEqual(result.sourceIDs, item.source_ids);
-    assert.equal(repairNoteCitations(result.text, contract.known_ids).text, item.output);
+    assert.equal(repairNoteCitations(result.text, (item.known_ids ?? contract.known_ids)).text, item.output);
   });
 }

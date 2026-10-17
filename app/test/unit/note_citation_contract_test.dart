@@ -9,10 +9,11 @@ void main() {
   final knownIDs = (contract['known_ids'] as List).cast<String>();
   for (final item in contract['cases'] as List) {
     test(item['name'] as String, () {
-      final result = repairNoteCitations(item['input'] as String, knownIDs);
+      final ids = (item['known_ids'] as List?)?.cast<String>() ?? knownIDs;
+      final result = repairNoteCitations(item['input'] as String, ids);
       expect(result.text, item['output']);
       expect(result.sourceIDs, item['source_ids']);
-      expect(repairNoteCitations(result.text, knownIDs).text, item['output']);
+      expect(repairNoteCitations(result.text, ids).text, item['output']);
     });
   }
 }

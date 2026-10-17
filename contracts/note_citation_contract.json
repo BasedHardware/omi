@@ -45,6 +45,7 @@
     {"name":"code and prose speaker", "input":"spk 1: Use `[s01234] [] spk 1`.", "output":"Use `[s01234] [] spk 1`.", "source_ids":[]},
     {"name":"identifier boundary", "input":"Keep xs01234 and s01234suffix.", "output":"Keep xs01234 and s01234suffix.", "source_ids":[]},
     {"name":"parenthetical ordinary brackets", "input":"Fact (see [s01234, missing]).", "output":"Fact (see [s01234, missing]).", "source_ids":[]},
-    {"name":"cluster header requires whitespace", "input":"Fact [s01234, 0].", "output":"Fact [s01234, 0].", "source_ids":[]}
+    {"name":"cluster header requires whitespace", "input":"Fact [s01234, 0].", "output":"Fact [s01234, 0].", "source_ids":[]},
+    {"name":"numeric identity cannot corrupt code masks", "known_ids":["0"], "input":"Use `[s01234] [] spk 1` and [0].", "output":"Use `[s01234] [] spk 1` and.", "source_ids":["0"]}
   ]
 }

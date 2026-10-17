@@ -40,17 +40,18 @@ def assert_visible_invariants(note):
 
 @pytest.mark.parametrize('case', CONTRACT['cases'], ids=lambda case: case['name'])
 def test_render_conformance(case):
-    text, ids = repair_note_citations(case['input'], KNOWN)
+    known = set(case.get('known_ids', KNOWN))
+    text, ids = repair_note_citations(case['input'], known)
     assert text == case['output']
     assert ids == case['source_ids']
     note = Structured(sections=[{'heading': 'Discussion', 'body_markdown': case['input']}])
-    enforce_structured_presentation_contract(note, KNOWN, safe_fallback=True)
+    enforce_structured_presentation_contract(note, known, safe_fallback=True)
     assert note.sections[0].body_markdown == case['output']
     assert note.sections[0].source_segment_ids == case['source_ids']
     assert_visible_invariants(note)
     # Every output must be stable across subsequent reads (no delayed shell creation).
     second = note.model_dump()
-    enforce_structured_presentation_contract(note, KNOWN, safe_fallback=True)
+    enforce_structured_presentation_contract(note, known, safe_fallback=True)
     assert note.model_dump() == second
 
 
@@ -126,6 +127,7 @@ def test_recovery_is_scoped_to_the_owning_object():
 
 @pytest.mark.parametrize('case', CONTRACT['cases'], ids=lambda case: case['name'])
 def test_every_visible_field(case):
+    known = set(case.get('known_ids', KNOWN))
     note = Structured(
         title=case['input'],
         overview=case['input'],
@@ -137,7 +139,7 @@ def test_every_visible_field(case):
         insights=[{'text': case['input'], 'kind': 'memory'}],
         events=[{'title': case['input'], 'description': case['input'], 'start': '2026-01-01T00:00:00Z'}],
     )
-    enforce_structured_presentation_contract(note, KNOWN, safe_fallback=True)
+    enforce_structured_presentation_contract(note, known, safe_fallback=True)
     for owner, field in visible_text_fields(note):
         assert getattr(owner, field) == case['output'], field
     assert note.sections[0].source_segment_ids == case['source_ids']

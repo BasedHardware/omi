@@ -5,10 +5,15 @@ import { repairNoteCitations } from '../../../../shared/note-citations.mjs';
 describe('hand-authored note citation contract', () => {
   for (const item of contract.cases) {
     it(item.name, () => {
-      const result = repairNoteCitations(item.input, contract.known_ids);
+      const result = repairNoteCitations(
+        item.input,
+        item.known_ids ?? contract.known_ids,
+      );
       expect(result.text).toBe(item.output);
       expect(result.sourceIDs).toEqual(item.source_ids);
-      expect(repairNoteCitations(result.text, contract.known_ids).text).toBe(item.output);
+      expect(
+        repairNoteCitations(result.text, item.known_ids ?? contract.known_ids).text,
+      ).toBe(item.output);
     });
   }
 });

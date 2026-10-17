@@ -15,10 +15,11 @@ final class NoteCitationContractTests: XCTestCase {
           root.appendingPathComponent("contracts/note_citation_contract.json")))
     XCTAssertFalse(contract.cases.isEmpty)
     for item in contract.cases {
-      let result = NoteCitationContract.repair(item.input, valid: Set(contract.known_ids))
+      let knownIDs = item.known_ids ?? contract.known_ids
+      let result = NoteCitationContract.repair(item.input, valid: Set(knownIDs))
       XCTAssertEqual(result.text, item.output, item.name)
       XCTAssertEqual(result.sourceIDs, item.source_ids, item.name)
-      let segments = contract.known_ids.map {
+      let segments = knownIDs.map {
         TranscriptSegment(
           id: $0, backendId: nil, text: "Evidence", speaker: nil, isUser: false,
           personId: nil, start: 0, end: 1)
@@ -41,5 +42,6 @@ final class NoteCitationContractTests: XCTestCase {
     let input: String
     let output: String
     let source_ids: [String]
+    let known_ids: [String]?
   }
 }

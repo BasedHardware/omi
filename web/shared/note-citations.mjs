@@ -5,7 +5,7 @@ function repairPass(input, knownIDs) {
   let prefix = "\uE000";
   while (input.includes(prefix)) prefix += "\uE000";
   const protect = (value) => {
-    const key = `${prefix}${protectedUnits.size}\uE001`;
+    const key = `${prefix}${"\uE002".repeat(protectedUnits.size)}\uE001`;
     protectedUnits.set(key, value);
     return key;
   };
