@@ -49,7 +49,7 @@ def optional_token() -> str | None:
 
         try:
             return cloudrun.secret('mercury')
-        except (cloudrun.AuthError, OSError):
+        except (cloudrun.AuthError, OSError, UnicodeError):
             return None
     return os.environ.get('FINOPS_MERCURY_READONLY_TOKEN', '').strip() or None
 
@@ -74,7 +74,8 @@ def fetch_aggregates(start: str, end: str, token: str, config: dict) -> list[dic
                 break
             if not transactions:
                 raise MercuryError('Mercury pagination did not advance')
-            # start_after is explicitly exclusive in Mercury's API contract.
+            # Follow Mercury's official Go SDK CursorIDTransactions.GetNextPage:
+            # it passes the last item's ID as the exclusive start_after cursor.
             # Use the last actual transaction id rather than guessing whether
             # page.nextPage points at a last-seen or first-unseen transaction.
             cursor = transactions[-1]['id']

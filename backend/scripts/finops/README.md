@@ -360,7 +360,7 @@ usual nested mount at:
 ```
 
 Local execution accepts explicit `FINOPS_MERCURY_READONLY_TOKEN` only. Disabled,
-missing/empty/unreadable secrets and Mercury 401/403 responses warn and skip the
+missing/empty/unreadable (including non-UTF-8) secrets and Mercury 401/403 responses warn and skip the
 Mercury line without failing other pulls; no Mercury table is read or written on
 a skip. Other API/shape errors fail the run. A previous ready file cannot be
 reused after a skipped/failed pull. Successful-child warnings reach Cloud Logging.
@@ -393,7 +393,9 @@ created-date `start/end`. The projection accepts only `status='sent'`, non-null
 timestamp into UTC and applies the half-open end locally. It never uses foreign
 merchant minor-unit amounts or the credit-statement endpoint's different signs.
 Pagination uses the last actual transaction ID as `start_after` (exclusive),
-dedupes IDs in memory, and fails on a non-advancing cursor.
+matching the [official Go SDK](https://github.com/MercuryTechnologies/mercury-go/blob/166dc7d99d3f5fc59672f60deaf910f23ca62860/packages/pagination/pagination.go#L43-L54),
+dedupes IDs in memory, and fails on a non-advancing cursor. It does not infer a
+request cursor from the potentially different `page.nextPage` value.
 
 Raw responses never reach files, BigQuery or logs. The normalized artifact stores
 only date, checked-in canonical vendor, category, USD amount and aggregate count,
@@ -420,7 +422,9 @@ set `annual: true` only after confirming a vendor's actual billing cadence.
 
 Incoming credits/refunds are outside this outgoing-spend feed and are not netted
 against bills. External ACH/wire transfers are **not** blanket-excluded: they may
-be vendor payments. Unknown recipients remain unmapped. Stripe fees withheld from
+be vendor payments. Unknown recipients remain unmapped. Generic `Stripe`/`Stripe Inc` descriptors
+also remain unmapped; only explicit `Stripe Fee`/`Stripe Fees` aliases classify
+as outgoing fees. Stripe fees withheld from
 incoming payouts cannot be measured as outgoing transactions here; do not invent
 them from net deposits. The initial alias map needs human review against Mercury's
 own dashboard; extend it there, never by logging unknown counterparties. Mixed

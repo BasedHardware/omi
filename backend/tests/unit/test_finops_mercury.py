@@ -157,6 +157,12 @@ def test_exclusion_map_and_alias_boundaries(mercury):
     assert costs.classify(tx, config) == ('excluded', 'excluded')
     tx['counterpartyName'] = 'Google Workspace'
     assert costs.classify(tx, config) == ('google_workspace', 'saas')
+    tx['counterpartyName'] = 'Stripe Unknown Merchant'
+    assert costs.classify(tx, config) == ('unmapped', 'unmapped')
+    tx['counterpartyName'] = 'Stripe Inc'
+    assert costs.classify(tx, config) == ('unmapped', 'unmapped')
+    tx['counterpartyName'] = 'Stripe Fees'
+    assert costs.classify(tx, config) == ('stripe_fees', 'infra_non_gcp')
     tx['counterpartyName'] = 'Google Cloud'
     assert costs.classify(tx, config) == ('gcp', 'gcp')
 
@@ -283,3 +289,16 @@ def test_successful_cloudrun_job_surfaces_mercury_skip(mercury, monkeypatch, cap
     assert entry.subprocess_run('2026-10-15') == 0
     output = capsys.readouterr()
     assert 'WARNING: Mercury' in output.err and 'PRIVATE' not in output.err
+
+
+def test_non_utf8_secret_is_unavailable(mercury, monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv('FINOPS_AUTH', 'cloudrun')
+    monkeypatch.setenv('FINOPS_MERCURY_ENABLED', 'true')
+    monkeypatch.setenv('FINOPS_SECRETS_DIR', str(tmp_path / 'secrets'))
+    secret = tmp_path / 'secrets' / 'finops-mercury-readonly'
+    secret.parent.mkdir()
+    secret.write_bytes(bytes([255, 254]))
+    monkeypatch.setattr(mercury, 'get_page', lambda *a: pytest.fail('network forbidden'))
+    mercury.pull(tmp_path, '2026-10-17')
+    assert json.loads((tmp_path / mercury.FILENAME).read_text())['reason'] == 'secret_unavailable'
+    assert 'WARNING: Mercury' in capsys.readouterr().err

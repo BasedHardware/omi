@@ -24,7 +24,7 @@
     "figma": {"category": "saas", "annual": false, "aliases": ["figma"]},
     "google_workspace": {"category": "saas", "annual": false, "aliases": ["google workspace", "google gsuite", "google g suite"]},
     "apple_developer": {"category": "saas", "annual": false, "aliases": ["apple developer"]},
-    "stripe_fees": {"category": "infra_non_gcp", "annual": false, "aliases": ["stripe fees", "stripe fee", "stripe inc", "stripe"]},
+    "stripe_fees": {"category": "infra_non_gcp", "annual": false, "aliases": ["stripe fees", "stripe fee"]},
     "modal": {"category": "infra_non_gcp", "annual": false, "aliases": ["modal labs", "modal com"]},
     "aws": {"category": "infra_non_gcp", "annual": false, "aliases": ["amazon web services", "aws"]},
     "azure": {"category": "infra_non_gcp", "annual": false, "aliases": ["microsoft azure", "azure"]},
