@@ -26,6 +26,12 @@ STACKDRIVER_EXPORTER = MONITORING / 'prometheus-stackdriver-exporter' / 'prod_om
 STACKDRIVER_EXPORTER_DEV = MONITORING / 'prometheus-stackdriver-exporter' / 'dev_omi_stackdriver_exporter.yaml'
 CLOUD_RUN_EXPORTER = MONITORING / 'prometheus-stackdriver-exporter' / 'prod_omi_cloud_run_metrics_exporter.yaml'
 CLOUD_RUN_EXPORTER_DEV = MONITORING / 'prometheus-stackdriver-exporter' / 'dev_omi_cloud_run_metrics_exporter.yaml'
+CLOUD_RUN_SYNC_EXPORTER = (
+    MONITORING / 'prometheus-stackdriver-exporter' / 'prod_sync_omi_cloud_run_metrics_exporter.yaml'
+)
+CLOUD_RUN_SYNC_EXPORTER_DEV = (
+    MONITORING / 'prometheus-stackdriver-exporter' / 'dev_sync_omi_cloud_run_metrics_exporter.yaml'
+)
 
 
 def _cpu_millicores(value: object) -> float:
@@ -160,8 +166,31 @@ def test_stackdriver_exporter_ingests_firestore_read_count(path):
 # panel that reads as no traffic. Use one_of() and pin the exact string.
 CLOUD_RUN_EXPORTER_FILTER = (
     'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND '
-    'resource.labels.namespace=one_of("backend","desktop-backend","backend-sync","backend-sync-backfill","notifications-job")'
+    'resource.labels.namespace=one_of("backend","desktop-backend","notifications-job")'
 )
+
+# The sync services run the full backend codebase, so every omi_* family arrives
+# once per instance of each. Importing all of it took a collection from ~52k to
+# ~187k series and OOMKilled the exporter at 2Gi (2026-10-16). A dedicated release
+# imports only consumed families from these namespaces; the main release excludes
+# them. One release cannot do both: the exporter ANDs every filter whose prefix
+# matches, and Cloud Monitoring rejects OR across resource.labels with HTTP 400.
+SYNC_NAMESPACES = ('backend-sync', 'backend-sync-backfill', 'backend-integration')
+CLOUD_RUN_SYNC_EXPORTER_FILTER = (
+    'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND '
+    'resource.labels.namespace=one_of("backend-sync","backend-sync-backfill","backend-integration")'
+)
+CLOUD_RUN_SYNC_EXPORTER_PREFIXES = [
+    'prometheus.googleapis.com/omi_sync_',
+    'prometheus.googleapis.com/omi_journey_',
+    'prometheus.googleapis.com/omi_client_journey_',
+    'prometheus.googleapis.com/omi_owner_recognition_conversations_total/',
+    'prometheus.googleapis.com/omi_conversation_duration_seconds/',
+    'prometheus.googleapis.com/omi_conversation_summary_vector_upserts_total/',
+    'prometheus.googleapis.com/omi_firestore_documents_per_operation/',
+    'prometheus.googleapis.com/omi_capture_finalization_',
+    'prometheus.googleapis.com/omi_queue_oldest_ready_',
+]
 
 
 @pytest.mark.parametrize(
@@ -190,9 +219,51 @@ def test_cloud_run_metrics_exporter_is_scoped_and_rate_limited(path, project_id,
         'create': False,
         'name': service_account,
     }
+    for namespace in SYNC_NAMESPACES:
+        assert f'"{namespace}"' not in metrics['filters'][0], f'{path.name}: {namespace} belongs to the sync release'
 
 
-@pytest.mark.parametrize('path', (CLOUD_RUN_EXPORTER, CLOUD_RUN_EXPORTER_DEV), ids=('prod', 'dev'))
+@pytest.mark.parametrize(
+    ('path', 'env', 'project_id'),
+    (
+        (CLOUD_RUN_SYNC_EXPORTER, 'prod', 'based-hardware'),
+        (CLOUD_RUN_SYNC_EXPORTER_DEV, 'dev', 'based-hardware-dev'),
+    ),
+    ids=('prod', 'dev'),
+)
+def test_cloud_run_sync_metrics_exporter_imports_only_consumed_families(path, env, project_id):
+    values = yaml.safe_load(path.read_text(encoding='utf-8'))
+    metrics = values['stackdriver']['metrics']
+    assert values['fullnameOverride'] == f'{env}-omi-cloud-run-sync-metrics-exporter'
+    assert values['stackdriver']['projectIds'] == [project_id]
+    assert metrics['prefixes'] == CLOUD_RUN_SYNC_EXPORTER_PREFIXES
+    # stackdriver_exporter silently drops a prefix that starts with another listed one.
+    for prefix in metrics['prefixes']:
+        assert not any(other != prefix and prefix.startswith(other) for other in metrics['prefixes'])
+    assert metrics['filters'] == [CLOUD_RUN_SYNC_EXPORTER_FILTER]
+    assert metrics['interval'] == '10m'
+    assert metrics['offset'] == '1m'
+    assert values['serviceAccount'] == {'create': False, 'name': f'{env}-omi-prometheus-stackdriver-exporter'}
+
+
+@pytest.mark.parametrize('env', ('prod', 'dev'))
+def test_cloud_run_application_job_scrapes_both_exporter_releases(env):
+    text = (MONITORING / 'kube-prometheus-stack' / f'{env}_omi_monitoring_values.yaml').read_text(encoding='utf-8')
+    job = text[text.index('- job_name: cloud-run-application-metrics') :]
+    match = re.search(r'regex: "([^"]+)"', job)
+    assert match
+    pattern = re.compile(match.group(1))
+    for release in (f'{env}-omi-cloud-run-metrics-exporter', f'{env}-omi-cloud-run-sync-metrics-exporter'):
+        assert pattern.fullmatch(release), release
+    # The 1-second LB/Firestore exporter job must not pick either release up.
+    assert not re.fullmatch('(.*)-prometheus-stackdriver-exporter', f'{env}-omi-cloud-run-sync-metrics-exporter')
+
+
+@pytest.mark.parametrize(
+    'path',
+    (CLOUD_RUN_EXPORTER, CLOUD_RUN_EXPORTER_DEV, CLOUD_RUN_SYNC_EXPORTER, CLOUD_RUN_SYNC_EXPORTER_DEV),
+    ids=('prod', 'dev', 'sync-prod', 'sync-dev'),
+)
 def test_cloud_run_metrics_exporter_can_outlast_its_own_scrape(path):
     """The exporter collects from Cloud Monitoring inline, so it must be sized for it.
 
@@ -220,7 +291,11 @@ def test_cloud_run_metrics_exporter_can_outlast_its_own_scrape(path):
         )
 
 
-@pytest.mark.parametrize('path', (CLOUD_RUN_EXPORTER, CLOUD_RUN_EXPORTER_DEV), ids=('prod', 'dev'))
+@pytest.mark.parametrize(
+    'path',
+    (CLOUD_RUN_EXPORTER, CLOUD_RUN_EXPORTER_DEV, CLOUD_RUN_SYNC_EXPORTER, CLOUD_RUN_SYNC_EXPORTER_DEV),
+    ids=('prod', 'dev', 'sync-prod', 'sync-dev'),
+)
 def test_cloud_run_metrics_exporter_filter_has_no_mixed_and_or(path):
     # A narrow static tripwire for the one shape that took the bridge down, not a
     # grammar check: it does not parse the filter language and does not call Cloud
@@ -276,8 +351,24 @@ def test_alert_rules_use_declared_receiver_and_instatus_components():
     for rule in _alert_rules():
         receiver = (rule.get('notification_settings') or {}).get('receiver')
         assert receiver == default_receiver, f"{rule.get('uid')}: unexpected receiver {receiver!r}"
-        component = (rule.get('labels') or {}).get(label_key)
-        assert component in allowed, f"{rule.get('uid')}: unexpected {label_key}={component!r}"
+        labels = rule.get('labels') or {}
+        component = labels.get(label_key)
+        canary_sources = {
+            'omi-datasource-prometheus': 'prometheus',
+            'omi-datasource-cloud-monitoring': 'beuxmaq8oxhq8e',
+        }
+        if rule.get('uid') in canary_sources:
+            # A datasource outage is monitoring infrastructure, not evidence of
+            # an Omi product outage. These two explicit canaries reach Telegram
+            # via the root receiver and must not update a product Instatus page.
+            source = canary_sources[rule['uid']]
+            assert labels['impact'] == 'infrastructure'
+            assert labels['component'] == 'monitoring'
+            assert labels['datasource_uid'] == source
+            assert rule['data'][0]['datasourceUid'] == source
+            assert component is None
+        else:
+            assert component in allowed, f"{rule.get('uid')}: unexpected {label_key}={component!r}"
 
 
 def test_scrape_health_no_data_semantics_match_inventory():

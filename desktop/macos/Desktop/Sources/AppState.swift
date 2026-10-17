@@ -877,12 +877,14 @@ class AppState: ObservableObject {
 
   /// Setup observers for app quit and system sleep to finalize conversations
   private func setupLifecycleObservers() {
+    ClientTelemetryFlags.installProductionRefresh()
     // App is about to quit
     willTerminateObserver = NotificationCenter.default.addObserver(
       forName: NSApplication.willTerminateNotification,
       object: nil,
       queue: .main
     ) { [weak self] _ in
+      ClientTelemetryTransport.scheduleBestEffortFlush()
       guard let self = self else { return }
       Task { @MainActor in
         if self.isTranscribing {
@@ -908,6 +910,7 @@ class AppState: ObservableObject {
       object: nil,
       queue: .main
     ) { [weak self] _ in
+      ClientTelemetryTransport.scheduleBestEffortFlush()
       guard let self = self else { return }
       Task { @MainActor in
         self.wasTranscribingBeforeSleep = self.isTranscribing

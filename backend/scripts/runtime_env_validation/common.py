@@ -8,6 +8,7 @@ import yaml
 
 from scripts.runtime_env_durable_dispatch_contracts import ValidationError
 from scripts.runtime_env_memory_contract import validate_retired_memory_env
+from scripts.runtime_env_compat import normalize_runtime_manifest
 
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND_ROOT = ROOT / 'backend'
@@ -161,7 +162,7 @@ def _load_yaml(path: Path) -> ConfigDict:
         loaded = yaml.safe_load(handle)
     if not isinstance(loaded, dict):
         raise ValueError(f'{path} must contain a YAML mapping')
-    return cast(ConfigDict, loaded)
+    return normalize_runtime_manifest(cast(ConfigDict, loaded))
 
 
 def _manifest_env_value(expected_services: ConfigDict, name: str) -> str:
@@ -175,6 +176,32 @@ def _manifest_env_value(expected_services: ConfigDict, name: str) -> str:
 
 
 KEY_CREDENTIAL_ENV_NAMES = ('SERVICE_ACCOUNT_JSON', 'GOOGLE_APPLICATION_CREDENTIALS')
+
+# The literal --remove-env-vars list every Cloud Run service deploy action already carries. The
+# manifest's forbidden_env may only append keys missing from it: gcloud rejects a key named twice.
+RETIRED_ENV_NAMES = (
+    'MEMORY_ENABLED_USERS',
+    'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED',
+    'MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS',
+    'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED',
+    'BASIC_TIER_MINUTES_LIMIT_PER_MONTH',
+    'BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH',
+    'BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH',
+    'BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH',
+    'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST',
+    'DEEPGRAM_SELF_HOSTED_ENABLED',
+    'DEEPGRAM_SELF_HOSTED_URL',
+)
+# Only the API service talks to the pusher; every other service drops its URL.
+PUSHER_CLIENT_SERVICES = frozenset({'backend'})
+
+
+def _remove_env_extra(service: str, service_config: ConfigDict) -> str:
+    """Manifest forbidden keys the action's literal list lacks, each with a leading comma."""
+    listed: set[str] = set(RETIRED_ENV_NAMES)
+    if service not in PUSHER_CLIENT_SERVICES:
+        listed.add('HOSTED_PUSHER_API_URL')
+    return ''.join(f',{name}' for name in sorted(set(service_config.get('forbidden_env', [])) - listed))
 
 
 def _declared_service_account(service_config: ConfigDict) -> str:

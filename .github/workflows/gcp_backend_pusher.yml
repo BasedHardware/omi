@@ -466,6 +466,8 @@ jobs:
           helm -n prod-omi-backend upgrade --install "$PUSHER_CANARY" ./backend/charts/pusher \
             -f ./backend/charts/pusher/prod_omi_pusher_values.yaml \
             --set-string "fullnameOverride=$PUSHER_CANARY" \
+            --set serviceAccount.create=false \
+            --set-string serviceAccount.name=prod-omi-pusher \
             --set autoscaling.enabled=false \
             --set replicaCount=1 \
             --set ingress.enabled=false \

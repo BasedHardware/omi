@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-writer-accepts-zone-reader-cannot-serve",
+  "violated_contract": "An input validator must admit exactly the values the downstream consumer of that input can serve. When a request validator and the scheduler that later selects on the stored value resolve 'valid' against different authorities -- here `zoneinfo.ZoneInfo` reading the host tz database versus the pinned `pytz==2024.1` the daily-summary reader is built on -- the write succeeds and the value is stored, but the consumer silently never selects it. The owner then never receives their recap while every layer reports success, and nothing surfaces the divergence: no exception at write time, no failing test, and the recap route answers 500 only when the user asks for it directly. A validator that is merely permissive is not safe when a strict reader owns the value.",
+  "canonical_prevention": "Validate persisted input against the authority of the component that will read it, not against a convenient or newer equivalent, and pin that authority in a test. Introduce one shared predicate over the reader's own parser (`pytz.timezone` for a pytz-based scheduler) and route every writer of the value through it -- request models, client-sync paths, and the read-side fallback. Keep the predicate in a layer both the writer and reader can import without a cycle. Cover the request models themselves, not only the helper, with the divergence case (a zone the host database accepts and the pinned authority rejects) so the regression cannot pass on a runner whose tz database happens to agree.",
+  "scope_hints": [
+    "backend/models/**",
+    "backend/database/notifications.py"
+  ],
+  "canonical_prevention_artifact": [
+    "backend/models/time_zone_admission.py",
+    "backend/tests/unit/test_request_model_timezone_admission.py"
+  ],
+  "evidence_prs": [],
+  "status": "open"
+}

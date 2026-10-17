@@ -222,18 +222,20 @@ void main() {
     expect(service.connectionFor('omi-1'), isNull);
   });
 
-  test('disconnectDevice keeps the connection tracked for a later forced reconnect', () async {
+  test('disconnectDevice disposes the dropped connection; a forced reconnect starts fresh', () async {
     SharedPreferencesUtil().btDevice = _device('omi-1');
     await service.ensureConnection('omi-1', force: true);
+    final firstTransport = transports.remove('omi-1')!;
 
     await service.disconnectDevice('omi-1');
-    expect(service.connectionFor('omi-1')?.status, DeviceConnectionState.disconnected);
+    expect(firstTransport.disconnectCalls, 1);
+    expect(firstTransport.disposeCalls, 1, reason: 'an undisposed transport stays registered for native events');
+    expect(service.connectionFor('omi-1'), isNull);
     expect(await service.ensureConnection('omi-1'), isNull, reason: 'non-forced calls do not reconnect');
 
-    final firstTransport = transports.remove('omi-1')!;
     final reconnected = await service.ensureConnection('omi-1', force: true);
     expect(reconnected?.status, DeviceConnectionState.connected);
-    expect(firstTransport.disposeCalls, 1);
+    expect(transports['omi-1'], isNot(same(firstTransport)));
   });
 }
 

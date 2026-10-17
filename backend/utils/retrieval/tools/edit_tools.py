@@ -15,6 +15,7 @@ from database import chat_edits
 from database.chat_edits import envelope
 from utils.messaging.undo import record_write
 from utils.mcp_server.handlers import other as mcp_people
+from utils.retrieval.turn_refs import resolve_edit_ref, tool_error
 
 
 def owner(config):
@@ -27,8 +28,8 @@ def owner(config):
 
 @tool
 def update_conversation(
-    conversation_id: str,
-    correction: str,
+    conversation_id: Optional[str] = None,
+    correction: str = '',
     title: Optional[str] = None,
     overview: Optional[str] = None,
     *,
@@ -36,27 +37,41 @@ def update_conversation(
 ) -> str:
     """Change a conversation title and/or overview only when the user asks or confirms a proposed correction.
 
-    Retrieve the owned conversation ID first. correction is the user's confirmed
+    Omit conversation_id to use the user-attached conversation; otherwise use an
+    owned ID attached or returned by search/read in this turn. correction is the user's confirmed
     correction, stored as a durable note used on later reprocessing. Never rewrite
     a transcript or delete a whole conversation. Returns a structured undo receipt.
     """
     uid = owner(config)
+    conversation_id, error = resolve_edit_ref(
+        config.get('configurable', {}),
+        'conversations',
+        conversation_id,
+        parameter='conversation_id',
+        default_to_attachment=True,
+    )
+    if error:
+        return error
+    assert conversation_id is not None
     if not correction.strip() or len(correction) > 2000 or (title is None and overview is None):
-        return 'Error: provide a confirmed correction and a title or overview.'
+        return tool_error('invalid_correction', 'Provide a confirmed correction and a title or overview.')
     if title is not None and (not title.strip() or len(title) > 300):
-        return 'Error: invalid title.'
+        return tool_error('invalid_title', 'Title must contain 1 to 300 characters.')
     if overview is not None and (not overview.strip() or len(overview) > 20000):
-        return 'Error: invalid overview.'
+        return tool_error('invalid_overview', 'Overview must contain 1 to 20000 characters.')
     row = conversations.get_conversation(uid, conversation_id)
-    if not row or row.get('is_locked') or row.get('deleted'):
-        return 'Error: conversation not found or unavailable.'
+    if not row or row.get('deleted'):
+        return tool_error('conversation_not_found', 'Conversation not found for the authenticated owner.')
+    if row.get('is_locked'):
+        return tool_error('conversation_locked', 'Conversation is locked and cannot be edited.')
     before = cast(Dict[str, Any], chat_edits.snapshot(uid, 'conversation', conversation_id))
     observed = conversations.prepare_conversation_for_read(cast(Dict[str, Any], chat_edits.decode(before)), uid) or {}
     structured = dict(observed.get('structured') or {})
     notes = list(observed.get('user_corrections') or [])
-    notes.append({'note': correction.strip(), 'at': datetime.now(timezone.utc).isoformat()})
+    corrected_at = datetime.now(timezone.utc).isoformat()  # not-model-facing: persisted edit metadata
+    notes.append({'note': correction.strip(), 'at': corrected_at})
     if len(notes) > 100:
-        return 'Error: correction note limit reached.'
+        return tool_error('correction_limit_reached', 'Conversation correction note limit reached (100).')
     patch: Dict[str, Any] = {'user_corrections': notes}
     if title is not None:
         structured['title'] = title.strip()
@@ -79,6 +94,11 @@ def rename_person(person_id: str, name: str, *, config: RunnableConfig) -> str:
     retaining the previous name as an alias. Undo restores the prior name and aliases.
     """
     uid = owner(config)
+    resolved_id, error = resolve_edit_ref(config.get('configurable', {}), 'people', person_id, parameter='person_id')
+    if error:
+        return error
+    assert resolved_id is not None
+    person_id = resolved_id
     if not users.get_person(uid, person_id):
         return 'Error: person not found.'
     before = chat_edits.snapshot(uid, 'person', person_id)
@@ -98,6 +118,11 @@ def edit_memory(memory_id: str, content: str, *, config: RunnableConfig) -> str:
     preserving canonical correction history. Returns a structured undo receipt.
     """
     uid = owner(config)
+    resolved_id, error = resolve_edit_ref(config.get('configurable', {}), 'memories', memory_id, parameter='memory_id')
+    if error:
+        return error
+    assert resolved_id is not None
+    memory_id = resolved_id
     if not content.strip() or len(content) > 20000:
         return 'Error: memory content must contain 1 to 20000 characters.'
     db = get_data_plane_firestore_client()
@@ -125,6 +150,11 @@ def delete_memory(memory_id: str, *, config: RunnableConfig) -> str:
     controls for permanent erasure. Returns a structured undo receipt.
     """
     uid = owner(config)
+    resolved_id, error = resolve_edit_ref(config.get('configurable', {}), 'memories', memory_id, parameter='memory_id')
+    if error:
+        return error
+    assert resolved_id is not None
+    memory_id = resolved_id
     db = get_data_plane_firestore_client()
     before = read_canonical_memory_item(uid, memory_id, db_client=db)
     if before is None or before.uid != uid or (before.promotion or {}).get('chat_deleted'):

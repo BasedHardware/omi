@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
+import 'package:omi/pages/activity/activity_seen.dart';
 import 'package:omi/pages/conversations/daily_recaps_page.dart';
 import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
 import 'package:omi/pages/home/widgets/daily_summary_card.dart';
@@ -9,6 +12,7 @@ import 'package:omi/pages/home/widgets/home_for_you.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/services/proactivity/proactivity_outbox.dart';
+import 'package:omi/services/recap_events.dart';
 import 'package:omi/services/proactivity/proactivity_push.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -34,31 +38,70 @@ class HomeDailyRecaps extends StatefulWidget {
   State<HomeDailyRecaps> createState() => HomeDailyRecapsState();
 }
 
-class HomeDailyRecapsState extends State<HomeDailyRecaps> {
+class HomeDailyRecapsState extends State<HomeDailyRecaps> with WidgetsBindingObserver {
   final _forYouKey = GlobalKey<HomeForYouState>();
   List<DailySummary> _recaps = [];
   bool _loading = true;
+  bool _loadFailed = false;
+
+  StreamSubscription<String>? _deletions;
+  StreamSubscription<void>? _arrivals;
+  DateTime? _lastRefresh;
+
+  /// A recap made while the app was in the background shows (and lights the Activity bell) on return.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    final last = _lastRefresh;
+    if (last != null && DateTime.now().difference(last) < const Duration(minutes: 5)) return;
+    refresh();
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _deletions = recapDeletions.listen(_dropRecap);
+    _arrivals = recapArrivals.listen((_) => refresh());
     WidgetsBinding.instance.addPostFrameCallback((_) => refresh());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _deletions?.cancel();
+    _arrivals?.cancel();
+    super.dispose();
   }
 
   /// Reloads the row (pull-to-refresh on Home). A failed read keeps the cards already shown.
   Future<void> refresh() async {
+    _lastRefresh = DateTime.now();
     await Future.wait([_refreshRecaps(), if (_forYouKey.currentState != null) _forYouKey.currentState!.refresh()]);
   }
 
+  /// Load, arrival, resume and pull can overlap: only the newest response may land.
+  int _generation = 0;
+
   Future<void> _refreshRecaps() async {
+    final generation = ++_generation;
     if (!mounted) return;
     setState(() => _loading = _recaps.isEmpty);
-    final result = await widget.load();
-    if (!mounted) return;
-    setState(() {
-      if (result.ok) _recaps = result.items;
-      _loading = false;
-    });
+    try {
+      final result = await widget.load().timeout(const Duration(seconds: 15));
+      if (!mounted || generation != _generation) return;
+      final items = result.items.where((r) => !_deletedIds.contains(r.id)).toList();
+      if (result.ok) ActivitySeen.instance.observe(ActivitySeen.recapArrivals(items));
+      setState(() {
+        if (result.ok) _recaps = items;
+        _loadFailed = !result.ok;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted && generation == _generation) setState(() => _loadFailed = true);
+    } finally {
+      if (mounted && generation == _generation) setState(() => _loading = false);
+    }
   }
 
   @override
@@ -73,7 +116,12 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> {
       );
 
   Widget _buildRecaps(BuildContext context) {
-    if (!_loading && _recaps.isEmpty) return const SizedBox.shrink();
+    if (!_loading && _recaps.isEmpty) {
+      return _loadFailed
+          ? OmiErrorState(
+              title: context.l10n.dailyRecaps, message: context.l10n.somethingWentWrong, onRetry: _refreshRecaps)
+          : const SizedBox.shrink();
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -107,11 +155,35 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> {
             ),
           ),
         ),
+        if (_loadFailed && !_loading)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+            child: Row(children: [
+              Expanded(
+                  child: Text(context.l10n.somethingWentWrong,
+                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary))),
+              OmiButton.tertiary(label: context.l10n.tryAgain, onPressed: _refreshRecaps),
+            ]),
+          ),
       ],
     );
   }
 
-  void _openAll() => routeToPage(context, const DailyRecapsPage());
+  /// Recaps deleted while this row is mounted: a refresh already in flight may still return them.
+  final Set<String> _deletedIds = {};
+
+  /// A deleted recap leaves the row and the bell: the latest remaining recap is what counts.
+  void _dropRecap(String id) {
+    if (!mounted) return;
+    _deletedIds.add(id);
+    setState(() => _recaps.removeWhere((s) => s.id == id));
+    ActivitySeen.instance.observe(ActivitySeen.recapArrivals(_recaps));
+  }
+
+  Future<void> _openAll() async {
+    await routeToPage(context, const DailyRecapsPage());
+    if (mounted) await _refreshRecaps();
+  }
 
   Widget _card(BuildContext context, DailySummary summary) {
     return DailySummaryCard(
@@ -125,7 +197,7 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> {
         if (!mounted) return;
         if (result is Map && result['deleted'] == true) {
           final deletedId = result['summaryId'] as String?;
-          if (deletedId != null) setState(() => _recaps.removeWhere((s) => s.id == deletedId));
+          if (deletedId != null) _dropRecap(deletedId);
         }
       },
     );

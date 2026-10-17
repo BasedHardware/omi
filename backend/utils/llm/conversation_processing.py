@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from utils.conversations.episode_evidence import EvidenceItem
 
 from utils.llm.conversation_notes_prompts import (
+    ACTION_ITEM_EXTRACTION_RULES,
     conversation_notes_volatile_instructions as _conversation_notes_volatile_instructions,
     conversation_notes_static_instructions as _conversation_notes_static_instructions,
     conversation_note_density,
@@ -381,7 +382,7 @@ Calendar invitees are expected participants only. Screen-shown names are observe
 listing data only. Neither establishes attendance or binds an audio cluster to a
 person. Attribute speech only from the original speaker map or direct evidence.
 Do not infer attendance, absence, or a no-show from either listing.
-""",
+""" + '\n\n' + ACTION_ITEM_EXTRACTION_RULES,
         schema=StructuredExtraction,
         budget=Budget(turns=1, tool_calls=0, deadline_seconds=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS),
     )
@@ -420,8 +421,10 @@ def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: A
                     'timezone': kwargs['tz'],
                     'started_at': kwargs['started_at'].isoformat(),
                     'task_intelligence_capture': kwargs['task_intelligence_capture'],
+                    'account_owner_name': prefix.account_owner_name or next(iter(prefix.owner_names), None),
                     'open_tasks': kwargs.get('existing_action_items') or [],
                     'capture_evidence': context,
+                    **({'known_spellings': prefix.known_spellings} if prefix.known_spellings else {}),
                     **({'title_people': title_people_block(prefix)} if not rich_mode else {}),
                 },
                 ensure_ascii=False,

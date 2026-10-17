@@ -717,7 +717,9 @@ def test_claim_conversation_status_invalidates_on_claim_including_discard(writer
     from models.conversation_enums import ConversationStatus
 
     monkeypatch.setattr(
-        conversations_db, 'extra_updates_with_bound_client_processing', lambda uid, current, extra: dict(extra)
+        conversations_db,
+        'extra_updates_with_bound_client_processing',
+        lambda uid, current, extra, *, transcript_corrections=None: dict(extra),
     )
     store.seed_conv('u1', 'c1', status=ConversationStatus.in_progress.value)
     claimed = conversations_db.claim_conversation_status(

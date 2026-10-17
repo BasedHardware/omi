@@ -17,7 +17,7 @@ vi.mock('./SignWritingView', () => ({
   SignWritingView: () => null
 }))
 
-import { SignLanguageOverlay } from './SignOverlay'
+import { SignLanguageOverlay, SignLanguageOverlayGate } from './SignOverlay'
 
 let deliver: ((result: TranslationResult) => void) | null = null
 
@@ -83,5 +83,68 @@ describe('SignLanguageOverlay media', () => {
     })
     expect(screen.getByTestId('sign-avatar').textContent).toBe('data:application/json;base64,e30=')
     expect(screen.queryByTestId('sign-video')).toBeNull()
+  })
+})
+
+describe('SignLanguageOverlayGate', () => {
+  let enabledListener: ((enabled: boolean) => void) | null = null
+  let resolveInitial: (enabled: boolean) => void = () => {}
+
+  beforeEach(() => {
+    enabledListener = null
+    const omi = (window as unknown as { omi: Record<string, unknown> }).omi
+    omi.signLanguageGetEnabled = () =>
+      new Promise<boolean>((resolve) => {
+        resolveInitial = resolve
+      })
+    omi.onSignLanguageEnabledChanged = (cb: (enabled: boolean) => void) => {
+      enabledListener = cb
+      return () => {
+        enabledListener = null
+      }
+    }
+  })
+
+  async function settle(enabled: boolean): Promise<void> {
+    await act(async () => {
+      resolveInitial(enabled)
+    })
+  }
+
+  it('renders nothing while sign-language translation is disabled', async () => {
+    const { container } = render(<SignLanguageOverlayGate />)
+    await settle(false)
+    expect(container.firstChild).toBeNull()
+    expect(screen.queryByTestId('sign-avatar')).toBeNull()
+  })
+
+  it('renders the overlay when the setting is enabled at startup', async () => {
+    render(<SignLanguageOverlayGate />)
+    await settle(true)
+    expect(screen.getByText('IDLE')).toBeTruthy()
+  })
+
+  it('follows the toggle live without a relaunch', async () => {
+    const { container } = render(<SignLanguageOverlayGate />)
+    await settle(false)
+    act(() => enabledListener?.(true))
+    expect(screen.getByText('IDLE')).toBeTruthy()
+    act(() => enabledListener?.(false))
+    expect(container.firstChild).toBeNull()
+  })
+
+  it('keeps a toggle that lands before the initial read resolves', async () => {
+    render(<SignLanguageOverlayGate />)
+    act(() => enabledListener?.(true))
+    await settle(false)
+    expect(screen.getByText('IDLE')).toBeTruthy()
+  })
+
+  it('unsubscribes on unmount', async () => {
+    const { unmount } = render(<SignLanguageOverlayGate />)
+    await settle(false)
+    expect(enabledListener).not.toBeNull()
+    unmount()
+    expect(enabledListener).toBeNull()
   })
 })

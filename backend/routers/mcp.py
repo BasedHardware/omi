@@ -13,7 +13,6 @@ from database._client import db
 import database.phone_calls as phone_calls_db
 from firebase_admin import auth as firebase_auth
 
-# from database.redis_db import get_filter_category_items
 # from database.vector_db import query_vectors_by_metadata
 from models.memories import Memory, MemoryCategory
 from models.conversation_enums import CategoryEnum
@@ -487,6 +486,7 @@ class SimpleStructured(BaseModel):
 class SimpleTranscriptSegment(BaseModel):
     id: Optional[str] = None
     text: str
+    original_text: Optional[str] = None
     speaker_id: Optional[int] = None
     speaker_name: Optional[str] = None
     start: float
@@ -513,22 +513,15 @@ class SimpleConversation(BaseModel):
     language: Optional[str] = None
     apps_results: List[AppResult] = []
     match_snippets: List[TranscriptMatchSnippet] = []
+    participants_included: bool = False
+    participants: List[dict] = Field(default_factory=list)
+    person_ids: List[str] = Field(default_factory=list)
 
 
 class FullConversation(SimpleConversation):
     transcript_segments: List[SimpleTranscriptSegment] = []
     # Additive: true only when the bounded shared reader clipped the transcript.
     truncated: bool = False
-
-
-# Step 2 do retrieval
-# @router.get("/v1/mcp/conversations/available-filters", tags=["mcp"])
-# def get_conversations_available_filters(uid: str = Header(None)):
-#     return {
-#         "people": get_filter_category_items(uid, "people"),
-#         "topics": get_filter_category_items(uid, "topics"),
-#         "entities": get_filter_category_items(uid, "entities"),
-#     }
 
 
 @router.get("/v1/mcp/conversations", response_model=List[SimpleConversation], tags=["mcp"])

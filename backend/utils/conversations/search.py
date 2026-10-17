@@ -450,6 +450,7 @@ def keyword_search_conversation_ids(
     start_date: Optional[int] = None,
     end_date: Optional[int] = None,
     *,
+    page: int = 1,
     raise_on_error: bool = False,
 ) -> List[str]:
     """Typesense keyword search returning only conversation ids, for hybrid (keyword + vector) retrieval.
@@ -464,6 +465,7 @@ def keyword_search_conversation_ids(
             uid=uid,
             query=query,
             per_page=limit,
+            page=page,
             include_discarded=False,
             start_date=start_date,
             end_date=end_date,

@@ -99,6 +99,9 @@ class MessageServiceStatusEvent(MessageEvent):
     reason: Optional[str] = None
     retry_after: Optional[int] = None
 
+    # Additive capability: absent on old servers means live-only on new clients.
+    mobile_standard_batch: Optional[bool] = None
+
     def to_json(self):
         # The outcome fields are an additive terminal-failure contract, not
         # nullable noise on legacy ready and initiating status events.

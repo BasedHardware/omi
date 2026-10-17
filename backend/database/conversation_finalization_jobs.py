@@ -384,6 +384,8 @@ def _snapshot_bound_projection_updates(
     uid: str,
     conversation: Mapping[str, Any],
     extra_updates: Mapping[str, Any] | None,
+    *,
+    transcript_corrections: list[dict] | None = None,
 ) -> dict[str, Any]:
     """Bind ``extra_updates`` to this snapshot, then keep projection fields only.
 
@@ -391,7 +393,9 @@ def _snapshot_bound_projection_updates(
     one that does not is dropped. Binding is the same helper every exit uses
     — not a second write path per branch.
     """
-    bound = conversations_db.extra_updates_with_bound_client_processing(uid, conversation, extra_updates)
+    bound = conversations_db.extra_updates_with_bound_client_processing(
+        uid, conversation, extra_updates, transcript_corrections=transcript_corrections
+    )
     return {field: bound[field] for field in PROJECTION_FAMILY_FIELDS if field in bound}
 
 
@@ -426,7 +430,20 @@ def _apply_snapshot_bound_projection(
     """
     if conversation is None:
         return
-    conversation_updates = _snapshot_bound_projection_updates(uid, conversation, extra_updates)
+    corrections = None
+    if conversation.get('has_transcript_corrections') and any(
+        field in (extra_updates or {}) for field in PROJECTION_FAMILY_FIELDS
+    ):
+        from database import review_store
+
+        overlay_ref = conversation_ref.parent.parent.collection('transcript_corrections').document(conversation_ref.id)
+        overlay = overlay_ref.get(transaction=transaction).to_dict()
+        corrections = review_store.require_doc(uid, overlay).get('source')
+        if not isinstance(corrections, list):
+            raise ValueError('Transcript correction overlay invalid')
+    conversation_updates = _snapshot_bound_projection_updates(
+        uid, conversation, extra_updates, transcript_corrections=corrections
+    )
     for key, value in lifecycle_updates.items():
         # A dotted key is a Firestore field path: ``client_processing.title``
         # writes inside the projection without going through the bind.
@@ -1177,6 +1194,12 @@ def _mark_finalization_dead_letter_txn(
         # collection inside this transaction.
         conversation_updates = dead_letter_conversation_updates(
             uid, conversation, conversation_ref, transaction, failure_code, time_zone_for_uid
+        )
+    if conversation_updates is not None and isinstance(uid, str) and isinstance(conversation, Mapping):
+        from database.processing_attention import create_in_transaction
+
+        create_in_transaction(
+            transaction, uid, conversation_ref, dict(conversation), conversation_updates, failure_code, now
         )
     transaction.update(
         job_ref,

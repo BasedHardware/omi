@@ -416,7 +416,7 @@ async def trigger_realtime_integrations(
     *,
     client_kind: ClientKind = 'unknown',
 ):
-    logger.info(f"trigger_realtime_integrations {uid}")
+    logger.debug(f"trigger_realtime_integrations {uid}")
     """REALTIME STREAMING"""
     return await _async_trigger_realtime_integrations(
         uid,
@@ -428,7 +428,7 @@ async def trigger_realtime_integrations(
 
 
 async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
-    logger.info(f"trigger_realtime_audio_bytes {uid}")
+    logger.debug(f"trigger_realtime_audio_bytes {uid}")
     """REALTIME AUDIO STREAMING"""
     return await _async_trigger_realtime_audio_bytes(uid, sample_rate, data)
 
@@ -799,7 +799,10 @@ def _process_proactive_notification(uid: str, app: App, data):
     max_prompt_char_limit = 128000
     min_message_char_limit = 5
 
-    prompt = data.get('prompt', '')
+    # `data.get(k, default)` returns the stored value even when it's an
+    # explicit JSON null — a default only fires on a MISSING key. `or` coerces
+    # {"prompt": null} to the default so len()/iteration/.get can't TypeError.
+    prompt = data.get('prompt') or ''
     if len(prompt) > max_prompt_char_limit:
         send_app_notification(
             uid,
@@ -810,13 +813,15 @@ def _process_proactive_notification(uid: str, app: App, data):
         logger.info(f"App {app.id}, prompt too long, length: {len(prompt)}/{max_prompt_char_limit} {uid}")
         return None
 
-    filter_scopes = app.filter_proactive_notification_scopes(data.get('params', []))
+    # params/context can also be explicit JSON nulls — coerce to the default so
+    # iteration/lookup can't TypeError/AttributeError on None.
+    filter_scopes = app.filter_proactive_notification_scopes(data.get('params') or [])
 
     user_name, user_facts = get_prompt_memories(uid)
 
     context = None
     if 'user_context' in filter_scopes:
-        memories = _retrieve_contextual_memories(uid, data.get('context', {}))
+        memories = _retrieve_contextual_memories(uid, data.get('context') or {})
         if len(memories) > 0:
             context = conversations_to_string(deserialize_conversations(memories))
 
@@ -912,6 +917,7 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
             if response.status_code >= 200 and response.status_code < 300:
                 cb.record_success()
                 await run_blocking(db_executor, record_app_webhook_success, app.id)
+                logger.debug(f'trigger_realtime_audio_bytes {app.id} status: {response.status_code}')
             else:
                 cb.record_failure()
                 error_str = f'HTTP {response.status_code}'
@@ -919,7 +925,7 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
                     db_executor, record_app_webhook_failure, app.id, response.status_code, error_str
                 )
                 await run_blocking(db_executor, _handle_webhook_health_action, app.id, action, error_str)
-            logger.info(f'trigger_realtime_audio_bytes {app.id} status: {response.status_code}')
+                logger.warning(f'trigger_realtime_audio_bytes {app.id} status: {response.status_code}')
         except Exception as e:
             cb.record_failure()
             error_str = type(e).__name__

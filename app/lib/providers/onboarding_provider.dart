@@ -33,6 +33,14 @@ import 'package:omi/utils/analytics/product_telemetry.dart';
 
 class OnboardingProvider extends BaseProvider with MessageNotifierMixin implements IDeviceServiceSubsciption {
   DeviceProvider? deviceProvider;
+  DeviceConnectFailureShownFailureReason? pairingFailureReason;
+  int pairingFailureVersion = 0;
+
+  void dismissPairingFailure() {
+    pairingFailureReason = null;
+    notifyListeners();
+  }
+
   bool isClicked = false;
   bool isConnected = false;
   int batteryPercentage = -1;
@@ -180,6 +188,40 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     notifyListeners();
   }
 
+  /// Whether Omi may scan for and connect to Bluetooth devices, read without prompting.
+  Future<bool> readBluetoothPermission() async {
+    final granted = Platform.isIOS
+        ? await Permission.bluetooth.isGranted
+        : await Permission.bluetoothScan.isGranted && await Permission.bluetoothConnect.isGranted;
+    if (granted != hasBluetoothPermission) updateBluetoothPermission(granted);
+    return granted;
+  }
+
+  /// Starts looking for nearby devices in the background, without prompts, when Bluetooth is
+  /// already allowed. "Connect your Omi" then shows the device the moment it opens.
+  Future<void> startQuietDeviceScan() async {
+    if (_isDisposed || isConnected) return;
+    if (!await readBluetoothPermission()) return;
+    // Only when the radio is already on: an off adapter would raise the shared "Enable Bluetooth"
+    // guidance over an unrelated step. "Connect your Omi" handles that case itself.
+    try {
+      if (BluetoothReadiness.parse(await BleHostApi().getBluetoothState()) != BluetoothAdapterState.on) return;
+    } catch (_) {
+      return;
+    }
+    if (_isDisposed) return;
+    ServiceManager.instance().device.subscribe(this, this);
+    await deviceProvider?.initiateConnection('OnboardingEarlyScan');
+  }
+
+  /// Ends a search screen's session: stops scanning and clears "nothing found", so the next search
+  /// screen (onboarding's Connect Omi or the in-app pairing page, which share this provider) starts
+  /// fresh instead of opening on a stale "No Omi Found".
+  void endSearch() {
+    cancelActiveScan();
+    enableInstructions = false;
+  }
+
   Future askForNotificationPermissions() async {
     final attempt = ProductTelemetry.instance.start(
       ProductJourney.permission,
@@ -306,6 +348,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   Future<void> handleTap({required BtDevice device, required bool isFromOnboarding, VoidCallback? goNext}) async {
     try {
       if (isClicked) return;
+      pairingFailureReason = null;
       isClicked = true;
 
       connectingToDeviceId = device.id;
@@ -390,6 +433,9 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       // A failed second-device pairing must not report the still-connected
       // primary device as disconnected.
       if (deviceProvider?.connectedDevice == null) deviceProvider?.setIsConnected(false);
+      pairingFailureVersion++;
+      pairingFailureReason =
+          connectFailureReason(e, staleBond: ServiceManager.instance().device.staleBondRecoveryRequired);
       PlatformManager.instance.analytics.deviceConnectFailed(classifyDeviceConnectError(e));
       notifyError('DEVICE_CONNECT_FAILED');
       notifyListeners();
@@ -487,6 +533,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
             adapterOff: false,
           ),
         );
+        _armInstructionsTimer(epoch, scanStarted: false);
         onShowDialog();
         return;
       }
@@ -503,6 +550,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         updateLocationPermission(locationGranted);
         if (!locationGranted) {
           _emitPairingBlocked(DevicePairingBlockedReason.locationPermissionMissing);
+          _armInstructionsTimer(epoch, scanStarted: false);
           onShowLocationDialog?.call();
           return;
         }
@@ -511,19 +559,14 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
     if (!await BluetoothReadiness.instance.ensureReady(BluetoothUse.discovery)) {
       if (_isDisposed || epoch != _scanEpoch) return;
-      _emitPairingBlocked(_pairingBlockForAdapter(BluetoothReadiness.instance.state));
+      _emitPairingBlocked(_pairingBlockForAdapter(BluetoothReadiness.instance.state),
+          adapterState: BluetoothReadiness.instance.state);
+      _armInstructionsTimer(epoch, scanStarted: false);
       return;
     }
     if (_isDisposed || epoch != _scanEpoch) return;
 
-    _didNotMakeItTimer = Timer(const Duration(seconds: deviceScanEmptyAfterSeconds), () {
-      if (_isDisposed || epoch != _scanEpoch) return;
-      if (shouldReportEmptyDeviceScan(deviceCount: deviceList.length)) {
-        PlatformManager.instance.analytics.deviceScanEmpty(afterSeconds: deviceScanEmptyAfterSeconds);
-      }
-      enableInstructions = true;
-      notifyListeners();
-    });
+    _armInstructionsTimer(epoch, scanStarted: true);
 
     await deviceProvider?.initiateConnection("Onboarding");
     // With a device already paired the default loop only reconnects saved
@@ -536,6 +579,21 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   /// Stops the nearby scan started for the picker (page closed).
   void stopScanningDevices() {
     deviceProvider?.stopDiscoveryScanning();
+  }
+
+  /// Arms the delayed "No Omi Found" help (Scan Again, pairing guide, Contact Support). A blocked
+  /// search arms it too, so the help never depends on discovery having started; only a scan that
+  /// actually ran reports Device Scan Empty (a blocked one already reported Device Pairing Blocked).
+  void _armInstructionsTimer(int epoch, {required bool scanStarted}) {
+    _didNotMakeItTimer?.cancel();
+    _didNotMakeItTimer = Timer(const Duration(seconds: deviceScanEmptyAfterSeconds), () {
+      if (_isDisposed || epoch != _scanEpoch) return;
+      if (scanStarted && shouldReportEmptyDeviceScan(deviceCount: deviceList.length)) {
+        PlatformManager.instance.analytics.deviceScanEmpty(afterSeconds: deviceScanEmptyAfterSeconds);
+      }
+      enableInstructions = true;
+      notifyListeners();
+    });
   }
 
   void _recordOnboardingPermission({
@@ -593,11 +651,14 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     };
   }
 
-  void _emitPairingBlocked(DevicePairingBlockedReason? reason) {
+  void _emitPairingBlocked(DevicePairingBlockedReason? reason, {BluetoothAdapterState? adapterState}) {
     if (reason == null) return;
     final key = '$_scanEpoch|${reason.wireName}';
     if (_lastPairingBlockKey == key) return;
     _lastPairingBlockKey = key;
+    pairingFailureVersion++;
+    pairingFailureReason = blockedFailureReason(reason, adapterState: adapterState);
+    notifyListeners();
     PlatformManager.instance.analytics.devicePairingBlocked(
       reason: reason,
       androidSdk: _osAndroidSdk < 0 ? 0 : _osAndroidSdk,
@@ -607,6 +668,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
   void cancelActiveScan() {
     _reportNativeScanBlocks = false;
+    pairingFailureReason = null;
     _scanEpoch++;
     _didNotMakeItTimer?.cancel();
     _didNotMakeItTimer = null;
@@ -651,7 +713,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     // Convert the values of the map back to a list
     List<BtDevice> orderedDevices = foundDevicesMap.values.toList();
     deviceList = orderedDevices;
-    if (orderedDevices.isNotEmpty || savedDeviceList.isNotEmpty) {
+    if (visibleDeviceList.isNotEmpty) {
+      if (pairingFailureReason == DeviceConnectFailureShownFailureReason.notFoundOrDropped) {
+        pairingFailureReason = null;
+      }
       notifyListeners();
       _didNotMakeItTimer?.cancel();
     }

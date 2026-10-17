@@ -160,7 +160,8 @@ def test_seventy_minutes_of_identical_narration_is_one_recording():
     assert rows[0]['discarded'] is False
 
 
-def test_reverse_order_retry_and_deleted_target():
+def test_reverse_order_retry_and_deleted_target(monkeypatch):
+    monkeypatch.setenv('SYNC_BACKFILL_ORDER', 'newest')
     store = StrictFirestore()
     later, _, _ = intake(store, chunk('later', 1060))
     earlier, _, _ = intake(store, chunk('earlier', 1000))

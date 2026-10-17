@@ -5,6 +5,18 @@ from typing import NamedTuple
 import threading
 
 from config.live_stt_recovery import recovery_enabled
+from utils.observability.demand_cohort import DEMAND_COHORTS, initialize_metric
+
+DEMAND_LANE_SECONDS = Counter(
+    'omi_listen_live_lane_seconds_total',
+    'Listen wall time on the actual serving lane',
+    ['lane', 'reason', 'demand_cohort'],
+)
+DEMAND_SWITCHES = Counter(
+    'omi_listen_live_lane_switches_total',
+    'Adopted listen lane changes, including demand handovers and fallbacks',
+    ['from_lane', 'to_lane', 'reason'],
+)
 
 PAID_SPILLOVER_ADMISSIONS = Counter(
     'omi_stt_paid_spillover_admissions_total', 'Fleet paid router spillover budget decisions', ['provider', 'outcome']
@@ -38,12 +50,12 @@ REPLAY_CLOSED = Counter(
 RECOVERY_ATTEMPTS = Counter(
     'omi_stt_recovery_attempts_total',
     'Actual live recovery dials by dead provider family and attempted successor family',
-    ['source', 'successor'],
+    ['source', 'successor', 'demand_cohort'],
 )
 LIVE_SESSION_TERMINAL_AFTER_TEXT = Counter(
     'omi_live_session_terminal_after_text_total',
     'Live sessions closed with a terminal STT failure after a transcript was already delivered',
-    ['provider'],
+    ['provider', 'demand_cohort'],
 )
 
 WINDOW_ACTIVE = Gauge('omi_stt_window_sessions_active', 'Admitted windowed TDT sessions')
@@ -63,6 +75,7 @@ WINDOW_LATENCY = Histogram('omi_stt_window_post_seconds', 'Window POST latency',
 WINDOW_FIRST_TEXT = Histogram(
     'omi_stt_window_first_text_seconds',
     'Wall seconds from first VAD speech sent to first nonempty windowed transcript',
+    ['demand_cohort'],
     buckets=(2, 5, 10, 15, 20, 25, 30, 45, 60),
 )
 WINDOW_SESSION_OUTCOME = Counter(
@@ -91,16 +104,17 @@ WINDOW_STRANDED_FLUSHES = Counter(
 WINDOW_CANARY_OUTCOME = Counter(
     'omi_stt_window_canary_transcript_outcome_total',
     'Listen transcript outcome by stable window allocation arm',
-    ['arm', 'outcome'],
+    ['arm', 'outcome', 'demand_cohort'],
 )
 COST_CANARY_OUTCOME = Counter(
     'omi_stt_cost_routing_canary_outcome_total',
     'Managed listen transcript outcome by router allocation at initialization',
-    ['arm', 'outcome'],
+    ['arm', 'outcome', 'demand_cohort'],
 )
 for _arm in ('on', 'control'):
     for _outcome in ('transcribed', 'no_transcript', 'too_short'):
-        COST_CANARY_OUTCOME.labels(arm=_arm, outcome=_outcome)
+        for _cohort in DEMAND_COHORTS:
+            initialize_metric(COST_CANARY_OUTCOME, arm=_arm, outcome=_outcome, demand_cohort=_cohort)
 WINDOW_CONTEXT = Histogram(
     'omi_stt_window_context_seconds',
     'Posted TDT context duration',
@@ -129,7 +143,13 @@ CONNECT_BACKOFF = Counter(
     'Per-target connect-refusal backoff decisions at the configured live chain connect seam',
     ['provider', 'event'],
 )
-CHAIN_EXHAUSTED = Counter('omi_stt_chain_exhausted_total', 'Configured live chains that could not serve')
+CHAIN_EXHAUSTED = Counter(
+    'omi_stt_chain_exhausted_total', 'Configured live chains that could not serve', ['demand_cohort']
+)
+for _cohort in DEMAND_COHORTS:
+    initialize_metric(CHAIN_EXHAUSTED, demand_cohort=_cohort)
+    initialize_metric(WINDOW_FIRST_TEXT, demand_cohort=_cohort)
+
 LEG_ATTEMPTS = Counter('omi_stt_leg_attempts_total', 'Configured-chain connection results', ['to_mode', 'outcome'])
 RECONNECT = Counter(
     'omi_stt_reconnect_total', 'Bounded live STT reconnect decisions', ['provider', 'reason', 'outcome']
@@ -253,9 +273,11 @@ if recovery_enabled():
             REPLAY_QUEUE_HIGH_WATER.labels(source=_source, successor=_successor)
             REPLAY_SKIPPED.labels(source=_source, successor=_successor)
             REPLAY_CLOSED.labels(source=_source, successor=_successor)
-            RECOVERY_ATTEMPTS.labels(source=_source, successor=_successor)
+            for _cohort in DEMAND_COHORTS:
+                initialize_metric(RECOVERY_ATTEMPTS, source=_source, successor=_successor, demand_cohort=_cohort)
     for _provider in PROVIDER_FAMILIES:
-        LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider=_provider)
+        for _cohort in DEMAND_COHORTS:
+            initialize_metric(LIVE_SESSION_TERMINAL_AFTER_TEXT, provider=_provider, demand_cohort=_cohort)
         for _event in ('opened', 'probe', 'skipped', 'reset', 'escape'):
             CONNECT_BACKOFF.labels(provider=_provider, event=_event)
 

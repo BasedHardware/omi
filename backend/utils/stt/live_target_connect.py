@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from utils.stt_cap_dispatch import live_provider
+
 import asyncio
 import os
 from urllib.parse import urlencode
@@ -12,6 +14,7 @@ from utils.stt.live_router import connecting_target
 from utils.stt import streaming
 
 
+@live_provider('modulate', 1)
 async def connect_modulate(callback, sample_rate, language):
     target = connecting_target.get()
     if target is None or target.endpoint is None:

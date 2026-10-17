@@ -1084,8 +1084,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   Future<void> _toggleCompleted(ActionItemsProvider provider, ActionItemWithMetadata item) async {
     OmiHaptics.light();
-    await provider.updateActionItemState(item, !item.completed);
-    if (!item.completed) _onActionItemCompleted();
+    final saved = await provider.updateActionItemState(item, !item.completed);
+    if (!saved && mounted) OmiFeedback.error(context, context.l10n.failedToUpdateActionItem);
+    if (saved && !item.completed) _onActionItemCompleted();
   }
 
   /// Long-press menu: the same shape as memories and conversations, with Select for multi-select

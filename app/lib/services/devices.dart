@@ -388,17 +388,21 @@ class DeviceService {
     return null;
   }
 
-  /// Drops the BLE link for [deviceId] (e.g. before a DFU reboot). The
-  /// connection object stays tracked so a later forced [ensureConnection]
-  /// disposes its transport before creating a fresh one.
+  /// A connection leaving [_connections] is always disposed: an orphaned
+  /// transport stays registered for native events and would swallow the next
+  /// device-ready, leaving the UI disconnected over a live link.
   Future<void> disconnectDevice(String deviceId) async {
     final mutex = _connectionMutexes.putIfAbsent(deviceId, Mutex.new);
     await mutex.acquire();
     try {
-      final connection = _connections[deviceId];
+      final connection = _connections.remove(deviceId);
       if (connection == null) return;
       Logger.debug("DeviceService: Disconnecting device $deviceId...");
-      await connection.disconnect();
+      try {
+        await connection.disconnect();
+      } finally {
+        await connection.transport.dispose();
+      }
     } finally {
       mutex.release();
     }

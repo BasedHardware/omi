@@ -41,4 +41,7 @@ class WindowSelection(TypedDict, total=False):
 
 def window_selection_kwargs(host: object, uid: str) -> WindowSelection:
     """Selector kwargs for managed sessions; empty keeps the legacy call shape while dark."""
+    demand = getattr(getattr(host, 'receiver', None), 'live_demand', None)
+    if demand is not None and demand.eligible and not demand.window_permitted:
+        return {}
     return {'window_uid': uid} if managed_chain_enabled(host) else {}

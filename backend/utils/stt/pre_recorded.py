@@ -560,6 +560,7 @@ def modulate_prerecorded_from_bytes(
     diarize: bool = True,
     attempts: int = 0,
     return_language: bool = False,
+    language: Optional[str] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     logger.info(f'modulate_prerecorded_from_bytes bytes_len={len(audio_bytes)} {sample_rate} {diarize} {attempts}')
 
@@ -580,11 +581,11 @@ def modulate_prerecorded_from_bytes(
         utterances = result.get('utterances', [])
         if not utterances:
             if return_language:
-                return [], 'en'
+                return [], language or 'multi'
             return []
 
         words: List[Dict[str, Any]] = []
-        detected_language = 'en'
+        language_votes: List[Tuple[str, int, float]] = []
         for utt in utterances:
             text = utt.get('text', '').strip()
             if not text:
@@ -606,9 +607,20 @@ def modulate_prerecorded_from_bytes(
 
             lang = utt.get('language')
             if lang:
-                detected_language = lang
+                lang = lang.split('-')[0].split('_')[0].lower()
+                language_votes.append((lang, len(text.split()), max(0, duration_ms)))
 
         if return_language:
+            # Tiny acknowledgments are noisy detection evidence. Only use them
+            # when the provider supplied no longer transcribed utterance.
+            has_long_utterance = any(len(utt.get('text', '').split()) >= 3 for utt in utterances)
+            totals: Dict[str, Tuple[int, float]] = {}
+            for lang, word_count, duration in language_votes:
+                if has_long_utterance and word_count < 3:
+                    continue
+                count, seconds = totals.get(lang, (0, 0))
+                totals[lang] = (count + word_count, seconds + duration)
+            detected_language = max(totals, key=lambda lang: totals[lang]) if totals else language or 'multi'
             return words, detected_language
 
         return words
@@ -616,7 +628,9 @@ def modulate_prerecorded_from_bytes(
     except Exception as e:
         logger.error('Modulate prerecorded error exception_type=%s attempt=%s', type(e).__name__, attempts + 1)
         if attempts < 2 and _verification_deadline.get() is None:
-            return modulate_prerecorded_from_bytes(audio_bytes, sample_rate, diarize, attempts + 1, return_language)
+            return modulate_prerecorded_from_bytes(
+                audio_bytes, sample_rate, diarize, attempts + 1, return_language, language
+            )
         raise RuntimeError(f'Modulate transcription failed after {attempts + 1} attempts') from e
 
 
@@ -638,7 +652,7 @@ def modulate_prerecorded(
             resp.raise_for_status()
             audio_bytes = resp.content
         return modulate_prerecorded_from_bytes(
-            audio_bytes, diarize=diarize, attempts=attempts, return_language=return_language
+            audio_bytes, diarize=diarize, attempts=attempts, return_language=return_language, language=language
         )
     except Exception as e:
         logger.error(
@@ -712,7 +726,7 @@ class DeepgramPrerecordedProvider(PrerecordedSTTProvider):
 class ModulatePrerecordedProvider(PrerecordedSTTProvider):
     def _normalize_lang(self, language: Optional[str]) -> str:
         if not language:
-            return 'en'
+            return 'multi'
         return language.split('-')[0].split('_')[0].lower()
 
     def transcribe_url(
@@ -754,6 +768,7 @@ class ModulatePrerecordedProvider(PrerecordedSTTProvider):
             diarize=diarize,
             attempts=attempts,
             return_language=return_language,
+            language=self._normalize_lang(language),
         )
 
 
@@ -810,6 +825,7 @@ def parakeet_prerecorded_from_bytes(
     require_provider_environment(PrerecordedSTTService.PARAKEET)
     api_url = os.environ['HOSTED_PARAKEET_API_URL']
 
+    original_audio_bytes = audio_bytes
     try:
         if encoding:
             audio_bytes = _wrap_pcm_as_wav(audio_bytes, sample_rate, channels)
@@ -891,7 +907,7 @@ def parakeet_prerecorded_from_bytes(
         logger.error('Parakeet prerecorded error exception_type=%s attempt=%s', type(e).__name__, attempts + 1)
         if attempts < 1 and _verification_deadline.get() is None:
             return parakeet_prerecorded_from_bytes(
-                audio_bytes, sample_rate, diarize, attempts + 1, None, channels, language, return_language
+                original_audio_bytes, sample_rate, diarize, attempts + 1, encoding, channels, language, return_language
             )
         raise RuntimeError(f'Parakeet transcription failed after {attempts + 1} attempts') from e
 
@@ -1052,7 +1068,9 @@ class ParakeetPrerecordedProvider(PrerecordedSTTProvider):
         )
 
 
-def get_prerecorded_provider(language: Optional[str] = 'en') -> PrerecordedSTTProvider:
+def get_prerecorded_provider(
+    language: Optional[str] = 'en', *, selected_service: Optional[Tuple[str, Optional[str], str]] = None
+) -> PrerecordedSTTProvider:
     """Construct exactly the language-aware provider selected for telemetry."""
     # Offline harness sessions swap the provider for a deterministic stub
     # (selection/telemetry still resolve normally above them). Imported lazily:
@@ -1061,7 +1079,7 @@ def get_prerecorded_provider(language: Optional[str] = 'en') -> PrerecordedSTTPr
 
     if prerecorded_stub_enabled():
         return PrerecordedStubProvider()
-    service, _provider_language, model = get_prerecorded_service(language)
+    service, _provider_language, model = selected_service or get_prerecorded_service(language)
     if service == PrerecordedSTTService.MODULATE:
         return ModulatePrerecordedProvider()
     if service == PrerecordedSTTService.PARAKEET:
@@ -1083,9 +1101,15 @@ def prerecorded(
     language: Optional[str] = None,
     model: str = "nova-3",
     keywords: Optional[Sequence[str]] = None,
+    *,
+    selected_service: Optional[Tuple[str, Optional[str], str]] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     """Route pre-recorded URL transcription through STT_PRERECORDED_MODEL."""
-    provider = get_prerecorded_provider(language)
+    provider = (
+        get_prerecorded_provider(language, selected_service=selected_service)
+        if selected_service is not None
+        else get_prerecorded_provider(language)
+    )
     return provider.transcribe_url(
         audio_url,
         speakers_count=speakers_count,

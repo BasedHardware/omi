@@ -178,7 +178,9 @@ class OmiClient:
         try:
             for attempt in retrying:
                 with attempt:
-                    response = self._http.request(method, path, params=cleaned_params, json=json_body)
+                    response = self._http.request(
+                        method, path, params=cleaned_params, json=json_body,
+                        headers=self._bearer_headers_for(path))
                     self._maybe_log(method, path, response)
                     if response.status_code >= 500:
                         retry_after = _parse_retry_after(response.headers.get("Retry-After"))
@@ -275,6 +277,21 @@ class OmiClient:
             "User-Agent": USER_AGENT,
             "Accept": "application/json",
         }
+
+    def _bearer_headers_for(self, path: str) -> Optional[dict[str, str]]:
+        """Per-request credential pick for a dual-credential profile.
+
+        A browser-login profile carries BOTH a Firebase ID token and the
+        minted dev key: ``/v1/dev/user/*`` routes authenticate through the
+        backend's ``get_api_key_auth`` which only accepts an ``omi_dev_…``
+        key — a JWT there 401s. ``/v2/*`` (and ``POST /v1/dev/keys``) need
+        the ID token instead. One shared client header can't serve both, so
+        the dev-user family overrides it here. None → the client's default
+        Authorization applies unchanged."""
+        p = self._profile
+        if p.auth_method == "oauth" and p.api_key and                 path.startswith("/v1/dev/user"):
+            return {"Authorization": f"Bearer {p.api_key}"}
+        return None
 
 
 # ---------------------------------------------------------------------------

@@ -687,7 +687,16 @@ def build_platform_board(base, scope: str) -> dict:
     return finish(dash, f"omi-tv-{scope}", f"Omi TV — {label}")
 
 
+def write_if_changed(path: Path, dashboard: dict) -> None:
+    """A no-op rebuild must preserve authored formatting on legacy boards."""
+    if path.exists() and json.loads(path.read_text(encoding="utf-8")) == dashboard:
+        return
+    path.write_text(json.dumps(dashboard, indent=2) + "\n", encoding="utf-8")
+
+
 def main() -> None:
+    from build_wall_dashboard import write_wall_board
+    write_wall_board()
     base = json.loads(BASE_PATH.read_text(encoding="utf-8"))
     if not any(base_title(p) == RELEASES_CHART_TITLE for p in base["panels"]):
         base["panels"].append(releases_chart_panel(991))
@@ -702,9 +711,9 @@ def main() -> None:
     macos = build_platform_board(base, "macos")
     mobile = build_platform_board(base, "mobile")
 
-    BASE_PATH.write_text(json.dumps(base, indent=2) + "\n", encoding="utf-8")
+    write_if_changed(BASE_PATH, base)
     for dash, name in [(macos, "omi-tv-macos.json"), (mobile, "omi-tv-mobile.json")]:
-        (DASH_DIR / name).write_text(json.dumps(dash, indent=2) + "\n", encoding="utf-8")
+        write_if_changed(DASH_DIR / name, dash)
         print(f"wrote {name}: {len(dash['panels'])} panels, "
               f"{len(dash['templating']['list'])} vars")
     print(f"updated omi-tv.json: {len(base['panels'])} panels (NYC tz + _tzdates + platform=all + links)")

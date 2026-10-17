@@ -8355,6 +8355,18 @@ abstract class AppLocalizations {
   /// **'Your plan ended on {date}.\nResubscribe now - you\'ll be charged immediately for a new billing period.'**
   String planEndedOn(String date);
 
+  /// Pending cancellation shown beside the current plan
+  ///
+  /// In en, this message translates to:
+  /// **'Your {plan} plan ends {date}.'**
+  String yourPlanEndsOn(String plan, String date);
+
+  /// Reassurance under a pending cancellation that resubscribing is not charged until the end date
+  ///
+  /// In en, this message translates to:
+  /// **'Resubscribe now to keep your plan. No charge until {date}.'**
+  String resubscribeNowNoChargeUntil(String date);
+
   /// Message when plan is set to cancel
   ///
   /// In en, this message translates to:
@@ -8366,6 +8378,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your annual plan will start automatically when your monthly plan ends.'**
   String get annualPlanStartsAutomatically;
+
+  /// Confirmation after resubscribing a plan that was set to cancel
+  ///
+  /// In en, this message translates to:
+  /// **'Your {plan} plan will renew on {date}.'**
+  String yourPlanWillRenewOn(String plan, String date);
 
   /// Message showing plan renewal date
   ///
@@ -8426,6 +8444,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Continue'**
   String get continueText;
+
+  /// Why another price is refused while cancellation is pending
+  ///
+  /// In en, this message translates to:
+  /// **'Resubscribe first to change plans.'**
+  String get resubscribeFirstToChangePlans;
 
   /// Button to resubscribe
   ///
@@ -9548,12 +9572,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Content'**
   String get content;
-
-  /// Message when there is no content available
-  ///
-  /// In en, this message translates to:
-  /// **'No content to display'**
-  String get noContentToDisplay;
 
   /// Message when no summary is available
   ///
@@ -10742,12 +10760,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Downloading from SD Card'**
   String get downloadingFromSdCard;
-
-  /// Progress label showing current/total items
-  ///
-  /// In en, this message translates to:
-  /// **'Processing {current}/{total}'**
-  String processingProgress(int current, int total);
 
   /// Success message showing number of conversations created
   ///
@@ -16941,12 +16953,6 @@ abstract class AppLocalizations {
   /// **'{percent}% · {speed} KB/s'**
   String syncCardDownloadPercentSpeed(int percent, String speed);
 
-  /// Top status card: secondary progress line under the phase title.
-  ///
-  /// In en, this message translates to:
-  /// **'{current} of {total}'**
-  String syncCardProgressOf(int current, int total);
-
   /// Row subtitle for a recording still on the Omi device (SD-card or flash page) that has not been downloaded to the phone yet.
   ///
   /// In en, this message translates to:
@@ -16958,12 +16964,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Downloading from your device'**
   String get syncStatusDownloadingFromDevice;
-
-  /// Subtle sort-order indicator next to the recordings list header so the user knows the newest items are at the top.
-  ///
-  /// In en, this message translates to:
-  /// **'Newest first'**
-  String get newestFirst;
 
   /// Empty-state message when the Synced filter is active but no recording has finished backing up.
   ///
@@ -18284,12 +18284,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Speech-to-text isn\'t available right now. Check your internet connection and your device\'s speech recognition settings, then try again.'**
   String get speechToTextUnavailableDesc;
-
-  /// Shown on the homepage processing card after ~2 minutes with a Retry action (#5481).
-  ///
-  /// In en, this message translates to:
-  /// **'Still working — this is taking longer than usual.'**
-  String get processingTakingLonger;
 
   /// First-run onboarding instruction: why Omi needs a short voice sample and the approximate duration.
   ///
@@ -21549,12 +21543,6 @@ abstract class AppLocalizations {
   /// **'Deletes local copies {days} days after sync. Cloud copies are kept.'**
   String autoRemoveSyncedCopiesDescription(int days);
 
-  /// Section header above the auto-remove synced copies setting
-  ///
-  /// In en, this message translates to:
-  /// **'Local Copies'**
-  String get localCopiesSection;
-
   /// After tagging a speaker: how many transcript lines received the name
   ///
   /// In en, this message translates to:
@@ -22047,6 +22035,12 @@ abstract class AppLocalizations {
   /// **'Same person as “{name}”?'**
   String reviewQuestionSamePerson(String name);
 
+  /// Heading above the speech around a spelling question in Review.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation context'**
+  String get reviewSpellingContext;
+
   /// Question card: confirm the spelling of a name or term
   ///
   /// In en, this message translates to:
@@ -22227,6 +22221,24 @@ abstract class AppLocalizations {
   /// **'Recent Changes'**
   String get reviewRecentChanges;
 
+  /// Label for the resulting value in an applied Review change
+  ///
+  /// In en, this message translates to:
+  /// **'After'**
+  String get reviewChangeAfter;
+
+  /// Label for the original value in an applied Review change
+  ///
+  /// In en, this message translates to:
+  /// **'Before'**
+  String get reviewChangeBefore;
+
+  /// Reversible retirement or dismissal in an applied change; Undo restores the item
+  ///
+  /// In en, this message translates to:
+  /// **'Removed from the active list'**
+  String get reviewChangeRemoved;
+
   /// Intro line on Recent Changes
   ///
   /// In en, this message translates to:
@@ -22262,6 +22274,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'When Omi tidies your notes, the changes appear here.'**
   String get reviewNoChangesBody;
+
+  /// Recent changes section: spelling fixes to names and terms
+  ///
+  /// In en, this message translates to:
+  /// **'Names and terms'**
+  String get reviewChangesSectionTerms;
+
+  /// Recent changes section: conversation titles and summaries
+  ///
+  /// In en, this message translates to:
+  /// **'Titles and summaries'**
+  String get reviewChangesSectionTitles;
+
+  /// Recent changes section: changes that fit no other section
+  ///
+  /// In en, this message translates to:
+  /// **'Other changes'**
+  String get reviewChangesSectionOther;
+
+  /// How many conversations one change touched
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 conversation} other{{count} conversations}}'**
+  String reviewChangeConversationCount(int count);
+
+  /// How many places in transcripts one change touched
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 place} other{{count} places}}'**
+  String reviewChangePlaceCount(int count);
+
+  /// Button opening every place a change landed
+  ///
+  /// In en, this message translates to:
+  /// **'Show all {count}'**
+  String reviewChangeShowAll(int count);
+
+  /// Button undoing every instance of one change
+  ///
+  /// In en, this message translates to:
+  /// **'Undo all'**
+  String get reviewChangeUndoAll;
+
+  /// Button showing the conversation evidence behind a change
+  ///
+  /// In en, this message translates to:
+  /// **'See evidence'**
+  String get reviewChangeSeeEvidence;
+
+  /// Button opening the conversation a change came from
+  ///
+  /// In en, this message translates to:
+  /// **'View conversation'**
+  String get reviewChangeViewConversation;
+
+  /// Button opening the tasks list from a task change
+  ///
+  /// In en, this message translates to:
+  /// **'View task'**
+  String get reviewChangeViewTask;
+
+  /// Undo all finished with some failures
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t undo {failed} of {total}. Try again.'**
+  String reviewChangesUndoPartial(int failed, int total);
 
   /// Button (Title Case)
   ///
@@ -23253,6 +23331,66 @@ abstract class AppLocalizations {
   /// **'{count, plural, =0{No Items} =1{1 Item} other{{count} Items}}'**
   String itemLinkListTitle(int count);
 
+  /// Backend recommended tier badge; highlights a recommendation without preselecting checkout.
+  ///
+  /// In en, this message translates to:
+  /// **'Recommended'**
+  String get paywallRecommended;
+
+  /// Empty state when the plans list has no tiers.
+  ///
+  /// In en, this message translates to:
+  /// **'Plans aren\'t available right now. Try again in a minute.'**
+  String get paywallNoPlans;
+
+  /// Collapsed section that reveals the rest of the plan ladder.
+  ///
+  /// In en, this message translates to:
+  /// **'See all plans'**
+  String get paywallOtherPlans;
+
+  /// Primary button on the usage banner.
+  ///
+  /// In en, this message translates to:
+  /// **'See plans'**
+  String get paywallComparePlans;
+
+  /// Badge on the tier card for the plan the person already has.
+  ///
+  /// In en, this message translates to:
+  /// **'Your plan'**
+  String get paywallYourPlan;
+
+  /// Secondary button on the usage banner.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get paywallNotNow;
+
+  /// Retry button when the plans sheet fails to load.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get paywallTryAgain;
+
+  /// Button that opens billing management.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage billing'**
+  String get paywallManageBilling;
+
+  /// Plans sheet error copy. The retry button is separate.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load plans. Check your connection and try again.'**
+  String get paywallLoadError;
+
+  /// Title of the new plans sheet. The previous sheet keeps Plans & Billing.
+  ///
+  /// In en, this message translates to:
+  /// **'Plans'**
+  String get paywallPlans;
+
   /// No description provided for @firstCaptureTitle.
   ///
   /// In en, this message translates to:
@@ -23343,6 +23481,72 @@ abstract class AppLocalizations {
   /// **'I didn\'t catch enough speech, try again with a few sentences'**
   String get firstCaptureEmpty;
 
+  /// No description provided for @watchCaptureTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Record from your Apple Watch'**
+  String get watchCaptureTitle;
+
+  /// No description provided for @watchCaptureOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Omi on your Apple Watch.'**
+  String get watchCaptureOpen;
+
+  /// No description provided for @watchCaptureRecord.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap Record. Allow microphone access if asked.'**
+  String get watchCaptureRecord;
+
+  /// No description provided for @watchCaptureSync.
+  ///
+  /// In en, this message translates to:
+  /// **'Your recording syncs to Omi on this phone.'**
+  String get watchCaptureSync;
+
+  /// No description provided for @pairingBluetoothOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on Bluetooth on your phone, then try again.'**
+  String get pairingBluetoothOff;
+
+  /// No description provided for @pairingBluetoothPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Bluetooth access for Omi in Settings, then try again.'**
+  String get pairingBluetoothPermission;
+
+  /// No description provided for @pairingNearbyPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Nearby devices access for Omi in Settings, then try again.'**
+  String get pairingNearbyPermission;
+
+  /// No description provided for @pairingLocationPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow location access for Omi in Settings so this phone can find your device, then try again.'**
+  String get pairingLocationPermission;
+
+  /// No description provided for @pairingNotFoundOrDropped.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t reach your Omi. Make sure it\'s charged, close to your phone, and its light is blinking, then try again.'**
+  String get pairingNotFoundOrDropped;
+
+  /// No description provided for @pairingBondRecovery.
+  ///
+  /// In en, this message translates to:
+  /// **'Forget Omi in your phone’s Bluetooth settings, then try pairing again.'**
+  String get pairingBondRecovery;
+
+  /// No description provided for @pairingHowTo.
+  ///
+  /// In en, this message translates to:
+  /// **'How to pair'**
+  String get pairingHowTo;
+
   /// No description provided for @firstCaptureWatchInstructions.
   ///
   /// In en, this message translates to:
@@ -23408,6 +23612,444 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Tip: Enable Omi in Shortcuts → Siri.'**
   String get firstCaptureSiriTip;
+
+  /// Headline of the Outline paywall variant (mobile paywall A/B test)
+  ///
+  /// In en, this message translates to:
+  /// **'Never miss a word again.'**
+  String get paywallOutlineHeadline;
+
+  /// Caption under the upgrade button on the Outline paywall variant
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel anytime.'**
+  String get paywallCancelAnytime;
+
+  /// Settings row that opens the web developer home, where users get copy-paste setup prompts and keys for AI agents (Claude, ChatGPT, Codex, ...)
+  ///
+  /// In en, this message translates to:
+  /// **'Connect an Agent'**
+  String get connectAnAgent;
+
+  /// Subtitle of the Connect an Agent settings row
+  ///
+  /// In en, this message translates to:
+  /// **'Get a setup prompt for Claude, ChatGPT, Codex, or any agent'**
+  String get connectAnAgentSubtitle;
+
+  /// Offline Sync status card title while a sync runs; amount is a compact audio length like 18m.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing {amount} of audio'**
+  String syncCardSyncingAmount(String amount);
+
+  /// Offline Sync status card title while a sync runs and the amount of audio is not known yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing your recordings'**
+  String get syncCardSyncingTitle;
+
+  /// Offline Sync status card subtitle: audio moved from the Omi device to the phone so far, as compact lengths.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading from your Omi · {done} of {total}'**
+  String syncStepDownloadingAmount(String done, String total);
+
+  /// Offline Sync status card subtitle: audio uploaded from the phone to Omi so far, as compact lengths.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading · {done} of {total}'**
+  String syncStepUploadingAmount(String done, String total);
+
+  /// Offline Sync status card title while the server transcribes uploaded audio; amount is a compact audio length.
+  ///
+  /// In en, this message translates to:
+  /// **'Turning {amount} into conversations'**
+  String syncCardTranscribingAmount(String amount);
+
+  /// Offline Sync status card subtitle while the server transcribes: compact audio lengths done and total.
+  ///
+  /// In en, this message translates to:
+  /// **'{done} of {total} done · you can leave this screen'**
+  String syncCardTranscribedOf(String done, String total);
+
+  /// Offline Sync status card title when recordings wait for a manual sync; amount is a compact audio length.
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} ready to sync'**
+  String syncCardReadyAmount(String amount);
+
+  /// Tiny label under the first of three Offline Sync progress segments: moving audio from the Omi device to the phone.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi → phone'**
+  String get syncStepLabelDownload;
+
+  /// Tiny label under the second of three Offline Sync progress segments: uploading to Omi.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload'**
+  String get syncStepLabelUpload;
+
+  /// Tiny label under the third of three Offline Sync progress segments: server transcription.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribe'**
+  String get syncStepLabelTranscribe;
+
+  /// Title of the Offline Sync diagnostics sheet and the link on the status card that opens it.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync details'**
+  String get syncDetailsTitle;
+
+  /// Section header in Sync details: where unsynced audio is at this moment.
+  ///
+  /// In en, this message translates to:
+  /// **'Right now'**
+  String get syncDetailsRightNow;
+
+  /// Sync details row label for the Omi device; the value is Connected or Disconnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Omi'**
+  String get syncDetailsYourOmi;
+
+  /// Sync details row label for the Bluetooth transfer speed, e.g. 50 KB/s.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer speed'**
+  String get syncDetailsTransferSpeed;
+
+  /// Sync details row label: audio still stored on the Omi device.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting on your Omi'**
+  String get syncDetailsWaitingOnOmi;
+
+  /// Sync details row label: audio on the phone that has not been uploaded yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting on this phone'**
+  String get syncDetailsWaitingOnPhone;
+
+  /// Sync details row label: audio uploaded and still being transcribed by Omi.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing on Omi'**
+  String get syncDetailsTranscribing;
+
+  /// Sync details section header for raw technical counts meant for customer support.
+  ///
+  /// In en, this message translates to:
+  /// **'For support'**
+  String get syncDetailsForSupport;
+
+  /// Sync details row label: number of raw audio files the app holds.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio files'**
+  String get syncDetailsAudioFiles;
+
+  /// Sync details row label: server processing jobs, shown as done / total.
+  ///
+  /// In en, this message translates to:
+  /// **'Server jobs (done / total)'**
+  String get syncDetailsServerJobs;
+
+  /// Sync details button that copies the diagnostics text to the clipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy details for support'**
+  String get syncDetailsCopy;
+
+  /// Chat apps row subtitle when the channel (iMessage) needs the Operator or Architect plan; plan names are not translated
+  ///
+  /// In en, this message translates to:
+  /// **'Available on Operator and Architect'**
+  String get chatAppsChannelPlanRequired;
+
+  /// Chat apps row subtitle when all seats for the channel are taken; app is iMessage or Telegram
+  ///
+  /// In en, this message translates to:
+  /// **'{app} is at capacity'**
+  String chatAppsAtCapacity(String app);
+
+  /// Chat apps chip to join the waitlist for a full channel
+  ///
+  /// In en, this message translates to:
+  /// **'Join Waitlist'**
+  String get chatAppsJoinWaitlist;
+
+  /// Chat apps row subtitle once the person is on the channel waitlist
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re on the waitlist'**
+  String get chatAppsOnWaitlist;
+
+  /// Confirmation after joining a chat app channel waitlist
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re on the waitlist. We\'ll let you know when there\'s room.'**
+  String get chatAppsWaitlistJoined;
+
+  /// Activation: congratulations title with the user's first name
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re all set, {name}'**
+  String onboardingActCongratsTitle(String name);
+
+  /// Activation slide illustration: example summary line
+  ///
+  /// In en, this message translates to:
+  /// **'Lunch with Sam, who\'s moving to Lisbon in June. You want to send the deck to your team by Friday and grab milk on the way home.'**
+  String get onboardingActDemoSummary;
+
+  /// Activation slide illustration: example task
+  ///
+  /// In en, this message translates to:
+  /// **'Send the deck to the team by Friday'**
+  String get onboardingActDemoTask1;
+
+  /// Activation slide illustration: example task
+  ///
+  /// In en, this message translates to:
+  /// **'Grab milk on the way home'**
+  String get onboardingActDemoTask2;
+
+  /// Activation slide illustration: example note title
+  ///
+  /// In en, this message translates to:
+  /// **'Lunch with Sam'**
+  String get onboardingActDemoTitle;
+
+  /// Activation: line under the dictation title
+  ///
+  /// In en, this message translates to:
+  /// **'Say it your way. Omi handles the rest.'**
+  String get onboardingActDictateBody;
+
+  /// Onboarding dictation subtitle when the words come from the connected Omi
+  ///
+  /// In en, this message translates to:
+  /// **'Just talk. Your Omi is listening.'**
+  String get onboardingActDictateBodyOmi;
+
+  /// Activation: faded example in the dictation card (casual tone; keep 'Remind me' so Omi keeps it; Sam and Lisbon are example names)
+  ///
+  /// In en, this message translates to:
+  /// **'Just had lunch with Sam, she\'s moving to Lisbon in June! Remind me to send the deck to my team by Friday, and to grab milk on the way home.'**
+  String get onboardingActDictateExample;
+
+  /// Activation: hint in the dictation bar next to the check button
+  ///
+  /// In en, this message translates to:
+  /// **'Tap the check when you\'re done'**
+  String get onboardingActDictateHint;
+
+  /// Activation: dictation step title
+  ///
+  /// In en, this message translates to:
+  /// **'Tell Omi about your day'**
+  String get onboardingActDictateTitle;
+
+  /// Activation: animated line before the demo slides
+  ///
+  /// In en, this message translates to:
+  /// **'Let\'s try Omi.'**
+  String get onboardingActIntro;
+
+  /// Time label on the first note Omi wrote in onboarding
+  ///
+  /// In en, this message translates to:
+  /// **'Just now'**
+  String get onboardingActJustNow;
+
+  /// Activation: button that shows the microphone system prompt
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Microphone'**
+  String get onboardingActMicAllow;
+
+  /// Activation: why the microphone is needed
+  ///
+  /// In en, this message translates to:
+  /// **'So Omi can hear you when you talk to it.'**
+  String get onboardingActMicBody;
+
+  /// Onboarding microphone ask when the connected Omi is not streaming
+  ///
+  /// In en, this message translates to:
+  /// **'Your Omi isn\'t sending audio yet. Use your phone for now.'**
+  String get onboardingActMicFallbackBody;
+
+  /// Activation: microphone pre-permission title (phone users)
+  ///
+  /// In en, this message translates to:
+  /// **'Omi needs your microphone'**
+  String get onboardingActMicTitle;
+
+  /// Onboarding dictation hint after a while with no words from the Omi
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t hear your Omi. Make sure it\'s on and close by.'**
+  String get onboardingActNoAudioOmi;
+
+  /// Onboarding dictation hint after a while with no words from the phone microphone
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t hear you yet. Try speaking a little louder.'**
+  String get onboardingActNoAudioPhone;
+
+  /// Activation: small label above the generated summary
+  ///
+  /// In en, this message translates to:
+  /// **'Your day, summarized'**
+  String get onboardingActNotesLabel;
+
+  /// Activation: which microphone is listening (phone)
+  ///
+  /// In en, this message translates to:
+  /// **'Phone microphone'**
+  String get onboardingActPhoneMic;
+
+  /// Activation: rating ask on the congratulations screen
+  ///
+  /// In en, this message translates to:
+  /// **'Enjoying Omi so far?'**
+  String get onboardingActRateTitle;
+
+  /// Line above the summary title at the end of the onboarding dictation
+  ///
+  /// In en, this message translates to:
+  /// **'Omi remembers so you don\'t have to'**
+  String get onboardingActRemembers;
+
+  /// Confirmation under the to-dos Omi found in onboarding
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to your tasks'**
+  String get onboardingActSavedToTasks;
+
+  /// Activation: small label above the generated tasks
+  ///
+  /// In en, this message translates to:
+  /// **'Omi caught your to-dos'**
+  String get onboardingActTasksLabel;
+
+  /// Activation: shown while Omi processes the dictation
+  ///
+  /// In en, this message translates to:
+  /// **'Summarizing…'**
+  String get onboardingActWriting;
+
+  /// Activation: fallback label when no summary could be made
+  ///
+  /// In en, this message translates to:
+  /// **'Here\'s what you said'**
+  String get onboardingActYourWords;
+
+  /// Onboarding connect step title; Omi is the brand name of the wearable
+  ///
+  /// In en, this message translates to:
+  /// **'Connect Omi'**
+  String get onboardingConnectOmi;
+
+  /// Connect Omi onboarding step, under the title once an Omi is found nearby
+  ///
+  /// In en, this message translates to:
+  /// **'Tap your Omi to connect.'**
+  String get onboardingConnectTapToConnect;
+
+  /// Onboarding connect step: small prompt for people without their Omi device
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t have your Omi yet?'**
+  String get onboardingNoOmiYet;
+
+  /// Onboarding connect step: choice for people who have not ordered an Omi device
+  ///
+  /// In en, this message translates to:
+  /// **'Not ordered yet'**
+  String get onboardingOmiNotOrdered;
+
+  /// Onboarding connect step: choice for people whose Omi device is on its way
+  ///
+  /// In en, this message translates to:
+  /// **'I\'ve ordered mine'**
+  String get onboardingOmiOrdered;
+
+  /// Onboarding permissions: shown on a denied permission card; tapping opens Settings
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to fix'**
+  String get onboardingPermissionTapToFix;
+
+  /// Home row title while recordings are still turning into conversations
+  ///
+  /// In en, this message translates to:
+  /// **'Conversations on the way'**
+  String get homePendingTitle;
+
+  /// Home row title when a long backlog of recordings is still being processed
+  ///
+  /// In en, this message translates to:
+  /// **'Catching up on earlier audio'**
+  String get homePendingCatchingUp;
+
+  /// Title of the page listing recordings not yet turned into conversations
+  ///
+  /// In en, this message translates to:
+  /// **'On the Way'**
+  String get onTheWayTitle;
+
+  /// Section header: recordings being transcribed or summarized
+  ///
+  /// In en, this message translates to:
+  /// **'Almost ready'**
+  String get onTheWayAlmostReady;
+
+  /// Empty state of the Activity page
+  ///
+  /// In en, this message translates to:
+  /// **'No activity yet'**
+  String get activityEmpty;
+
+  /// Screen reader label for the Activity bell when it has new items
+  ///
+  /// In en, this message translates to:
+  /// **'Activity, new items'**
+  String get activityNewSemantics;
+
+  /// Activity page: one or more sources failed to load
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load all of your activity'**
+  String get activityLoadFailed;
+
+  /// Screen reader suffix for an Activity row added since the last visit
+  ///
+  /// In en, this message translates to:
+  /// **'New'**
+  String get activityNewItem;
+
+  /// Activity section header for work that could not finish and needs the user
+  ///
+  /// In en, this message translates to:
+  /// **'Needs attention'**
+  String get activityNeedsAttention;
+
+  /// Button in Activity's Needs attention section that retries every failed item once
+  ///
+  /// In en, this message translates to:
+  /// **'Retry all'**
+  String get activityRetryAll;
+
+  /// Needs attention row: the server gave up summarizing a conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t summarize this conversation'**
+  String get attentionSummaryFailed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

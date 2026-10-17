@@ -167,6 +167,10 @@ def test_failure_reason_tokens_are_bounded_and_carry_no_message():
         firestore_failure_reason(InvalidArgument('The referenced transaction has expired or is no longer valid.'))
         == 'expired_transaction'
     )
+    assert (
+        firestore_failure_reason(Aborted('409 The referenced transaction has expired or is no longer valid.'))
+        == 'expired_transaction'
+    )
     assert firestore_failure_reason(ValueError('Failed to commit transaction in 5 attempts.')) == 'contention'
     assert firestore_failure_reason(Aborted('Too much contention on these documents.')) == 'contention'
     assert firestore_failure_reason(FirestoreContentionExhausted('exhausted')) == 'contention'
@@ -209,6 +213,9 @@ def test_permanent_rejection_classifier_splits_the_write_classes():
     assert is_permanent_firestore_write_rejection(permission), 'a denied row never accepts the same write'
     assert is_permanent_firestore_write_rejection(precondition), 'a policy refusal never accepts the same write'
     assert not is_permanent_firestore_write_rejection(expired), 'the storage boundary restarts expired ids'
+    assert not is_permanent_firestore_write_rejection(
+        Aborted('409 The referenced transaction has expired or is no longer valid.')
+    ), 'a streaming read reports the same retired id as Aborted 409'
     assert not is_permanent_firestore_write_rejection(other_400)
     assert not is_permanent_firestore_write_rejection(Aborted('Too much contention on these documents.'))
     assert not is_permanent_firestore_write_rejection(RuntimeError('boom'))

@@ -1,0 +1,58 @@
+# Rendering defaults creates no resources. Enabling this release only drains
+# durable admitted work; the lead separately controls backend admission cohorts.
+enabled: false
+image:
+  repository: ""
+  digest: ""
+serviceAccountName: ""
+gcpServiceAccount: ""
+namespace: batch_pipeline_prod
+stage: prod
+dataPlaneProject: ""
+bucket: ""
+secretName: ""
+replicaCount: 1
+# Operator-managed L4 (g2-standard-8) pool; never share the live diarizer pool.
+nodeSelector:
+  cloud.google.com/gke-nodepool: batch-pipeline-pool
+  service: batch-pipeline
+tolerations:
+  - key: omi.ai/batch-pipeline
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+  - key: nvidia.com/gpu
+    operator: Equal
+    value: present
+    effect: NoSchedule
+worker:
+  # HTTPS policy host and exact OIDC audience; admission remains on CPU hosts.
+  apiUrl: ""
+  audience: ""
+  batchSize: 8
+  unitSeconds: 3600
+  paddedSeconds: 272
+resources:
+  # Dev L4 batch-8 one-hour compute receipt: 9.795Gi cgroup lifetime peak.
+  # Round peak + max(1Gi, 20%) / max(2Gi, 40%) up for request / limit.
+  requests:
+    cpu: "4"
+    memory: 12Gi
+    nvidia.com/gpu: "1"
+  limits:
+    cpu: "8"
+    memory: 14Gi
+    nvidia.com/gpu: "1"
+autoscaling:
+  # Enable only after scoped queue-age series and adapter are verified live.
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 6
+  # External metrics from the supplied Prometheus adapter rules must be installed
+  # and freshly sampled. A failed/stale metric prevents unsafe HPA scale-down.
+  targets:
+    fresh: 30
+    recent: 300
+    deep: 3600
+podMonitoring:
+  enabled: true

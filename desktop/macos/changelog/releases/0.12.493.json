@@ -1,0 +1,7 @@
+{
+  "version": "0.12.493",
+  "date": "2026-10-16",
+  "changes": [
+    "A plan set to cancel now shows when it ends, and Resubscribe confirms the renewal"
+  ]
+}

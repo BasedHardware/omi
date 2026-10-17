@@ -221,7 +221,10 @@ class BYOKMiddleware(BaseHTTPMiddleware):
                         set_byok_keys({})
                         set_byok_uid(None)
                         logger.warning('BYOK middleware validation failed; clearing unvalidated keys')
-            return await call_next(request)
+            from utils.product_telemetry import product_telemetry_context
+
+            with product_telemetry_context(headers=request.headers):
+                return await call_next(request)
         finally:
             _byok_ctx.reset(token)
             _byok_uid_ctx.reset(uid_token)

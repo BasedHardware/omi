@@ -132,7 +132,7 @@ void main() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMessageHandler(channel, null);
     }
     mockedChannels.clear();
-    BleBridge.instance.unregisterPeripheral(audioId);
+    BleBridge.instance.clearPeripheralForTesting(audioId);
   });
 
   setUp(() async {
@@ -228,8 +228,9 @@ void main() {
 
     await service.disconnectDevice(audioId);
 
-    expect(service.connectionFor(audioId)?.status, DeviceConnectionState.disconnected);
+    expect(service.connectionFor(audioId), isNull);
     expect(built[audioId]!.disconnectCalled, isTrue);
+    expect(built[audioId]!.transport.disposed, isTrue);
     expect(service.connectionFor(glassId)?.status, DeviceConnectionState.connected);
     expect(built[glassId]!.disconnectCalled, isFalse);
   });
