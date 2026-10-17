@@ -68,6 +68,38 @@ def test_deadline_metadata_survives_appends(enabled):
     assert row['summary_due_at'] == 220
 
 
+def test_intake_discard_never_indexes_debt_and_keep_gets_a_new_deadline(enabled):
+    row = {**minimum(), 'discarded': True}
+    delivery.prepare(row, 'u', now=100)
+    assert row['summary_due_at'] is None
+    assert row['summary_discard_receipted']
+    assert 'summary_first_pending_at' not in row
+    delivery.prepare(row, 'u', now=200)
+    assert row['summary_due_at'] is None
+    row['discarded'] = False
+    delivery.prepare(row, 'u', now=300)
+    assert row['summary_due_at'] == 420 and row['summary_first_pending_at'] == 300
+
+
+def test_existing_due_discard_and_exhausted_empty_output_leave_the_index(enabled):
+    row = {**debt(), 'discarded': True}
+    delivery.prepare(row, 'u', now=1000)
+    assert row['summary_due_at'] is None
+    blocked = {**debt(), 'summary_blocked_reason': 'empty_output_exhausted'}
+    delivery.prepare(blocked, 'u', now=1000)
+    assert blocked['summary_due_at'] is None
+    assert delivery.refusal(blocked) == 'empty_output_exhausted'
+
+
+def test_only_owner_replacement_fences_a_live_result_after_expiry():
+    token = delivery.PROCESS_CONTEXT.set({'owner': 'same', 'claimed': True, 'lease_until': 1})
+    try:
+        assert not delivery.processing_fenced({'summary_processing_owner': 'same', 'summary_processing_lease_until': 1})
+        assert delivery.processing_fenced({'summary_processing_owner': 'replacement'})
+    finally:
+        delivery.PROCESS_CONTEXT.reset(token)
+
+
 def test_actions_events_title_and_empty_sections_do_not_satisfy_summary():
     for structured in (
         {'title': 't'},

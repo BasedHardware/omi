@@ -39,14 +39,7 @@ REPAIR_CONTEXT: ContextVar[Row | None] = ContextVar('summary_repair', default=No
 
 def processing_fenced(existing: Row) -> bool:
     context = PROCESS_CONTEXT.get()
-    return bool(
-        context
-        and context.get('claimed')
-        and (
-            existing.get('summary_processing_owner') != context['owner']
-            or existing.get('summary_processing_lease_until', 0) <= time.time()
-        )
-    )
+    return bool(context and context.get('claimed') and existing.get('summary_processing_owner') != context['owner'])
 
 
 def repair_fenced(existing: Row) -> bool:
@@ -59,6 +52,10 @@ def repair_fenced(existing: Row) -> bool:
 
 class SummaryRepairSuperseded(RuntimeError):
     """A repair lost eligibility or its transcript generation; acknowledge its wake."""
+
+    def __init__(self, message: str, *, retry_revision: int | None = None):
+        super().__init__(message)
+        self.retry_revision = retry_revision
 
 
 class SummaryOutputUnavailable(RuntimeError):
@@ -92,6 +89,16 @@ def prepare(data: Row, uid: str, *, now: float | None = None) -> None:
     structured = data['structured']
     data['summary_output_present'] = present(structured)
     if field(structured, 'title_provenance') == 'server_minimum' and not present(structured):
+        data['summary_title_provenance'] = 'server_minimum'
+        if data.get('discarded'):
+            # Intake discards owe no summary. Keep them out of the indexed debt
+            # prefix, while allowing a later keep to start a fresh obligation.
+            data['summary_due_at'] = None
+            data['summary_discard_receipted'] = True
+            return
+        if data.get('summary_blocked_reason') == 'empty_output_exhausted':
+            data['summary_due_at'] = None
+            return
         if data.get('summary_discard_receipted') and not data.get('discarded'):
             # A later explicit keep/append starts a new obligation after discard.
             data['summary_first_pending_at'] = current
@@ -99,7 +106,6 @@ def prepare(data: Row, uid: str, *, now: float | None = None) -> None:
             data['summary_discard_receipted'] = False
         data.setdefault('summary_first_pending_at', current)
         data.setdefault('summary_due_at', data['summary_first_pending_at'] + deadline_seconds())
-        data['summary_title_provenance'] = 'server_minimum'
         data.setdefault('summary_lane', lane(data))
 
 
@@ -116,6 +122,8 @@ def refusal(row: Row) -> str | None:
         return 'manual'
     if row.get('summary_completed_at') or row.get('summary_output_present'):
         return 'already_enriched'
+    if row.get('summary_blocked_reason') == 'empty_output_exhausted':
+        return 'empty_output_exhausted'
     if row.get('summary_title_provenance') != 'server_minimum':
         return 'unknown_provenance'
     if row.get('finalization_job_id') or row.get('finalization_status') == 'blocked_byok':

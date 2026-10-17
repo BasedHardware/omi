@@ -59,7 +59,11 @@ def redrive(client: Any, uid: str, conversation_id: str, *, now: float) -> bool:
             outbox = client.collection(reprocess.COLLECTION).document(document_id)
             prior = outbox.get(transaction=transaction)
             old: Row | None = prior.to_dict() if prior.exists else None
-            if old and (old.get('lease_until', 0) > now or old.get('summary_seen')):
+            if old and (
+                old.get('lease_until', 0) > now
+                or old.get('summary_seen')
+                or old.get('summary_blocked_reason') == 'empty_output_exhausted'
+            ):
                 return {}, True
             new, _ = operation(old)
             new['first_pending_at'] = min(new['first_pending_at'], row['summary_first_pending_at'])

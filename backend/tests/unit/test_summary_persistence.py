@@ -7,6 +7,13 @@ from google.api_core.exceptions import InvalidArgument
 from database import conversations as db
 from utils.conversations import summary_delivery as delivery
 from tests.unit.test_conversation_persistence_transaction_expiry import _FakeFirestoreClient, EXPIRED_MESSAGE
+from tests.unit.test_process_conversation_free_tier_branch import (
+    pc,  # noqa: F401 - real process_conversation with isolated external dependencies
+    _existing_desktop,
+    _disable_flag,
+    _spy_managed_effects,
+    _drive_reprocess,
+)
 
 
 @pytest.fixture
@@ -83,3 +90,35 @@ def test_manual_edit_after_repair_admission_fences_write(writer, monkeypatch):
         assert all(value is None for value in writer.commits)
     finally:
         delivery.REPAIR_CONTEXT.reset(token)
+
+
+def test_same_owners_lease_expires_during_long_process_conversation_but_summary_commits(writer, pc, monkeypatch):
+    from models.structured import Structured
+
+    _disable_flag(monkeypatch, pc)
+    _spy_managed_effects(monkeypatch, pc)
+    conversation = _existing_desktop('c')
+    conversation.sync_content_revision = 3
+    clock = [100.0]
+    monkeypatch.setattr(delivery, 'time', type('Clock', (), {'time': staticmethod(lambda: clock[0])}))
+    writer.document.update(summary_processing_owner='same-owner', summary_processing_lease_until=220)
+    context = {'owner': 'same-owner', 'claimed': True, 'lease_until': 220}
+
+    def slow_notes(*_args, **_kwargs):
+        clock[0] = 221  # Simulated model latency exceeds the original lease.
+        assert writer.document['summary_processing_lease_until'] < clock[0]
+        return Structured(title='Synthetic title', overview='Synthetic long-request summary'), False
+
+    monkeypatch.setattr(pc, '_get_structured', slow_notes)
+    monkeypatch.setattr(
+        pc.lifecycle_service, 'persist_processed_conversation', db.persist_processing_result_with_lifecycle
+    )
+    token = delivery.PROCESS_CONTEXT.set(context)
+    try:
+        result = _drive_reprocess(pc, conversation, uid='u')
+    finally:
+        delivery.PROCESS_CONTEXT.reset(token)
+    assert result.structured.overview == 'Synthetic long-request summary'
+    assert len(writer.commits) == 1
+    assert writer.commits[0]['structured']['overview'] == result.structured.overview
+    assert writer.commits[0]['summary_completed_at'] == 221

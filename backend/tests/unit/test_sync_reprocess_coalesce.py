@@ -28,6 +28,19 @@ def state(monkeypatch):
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
     monkeypatch.setattr(reprocess, '_mutate', mutate)
     monkeypatch.setattr(reprocess, '_enqueue', lambda row: tasks.append(deepcopy(row)))
+
+    def empty_failure(_client, _collection, document_id, owner, token):
+        row = rows[document_id]
+        assert row['owner'] == owner and row['task_token'] == token
+        row['summary_empty_failures'] = min(3, row.get('summary_empty_failures', 0) + 1)
+        if row['summary_empty_failures'] == 3:
+            row.update(dormant=True, due_at=None, lease_until=0, summary_blocked_reason='empty_output_exhausted')
+            return True
+        return False
+
+    # Actual multi-document failure persistence is exercised by the emulator.
+    monkeypatch.setattr(reprocess, 'record_empty_failure', empty_failure)
+    monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: None)
     monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs')
     monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://fresh.invalid/v2/sync-jobs/run')
     monkeypatch.delenv('SYNC_TASKS_OIDC_AUDIENCE', raising=False)
@@ -706,6 +719,111 @@ def test_first_summary_retry_preserves_queued_token(state, monkeypatch):
     assert rows[key]['wake_generation'] == 3
     output = SimpleNamespace(discarded=False, structured={'overview': 'Real summary'})
     assert reprocess.run(key, earliest, lambda *_: output, now=480) == 'processed'
+
+
+def test_live_request_heartbeats_same_owner_token_without_a_replacement_wake(state, monkeypatch):
+    import threading
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setattr(reprocess, 'FIRST_SUMMARY_HEARTBEAT_SECONDS', 0.01)
+    clock = [120]
+    monkeypatch.setattr(reprocess, 'time', SimpleNamespace(time=lambda: clock[0]))
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    key, token = reprocess.key('u', 'c'), tasks[0]['task_token']
+    renewed = threading.Event()
+    mutate = reprocess._mutate
+
+    def observe(document_id, operation):
+        result = mutate(document_id, operation)
+        if rows.get(key, {}).get('lease_until', 0) > 300:
+            renewed.set()
+        return result
+
+    monkeypatch.setattr(reprocess, '_mutate', observe)
+    query = Mock()
+    query.where.return_value = query
+    query.order_by.return_value = query
+    query.limit.return_value = query
+    query.stream.return_value = [SimpleNamespace(id=key)]
+    monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: SimpleNamespace(collection=lambda _: query))
+
+    def slow_process(*_):
+        owner = rows[key]['owner']
+        assert rows[key]['lease_until'] == 240
+        clock[0] = 300  # The original 120s lease expires during model work.
+        assert renewed.wait(1)
+        assert rows[key]['owner'] == owner and rows[key]['task_token'] == token
+        assert reprocess.sweep(now=300) == {'repaired': 0, 'error': 0}
+        assert len(tasks) == 1
+        duplicate = Mock()
+        assert reprocess.run(key, token, duplicate, now=300) == 'busy'
+        duplicate.assert_not_called()
+        return SimpleNamespace(discarded=False, structured={'overview': 'Real summary'})
+
+    assert reprocess.run(key, token, slow_process, now=120) == 'processed'
+    assert rows[key]['dormant'] and rows[key]['summary_seen']
+    assert not any(t.name == 'first-summary-heartbeat' and t.is_alive() for t in threading.enumerate())
+
+
+def test_empty_kept_output_has_a_terminal_budget_and_cannot_be_remarked(state, monkeypatch):
+    from utils.conversations.summary_delivery import SummaryOutputUnavailable
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    key, token = reprocess.key('u', 'c'), tasks[0]['task_token']
+    empty = lambda *_: SimpleNamespace(discarded=False, structured={})
+    for now in (120, 240):
+        with pytest.raises(SummaryOutputUnavailable):
+            reprocess.run(key, token, empty, now=now)
+    assert reprocess.run(key, token, empty, now=360) == 'blocked'
+    assert rows[key]['summary_empty_failures'] == 3 and rows[key]['due_at'] is None
+    reprocess.mark('u', 'c', 'en', now=1000)
+    assert len(tasks) == 1 and rows[key]['due_at'] is None
+    process = Mock()
+    assert reprocess.run(key, token, process, now=1000) == 'stale'
+    process.assert_not_called()
+
+
+def test_revision_changed_before_repair_claim_keeps_same_version_debt(state, monkeypatch):
+    from utils.conversations.summary_delivery import SummaryRepairSuperseded
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    key = reprocess.key('u', 'c')
+    version = rows[key]['version']
+
+    def append_before_claim(*_):
+        raise SummaryRepairSuperseded('new revision without outbox mark', retry_revision=4)
+
+    assert reprocess.run(key, tasks[0]['task_token'], append_before_claim, now=120) == 'superseded'
+    assert rows[key]['version'] == version
+    assert rows[key]['summary_repair'] and rows[key]['summary_expected_revision'] == 4
+    assert rows[key]['lease_until'] == 0 and rows[key]['due_at'] == 120
+    output = SimpleNamespace(discarded=False, structured={'overview': 'New revision summary'})
+    assert reprocess.run(key, tasks[-1]['task_token'], lambda *_: output, now=120) == 'processed'
+
+
+@pytest.mark.parametrize('manual', [False, True])
+def test_repair_preclaim_retries_only_an_eligible_new_revision(pipeline, monkeypatch, manual):
+    from utils.conversations import summary_delivery as delivery
+
+    row = {'status': 'completed', 'summary_title_provenance': 'server_minimum', 'sync_content_revision': 4}
+    if manual:
+        row['user_title'] = 'Synthetic manual title'
+    monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', lambda *_: row)
+    process = Mock()
+    monkeypatch.setattr(pipeline, 'process_conversation', process)
+    token = delivery.REPAIR_CONTEXT.set({'summary_expected_revision': 3})
+    try:
+        with pytest.raises(delivery.SummaryRepairSuperseded) as error:
+            pipeline._reprocess_conversation_after_update('u', 'c', 'en')
+        assert error.value.retry_revision == (None if manual else 4)
+        process.assert_not_called()
+    finally:
+        delivery.REPAIR_CONTEXT.reset(token)
 
 
 def test_superseded_repair_retires_only_its_own_generation(state, monkeypatch):

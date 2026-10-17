@@ -14,23 +14,32 @@ budget, not a promise that an unavailable provider finishes in 120 seconds.
 Ordinary demand priority cannot defer this first wake. Later revisions retain
 the existing quiet window and 1,800-second lease.
 
-The first-summary lease is 120 seconds. Before model work, the worker conditionally
-stamps its owner and expiry using the conversation revision it already loaded.
-The lifecycle transaction refuses a replaced/expired owner before writing any
-result or emitting a summary receipt. This adds one write and **zero reads** to
-the first-summary path. A short lease therefore cannot let an old worker replace
-a newer summary. The existing processor persistence observer fences downstream
-side effects. The existing sweep adds a distinct retry wake after 120 seconds while
-preserving the valid token of earlier queued deliveries; it never steals an
-active lease or repeatedly sends waiting work to the queue tail.
+The first-summary lease is 120 seconds. While the request is alive, a scoped
+heartbeat renews that same outbox owner and task token every 30 seconds; it adds
+one CAS read/write per heartbeat. The heartbeat stops on request exit or owner/token
+replacement. A dead request becomes replaceable after its last renewal expires.
+Before model work, the worker conditionally stamps its conversation owner using
+the revision it already loaded (one claim write, **zero claim reads**). The lifecycle
+transaction refuses a different owner; expiration alone never rejects the still-matching
+owner's completed result. The processor persistence observer fences downstream
+side effects. The sweep adds a distinct retry wake only after the active lease expires,
+preserving the valid token of earlier queued deliveries.
 
 A nonempty overview or section `body_markdown` constitutes a summary. A title,
 actions, events, or empty headings do not. Empty kept model output raises before
-persistence and retains debt; previously good output survives. With the gate on,
+persistence and retains debt; previously good output survives. Three empty kept
+failures exhaust the durable budget: one transaction marks the outbox dormant and
+sets `summary_blocked_reason=empty_output_exhausted`, `summary_due_at=null` on the
+still-owned conversation. No structured content is cleared. Ordinary appends do
+not reset this block; resumption requires an explicit reviewed retry. The failure
+path adds one outbox read per failed attempt and one conversation read on terminal
+failure, plus their metadata writes. With the gate on,
 notes dedupe treats an empty checkpoint as a cache miss so retries can actually
 generate a summary instead of replaying the same empty cached output. Discard is an
 explicit separate outcome: its receipt never marks first-summary delivery, and
-a later kept revision gets a first-summary deadline. Once a real summary lands,
+a later kept revision gets a first-summary deadline. Intake discards are never
+indexed as summary debt; an existing due value is cleared when intake discards it.
+Once a real summary lands,
 a dirty later revision starts its own coalescing window. Local-only, deferred, locked, E2EE, manual title/overview,
 client projection, terminal-no-derived and existing finalization generations are
 not background repair admissions. BYOK-enrolled accounts remain blocked, with
@@ -95,10 +104,13 @@ emission can lose a Prometheus observation; the durable metadata remains truth.
 
 ## Enable and rollback (lead owned; no production mutation in this PR)
 
-1. Merge and ship the normal backend train dark to all producers/workers. Deploy
-   the new collection-group single-field index on `conversations.summary_due_at`
-   from `firestore.indexes.json`; wait for READY before repair enablement.
-2. Set `FIRST_SUMMARY_DEADLINE_ENABLED=true`,
+1. Merge the manifest and run/approve `.github/workflows/gcp_firestore_indexes.yml`
+   for its exact commit. Wait for the declared collection-group ascending index on
+   `conversations.summary_due_at` to be **READY** in the target project. Keep repair
+   off. The backend train's firestore-readiness gate requires the manifest to be
+   present and READY; shipping the image first is not a valid order.
+2. Ship the normal backend train dark to all producers/workers after index readiness.
+   Then set `FIRST_SUMMARY_DEADLINE_ENABLED=true`,
    `FIRST_SUMMARY_UID_ALLOWLIST=<canary uid>`,
    `FIRST_SUMMARY_DEADLINE_SECONDS=120` on backend-sync, backend-sync-backfill,
    backend-integration and batch projection/enrichment hosts. Keep

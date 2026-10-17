@@ -208,3 +208,78 @@ def test_repair_preserves_stored_conversation_language(debt_store):
     ref.update({'language': 'vi'})
     assert repair.redrive(client, uid, 'c', now=220)
     assert tasks[-1]['language'] == 'vi'
+
+
+def test_empty_output_budget_atomically_removes_terminal_debt_and_preserves_content(debt_store, monkeypatch):
+    import time
+    from database.summary_processing import claim_from_snapshot
+
+    client, uid, tasks, ref, row = debt_store
+    ref.update({'structured': {'title': 'Synthetic minimum', 'overview': ''}})
+    reprocess.mark(uid, 'c', 'en', now=time.time() - 120)
+    key, token = reprocess.key(uid, 'c'), tasks[-1]['task_token']
+    outbox = client.collection(reprocess.COLLECTION).document(key)
+
+    def empty_process(*_):
+        snapshot = ref.get()
+        assert claim_from_snapshot(client, uid, 'c', {**snapshot.to_dict(), 'updated_at': snapshot.update_time})
+        raise delivery.SummaryOutputUnavailable('Synthetic empty kept output')
+
+    for attempt in range(3):
+        now = time.time() + attempt * 121
+        if attempt < 2:
+            with pytest.raises(delivery.SummaryOutputUnavailable):
+                reprocess.run(key, token, empty_process, now=now)
+        else:
+            assert reprocess.run(key, token, empty_process, now=now) == 'blocked'
+    blocked = ref.get().to_dict()
+    assert blocked['summary_blocked_reason'] == 'empty_output_exhausted'
+    assert blocked['summary_due_at'] is None and blocked['summary_empty_failures'] == 3
+    assert blocked['structured'] == {'title': 'Synthetic minimum', 'overview': ''}
+    assert outbox.get().to_dict()['due_at'] is None
+    assert not repair.redrive(client, uid, 'c', now=time.time() + 1000)
+    assert not [s for s in repair.due_conversations(now=time.time() + 1000, firestore_client=client) if s.id == 'c']
+
+
+def test_empty_failure_never_clears_a_previously_committed_good_overview(debt_store):
+    from database.summary_processing import record_empty_failure
+
+    client, uid, tasks, ref, row = debt_store
+    reprocess.mark(uid, 'c', 'en', now=100)
+    key = reprocess.key(uid, 'c')
+    outbox = client.collection(reprocess.COLLECTION).document(key)
+    token = outbox.get().to_dict()['task_token']
+    outbox.update({'owner': 'worker', 'summary_empty_failures': 2})
+    ref.update(
+        {
+            'summary_processing_owner': 'worker',
+            'structured': {'title': 'Synthetic title', 'overview': 'Previously committed good overview'},
+            'summary_output_present': True,
+            'summary_completed_at': 150,
+            'summary_due_at': None,
+        }
+    )
+    before = ref.get().to_dict()
+    assert record_empty_failure(client, reprocess.COLLECTION, key, 'worker', token)
+    assert ref.get().to_dict() == before
+
+
+def test_empty_failure_from_replaced_owner_or_token_does_not_record_or_block(debt_store):
+    from database.summary_processing import record_empty_failure
+
+    client, uid, tasks, ref, row = debt_store
+    reprocess.mark(uid, 'c', 'en', now=100)
+    key = reprocess.key(uid, 'c')
+    outbox = client.collection(reprocess.COLLECTION).document(key)
+    token = outbox.get().to_dict()['task_token']
+    outbox.update({'owner': 'replacement'})
+    before = outbox.get().to_dict()
+    assert not record_empty_failure(client, reprocess.COLLECTION, key, 'old-worker', token)
+    assert not record_empty_failure(client, reprocess.COLLECTION, key, 'replacement', 'old-token')
+    assert outbox.get().to_dict() == before and ref.get().to_dict() == row
+    outbox.update({'summary_empty_failures': 2})
+    before = outbox.get().to_dict()
+    ref.update({'summary_processing_owner': 'new-conversation-owner'})
+    assert not record_empty_failure(client, reprocess.COLLECTION, key, 'replacement', token)
+    assert outbox.get().to_dict() == before
+    assert ref.get().to_dict()['summary_due_at'] == row['summary_due_at']

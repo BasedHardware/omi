@@ -12,8 +12,11 @@ import math
 import logging
 import os
 import random
+import threading
 import time
 import uuid
+from contextlib import contextmanager, nullcontext
+from collections.abc import Iterator
 from typing import Any, Callable, TypeVar, TypeAlias, TypeGuard
 from urllib.parse import urlsplit
 
@@ -26,6 +29,7 @@ from config.summary_guarantee import enabled as summary_enabled, deadline_second
 from config.sync_reprocess import settle_seconds
 from config.repeat_work import revision_reuse
 from database._client import get_firestore_client
+from database.summary_processing import record_empty_failure, EMPTY_BLOCKED_REASON
 
 Row: TypeAlias = dict[str, Any]
 ResultT = TypeVar('ResultT')
@@ -35,6 +39,7 @@ logger = logging.getLogger(__name__)
 COLLECTION = 'sync_reprocess_outbox'
 LEASE_SECONDS = 1800  # Greater than the Cloud Tasks dispatch deadline.
 FIRST_SUMMARY_LEASE_SECONDS = 120
+FIRST_SUMMARY_HEARTBEAT_SECONDS = 30
 REPAIR_SECONDS = 1800
 COALESCED = Counter('sync_reprocess_coalesced_total', 'Sync updates folded into an existing enrichment obligation')
 UNBOUND = Counter('sync_reprocess_unbound_total', 'Sync obligations awaiting a complete worker binding', ['action'])
@@ -214,6 +219,8 @@ def mark(
     current = time.time() if now is None else now
 
     def update(old: Row | None) -> tuple[Row, tuple[Row, bool]]:
+        if old and old.get('summary_blocked_reason') == EMPTY_BLOCKED_REASON:
+            return old, ({**old, '_wake': False}, True)
         row = dict(old or {})
         row.update(
             document_id=key(uid, conversation_id + ('\0effects' if effects_only else '')),
@@ -272,6 +279,47 @@ def mark(
         UNBOUND.labels(action='mark').inc()
 
 
+@contextmanager
+def _heartbeat(document_id: str, task_token: str, owner: str, context: Row) -> Iterator[None]:
+    """Renew only this request's owner/token, stopping when the request exits.
+
+    This scoped daemon does only a bounded CAS heartbeat, never model work.
+    A lost owner cannot resurrect its lease; an in-flight RPC on shutdown also
+    checks the stop event inside its CAS before writing.
+    """
+    stopped = threading.Event()
+
+    def renew() -> None:
+        while not stopped.wait(FIRST_SUMMARY_HEARTBEAT_SECONDS):
+
+            def update(old: Row | None) -> tuple[Row | None, bool]:
+                if (
+                    stopped.is_set()
+                    or old is None
+                    or old.get('dormant')
+                    or old.get('owner') != owner
+                    or old.get('task_token') != task_token
+                ):
+                    return old, False
+                expiry = time.time() + FIRST_SUMMARY_LEASE_SECONDS
+                context['lease_until'] = expiry
+                return {**old, 'lease_until': expiry}, True
+
+            try:
+                if not _mutate(document_id, update):
+                    return
+            except Exception as error:
+                logger.warning('event=summary_heartbeat outcome=error exception_type=%s', type(error).__name__)
+
+    worker = threading.Thread(target=renew, name='first-summary-heartbeat', daemon=True)
+    worker.start()
+    try:
+        yield
+    finally:
+        stopped.set()
+        worker.join(timeout=2)
+
+
 def run(document_id: str, task_token: str, process: Callable[[str, str, str], Any], *, now: float | None = None) -> str:
     current = time.time() if now is None else now
     from utils.conversations.demand_processing import admit
@@ -307,6 +355,8 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
     # Exceptions leave a leased, dirty row. Retry/sweep recovers after expiry.
     summary_seen = False
     superseded = False
+    retry_revision = None
+    empty_blocked = False
     if row.get('effects_only'):
         from utils.conversations.lazy_enrichment import enrich_settled
 
@@ -328,32 +378,52 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         accept_token = summary_delivery.ACCEPT_CONTEXT.set(row.get('first_pending_at'))
         context_token = summary_delivery.REPAIR_CONTEXT.set(row if row.get('summary_repair') else None)
         try:
-            output = process(row['uid'], row['conversation_id'], row['language'])
-        except summary_delivery.SummaryRepairSuperseded:
+            with _heartbeat(document_id, task_token, owner, process_context) if process_context else nullcontext():
+                output = process(row['uid'], row['conversation_id'], row['language'])
+                if summary_enabled(row['uid']):
+                    summary_seen = output is not None and summary_delivery.present(
+                        summary_delivery.field(output, 'structured')
+                    )
+                    discarded = output is not None and summary_delivery.field(output, 'discarded', False)
+                    blocked = bool(process_context and process_context.get('blocked_reason'))
+                    if output is not None and not summary_seen and not discarded and not blocked:
+                        raise summary_delivery.SummaryOutputUnavailable('first-summary output is empty')
+        except summary_delivery.SummaryRepairSuperseded as error:
             output = None
             superseded = True
+            retry_revision = error.retry_revision
+        except summary_delivery.SummaryOutputUnavailable:
+            if not process_context or not record_empty_failure(
+                get_firestore_client(), COLLECTION, document_id, owner, task_token
+            ):
+                raise
+            empty_blocked = True
         finally:
             summary_delivery.REPAIR_CONTEXT.reset(context_token)
             summary_delivery.LANE_CONTEXT.reset(lane_token)
             summary_delivery.ACCEPT_CONTEXT.reset(accept_token)
             summary_delivery.PROCESS_CONTEXT.reset(process_token)
 
-        if summary_enabled(row['uid']):
-            summary_seen = output is not None and summary_delivery.present(summary_delivery.field(output, 'structured'))
-            discarded = output is not None and summary_delivery.field(output, 'discarded', False)
-            blocked = bool(process_context and process_context.get('blocked_reason'))
-            if (
-                summary_enabled(row['uid'])
-                and output is not None
-                and not summary_seen
-                and not discarded
-                and not blocked
-            ):
-                raise summary_delivery.SummaryOutputUnavailable('first-summary output is empty')
+    if empty_blocked:
+        return 'blocked'
 
     def finish(old: Row | None) -> tuple[Row | None, Row | None]:
         if old is None or old.get('owner') != owner:
             return old, None
+
+        if superseded and retry_revision is not None:
+            # An append may precede the repair claim without another outbox
+            # mark/version bump. Keep that obligation and refresh its fence.
+            pending = dict(old)
+            pending.update(
+                summary_repair=True,
+                summary_expected_revision=retry_revision,
+                lease_until=0,
+                task_token=uuid.uuid4().hex,
+                task_due_at=min(current, pending['due_at']),
+                due_at=min(current, pending['due_at']),
+            )
+            return pending, pending
 
         if old['version'] == row['version']:
             if summary_enabled(row['uid']) and summary_seen:

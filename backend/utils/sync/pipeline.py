@@ -40,7 +40,13 @@ from pydub import AudioSegment
 
 from database import conversations as conversations_db
 from database.summary_processing import claim_from_snapshot
-from utils.conversations.summary_delivery import repair_fenced, REPAIR_CONTEXT, PROCESS_CONTEXT, SummaryRepairSuperseded
+from utils.conversations.summary_delivery import (
+    repair_fenced,
+    refusal as summary_repair_refusal,
+    REPAIR_CONTEXT,
+    PROCESS_CONTEXT,
+    SummaryRepairSuperseded,
+)
 from database import users as users_db
 from database.auth import get_user_name
 from database.conversations import get_closest_conversation_to_timestamps
@@ -1055,7 +1061,14 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         return
 
     if repair_fenced(conversation_data):
-        raise SummaryRepairSuperseded('summary repair ownership changed')
+        raise SummaryRepairSuperseded(
+            'summary repair ownership changed',
+            retry_revision=(
+                conversation_data.get('sync_content_revision')
+                if summary_repair_refusal(conversation_data) is None
+                else None
+            ),
+        )
     if conversation_data.get('sync_live_target') and conversation_data.get('status') == 'in_progress':
         # Live finalization owns the open row. SYNC_UPDATE would mark it
         # completed while the socket is still adding speech, after which the
