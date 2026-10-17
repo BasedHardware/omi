@@ -1359,3 +1359,88 @@ def test_note_budget_deferral_is_inert_for_released_or_mismatched_owner(db):
     assert registry.begin_job('a', second['job_id'], second['epoch'], firestore_client=db, now=NOW)
     registry.note_budget_deferral('a', second['job_id'], second['epoch'] + 5, 4, firestore_client=db, now=NOW)
     assert 'active_budget_deferrals' not in registry.get_owner('a', firestore_client=db)
+
+
+def test_sweep_stops_redriving_at_the_budget_deferral_cap(db, monkeypatch):
+    """A sequenced job whose persisted budget-deferral count has reached the
+    handler's own exhaustion threshold must not be redriven again: the redrive
+    would copy the maxed count into a fresh epoch payload, run another
+    full-budget attempt, 409, and redrive forever — and backfill allows one
+    in-flight job per UID, so the loop also blocks every later capture. The
+    sweep releases the owner (deadline-fenced) and kicks the next pending
+    capture instead."""
+
+    monkeypatch.setenv('SYNC_TASKS_MAX_ATTEMPTS', '5')
+    _register('a', 'job', 0, db=db)
+    _register('a', 'next', 60, db=db)
+    first = registry.claim_next('a', firestore_client=db, now=NOW)
+    assert first['job_id'] == 'job'
+    assert registry.begin_job('a', 'job', first['epoch'], firestore_client=db, now=NOW)
+    # The handler deferred max-1 times; its next whole-budget run ends through
+    # the 409/queue with no further replacement scheduled.
+    registry.note_budget_deferral('a', 'job', first['epoch'], 4, firestore_client=db, now=NOW)
+
+    dispatched = []
+    monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
+    monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
+    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: {'status': 'processing'})
+    monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
+    monkeypatch.setattr(backfill_cutover, 'direct_remaining_for_uid', lambda _uid: (0, ''))
+    redrives = []
+    real_redrive = registry.redrive_job
+
+    def _counting_redrive(uid, job_id, epoch, **kwargs):
+        redrives.append((job_id, epoch))
+        return real_redrive(uid, job_id, epoch, **kwargs)
+
+    monkeypatch.setattr(registry, 'redrive_job', _counting_redrive)
+
+    expired = NOW + timedelta(minutes=35)
+    owner = registry.get_owner('a', firestore_client=db)
+    assert uid_sequencer.reconcile_uid('a', owner, now=expired) == 'budget_chain_exhausted'
+
+    # No fresh full-budget attempt was dispatched for the exhausted job; the
+    # next waiting capture was promoted instead, unblocking the per-UID lane.
+    assert redrives == []
+    assert [claim['job_id'] for claim in dispatched] == ['next']
+    released = registry.get_owner('a', firestore_client=db)
+    # The exhausted job's owner record is gone and the next capture has
+    # already claimed the lane: the per-UID slot is no longer held hostage.
+    assert released.get('active_job_id') == 'next'
+
+    # Below the cap the sweep keeps redriving with the persisted count
+    # re-attached (existing contract, thread guard).
+    assert registry.begin_job('a', 'next', dispatched[0]['epoch'], firestore_client=db, now=expired)
+    registry.note_budget_deferral('a', 'next', dispatched[0]['epoch'], 2, firestore_client=db, now=expired)
+    later = expired + timedelta(minutes=35)
+    outcome = uid_sequencer.reconcile_uid('a', registry.get_owner('a', firestore_client=db), now=later)
+    assert outcome == 'lease_expired'
+    assert redrives == [('next', dispatched[0]['epoch'])]
+    owner_after = registry.get_owner('a', firestore_client=db)
+    assert owner_after['active_payload'].get(registry.BUDGET_DEFERRALS_PAYLOAD_KEY) is None
+
+
+def test_finish_expired_job_refuses_a_live_lease(db):
+    """The budget-cap release is fenced exactly like redrive_job: a delivery
+    that began and renewed between the sweeper's read and the release write
+    must never be released out from under its running worker."""
+
+    _register('a', 'job', 0, db=db)
+    first = registry.claim_next('a', firestore_client=db, now=NOW)
+    assert registry.begin_job('a', 'job', first['epoch'], firestore_client=db, now=NOW)
+
+    # Lease still live: release refused.
+    assert (
+        registry.finish_expired_job('a', 'job', first['epoch'], 'budget_chain_exhausted', firestore_client=db, now=NOW)
+        is False
+    )
+    assert registry.get_owner('a', firestore_client=db).get('active_job_id') == 'job'
+
+    # Lease expired: release succeeds and the owner is gone.
+    assert (
+        registry.finish_expired_job(
+            'a', 'job', first['epoch'], 'budget_chain_exhausted', firestore_client=db, now=NOW + timedelta(minutes=35)
+        )
+        is True
+    )
+    assert registry.get_owner('a', firestore_client=db).get('active_job_id') is None

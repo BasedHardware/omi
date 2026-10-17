@@ -24,7 +24,7 @@ from database.sync_jobs import (
     try_acquire_job_run_lock,
     release_job_run_lock,
 )
-from utils.cloud_tasks import enqueue_sync_job
+from utils.cloud_tasks import enqueue_sync_job, get_sync_tasks_max_attempts
 from utils.sync import backfill_cutover, stage as sync_stage
 from utils.sync.backfill_order import newest_first
 
@@ -280,6 +280,31 @@ def reconcile_uid(
         outcome = 'expired_job_cleanup'
     else:
         outcome = 'lease_expired'
+    deferrals = owner.get('active_budget_deferrals')
+    if (
+        outcome == 'lease_expired'
+        and isinstance(deferrals, int)
+        and not isinstance(deferrals, bool)
+        and deferrals + 1 >= get_sync_tasks_max_attempts()
+    ):
+        # The handler's own bound already refused the next replacement at this
+        # count (its final whole-budget run ends through the 409/queue), so a
+        # redrive would copy the maxed count into a fresh epoch payload and run
+        # another full budget, then redrive again — forever. Backfill allows
+        # one in-flight job per UID, so that loop would also block every later
+        # capture for this user. Release the owner and dispatch the next
+        # waiting capture instead; the deferred job's own marker/lock expiry
+        # leaves it to the same recovery as any other abandoned attempt.
+        logger.error(
+            'event=sync_uid_sequencer action=sweep outcome=budget_chain_exhausted job_id=%s uid_hash=%s deferrals=%d',
+            job_id,
+            backfill_cutover.uid_hash(uid),
+            deferrals,
+        )
+        if registry.finish_expired_job(uid, job_id, epoch, 'budget_chain_exhausted', now=current):
+            kick(uid, retire_limit=retire_limit, progress=progress)
+            return 'budget_chain_exhausted'
+        return 'raced'
     replacement = registry.redrive_job(uid, job_id, epoch, now=current)
     if replacement is None:
         return 'raced'

@@ -624,6 +624,49 @@ def note_budget_deferral(
         pass
 
 
+def finish_expired_job(
+    uid: str,
+    job_id: str,
+    epoch: int,
+    outcome: str,
+    *,
+    firestore_client: Any = None,
+    now: Optional[datetime] = None,
+) -> bool:
+    """Release an owner whose lease expired, fenced exactly like redrive_job.
+
+    The deadline is re-checked inside the transaction: a delivery that began
+    and renewed between the sweeper's read and this write must never be
+    released out from under its running worker.
+    """
+    _require_production()
+    client = firestore_client or get_firestore_client()
+    root = _root(client, uid)
+    current = now or _now()
+
+    @firestore.transactional
+    def commit(transaction: Any) -> bool:
+        owner = _data(root.get(transaction=transaction))
+        if owner.get('active_job_id') != job_id or owner.get('active_epoch') != epoch:
+            return False
+        dispatching = owner.get('active_state') == 'dispatching'
+        deadline = owner.get('dispatch_retry_at' if dispatching else 'lease_expires_at')
+        if not isinstance(deadline, datetime) or deadline > current:
+            return False
+        has_pending = _has_pending(client, uid, transaction=transaction)
+        _release_owner(transaction, root, owner, current, has_pending=has_pending)
+        return True
+
+    released = False
+    try:
+        released = commit(client.transaction())
+    except NotFound:
+        return False
+    if released:
+        logger.info('event=sync_uid_sequencer action=finished outcome=%s', outcome)
+    return released
+
+
 def redrive_job(
     uid: str, job_id: str, epoch: int, *, firestore_client: Any = None, now: Optional[datetime] = None
 ) -> Optional[dict[str, Any]]:
