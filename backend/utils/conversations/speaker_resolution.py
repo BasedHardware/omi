@@ -968,8 +968,9 @@ def resolve_speakers_for_processing(
             # reclustering batch voices. Manual receipts still win below.
             trusted = _capture_trusted(conversation.transcript_segments)
             _without_resolution(conversation, 'batch_authoritative', force_unavailable=not trusted)
-            if trusted:
-                conversation.speaker_resolution.participant_speaker_ids = significant_capture_speaker_ids(
+            resolution = conversation.speaker_resolution
+            if trusted and resolution is not None:
+                resolution.participant_speaker_ids = significant_capture_speaker_ids(
                     [
                         segment
                         for segment in conversation.transcript_segments

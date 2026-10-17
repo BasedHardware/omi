@@ -97,7 +97,7 @@ def admit(
     outcome = store.run(commit)
     seconds = outcome.pop('_admitted_seconds', None)
     if seconds is not None:
-        record_correctness('admitted', seconds=seconds)
+        record_correctness('admitted', seconds=float(seconds))
     return outcome
 
 

@@ -139,8 +139,12 @@ class QuarantineRecovery:
         all_admitted = recover_all_admitted()
         owners = (None,) if all_admitted else recovery_owners()
         for selected_owner in owners:
-            kwargs = {'after_id': self._candidate_after} if all_admitted else {}
-            candidates = recovery_candidates(self.store.client, self.store.namespace, selected_owner, **kwargs)
+            if all_admitted:
+                candidates = recovery_candidates(
+                    self.store.client, self.store.namespace, None, after_id=self._candidate_after
+                )
+            else:
+                candidates = recovery_candidates(self.store.client, self.store.namespace, selected_owner)
             if all_admitted and not candidates:
                 self._candidate_after = None  # Wrap next tick, without a second query.
             for segment_id, owner_id in candidates:

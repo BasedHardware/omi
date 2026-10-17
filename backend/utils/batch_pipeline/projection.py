@@ -53,7 +53,7 @@ def build_incoming(item: WorkItem, binding, payload: dict, *, geolocation=None, 
                 if not in_gap:
                     gap += 1
                 in_gap = True
-                word = {**word, 'speaker': f'BATCH_UNASSIGNED_{gap}'}
+                word = {**word, 'speaker': f'BATCH_UNASSIGNED_{item.segment_id}_{gap}'}
             else:
                 in_gap = False
             prepared.append(word)

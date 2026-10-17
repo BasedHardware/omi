@@ -500,7 +500,7 @@ def test_authoritative_projection_preserves_pyannote_groups_and_gap_abstention(m
     }
     row = build_incoming(item, binding, payload, batch_segment_id='unit')
     segments = row['transcript_segments']
-    assert [s['speaker'] for s in segments] == ['SPEAKER_00', 'BATCH_UNASSIGNED_1', 'SPEAKER_01']
+    assert [s['speaker'] for s in segments] == ['SPEAKER_00', 'BATCH_UNASSIGNED_part_1', 'SPEAKER_01']
     assert {s['speaker_id_scope'] for s in segments} == {'final:batch:unit'}
     assert all(not s['is_user'] and s['person_id'] is None for s in segments)
     assert segments[1]['speaker_match_source'] == 'batch_abstention'

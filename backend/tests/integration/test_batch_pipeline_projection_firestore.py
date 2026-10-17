@@ -1142,3 +1142,31 @@ def test_global_recovery_sweep_advances_past_held_pages_without_extra_query(lane
     assert query.call_count == 3
     assert recovery.sweep() == {'held': 10}
     assert query.call_args.kwargs['after_id'] is None
+
+
+def test_multipart_anonymous_gaps_are_distinct_while_pyannote_voice_is_shared(lane, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'true')
+    batch = lane.seed(duration_seconds=600)
+    lane.payload.update(
+        audio_seconds=600,
+        speech_seconds=600,
+        speech_spans=[{'start': 0, 'end': 600}],
+        words=[{'word': 'Synthetic.', 'timestamp': [start, start + 1]} for start in (0, 2, 299, 300, 302, 599)],
+        diarization={
+            'turns': [
+                {'start': 0, 'end': 1, 'speaker': 'SPEAKER_00'},
+                {'start': 299, 'end': 301, 'speaker': 'SPEAKER_00'},
+                {'start': 599, 'end': 600, 'speaker': 'SPEAKER_00'},
+            ]
+        },
+    )
+    lane.finish(batch)
+    lane.projector.project(batch.ids[0])
+    rows = active_rows(lane)
+    assert len(rows) == 1
+    segments = rows[0]['transcript_segments']
+    gaps = [s for s in segments if s['speaker_match_source'] == 'batch_abstention']
+    voices = [s for s in segments if s['speaker_match_source'] == 'batch_pyannote']
+    assert len(gaps) == 2 and len({s['speaker_id'] for s in gaps}) == 2
+    assert len({s['speaker_id'] for s in voices}) == 1
+    assert not {s['speaker_id'] for s in voices} & {s['speaker_id'] for s in gaps}
