@@ -4793,6 +4793,25 @@ enhanced encryption envelopes use a **big-endian** uint32 length prefix.
 
 ### Historical sync queue retirement
 
+Redis sync jobs retain their existing 24-hour TTL by default. Two optional
+write-time settings accept integer seconds from 3600 through 86400; unset,
+invalid, or out-of-range values preserve 86400. `SYNC_JOB_COMPLETED_TTL_SECONDS`
+changes only the TTL atomically published with a winning `completed` mutation
+(both legacy and run-token-fenced CAS). Queued, processing, failed and partial
+failure records, pending indexes, retry checkpoints and run leases keep their
+existing lifetimes. A shorter successful-result window means a client returning
+later may see 404 and re-upload its retained WAL; existing content/segment
+deduplication still applies, but reconciliation traffic can increase. Failed
+results retain 24 hours for dead-letter and retry-material cleanup.
+
+`SYNC_JOB_METRIC_ONCE_TTL_SECONDS` changes only `terminal_outcome_metric` and
+`segment_outcome:*` guards. A retry after this window can count telemetry again;
+`speech_ms`, `dg_ms`, `usage` and unknown tags retain 24 hours. Do not shorten
+billing guards based only on nominal retry count: queue pauses, dispatch delay
+and long-running attempts also bound their lifetime. Neither setting rewrites
+existing Redis entries or deletes results on completion. Rollback restores the
+default for future writes; already-shortened entries cannot be recovered.
+
 Backfill ownership and expired-head retirement are defined in [the two-lane runbook](runbooks/sync-two-lane.md#expired-head-retirement-train-1). Under `SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM`, Redis-absent unbound waiting work is retired transactionally before dispatch, with a bounded loop and a per-job run lock. Dispatching owners are reconciled under the same guard; running/bound work remains protected. Retirement emits `sync_backfill_expired_retired` and never counts as completed transcription or deletes client audio. Flutter/macOS retain queued WAL audio for completion or 404-triggered re-upload.
 
 Backfill admission transactionally creates or repairs its sequencer owner. Completion and retirement transactionally park empty owners outside the hot reconcile query while retaining their fencing epochs; admission wakes them atomically. The bounded pending reconcile scan self-heals legacy missing owners over a configurable window (default 30 minutes), honors the staggered deadline before claiming or retiring waiting work, and meters `sync_backfill_owner_repaired`. The operator-only dry-run/apply procedure is in [backfill owner repair](runbooks/sync-two-lane.md#backfill-owner-repair).

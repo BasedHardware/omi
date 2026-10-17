@@ -474,12 +474,12 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
-          # Non-mutating shared-speech qualification; GKE hosts remain off.
+          # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
-            value: 'shadow'
+            value: 'off'
             category: rollout
           CAPTURE_SHARED_SPEECH_PERCENT:
-            value: '100'
+            value: '0'
             category: rollout
           BATCH_PIPELINE_ENABLED:
             value: "true"
@@ -728,12 +728,12 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
-          # Non-mutating shared-speech qualification; GKE hosts remain off.
+          # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
-            value: 'shadow'
+            value: 'off'
             category: rollout
           CAPTURE_SHARED_SPEECH_PERCENT:
-            value: '100'
+            value: '0'
             category: rollout
           BATCH_PIPELINE_ENABLED:
             value: "true"
@@ -957,12 +957,12 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
-          # Non-mutating shared-speech qualification; GKE hosts remain off.
+          # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
-            value: 'shadow'
+            value: 'off'
             category: rollout
           CAPTURE_SHARED_SPEECH_PERCENT:
-            value: '100'
+            value: '0'
             category: rollout
           BATCH_PIPELINE_ENABLED:
             value: "true"
@@ -1157,12 +1157,12 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
-          # Non-mutating shared-speech qualification; GKE hosts remain off.
+          # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
-            value: 'shadow'
+            value: 'off'
             category: rollout
           CAPTURE_SHARED_SPEECH_PERCENT:
-            value: '100'
+            value: '0'
             category: rollout
           BATCH_PIPELINE_ENABLED:
             value: "true"
