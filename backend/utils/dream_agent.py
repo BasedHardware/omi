@@ -18,7 +18,7 @@ from config.dream_agent import (
     PASS_TIMEOUT_SECONDS,
     DRAIN_TIMEOUT_SECONDS,
 )
-from database import dream_scheduler, dream_store, dream_turns, review_store
+from database import dream_scheduler, dream_store, dream_turns, legal_holds
 from database.dream_dirty import dream_writing
 from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive
 from models.agent_tools import HarnessQuestion
@@ -51,7 +51,8 @@ BUDGET_STOP_CODES = frozenset(
     }
 )
 GATE_CONTENTION_BACKOFF_SECONDS = (5, 15, 30, 60)
-GATE_CONTENTION_FINAL_ATTEMPT_HEADROOM_SECONDS = 5
+GATE_CONTENTION_APPLY_HEADROOM_SECONDS = 20
+GATE_CONTENTION_RETRY_BUDGET_SECONDS = sum(GATE_CONTENTION_BACKOFF_SECONDS) + GATE_CONTENTION_APPLY_HEADROOM_SECONDS + 1
 RETRYABLE_GATE_CONTENTION_MESSAGES = frozenset(
     {
         'another destructive operation owns the account gate',
@@ -345,29 +346,48 @@ async def run_session(
         return await run_blocking(db_executor, partial(fn, uid, *args, **kwargs))
 
     gate_retry_deadline = None
-    gate_retry_index = 0
+    gate_retry_in_progress = False
 
     async def effect_with_gate_retry(fn, *args, **kwargs):
-        nonlocal gate_retry_deadline, gate_retry_index
+        nonlocal gate_retry_deadline, gate_retry_in_progress
         loop = asyncio.get_running_loop()
+        delay_index = 0
+        attempt = 0
         while True:
+            attempt += 1
+            effect_kwargs = kwargs
+            if attempt > 1 and fn is dream_tools.apply_verified_edit:
+                effect_kwargs = {
+                    **kwargs,
+                    'gate_retry': True,
+                    'run_started_at': (lease or {}).get('started_at'),
+                    'run_id': (lease or {}).get('run_id'),
+                }
             try:
-                return await effect(fn, *args, **kwargs)
+                result = await effect(fn, *args, **effect_kwargs)
+                gate_retry_in_progress = False
+                return result
             except Exception as exc:
                 if not _retryable_gate_contention(exc):
                     raise
+                gate_retry_in_progress = True
                 now = loop.time()
                 if gate_retry_deadline is None:
-                    gate_retry_deadline = min(deadline, now + sum(GATE_CONTENTION_BACKOFF_SECONDS) + 5)
-                if gate_retry_index >= len(GATE_CONTENTION_BACKOFF_SECONDS):
+                    gate_retry_deadline = min(deadline, now + GATE_CONTENTION_RETRY_BUDGET_SECONDS)
+                retry_allowed = await run_blocking(db_executor, legal_holds.dream_gate_contention_retry_allowed, uid)
+                if not retry_allowed:
+                    gate_retry_in_progress = False
+                    raise
+                now = loop.time()
+                if delay_index >= len(GATE_CONTENTION_BACKOFF_SECONDS):
                     raise ValueError('dream_gate_contention') from exc
-                delay = GATE_CONTENTION_BACKOFF_SECONDS[gate_retry_index]
-                gate_retry_index += 1
-                retry_deadline = min(deadline - GATE_CONTENTION_FINAL_ATTEMPT_HEADROOM_SECONDS, gate_retry_deadline)
-                if now + delay >= retry_deadline:
+                delay = GATE_CONTENTION_BACKOFF_SECONDS[delay_index]
+                delay_index += 1
+                retry_deadline = min(deadline, gate_retry_deadline)
+                if now + delay + GATE_CONTENTION_APPLY_HEADROOM_SECONDS >= retry_deadline:
                     raise ValueError('dream_gate_contention') from exc
                 await _sleep_gate_retry(delay)
-                if loop.time() >= retry_deadline:
+                if loop.time() + GATE_CONTENTION_APPLY_HEADROOM_SECONDS >= retry_deadline:
                     raise ValueError('dream_gate_contention') from exc
                 await active()
 
@@ -498,8 +518,6 @@ async def run_session(
                             if str(exc) == 'dream_gate_contention':
                                 raise
                             status = 'invalid_evidence'
-                        except (review_store.ReviewConflict, review_store.ReviewNotFound):
-                            status = 'invalid_evidence'
                         report['outcomes'].append({'key': item.key, 'kind': item.kind, 'status': status})
                     elif item.value > 2:
                         offered.append((item, sum(vote is True for vote in support[item.id])))
@@ -532,8 +550,6 @@ async def run_session(
                         if str(exc) == 'dream_gate_contention':
                             raise
                         status = 'invalid_evidence'
-                    except (review_store.ReviewConflict, review_store.ReviewNotFound):
-                        status = 'invalid_evidence'
                     report['outcomes'].append({'key': item.key, 'kind': item.kind, 'status': status})
             finally:
                 dream_writing.reset(token)
@@ -545,6 +561,8 @@ async def run_session(
                 summary=session.finish.summary if session.finish else '',
             )
     except Exception as exc:
+        if isinstance(exc, TimeoutError) and gate_retry_in_progress:
+            exc = ValueError('dream_gate_contention')
         code = error_code(exc)
         report.update(status='failed', error_type=type(exc).__name__, error_code=code)
         if code == 'dream_gate_contention':

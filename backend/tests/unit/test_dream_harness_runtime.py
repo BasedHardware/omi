@@ -3,16 +3,17 @@
 import asyncio
 import json
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
 import pytest
 
-from config.dream_agent import Caps
 from config.dream_session import SessionLimits
-from database import dream_store, dream_turns, review_store, review_changes
+from database import dream_store, dream_turns, legal_holds, review_store, review_changes
 from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive
+from models.agent_edit import HarnessEdit
 from models.agent_tools import VerificationBatch, Verification
-from tests.unit.test_dream_cleanup_edits import store, records, UID
+from tests.unit.test_dream_cleanup_edits import store, records, UID  # pyright: ignore[reportUnusedImport]
 from tests.unit.test_dream_session import call, turn
 from utils.agent_capabilities import tools as dream_tools
 from utils import dream_agent, dream_seed, dream_capacity
@@ -26,6 +27,9 @@ def runtime(store, monkeypatch):
     monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
     monkeypatch.setenv('DREAM_AGENT_ELIGIBILITY', 'all')
     monkeypatch.setattr(dream_store, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(
+        legal_holds, 'account_deletion_firestore_client', lambda **kwargs: kwargs.get('firestore_client') or store
+    )
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *args: set())
     monkeypatch.setattr(dream_store.firestore, 'transactional', lambda fn: fn)
     monkeypatch.setattr(dream_turns.firestore, 'transactional', lambda fn: fn)
@@ -114,11 +118,13 @@ def test_two_verifiers_select_apply_review_or_drop_and_report_counts(runtime, vo
     assert not any(key[0] == 'dream_global_spend' for key in runtime.rows)
     assert runtime.rows[('dream_users', UID, 'spend', day)].get('observed_usd', 0) == pytest.approx(0)
     if status == 'applied':
-        changes = [
-            review_store.decode_doc(UID, value)['change']
-            for key, value in runtime.rows.items()
-            if key[2:3] == ('review_changes',)
-        ]
+        changes = []
+        for key, value in runtime.rows.items():
+            if key[2:3] != ('review_changes',):
+                continue
+            journal = review_store.decode_doc(UID, value)
+            if journal is not None:
+                changes.append(journal['change'])
         review_changes.set_undone(UID, changes[0]['change_id'], True)
         assert runtime.rows[('users', UID, 'people', 'junk')] == before
     else:
@@ -141,11 +147,14 @@ def test_kill_switch_prevents_reads_model_calls_and_all_effects(runtime, monkeyp
 
 
 def _proposals(runtime):
-    return [
-        review_store.decode_doc(UID, value)
-        for key, value in runtime.rows.items()
-        if key[:3] == ('users', UID, 'review_proposals')
-    ]
+    proposals = []
+    for key, value in runtime.rows.items():
+        if key[:3] != ('users', UID, 'review_proposals'):
+            continue
+        proposal = review_store.decode_doc(UID, value)
+        if proposal is not None:
+            proposals.append(proposal)
+    return proposals
 
 
 def _plan(*, value=4):
@@ -214,6 +223,132 @@ def test_transient_gate_contention_retries_committed_effect_idempotently(runtime
     assert runtime.rows[('users', UID, 'people', 'junk')] != before
 
 
+def test_earlier_pass_journal_does_not_skip_first_attempt_validation(runtime, monkeypatch):
+    before = deepcopy(runtime.rows[('users', UID, 'people', 'junk')])
+    edit = HarnessEdit(
+        kind='dismiss_person',
+        target='people/junk',
+        evidence=['conversations/one'],
+        reason='Synthetic junk profile',
+        value=4,
+    )
+    key = dream_tools.edit_key(edit, records(runtime))
+    change_id = dream_tools.dream_change_view.change_id_for_key(UID, key)
+    journal_ref = review_store.user(UID).collection('review_changes').document(review_store.safe_id(change_id))
+    journal_ref.set(
+        review_store.encode_doc(
+            UID,
+            {
+                'edit_key': key,
+                'created_at': datetime.now(timezone.utc) - timedelta(days=1),
+                'change': {'change_id': change_id, 'undone': False},
+            },
+        )
+    )
+    revalidations = []
+    revalidate = dream_tools.revalidate_proposal
+
+    def stale_on_effect(uid, proposal):
+        revalidations.append(None)
+        if len(revalidations) == 2:
+            raise review_store.ReviewConflict('Dream proposal evidence changed')
+        return revalidate(uid, proposal)
+
+    monkeypatch.setattr(dream_tools, 'revalidate_proposal', stale_on_effect)
+    report = asyncio.run(dream_agent.run_pass(UID, turn=scripted([True, True])))
+
+    assert report['status'] == 'complete', report
+    assert report['outcomes'][0]['status'] == 'invalid_evidence'
+    assert len(revalidations) == 2
+    assert runtime.rows[('users', UID, 'people', 'junk')] == before
+
+
+def test_each_effect_gets_a_fresh_gate_backoff_index(runtime, monkeypatch):
+    apply = dream_tools.apply_verified_edit
+    target_ids = [f'junk-{index}' for index in range(6)]
+    for index, target_id in enumerate(target_ids):
+        runtime.rows[('users', UID, 'people', target_id)] = {
+            'id': target_id,
+            'name': f'Synthetic {index}',
+            'created_at': datetime.now(timezone.utc),
+            'updated_at': datetime.now(timezone.utc),
+        }
+    attempts = {target_id: 0 for target_id in target_ids}
+    waits = []
+
+    def contend_once_per_effect(uid, edit, *args, **kwargs):
+        target_id = edit.target.split('/', 1)[1]
+        attempts[target_id] += 1
+        if attempts[target_id] == 1:
+            raise DestructiveOperationInProgress('canonical mutation blocked by destructive operation')
+        return apply(uid, edit, *args, **kwargs)
+
+    async def no_wait(seconds):
+        waits.append(seconds)
+
+    async def model(uid, lane, mount, messages):
+        if lane == MAIN_LANE:
+            calls = [
+                call(
+                    'propose_edit',
+                    {
+                        'edit': {
+                            'kind': 'dismiss_person',
+                            'target': f'people/{target_id}',
+                            'evidence': ['conversations/one'],
+                            'reason': 'Synthetic junk profile',
+                            'value': 4,
+                        }
+                    },
+                    index,
+                )
+                for index, target_id in enumerate(target_ids, start=1)
+            ]
+            calls.append(call('finish', {'summary': 'Checked synthetic records', 'notes': 'Apply six edits'}, 7))
+            return turn(calls, tokens=10)
+        assert lane == VERIFY_LANE
+        batch = json.loads(messages[-1]['content'].split('\n', 1)[1])
+        return Turn(
+            tokens=20,
+            value=VerificationBatch(
+                decisions=[
+                    Verification(id=row['id'], agree=True, reason='Synthetic independent evidence check')
+                    for row in batch
+                ]
+            ),
+        )
+
+    monkeypatch.setattr(dream_tools, 'apply_verified_edit', contend_once_per_effect)
+    monkeypatch.setattr(dream_agent, '_sleep_gate_retry', no_wait)
+    report = asyncio.run(dream_agent.run_pass(UID, turn=model))
+
+    assert report['status'] == 'complete', report
+    assert len(report['outcomes']) == len(target_ids)
+    assert {item['status'] for item in report['outcomes']} == {'applied'}
+    assert attempts == {target_id: 2 for target_id in target_ids}
+    assert waits == [5] * len(target_ids)
+
+
+def test_retry_timeout_is_reported_as_gate_contention_and_releases_lease(runtime, monkeypatch):
+    def contend(*args, **kwargs):
+        raise DestructiveOperationInProgress('canonical mutation blocked by destructive operation')
+
+    async def timed_out_sleep(_seconds):
+        raise TimeoutError()
+
+    monkeypatch.setattr(dream_tools, 'apply_verified_edit', contend)
+    monkeypatch.setattr(dream_agent, '_sleep_gate_retry', timed_out_sleep)
+    report = asyncio.run(dream_agent.run_pass(UID, turn=scripted([True, True])))
+
+    assert report['status'] == 'failed'
+    assert report['error_code'] == 'dream_gate_contention'
+    assert report['stop_reason'] == 'dream_gate_contention'
+    assert runtime.rows[('dream_users', UID)]['lease'] is None
+    release = dream_capacity.release
+    assert isinstance(release, AsyncMock)
+    release.assert_awaited_once()
+
+
 def test_persistent_gate_contention_has_bounded_failure_code(runtime, monkeypatch, caplog):
     attempts = []
     waits = []
@@ -265,6 +400,37 @@ def test_legal_hold_and_account_deletion_blocks_are_not_retried(runtime, monkeyp
     report = asyncio.run(dream_agent.run_pass(UID, turn=scripted([True, True])))
 
     assert report['status'] == 'failed'
+    assert len(attempts) == 1
+
+
+def test_canonical_account_deletion_gate_is_not_retried(runtime, monkeypatch):
+    runtime.rows[('account_deletions', UID)] = {'wipe_status': 'cancelled'}
+    runtime.rows[('legal_hold_deletion_gates', UID)] = {
+        'schema_version': legal_holds.LEGAL_HOLD_DELETION_GATE_SCHEMA_VERSION,
+        'uid': UID,
+        'kind': 'account_deletion',
+        'token': 'synthetic-account-deletion-token',
+        'state': 'running',
+        'started_at': datetime.now(timezone.utc),
+        'finished_at': None,
+    }
+    attempts = []
+
+    def blocked(*args, **kwargs):
+        attempts.append(None)
+        raise DestructiveOperationInProgress('canonical mutation blocked by destructive operation')
+
+    monkeypatch.setattr(dream_tools, 'apply_verified_edit', blocked)
+    monkeypatch.setattr(
+        dream_agent,
+        '_sleep_gate_retry',
+        lambda *_: pytest.fail('account deletion gate must not be retried'),
+    )
+
+    report = asyncio.run(dream_agent.run_pass(UID, turn=scripted([True, True])))
+
+    assert report['status'] == 'failed'
+    assert report['error_type'] == 'DestructiveOperationInProgress'
     assert len(attempts) == 1
 
 
