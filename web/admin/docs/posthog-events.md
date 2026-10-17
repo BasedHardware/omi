@@ -139,29 +139,42 @@ These follow the frozen transport contract. Legacy PostHog events stay until the
 Chat and product analytics stay on PostHog. The admin reliability reader's replacement flag defaults off (`RELIABILITY_REPLACEMENT_READER=on` plus an explicit `RELIABILITY_REPLACEMENT_CUTOVER` UTC day). Transport shadow and retirement flags are independent and are not read by this reader. Direct BigQuery billing (`lib/services/gcp-billing.ts`) and plan economics (`lib/services/plan-economics.ts`) are unchanged. There is no PostHog GCP aggregate.
 
 
-## Desktop health event sampling
+## Ingestion sampling (since 2026-10-17)
 
-The approved PostHog ingestion sampling transform retains 10% of
-`desktop_health_event` (stable by distinct ID). It was enabled on
-**2026-10-17 at 03:43:08Z** as part of the PostHog cost cut, and reader
-compensation is **armed** at that instant:
-`DESKTOP_HEALTH_EVENT_SAMPLING_CUTOVER` in
-`lib/telemetry/desktop-health-sampling.ts` is `2026-10-17T03:43:08Z`. Events
-before it keep weight one; events at or after it are weighted by the
-multiplier. If the transform is ever disabled, reset the constant in the same
-change.
-The common `DESKTOP_HEALTH_EVENT_COUNT_MULTIPLIER` is **10**. This is the transform's
-reader compensation contract, distinct from retiring or replacing PostHog telemetry.
+These ingestion-side Hog transformations are active in PostHog project `302298`.
+Sampling is stable by `distinct_id`. The keep-list function's 100% pass-through
+is one stage; `desktop_health_event` has its own 10% sampler and is therefore
+sampled overall.
 
-Response-reliability's physical voice SQL and both fallback-triage legacy queries
-weight each event at/after that instant before grouping. Earlier events keep weight
-one, including windows spanning the cutover. Duration sums use the same weight as
-success counts, so mean latency stays a ratio. Success/failure rates remain ratios
-of corrected counts; never multiply a resulting percentage. Chat, legacy floating
-voice and unsampled replacement aggregate rows are unchanged. Legacy fallback rows
-already carry the SQL weight and must not be multiplied again by their tally helper.
+| Event or group | Rate | PostHog Hog function ID | Reason / saved insights | Date |
+|---|---:|---|---|---|
+| Keep-list: TV qualified-activity events (`question_asked`, `Chat Message Sent`, `floating_bar_query_sent`, `Memory List Item Clicked`, `Search Result Opened`, `Conversation Opened From Search`, `chat_agent_query_completed`, `Phone Mic Recording Started`, `Conversation List Item Clicked`, `Live Transcript Card Clicked`, `Action Item Completed`, `Action Item Manually Added`, `Action Item Edited`, `Conversation Detail Search Query Entered`, `Fact List Item Clicked`, `Conversation Action`, `Fact Searched`, `Bottom Navigation Tab Clicked`, `Daily Summary Detail Viewed`); `Memory Created`; `Recording Started`; `Device Paired`; `Device Session Ended`; `Desktop Recording Started` / `Desktop Recording Stopped`; `Task Extracted`; `Device Disconnected`; `Action Items Page Opened`; `Recording Upload Failed`; `MCP Tool Use Succeeded`; `Sign In Completed`; `Device Onboarding*`; `Guided Intro Completed`; `Onboarding Completed`; `Product Journey Started` when `journey='onboarding'`; `fallback_triggered`; all `$` events except `$rageclick`; and case-insensitive event-name substrings `onboard`, `paywall`, `subscri`, `purchase`, `checkout`, `trial`, `plan`, `pricing`, `upgrade`, `signup`, `sign in`, `login`, or `experiment` | 100% | `01a147fe-0748-0000-6dd2-c23e39cf9a3a` | Exact TV, capture, onboarding, and product readers; matching names protect auth, experiment, and purchase analysis. `desktop_health_event` is subject to its dedicated 10% sampler below. | 2026-10-17 (keep-list active ~04:00Z; `Recording Upload Failed` added ~10:30Z) |
+| `desktop_health_event` | **10%** | `01a14818-0c6c-0000-9d91-a05dd3fdcf8a` | Stable by `distinct_id`. The response-reliability and fallback-triage readers already apply the ×10 compensation below. | Since **2026-10-17T03:43:08Z** |
+| `Recording Upload Started`, `Recording Upload Completed` | **0.5%** | `01a147e7-685b-0000-0b4b-85177eb1c46a` | Reduce the high-volume upload lifecycle while retaining a sampled diagnostic stream. | 2026-10-17 (~03:2xZ; 0.5% set ~04:25Z) |
+| `Suggestion Assistant Gate Outcome`; `Capture Ingress Health`; `Conversation Processing Completed`; `Recording Requested`; `Capture Wedge Detected`; `Screen Task Frame Terminal`; `Mobile Telemetry Health`; `Recording Observation`; `Capture Recovery Resolved`; `Recording Completed`; `Update Check Completed`; `Suggestion Assistant Evaluation Started`; `Suggestion Assistant Evaluation Failed`; `Recording Start Failed`; `Siri Index Rebuilt`; `Mobile Background Resource Session`; `Desktop Silent Mic Diagnostic`; `Audio Playback Seeked`; `Local WAL Stuck`; `Product Journey Outcome`; `Diarization Completed`; `Listen Session Realtime Demand`; `Encoded Audio Duration Measured`; `Transcript Started`; `Transcript Completed`; `Transcript Cancelled`; `Speech Positive Duration Measured`; `Speaker Identity Proposed` | **3%** | `01a13f9f-bd9e-0000-587f-42d1757b1be0` | Operational telemetry sampling. `Recording Upload Failed` is kept at 100%; `Mobile Render Observation` and `wal_transcript_coverage` are dropped separately. | 2026-10-17 (~04:25Z; final 28-event list ~10:30Z) |
+| `Mobile Render Observation`, `wal_transcript_coverage` | **0% (dropped)** | `01a14955-e81f-0000-91ae-520340a1716e` | Routine render observation is removed from PostHog; WAL transcript coverage remains in local debug logging. Dropped events cannot be reweighted. | 2026-10-17 (~10:30Z) |
+| Everything else, including `App Session Started`, `Device Disconnected Detailed`, and `$rageclick` | **2%** | `01a147fe-0748-0000-6dd2-c23e39cf9a3a` | Stable sample for the long tail. Saved insights annotated in PostHog on 2026-10-17: `App Session Started` — `EblY7Tul` Downloads per day; `L0xHnHgX` Country breakdown; `e8wp6WgL` iOS vs. Android; `bZShNqgU` Mobile vs. Desktop; `ViHw9RI8` DAU / WAU. | 2026-10-17 |
+| `Device Connected` | **2%** | `01a147fe-0748-0000-6dd2-c23e39cf9a3a` | Stable sample. Saved insights annotated in PostHog on 2026-10-17: `YZqSNIUT` Device Usage 7D; `249fYSnT` Device Connected Retention; `ym8miKtQ` Core Features; `jTgTJv65` Total Times Device Connected. `Device Paired` and `Device Session Ended` remain in the keep-list. | 2026-10-17 (~04:25Z) |
 
-Approval and reader audit: 2026-10-15 orchestrator ruling and the dashboard knowledge
-base's `2026-10-15-sampling-reader-receipts.md`, row `desktop_health_event`. The
-external transform's actual enablement/cutover remains the ingestion rollout owner's
-responsibility; this PR performs no PostHog pipeline write.
+Every kept event from a sampled bucket carries the numeric `omi_sample_pct`
+property. Reweight sampled event counts and additive measures with
+`100 / omi_sample_pct` before grouping (for example, 50 at 2%, 33⅓ at 3%, 200
+at 0.5%, or 10 at 10%). Do not multiply ratios after aggregation. The sampler
+hashes `distinct_id`, so unique-user metrics on sampled events also read about
+50× low at 2% after 2026-10-17; a weighted event count does not recover the
+exact omitted identities.
+
+To change a rate, PATCH the corresponding Hog function's inputs and update this
+table in the same change. Keep this table synchronized with the function's event
+list and UTC cutover.
+
+`desktop_health_event` reader compensation is already enabled at its ingestion
+cutover: `DESKTOP_HEALTH_EVENT_SAMPLING_CUTOVER` in
+`lib/telemetry/desktop-health-sampling.ts` is
+`2026-10-17T03:43:08Z`; the shared
+`DESKTOP_HEALTH_EVENT_COUNT_MULTIPLIER` is **10**. Pre-cutover events keep weight
+one. The response-reliability physical-voice SQL and both fallback-triage
+queries apply the weight before grouping; duration sums receive the same weight
+as event counts, and success/failure ratios remain ratios. Do not multiply
+already-weighted fallback tallies again. Chat, legacy floating-voice, and
+unsampled replacement aggregate rows are unchanged.
