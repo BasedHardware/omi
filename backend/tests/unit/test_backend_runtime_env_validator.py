@@ -75,6 +75,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_LIVE_ADMISSION_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_RECOVERY_ALL_ADMITTED", "value": "false"},
         {"name": "BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED", "value": "false"},
@@ -223,24 +224,11 @@ def with_jev_flags_env(payload: str) -> str:
     )
 
 
-def with_capture_jev_shadow_env(payload: str) -> str:
-    """EXP-003 shadow bindings belong on every Cloud Run capture-shadow host.
-
-    backend runs reprocess and merge inline. backend-sync writes Cloud Tasks
-    finalization and fresh sync. backend-sync-backfill replays historical sync.
-    Capture percentage stays 0; only the allowlisted UID is shadowed. The
-    EXP-004 population shadows stay 100 only on `backend`: the sync services
-    have no GMP sidecar/exporter entry, so their shadow metrics would be
-    invisible (EXP-004 doc, Admission and privacy).
-    """
-
+def with_jev_decision_config_env(payload: str) -> str:
     def service_flags(service: str) -> str:
         shadow_percent = '100' if service == 'backend' else '0'
         return (
-            r'\1\n        {"name": "CAPTURE_JEV_SHADOW_ENABLED", "value": "true"},'
-            r'\n        {"name": "CAPTURE_JEV_SHADOW_UID_ALLOWLIST", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},'
-            r'\n        {"name": "CAPTURE_JEV_SHADOW_PERCENT", "value": "0"},'
-            rf'\n        {{"name": "CONVERSATION_RELEVANCE_JEV_PERCENT", "value": "0"}},'
+            r'\1\n        {"name": "CONVERSATION_RELEVANCE_JEV_PERCENT", "value": "0"},'
             r'\n        {"name": "MEMORY_OWNER_JEV_FLIP_PERCENT", "value": "0"},'
             rf'\n        {{"name": "CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT", "value": "{shadow_percent}"}},'
             rf'\n        {{"name": "MEMORY_OWNER_JEV_SHADOW_PERCENT", "value": "{shadow_percent}"}},'
@@ -456,7 +444,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_parity_pack_env(payload)
     payload = with_backend_pusher_env(payload)
     payload = with_conversation_notes_v2_env(payload)
-    payload = with_capture_jev_shadow_env(payload)
+    payload = with_jev_decision_config_env(payload)
     payload = with_jev_flags_env(payload)
     payload = with_wake_word_adjudication_env(payload)
     payload = with_backend_public_shared_chat_auth_env(payload)

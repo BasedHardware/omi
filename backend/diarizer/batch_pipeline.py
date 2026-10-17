@@ -13,7 +13,7 @@ import threading
 from typing import Any, Callable, Mapping, Sequence
 
 from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
-from config.batch_pipeline import empty_asr_recovery_enabled
+from config.batch_pipeline import empty_asr_recovery_enabled, empty_asr_disposition_enabled
 from utils.observability.stt_cap_dispatch import record_audio
 from config.batch_pipeline_providers import ProviderConfig
 from config.sync_live_dedupe import sync_live_dedupe_active_for
@@ -293,10 +293,14 @@ class PipelineWorker:
                 if reason == 'empty_asr':
                     record_correctness('empty_asr_attempt', source='gpu_worker', seconds=item.duration_seconds)
                 if (
-                    reason == 'empty_asr'
+                    (
+                        reason == 'empty_asr'
+                        and empty_asr_recovery_enabled()
+                        or reason in {'empty_asr', 'no_owned_words'}
+                        and empty_asr_disposition_enabled()
+                    )
                     and stage == 'assemble_words'
                     and self.recover_words is not None
-                    and empty_asr_recovery_enabled()
                 ):
                     results.append(RecoveryWork(item.segment_id))
                 owned = len(states.get(item.segment_id, {}).get('words', []))

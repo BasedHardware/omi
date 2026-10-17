@@ -14,6 +14,8 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailRequestIdentity.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationAppSelectorSheet.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationSummarySelection.swift
+  # Read-time section presentation; exact citation vectors live in NoteCitationContractTests.
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/NoteCitationContract.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationSummaryProvenanceState.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationSummarySections.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/SummaryDocumentProse.swift

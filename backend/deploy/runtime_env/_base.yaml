@@ -531,15 +531,6 @@ environment_shared:
         MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
           value: '60000'
           category: rollout
-        CAPTURE_JEV_SHADOW_ENABLED:
-          value: 'true'
-          category: rollout
-        CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-          category: rollout
-        CAPTURE_JEV_SHADOW_PERCENT:
-          value: '0'
-          category: rollout
         REVIEW_SURFACE_MODE:
           value: 'on'
           category: rollout
@@ -552,6 +543,7 @@ environment_shared:
         BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
           value: 'false'
           category: rollout
+        BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
         BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
           value: 'false'
           category: rollout
@@ -772,15 +764,6 @@ environment_shared:
           category: rollout
         MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
           value: '60000'
-          category: rollout
-        CAPTURE_JEV_SHADOW_ENABLED:
-          value: 'true'
-          category: rollout
-        CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-          category: rollout
-        CAPTURE_JEV_SHADOW_PERCENT:
-          value: '0'
           category: rollout
         CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
           value: 'off'
@@ -1346,15 +1329,6 @@ environment_shared:
           MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
-          CAPTURE_JEV_SHADOW_ENABLED:
-            value: 'true'
-            category: rollout
-          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            category: rollout
-          CAPTURE_JEV_SHADOW_PERCENT:
-            value: '0'
-            category: rollout
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'false'
             category: rollout
@@ -1364,6 +1338,7 @@ environment_shared:
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
             value: 'false'
             category: rollout
@@ -1769,15 +1744,6 @@ environment_shared:
           MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
-          CAPTURE_JEV_SHADOW_ENABLED:
-            value: 'true'
-            category: rollout
-          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            category: rollout
-          CAPTURE_JEV_SHADOW_PERCENT:
-            value: '0'
-            category: rollout
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'false'
             category: rollout
@@ -1787,6 +1753,7 @@ environment_shared:
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
             value: 'false'
             category: rollout
@@ -2157,15 +2124,6 @@ environment_shared:
           MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
-          CAPTURE_JEV_SHADOW_ENABLED:
-            value: 'true'
-            category: rollout
-          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            category: rollout
-          CAPTURE_JEV_SHADOW_PERCENT:
-            value: '0'
-            category: rollout
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'false'
             category: rollout
@@ -2175,6 +2133,7 @@ environment_shared:
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
             value: 'false'
             category: rollout
@@ -2488,6 +2447,7 @@ environment_shared:
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
             value: 'false'
             category: rollout

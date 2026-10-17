@@ -104,7 +104,19 @@ def register_batch_artifact(
             and bool(recovery.get('token'))
             and uri.endswith(f"/{recovery['token']}.enc")
         )
-        if kind != 'audio' and job.get('state') != 'leased' and not recovery_write:
+        disposition = job.get('silence_disposition') or {}
+        from config.batch_pipeline import empty_asr_disposition_enabled
+
+        disposition_write = (
+            empty_asr_disposition_enabled()
+            and job.get('state') == 'quarantined'
+            and job.get('recovery_state') == 'failed_held'
+            and disposition.get('state') == 'prepared'
+            and disposition.get('privacy_generation') == expected_generation
+            and bool(disposition.get('token'))
+            and uri.endswith(f"/{disposition['token']}.enc")
+        )
+        if kind != 'audio' and job.get('state') != 'leased' and not recovery_write and not disposition_write:
             raise BatchPrivacyBlocked('result_lease_lost')
         if job and job.get('owner_id') != uid:
             raise ValueError('artifact owner mismatch')

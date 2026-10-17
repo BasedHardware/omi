@@ -47,7 +47,10 @@ The hook runs after successful persistence in REST/sync/from-segments processing
 and after the durable fanout fence in live/Cloud Tasks finalization. Deploy the
 same revision/config to Cloud Run backend, backend-sync, backend-sync-backfill,
 backend-integration, GKE backend-listen and pusher. No client release is required.
-Smart merge and EXP-003 Jev remain separate and unchanged.
+Smart merge remains separate. EXP-003 Jev concluded no-go on 2026-10-17 after
+3 of 14 “same” calls were wrong (79% precision, below the preregistered 90%
+bar); the re-summary half was dropped. Its log-only shadow was removed, and
+this deterministic matcher remains the replacement.
 
 ## Matcher contract (overlap_shared_speech_v1)
 

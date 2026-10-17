@@ -1147,6 +1147,16 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                         controller: _controller,
                         children: [
                           SummaryTab(
+                            onOpenSource: (id) {
+                              final segments = detailProvider.conversation.transcriptSegments;
+                              final segment = segments.where((segment) => segment.id == id).firstOrNull;
+                              if (segment == null) return;
+                              _hasExplicitTabSelection = true;
+                              setState(() => selectedTab = ConversationTab.transcript);
+                              _controller!.animateTo(_transcriptTabIndex);
+                              _playbackController.updateSegments(segments);
+                              _playbackController.seek(segment.start, strict: true);
+                            },
                             reviewEnabled: !widget.isFromOnboarding &&
                                 widget.initialSeekStart == null &&
                                 selectedTab == ConversationTab.summary &&
